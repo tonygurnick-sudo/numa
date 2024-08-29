@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",              // Use ES6 module system
+    "target": "ES2020",              // Target modern JavaScript (ES2020)
+    "moduleResolution": "node",      // Resolve modules using Node.js resolution
+    "esModuleInterop": true,         // Enable interop between CommonJS and ESModules
+    "skipLibCheck": true,            // Skip type checking of declaration files
+    "strict": true,                  // Enable strict type checking
+    "outDir": "./dist",              // Output directory for compiled files
+    "rootDir": "./",                 // Root directory for your TypeScript files
+    "allowSyntheticDefaultImports": true // Allows default imports from modules with no default export
+  },
+  "include": ["./*.ts"],
+  "exclude": ["dist", "node_modules"]
+}
