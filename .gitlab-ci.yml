@@ -1,0 +1,7 @@
+include:
+  - project: arcanumai/ci
+    file: pipelines/node.yml
+
+.node_job:
+  variables:
+    BUILD_DIR: infra
