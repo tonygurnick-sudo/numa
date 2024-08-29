@@ -1,0 +1,3 @@
+include:
+    - project: arcanumai/ci
+      file: pipelines/noop.yml
