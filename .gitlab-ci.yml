@@ -1,3 +1,49 @@
 include:
-    - project: arcanumai/ci
-      file: pipelines/noop.yml
+  - project: arcanumai/ci
+    file: templates/common-jobs.yml
+  - project: arcanumai/ci
+    file: pipelines/noop.yml
+
+.apps:
+  TYPE: apps
+  NAME:
+    - document-completeness-app
+
+lint:
+  stage: lint
+  needs: []
+  image: python:3.11
+  script:
+    - pip install pre-commit
+    - pre-commit run --all-files
+
+test:
+  stage: test
+  image: python:3.11-bookworm
+  needs: []
+  parallel:
+    matrix:
+      - !reference [.apps]
+  before_script:
+    - !reference [.setup-poetry-private-auth]
+  script:
+    - cd $TYPE/$NAME
+    - poetry install
+    - poetry run python -m unittest
+    - dirname */__init__.py | xargs  poetry run pylint --verbose
+    - poetry run mypy .
+    - poetry run pyright .
+
+deploy_doc_reconstructor_app:
+  stage: deploy
+  image: node:20-alpine
+  script:
+    - cd $TYPE/$NAME                   # Navigate to the project directory
+    - yarn install                      # Install dependencies
+    - yarn build                        # Compile TypeScript to JavaScript using esbuild
+    - cp -r node_modules dist/functions/node_modules  # Copy node_modules into the dist/functions directory
+    - cd dist/functions                 # Navigate to the dist/functions directory where compiled code and dependencies are
+    - zip -r function.zip .             # Zip the compiled code and node_modules
+    - aws lambda update-function-code --function-name document-reconstructor --zip-file fileb://function.zip
+  only:
+    - main

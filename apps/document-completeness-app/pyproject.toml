@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "document-completeness"
+version = "0.1.0"
+description = ""
+authors = ["Nick6464 <49857434+Nick6464@users.noreply.github.com>", "Nathan Douglas <nathan@arcanum.ai>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+boto3 = "^1.34.162"
+streamlit = "^1.37.1"
+python-dotenv = "^1.0.1"
+boto3-stubs = "^1.35.5"
+structlog = "^24.4.0"
+
+[tool.poetry.group.dev.dependencies]
+pylint = "^3.2.5"
+pyright = "^1.1.371"
+mypy = "^1.10.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
