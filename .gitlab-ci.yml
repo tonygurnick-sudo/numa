@@ -3,6 +3,8 @@ include:
     file: pipelines/node.yml
   - project: arcanumai/ci
     file: pipelines/python.yml
+  - project: arcanumai/ci
+    file: libraries/python.yml
 
 .node_job:
   variables:
