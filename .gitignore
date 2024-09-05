@@ -107,3 +107,5 @@ infra/.yarn/*
 !infra/.yarn/releases
 !infra/.yarn/sdks
 !infra/.yarn/versions
+
+.venv/
