@@ -11,7 +11,9 @@ def display_app_details(app):
         st.text(f"Status: {app['status']}")
         st.text(f"Created At: {app['createdAt']}")
         st.text(f"Updated At: {app['updatedAt']}")
-        st.text(f"Required Capabilities: {', '.join(app['requiredCapabilities'])}")
+        st.text(
+            f"Required Capabilities: {', '.join(app['requiredCapabilities'])}"
+        )
 
         # Prepare filtered data for download
         filtered_data = {

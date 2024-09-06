@@ -42,7 +42,9 @@ def create_q_app(qclient):
             "tags": {"Environment": "Development"},
         }
 
-        st.write("Creating Q App with the following definition:", q_app_definition)
+        st.write(
+            "Creating Q App with the following definition:", q_app_definition
+        )
 
         response = qclient.create_q_app(**q_app_definition)
         return response

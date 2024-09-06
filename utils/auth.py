@@ -56,14 +56,16 @@ def handle_oauth2_token_retrieval_headless():
                 "refresh_token": token.get("RefreshToken"),
             }
 
-            # Retrieve the Identity Center (IDC) token based on the Cognito ID token
+            # Retrieve the Identity Center (IDC)
+            # token based on the Cognito ID token
             try:
+                seconds = st.session_state.idc_jwt_token["expiresIn"]
                 st.session_state.idc_jwt_token = get_iam_oidc_token(
                     st.session_state.token["id_token"]
                 )
                 st.session_state.idc_jwt_token["expires_at"] = datetime.now(
                     UTC
-                ) + timedelta(seconds=st.session_state.idc_jwt_token["expiresIn"])
+                ) + timedelta(seconds=seconds)
 
                 # Rerun to refresh UI if necessary
                 st.rerun()
@@ -76,9 +78,12 @@ def handle_oauth2_token_retrieval_headless():
 
 
 def handle_oauth2_token_retrieval(oauth2):
-    redirect_uri = "http://localhost:8501/component/streamlit_oauth.authorize_button/index.html"  # Adjust as per your setup
+    redirect_uri = "http://localhost:8501/component/streamlit_oauth.authorize_button/index.html"
     result = oauth2.authorize_button(
-        "Connect with Cognito", scope="openid", pkce="S256", redirect_uri=redirect_uri
+        "Connect with Cognito",
+        scope="openid",
+        pkce="S256",
+        redirect_uri=redirect_uri,
     )
 
     if result and "token" in result:
@@ -100,7 +105,8 @@ def handle_oauth2_token_retrieval(oauth2):
 
 # Retrieve configuration (from environment variables)
 def retrieve_config_from_env():
-    global REGION, IAM_ROLE, IDC_APPLICATION_ID, AMAZON_Q_APP_ID, OAUTH_CONFIG, session
+    global REGION, IAM_ROLE, IDC_APPLICATION_ID
+    global AMAZON_Q_APP_ID, OAUTH_CONFIG, session
     REGION = os.getenv("AWS_REGION")
     IAM_ROLE = os.getenv("IAM_ROLE")
     IDC_APPLICATION_ID = os.getenv("IDC_APPLICATION_ID")
@@ -125,7 +131,12 @@ def configure_oauth_component():
     revoke_token_url = f"https://{cognito_domain}/oauth2/revoke"
     client_id = OAUTH_CONFIG["ClientId"]
     return OAuth2Component(
-        client_id, None, authorize_url, token_url, refresh_token_url, revoke_token_url
+        client_id,
+        None,
+        authorize_url,
+        token_url,
+        refresh_token_url,
+        revoke_token_url,
     )
 
 
@@ -147,21 +158,20 @@ def get_iam_oidc_token(id_token):
 
 def assume_role_with_token(iam_token, verbose=False):
     """
-    Assume IAM role with the IAM OIDC idToken, with optional logging for debugging audience mismatch.
-
-    Args:
-        iam_token (str): The IAM OIDC idToken.
-        verbose (bool): If True, logs detailed information for debugging purposes. Defaults to False.
+    Assume IAM role with the IAM OIDC idToken, with optional logging for
+    debugging audience mismatch.
     """
     try:
         # Decode the JWT token without verifying the signature
-        decoded_token = pyjwt.decode(iam_token, options={"verify_signature": False})
+        decoded_token = pyjwt.decode(
+            iam_token, options={"verify_signature": False}
+        )
 
-        # Log the entire decoded token for troubleshooting purposes if verbose is enabled
+        # Log the entire decoded token for troubleshooting purposes if verbose is
         if verbose:
             st.write("Decoded token:", decoded_token)
 
-        # Extract and log the audience (aud) claim from the token if verbose is enabled
+        # Extract and log the audience (aud) claim from the token if verbose is
         audience = decoded_token.get("aud")
         if verbose:
             st.write(f"Audience (aud) claim in token: {audience}")
@@ -211,12 +221,16 @@ def get_qclient(idc_id_token: str):
     """
     if not st.session_state.aws_credentials:
         assume_role_with_token(idc_id_token)
-    elif st.session_state.aws_credentials["Expiration"] < datetime.now(timezone.utc):
+    elif st.session_state.aws_credentials["Expiration"] < datetime.now(
+        timezone.utc
+    ):
         assume_role_with_token(idc_id_token)
 
     assumedSession = boto3.Session(
         aws_access_key_id=st.session_state.aws_credentials["AccessKeyId"],
-        aws_secret_access_key=st.session_state.aws_credentials["SecretAccessKey"],
+        aws_secret_access_key=st.session_state.aws_credentials[
+            "SecretAccessKey"
+        ],
         aws_session_token=st.session_state.aws_credentials["SessionToken"],
     )
     amazon_q = assumedSession.client("qapps", REGION)
