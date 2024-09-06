@@ -1,5 +1,6 @@
-import streamlit as st
 import json
+
+import streamlit as st
 
 
 def display_app_details(app):
