@@ -1,6 +1,8 @@
 import os
 import uuid
+
 import streamlit as st
+
 # Load environment variables from .env file
 from dotenv import load_dotenv
 
