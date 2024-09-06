@@ -1,15 +1,18 @@
 import os
 import uuid
+
 import boto3
 import streamlit as st
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Configuration for AWS Q applications
 AMAZON_Q_APP_ID = os.getenv("AMAZON_Q_APP_ID")
 REGION = os.getenv("AWS_REGION")
+
 
 def create_q_app(qclient):
     """
@@ -30,13 +33,13 @@ def create_q_app(qclient):
                             "id": card_id,
                             "type": "text-input",
                             "placeholder": "Enter your text here",
-                            "defaultValue": "Default text"
+                            "defaultValue": "Default text",
                         }
                     }
                 ],
-                "initialPrompt": "Welcome to My Text Input Q App!"
+                "initialPrompt": "Welcome to My Text Input Q App!",
             },
-            "tags": {"Environment": "Development"}
+            "tags": {"Environment": "Development"},
         }
 
         st.write("Creating Q App with the following definition:", q_app_definition)
@@ -47,13 +50,12 @@ def create_q_app(qclient):
         st.error(f"Error creating Q App: {e}")
         raise
 
+
 def list_library(qclient, verbose=False):
     """
     List all library items from Q.
     """
-    qListDef = {
-        "instanceId": AMAZON_Q_APP_ID
-    }
+    qListDef = {"instanceId": AMAZON_Q_APP_ID}
 
     all_library_items = []
 
@@ -63,29 +65,27 @@ def list_library(qclient, verbose=False):
             if verbose:
                 st.write("List Library Items Response:", response)
 
-            all_library_items.extend(response.get('libraryItems', []))
+            all_library_items.extend(response.get("libraryItems", []))
 
-            next_token = response.get('NextToken')
+            next_token = response.get("NextToken")
             if not next_token:
                 break
 
-            qListDef['NextToken'] = next_token
+            qListDef["NextToken"] = next_token
 
         except Exception as e:
             st.error(f"Error listing library items: {e}")
             raise
 
-    return {'libraryItems': all_library_items}
+    return {"libraryItems": all_library_items}
+
 
 def get_app(qclient, q_app_id):
     """
     Get the Q App details.
     """
-    qGetDef = {
-        "instanceId": AMAZON_Q_APP_ID,
-        "appId": q_app_id
-    }
-    
+    qGetDef = {"instanceId": AMAZON_Q_APP_ID, "appId": q_app_id}
+
     try:
         response = qclient.get_q_app(**qGetDef)
         return response

@@ -1,9 +1,10 @@
-from datetime import datetime, timezone, timedelta
 import os
+from datetime import datetime, timedelta, timezone
+
 import boto3
 import jwt as pyjwt
-from dotenv import load_dotenv
 import streamlit as st
+from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
@@ -25,11 +26,11 @@ session = None
 def handle_oauth2_token_retrieval_headless():
     # Create Cognito Identity Provider client
     client = boto3.client("cognito-idp", region_name=os.getenv("AWS_REGION"))
-    
+
     username = os.getenv("COGNITO_USER")
     password = os.getenv("COGNITO_PASSWORD")
     client_id = os.getenv("CLIENT_ID")
-    
+
     st.write(f"Authenticating with username: {username}")
     st.write(f"Authenticating with password: {'*' * len(password)}")
 
@@ -72,19 +73,26 @@ def handle_oauth2_token_retrieval_headless():
             st.error("Failed to retrieve authentication tokens.")
     except Exception as e:
         st.error(f"Error during authentication: {e}")
-        
+
+
 def handle_oauth2_token_retrieval(oauth2):
     redirect_uri = "http://localhost:8501/component/streamlit_oauth.authorize_button/index.html"  # Adjust as per your setup
-    result = oauth2.authorize_button("Connect with Cognito", scope="openid", pkce="S256", redirect_uri=redirect_uri)
-    
+    result = oauth2.authorize_button(
+        "Connect with Cognito", scope="openid", pkce="S256", redirect_uri=redirect_uri
+    )
+
     if result and "token" in result:
         # If authorization is successful, save token in session state
         st.session_state.token = result.get("token")
-        
+
         # Retrieve the Identity Center token
         try:
-            st.session_state.idc_jwt_token = get_iam_oidc_token(st.session_state.token["id_token"])
-            st.session_state.idc_jwt_token["expires_at"] = datetime.now(UTC) + timedelta(seconds=st.session_state.idc_jwt_token["expiresIn"])
+            st.session_state.idc_jwt_token = get_iam_oidc_token(
+                st.session_state.token["id_token"]
+            )
+            st.session_state.idc_jwt_token["expires_at"] = datetime.now(
+                UTC
+            ) + timedelta(seconds=st.session_state.idc_jwt_token["expiresIn"])
             st.rerun()
         except Exception as e:
             st.error(f"Error retrieving IDC JWT Token: {e}")
