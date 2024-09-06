@@ -18,6 +18,7 @@ IDC_APPLICATION_ID = None
 AMAZON_Q_APP_ID = None
 OAUTH_CONFIG = {}
 
+
 # Global boto3 session
 session = None
 
@@ -78,7 +79,9 @@ def handle_oauth2_token_retrieval_headless():
 
 
 def handle_oauth2_token_retrieval(oauth2):
-    redirect_uri = "http://localhost:8501/component/streamlit_oauth.authorize_button/index.html"
+    domain = "http://localhost:8501/"
+    extension = "component/streamlit_oauth.authorize_button/index.html"
+    redirect_uri = f"{domain}{extension}"
     result = oauth2.authorize_button(
         "Connect with Cognito",
         scope="openid",
@@ -167,16 +170,19 @@ def assume_role_with_token(iam_token, verbose=False):
             iam_token, options={"verify_signature": False}
         )
 
-        # Log the entire decoded token for troubleshooting purposes if verbose is
+        # Log the entire decoded token for
+        # troubleshooting purposes if verbose is
         if verbose:
             st.write("Decoded token:", decoded_token)
 
-        # Extract and log the audience (aud) claim from the token if verbose is
+        # Extract and log the audience (aud)
+        # claim from the token if verbose is
         audience = decoded_token.get("aud")
         if verbose:
             st.write(f"Audience (aud) claim in token: {audience}")
 
-        # Check for the sts:identity_context claim and log it if verbose is enabled
+        # Check for the sts:identity_context
+        # claim and log it if verbose is enabled
         identity_context = decoded_token.get("sts:identity_context")
         if identity_context:
             if verbose:
@@ -190,12 +196,13 @@ def assume_role_with_token(iam_token, verbose=False):
         sts_client = session.client("sts", region_name=REGION)
 
         # Assume the role using the provided context from Identity Center
+        identity_center_arn = "arn:aws:iam::aws:contextProvider/IdentityCenter"
         response = sts_client.assume_role(
             RoleArn=IAM_ROLE,
             RoleSessionName="qapp",
             ProvidedContexts=[
                 {
-                    "ProviderArn": "arn:aws:iam::aws:contextProvider/IdentityCenter",
+                    "ProviderArn": identity_center_arn,
                     "ContextAssertion": identity_context,
                 }
             ],
