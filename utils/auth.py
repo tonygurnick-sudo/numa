@@ -22,6 +22,57 @@ session = None
 
 
 # Handle the OAuth2 token retrieval and IDC JWT token retrieval
+def handle_oauth2_token_retrieval_headless():
+    # Create Cognito Identity Provider client
+    client = boto3.client("cognito-idp", region_name=os.getenv("AWS_REGION"))
+    
+    username = os.getenv("COGNITO_USER")
+    password = os.getenv("COGNITO_PASSWORD")
+    client_id = os.getenv("CLIENT_ID")
+    
+    st.write(f"Authenticating with username: {username}")
+    st.write(f"Authenticating with password: {'*' * len(password)}")
+
+    try:
+        # Initiate authentication
+        auth_response = client.initiate_auth(
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={
+                "USERNAME": username,
+                "PASSWORD": password,
+            },
+            ClientId=client_id,
+        )
+
+        # Check if authentication was successful and tokens are available
+        if "AuthenticationResult" in auth_response:
+            token = auth_response["AuthenticationResult"]
+
+            # Save tokens in session state, similar to the OAuth2 flow
+            st.session_state.token = {
+                "id_token": token["IdToken"],
+                "access_token": token["AccessToken"],
+                "refresh_token": token.get("RefreshToken"),
+            }
+
+            # Retrieve the Identity Center (IDC) token based on the Cognito ID token
+            try:
+                st.session_state.idc_jwt_token = get_iam_oidc_token(
+                    st.session_state.token["id_token"]
+                )
+                st.session_state.idc_jwt_token["expires_at"] = datetime.now(
+                    UTC
+                ) + timedelta(seconds=st.session_state.idc_jwt_token["expiresIn"])
+
+                # Rerun to refresh UI if necessary
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error retrieving IDC JWT Token: {e}")
+        else:
+            st.error("Failed to retrieve authentication tokens.")
+    except Exception as e:
+        st.error(f"Error during authentication: {e}")
+        
 def handle_oauth2_token_retrieval(oauth2):
     redirect_uri = "http://localhost:8501/component/streamlit_oauth.authorize_button/index.html"  # Adjust as per your setup
     result = oauth2.authorize_button("Connect with Cognito", scope="openid", pkce="S256", redirect_uri=redirect_uri)
@@ -143,7 +194,6 @@ def assume_role_with_token(iam_token, verbose=False):
         if verbose:
             st.error(f"Error assuming role with token: {e}")
         raise
-
 
 
 # Create the Q client using the assumed role's credentials

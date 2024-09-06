@@ -33,9 +33,10 @@ st.title("Amazon Q Apps Deployer")
 # OAuth2 Setup
 oauth2 = auth.configure_oauth_component()
 
-# Step 1: OAuth2 Token Retrieval
+# Step 1: OAuth2 Token Retrieval (Headless)
 if "token" not in st.session_state or not st.session_state.token:
-    auth.handle_oauth2_token_retrieval(oauth2)
+    # auth.handle_oauth2_token_retrieval(oauth2)
+    auth.handle_oauth2_token_retrieval_headless()
 else:
     token = st.session_state["token"]
     refresh_token = token["refresh_token"]
