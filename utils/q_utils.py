@@ -1,7 +1,5 @@
 import os
 import uuid
-
-import boto3
 import streamlit as st
 
 # Load environment variables from .env file
