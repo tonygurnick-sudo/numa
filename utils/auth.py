@@ -14,13 +14,14 @@ SECRET_DATA = {}
 CURRENT_ACCOUNT = None  # The selected account name
 
 # Global boto3 session
-session = None
+SESSION = None
+
 
 # Load secrets from AWS Secrets Manager
 def load_secret(secret_name):
     try:
-        session = boto3.Session(profile_name="qapps", region_name=os.getenv("AWS_REGION"))
-        secrets_client = session.client("secretsmanager")
+        SESSION = boto3.Session(profile_name="qapps", region_name=os.getenv("AWS_REGION"))
+        secrets_client = SESSION.client("secretsmanager")
         response = secrets_client.get_secret_value(SecretId=secret_name)
         secret_string = response['SecretString']
         return json.loads(secret_string)  # Convert the secret string to a dictionary
@@ -31,7 +32,7 @@ def load_secret(secret_name):
 
 # Retrieve configuration for a specific account from Secrets Manager
 def retrieve_config_from_secret(secret_name, account):
-    global SECRET_DATA, OAUTH_CONFIG, CURRENT_ACCOUNT, session
+    global SECRET_DATA, OAUTH_CONFIG, CURRENT_ACCOUNT, SESSION
 
     # Load the entire secret data containing multiple accounts
     SECRET_DATA = load_secret(secret_name)
@@ -47,7 +48,7 @@ def retrieve_config_from_secret(secret_name, account):
         }
 
         # Initialize the global boto3 session using the qapps profile
-        session = boto3.Session(profile_name="qapps")
+        SESSION = boto3.Session(profile_name="qapps")
     else:
         st.error(f"Account '{account}' not found in secret '{secret_name}'.")
 
@@ -57,7 +58,7 @@ def handle_oauth2_token_retrieval_headless():
     if CURRENT_ACCOUNT is None:
         st.error("No account selected")
         return
-    
+
     client = boto3.client("cognito-idp", region_name=os.getenv("AWS_REGION"))
 
     username = os.getenv("COGNITO_USER")  # This could still be stored in env or secret
@@ -114,7 +115,7 @@ def configure_oauth_component():
     refresh_token_url = f"https://{cognito_domain}/oauth2/token"
     revoke_token_url = f"https://{cognito_domain}/oauth2/revoke"
     client_id = OAUTH_CONFIG["ClientId"]
-    
+
     return OAuth2Component(
         client_id,
         None,
@@ -128,7 +129,7 @@ def configure_oauth_component():
 # Retrieve IAM OIDC token using the ID token from Cognito
 def get_iam_oidc_token(id_token):
     try:
-        client = session.client("sso-oidc", region_name=os.getenv("AWS_REGION"))
+        client = SESSION.client("sso-oidc", region_name=os.getenv("AWS_REGION"))
         response = client.create_token_with_iam(
             clientId=SECRET_DATA[CURRENT_ACCOUNT]["idc_application_id"],
             grantType="urn:ietf:params:oauth:grant-type:jwt-bearer",
@@ -143,7 +144,6 @@ def get_iam_oidc_token(id_token):
 def assume_role_with_token(iam_token, verbose=False):
     try:
         decoded_token = pyjwt.decode(iam_token, options={"verify_signature": False})
-        audience = decoded_token.get("aud")
         identity_context = decoded_token.get("sts:identity_context")
 
         if not identity_context:
@@ -151,7 +151,7 @@ def assume_role_with_token(iam_token, verbose=False):
                 st.error("No sts:identity_context found in token")
             return
 
-        sts_client = session.client("sts", region_name=os.getenv("AWS_REGION"))
+        sts_client = SESSION.client("sts", region_name=os.getenv("AWS_REGION"))
         identity_center_arn = "arn:aws:iam::aws:contextProvider/IdentityCenter"
         response = sts_client.assume_role(
             RoleArn=SECRET_DATA[CURRENT_ACCOUNT]["iam_role"],

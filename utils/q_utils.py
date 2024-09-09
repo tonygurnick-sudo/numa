@@ -1,27 +1,20 @@
-import os
 import uuid
-
 import streamlit as st
 
-# Load environment variables from .env file
-from dotenv import load_dotenv
 
-load_dotenv()
-
-# Configuration for AWS Q applications
-AMAZON_Q_APP_ID = os.getenv("AMAZON_Q_APP_ID")
-REGION = os.getenv("AWS_REGION")
-
-
+# Assuming AMAZON_Q_APP_ID and REGION are stored in the selected account in session state
 def create_q_app(qclient):
     """
     Create a Q App with a single text input card.
     """
     try:
+        # Fetch the app ID from the selected account's secret data
+        amazon_q_app_id = st.session_state.secret_data[st.session_state.selected_account]["q_app_id"]
+
         card_id = str(uuid.uuid4())
 
         q_app_definition = {
-            "instanceId": AMAZON_Q_APP_ID,
+            "instanceId": amazon_q_app_id,
             "title": "My Text Input Q App",
             "description": "A Q App with a single text input card",
             "appDefinition": {
@@ -56,12 +49,14 @@ def list_library(qclient, verbose=False):
     """
     List all library items from Q.
     """
-    qListDef = {"instanceId": AMAZON_Q_APP_ID}
+    try:
+        # Fetch the app ID from the selected account's secret data
+        amazon_q_app_id = st.session_state.secret_data[st.session_state.selected_account]["q_app_id"]
 
-    all_library_items = []
+        qListDef = {"instanceId": amazon_q_app_id}
+        all_library_items = []
 
-    while True:
-        try:
+        while True:
             response = qclient.list_library_items(**qListDef)
             if verbose:
                 st.write("List Library Items Response:", response)
@@ -74,20 +69,22 @@ def list_library(qclient, verbose=False):
 
             qListDef["NextToken"] = next_token
 
-        except Exception as e:
-            st.error(f"Error listing library items: {e}")
-            raise
-
-    return {"libraryItems": all_library_items}
+        return {"libraryItems": all_library_items}
+    except Exception as e:
+        st.error(f"Error listing library items: {e}")
+        raise
 
 
 def get_app(qclient, q_app_id):
     """
     Get the Q App details.
     """
-    qGetDef = {"instanceId": AMAZON_Q_APP_ID, "appId": q_app_id}
-
     try:
+        # Fetch the app ID from the selected account's secret data
+        amazon_q_app_id = st.session_state.secret_data[st.session_state.selected_account]["q_app_id"]
+
+        qGetDef = {"instanceId": amazon_q_app_id, "appId": q_app_id}
+
         response = qclient.get_q_app(**qGetDef)
         return response
     except Exception as e:
