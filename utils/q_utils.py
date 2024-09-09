@@ -1,4 +1,5 @@
 import uuid
+
 import streamlit as st
 
 
@@ -9,7 +10,9 @@ def create_q_app(qclient):
     """
     try:
         # Fetch the app ID from the selected account's secret data
-        amazon_q_app_id = st.session_state.secret_data[st.session_state.selected_account]["q_app_id"]
+        amazon_q_app_id = st.session_state.secret_data[
+            st.session_state.selected_account
+        ]["q_app_id"]
 
         card_id = str(uuid.uuid4())
 
@@ -51,7 +54,9 @@ def list_library(qclient, verbose=False):
     """
     try:
         # Fetch the app ID from the selected account's secret data
-        amazon_q_app_id = st.session_state.secret_data[st.session_state.selected_account]["q_app_id"]
+        amazon_q_app_id = st.session_state.secret_data[
+            st.session_state.selected_account
+        ]["q_app_id"]
 
         qListDef = {"instanceId": amazon_q_app_id}
         all_library_items = []
@@ -81,7 +86,9 @@ def get_app(qclient, q_app_id):
     """
     try:
         # Fetch the app ID from the selected account's secret data
-        amazon_q_app_id = st.session_state.secret_data[st.session_state.selected_account]["q_app_id"]
+        amazon_q_app_id = st.session_state.secret_data[
+            st.session_state.selected_account
+        ]["q_app_id"]
 
         qGetDef = {"instanceId": amazon_q_app_id, "appId": q_app_id}
 

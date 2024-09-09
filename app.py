@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+
 import streamlit as st
 
 import utils.auth as auth
@@ -23,7 +24,9 @@ if "selected_account" not in st.session_state:
 if "secret_data" not in st.session_state:
     st.session_state.secret_data = None  # Store the secret data itself
 if "credentials_selected" not in st.session_state:
-    st.session_state.credentials_selected = False  # Track if credentials are selected
+    st.session_state.credentials_selected = (
+        False  # Track if credentials are selected
+    )
 
 
 # Utility function to add to debug logs
@@ -44,7 +47,9 @@ if not st.session_state.secret_data:
 # Step 1: If credentials are not selected, allow the user to choose an account
 if not st.session_state.credentials_selected:
     if st.session_state.secret_data:
-        account_names = list(st.session_state.secret_data.keys())  # Get all account names from the secret
+        account_names = list(
+            st.session_state.secret_data.keys()
+        )  # Get all account names from the secret
 
         # Display selectbox to choose an account
         st.session_state.selected_account = st.selectbox(
@@ -53,12 +58,18 @@ if not st.session_state.credentials_selected:
 
         # Once an account is selected, load the corresponding configuration
         if st.button("Select Account"):
-            auth.retrieve_config_from_secret(secret_name, st.session_state.selected_account)
-            st.session_state.credentials_selected = True  # Mark credentials as selected
+            auth.retrieve_config_from_secret(
+                secret_name, st.session_state.selected_account
+            )
+            st.session_state.credentials_selected = (
+                True  # Mark credentials as selected
+            )
 
 # Step 2: If an account is selected, proceed with OAuth2 Token Retrieval (Headless)
 if st.session_state.credentials_selected and st.session_state.selected_account:
-    st.write(f"Authenticating with selected account: {st.session_state.selected_account}")
+    st.write(
+        f"Authenticating with selected account: {st.session_state.selected_account}"
+    )
 
     # OAuth2 Setup
     oauth2 = auth.configure_oauth_component()
@@ -87,7 +98,9 @@ if st.session_state.credentials_selected and st.session_state.selected_account:
                     st.session_state.q_app_response = None
 
                     with st.spinner("Fetching Library Apps..."):
-                        qclient = auth.get_qclient(st.session_state.idc_jwt_token["idToken"])
+                        qclient = auth.get_qclient(
+                            st.session_state.idc_jwt_token["idToken"]
+                        )
                         response = q_utils.list_library(qclient)
                         st.session_state.q_app_response = response
 
@@ -107,7 +120,9 @@ if st.session_state.credentials_selected and st.session_state.selected_account:
                     add_debug_log(f"Error listing Library Apps: {e}")
 
         else:
-            st.error("IDC JWT Token is not available. Please authenticate first.")
+            st.error(
+                "IDC JWT Token is not available. Please authenticate first."
+            )
 
 # Step 4: Display debug logs if any
 st.write("### Debug Logs")
