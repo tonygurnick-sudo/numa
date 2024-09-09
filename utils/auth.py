@@ -20,11 +20,15 @@ SESSION = None
 # Load secrets from AWS Secrets Manager
 def load_secret(secret_name):
     try:
-        SESSION = boto3.Session(profile_name="qapps", region_name=os.getenv("AWS_REGION"))
+        SESSION = boto3.Session(
+            profile_name="qapps", region_name=os.getenv("AWS_REGION")
+        )
         secrets_client = SESSION.client("secretsmanager")
         response = secrets_client.get_secret_value(SecretId=secret_name)
-        secret_string = response['SecretString']
-        return json.loads(secret_string)  # Convert the secret string to a dictionary
+        secret_string = response["SecretString"]
+        return json.loads(
+            secret_string
+        )  # Convert the secret string to a dictionary
     except Exception as e:
         st.error(f"Error retrieving secret value for {secret_name}: {e}")
         return None
@@ -61,9 +65,15 @@ def handle_oauth2_token_retrieval_headless():
 
     client = boto3.client("cognito-idp", region_name=os.getenv("AWS_REGION"))
 
-    username = os.getenv("COGNITO_USER")  # This could still be stored in env or secret
-    password = SECRET_DATA[CURRENT_ACCOUNT]["password"]  # Fetch password from the selected account
-    client_id = SECRET_DATA[CURRENT_ACCOUNT]["client_id"]  # Fetch client ID from the selected account
+    username = os.getenv(
+        "COGNITO_USER"
+    )  # This could still be stored in env or secret
+    password = SECRET_DATA[CURRENT_ACCOUNT][
+        "password"
+    ]  # Fetch password from the selected account
+    client_id = SECRET_DATA[CURRENT_ACCOUNT][
+        "client_id"
+    ]  # Fetch client ID from the selected account
 
     st.write(f"Authenticating with username: {username}")
 
@@ -129,7 +139,9 @@ def configure_oauth_component():
 # Retrieve IAM OIDC token using the ID token from Cognito
 def get_iam_oidc_token(id_token):
     try:
-        client = SESSION.client("sso-oidc", region_name=os.getenv("AWS_REGION"))
+        client = SESSION.client(
+            "sso-oidc", region_name=os.getenv("AWS_REGION")
+        )
         response = client.create_token_with_iam(
             clientId=SECRET_DATA[CURRENT_ACCOUNT]["idc_application_id"],
             grantType="urn:ietf:params:oauth:grant-type:jwt-bearer",
@@ -143,7 +155,9 @@ def get_iam_oidc_token(id_token):
 
 def assume_role_with_token(iam_token, verbose=False):
     try:
-        decoded_token = pyjwt.decode(iam_token, options={"verify_signature": False})
+        decoded_token = pyjwt.decode(
+            iam_token, options={"verify_signature": False}
+        )
         identity_context = decoded_token.get("sts:identity_context")
 
         if not identity_context:
@@ -178,12 +192,16 @@ def assume_role_with_token(iam_token, verbose=False):
 def get_qclient(idc_id_token: str):
     if not st.session_state.aws_credentials:
         assume_role_with_token(idc_id_token)
-    elif st.session_state.aws_credentials["Expiration"] < datetime.now(timezone.utc):
+    elif st.session_state.aws_credentials["Expiration"] < datetime.now(
+        timezone.utc
+    ):
         assume_role_with_token(idc_id_token)
 
     assumedSession = boto3.Session(
         aws_access_key_id=st.session_state.aws_credentials["AccessKeyId"],
-        aws_secret_access_key=st.session_state.aws_credentials["SecretAccessKey"],
+        aws_secret_access_key=st.session_state.aws_credentials[
+            "SecretAccessKey"
+        ],
         aws_session_token=st.session_state.aws_credentials["SessionToken"],
     )
     amazon_q = assumedSession.client("qapps", os.getenv("AWS_REGION"))
