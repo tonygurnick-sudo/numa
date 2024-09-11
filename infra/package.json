@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@arcanumai/cdktf-util": "1.11.0",
+    "@arcanumai/private-bucket-construct": "^1.2.1",
     "@cdktf/provider-aws": "~19.8.0",
     "cdktf": "~0.20.0",
     "constructs": "~10"
