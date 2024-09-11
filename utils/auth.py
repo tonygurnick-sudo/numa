@@ -8,14 +8,6 @@ import streamlit as st
 
 UTC = timezone.utc
 
-# Constants for the configuration
-OAUTH_CONFIG = {}
-SECRET_DATA = {}
-CURRENT_ACCOUNT = None  # The selected account name
-
-# Global boto3 session
-SESSION = None
-
 
 # Load secrets from AWS Secrets Manager
 def load_secret(secret_name):
@@ -36,44 +28,48 @@ def load_secret(secret_name):
 
 # Retrieve configuration for a specific account from Secrets Manager
 def retrieve_config_from_secret(secret_name, account):
-    global SECRET_DATA, OAUTH_CONFIG, CURRENT_ACCOUNT, SESSION
+    # Check if `secret_data`, `session`, and `current_account` are already in session state
+    if "secret_data" not in st.session_state:
+        st.session_state.secret_data = load_secret(secret_name)
 
-    # Load the entire secret data containing multiple accounts
-    SECRET_DATA = load_secret(secret_name)
-
-    if SECRET_DATA and account in SECRET_DATA:
-        CURRENT_ACCOUNT = account
-        account_data = SECRET_DATA[account]
+    if (
+        st.session_state.secret_data
+        and account in st.session_state.secret_data
+    ):
+        st.session_state.current_account = account
+        account_data = st.session_state.secret_data[account]
 
         # Initialize configuration using the secret values for the selected account
-        OAUTH_CONFIG = {
+        st.session_state.OAUTH_CONFIG = {
             "CognitoDomain": account_data["cognito_domain"],
             "ClientId": account_data["client_id"],
         }
 
-        # Initialize the global boto3 session using the qapps profile
-        SESSION = boto3.Session(profile_name="qapps")
+        # Initialize the boto3 session if not already initialized
+        if (
+            "session" not in st.session_state
+            or st.session_state.session is None
+        ):
+            st.session_state.session = boto3.Session(profile_name="qapps")
     else:
         st.error(f"Account '{account}' not found in secret '{secret_name}'.")
 
 
 # Handle the OAuth2 token retrieval and IDC JWT token retrieval
 def handle_oauth2_token_retrieval_headless():
-    if CURRENT_ACCOUNT is None:
+    if st.session_state.current_account is None:
         st.error("No account selected")
         return
 
     client = boto3.client("cognito-idp", region_name=os.getenv("AWS_REGION"))
 
-    username = os.getenv(
-        "COGNITO_USER"
-    )  # This could still be stored in env or secret
-    password = SECRET_DATA[CURRENT_ACCOUNT][
+    username = "arcanum-service-account"
+    password = st.session_state.secret_data[st.session_state.current_account][
         "password"
-    ]  # Fetch password from the selected account
-    client_id = SECRET_DATA[CURRENT_ACCOUNT][
+    ]
+    client_id = st.session_state.secret_data[st.session_state.current_account][
         "client_id"
-    ]  # Fetch client ID from the selected account
+    ]
 
     st.write(f"Authenticating with username: {username}")
 
@@ -119,12 +115,16 @@ def handle_oauth2_token_retrieval_headless():
 def configure_oauth_component():
     from streamlit_oauth import OAuth2Component
 
-    cognito_domain = OAUTH_CONFIG["CognitoDomain"]
+    if "OAUTH_CONFIG" not in st.session_state:
+        st.error("OAUTH_CONFIG not found in session state.")
+        return None
+
+    cognito_domain = st.session_state.OAUTH_CONFIG["CognitoDomain"]
     authorize_url = f"https://{cognito_domain}/oauth2/authorize"
     token_url = f"https://{cognito_domain}/oauth2/token"
     refresh_token_url = f"https://{cognito_domain}/oauth2/token"
     revoke_token_url = f"https://{cognito_domain}/oauth2/revoke"
-    client_id = OAUTH_CONFIG["ClientId"]
+    client_id = st.session_state.OAUTH_CONFIG["ClientId"]
 
     return OAuth2Component(
         client_id,
@@ -139,11 +139,20 @@ def configure_oauth_component():
 # Retrieve IAM OIDC token using the ID token from Cognito
 def get_iam_oidc_token(id_token):
     try:
-        client = SESSION.client(
+        if (
+            "session" not in st.session_state
+            or st.session_state.session is None
+        ):
+            st.error("Boto3 session is not initialized.")
+            return None
+
+        client = st.session_state.session.client(
             "sso-oidc", region_name=os.getenv("AWS_REGION")
         )
         response = client.create_token_with_iam(
-            clientId=SECRET_DATA[CURRENT_ACCOUNT]["idc_application_id"],
+            clientId=st.session_state.secret_data[
+                st.session_state.current_account
+            ]["idc_application_id"],
             grantType="urn:ietf:params:oauth:grant-type:jwt-bearer",
             assertion=id_token,
         )
@@ -153,8 +162,13 @@ def get_iam_oidc_token(id_token):
         raise
 
 
+#
+
+
+# Assume a role using the token
 def assume_role_with_token(iam_token, verbose=False):
     try:
+        # Decode the IAM token
         decoded_token = pyjwt.decode(
             iam_token, options={"verify_signature": False}
         )
@@ -165,10 +179,24 @@ def assume_role_with_token(iam_token, verbose=False):
                 st.error("No sts:identity_context found in token")
             return
 
-        sts_client = SESSION.client("sts", region_name=os.getenv("AWS_REGION"))
+        # Check if session exists in session_state
+        if (
+            "session" not in st.session_state
+            or st.session_state.session is None
+        ):
+            st.error("Boto3 session is not initialized.")
+            return
+
+        # Use the session from session_state
+        sts_client = st.session_state.session.client(
+            "sts", region_name=os.getenv("AWS_REGION")
+        )
         identity_center_arn = "arn:aws:iam::aws:contextProvider/IdentityCenter"
+
         response = sts_client.assume_role(
-            RoleArn=SECRET_DATA[CURRENT_ACCOUNT]["iam_role"],
+            RoleArn=st.session_state.secret_data[
+                st.session_state.current_account
+            ]["iam_role"],
             RoleSessionName="qapp",
             ProvidedContexts=[
                 {
@@ -178,6 +206,7 @@ def assume_role_with_token(iam_token, verbose=False):
             ],
         )
 
+        # Store the temporary credentials in session state
         st.session_state.aws_credentials = response["Credentials"]
         if verbose:
             st.write("Assume role successful, temporary credentials obtained.")
