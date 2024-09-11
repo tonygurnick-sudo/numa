@@ -12,11 +12,28 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@arcanumai/cdktf-util@npm:^1.11.1":
+  version: 1.11.1
+  resolution: "@arcanumai/cdktf-util@npm:1.11.1::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Fcdktf-util%2F-%2F%40arcanumai%2Fcdktf-util-1.11.1.tgz"
+  checksum: 10c0/da0ee675409a060baadae9ecd49ad85d15cac3a82bba66d36c312386699c3d93224a89e57d95f46d7549ad5b9b4f23e2d9c6a9c074ceaa13acee16d2ca60d78d
+  languageName: node
+  linkType: hard
+
+"@arcanumai/private-bucket-construct@npm:^1.2.1":
+  version: 1.2.1
+  resolution: "@arcanumai/private-bucket-construct@npm:1.2.1::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Fprivate-bucket-construct%2F-%2F%40arcanumai%2Fprivate-bucket-construct-1.2.1.tgz"
+  dependencies:
+    "@arcanumai/cdktf-util": "npm:^1.11.1"
+  checksum: 10c0/f4f7cb9624d1a88704d2b012eea5765366a34965e50143cb23a057d1bd35a4c98ba8f2c967c46c1f6c51f912a5447c8fa6c6713080fa4b6e7bb25fc53cbb4bba
+  languageName: node
+  linkType: hard
+
 "@arcanumai/q-apps-deployer-infra@workspace:.":
   version: 0.0.0-use.local
   resolution: "@arcanumai/q-apps-deployer-infra@workspace:."
   dependencies:
     "@arcanumai/cdktf-util": "npm:1.11.0"
+    "@arcanumai/private-bucket-construct": "npm:^1.2.1"
     "@cdktf/node-pty-prebuilt-multiarch": "npm:^0.10.1-pre.11"
     "@cdktf/provider-aws": "npm:~19.8.0"
     "@types/fs-extra": "npm:^11"
