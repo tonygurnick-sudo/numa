@@ -1,6 +1,9 @@
-import json
 import os
+import json
 from datetime import datetime, timedelta, timezone
+from typing import List, TypedDict, Dict
+from botocore.client import BaseClient
+from streamlit_oauth import OAuth2Component
 
 import boto3
 import jwt as pyjwt
@@ -9,26 +12,50 @@ import streamlit as st
 UTC = timezone.utc
 
 
+class QWorkspaceSecret(TypedDict):
+    username: str
+    password: str
+    iam_role: str
+    idc_application_id: str
+    q_app_id: str
+    cognito_domain: str
+    client_id: str
+
+
+class QWorkspaceSecrets(TypedDict):
+    __root__: Dict[str, QWorkspaceSecret]  # Allow any number of secrets with dynamic names
+
+
 # Load secrets from AWS Secrets Manager
-def load_secret(secret_name):
+def load_secret(secret_name: str) -> Dict[str, QWorkspaceSecret] | None:
+    """
+    Load and parse the SecretString from AWS Secrets Manager.
+    Return the parsed QWorkspaceSecrets structure.
+    """
     try:
-        SESSION = boto3.Session(
-            profile_name="qapps", region_name=os.getenv("AWS_REGION")
-        )
+        # Initialize boto3 session and secrets client
+        SESSION = boto3.Session(profile_name="qapps", region_name=os.getenv("AWS_REGION"))
         secrets_client = SESSION.client("secretsmanager")
+
+        # Retrieve the secret value from AWS Secrets Manager
         response = secrets_client.get_secret_value(SecretId=secret_name)
-        secret_string = response["SecretString"]
-        return json.loads(
-            secret_string
-        )  # Convert the secret string to a dictionary
+
+        # Extract and parse the SecretString
+        secret_string = response.get("SecretString")
+        if secret_string:
+            # Parse the SecretString into a dictionary with dynamic secret names
+            secret_data: Dict[str, QWorkspaceSecret] = json.loads(secret_string)
+            return secret_data
+
+        st.error(f"No SecretString found for {secret_name}")
+        return None
     except Exception as e:
         st.error(f"Error retrieving secret value for {secret_name}: {e}")
         return None
 
 
 # Retrieve configuration for a specific account from Secrets Manager
-def retrieve_config_from_secret(secret_name, account):
-    # Check if `secret_data`, `session`, and `current_account` are already in session state
+def retrieve_config_from_secret(secret_name: str, account: str) -> None:
     if "secret_data" not in st.session_state:
         st.session_state.secret_data = load_secret(secret_name)
 
@@ -39,13 +66,11 @@ def retrieve_config_from_secret(secret_name, account):
         st.session_state.current_account = account
         account_data = st.session_state.secret_data[account]
 
-        # Initialize configuration using the secret values for the selected account
         st.session_state.OAUTH_CONFIG = {
             "CognitoDomain": account_data["cognito_domain"],
             "ClientId": account_data["client_id"],
         }
 
-        # Initialize the boto3 session if not already initialized
         if (
             "session" not in st.session_state
             or st.session_state.session is None
@@ -56,14 +81,16 @@ def retrieve_config_from_secret(secret_name, account):
 
 
 # Handle the OAuth2 token retrieval and IDC JWT token retrieval
-def handle_oauth2_token_retrieval_headless():
+def handle_oauth2_token_retrieval_headless() -> None:
     if st.session_state.current_account is None:
         st.error("No account selected")
         return
 
     client = boto3.client("cognito-idp", region_name=os.getenv("AWS_REGION"))
 
-    username = "arcanum-service-account"
+    username = st.session_state.secret_data[st.session_state.current_account][
+        "username"
+    ]
     password = st.session_state.secret_data[st.session_state.current_account][
         "password"
     ]
@@ -74,7 +101,6 @@ def handle_oauth2_token_retrieval_headless():
     st.write(f"Authenticating with username: {username}")
 
     try:
-        # Initiate authentication
         auth_response = client.initiate_auth(
             AuthFlow="USER_PASSWORD_AUTH",
             AuthParameters={
@@ -97,11 +123,12 @@ def handle_oauth2_token_retrieval_headless():
                 st.session_state.idc_jwt_token = get_iam_oidc_token(
                     st.session_state.token["id_token"]
                 )
-                st.session_state.idc_jwt_token["expires_at"] = datetime.now(
-                    UTC
-                ) + timedelta(
-                    seconds=st.session_state.idc_jwt_token["expiresIn"]
-                )
+                if st.session_state.idc_jwt_token:
+                    st.session_state.idc_jwt_token[
+                        "expires_at"
+                    ] = datetime.now(UTC) + timedelta(
+                        seconds=st.session_state.idc_jwt_token["expiresIn"]
+                    )
                 st.rerun()
             except Exception as e:
                 st.error(f"Error retrieving IDC JWT Token: {e}")
@@ -112,9 +139,7 @@ def handle_oauth2_token_retrieval_headless():
 
 
 # Configure the OAuth2 component for Cognito
-def configure_oauth_component():
-    from streamlit_oauth import OAuth2Component
-
+def configure_oauth_component() -> OAuth2Component | None:
     if "OAUTH_CONFIG" not in st.session_state:
         st.error("OAUTH_CONFIG not found in session state.")
         return None
@@ -136,8 +161,20 @@ def configure_oauth_component():
     )
 
 
+class OIDCTokenResponse(TypedDict):
+    accessToken: str
+    tokenType: str
+    expiresIn: int
+    refreshToken: str
+    idToken: str
+    issuedTokenType: str
+    scope: List[str]
+    expires_at: datetime
+    scope: List[str]
+
+
 # Retrieve IAM OIDC token using the ID token from Cognito
-def get_iam_oidc_token(id_token):
+def get_iam_oidc_token(id_token: str) -> OIDCTokenResponse | None:
     try:
         if (
             "session" not in st.session_state
@@ -156,19 +193,25 @@ def get_iam_oidc_token(id_token):
             grantType="urn:ietf:params:oauth:grant-type:jwt-bearer",
             assertion=id_token,
         )
-        return response
+        return OIDCTokenResponse(
+            accessToken=response["accessToken"],
+            tokenType=response["tokenType"],
+            expiresIn=response["expiresIn"],
+            refreshToken=response["refreshToken"],
+            idToken=response["idToken"],
+            issuedTokenType=response["issuedTokenType"],
+            scope=response["scope"],
+            expires_at=datetime.now(UTC)
+            + timedelta(seconds=response["expiresIn"]),
+        )
     except Exception as e:
         st.error(f"Error retrieving IDC JWT token: {e}")
         raise
 
 
-#
-
-
 # Assume a role using the token
-def assume_role_with_token(iam_token, verbose=False):
+def assume_role_with_token(iam_token: str, verbose: bool = False) -> None:
     try:
-        # Decode the IAM token
         decoded_token = pyjwt.decode(
             iam_token, options={"verify_signature": False}
         )
@@ -179,7 +222,6 @@ def assume_role_with_token(iam_token, verbose=False):
                 st.error("No sts:identity_context found in token")
             return
 
-        # Check if session exists in session_state
         if (
             "session" not in st.session_state
             or st.session_state.session is None
@@ -187,7 +229,6 @@ def assume_role_with_token(iam_token, verbose=False):
             st.error("Boto3 session is not initialized.")
             return
 
-        # Use the session from session_state
         sts_client = st.session_state.session.client(
             "sts", region_name=os.getenv("AWS_REGION")
         )
@@ -206,11 +247,9 @@ def assume_role_with_token(iam_token, verbose=False):
             ],
         )
 
-        # Store the temporary credentials in session state
         st.session_state.aws_credentials = response["Credentials"]
         if verbose:
             st.write("Assume role successful, temporary credentials obtained.")
-
     except Exception as e:
         if verbose:
             st.error(f"Error assuming role with token: {e}")
@@ -218,7 +257,7 @@ def assume_role_with_token(iam_token, verbose=False):
 
 
 # Create the Q client using the assumed role's credentials
-def get_qclient(idc_id_token: str):
+def get_qclient(idc_id_token: str) -> BaseClient:
     if not st.session_state.aws_credentials:
         assume_role_with_token(idc_id_token)
     elif st.session_state.aws_credentials["Expiration"] < datetime.now(
