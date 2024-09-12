@@ -2,6 +2,7 @@ from datetime import timezone
 from typing import List
 
 import streamlit as st
+
 import utils.auth as auth
 import utils.q_utils as q_utils
 from utils import ui_utils
@@ -19,7 +20,9 @@ def initialize_session_state() -> None:
     if "debug_logs" not in st.session_state:
         st.session_state.debug_logs = []  # Store debug logs to display
     if "q_app_response" not in st.session_state:
-        st.session_state.q_app_response = None  # Store the Q App creation response
+        st.session_state.q_app_response = (
+            None  # Store the Q App creation response
+        )
     if "token" not in st.session_state:
         st.session_state.token = None  # Store the OAuth2 token
     if "selected_account" not in st.session_state:
@@ -27,7 +30,9 @@ def initialize_session_state() -> None:
     if "secret_data" not in st.session_state:
         st.session_state.secret_data = None  # Store the secret data itself
     if "credentials_selected" not in st.session_state:
-        st.session_state.credentials_selected = False  # Track if credentials are selected
+        st.session_state.credentials_selected = (
+            False  # Track if credentials are selected
+        )
 
 
 # Step 1: Load Secret Data and Select Account
@@ -56,15 +61,22 @@ def load_secret_and_select_account(secret_name: str) -> None:
 # Step 2: OAuth2 Token Retrieval
 def retrieve_oauth2_token() -> None:
     """Retrieve or refresh the OAuth2 token."""
-    if st.session_state.credentials_selected and st.session_state.selected_account:
-        st.write(f"Authenticating with selected account: {st.session_state.selected_account}")
+    if (
+        st.session_state.credentials_selected
+        and st.session_state.selected_account
+    ):
+        st.write(
+            f"Authenticating with selected account: {st.session_state.selected_account}"
+        )
 
         # OAuth2 Setup
         oauth2 = auth.configure_oauth_component()
 
         # Check if oauth2 component is properly configured
         if oauth2 is None:
-            st.error("OAuth2 component could not be configured. Please check your OAUTH_CONFIG.")
+            st.error(
+                "OAuth2 component could not be configured. Please check your OAUTH_CONFIG."
+            )
             return
 
         if "token" not in st.session_state or not st.session_state.token:
@@ -87,7 +99,9 @@ def retrieve_oauth2_token() -> None:
                     except Exception as e:
                         st.error(f"Error refreshing token: {e}")
             else:
-                st.error("IDC JWT Token is not available. Please authenticate first.")
+                st.error(
+                    "IDC JWT Token is not available. Please authenticate first."
+                )
 
 
 # Step 3: List and Display Library Apps
@@ -97,11 +111,15 @@ def list_and_display_library_apps() -> None:
         try:
             st.session_state.q_app_response = None
             response = None  # Initialize response to avoid unbound error
-            library_items = []  # Initialize library_items to avoid unbound error
+            library_items = (
+                []
+            )  # Initialize library_items to avoid unbound error
 
             with st.spinner("Fetching Library Apps..."):
                 # Retrieve the Q client using the stored ID token
-                qclient = auth.get_qclient(st.session_state.idc_jwt_token["idToken"])
+                qclient = auth.get_qclient(
+                    st.session_state.idc_jwt_token["idToken"]
+                )
 
                 # List library apps using the Q client
                 if qclient is not None:
@@ -112,7 +130,9 @@ def list_and_display_library_apps() -> None:
 
                 # Use the defined type for library items (assuming it's a list of QAppResponse)
                 if response is not None:
-                    library_items: List[q_utils.QAppResponse] = response["libraryItems"]
+                    library_items: List[q_utils.QAppResponse] = response[
+                        "libraryItems"
+                    ]
                 else:
                     st.error("No library items found in the response.")
                 apps_data: List[q_utils.QAppResponse] = []
@@ -141,7 +161,9 @@ def main() -> None:
     initialize_session_state()
 
     # Set page config and title
-    st.set_page_config(page_title="Amazon Q Apps Deployer", page_icon=":rocket:")
+    st.set_page_config(
+        page_title="Amazon Q Apps Deployer", page_icon=":rocket:"
+    )
     st.title("Amazon Q Apps Deployer")
 
     # Secret loading and account selection

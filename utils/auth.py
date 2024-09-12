@@ -1,13 +1,13 @@
-import os
 import json
+import os
 from datetime import datetime, timedelta, timezone
-from typing import List, TypedDict, Dict
-from botocore.client import BaseClient
-from streamlit_oauth import OAuth2Component
+from typing import Dict, List, TypedDict
 
 import boto3
 import jwt as pyjwt
 import streamlit as st
+from botocore.client import BaseClient
+from streamlit_oauth import OAuth2Component
 
 UTC = timezone.utc
 
@@ -23,9 +23,12 @@ class QWorkspaceSecret(TypedDict):
 
 
 class QWorkspaceSecrets(TypedDict):
-    __root__: Dict[str, QWorkspaceSecret]  # Allow any number of secrets with dynamic names
+    __root__: Dict[
+        str, QWorkspaceSecret
+    ]  # Allow any number of secrets with dynamic names
 
 
+# Load secrets from AWS Secrets Manager
 # Load secrets from AWS Secrets Manager
 def load_secret(secret_name: str) -> Dict[str, QWorkspaceSecret] | None:
     """
@@ -33,8 +36,13 @@ def load_secret(secret_name: str) -> Dict[str, QWorkspaceSecret] | None:
     Return the parsed QWorkspaceSecrets structure.
     """
     try:
+        # Fetch the AWS_PROFILE from environment variable or use 'qapps' as default
+        aws_profile = os.getenv("AWS_PROFILE", "qapps")
+
         # Initialize boto3 session and secrets client
-        SESSION = boto3.Session(profile_name="qapps", region_name=os.getenv("AWS_REGION"))
+        SESSION = boto3.Session(
+            profile_name=aws_profile, region_name=os.getenv("AWS_REGION")
+        )
         secrets_client = SESSION.client("secretsmanager")
 
         # Retrieve the secret value from AWS Secrets Manager
@@ -44,13 +52,15 @@ def load_secret(secret_name: str) -> Dict[str, QWorkspaceSecret] | None:
         secret_string = response.get("SecretString")
         if secret_string:
             # Parse the SecretString into a dictionary with dynamic secret names
-            secret_data: Dict[str, QWorkspaceSecret] = json.loads(secret_string)
+            secret_data: Dict[str, QWorkspaceSecret] = json.loads(
+                secret_string
+            )
             return secret_data
 
         st.error(f"No SecretString found for {secret_name}")
         return None
     except Exception as e:
-        st.error(f"Error retrieving secret value for {secret_name}: {e}")
+        st.exception(f"Error retrieving secret value for {secret_name}: {e}")
         return None
 
 
@@ -101,6 +111,7 @@ def handle_oauth2_token_retrieval_headless() -> None:
     st.write(f"Authenticating with username: {username}")
 
     try:
+        # Try to authenticate
         auth_response = client.initiate_auth(
             AuthFlow="USER_PASSWORD_AUTH",
             AuthParameters={
@@ -113,6 +124,7 @@ def handle_oauth2_token_retrieval_headless() -> None:
         if "AuthenticationResult" in auth_response:
             token = auth_response["AuthenticationResult"]
 
+            # Store tokens in session state
             st.session_state.token = {
                 "id_token": token["IdToken"],
                 "access_token": token["AccessToken"],
@@ -120,6 +132,7 @@ def handle_oauth2_token_retrieval_headless() -> None:
             }
 
             try:
+                # Try to retrieve IDC JWT Token
                 st.session_state.idc_jwt_token = get_iam_oidc_token(
                     st.session_state.token["id_token"]
                 )
@@ -130,12 +143,25 @@ def handle_oauth2_token_retrieval_headless() -> None:
                         seconds=st.session_state.idc_jwt_token["expiresIn"]
                     )
                 st.rerun()
+
+            except KeyError as e:
+                st.error(f"Missing key in IDC JWT Token response: {e}")
             except Exception as e:
-                st.error(f"Error retrieving IDC JWT Token: {e}")
+                st.error(f"Unexpected error retrieving IDC JWT Token: {e}")
+
         else:
             st.error("Failed to retrieve authentication tokens.")
+
+    except client.exceptions.NotAuthorizedException:
+        st.error("Invalid username or password.")
+    except client.exceptions.UserNotFoundException:
+        st.error("User not found.")
+    except client.exceptions.InvalidParameterException as e:
+        st.error(f"Invalid parameters provided: {e}")
+    except KeyError as e:
+        st.error(f"Unexpected response structure: {e}")
     except Exception as e:
-        st.error(f"Error during authentication: {e}")
+        st.error(f"Unexpected error during authentication: {e}")
 
 
 # Configure the OAuth2 component for Cognito

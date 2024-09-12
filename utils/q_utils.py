@@ -1,8 +1,9 @@
 import uuid
-from typing import Optional, Dict, List, Literal, TypedDict
+from datetime import datetime
+from typing import Dict, List, Literal, Optional, TypedDict
+
 import streamlit as st
 from botocore.client import BaseClient
-from datetime import datetime
 
 
 # Define the structure of the Q App cards and definition using TypedDict
@@ -53,44 +54,47 @@ def create_q_app(qclient: BaseClient) -> QAppResponse:
     Create a Q App with a single text input card.
     """
     try:
-        # Fetch the app ID from the selected account's secret data
+        # Fetch the app ID from the selected account's secret data (potential failure)
         amazon_q_app_id: str = st.session_state.secret_data[
             st.session_state.selected_account
         ]["q_app_id"]
 
-        card_id: str = str(uuid.uuid4())
+    except KeyError as e:
+        st.error(f"Error accessing session data: {e}")
+        raise
 
-        # Define the text input card using the structure
-        text_input_card: TextInputCard = {
-            "title": "My Text Card",  # Required title for the card
-            "id": card_id,  # Unique identifier for the card
-            "type": "text-input",  # Type of card
-            "placeholder": "Enter your text here",  # Optional placeholder
-            "defaultValue": "Default text",  # Optional default value
-        }
+    # Generate a card ID (this is unlikely to fail)
+    card_id: str = str(uuid.uuid4())
 
-        # Define the Q App structure
-        q_app_definition: QAppDefinition = {
-            "instanceId": amazon_q_app_id,  # Required instanceId
-            "title": "My Text Input Q App",  # Required title for the app
-            "description": "A Q App with a single text input card",  # Optional description
-            "appDefinition": {
-                "appDefinitionVersion": "1.0",  # Version of the app definition
-                "cards": [text_input_card],  # Cards must be defined in a list
-                "initialPrompt": "Welcome to My Text Input Q App!",  # Initial prompt
-                "canEdit": True,  # Whether the app can be edited
-            },
-            "tags": {"Environment": "Development"},  # Tags for the Q App
-        }
+    # Define the text input card
+    text_input_card: TextInputCard = {
+        "title": "My Text Card",
+        "id": card_id,
+        "type": "text-input",
+        "placeholder": "Enter your text here",
+        "defaultValue": "Default text",
+    }
 
-        st.write(
-            "Creating Q App with the following definition:", q_app_definition
-        )
+    # Define the Q App structure
+    q_app_definition: QAppDefinition = {
+        "instanceId": amazon_q_app_id,
+        "title": "My Text Input Q App",
+        "description": "A Q App with a single text input card",
+        "appDefinition": {
+            "appDefinitionVersion": "1.0",
+            "cards": [text_input_card],
+            "initialPrompt": "Welcome to My Text Input Q App!",
+            "canEdit": True,
+        },
+        "tags": {"Environment": "Development"},
+    }
 
-        # Call the Q client to create the Q App
+    st.write("Creating Q App with the following definition:", q_app_definition)
+
+    try:
+        # Call the Q client to create the Q App (potential failure)
         response: QAppResponse = qclient.create_q_app(**q_app_definition)
         return response
-
     except Exception as e:
         st.error(f"Error creating Q App: {e}")
         raise
@@ -111,12 +115,19 @@ def list_library(
         # Define the request with the specific type
         qListDef: Dict[str, str] = {"instanceId": amazon_q_app_id}
         all_library_items: List[QAppResponse] = []
+        next_token: Optional[str] = None
 
+        # Loop through pages of results
         while True:
+            # Add NextToken to the request if it exists
+            if next_token:
+                qListDef["NextToken"] = next_token
+
             # Expecting the response to be a dictionary with known keys and types
             response: Dict[str, List[QAppResponse]] = (
                 qclient.list_library_items(**qListDef)
             )
+
             if verbose:
                 st.write("List Library Items Response:", response)
 
@@ -125,14 +136,13 @@ def list_library(
 
             # Check for the presence of a NextToken for pagination
             next_token_value = response.get("NextToken", None)
-            next_token: Optional[str] = (
+            next_token = (
                 next_token_value if isinstance(next_token_value, str) else None
             )
+
+            # Exit the loop if there's no NextToken
             if not next_token:
                 break
-
-            # Update the request for the next page if NextToken exists
-            qListDef["NextToken"] = next_token
 
         return {"libraryItems": all_library_items}
     except Exception as e:
