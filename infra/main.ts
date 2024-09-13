@@ -8,10 +8,12 @@ const client = 'arcanum';
 const serviceName = 'q-apps-deployer';
 
 const app = new App();
+const bucketSuffix = environmentName == 'prod' ? '' : '-dev';
 new QAppsDeployerStack(app, 'q-apps-deployer', {
   environmentName,
   client,
   serviceName,
-  templateBucketName: 'arcanum-numa-templates' + (environmentName == 'prod' ? '' : '-dev'),
+  templateBucketName: 'arcanum-numa-templates' + bucketSuffix,
+  appsBucketName: 'numa-qapps' + bucketSuffix,
 });
 app.synth();
