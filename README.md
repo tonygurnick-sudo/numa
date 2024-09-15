@@ -12,7 +12,7 @@ This project is a Streamlit-based interface for managing and deploying Q Apps in
 
     streamlit run app.py
 
-3. The deployer is accessible at 
+3. The deployer is accessible at
 
     http://localhost:8501/
 
