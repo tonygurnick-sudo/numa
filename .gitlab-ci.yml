@@ -1,6 +1,11 @@
 include:
   - project: arcanumai/ci
     file: pipelines/node.yml
+  - project: arcanumai/ci
+    file: pipelines/python.yml
+
+variables:
+  PYTHON_VER: "3.12"
 
 .node_job:
   variables:
