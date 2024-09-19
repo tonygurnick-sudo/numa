@@ -1,74 +1,95 @@
-import boto3
 import os
+from typing import Dict, List
+
 import streamlit as st
 
 
 # List S3 objects using the session
-def list_s3_objects(bucket_name: str) -> List[str]:
-    """List objects in the specified S3 bucket using the boto3 session from the state."""
+def list_s3_objects_with_metadata(bucket_name: str) -> List[Dict]:
+    """
+    List objects in the specified S3 bucket and fetch their metadata, including x-amz-meta-appid.
+    :param bucket_name: The name of the S3 bucket.
+    :return: A list of objects with their metadata.
+    """
+    if "session" not in st.session_state or st.session_state.session is None:
+        st.error("Boto3 session is not initialized.")
+        return []
+
+    # Create the S3 client from the existing session
+    s3_client = st.session_state.session.client(
+        "s3", region_name=os.getenv("AWS_REGION")
+    )
+
     try:
-        # Ensure the session is initialized
-        if "session" not in st.session_state or st.session_state.session is None:
-            st.error("Boto3 session is not initialized.")
-            return []
-
-        # Create the S3 client from the existing session
-        s3_client = st.session_state.session.client('s3', region_name=os.getenv('AWS_REGION'))
-
-        # List objects in the bucket
+        objects_with_metadata = []
         response = s3_client.list_objects_v2(Bucket=bucket_name)
 
-        if 'Contents' in response:
-            object_keys = [obj['Key'] for obj in response['Contents']]
-            return object_keys
-        else:
-            st.write(f"No objects found in {bucket_name}.")
-            return []
+        for obj in response.get("Contents", []):
+            object_key = obj["Key"]
+
+            # Get metadata for each object
+            try:
+                object_metadata = s3_client.head_object(
+                    Bucket=bucket_name, Key=object_key
+                )
+                s3_app_id = object_metadata.get("Metadata", {}).get(
+                    "appid", None
+                )
+
+                # Add metadata if appId exists
+                if s3_app_id:
+                    obj["Metadata"] = {"appid": s3_app_id}
+
+                # Append the object along with its metadata
+                obj["RawMetadata"] = object_metadata
+                objects_with_metadata.append(obj)
+
+            except Exception as e:
+                st.warning(
+                    f"Failed to fetch metadata for object {object_key}: {e}"
+                )
+
+        return objects_with_metadata
 
     except Exception as e:
-        st.error(f"Error listing S3 objects: {e}")
+        st.error(f"Error listing objects in S3: {e}")
         return []
 
 
-# Upload a file to S3
-def upload_file_to_s3(bucket_name: str, file_path: str, object_key: str) -> bool:
-    """Upload a file to the specified S3 bucket using the session from the state."""
-    try:
-        if "session" not in st.session_state or st.session_state.session is None:
-            st.error("Boto3 session is not initialized.")
-            return False
+def upload_data_to_s3(
+    bucket_name: str, object_key: str, data: str, metadata: dict
+) -> bool:
+    """
+    Upload raw data (like a JSON string) directly to the S3 bucket with metadata.
+    Uses the existing Boto3 session from `st.session_state.session`.
 
-        # Create the S3 client
-        s3_client = st.session_state.session.client('s3', region_name=os.getenv('AWS_REGION'))
-
-        # Upload the file
-        with open(file_path, "rb") as f:
-            s3_client.put_object(Bucket=bucket_name, Key=object_key, Body=f)
-
-        st.success(f"File {file_path} uploaded to S3 bucket {bucket_name} as {object_key}.")
-        return True
-
-    except Exception as e:
-        st.error(f"Error uploading file to S3: {e}")
+    :param bucket_name: The name of the S3 bucket.
+    :param object_key: The key (path) for the object in S3.
+    :param data: The data (like JSON) to upload.
+    :param metadata: Dictionary of metadata to attach (e.g., appId and version).
+    """
+    # Ensure the session is initialized
+    if "session" not in st.session_state or st.session_state.session is None:
+        st.error("Boto3 session is not initialized.")
         return False
 
+    # Create the S3 client from the existing session
+    s3_client = st.session_state.session.client(
+        "s3", region_name=os.getenv("AWS_REGION")
+    )
 
-# Download a file from S3
-def download_file_from_s3(bucket_name: str, object_key: str, download_path: str) -> bool:
-    """Download a file from the specified S3 bucket using the session from the state."""
     try:
-        if "session" not in st.session_state or st.session_state.session is None:
-            st.error("Boto3 session is not initialized.")
-            return False
-
-        # Create the S3 client
-        s3_client = st.session_state.session.client('s3', region_name=os.getenv('AWS_REGION'))
-
-        # Download the file
-        s3_client.download_file(bucket_name, object_key, download_path)
-        st.success(f"File {object_key} downloaded from S3 bucket {bucket_name} to {download_path}.")
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=object_key,
+            Body=data,
+            Metadata=metadata,  # Add metadata, including appId and version
+        )
+        st.success(
+            f"Data uploaded to {bucket_name}/{object_key} with metadata."
+        )
         return True
 
     except Exception as e:
-        st.error(f"Error downloading file from S3: {e}")
+        st.error(f"Error uploading data to S3: {e}")
         return False
