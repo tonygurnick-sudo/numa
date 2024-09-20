@@ -21,7 +21,7 @@ def download_file_ui(bucket_name: str):
             st.error(f"Failed to download {download_file} from S3.")
 
 
-def display_app_details(app_info: Dict, bucket_name: str):
+def display_app_details(app_info: Dict):
     """
     Display app details with action buttons and additional status information, including debug info.
     :param app_info: Dictionary containing app details and status information.
@@ -211,7 +211,7 @@ def display_comparison_ui(
     st.write("### Deployed Apps (In S3 and the Instance)")
     if comparison_result["deployed"]:
         for app_info in comparison_result["deployed"]:
-            display_app_details(app_info, bucket_name)
+            display_app_details(app_info)
     else:
         st.write("No apps are deployed.")
 
@@ -220,7 +220,7 @@ def display_comparison_ui(
         st.write("### Apps Only in Instance")
         if comparison_result["only_in_instance"]:
             for app_info in comparison_result["only_in_instance"]:
-                display_app_details(app_info, bucket_name)
+                display_app_details(app_info)
         else:
             st.write("No apps found only in the instance.")
 
@@ -228,7 +228,7 @@ def display_comparison_ui(
     st.write("### Not Deployed Apps (Only in S3)")
     if comparison_result["not_deployed"]:
         for app_info in comparison_result["not_deployed"]:
-            display_app_details(app_info, bucket_name)
+            display_app_details(app_info)
     else:
         st.write("All apps are deployed.")
 
