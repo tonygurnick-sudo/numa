@@ -177,7 +177,6 @@ def main():
         bucket_name = "numa-q-apps"  # Replace with your actual bucket name
 
         # Fetch the S3 objects and display metadata
-        st.write("### Listing Raw S3 Objects with Metadata")
         s3_objects = s3_utils.list_s3_objects_with_metadata(bucket_name)
 
         # Call your Q client to interact with the Q instance
@@ -185,7 +184,6 @@ def main():
 
         if qclient:
             # Fetch and display Q Apps from the instance
-            st.write("### Listing Raw Q Apps from the Instance")
             instance_apps = q_utils.get_all_q_apps(qclient)
 
             # Compare and display the Q Apps from the instance with S3
