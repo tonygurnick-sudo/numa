@@ -2,12 +2,12 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, TypedDict
-from dotenv import load_dotenv
 
 import boto3
 import jwt as pyjwt
 import streamlit as st
 from botocore.client import BaseClient
+from dotenv import load_dotenv
 from streamlit_oauth import OAuth2Component
 
 UTC = timezone.utc

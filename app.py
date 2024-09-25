@@ -4,8 +4,7 @@ import streamlit as st
 
 import utils.auth as auth
 import utils.q_utils as q_utils
-from utils import s3_utils
-from utils import ui_utils
+from utils import s3_utils, ui_utils
 
 UTC = timezone.utc
 
