@@ -4,7 +4,7 @@ import streamlit as st
 
 import utils.auth as auth
 import utils.q_utils as q_utils
-from utils import s3_utils  # Import the S3 utilities
+from utils import s3_utils
 from utils import ui_utils
 
 UTC = timezone.utc
@@ -13,9 +13,10 @@ UTC = timezone.utc
 S3_BUCKET = "numa-q-apps"
 
 
-# Initialize session state variables
 def initialize_session_state() -> None:
-    """Initialize session state variables."""
+    """
+    Initialize session state variables.
+    """
     if "aws_credentials" not in st.session_state:
         st.session_state.aws_credentials = None
     if "idc_jwt_token" not in st.session_state:
@@ -36,11 +37,16 @@ def initialize_session_state() -> None:
         st.session_state.credentials_selected = (
             False  # Track if credentials are selected
         )
+    if "bucket_name" not in st.session_state:
+        st.session_state.bucket_name = S3_BUCKET
 
 
-# Step 1: Load Secret Data and Select Account
 def load_secret_and_select_account(secret_name: str) -> None:
-    """Load the secret data and allow account selection."""
+    """
+    Load the secret data and allow account selection.
+
+    :param secret_name: The name of the secret to load.
+    """
     if not st.session_state.secret_data:
         st.session_state.secret_data = auth.load_secret(secret_name)
 
@@ -60,9 +66,10 @@ def load_secret_and_select_account(secret_name: str) -> None:
                 st.session_state.credentials_selected = True
 
 
-# Step 2: OAuth2 Token Retrieval
 def retrieve_oauth2_token() -> None:
-    """Retrieve or refresh the OAuth2 token."""
+    """
+    Retrieve or refresh the OAuth2 token.
+    """
     if (
         st.session_state.credentials_selected
         and st.session_state.selected_account
@@ -103,9 +110,10 @@ def retrieve_oauth2_token() -> None:
                 )
 
 
-# Step 3: List and Display Library Apps
 def list_and_display_library_apps() -> None:
-    """Fetch and display all Library Apps in the Q Business Instance."""
+    """
+    Fetch and display all Library Apps in the Q Business Instance.
+    """
     if st.button("List Library Apps"):
         try:
             st.session_state.q_app_response = None
@@ -154,6 +162,9 @@ def list_and_display_library_apps() -> None:
 
 # Main flow control
 def main():
+    """
+    Main function for the Streamlit app.
+    """
     # Initialize session state
     initialize_session_state()
 
@@ -174,7 +185,7 @@ def main():
 
     # Use S3 Utilities to list objects in S3 with metadata
     if "session" in st.session_state and st.session_state.session is not None:
-        bucket_name = "numa-q-apps"  # Replace with your actual bucket name
+        bucket_name = st.session_state.bucket_name
 
         # Fetch the S3 objects and display metadata
         s3_objects = s3_utils.list_s3_objects_with_metadata(bucket_name)

@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, TypedDict
+from dotenv import load_dotenv
 
 import boto3
 import jwt as pyjwt
@@ -10,6 +11,8 @@ from botocore.client import BaseClient
 from streamlit_oauth import OAuth2Component
 
 UTC = timezone.utc
+
+load_dotenv()
 
 
 class QWorkspaceSecret(TypedDict):
@@ -34,6 +37,8 @@ def load_secret(secret_name: str) -> Dict[str, QWorkspaceSecret] | None:
     """
     Load and parse the SecretString from AWS Secrets Manager.
     Return the parsed QWorkspaceSecrets structure.
+    :param secret_name: The name of the secret in AWS Secrets Manager.
+    :return: Dictionary containing the parsed secret data, or None if an error occurs.
     """
     try:
         # Fetch the AWS_PROFILE from environment variable or use 'qapps' as default
@@ -66,6 +71,11 @@ def load_secret(secret_name: str) -> Dict[str, QWorkspaceSecret] | None:
 
 # Retrieve configuration for a specific account from Secrets Manager
 def retrieve_config_from_secret(secret_name: str, account: str) -> None:
+    """
+    Retrieve configuration for a specific account from Secrets Manager.
+    :param secret_name: The name of the secret in AWS Secrets Manager.
+    :param account: The account name to retrieve configuration for.
+    """
     if "secret_data" not in st.session_state:
         st.session_state.secret_data = load_secret(secret_name)
 
@@ -92,6 +102,9 @@ def retrieve_config_from_secret(secret_name: str, account: str) -> None:
 
 # Handle the OAuth2 token retrieval and IDC JWT token retrieval
 def handle_oauth2_token_retrieval_headless() -> None:
+    """
+    Handle the OAuth2 token retrieval and IDC JWT token retrieval.
+    """
     if st.session_state.current_account is None:
         st.error("No account selected")
         return
@@ -166,6 +179,10 @@ def handle_oauth2_token_retrieval_headless() -> None:
 
 # Configure the OAuth2 component for Cognito
 def configure_oauth_component() -> OAuth2Component | None:
+    """
+    Configure the OAuth2 component for Cognito.
+    :return: Configured OAuth2Component or None if configuration fails.
+    """
     if "OAUTH_CONFIG" not in st.session_state:
         st.error("OAUTH_CONFIG not found in session state.")
         return None
@@ -201,6 +218,11 @@ class OIDCTokenResponse(TypedDict):
 
 # Retrieve IAM OIDC token using the ID token from Cognito
 def get_iam_oidc_token(id_token: str) -> OIDCTokenResponse | None:
+    """
+    Retrieve IAM OIDC token using the ID token from Cognito.
+    :param id_token: The ID token obtained from Cognito.
+    :return: OIDCTokenResponse containing the IAM OIDC token information, or None if an error occurs.
+    """
     try:
         if (
             "session" not in st.session_state
@@ -235,8 +257,12 @@ def get_iam_oidc_token(id_token: str) -> OIDCTokenResponse | None:
         raise
 
 
-# Assume a role using the token
 def assume_role_with_token(iam_token: str, verbose: bool = False) -> None:
+    """
+    Assume a role using the token.
+    :param iam_token: The IAM token to use for assuming the role.
+    :param verbose: If True, print verbose output.
+    """
     try:
         decoded_token = pyjwt.decode(
             iam_token, options={"verify_signature": False}
@@ -284,6 +310,11 @@ def assume_role_with_token(iam_token: str, verbose: bool = False) -> None:
 
 # Create the Q client using the assumed role's credentials
 def get_qclient(idc_id_token: str) -> BaseClient:
+    """
+    Create the Q client using the assumed role's credentials.
+    :param idc_id_token: The IDC ID token to use for authentication.
+    :return: A BaseClient instance for interacting with the Q service.
+    """
     if not st.session_state.aws_credentials:
         assume_role_with_token(idc_id_token)
     elif st.session_state.aws_credentials["Expiration"] < datetime.now(

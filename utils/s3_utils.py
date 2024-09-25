@@ -56,9 +56,7 @@ def list_s3_objects_with_metadata(bucket_name: str) -> List[Dict]:
         return []
 
 
-def upload_data_to_s3(
-    bucket_name: str, object_key: str, data: str, metadata: dict
-) -> bool:
+def upload_data_to_s3(object_key: str, data: str, metadata: dict) -> bool:
     """
     Upload raw data (like a JSON string) directly to the S3 bucket with metadata.
     Uses the existing Boto3 session from `st.session_state.session`.
@@ -80,13 +78,13 @@ def upload_data_to_s3(
 
     try:
         s3_client.put_object(
-            Bucket=bucket_name,
+            Bucket=st.session_state.bucket_name,
             Key=object_key,
             Body=data,
             Metadata=metadata,  # Add metadata, including appId and version
         )
         st.success(
-            f"Data uploaded to {bucket_name}/{object_key} with metadata."
+            f"Data uploaded to {st.session_state.bucket_name}/{object_key} with metadata."
         )
         return True
 

@@ -101,6 +101,10 @@ def list_library(
 ) -> List[QAppResponse]:
     """
     List all library items from Q.
+
+    :param qclient: The Q client to interact with the Q service.
+    :param verbose: Whether to print verbose output.
+    :return: A list of Q App responses.
     """
     try:
         # Fetch the app ID from the selected account's secret data
@@ -148,6 +152,10 @@ def list_library(
 def get_app(qclient: BaseClient, q_app_id: str) -> QAppResponse:
     """
     Get the Q App details.
+
+    :param qclient: The Q client to interact with the Q service.
+    :param q_app_id: The ID of the Q App.
+    :return: The Q App response.
     """
     try:
         # Fetch the app ID from the selected account's secret data
@@ -171,6 +179,9 @@ def get_all_q_apps(qclient: BaseClient) -> List[QAppResponse]:
     """
     Get all Q Apps from the Q instance, based on the library.
     Get the Library and then fetch each app's details.
+
+    :param qclient: The Q client to interact with the Q service.
+    :return: A list of Q App responses.
     """
     try:
         # Fetch the library items

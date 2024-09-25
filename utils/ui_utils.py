@@ -1,3 +1,4 @@
+import json
 from typing import Dict, List
 
 import streamlit as st
@@ -6,7 +7,10 @@ from utils import s3_utils  # Ensure s3_utils is imported for S3 operations
 
 
 def download_file_ui(bucket_name: str):
-    """Display UI for downloading a file from the S3 bucket."""
+    """
+    Display UI for downloading a file from the S3 bucket.
+    :param bucket_name: The name of the S3 bucket.
+    """
     download_file = st.text_input("Enter file name to download from S3")
     if st.button("Download from S3") and download_file:
         download_path = f"downloads/{download_file}"  # Example local path
@@ -25,7 +29,6 @@ def display_app_details(app_info: Dict):
     """
     Display app details with action buttons and additional status information, including debug info.
     :param app_info: Dictionary containing app details and status information.
-    :param bucket_name: S3 bucket name.
     """
     instance_app = app_info.get("instance_app", {})
     s3_object = app_info.get("s3_object", {})
@@ -42,14 +45,9 @@ def display_app_details(app_info: Dict):
     )
     app_status = app_info.get("status", "Unknown status")
     is_parent = app_info.get("is_parent", False)
-
-    # Get appIds for debugging
-    instance_app_id = instance_app.get("appId", "N/A")
-    s3_app_id = (
-        s3_object.get("RawMetadata", {})
-        .get("Metadata", {})
-        .get("appid", "N/A")
-    )
+    app_id = instance_app.get("appId") or s3_object.get("RawMetadata", {}).get(
+        "Metadata", {}
+    ).get("appid", "Unknown ID")
 
     # Update the title format to include Parent status
     title = f"{app_title} ({app_status}{' - Parent' if is_parent else ''})"
@@ -63,8 +61,10 @@ def display_app_details(app_info: Dict):
 
         # Debug information
         st.markdown("### Debug Information")
-        st.text(f"Instance App ID: {instance_app_id}")
-        st.text(f"S3 App ID: {s3_app_id}")
+        st.text(f"Instance App ID: {instance_app.get('appId', 'N/A')}")
+        st.text(
+            f"S3 App ID: {s3_object.get('RawMetadata', {}).get('Metadata', {}).get('appid', 'N/A')}"
+        )
 
         # Display version comparison debug info
         debug_info = app_info.get("debug_info", {})
@@ -84,7 +84,71 @@ def display_app_details(app_info: Dict):
             for key, value in s3_object["RawMetadata"]["Metadata"].items():
                 st.text(f"  {key}: {value}")
 
-        # ... (rest of the function remains the same)
+        # Prepare filtered data for download and upload
+        filtered_data = {
+            "appId": app_id,
+            "title": app_title,
+            "description": app_description,
+            "initialPrompt": instance_app.get("initialPrompt", ""),
+            "appVersion": app_version,
+            "appDefinition": instance_app.get("appDefinition", {}),
+        }
+        json_data = json.dumps(filtered_data, indent=4)
+
+        # Create a row with columns for the download button and action buttons
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        # Download button
+        with col1:
+            st.download_button(
+                label="Download",
+                key=f"{app_title}_definition",
+                data=json_data,
+                file_name=f"{app_title}_definition.json",
+                mime="application/json",
+            )
+
+        # Deploy button
+        with col2:
+            if st.button(label="Deploy", key=f"{app_title}_deploy"):
+                st.write("Deploying app...")
+
+        # Delete button
+        with col3:
+            if st.button(label="Delete", key=f"{app_title}_delete"):
+                st.write("Deleting app...")
+
+        # Update button
+        with col4:
+            if st.button(label="Update", key=f"{app_title}_update"):
+                st.write("Updating app...")
+
+        # Export to Numa S3 button
+        if app_info.get("status") != "In S3":
+            with col5:
+                if st.button(
+                    label="Export to Numa S3", key=f"{app_title}_export"
+                ):
+                    # Upload the JSON data directly to S3 with appID and version as metadata
+                    object_key = f"{app_title}.json"
+                    metadata = {
+                        "appId": app_id,
+                        "version": str(app_version),
+                    }
+                    success = s3_utils.upload_data_to_s3(
+                        object_key=object_key,
+                        data=json_data,
+                        metadata=metadata,
+                    )
+
+                    if success:
+                        st.success(
+                            f"App {app_title} exported to Numa S3 with version {app_version}."
+                        )
+                    else:
+                        st.error(
+                            f"Failed to export app {app_title} to Numa S3."
+                        )
 
 
 def compare_instance_and_s3_apps(
@@ -93,6 +157,9 @@ def compare_instance_and_s3_apps(
     """
     Compare apps in the instance and S3 to classify them as deployed, not deployed, or only in the instance.
     Include information about deployment status, tags, and Parent App status.
+    :param instance_apps: List of apps from the instance.
+    :param s3_objects: List of S3 objects containing metadata.
+    :return: Dictionary with categorized app information.
     """
     comparison_result = {
         "deployed": [],  # Apps in both S3 and the instance
