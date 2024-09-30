@@ -1721,15 +1721,15 @@ __metadata:
   linkType: hard
 
 "cdktf@npm:~0.20.0":
-  version: 0.20.8
-  resolution: "cdktf@npm:0.20.8"
+  version: 0.20.9
+  resolution: "cdktf@npm:0.20.9"
   dependencies:
     archiver: "npm:6.0.2"
     json-stable-stringify: "npm:1.1.1"
-    semver: "npm:7.6.2"
+    semver: "npm:7.6.3"
   peerDependencies:
     constructs: ^10.3.0
-  checksum: 10c0/9e69fc366c0a99a6f4f23839a3eab766ea4854c894675f5613ca6164efcb7eef78a0677e58e38b20f79fc9651f7fe0d1455c6d8faf0e61d8da6cedbfecd9d46e
+  checksum: 10c0/47d66213eba086d6683f50e71e54575da5c6306684f3ec0e147feca0e2d2ebcd5d2f7520922a8e54f89ada4f2083d292b00ad1d10eaa77a56cef84c4d8ffc479
   languageName: node
   linkType: hard
 
@@ -5257,12 +5257,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"semver@npm:7.6.2":
-  version: 7.6.2
-  resolution: "semver@npm:7.6.2"
+"semver@npm:7.6.3, semver@npm:^7.3.2, semver@npm:^7.3.5, semver@npm:^7.5.4, semver@npm:^7.6.0, semver@npm:^7.6.3":
+  version: 7.6.3
+  resolution: "semver@npm:7.6.3"
   bin:
     semver: bin/semver.js
-  checksum: 10c0/97d3441e97ace8be4b1976433d1c32658f6afaff09f143e52c593bae7eef33de19e3e369c88bd985ce1042c6f441c80c6803078d1de2a9988080b66684cbb30c
+  checksum: 10c0/88f33e148b210c153873cb08cfe1e281d518aaa9a666d4d148add6560db5cd3c582f3a08ccb91f38d5f379ead256da9931234ed122057f40bb5766e65e58adaf
   languageName: node
   linkType: hard
 
@@ -5272,15 +5272,6 @@ __metadata:
   bin:
     semver: bin/semver.js
   checksum: 10c0/e3d79b609071caa78bcb6ce2ad81c7966a46a7431d9d58b8800cfa9cb6a63699b3899a0e4bcce36167a284578212d9ae6942b6929ba4aa5015c079a67751d42d
-  languageName: node
-  linkType: hard
-
-"semver@npm:^7.3.2, semver@npm:^7.3.5, semver@npm:^7.5.4, semver@npm:^7.6.0, semver@npm:^7.6.3":
-  version: 7.6.3
-  resolution: "semver@npm:7.6.3"
-  bin:
-    semver: bin/semver.js
-  checksum: 10c0/88f33e148b210c153873cb08cfe1e281d518aaa9a666d4d148add6560db5cd3c582f3a08ccb91f38d5f379ead256da9931234ed122057f40bb5766e65e58adaf
   languageName: node
   linkType: hard
 
