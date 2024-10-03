@@ -49,62 +49,62 @@ class QAppResponse(TypedDict):
 
 
 # Assuming AMAZON_Q_APP_ID and REGION are stored in the selected account in session state
-def create_q_app(qclient: BaseClient) -> QAppResponse:
+def create_q_app_with_version(
+    qclient, app_title: str, description: str, app_id: str, app_version: str
+) -> QAppResponse:
     """
-    Create a Q App with a single text input card.
+    Create a Q App and add a tag with the given appID and version.
+    :param qclient: The Q client to interact with the Q service.
+    :param app_title: The title of the Q App.
+    :param description: The description of the Q App.
+    :param app_id: The ID of the Q App (used as UUID).
+    :param app_version: The version of the Q App.
     """
     try:
-        # Fetch the app ID from the selected account's secret data (potential failure)
-        amazon_q_app_id: str = st.session_state.secret_data[
-            st.session_state.selected_account
-        ]["q_app_id"]
+        # Define a card (this part would be customizable based on your needs)
+        text_input_card = {
+            "title": "My Text Card",
+            "id": str(uuid.uuid4()),  # Generate a unique ID for the card
+            "type": "text-input",
+            "placeholder": "Enter your text here",
+            "defaultValue": "Default text",
+        }
 
-    except KeyError as e:
-        st.error(f"Error accessing session data: {e}")
-        raise
+        # Define the Q App structure
+        q_app_definition = {
+            "instanceId": app_id,  # The app ID of the Q App instance (used as UUID)
+            "title": app_title,  # App title
+            "description": description,  # Description of the app
+            "appDefinition": {
+                "appDefinitionVersion": "1.0",
+                "cards": [text_input_card],  # The cards in the app
+                "initialPrompt": "Welcome to My Text Input Q App!",
+                "canEdit": True,
+            },
+            "tags": {
+                "uuid": app_id,  # Use appID as the UUID
+                "version": app_version,  # Add version control
+            },
+        }
 
-    # Generate a card ID (this is unlikely to fail)
-    card_id: str = str(uuid.uuid4())
-
-    # Define the text input card
-    text_input_card: TextInputCard = {
-        "title": "My Text Card",
-        "id": card_id,
-        "type": "text-input",
-        "placeholder": "Enter your text here",
-        "defaultValue": "Default text",
-    }
-
-    # Define the Q App structure
-    q_app_definition: QAppDefinition = {
-        "instanceId": amazon_q_app_id,
-        "title": "My Text Input Q App",
-        "description": "A Q App with a single text input card",
-        "appDefinition": {
-            "appDefinitionVersion": "1.0",
-            "cards": [text_input_card],
-            "initialPrompt": "Welcome to My Text Input Q App!",
-            "canEdit": True,
-        },
-        "tags": {"Environment": "Development"},
-    }
-
-    st.write("Creating Q App with the following definition:", q_app_definition)
-
-    try:
-        # Call the Q client to create the Q App (potential failure)
-        response: QAppResponse = qclient.create_q_app(**q_app_definition)
+        # Create the Q App
+        response = qclient.create_q_app(**q_app_definition)
+        print(f"Q App created with appID {app_id} and version {app_version}")
         return response
     except Exception as e:
-        st.error(f"Error creating Q App: {e}")
-        raise
+        print(f"Error creating Q App: {e}")
+        return None
 
 
 def list_library(
     qclient: BaseClient, verbose: bool = False
-) -> Dict[str, List[QAppResponse]]:
+) -> List[QAppResponse]:
     """
     List all library items from Q.
+
+    :param qclient: The Q client to interact with the Q service.
+    :param verbose: Whether to print verbose output.
+    :return: A list of Q App responses.
     """
     try:
         # Fetch the app ID from the selected account's secret data
@@ -116,9 +116,9 @@ def list_library(
         qListDef: Dict[str, str] = {"instanceId": amazon_q_app_id}
         all_library_items: List[QAppResponse] = []
         next_token: Optional[str] = None
+        more_items = True  # Variable to control loop
 
-        # Loop through pages of results
-        while True:
+        while more_items:
             # Add NextToken to the request if it exists
             if next_token:
                 qListDef["NextToken"] = next_token
@@ -140,11 +140,10 @@ def list_library(
                 next_token_value if isinstance(next_token_value, str) else None
             )
 
-            # Exit the loop if there's no NextToken
-            if not next_token:
-                break
+            # If there is no NextToken, exit the loop
+            more_items = bool(next_token)
 
-        return {"libraryItems": all_library_items}
+        return all_library_items
     except Exception as e:
         st.error(f"Error listing library items: {e}")
         raise
@@ -153,6 +152,10 @@ def list_library(
 def get_app(qclient: BaseClient, q_app_id: str) -> QAppResponse:
     """
     Get the Q App details.
+
+    :param qclient: The Q client to interact with the Q service.
+    :param q_app_id: The ID of the Q App.
+    :return: The Q App response.
     """
     try:
         # Fetch the app ID from the selected account's secret data
@@ -169,4 +172,34 @@ def get_app(qclient: BaseClient, q_app_id: str) -> QAppResponse:
         return response
     except Exception as e:
         st.error(f"Error getting Q App: {e}")
+        raise
+
+
+def get_all_q_apps(qclient: BaseClient) -> List[QAppResponse]:
+    """
+    Get all Q Apps from the Q instance, based on the library.
+    Get the Library and then fetch each app's details.
+
+    :param qclient: The Q client to interact with the Q service.
+    :return: A list of Q App responses.
+    """
+    try:
+        # Fetch the library items
+        st.write("Fetching all Q Apps from the Library...")
+        library_items: List[QAppResponse] = list_library(qclient)
+
+        all_apps_data: List[QAppResponse] = []
+
+        for item in library_items:
+            try:
+                app_data: QAppResponse = get_app(qclient, item["appId"])
+                all_apps_data.append(app_data)
+            except Exception as app_err:
+                st.error(
+                    f"Failed to fetch app details for {item['appId']}: {app_err}"
+                )
+
+        return all_apps_data
+    except Exception as e:
+        st.error(f"Error getting all Q Apps: {e}")
         raise

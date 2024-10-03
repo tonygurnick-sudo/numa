@@ -1,18 +1,21 @@
 from datetime import timezone
-from typing import List
 
 import streamlit as st
 
 import utils.auth as auth
 import utils.q_utils as q_utils
-from utils import ui_utils
+from utils import s3_utils, ui_utils
 
 UTC = timezone.utc
 
+# Define the S3 bucket where apps will be uploaded and retrieved
+S3_BUCKET = "numa-q-apps"
 
-# Initialize session state variables
+
 def initialize_session_state() -> None:
-    """Initialize session state variables."""
+    """
+    Initialize session state variables.
+    """
     if "aws_credentials" not in st.session_state:
         st.session_state.aws_credentials = None
     if "idc_jwt_token" not in st.session_state:
@@ -33,12 +36,16 @@ def initialize_session_state() -> None:
         st.session_state.credentials_selected = (
             False  # Track if credentials are selected
         )
+    if "bucket_name" not in st.session_state:
+        st.session_state.bucket_name = S3_BUCKET
 
 
-# Step 1: Load Secret Data and Select Account
 def load_secret_and_select_account(secret_name: str) -> None:
-    """Load the secret data and allow account selection."""
-    # Check if secret data has already been loaded into session state
+    """
+    Load the secret data and allow account selection.
+
+    :param secret_name: The name of the secret to load.
+    """
     if not st.session_state.secret_data:
         st.session_state.secret_data = auth.load_secret(secret_name)
 
@@ -58,9 +65,10 @@ def load_secret_and_select_account(secret_name: str) -> None:
                 st.session_state.credentials_selected = True
 
 
-# Step 2: OAuth2 Token Retrieval
 def retrieve_oauth2_token() -> None:
-    """Retrieve or refresh the OAuth2 token."""
+    """
+    Retrieve or refresh the OAuth2 token.
+    """
     if (
         st.session_state.credentials_selected
         and st.session_state.selected_account
@@ -72,7 +80,6 @@ def retrieve_oauth2_token() -> None:
         # OAuth2 Setup
         oauth2 = auth.configure_oauth_component()
 
-        # Check if oauth2 component is properly configured
         if oauth2 is None:
             st.error(
                 "OAuth2 component could not be configured. Please check your OAUTH_CONFIG."
@@ -80,7 +87,6 @@ def retrieve_oauth2_token() -> None:
             return
 
         if "token" not in st.session_state or not st.session_state.token:
-            # Handle token retrieval if no token is present in the session
             auth.handle_oauth2_token_retrieval_headless()
         else:
             token = st.session_state["token"]
@@ -91,7 +97,6 @@ def retrieve_oauth2_token() -> None:
 
                 if st.button("Refresh Auth"):
                     try:
-                        # Ensure that oauth2 is not None before calling refresh_token
                         token = oauth2.refresh_token(token, force=True)
                         token["refresh_token"] = refresh_token
                         st.session_state.token = token
@@ -104,59 +109,61 @@ def retrieve_oauth2_token() -> None:
                 )
 
 
-# Step 3: List and Display Library Apps
 def list_and_display_library_apps() -> None:
-    """Fetch and display all Library Apps in the Q Business Instance."""
+    """
+    Fetch and display all Library Apps in the Q Business Instance.
+    """
     if st.button("List Library Apps"):
         try:
             st.session_state.q_app_response = None
-            response = None  # Initialize response to avoid unbound error
-            library_items = (
-                []
-            )  # Initialize library_items to avoid unbound error
+            library_items = []
+            apps_data = []
 
             with st.spinner("Fetching Library Apps..."):
-                # Retrieve the Q client using the stored ID token
+                # Get the Q client using the IDC JWT token
                 qclient = auth.get_qclient(
                     st.session_state.idc_jwt_token["idToken"]
                 )
 
-                # List library apps using the Q client
-                if qclient is not None:
-                    response = q_utils.list_library(qclient)
+                if qclient:
+                    # List library items from the Q client
+                    library_items = q_utils.get_all_q_apps(qclient)
+                    st.session_state.q_app_response = library_items
                 else:
                     st.error("Failed to retrieve Q client.")
-                st.session_state.q_app_response = response
+                    return
 
-                # Use the defined type for library items (assuming it's a list of QAppResponse)
-                if response is not None:
-                    library_items: List[q_utils.QAppResponse] = response[
-                        "libraryItems"
-                    ]
-                else:
-                    st.error("No library items found in the response.")
-                apps_data: List[q_utils.QAppResponse] = []
-
-                # Fetch details of each app and add it to the apps_data list
+                # Fetch app details for each library item
                 for item in library_items:
-                    if qclient is not None:
+                    try:
                         app = q_utils.get_app(qclient, item["appId"])
                         apps_data.append(app)
-                    else:
-                        st.error("Q client is None, cannot fetch app details.")
+                    except Exception as app_err:
+                        st.error(
+                            f"Failed to fetch app details for {item['appId']}: {app_err}"
+                        )
 
-            st.write("### Library Apps")
+            # Display the fetched library apps
+            if apps_data:
+                st.write("### Library Apps")
+                for app in apps_data:
+                    ui_utils.display_app_details(app)
 
-            # Display app details for each fetched app
-            for app in apps_data:
-                ui_utils.display_app_details(app)
+                    # Add button to export apps to S3
+                    if st.button(f"Export {app['appId']} to S3"):
+                        s3_utils.export_app_to_s3(S3_BUCKET, app, app["appId"])
+            else:
+                st.write("No apps to display.")
 
         except Exception as e:
             st.error(f"Failed to list Library Apps: {e}")
 
 
 # Main flow control
-def main() -> None:
+def main():
+    """
+    Main function for the Streamlit app.
+    """
     # Initialize session state
     initialize_session_state()
 
@@ -171,13 +178,29 @@ def main() -> None:
     if not st.session_state.credentials_selected:
         load_secret_and_select_account(secret_name)
 
-    # OAuth2 token retrieval
+    # OAuth2 token retrieval (if credentials have been selected)
     if st.session_state.credentials_selected:
         retrieve_oauth2_token()
 
-    # List and display library apps only if OAuth2 token is available
-    if st.session_state.idc_jwt_token:
-        list_and_display_library_apps()
+    # Use S3 Utilities to list objects in S3 with metadata
+    if "session" in st.session_state and st.session_state.session is not None:
+        bucket_name = st.session_state.bucket_name
+
+        # Fetch the S3 objects and display metadata
+        s3_objects = s3_utils.list_s3_objects_with_metadata(bucket_name)
+
+        # Call your Q client to interact with the Q instance
+        qclient = auth.get_qclient(st.session_state.idc_jwt_token["idToken"])
+
+        if qclient:
+            # Fetch and display Q Apps from the instance
+            instance_apps = q_utils.get_all_q_apps(qclient)
+
+            # Compare and display the Q Apps from the instance with S3
+            st.write("### Comparing Q Apps in Instance and S3")
+            ui_utils.display_comparison_ui(
+                instance_apps, s3_objects, bucket_name
+            )
 
 
 if __name__ == "__main__":
