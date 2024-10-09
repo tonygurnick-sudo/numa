@@ -1,13 +1,13 @@
 import React from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css'
-import { Routes } from './routes';
+import { NumaRoutes } from './routes';
 
 function App() {
 
   return (
     <React.StrictMode>
-       <Routes />
+       <NumaRoutes />
     </React.StrictMode>
   )
 }
