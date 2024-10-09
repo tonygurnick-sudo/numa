@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@popperjs/core": "@popperjs/core/dist/umd/popper.min.js",
+      "node_modules/@popperjs/core": "@popperjs/core/dist/umd/popper.min.js",
     },
     extensions: ['.js', '.jsx'],
   },
