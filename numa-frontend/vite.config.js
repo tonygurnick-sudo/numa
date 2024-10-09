@@ -8,5 +8,6 @@ export default defineConfig({
     alias: {
       "@popperjs/core": "@popperjs/core/dist/umd/popper.min.js",
     },
+    extensions: ['.js', '.jsx'],
   },
 });
