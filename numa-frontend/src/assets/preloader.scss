@@ -1,0 +1,76 @@
+.preloader, .preloader_small {
+    width: 100%;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 9999;
+    background: rgba(255,255,255, 0.7);
+
+    .wrap {
+        height: 40px;
+        width: 40px;
+        margin: 0 auto;
+        text-align: center;
+        margin-top: 40vh;
+
+        .animate {        
+            -webkit-animation-iteration-count: infinite;
+            animation-iteration-count: infinite;
+            -webkit-animation-duration: 2s;
+            animation-duration: 2.5s;
+        }
+
+        .preloader-top {
+            -webkit-animation-name: fadeInTop;
+            animation-name: fadeInTop;
+            
+        }
+        .preloader-mid {
+            -webkit-animation-name: fadeInMid;
+            animation-name: fadeInMid;
+        }
+        .preloader-bottom {
+            -webkit-animation-name: fadeInBottom;
+            animation-name: fadeInBottom;
+        }
+    }
+}
+
+.preloader_small{
+    width: 100%;
+    height: 100%;
+    position: relative;
+    padding: 0;
+    margin: 0;
+    z-index: 10;
+
+    .wrap {
+        height: 40px;
+        width: 40px;
+        margin: 0 auto;
+        text-align: center;
+    }
+
+}
+
+@keyframes fadeInTop {
+    0%   {opacity: 0;}
+    20%  {opacity: 1;}
+    80%  {opacity: 1;}
+    100%  {opacity: 0;}
+}
+@keyframes fadeInMid {
+    0%   {opacity: 0;}
+    10%   {opacity: 0;}
+    30%  {opacity: 1;}
+    80%  {opacity: 1;}
+    100%  {opacity: 0;}
+}
+@keyframes fadeInBottom {
+    0%   {opacity: 0;}
+    20%   {opacity: 0;}
+    40%  {opacity: 1;}
+    80%  {opacity: 1;}
+    100%  {opacity: 0;}
+}
