@@ -1,7 +1,7 @@
 import React from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css'
-import { NumaRoutes } from './routes';
+import { NumaRoutes } from './Routes';
 
 function App() {
 

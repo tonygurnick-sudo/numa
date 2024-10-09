@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
-import { LayoutForm } from '../layouts/layout-form';
-//import { Preloader } from '../../components/preloader';
+import { LayoutForm } from '../layouts/LayoutForm';
+//import { Preloader } from '../../components/Preloader';
 
 import { Button, Form } from 'react-bootstrap';
 

@@ -1,4 +1,4 @@
-import { NumaLogin } from '../src/pages/login';
+import { NumaLogin } from './pages/login';
 import { BrowserRouter as Router, Routes, Route, } from 'react-router-dom';
 
 const NumaRoutes = () => {
