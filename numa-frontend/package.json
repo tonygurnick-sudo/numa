@@ -28,7 +28,10 @@
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.12",
     "globals": "^13.24.0",
+<<<<<<< HEAD
     "sass-embedded": "^1.79.4",
+=======
+>>>>>>> 07f7743 (Numa frontend)
     "vite": "^5.1.0"
   }
 }
