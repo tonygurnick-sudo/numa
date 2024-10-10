@@ -14,7 +14,7 @@
         text-align: center;
         margin-top: 40vh;
 
-        .animate {        
+        .animate {
             -webkit-animation-iteration-count: infinite;
             animation-iteration-count: infinite;
             -webkit-animation-duration: 2s;
@@ -24,7 +24,7 @@
         .preloader-top {
             -webkit-animation-name: fadeInTop;
             animation-name: fadeInTop;
-            
+
         }
         .preloader-mid {
             -webkit-animation-name: fadeInMid;
