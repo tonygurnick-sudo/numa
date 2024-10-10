@@ -12,13 +12,8 @@ const LayoutForm = ({ FormName, Content }) => {
             <header>
               <img src={LogoBk} height="55" className="logo-bk" alt="Arcanum" />
             </header>
-            <Row
-              className={`container d-flex h-100  justify-content-center align-items-center ${FormName}`}
-            >
-              <Col
-                lg={6}
-                className="row justify-content-center align-self-center"
-              >
+            <Row className={`container d-flex h-100  justify-content-center align-items-center ${FormName}`}>
+              <Col lg={6} className="row justify-content-center align-self-center">
                 {Content}
               </Col>
             </Row>
@@ -26,18 +21,16 @@ const LayoutForm = ({ FormName, Content }) => {
           </Col>
 
           <Col lg={6} className={`${FormName}-right`}>
-            <Row className="container d-flex h-100 justify-content-center align-items-center benefits_trial">
-              <Col lg={12}>
-                <h1>
-                  Supercharge your workforce with AI and scale your business
-                </h1>
-                <p>
-                  Numa is a generative AI-powered platform that will empower
-                  your employees to be more creative, data-driven, efficient and
-                  productive.
-                </p>
-              </Col>
-            </Row>
+              <Row className="benefits_trial">
+                <Col lg={12}>
+                  <h1>Supercharge your workforce with AI and scale your business</h1>
+                  <p>
+                    Numa is a generative AI-powered platform that will empower your employees to be more creative,
+                    data-driven, efficient and productive.
+                  </p>
+                </Col>
+              </Row>
+
           </Col>
         </Row>
       </Container>
