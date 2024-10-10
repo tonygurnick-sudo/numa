@@ -1898,10 +1898,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"constructs@npm:10.3.0, constructs@npm:~10":
+"constructs@npm:10.3.0":
   version: 10.3.0
   resolution: "constructs@npm:10.3.0"
   checksum: 10c0/be93ff934f28f2226a674dc18cd608dc7543e2cd6e17e4fbbb55faf80a5ab30b5346bdb18f266ea9b9192438debaafa0b65cad09d67a33a9f84fd8919200ee79
+  languageName: node
+  linkType: hard
+
+"constructs@npm:~10":
+  version: 10.3.1
+  resolution: "constructs@npm:10.3.1"
+  checksum: 10c0/98d14e5f4cbb0fcf812c5c17c5fdf92659232dba782fbe9d98d919649aa81aedf7b795e116a70dfdfb783f1e32cc2c9ff9b171dfde5310b64f81a45ae96eb7a9
   languageName: node
   linkType: hard
 
