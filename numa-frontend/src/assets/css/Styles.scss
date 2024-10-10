@@ -19,7 +19,7 @@
   --color-peach-600: #fbf1e9;
   --color-royal-900: #286bcb;
   --color-royal-100: #eef5ff;
-  --color-yellow: #f0dfbe;  
+  --color-yellow: #f0dfbe;
 }
 
 
@@ -105,7 +105,7 @@ strong {
 a {
   color: var(--color-primary);
   text-decoration: none;
-  
+
   &:hover {
     color: var(--color-primary-hover);
   }
@@ -154,7 +154,7 @@ header {
     z-index: 999;
   }
 
-  
+
   footer {
     font-style: normal;
     font-family: 'Metropolis Bold';
