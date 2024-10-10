@@ -1,0 +1,13 @@
+{
+  "proseWrap": "never",
+  "singleQuote": true,
+  "printWidth": 80,
+  "overrides": [
+    {
+      "files": ["*.css"],
+      "options": {
+        "singleQuote": false
+      }
+    }
+  ]
+}
