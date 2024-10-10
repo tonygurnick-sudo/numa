@@ -1,61 +1,88 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { LayoutForm } from '../layouts/LayoutForm';
 //import { Preloader } from '../../components/Preloader';
-
 import { Button, Form } from 'react-bootstrap';
+
+import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
+
 
 const NumaLogin = () => {
   const status_error = 'error';
 
-  const workspaceIDRef = useRef();
   const usernameRef = useRef();
   const passwordRef = useRef();
 
   const [alertLogin, setAlertLogin] = useState('d-none');
   const [arletLoginContent, setArletLoginContent] = useState('');
 
-  //const [loggedIn, setLoggedIn] = useState(false);
+  const [client, setClient] = useState(null);
 
-  //  let verify = searchParams.get('verify');
+  const [error, setError] = useState(null);  
 
-  const post_numa_workspace = '/api/platform/numa/workspace';
 
-  const handleSubmit = (e) => {
+    // Load the config.json file
+    useEffect(() => {
+      const loadConfig = async () => {
+        try {
+          const response = await fetch('config.json');
+          const data = await response.json();
+          const { region } = data.cognito;
+
+          console.log("region to use:",region)
+          // Create the Cognito Identity Client with the loaded region
+          const newClient = new CognitoIdentityProviderClient({
+            region,
+          });
+
+        // Set the client state variable
+        console.log("newClient to use:",newClient)
+        setClient(newClient);
+
+          // ... (rest of your code using the client)
+        } catch (error) {
+          console.error('Error loading config.json:', error);
+        }
+      };
+
+      loadConfig();
+    }, []);
+
+
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('submit fired')
 
-    const workspace_id = workspaceIDRef.current.value;
+    if (!client) {
+      console.error('Client not initialized');
+      return;
+    }
 
-    const loginData = {
-      username: usernameRef.current.value,
-      password: passwordRef.current.value,
-    };
-    window.localStorage.removeItem('numJWT');
+    const username = usernameRef.current.value;
+    const password = passwordRef.current.value;
 
-    const doFetch = async () => {
-      await fetch(`${post_numa_workspace}/${workspace_id}/`, {
-        method: 'POST',
-        headers: {
-          'Content-type': 'application/json',
+    try {
+      const response = await client.initiateAuthentication({
+        AuthFlow: 'USER_PASSWORD_AUTH',
+        AuthParameters: {
+          USERNAME: username,
+          PASSWORD: password,
         },
-        body: JSON.stringify(loginData),
-      })
-        .then((Response) => Response.json())
-        .then((data) => {
-          if (data.status === status_error) {
-            setAlertLogin('alert alert-secondary');
-            setArletLoginContent(data.message);
-          } else {
-            // TODO
-            //
-            // Ssave jwt data
+        ClientId: '2cvf6o8hg4kv3p9ngrb7lvu23g',
+      });
 
-            console.log('login worked');
-            // setLoggedIn(true);
-          }
-        })
-        .catch(console.error);
-    };
-    doFetch();
+      const tokens = response.AuthenticationResult;
+      console.log('Authentication successful:', tokens);
+
+      // Store tokens securely (e.g., using localStorage or a dedicated token storage solution)
+      // ...
+
+      // Redirect to protected content or perform other actions
+      // ...
+    } catch (error) {
+      console.error('Error during authentication:', error);
+      setError(error.message);
+    }
   };
 
   return (
@@ -69,16 +96,6 @@ const NumaLogin = () => {
             <br />
 
             <Form onSubmit={handleSubmit}>
-              <label htmlFor="password">Workspace ID</label>
-              <input
-                id="workspaceID"
-                name="workspaceID"
-                type="text"
-                className="form-control mb-3"
-                placeholder="Enter your workspace ID"
-                ref={workspaceIDRef}
-              />
-
               <label htmlFor="email">Username</label>
               <input
                 id="username"
