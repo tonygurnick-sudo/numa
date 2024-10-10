@@ -1,3 +1,4 @@
+@import '../fonts/Metropolis.css';
 
 /* Variables */
 :root {
@@ -182,9 +183,10 @@ header {
 
 /* benefits front pages */
 .benefits_trial{
-  margin: 52px 65px;
+
   color: white;
   padding: 15px;
+
 
 h1{
   text-align: center;
@@ -196,6 +198,7 @@ h3{
   font-size: 29px;
 }
 p{
+  text-align: center;
   font-size: 20px;
 }
 ul {
