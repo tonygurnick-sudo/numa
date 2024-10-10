@@ -1,0 +1,253 @@
+
+/* Variables */
+:root {
+  --color-primary: #8e50a7;
+  --color-primary-hover: #744188;
+  --color-secondary: #8e50a7;
+  --color-lt-gray: #f6f6f6;
+  --color-mid-gray: #dfdfdf;
+  --color-gray: #6d6d6d;
+  --color-dk-gray: #101828;
+  --color-blue: #4081de;
+  --color-eggplant-100: #f4eff5;
+  --color-eggplant-200: #ddd0e1;
+  --color-eggplant-600: #9873A6;
+  --color-eggplant-700: #63466D;
+  --color-eggplant-900: #46324e;
+  --color-magenta-900: #8e50a7;
+  --color-magenta-700: #B386C5;
+  --color-peach-600: #fbf1e9;
+  --color-royal-900: #286bcb;
+  --color-royal-100: #eef5ff;
+  --color-yellow: #f0dfbe;  
+}
+
+
+body {
+  background-color: var(--color-lt-gray);
+  font-family: 'Metropolis Regular';
+}
+
+h1,
+h2,
+h3 {
+  color: var(--color-dk-gray);
+}
+.larger{
+  font-size: xxx-large;
+}
+.text-primary {
+  color: var(--color-primary) !important;
+}
+.extra_light_grey_bg{
+  background: #fcfcfc;
+}
+.extra_light2_grey_bg{
+  background: #f9f9f9;
+}
+
+.light_grey_bg{
+  background: var(--color-lt-gray);
+}
+.mid_grey_bg{
+  background: var(--color-mid-gray);
+}
+.eggplant-100-bg {
+  background-color: var(--color-eggplant-100);
+}
+.eggplant-200-bg {
+  background-color: var(--color-eggplant-200);
+}
+.peach-600-bg {
+  background-color: var(--color-peach-600);
+}
+.eggplant-900 {
+  background-color: var(--color-eggplant-900);
+}
+.eggplant-600-text {
+  color: var(--color-eggplant-600);
+}
+.text-light {
+  opacity: 0.6;
+  color: inherit !important;
+}
+
+.text-mid {
+  font-family: 'Metropolis Semi Bold';
+}
+
+.left {
+  float: left;
+}
+.right {
+  float: right;
+}
+.underline {
+  text-decoration: underline;
+}
+.flexcenter {
+  align-items: center;
+}
+
+.subheading {
+  width: auto;
+  padding-right: 40px;
+}
+
+.tag {
+  padding-right: 8px;
+}
+
+strong {
+  font-family: 'Metropolis Bold';
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  
+  &:hover {
+    color: var(--color-primary-hover);
+  }
+
+  &.disabled {
+    pointer-events: none;
+  }
+}
+
+.h-100vh {
+  height: 100vh;
+}
+.mh_100{
+  max-height: 100vh;
+}
+
+
+@mixin gradient-bg {
+  background-image: linear-gradient(#824c93, #d0a5c3);
+}
+
+
+/* Layout */
+header {
+  background: #fff;
+  min-height: 80px;
+  width: 100%;
+
+  .logo-bk {
+    margin: 24px 30px;
+  }
+
+
+}
+.numalogin-left
+{
+  position: relative;
+
+  .register {
+    padding-top: 125px;
+  }
+  header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 999;
+  }
+
+  
+  footer {
+    font-style: normal;
+    font-family: 'Metropolis Bold';
+    font-size: 10px;
+    letter-spacing: 1.3px;
+    line-height: 20px;
+    position: absolute;
+    bottom: 30px;
+    left: 30px;
+    color: var(--color-gray);
+  }
+}
+
+.numalogin-right
+ {
+  @include gradient-bg;
+
+  .promo_pic_abs {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 49%;
+  }
+}
+
+/* benefits front pages */
+.benefits_trial{
+  margin: 52px 65px;
+  color: white;
+  padding: 15px;
+
+h1{
+  text-align: center;
+  color:white;
+  margin-bottom: 60px;
+}
+h3{
+  color:white;
+  font-size: 29px;
+}
+p{
+  font-size: 20px;
+}
+ul {
+  position: relative;
+  list-style-type: none;
+  li {
+    text-align: center;
+    position: absolute;
+    margin-top: 200px;
+    left: 50%;
+    width: 80%;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
+
+      img{
+        width: 125px;
+        clear: both;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      &.active {
+        opacity: 1;
+        visibility: visible;
+      }
+  }
+
+}
+}
+
+
+/* Forms */
+.btn-primary {
+  background-color: var(--color-primary);
+  border: 1px solid var(--color-primary) !important;
+  border-radius: 0;
+
+  &:hover {
+    background-color: var(--color-primary-hover) !important;
+  }
+}
+
+.btn-secondary {
+  background: none;
+  border: 1px solid var(--color-primary) !important;
+  color: var(--color-primary);
+  border-radius: 0;
+
+  &:hover {
+    background-color: var(--color-primary-hover) !important;
+  }
+}

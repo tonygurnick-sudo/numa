@@ -21,7 +21,7 @@ const LayoutForm = ({ FormName, Content }) => {
           </Col>
 
           <Col lg={6} className={`${FormName}-right`}>
-              <Row className="benefits_trial">
+              <Row className="container d-flex h-100 justify-content-center align-items-center benefits_trial">
                 <Col lg={12}>
                   <h1>Supercharge your workforce with AI and scale your business</h1>
                   <p>
