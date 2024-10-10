@@ -47,3 +47,17 @@ deploy_doc_reconstructor_app:
     - aws lambda update-function-code --function-name document-reconstructor --zip-file fileb://function.zip
   only:
     - main
+
+deploy_numa_frontend:
+  stage: deploy
+  image: node:20-alpine
+  script:
+    - cd numa-frontend
+    - yarn install
+    - yarn build
+    - cp -r node_modules dist/
+    - cd dist
+    - zip -r frontend.zip .
+    - aws s3 cp frontend.zip s3://my-bucket/path/
+  only:
+    - main
