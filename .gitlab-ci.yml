@@ -8,5 +8,11 @@ variables:
   PYTHON_VER: "3.12"
 
 .node_job:
+  image: registry.gitlab.com/arcanumai/ci/all-inclusive:latest
   variables:
     BUILD_DIR: infra
+  before_script:
+    - cd $BUILD_DIR
+    - !reference [.yarn, setup-private-auth]
+    - !reference [.yarn, install]
+    - yarn exec cdktf get

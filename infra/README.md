@@ -47,6 +47,20 @@ yarn cdktf plan
 yarn cdktf plan q-apps-deployer
 ```
 
+### Deploying stacks to customer accounts
+
+Customer accounts grant access to our production deployer account.
+
+To run the deploy of Numa to a customer account, do the following:
+
+```bash
+export TF_ENVIRONMENT=prod # All customer deployments are prod.
+export AWS_REGION=us-east-1 # Important: These stacks can only be deployed in us-east-1.
+yarn cdktf deploy --auto-approve numa-{client-id}
+```
+
+The client-id must be the name of an entry from the clientsProd list in numa-client-stack.ts.
+
 ## Development
 
 Linting can be run with `yarn lint`. This will run eslint and then tsc for type checking.
