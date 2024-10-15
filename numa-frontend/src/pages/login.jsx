@@ -8,11 +8,15 @@ import {
   RespondToAuthChallengeCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
+import { useNavigate } from 'react-router-dom';
+
 const NumaLogin = () => {
   const usernameRef = useRef();
   const passwordRef = useRef();
   const newPasswordRef = useRef();
   const confirmPasswordRef = useRef();
+
+  const navigate = useNavigate();
 
   const [client, setClient] = useState(null);
   const [error, setError] = useState(null);
@@ -90,8 +94,8 @@ const NumaLogin = () => {
 
         setSuccess('Login successful. Redirecting...');
         clearInputs(); // Clear inputs after successful login
-        // Redirect to protected content or perform other actions
-        // setTimeout(() => { window.location.href = '/dashboard'; }, 2000);
+
+        navigate('/chat');
       }
     } catch (error) {
       console.error('Error during authentication:', error);
