@@ -74,7 +74,7 @@ const NumaLogin = () => {
           USERNAME: enteredUsername,
           PASSWORD: password,
         },
-        ClientId: 'afd8mg8oedol3u6n8jj234kmn',
+        ClientId: '6ptqdb1o3b3e50dmf23950k679',
       });
       const response = await client.send(command);
 
