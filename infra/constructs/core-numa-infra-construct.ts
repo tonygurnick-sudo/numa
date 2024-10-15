@@ -15,6 +15,7 @@ import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { CognitoIdentityPool } from '@cdktf/provider-aws/lib/cognito-identity-pool';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { CognitoIdentityPoolRolesAttachment } from '@cdktf/provider-aws/lib/cognito-identity-pool-roles-attachment';
+import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 
 export class CoreNumaInfra extends Construct {
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
@@ -128,12 +129,12 @@ export class CoreNumaInfra extends Construct {
       const identityPoolRole = new IamRole(this, 'identity-pool-role', {
         name: `${numaClient}-identity-role`,
         assumeRolePolicy: identityPoolRoleTrustPolicy.json,
-        inlinePolicy: [
-          {
-            name: 'policy',
-            policy: identityPoolRolePolicy.json,
-          },
-        ],
+      });
+
+      new IamRolePolicy(this, 'identity-role-policy', {
+        name: 'policy',
+        role: identityPoolRole.name,
+        policy: identityPoolRolePolicy.json,
       });
 
       new CognitoIdentityPoolRolesAttachment(this, 'identity-pool-role-attachment', {
@@ -193,12 +194,12 @@ export class CoreNumaInfra extends Construct {
       const secretsRole = new IamRole(this, 'secrets-role', {
         name: `numa-secrets-role-${numaClient}`,
         assumeRolePolicy: secretsTrustPolicyDocument.json,
-        inlinePolicy: [
-          {
-            name: 'numa-secrets',
-            policy: secretsPolicyDocument.json,
-          },
-        ],
+      });
+
+      new IamRolePolicy(this, 'secrets-role-policy', {
+        name: 'policy',
+        role: secretsRole.name,
+        policy: secretsPolicyDocument.json,
       });
 
       new SecretsmanagerSecretVersion(this, 'secret-version', {
@@ -302,12 +303,12 @@ export class CoreNumaInfra extends Construct {
 
       name: `web-experience-role-${numaClient}`,
       assumeRolePolicy: webExperienceTrustDocument.json,
-      inlinePolicy: [
-        {
-          name: 'policy',
-          policy: rolePolicyDocument.json,
-        },
-      ],
+    });
+
+    new IamRolePolicy(this, 'web-experience-policy', {
+      name: 'policy',
+      role: role.name,
+      policy: rolePolicyDocument.json,
     });
 
     const application = new CloudcontrolapiResource(this, 'qbus', {
@@ -388,18 +389,23 @@ export class CoreNumaInfra extends Construct {
           // },
         },
       }),
-      inlinePolicy: [
+    });
+
+    // TODO: Correctly scope this policy to avoid being overly permissive.
+    const dataSourcePolicyDoc = new DataAwsIamPolicyDocument(this, 'data-source-role-policy-doc', {
+      statement: [
         {
-          name: 'policy',
-          // TODO: Correctly scope this policy to avoid being overly permissive.
-          // TODO: Replace stringify with a proper document.
-          policy: JSON.stringify({
-            Action: ['*'],
-            Resource: ['*'],
-            Effect: 'Allow',
-          }),
+          actions: ['*'],
+          resources: ['*'],
+          effect: 'Allow',
         },
       ],
+    });
+
+    new IamRolePolicy(this, 'data-source-policy', {
+      name: 'policy',
+      role: dataRole.name,
+      policy: dataSourcePolicyDoc.json,
     });
 
     new CloudcontrolapiResource(this, 'data-source', {
