@@ -1,19 +1,25 @@
 import { App } from 'cdktf';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { QAppsDeployerStack } from './stacks/q-apps-deployer-stack';
+import { NumaClientStack, listNumaClients } from './stacks/numa-client-stack';
 
 const environmentName = process.env['TF_ENVIRONMENT'] as EnvironmentName;
 
-const client = 'arcanum';
-const serviceName = 'q-apps-deployer';
-
 const app = new App();
+// TODO: Not sure if this an appropriate check.
 const bucketSuffix = environmentName == 'prod' ? '' : '-dev';
 new QAppsDeployerStack(app, 'q-apps-deployer', {
   environmentName,
-  client,
-  serviceName,
+  client: 'arcanum',
+  serviceName: 'q-apps-deployer',
   templateBucketName: 'arcanum-numa-templates' + bucketSuffix,
   appsBucketName: 'numa-qapps' + bucketSuffix,
 });
+for (const client of listNumaClients(environmentName)) {
+  new NumaClientStack(app, `numa-${client}`, {
+    environmentName,
+    client,
+    serviceName: 'numa',
+  });
+}
 app.synth();
