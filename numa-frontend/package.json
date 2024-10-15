@@ -10,8 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity": "^3.668.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.668.0",
     "@popperjs/core": "^2.11.8",
+    "aws-sdk": "^2.1691.0",
     "bootstrap": "^5.3.3",
     "react": "^18.2.0",
     "react-bootstrap": "^2.10.5",
