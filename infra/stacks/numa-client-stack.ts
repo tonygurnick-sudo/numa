@@ -47,6 +47,11 @@ const clientsProd: Record<string, ClientConfig> = {
     identityProvider: 'oidc',
     clientAccountId: '061039773876',
   },
+  rooflogic: {
+    client: 'rooflogic',
+    identityProvider: 'oidc',
+    clientAccountId: '640168445517',
+  },
   'w-advisory': {
     client: 'w-advisory',
     identityProvider: 'oidc',
