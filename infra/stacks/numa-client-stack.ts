@@ -34,27 +34,22 @@ interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
 const clientsProd: Record<string, ClientConfig> = {
   'arcanum-demo': {
     client: 'arcanum-demo',
-    identityProvider: 'oidc',
     clientAccountId: '905418183804',
   },
   'av-media': {
     client: 'av-media',
-    identityProvider: 'oidc',
     clientAccountId: '961341552812',
   },
   'design-builders': {
     client: 'design-builders',
-    identityProvider: 'oidc',
     clientAccountId: '061039773876',
   },
   rooflogic: {
     client: 'rooflogic',
-    identityProvider: 'oidc',
     clientAccountId: '640168445517',
   },
   'w-advisory': {
     client: 'w-advisory',
-    identityProvider: 'oidc',
     clientAccountId: '746669235417',
   },
 };

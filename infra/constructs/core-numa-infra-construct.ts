@@ -22,6 +22,7 @@ export class CoreNumaInfra extends Construct {
     super(scope, name);
 
     props.indexType ??= 'STARTER';
+    props.identityProvider ??= 'oidc';
     const region = props.region ?? 'us-east-1';
 
     const callerId = new DataAwsCallerIdentity(this, 'caller-id', {});
@@ -451,7 +452,7 @@ export class CoreNumaInfra extends Construct {
 export interface CoreNumaInfraProps {
   client: string;
   environmentName: string;
-  identityProvider: 'oidc' | 'idc';
+  identityProvider?: 'oidc' | 'idc';
   indexType?: 'ENTERPRISE' | 'STARTER';
   region?: string;
   clientAccountId?: string;
