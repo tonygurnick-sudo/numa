@@ -25,6 +25,8 @@ const NumaLogin = () => {
   const [session, setSession] = useState(null);
   const [username, setUsername] = useState('');
 
+  const COGNITO_CLIENT_ID = '48ed21kkeqa0h4jtrs08kbvvvr';
+
   useEffect(() => {
     const loadConfig = async () => {
       try {
@@ -74,7 +76,7 @@ const NumaLogin = () => {
           USERNAME: enteredUsername,
           PASSWORD: password,
         },
-        ClientId: '6ptqdb1o3b3e50dmf23950k679',
+        ClientId: COGNITO_CLIENT_ID,
       });
       const response = await client.send(command);
 
@@ -119,7 +121,7 @@ const NumaLogin = () => {
     try {
       const command = new RespondToAuthChallengeCommand({
         ChallengeName: 'NEW_PASSWORD_REQUIRED',
-        ClientId: 'afd8mg8oedol3u6n8jj234kmn',
+        ClientId: COGNITO_CLIENT_ID,
         ChallengeResponses: {
           USERNAME: username,
           NEW_PASSWORD: newPassword,
