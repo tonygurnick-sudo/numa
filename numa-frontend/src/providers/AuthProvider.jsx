@@ -4,16 +4,19 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadUserFromTokens = () => {
       const accessToken = localStorage.getItem('accessToken');
+      const idToken = localStorage.getItem('idToken');
       const refreshToken = localStorage.getItem('refreshToken');
-      if (accessToken && refreshToken) {
+      if (accessToken && refreshToken && idToken) {
         // Here you could add logic to decode the JWT and extract user info
         // For now, we'll just set a simple user object
-        setUser({ accessToken, refreshToken });
+        setUser({ accessToken, refreshToken, idToken });
       }
+      setLoading(false);
     };
 
     loadUserFromTokens();
@@ -27,22 +30,33 @@ export const AuthProvider = ({ children }) => {
     return user ? user.refreshToken : null;
   };
 
+  const getIdToken = () => {
+    return user ? user.idToken : null;
+  };
+
   const logout = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('idToken');
     setUser(null);
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, getAccessToken, getRefreshToken, logout }}
+      value={{
+        user,
+        loading,
+        getAccessToken,
+        getRefreshToken,
+        getIdToken,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>
   );
 };
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
