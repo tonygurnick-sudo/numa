@@ -3,3 +3,5 @@
 **.env
 **install-state.gz
 **yarn.lock
+
+numa-frontend/yarn.lock

@@ -93,6 +93,7 @@ const NumaLogin = () => {
 
         localStorage.setItem('accessToken', tokens.AccessToken);
         localStorage.setItem('refreshToken', tokens.RefreshToken);
+        localStorage.setItem('idToken', tokens.IdToken);
 
         setSuccess('Login successful. Redirecting...');
         clearInputs(); // Clear inputs after successful login
