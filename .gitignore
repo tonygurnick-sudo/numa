@@ -2,3 +2,4 @@
 **/dist
 **.env
 **install-state.gz
+**yarn.lock
