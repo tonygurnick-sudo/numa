@@ -6,7 +6,6 @@ import { NumaClientStack, listNumaClients } from './stacks/numa-client-stack';
 const environmentName = process.env['TF_ENVIRONMENT'] as EnvironmentName;
 
 const app = new App();
-// TODO: Not sure if this an appropriate check.
 const bucketSuffix = environmentName == 'prod' ? '' : '-dev';
 new QAppsDeployerStack(app, 'q-apps-deployer', {
   environmentName,
