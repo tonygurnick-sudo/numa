@@ -36,9 +36,8 @@ export class SetCallbackUrl extends Construct {
       functionName: func.lambdaFunction.functionName,
       input,
       triggers: {
-        // This is to cause it to trigger every time.
-        // We should consider whether this is neccessary.
-        now: `${Date.now()}`,
+        // This causes the lambda to trigger on config changes.
+        input,
       },
     });
   }
