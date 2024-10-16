@@ -9,30 +9,11 @@ import { NumaChat } from './pages/NumaChat';
 import { AuthProvider, useAuth } from './providers/AuthProvider';
 
 const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    // You can return a loading spinner or null here
-    return <div>Loading...</div>;
-  }
+  const { user } = useAuth();
 
   if (!user) {
+    // Redirect to login if there's no user (i.e., no valid JWT)
     return <Navigate to="/login" replace />;
-  }
-
-  return children;
-};
-
-const AuthenticatedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    // You can return a loading spinner or null here
-    return <div>Loading...</div>;
-  }
-
-  if (user) {
-    return <Navigate to="/chat" replace />;
   }
 
   return children;
@@ -43,14 +24,7 @@ const NumaRoutes = () => {
     <Router>
       <AuthProvider>
         <Routes>
-          <Route
-            path="/login"
-            element={
-              <AuthenticatedRoute>
-                <NumaLogin />
-              </AuthenticatedRoute>
-            }
-          />
+          <Route path="/login" element={<NumaLogin />} />
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route
             path="/chat"
