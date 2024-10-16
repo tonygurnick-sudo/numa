@@ -54,6 +54,10 @@ export class CoreNumaInfra extends Construct {
         },
       });
 
+      new TerraformOutput(this, 'user-pool-id', {
+        value: pool.id,
+      });
+
       new CognitoUserPoolDomain(this, 'domain', {
         userPoolId: pool.id,
         domain: cognitoDomain,
