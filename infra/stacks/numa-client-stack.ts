@@ -44,6 +44,10 @@ const clientsProd: Record<string, ClientConfig> = {
     client: 'design-builders',
     clientAccountId: '061039773876',
   },
+  nzsba: {
+    client: 'nzsba',
+    clientAccountId: '307946678276',
+  },
   rooflogic: {
     client: 'rooflogic',
     clientAccountId: '640168445517',
