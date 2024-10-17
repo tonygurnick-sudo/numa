@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { LayoutForm } from '../layouts/LayoutForm';
+import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert } from 'react-bootstrap';
 
 const NumaChat = () => {
