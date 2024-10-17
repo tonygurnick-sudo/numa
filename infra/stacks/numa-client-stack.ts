@@ -32,6 +32,10 @@ interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
 }
 // TODO: Replace this with some external store.
 const clientsProd: Record<string, ClientConfig> = {
+  accumen: {
+    client: 'accumen',
+    clientAccountId: '677276116117',
+  },
   'arcanum-demo': {
     client: 'arcanum-demo',
     clientAccountId: '905418183804',
@@ -40,9 +44,17 @@ const clientsProd: Record<string, ClientConfig> = {
     client: 'av-media',
     clientAccountId: '961341552812',
   },
+  'beyond-expectations': {
+    client: 'beyond-expectations',
+    clientAccountId: '474668383176',
+  },
   'design-builders': {
     client: 'design-builders',
     clientAccountId: '061039773876',
+  },
+  'modern-sales': {
+    client: 'modern-sales',
+    clientAccountId: '228743762183',
   },
   nzsba: {
     client: 'nzsba',
@@ -51,6 +63,10 @@ const clientsProd: Record<string, ClientConfig> = {
   rooflogic: {
     client: 'rooflogic',
     clientAccountId: '640168445517',
+  },
+  'story-box': {
+    client: 'story-box',
+    clientAccountId: '851725285135',
   },
   'w-advisory': {
     client: 'w-advisory',
