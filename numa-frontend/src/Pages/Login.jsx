@@ -115,7 +115,7 @@ const NumaLogin = () => {
     try {
       const command = new RespondToAuthChallengeCommand({
         ChallengeName: 'NEW_PASSWORD_REQUIRED',
-        ClientId: '48ed21kkeqa0h4jtrs08kbvvvr',
+        ClientId: clientId,
         ChallengeResponses: {
           USERNAME: username,
           NEW_PASSWORD: newPassword,
