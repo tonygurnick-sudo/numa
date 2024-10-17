@@ -1,14 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
-import { LayoutForm } from '../layouts/LayoutForm';
+import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert } from 'react-bootstrap';
-
 import {
-  CognitoIdentityProviderClient,
   InitiateAuthCommand,
   RespondToAuthChallengeCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
+import { getCognitoClientId, loadCognitoClient } from '../common';
+import { saveTokens } from '../auth';
 
-import { useNavigate } from 'react-router-dom';
+
 
 const NumaLogin = () => {
   const usernameRef = useRef();
@@ -16,34 +16,30 @@ const NumaLogin = () => {
   const newPasswordRef = useRef();
   const confirmPasswordRef = useRef();
 
-  const navigate = useNavigate();
-
   const [client, setClient] = useState(null);
+  const [clientId, setClientId] = useState(null);
+
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [isSettingNewPassword, setIsSettingNewPassword] = useState(false);
   const [session, setSession] = useState(null);
   const [username, setUsername] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const loadConfig = async () => {
+    const fetchClientId = async () => {
       try {
-        const response = await fetch('config.json');
-        const data = await response.json();
-        const { region } = data.cognito;
-
-        const newClient = new CognitoIdentityProviderClient({ region });
-        setClient(newClient);
+        const id = await getCognitoClientId();
+        setClientId(id);
       } catch (error) {
-        console.error('Error loading config.json:', error);
-        setError(
-          'Failed to initialize the auth client. Please try again later.'
-        );
+        console.error('Failed to fetch client ID:', error);
       }
     };
+    fetchClientId();
 
-    loadConfig();
+    loadCognitoClient(setClient, setError);
   }, []);
+
 
   const clearInputs = () => {
     if (usernameRef.current) usernameRef.current.value = '';
@@ -56,6 +52,7 @@ const NumaLogin = () => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setLoading(true)
 
     if (!client) {
       setError('Auth client not initialized. Please try again later.');
@@ -74,7 +71,7 @@ const NumaLogin = () => {
           USERNAME: enteredUsername,
           PASSWORD: password,
         },
-        ClientId: '6ptqdb1o3b3e50dmf23950k679',
+        ClientId: clientId,
       });
       const response = await client.send(command);
 
@@ -87,19 +84,17 @@ const NumaLogin = () => {
         clearInputs(); // Clear inputs after successful initial auth
       } else {
         const tokens = response.AuthenticationResult;
-        console.log('Authentication successful:', tokens);
-
-        localStorage.setItem('accessToken', tokens.AccessToken);
-        localStorage.setItem('refreshToken', tokens.RefreshToken);
+        saveTokens(tokens)
 
         setSuccess('Login successful. Redirecting...');
         clearInputs(); // Clear inputs after successful login
 
-        navigate('/chat');
+        setTimeout(() => { window.location.href = '/dash'; }, 700);
       }
     } catch (error) {
       console.error('Error during authentication:', error);
       setError(error.message);
+      setLoading(false)
     }
   };
 
@@ -107,6 +102,7 @@ const NumaLogin = () => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setLoading(true)
 
     const newPassword = newPasswordRef.current.value;
     const confirmPassword = confirmPasswordRef.current.value;
@@ -119,7 +115,7 @@ const NumaLogin = () => {
     try {
       const command = new RespondToAuthChallengeCommand({
         ChallengeName: 'NEW_PASSWORD_REQUIRED',
-        ClientId: 'afd8mg8oedol3u6n8jj234kmn',
+        ClientId: '48ed21kkeqa0h4jtrs08kbvvvr',
         ChallengeResponses: {
           USERNAME: username,
           NEW_PASSWORD: newPassword,
@@ -130,20 +126,17 @@ const NumaLogin = () => {
       const response = await client.send(command);
 
       const tokens = response.AuthenticationResult;
-      console.log('New password set successfully:', tokens);
-
-      localStorage.setItem('accessToken', tokens.AccessToken);
-      localStorage.setItem('refreshToken', tokens.RefreshToken);
+      saveTokens(tokens)
 
       setIsSettingNewPassword(false);
       setSuccess('New password set successfully. You are now logged in.');
       clearInputs(); // Clear inputs after successful password change
 
-      // Redirect to protected content or perform other actions
-      // setTimeout(() => { window.location.href = '/dashboard'; }, 2000);
+       setTimeout(() => { window.location.href = '/dash'; }, 700);
     } catch (error) {
       console.error('Error setting new password:', error);
       setError(error.message);
+      setLoading(false)
     }
   };
 
@@ -182,10 +175,13 @@ const NumaLogin = () => {
                   type="password"
                   ref={passwordRef}
                 />
+                <p className="mt-1">
+                  <a href="/reset-password">Forgot password</a>
+                </p>
               </Form.Group>
 
               <Button variant="primary" type="submit" className="mb-3">
-                Login
+              {loading ? 'Logging In...' : 'Login'}
               </Button>
             </Form>
           ) : (
