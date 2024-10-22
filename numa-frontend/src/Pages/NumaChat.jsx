@@ -43,15 +43,8 @@ const NumaChat = () => {
   };
 
   return (
-    <LayoutForm
-      FormName={'llmchat'}
-      Content={
+
         <>
-          <h1 className="mb-2">Numa Chat</h1>
-          <p className="mb-4 fs-lg-1">
-            Chat with your documents. Ask anything!
-          </p>
-          <br />
 
           {error && <Alert variant="danger">{error}</Alert>}
 
@@ -106,8 +99,7 @@ const NumaChat = () => {
             </Button>
           </Form>
         </>
-      }
-    />
+
   );
 };
 

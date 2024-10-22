@@ -391,6 +391,7 @@ nav {
     border-radius: 0 0 5px 5px;
     border-top: none;
     margin-bottom: 24px;
+    background: #f4eff54d;
 
     .card-header {
       background: #f4eff5;
@@ -399,11 +400,16 @@ nav {
       padding: 0 30px;
       border: none;
       border-left: solid 0px var(--color-primary);
-      font-size: 24px;
+      font-size: 20px;
       font-family: 'Metropolis Semi Bold';
       color: var(--color-primary);
       border-radius: 0;
       transition: ease all 0.25s;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      white-space: normal;
+      text-overflow: ellipsis;
 
       img {
         margin-right: 15px;
@@ -496,4 +502,11 @@ nav {
   &:hover {
     background-color: var(--color-primary-hover) !important;
   }
+}
+
+label {
+  color: var(--color-dk-gray);
+    font-size: 9px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
 }
