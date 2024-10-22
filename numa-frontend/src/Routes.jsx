@@ -8,6 +8,7 @@ import { NumaLogin } from './Pages/Login';
 import { NumaChat } from './Pages/NumaChat';
 import { ResetPassword } from './Pages/ResetPassword';
 import { Dash } from './Pages/Dash';
+import AppDetail from './Pages/AppDetail';
 
 import { isAuthenticated } from './auth'
 
@@ -21,6 +22,10 @@ const NumaRoutes = () => {
         <Route path="/" element={<Navigate to={isAuthenticated() ? "/dash" : "/login"} replace />} />
 
         <Route path="/dash" element={isAuthenticated() ? <Dash /> : <Navigate to="/login" replace />} />
+
+        {/* Route for app details */}
+        <Route path="/app/:appId" element={<AppDetail />} />
+
         <Route path="/chat" element={isAuthenticated() ? <NumaChat /> : <Navigate to="/login" replace />} />
 
       </Routes>

@@ -1,7 +1,7 @@
 import { Container, Row, Col } from 'react-bootstrap';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
-import {AppCard} from '../Components/AppCardItem'
-import appData from '../Data/appData.json';
+import {AppItem} from '../Components/AppItem'
+import appsData from '../Data/appsData.json';
 import { Nav } from '../Components/Nav';
 
 const Dash = () => {
@@ -22,12 +22,10 @@ const Dash = () => {
 
             <LayoutDashboard>
               <Row>
-              {appData.map(app => (
-              <Col key={app.id} lg={6} className="flex">
-                <AppCard
-                  title={app.name}
-                  description={app.description}
-                  link={app.link}
+              {appsData.map(app => (
+              <Col key={app.appId} lg={4} className="flex">
+                <AppItem
+                  appData={app}
                 />
               </Col>
             ))}

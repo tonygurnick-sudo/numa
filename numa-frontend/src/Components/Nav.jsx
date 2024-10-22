@@ -18,7 +18,7 @@ const Nav = () => {
   return (
     <>
       <nav>
-        <a href="/home" rel="noopener">
+        <a href="/dash" rel="noopener">
           <img src={Logo} className="logo-bk" alt="Arcanum" />
         </a>
 
