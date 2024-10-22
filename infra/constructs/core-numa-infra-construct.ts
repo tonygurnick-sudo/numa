@@ -413,7 +413,7 @@ export class CoreNumaInfra extends Construct {
       policy: dataSourcePolicyDoc.json,
     });
 
-    new CloudcontrolapiResource(this, 'data-source', {
+    const dataSource = new CloudcontrolapiResource(this, 'data-source', {
       typeName: 'AWS::QBusiness::DataSource',
       desiredState: Fn.jsonencode({
         ApplicationId: application.id,
@@ -442,10 +442,16 @@ export class CoreNumaInfra extends Construct {
         RoleArn: dataRole.arn,
       }),
     });
+    const dataSourceId = Fn.lookup(Fn.jsondecode(dataSource.properties), 'DataSourceId');
 
     new TerraformOutput(this, 'webex-url', {
       value: webexEndpoint,
     });
+
+    new TerraformOutput(this, 'data-bucket', { value: dataBucket.bucket.bucket });
+    new TerraformOutput(this, 'application-id', { value: applicationId });
+    new TerraformOutput(this, 'data-source-id', { value: dataSourceId });
+    new TerraformOutput(this, 'index-id', { value: indexId });
   }
 }
 
