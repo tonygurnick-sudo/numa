@@ -1,228 +1,146 @@
-import { useEffect, useState, useRef } from 'react';
-import { LayoutForm } from '../layouts/LayoutForm';
+import { useState, useRef } from 'react';
 import { Button, Form, Alert } from 'react-bootstrap';
-
-import {
-  CognitoIdentityProviderClient,
-  InitiateAuthCommand,
-  RespondToAuthChallengeCommand,
-} from '@aws-sdk/client-cognito-identity-provider';
-
-import { useNavigate } from 'react-router-dom';
+import { createSrpSession, signSrpSession } from 'cognito-srp-helper'; // Use named imports
 
 const NumaLogin = () => {
   const usernameRef = useRef();
   const passwordRef = useRef();
-  const newPasswordRef = useRef();
-  const confirmPasswordRef = useRef();
-
-  const navigate = useNavigate();
-
-  const [client, setClient] = useState(null);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [isSettingNewPassword, setIsSettingNewPassword] = useState(false);
-  const [session, setSession] = useState(null);
-  const [username, setUsername] = useState('');
 
-  const COGNITO_CLIENT_ID = '48ed21kkeqa0h4jtrs08kbvvvr';
+  const API_ENDPOINT = 'https://g59jhyyob7.execute-api.us-east-1.amazonaws.com'; // Replace with your actual backend API
+  const USER_POOL_ID = 'us-east-1_kVPZjTM6a';
 
-  useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        const response = await fetch('config.json');
-        const data = await response.json();
-        const { region } = data.cognito;
+  function getTimestamp() {
+    const date = new Date();
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
 
-        const newClient = new CognitoIdentityProviderClient({ region });
-        setClient(newClient);
-      } catch (error) {
-        console.error('Error loading config.json:', error);
-        setError(
-          'Failed to initialize the auth client. Please try again later.'
-        );
-      }
-    };
+    const dayName = days[date.getUTCDay()];
+    const monthName = months[date.getUTCMonth()];
+    const day = date.getUTCDate();
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+    const year = date.getUTCFullYear();
 
-    loadConfig();
-  }, []);
-
-  const clearInputs = () => {
-    if (usernameRef.current) usernameRef.current.value = '';
-    if (passwordRef.current) passwordRef.current.value = '';
-    if (newPasswordRef.current) newPasswordRef.current.value = '';
-    if (confirmPasswordRef.current) confirmPasswordRef.current.value = '';
-  };
+    return `${dayName} ${monthName} ${day} ${hours}:${minutes}:${seconds} UTC ${year}`;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
 
-    if (!client) {
-      setError('Auth client not initialized. Please try again later.');
-      return;
-    }
-
     const enteredUsername = usernameRef.current.value;
     const password = passwordRef.current.value;
 
-    setUsername(enteredUsername);
-
     try {
-      const command = new InitiateAuthCommand({
-        AuthFlow: 'USER_PASSWORD_AUTH',
-        AuthParameters: {
-          USERNAME: enteredUsername,
-          PASSWORD: password,
-        },
-        ClientId: COGNITO_CLIENT_ID,
+      // Step 1: Create the SRP session
+      const srpSession = createSrpSession(
+        enteredUsername,
+        password,
+        USER_POOL_ID,
+        false
+      );
+
+      console.log('srpSession', srpSession);
+
+      // Step 2: Send SRP-A to the server to initiate the SRP flow
+      const initiateAuthRes = await fetch(`${API_ENDPOINT}/initiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: enteredUsername,
+          srpA: srpSession.largeA, // Use `largeA` from srpSession
+        }),
       });
-      const response = await client.send(command);
 
-      if (response.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
-        setSession(response.Session);
-        setIsSettingNewPassword(true);
-        setSuccess(
-          'You need to set a new password. Please enter a new password below.'
-        );
-        clearInputs(); // Clear inputs after successful initial auth
-      } else {
-        const tokens = response.AuthenticationResult;
-        console.log('Authentication successful:', tokens);
+      const initiateData = await initiateAuthRes.json();
 
-        localStorage.setItem('accessToken', tokens.AccessToken);
-        localStorage.setItem('refreshToken', tokens.RefreshToken);
-        localStorage.setItem('idToken', tokens.IdToken);
+      console.log('initiateData', initiateData);
 
-        setSuccess('Login successful. Redirecting...');
-        clearInputs(); // Clear inputs after successful login
+      // Step 3: Sign SRP session with response from the server
+      const signedSrpSession = signSrpSession(srpSession, initiateData);
 
-        navigate('/chat');
+      // Step 4: Respond to the challenge with signed SRP session
+      const respondToAuthChallengeRes = await fetch(`${API_ENDPOINT}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: initiateData.ChallengeParameters.USERNAME,
+          challengeResponses: {
+            PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
+            PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
+          },
+          timestamp: getTimestamp(),
+        }),
+      });
+
+      const finalResponse = await respondToAuthChallengeRes.json();
+
+      if (!respondToAuthChallengeRes.ok) {
+        throw new Error(finalResponse.error || 'Authentication failed');
       }
+
+      console.log('finalResponse', finalResponse);
+
+      // Handle the authentication success and tokens
+      const tokens = finalResponse.authenticationResult;
+      localStorage.setItem('accessToken', tokens.AccessToken);
+      localStorage.setItem('refreshToken', tokens.RefreshToken);
+      localStorage.setItem('idToken', tokens.IdToken);
+
+      setSuccess('Login successful.');
+      window.location.href = '/dashboard'; // Redirect to dashboard
     } catch (error) {
       console.error('Error during authentication:', error);
       setError(error.message);
     }
   };
 
-  const handleNewPasswordSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-
-    const newPassword = newPasswordRef.current.value;
-    const confirmPassword = confirmPasswordRef.current.value;
-
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-
-    try {
-      const command = new RespondToAuthChallengeCommand({
-        ChallengeName: 'NEW_PASSWORD_REQUIRED',
-        ClientId: COGNITO_CLIENT_ID,
-        ChallengeResponses: {
-          USERNAME: username,
-          NEW_PASSWORD: newPassword,
-        },
-        Session: session,
-      });
-
-      const response = await client.send(command);
-
-      const tokens = response.AuthenticationResult;
-      console.log('New password set successfully:', tokens);
-
-      localStorage.setItem('accessToken', tokens.AccessToken);
-      localStorage.setItem('refreshToken', tokens.RefreshToken);
-
-      setIsSettingNewPassword(false);
-      setSuccess('New password set successfully. You are now logged in.');
-      clearInputs(); // Clear inputs after successful password change
-
-      // Redirect to protected content or perform other actions
-      // setTimeout(() => { window.location.href = '/dashboard'; }, 2000);
-    } catch (error) {
-      console.error('Error setting new password:', error);
-      setError(error.message);
-    }
-  };
-
   return (
-    <LayoutForm
-      FormName={'numalogin'}
-      Content={
-        <>
-          <h1 className="mb-2">Numa Login</h1>
-          <p className="mb-4 fs-lg-1">
-            Welcome back! Please enter your details.
-          </p>
-          <br />
+    <div>
+      <h1>Numa Login</h1>
 
-          {error && <Alert variant="danger">{error}</Alert>}
-          {success && <Alert variant="success">{success}</Alert>}
+      {error && <Alert variant="danger">{error}</Alert>}
+      {success && <Alert variant="success">{success}</Alert>}
 
-          {!isSettingNewPassword ? (
-            <Form onSubmit={handleSubmit}>
-              <Form.Group className="mb-3">
-                <Form.Label htmlFor="username">Username</Form.Label>
-                <Form.Control
-                  id="username"
-                  type="text"
-                  name="username"
-                  placeholder="Enter your username"
-                  ref={usernameRef}
-                />
-              </Form.Group>
+      <Form onSubmit={handleSubmit}>
+        <Form.Group controlId="username">
+          <Form.Label>Username</Form.Label>
+          <Form.Control
+            type="text"
+            ref={usernameRef}
+            placeholder="Enter username"
+          />
+        </Form.Group>
 
-              <Form.Group className="mb-3">
-                <Form.Label htmlFor="password">Password</Form.Label>
-                <Form.Control
-                  id="password"
-                  name="password"
-                  type="password"
-                  ref={passwordRef}
-                />
-              </Form.Group>
+        <Form.Group controlId="password">
+          <Form.Label>Password</Form.Label>
+          <Form.Control
+            type="password"
+            ref={passwordRef}
+            placeholder="Enter password"
+          />
+        </Form.Group>
 
-              <Button variant="primary" type="submit" className="mb-3">
-                Login
-              </Button>
-            </Form>
-          ) : (
-            <Form onSubmit={handleNewPasswordSubmit}>
-              <Form.Group className="mb-3">
-                <Form.Label htmlFor="newPassword">New Password</Form.Label>
-                <Form.Control
-                  id="newPassword"
-                  name="newPassword"
-                  type="password"
-                  ref={newPasswordRef}
-                />
-              </Form.Group>
-
-              <Form.Group className="mb-3">
-                <Form.Label htmlFor="confirmPassword">
-                  Confirm New Password
-                </Form.Label>
-                <Form.Control
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  ref={confirmPasswordRef}
-                />
-              </Form.Group>
-
-              <Button variant="primary" type="submit" className="mb-3">
-                Set New Password
-              </Button>
-            </Form>
-          )}
-        </>
-      }
-    />
+        <Button type="submit">Login</Button>
+      </Form>
+    </div>
   );
 };
 

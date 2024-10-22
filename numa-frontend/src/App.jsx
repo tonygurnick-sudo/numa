@@ -4,11 +4,7 @@ import './assets/css/Styles.scss';
 import { NumaRoutes } from './Routes';
 
 function App() {
-  return (
-    <React.StrictMode>
-      <NumaRoutes />
-    </React.StrictMode>
-  );
+  return <NumaRoutes />;
 }
 
 export default App;

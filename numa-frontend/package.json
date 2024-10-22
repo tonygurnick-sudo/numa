@@ -11,13 +11,17 @@
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity": "^3.668.0",
-    "@aws-sdk/client-cognito-identity-provider": "^3.668.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.670.0",
     "@aws-sdk/client-qbusiness": "^3.672.0",
     "@aws-sdk/credential-providers": "^3.670.0",
     "@popperjs/core": "^2.11.8",
+    "amazon-cognito-identity-js": "^6.3.12",
     "aws-jwt-verify": "^4.0.1",
     "aws-sdk": "^2.1691.0",
     "bootstrap": "^5.3.3",
+    "buffer": "^6.0.3",
+    "cognito-srp-helper": "^2.2.3",
+    "crypto-js": "^4.2.0",
     "react": "^18.2.0",
     "react-bootstrap": "^2.10.5",
     "react-dom": "^18.2.0",
@@ -36,5 +40,6 @@
     "globals": "^13.24.0",
     "sass-embedded": "^1.79.4",
     "vite": "^5.1.0"
-  }
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
