@@ -16,6 +16,7 @@ import { CognitoIdentityPool } from '@cdktf/provider-aws/lib/cognito-identity-po
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { CognitoIdentityPoolRolesAttachment } from '@cdktf/provider-aws/lib/cognito-identity-pool-roles-attachment';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
+import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
 
 export class CoreNumaInfra extends Construct {
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
@@ -205,6 +206,10 @@ export class CoreNumaInfra extends Construct {
         name: 'policy',
         role: secretsRole.name,
         policy: secretsPolicyDocument.json,
+      });
+
+      new IamServiceLinkedRole(this, 'q-service-role', {
+        awsServiceName: 'qbusiness.amazonaws.com',
       });
 
       new SecretsmanagerSecretVersion(this, 'secret-version', {
