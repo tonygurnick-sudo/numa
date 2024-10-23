@@ -5,6 +5,11 @@ import { Button, Form, Alert } from 'react-bootstrap';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
 import { useAuth } from '../Providers/AuthProvider';
 import { jwtDecode } from 'jwt-decode';
+import {
+  CognitoIdentityProviderClient,
+  RespondToAuthChallengeCommand,
+  InitiateAuthCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 
 const NumaLogin = () => {
   const usernameRef = useRef();
@@ -17,6 +22,8 @@ const NumaLogin = () => {
   const [success, setSuccess] = useState(null);
   const [isSettingNewPassword, setIsSettingNewPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
 
   const API_ENDPOINT = 'https://g59jhyyob7.execute-api.us-east-1.amazonaws.com';
   const USER_POOL_ID = 'us-east-1_kVPZjTM6a';
@@ -30,20 +37,20 @@ const NumaLogin = () => {
 
   const { setUser } = useAuth();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e, providedUsername, providedPassword) => {
+    if (e) e.preventDefault();
     setError(null);
     setSuccess(null);
     setLoading(true);
 
-    const enteredUsername = usernameRef.current.value;
-    const password = passwordRef.current.value;
+    const enteredUsername = providedUsername || usernameRef.current.value;
+    const enteredPassword = providedPassword || passwordRef.current.value;
 
     try {
       // Step 1: Create the SRP session
       const srpSession = createSrpSession(
         enteredUsername,
-        password,
+        enteredPassword,
         USER_POOL_ID,
         false,
       );
@@ -81,6 +88,9 @@ const NumaLogin = () => {
 
       if (finalResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
         setIsSettingNewPassword(true);
+        setUsername(enteredUsername);
+        setPassword(enteredPassword); // Save password in state only when new password is required
+        localStorage.setItem('cognitoAuthSession', finalResponse.Session);
         setSuccess(
           'You need to set a new password. Please enter a new password below.',
         );
@@ -136,31 +146,55 @@ const NumaLogin = () => {
     }
 
     try {
-      const response = await fetch(`${API_ENDPOINT}/new-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-        body: JSON.stringify({
-          newPassword: newPassword,
-        }),
+      const cognitoClient = new CognitoIdentityProviderClient({
+        region: 'us-east-1',
       });
 
-      const data = await response.json();
+      // Step 1: Initiate auth with Cognito directly
+      const initiateAuthCommand = new InitiateAuthCommand({
+        AuthFlow: 'USER_PASSWORD_AUTH',
+        ClientId: '48ed21kkeqa0h4jtrs08kbvvvr',
+        AuthParameters: {
+          USERNAME: username,
+          PASSWORD: password, // Use the password from state
+        },
+      });
 
-      if (response.ok) {
-        setSuccess(
-          'Password successfully updated. You can now log in with your new password.',
-        );
-        setIsSettingNewPassword(false);
-        clearInputs();
-      } else {
-        setError(data.message || 'Failed to set new password');
+      const initiateAuthResponse =
+        await cognitoClient.send(initiateAuthCommand);
+
+      if (initiateAuthResponse.ChallengeName !== 'NEW_PASSWORD_REQUIRED') {
+        throw new Error('Unexpected authentication response');
       }
+
+      // Step 2: Respond to the NEW_PASSWORD_REQUIRED challenge
+      const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand({
+        ClientId: '48ed21kkeqa0h4jtrs08kbvvvr',
+        ChallengeName: 'NEW_PASSWORD_REQUIRED',
+        Session: initiateAuthResponse.Session,
+        ChallengeResponses: {
+          USERNAME: username,
+          NEW_PASSWORD: newPassword,
+        },
+      });
+
+      await cognitoClient.send(respondToAuthChallengeCommand);
+
+      // Step 3: Clear password from state and trigger handleSubmit
+      setPassword('');
+      setSuccess(
+        'Password successfully updated. Logging in with new password...',
+      );
+      setIsSettingNewPassword(false);
+      clearInputs();
+
+      // Trigger handleSubmit with username and new password
+      await handleSubmit(null, username, newPassword);
     } catch (error) {
       console.error('Error setting new password:', error);
-      setError('An error occurred while setting the new password');
+      setError(
+        error.message || 'An error occurred while setting the new password',
+      );
     } finally {
       setLoading(false);
     }
@@ -174,7 +208,7 @@ const NumaLogin = () => {
       {success && <Alert variant="success">{success}</Alert>}
 
       {!isSettingNewPassword ? (
-        <Form onSubmit={handleSubmit}>
+        <Form onSubmit={(e) => handleSubmit(e)}>
           <Form.Group controlId="username">
             <Form.Label>Username</Form.Label>
             <Form.Control
