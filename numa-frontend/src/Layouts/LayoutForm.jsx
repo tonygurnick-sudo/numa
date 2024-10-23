@@ -12,15 +12,20 @@ const LayoutForm = ({ FormName, Content }) => {
             <header>
               <img src={LogoBk} height="55" className="logo-bk" alt="Arcanum" />
             </header>
-            <Row className={`container d-flex h-100  justify-content-center align-items-center ${FormName}`}>
-              <Col lg={6} className="row justify-content-center align-self-center">
+            <Row
+              className={`container d-flex h-100  justify-content-center align-items-center ${FormName}`}
+            >
+              <Col
+                lg={6}
+                className="row justify-content-center align-self-center"
+              >
                 {Content}
               </Col>
             </Row>
             <footer>&copy; ARCANUM {new Date().getFullYear()}</footer>
           </Col>
 
-          <Col lg={6} className={`${FormName}-right`}>
+          {/* <Col lg={6} className={`${FormName}-right`}>
               <Row className="container d-flex h-100  justify-content-center align-items-center benefits_trial">
                 <Col lg={12}>
                   <h1>Supercharge your workforce with AI and scale your business</h1>
@@ -31,7 +36,7 @@ const LayoutForm = ({ FormName, Content }) => {
                 </Col>
               </Row>
 
-          </Col>
+          </Col> */}
         </Row>
       </Container>
     </>

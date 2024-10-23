@@ -5,31 +5,84 @@ import {
   Navigate,
 } from 'react-router-dom';
 import { NumaLogin } from './Pages/Login';
-import { NumaChat } from './Pages/NumaChat';
 import { ResetPassword } from './Pages/ResetPassword';
 import { Dash } from './Pages/Dash';
 import AppDetail from './Pages/AppDetail';
 
-import { isAuthenticated } from './auth'
+import { AuthProvider, useAuth } from './Providers/AuthProvider';
+import { NumaChat } from './Pages/NumaChat';
 
 const NumaRoutes = () => {
   return (
-    <Router>
-      <Routes>
-        <Route path="/login" element={isAuthenticated() ? <Navigate to="/dash" replace /> : <NumaLogin />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+    <AuthProvider>
+      <Router>
+        <AppRoutes />
+      </Router>
+    </AuthProvider>
+  );
+};
 
-        <Route path="/" element={<Navigate to={isAuthenticated() ? "/dash" : "/login"} replace />} />
+const AppRoutes = () => {
+  const { user, loading, tokenValidationComplete } = useAuth();
 
-        <Route path="/dash" element={isAuthenticated() ? <Dash /> : <Navigate to="/login" replace />} />
+  if (loading || !tokenValidationComplete) {
+    return <div>Loading...</div>;
+  }
 
-        {/* Route for app details */}
-        <Route path="/app/:appId" element={<AppDetail />} />
+  const ProtectedRoute = ({ children }) => {
+    if (!tokenValidationComplete) {
+      return <div>Loading...</div>;
+    }
 
-        <Route path="/chat" element={isAuthenticated() ? <NumaChat /> : <Navigate to="/login" replace />} />
+    console.log('user', user);
 
-      </Routes>
-    </Router>
+    if (!user) {
+      return <Navigate to="/login" replace />;
+    }
+    return children;
+  };
+
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={user ? <Navigate to="/dash" replace /> : <NumaLogin />}
+      />
+      <Route path="/reset-password" element={<ResetPassword />} />
+
+      <Route
+        path="/"
+        element={<Navigate to={user ? '/dash' : '/login'} replace />}
+      />
+
+      <Route
+        path="/dash"
+        element={
+          <ProtectedRoute>
+            <Dash />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Route for app details */}
+      <Route
+        path="/app/:appId"
+        element={
+          <ProtectedRoute>
+            <AppDetail />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/chat"
+        element={
+          <ProtectedRoute>
+            <NumaChat />
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
   );
 };
 
