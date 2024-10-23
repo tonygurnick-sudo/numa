@@ -11,35 +11,6 @@ const NumaLogin = () => {
   const API_ENDPOINT = 'https://g59jhyyob7.execute-api.us-east-1.amazonaws.com'; // Replace with your actual backend API
   const USER_POOL_ID = 'us-east-1_kVPZjTM6a';
 
-  function getTimestamp() {
-    const date = new Date();
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-
-    const dayName = days[date.getUTCDay()];
-    const monthName = months[date.getUTCMonth()];
-    const day = date.getUTCDate();
-    const hours = date.getUTCHours().toString().padStart(2, '0');
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
-    const year = date.getUTCFullYear();
-
-    return `${dayName} ${monthName} ${day} ${hours}:${minutes}:${seconds} UTC ${year}`;
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -86,7 +57,7 @@ const NumaLogin = () => {
             PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
             PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
           },
-          timestamp: getTimestamp(),
+          timestamp: srpSession.timestamp,
         }),
       });
 
@@ -99,13 +70,13 @@ const NumaLogin = () => {
       console.log('finalResponse', finalResponse);
 
       // Handle the authentication success and tokens
-      const tokens = finalResponse.authenticationResult;
+      const tokens = finalResponse.AuthenticationResult;
       localStorage.setItem('accessToken', tokens.AccessToken);
       localStorage.setItem('refreshToken', tokens.RefreshToken);
       localStorage.setItem('idToken', tokens.IdToken);
 
       setSuccess('Login successful.');
-      window.location.href = '/dashboard'; // Redirect to dashboard
+      window.location.href = '/chat'; // Redirect to dashboard
     } catch (error) {
       console.error('Error during authentication:', error);
       setError(error.message);
