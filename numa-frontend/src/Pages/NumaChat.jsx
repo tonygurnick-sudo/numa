@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { LayoutForm } from '../layouts/LayoutForm';
 import { Button, Form, Alert } from 'react-bootstrap';
 import { QBusinessClient, ChatSyncCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../providers/AuthProvider';
@@ -137,9 +136,7 @@ const NumaChat = () => {
   };
 
   return (
-    <LayoutForm
-      FormName={'llmchat'}
-      Content={
+
         <>
           <h1 className="mb-2">Numa Chat</h1>
           <p className="mb-4 fs-lg-1">
@@ -205,8 +202,7 @@ const NumaChat = () => {
             </Button>
           </Form>
         </>
-      }
-    />
+
   );
 };
 

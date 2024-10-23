@@ -4,65 +4,67 @@ import {
   Route,
   Navigate,
 } from 'react-router-dom';
-import { NumaLogin } from './pages/Login';
-import { NumaChat } from './pages/NumaChat';
+import { NumaLogin } from './Pages/Login';
+import { ResetPassword } from './Pages/ResetPassword';
+import { Dash } from './Pages/Dash';
+import AppDetail from './Pages/AppDetail';
+
 import { AuthProvider, useAuth } from './providers/AuthProvider';
+import { NumaChat } from './Pages/NumaChat';
 
-const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
 
-  if (loading) {
-    // You can return a loading spinner or null here
-    return <div>Loading...</div>;
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return children;
-};
-
-const AuthenticatedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    // You can return a loading spinner or null here
-    return <div>Loading...</div>;
-  }
-
-  if (user) {
-    return <Navigate to="/chat" replace />;
-  }
-
-  return children;
-};
 
 const NumaRoutes = () => {
   return (
-    <Router>
-      <AuthProvider>
-        <Routes>
-          <Route
-            path="/login"
-            element={
-              <AuthenticatedRoute>
-                <NumaLogin />
-              </AuthenticatedRoute>
-            }
-          />
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route
-            path="/chat"
-            element={
-              <ProtectedRoute>
-                <NumaChat />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </AuthProvider>
-    </Router>
+    <AuthProvider>
+      <Router>
+        <AppRoutes />
+      </Router>
+    </AuthProvider>
+  );
+};
+
+const AppRoutes = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  const ProtectedRoute = ({ children }) => {
+    if (!user) {
+      return <Navigate to="/login" replace />;
+    }
+    return children;
+  };
+
+  return (
+    <Routes>
+      <Route path="/login" element={user ? <Navigate to="/dash" replace /> : <NumaLogin />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+
+      <Route path="/" element={<Navigate to={user ? "/dash" : "/login"} replace />} />
+
+      <Route path="/dash" element={
+        <ProtectedRoute>
+          <Dash />
+        </ProtectedRoute>
+      } />
+
+      {/* Route for app details */}
+      <Route path="/app/:appId" element={
+        <ProtectedRoute>
+          <AppDetail />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/chat" element={
+        <ProtectedRoute>
+          <NumaChat />
+        </ProtectedRoute>
+      }
+      />
+    </Routes>
   );
 };
 

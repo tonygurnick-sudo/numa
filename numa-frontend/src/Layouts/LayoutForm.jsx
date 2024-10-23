@@ -1,4 +1,4 @@
-import React from 'react';
+
 import LogoBk from '../assets/images/arc_logo_black.svg';
 
 import { Container, Row, Col } from 'react-bootstrap';
