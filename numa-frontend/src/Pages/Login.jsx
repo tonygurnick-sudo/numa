@@ -1,13 +1,17 @@
 import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert } from 'react-bootstrap';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
+import { useAuth } from '../Providers/AuthProvider';
+import { jwtDecode } from 'jwt-decode';
 
 const NumaLogin = () => {
   const usernameRef = useRef();
   const passwordRef = useRef();
   const newPasswordRef = useRef();
   const confirmPasswordRef = useRef();
+  const navigate = useNavigate();
 
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -23,6 +27,8 @@ const NumaLogin = () => {
     if (newPasswordRef.current) newPasswordRef.current.value = '';
     if (confirmPasswordRef.current) confirmPasswordRef.current.value = '';
   };
+
+  const { setUser } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -85,8 +91,26 @@ const NumaLogin = () => {
         localStorage.setItem('refreshToken', tokens.RefreshToken);
         localStorage.setItem('idToken', tokens.IdToken);
 
+        // Update the user state in AuthProvider
+        const decodedAccessToken = jwtDecode(tokens.AccessToken);
+        const decodedIdToken = jwtDecode(tokens.IdToken);
+        setUser({
+          tokens: {
+            accessToken: tokens.AccessToken,
+            idToken: tokens.IdToken,
+            refreshToken: tokens.RefreshToken,
+          },
+          decoded_tokens: {
+            accessToken: decodedAccessToken,
+            idToken: decodedIdToken,
+          },
+        });
+
         setSuccess('Login successful.');
-        clearInputs();
+        setTimeout(() => {
+          navigate('/dash');
+          clearInputs();
+        }, 1500); // 1.5 seconds delay
       }
     } catch (error) {
       console.error('Error during authentication:', error);
@@ -142,8 +166,8 @@ const NumaLogin = () => {
     }
   };
 
-  return (
-    <LayoutForm>
+  const loginContent = (
+    <>
       <h1>Numa Login</h1>
 
       {error && <Alert variant="danger">{error}</Alert>}
@@ -211,8 +235,10 @@ const NumaLogin = () => {
           </Button>
         </Form>
       )}
-    </LayoutForm>
+    </>
   );
+
+  return <LayoutForm FormName="login" Content={loginContent} />;
 };
 
 export { NumaLogin };

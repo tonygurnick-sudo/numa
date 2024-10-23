@@ -9,10 +9,8 @@ import { ResetPassword } from './Pages/ResetPassword';
 import { Dash } from './Pages/Dash';
 import AppDetail from './Pages/AppDetail';
 
-import { AuthProvider, useAuth } from './providers/AuthProvider';
+import { AuthProvider, useAuth } from './Providers/AuthProvider';
 import { NumaChat } from './Pages/NumaChat';
-
-
 
 const NumaRoutes = () => {
   return (
@@ -25,13 +23,19 @@ const NumaRoutes = () => {
 };
 
 const AppRoutes = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, tokenValidationComplete } = useAuth();
 
-  if (loading) {
+  if (loading || !tokenValidationComplete) {
     return <div>Loading...</div>;
   }
 
   const ProtectedRoute = ({ children }) => {
+    if (!tokenValidationComplete) {
+      return <div>Loading...</div>;
+    }
+
+    console.log('user', user);
+
     if (!user) {
       return <Navigate to="/login" replace />;
     }
@@ -40,29 +44,43 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/dash" replace /> : <NumaLogin />} />
+      <Route
+        path="/login"
+        element={user ? <Navigate to="/dash" replace /> : <NumaLogin />}
+      />
       <Route path="/reset-password" element={<ResetPassword />} />
 
-      <Route path="/" element={<Navigate to={user ? "/dash" : "/login"} replace />} />
+      <Route
+        path="/"
+        element={<Navigate to={user ? '/dash' : '/login'} replace />}
+      />
 
-      <Route path="/dash" element={
-        <ProtectedRoute>
-          <Dash />
-        </ProtectedRoute>
-      } />
+      <Route
+        path="/dash"
+        element={
+          <ProtectedRoute>
+            <Dash />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Route for app details */}
-      <Route path="/app/:appId" element={
-        <ProtectedRoute>
-          <AppDetail />
-        </ProtectedRoute>
-      } />
+      <Route
+        path="/app/:appId"
+        element={
+          <ProtectedRoute>
+            <AppDetail />
+          </ProtectedRoute>
+        }
+      />
 
-      <Route path="/chat" element={
-        <ProtectedRoute>
-          <NumaChat />
-        </ProtectedRoute>
-      }
+      <Route
+        path="/chat"
+        element={
+          <ProtectedRoute>
+            <NumaChat />
+          </ProtectedRoute>
+        }
       />
     </Routes>
   );

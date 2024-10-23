@@ -1,10 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button, Form, Alert } from 'react-bootstrap';
-import { QBusinessClient, ChatSyncCommand } from '@aws-sdk/client-qbusiness';
-import { useAuth } from '../providers/AuthProvider';
-import { fromWebToken } from '@aws-sdk/credential-providers';
-import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
-import QPolicy from '../config/QPolicy.json';
+import { ChatSyncCommand } from '@aws-sdk/client-qbusiness';
+import { useAuth } from '../Providers/AuthProvider';
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
@@ -12,46 +9,10 @@ const NumaChat = () => {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState(null);
-  const [client, setClient] = useState(null);
   const messageEndRef = useRef(null);
-  const { user, getIdToken, logout } = useAuth();
+  const { user, logout, qBusinessClient } = useAuth();
 
-  const IDENTITY_POOL_ID = 'us-east-1:facf1439-ef67-48f9-ada4-debb294db187';
-  const ROLE_ARN =
-    'arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo';
-  const REGION = 'us-east-1';
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
-
-  const initializeClient = useCallback(async () => {
-    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
-
-    try {
-      const idToken = await getIdToken();
-      const credentials = fromWebToken({
-        client: cognitoIdentity,
-        identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: 'numa-frontend-chat',
-        roleArn: ROLE_ARN,
-        policy: JSON.stringify(QPolicy),
-        durationSeconds: 3600,
-        webIdentityToken: idToken,
-      });
-
-      const newClient = new QBusinessClient({
-        region: REGION,
-        credentials: await credentials(),
-      });
-
-      setClient(newClient);
-    } catch (error) {
-      console.error('Error in client initialization:', error);
-      setError('Failed to initialize chat. Please try again.');
-    }
-  }, [getIdToken]);
-
-  useEffect(() => {
-    initializeClient();
-  }, [initializeClient]);
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -59,7 +20,7 @@ const NumaChat = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!inputMessage.trim() || !client) return;
+    if (!inputMessage.trim() || !qBusinessClient) return;
 
     setError(null);
     setIsLoading(true);
@@ -70,19 +31,18 @@ const NumaChat = () => {
       setMessages((prev) => [...prev, newUserMessage]);
       setInputMessage('');
 
-      // Prepare ChatSync input according to the documentation
       const input = {
         applicationId: APPLICATION_ID,
-        userId: user.id,
-        userGroups: user.groups,
+        userId: user.decoded_tokens.idToken.sub, // Use the sub from the ID token
+        userGroups: user.decoded_tokens.idToken['cognito:groups'] || [], // Use groups from the ID token
         conversationId: conversationId,
         userMessage: inputMessage,
-        chatMode: 'RETRIEVAL_MODE', // Default mode that uses connected data sources
-        clientToken: Date.now().toString(), // Simple unique token
+        chatMode: 'RETRIEVAL_MODE',
+        clientToken: Date.now().toString(),
       };
 
       const command = new ChatSyncCommand(input);
-      const response = await client.send(command);
+      const response = await qBusinessClient.send(command);
 
       // Update conversation ID if this is a new conversation
       if (!conversationId && response.conversationId) {
@@ -136,73 +96,70 @@ const NumaChat = () => {
   };
 
   return (
-
-        <>
-          <h1 className="mb-2">Numa Chat</h1>
-          <p className="mb-4 fs-lg-1">
-            Chat with your documents using Amazon Q Business. Ask anything!
-          </p>
-          <br />
-          {error && <Alert variant="danger">{error}</Alert>}
+    <>
+      <h1 className="mb-2">Numa Chat</h1>
+      <p className="mb-4 fs-lg-1">
+        Chat with your documents using Amazon Q Business. Ask anything!
+      </p>
+      <br />
+      {error && <Alert variant="danger">{error}</Alert>}
+      <div
+        className="chat-messages"
+        style={{
+          height: '400px',
+          overflowY: 'auto',
+          marginBottom: '20px',
+          border: '1px solid #ced4da',
+          borderRadius: '5px',
+          padding: '10px',
+        }}
+      >
+        {messages.map((message, index) => (
           <div
-            className="chat-messages"
+            key={index}
+            className={`message ${message.role}`}
             style={{
-              height: '400px',
-              overflowY: 'auto',
-              marginBottom: '20px',
-              border: '1px solid #ced4da',
+              marginBottom: '10px',
+              padding: '8px',
               borderRadius: '5px',
-              padding: '10px',
+              backgroundColor: message.role === 'user' ? '#e9ecef' : '#f8f9fa',
             }}
           >
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`message ${message.role}`}
-                style={{
-                  marginBottom: '10px',
-                  padding: '8px',
-                  borderRadius: '5px',
-                  backgroundColor:
-                    message.role === 'user' ? '#e9ecef' : '#f8f9fa',
-                }}
-              >
-                <strong>{message.role === 'user' ? 'You:' : 'AI:'}</strong>{' '}
-                {message.content}
-                {message.role === 'assistant' &&
-                  renderSourceAttributions(message.sources)}
-              </div>
-            ))}
-            <div ref={messageEndRef} />
+            <strong>{message.role === 'user' ? 'You:' : 'AI:'}</strong>{' '}
+            {message.content}
+            {message.role === 'assistant' &&
+              renderSourceAttributions(message.sources)}
           </div>
-          <Form onSubmit={handleSubmit}>
-            <Form.Group className="mb-3">
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Type your message here..."
-              />
-            </Form.Group>
-            <Button
-              variant="primary"
-              type="submit"
-              className="mb-3"
-              disabled={isLoading || !client}
-            >
-              {isLoading ? 'Sending...' : 'Send Message'}
-            </Button>
-            <Button
-              variant="secondary"
-              className="mb-3 ms-2"
-              onClick={() => logout()}
-            >
-              Logout
-            </Button>
-          </Form>
-        </>
-
+        ))}
+        <div ref={messageEndRef} />
+      </div>
+      <Form onSubmit={handleSubmit}>
+        <Form.Group className="mb-3">
+          <Form.Control
+            as="textarea"
+            rows={3}
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            placeholder="Type your message here..."
+          />
+        </Form.Group>
+        <Button
+          variant="primary"
+          type="submit"
+          className="mb-3"
+          disabled={isLoading || !qBusinessClient}
+        >
+          {isLoading ? 'Sending...' : 'Send Message'}
+        </Button>
+        <Button
+          variant="secondary"
+          className="mb-3 ms-2"
+          onClick={() => logout()}
+        >
+          Logout
+        </Button>
+      </Form>
+    </>
   );
 };
 
