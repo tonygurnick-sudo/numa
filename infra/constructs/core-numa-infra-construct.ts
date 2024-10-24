@@ -17,6 +17,8 @@ import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { CognitoIdentityPoolRolesAttachment } from '@cdktf/provider-aws/lib/cognito-identity-pool-roles-attachment';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
+import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
+import * as path from 'node:path';
 
 export class CoreNumaInfra extends Construct {
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
@@ -25,6 +27,7 @@ export class CoreNumaInfra extends Construct {
     props.indexType ??= 'STARTER';
     props.identityProvider ??= 'oidc';
     const region = props.region ?? 'us-east-1';
+    props.loadSampleFile ??= true;
 
     const callerId = new DataAwsCallerIdentity(this, 'caller-id', {});
 
@@ -380,6 +383,15 @@ export class CoreNumaInfra extends Construct {
       bucket: numaClient + '-data',
     });
 
+    if (props.loadSampleFile) {
+      const sampleFile = 'numa-one-pager.pdf';
+      new S3Object(this, 'sample-file', {
+        bucket: dataBucket.bucket.bucket,
+        key: sampleFile,
+        source: path.join(import.meta.dirname, '..', 'assets', sampleFile),
+      });
+    }
+
     const dataRole = new IamRole(this, 'data-source-role', {
       name: `data-source-role-${numaClient}`,
       // TODO: Replace stringify with a proper document.
@@ -445,6 +457,7 @@ export class CoreNumaInfra extends Construct {
         DisplayName: numaClient,
         IndexId: indexId,
         RoleArn: dataRole.arn,
+        SyncSchedule: 'cron(0 * ? * * *)',
       }),
     });
     const dataSourceId = Fn.lookup(Fn.jsondecode(dataSource.properties), 'DataSourceId');
@@ -467,4 +480,5 @@ export interface CoreNumaInfraProps {
   indexType?: 'ENTERPRISE' | 'STARTER';
   region?: string;
   clientAccountId?: string;
+  loadSampleFile?: boolean;
 }
