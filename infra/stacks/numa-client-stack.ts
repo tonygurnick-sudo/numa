@@ -67,6 +67,7 @@ const clientsProd: Record<string, ClientConfig> = {
   'story-box': {
     client: 'story-box',
     clientAccountId: '851725285135',
+    loadSampleFile: false,
   },
   'w-advisory': {
     client: 'w-advisory',
