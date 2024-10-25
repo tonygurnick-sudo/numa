@@ -28,6 +28,7 @@ export class CoreNumaInfra extends Construct {
     props.identityProvider ??= 'oidc';
     const region = props.region ?? 'us-east-1';
     props.loadSampleFile ??= true;
+    props.createServiceLinkedRole ??= true;
 
     const callerId = new DataAwsCallerIdentity(this, 'caller-id', {});
 
@@ -211,9 +212,11 @@ export class CoreNumaInfra extends Construct {
         policy: secretsPolicyDocument.json,
       });
 
-      new IamServiceLinkedRole(this, 'q-service-role', {
-        awsServiceName: 'qbusiness.amazonaws.com',
-      });
+      if (props.createServiceLinkedRole) {
+        new IamServiceLinkedRole(this, 'q-service-role', {
+          awsServiceName: 'qbusiness.amazonaws.com',
+        });
+      }
 
       new SecretsmanagerSecretVersion(this, 'secret-version', {
         secretId: secret.id,
@@ -481,4 +484,5 @@ export interface CoreNumaInfraProps {
   region?: string;
   clientAccountId?: string;
   loadSampleFile?: boolean;
+  createServiceLinkedRole?: boolean;
 }

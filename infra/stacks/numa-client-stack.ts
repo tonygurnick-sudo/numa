@@ -39,6 +39,7 @@ const clientsProd: Record<string, ClientConfig> = {
   'arcanum-demo': {
     client: 'arcanum-demo',
     clientAccountId: '905418183804',
+    createServiceLinkedRole: false,
   },
   'av-media': {
     client: 'av-media',
