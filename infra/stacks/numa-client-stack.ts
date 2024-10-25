@@ -69,6 +69,10 @@ const clientsProd: Record<string, ClientConfig> = {
     clientAccountId: '851725285135',
     loadSampleFile: false,
   },
+  tda: {
+    client: 'tda',
+    clientAccountId: '575108948290',
+  },
   'w-advisory': {
     client: 'w-advisory',
     clientAccountId: '746669235417',
