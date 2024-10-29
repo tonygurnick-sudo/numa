@@ -39,6 +39,12 @@ const clientsProd: Record<string, ClientConfig> = {
   'arcanum-demo': {
     client: 'arcanum-demo',
     clientAccountId: '905418183804',
+    createServiceLinkedRole: false,
+    webCrawlerConfigs: [
+      {
+        url: 'https://arcanum.ai/',
+      },
+    ],
   },
   'av-media': {
     client: 'av-media',
@@ -59,6 +65,18 @@ const clientsProd: Record<string, ClientConfig> = {
   nzsba: {
     client: 'nzsba',
     clientAccountId: '307946678276',
+    webCrawlerConfigs: [
+      {
+        url: 'https://www.nzstaresourcecentre.org.nz/',
+      },
+      {
+        url: 'https://www.legislation.govt.nz/',
+      },
+      {
+        url: 'https://www.education.govt.nz/',
+      },
+    ],
+    loadSampleFile: false,
   },
   rooflogic: {
     client: 'rooflogic',
@@ -76,6 +94,21 @@ const clientsProd: Record<string, ClientConfig> = {
   'w-advisory': {
     client: 'w-advisory',
     clientAccountId: '746669235417',
+    webCrawlerConfigs: [
+      {
+        url: 'https://www.ato.gov.au/',
+      },
+      {
+        url: 'https://business.gov.au/',
+      },
+      {
+        url: 'https://asic.gov.au/',
+      },
+      {
+        url: 'https://central.xero.com/s/',
+      },
+    ],
+    loadSampleFile: false,
   },
 };
 
