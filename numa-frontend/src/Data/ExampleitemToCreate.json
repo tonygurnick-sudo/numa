@@ -1,0 +1,35 @@
+{
+  "appDefinition": {
+    "cards": [
+      {
+        "textInput": {
+          "type": "text-input",
+          "id": "f9a81f5d-2b36-4f89-9451-cd073f29eab7",
+          "title": "Location"
+        }
+      },
+      {
+        "textInput": {
+          "type": "text-input",
+          "id": "2cd56093-56b4-4d9e-8c92-1e9a4f8c3b1f",
+          "title": "Cuisine Preference"
+        }
+      },
+      {
+        "qQuery": {
+          "type": "q-query",
+          "id": "6e33f18b-a4d0-4867-9a2d-c47f049de527",
+          "prompt": "Recommend me a list of restaurants in @f9a81f5d-2b36-4f89-9451-cd073f29eab7 that serve @2cd56093-56b4-4d9e-8c92-1e9a4f8c3b1f.",
+          "title": "Recommended Restaurants"
+        }
+      }
+    ],
+    "initialPrompt": "Enter your location and cuisine preference to get restaurant recommendations."
+  },
+  "instanceId": "2594236d-712a-4355-8b0e-6a4cef023f75",
+  "title": "Restaurant Recommender",
+  "description": "Get personalized restaurant recommendations based on your preferences.",
+  "tags": {
+    "category": "restaurant"
+  }
+}

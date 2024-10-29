@@ -12,6 +12,7 @@
   "dependencies": {
     "@aws-sdk/client-cognito-identity": "^3.668.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.670.0",
+    "@aws-sdk/client-qapps": "^3.678.0",
     "@aws-sdk/client-qbusiness": "^3.672.0",
     "@aws-sdk/credential-providers": "^3.670.0",
     "@popperjs/core": "^2.11.8",

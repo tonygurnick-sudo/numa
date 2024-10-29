@@ -1,12 +1,14 @@
 import { Row, Col } from 'react-bootstrap';
 
 const AppItem = ({ appData }) => {
+  console.log(appData)
   return (
     <>
       <div className="card card-apps">
 
         <a href={`/app/${appData.appId}`} rel="noopener" >
           <AppItemContents appData={appData} />
+
         </a>
 
       </div>
@@ -20,7 +22,7 @@ function AppItemContents({ appData }) {
       <div className="card-header">
         <Row>
           <Col lg={9}>
-            {appData.name}
+            {appData.title}
           </Col>
           <Col lg={3} className="right">
             {appData.appVersion && (

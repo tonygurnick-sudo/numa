@@ -25,7 +25,7 @@ const LayoutForm = ({ FormName, Content }) => {
             <footer>&copy; ARCANUM {new Date().getFullYear()}</footer>
           </Col>
 
-          {/* <Col lg={6} className={`${FormName}-right`}>
+          <Col lg={6} className={`${FormName}-right`}>
               <Row className="container d-flex h-100  justify-content-center align-items-center benefits_trial">
                 <Col lg={12}>
                   <h1>Supercharge your workforce with AI and scale your business</h1>
@@ -36,7 +36,7 @@ const LayoutForm = ({ FormName, Content }) => {
                 </Col>
               </Row>
 
-          </Col> */}
+          </Col>
         </Row>
       </Container>
     </>

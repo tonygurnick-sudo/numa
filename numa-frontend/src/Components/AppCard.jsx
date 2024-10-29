@@ -44,11 +44,14 @@ const AppCard = ({ card, dependencies, appsCards  }) => {
       <div className="card-header">
         <Row>
           <Col lg={12}>
-
             {this_card.title}
+            <br/>
+            <label className='type'>
+            {this_card.type}
+          </label>
+
           </Col>
-          <Col lg={3} className="right">
-          </Col>
+
         </Row>
       </div>
       {renderCardByType()}

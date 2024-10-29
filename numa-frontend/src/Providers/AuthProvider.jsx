@@ -8,9 +8,11 @@ import {
 import { jwtDecode } from 'jwt-decode';
 import { CognitoIdentityProvider } from '@aws-sdk/client-cognito-identity-provider';
 import { QBusinessClient } from '@aws-sdk/client-qbusiness';
+import { QAppsClient } from '@aws-sdk/client-qapps';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
 import QPolicy from '../Data/QPolicy.json';
+
 
 const AuthContext = createContext(null);
 
@@ -26,6 +28,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [qBusinessClient, setQBusinessClient] = useState(null);
+  const [qAppsClient, setQAppsClient] = useState(null);
   const [tokenValidationComplete, setTokenValidationComplete] = useState(false);
 
   const cognitoClient = new CognitoIdentityProvider({
@@ -154,13 +157,44 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user]);
 
+
+  const initializeQAppsClient = useCallback(async () => {
+    if (!user) return;
+
+    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+
+    try {
+      const idToken = user.tokens.idToken;
+      const credentials = fromWebToken({
+        client: cognitoIdentity,
+        identityPoolId: IDENTITY_POOL_ID, // Assuming the same identity pool for both clients
+        roleSessionName: 'numa-frontend-qapps', // Optional, you can use a different role name for QAppsClient
+        roleArn: ROLE_ARN,
+        policy: JSON.stringify(QPolicy), // Assuming the policy allows access to Q Apps API
+        durationSeconds: 3600,
+        webIdentityToken: idToken,
+      });
+
+      const newQAppsClient = new QAppsClient({
+        region: REGION,
+        credentials: await credentials(),
+      });
+
+      setQAppsClient(newQAppsClient);
+    } catch (error) {
+      console.error('Error in QAppsClient initialization:', error);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (user) {
       initializeQBusinessClient();
+      initializeQAppsClient();
     } else {
       setQBusinessClient(null);
+      setQAppsClient(null);
     }
-  }, [user, initializeQBusinessClient]);
+  }, [user, initializeQBusinessClient, initializeQAppsClient]);
 
   useEffect(() => {
     const loadUserFromTokens = async () => {
@@ -246,6 +280,7 @@ export const AuthProvider = ({ children }) => {
     getUserInfo,
     logout,
     qBusinessClient,
+    qAppsClient,
     setUser,
   };
 
