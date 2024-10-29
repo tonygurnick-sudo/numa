@@ -513,6 +513,7 @@ export class CoreNumaInfra extends Construct {
           SyncSchedule: 'cron(0 0 ? * * *)',
         }),
       });
+      // TODO: Trigger an initial crawl.
     }
 
     new TerraformOutput(this, 'webex-url', {
