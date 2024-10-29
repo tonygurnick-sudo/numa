@@ -65,6 +65,18 @@ const clientsProd: Record<string, ClientConfig> = {
   nzsba: {
     client: 'nzsba',
     clientAccountId: '307946678276',
+    webCrawlerConfigs: [
+      {
+        url: 'https://www.nzstaresourcecentre.org.nz/',
+      },
+      {
+        url: 'https://www.legislation.govt.nz/',
+      },
+      {
+        url: 'https://www.education.govt.nz/',
+      },
+    ],
+    loadSampleFile: false,
   },
   rooflogic: {
     client: 'rooflogic',
