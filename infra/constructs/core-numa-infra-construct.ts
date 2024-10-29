@@ -29,6 +29,7 @@ export class CoreNumaInfra extends Construct {
     const region = props.region ?? 'us-east-1';
     props.loadSampleFile ??= true;
     props.createServiceLinkedRole ??= true;
+    props.webCrawlerConfigs ??= [];
 
     const callerId = new DataAwsCallerIdentity(this, 'caller-id', {});
 
@@ -433,7 +434,7 @@ export class CoreNumaInfra extends Construct {
       policy: dataSourcePolicyDoc.json,
     });
 
-    const dataSource = new CloudcontrolapiResource(this, 'data-source', {
+    const s3DataSource = new CloudcontrolapiResource(this, 'data-source', {
       typeName: 'AWS::QBusiness::DataSource',
       desiredState: Fn.jsonencode({
         ApplicationId: application.id,
@@ -463,7 +464,56 @@ export class CoreNumaInfra extends Construct {
         SyncSchedule: 'cron(0 * ? * * *)',
       }),
     });
-    const dataSourceId = Fn.lookup(Fn.jsondecode(dataSource.properties), 'DataSourceId');
+    const dataSourceId = Fn.lookup(Fn.jsondecode(s3DataSource.properties), 'DataSourceId');
+
+    for (const crawlerDataSource of props.webCrawlerConfigs) {
+      const cleanedUrl = crawlerDataSource.url.replaceAll(/[^a-zA-Z0-9_-]/g, '-');
+      new CloudcontrolapiResource(this, `data-source-${cleanedUrl}`, {
+        typeName: 'AWS::QBusiness::DataSource',
+        desiredState: Fn.jsonencode({
+          ApplicationId: application.id,
+          Configuration: {
+            type: 'WEBCRAWLERV2',
+            syncMode: 'FULL_CRAWL',
+            connectionConfiguration: {
+              repositoryEndpointMetadata: {
+                seedUrlConnections: [
+                  {
+                    seedUrl: crawlerDataSource.url,
+                  },
+                ],
+              },
+            },
+            repositoryConfigurations: {
+              document: {
+                fieldMappings: [
+                  {
+                    dataSourceFieldName: 'content',
+                    indexFieldName: 'document_content',
+                    indexFieldType: 'STRING',
+                  },
+                ],
+              },
+            },
+            additionalProperties: {
+              rateLimit: '300',
+              honorRobots: true,
+              maxFileSize: '50',
+              maxLinksPerUrl: '100',
+              crawlDepth: '10',
+              crawlSubDomain: true,
+              crawlAllDomain: false,
+              crawlAttachments: true,
+              // TODO
+            },
+          },
+          DisplayName: `${numaClient}-web-${cleanedUrl}`,
+          IndexId: indexId,
+          RoleArn: dataRole.arn,
+          SyncSchedule: 'cron(0 0 ? * * *)',
+        }),
+      });
+    }
 
     new TerraformOutput(this, 'webex-url', {
       value: webexEndpoint,
@@ -476,6 +526,10 @@ export class CoreNumaInfra extends Construct {
   }
 }
 
+interface WebCrawlerConfig {
+  url: string;
+}
+
 export interface CoreNumaInfraProps {
   client: string;
   environmentName: string;
@@ -485,4 +539,5 @@ export interface CoreNumaInfraProps {
   clientAccountId?: string;
   loadSampleFile?: boolean;
   createServiceLinkedRole?: boolean;
+  webCrawlerConfigs?: WebCrawlerConfig[];
 }
