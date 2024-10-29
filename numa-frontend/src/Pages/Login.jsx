@@ -272,7 +272,7 @@ const NumaLogin = () => {
     </>
   );
 
-  return <LayoutForm FormName="login" Content={loginContent} />;
+  return <LayoutForm FormName="numalogin" Content={loginContent} />;
 };
 
 export { NumaLogin };

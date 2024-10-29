@@ -152,8 +152,27 @@ header {
     margin: 24px 30px;
   }
 
+  .breadcrumbs {
+    margin: 0;
+    padding: 12px 0 0;
+    list-style: none;
+
+    li {
+      display: inline-block;
+      font-size: 11px;
+      font-family: 'Metropolis Semi Bold';
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--color-gray);
+    }
+
+    a {
+      color: var(--color-primary);
+    }
+  }
 
 }
+
 .numalogin-left, .llmchat-left
 {
   position: relative;
@@ -419,6 +438,11 @@ nav {
 
       .right {
         text-align: right
+      }
+
+      .type {
+        position: absolute;
+        top: 20px;
       }
     }
 

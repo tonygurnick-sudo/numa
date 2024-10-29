@@ -1,94 +1,90 @@
 [
   {
     "appId": "725cc8fb-e86c-4ccf-ab75-fa7d4ff4dd37",
-    "name": "Tax Advisor",
+    "title": "Tax Advisor",
     "description": "An app that provides tax-saving advice based on user's financial data",
     "initialPrompt": "The **AI-Powered Tax Advisor** is an innovative application designed to streamline tax preparation and optimize tax savings. Users can upload a .txt file containing their income, expenses, and other financial items, which the AI then processes to extract key financial data points. The AI calculates taxable income, identifies potential deductions, and estimates tax liability. Based on this analysis, the application offers detailed tax-saving advice and specific recommendations to maximize deductions and reduce taxable income, ensuring users make informed financial decisions.",
     "appVersion": 28,
     "appDefinition": {
-        "appDefinitionVersion": "1",
-        "cards": [
-            {
-                "textInput": {
-                    "id": "687f4ec3-8527-4d42-b558-dde83c26ed1d",
-                    "title": "Financial Accounts",
-                    "dependencies": [],
-                    "type": "text-input",
-                    "defaultValue": "Income: - Salary: $80,000 - Freelance Income: $20,000 - Investment Income: $5,000  Expenses: - Rent: $18,000 - Utilities: $2,400 - Office Supplies: $800 - Travel Expenses: $1,500 - Medical Expenses: $2,000 - Education Expenses: $3,000 - Charitable Donations: $1,200  Other Items: - Mortgage Interest: $5,000 - Property Taxes: $3,000 - Retirement Contributions: $4,000 - Health Insurance Premiums: $6,000"
-                }
-            },
-            {
-                "qQuery": {
-                    "id": "d803f677-40fe-4aa5-9697-864a9c396797",
-                    "title": "Extracted Financial Data",
-                    "dependencies": [
-                        "687f4ec3-8527-4d42-b558-dde83c26ed1d"
-                    ],
-                    "type": "q-query",
-                    "prompt": "Given the financial data file @687f4ec3-8527-4d42-b558-dde83c26ed1d , extract the key financial data points such as income, expenses, deductions, etc. Present the extracted data in a structured format.",
-                    "outputSource": "approved-sources"
-                }
-            },
-            {
-                "qQuery": {
-                    "id": "ee0f322f-c5b8-463b-8b6f-278d884b5985",
-                    "title": "Tax Calculation",
-                    "dependencies": [
-                        "d803f677-40fe-4aa5-9697-864a9c396797"
-                    ],
-                    "type": "q-query",
-                    "prompt": "Based on the extracted financial data @d803f677-40fe-4aa5-9697-864a9c396797, calculate the taxable income and estimate the tax liability according to the latest tax rules and regulations.",
-                    "outputSource": "approved-sources"
-                }
-            },
-            {
-                "qQuery": {
-                    "id": "fbdf0e18-28e2-47df-a185-d43a2c7b117d",
-                    "title": "Tax Saving Advice",
-                    "dependencies": [
-                        "d803f677-40fe-4aa5-9697-864a9c396797",
-                        "ee0f322f-c5b8-463b-8b6f-278d884b5985"
-                    ],
-                    "type": "q-query",
-                    "prompt": "Considering the extracted financial data @d803f677-40fe-4aa5-9697-864a9c396797 and the calculated tax liability @ee0f322f-c5b8-463b-8b6f-278d884b5985, provide detailed tax-saving advice. Identify potential deductions the user may be eligible for, and recommend specific strategies to maximize deductions and reduce taxable income. The advice should be tailored to the user's financial situation and aim to help them make informed decisions to optimize their tax savings.",
-                    "outputSource": "approved-sources"
-                }
-            },
-            {
-                "qQuery": {
-                    "id": "0bb41836-648b-4fe7-b297-09e913d028e1",
-                    "title": "Tax Obligations and Relevant Forms",
-                    "dependencies": [
-                        "d803f677-40fe-4aa5-9697-864a9c396797",
-                        "ee0f322f-c5b8-463b-8b6f-278d884b5985",
-                        "fbdf0e18-28e2-47df-a185-d43a2c7b117d"
-                    ],
-                    "type": "q-query",
-                    "prompt": "Search for relevant forms and what the user whose accounts are @d803f677-40fe-4aa5-9697-864a9c396797. Find forms and resources the user will need to fulfill their tax obligations outlined in @ee0f322f-c5b8-463b-8b6f-278d884b5985 and @fbdf0e18-28e2-47df-a185-d43a2c7b117d ",
-                    "outputSource": "approved-sources"
-                }
-            }
-        ]
+      "appDefinitionVersion": "1",
+      "cards": [
+        {
+          "textInput": {
+            "id": "687f4ec3-8527-4d42-b558-dde83c26ed1d",
+            "title": "Financial Accounts",
+            "dependencies": [],
+            "type": "text-input",
+            "defaultValue": "Income: - Salary: $80,000 - Freelance Income: $20,000 - Investment Income: $5,000  Expenses: - Rent: $18,000 - Utilities: $2,400 - Office Supplies: $800 - Travel Expenses: $1,500 - Medical Expenses: $2,000 - Education Expenses: $3,000 - Charitable Donations: $1,200  Other Items: - Mortgage Interest: $5,000 - Property Taxes: $3,000 - Retirement Contributions: $4,000 - Health Insurance Premiums: $6,000"
+          }
+        },
+        {
+          "qQuery": {
+            "id": "d803f677-40fe-4aa5-9697-864a9c396797",
+            "title": "Extracted Financial Data",
+            "dependencies": ["687f4ec3-8527-4d42-b558-dde83c26ed1d"],
+            "type": "q-query",
+            "prompt": "Given the financial data file @687f4ec3-8527-4d42-b558-dde83c26ed1d , extract the key financial data points such as income, expenses, deductions, etc. Present the extracted data in a structured format.",
+            "outputSource": "approved-sources"
+          }
+        },
+        {
+          "qQuery": {
+            "id": "ee0f322f-c5b8-463b-8b6f-278d884b5985",
+            "title": "Tax Calculation",
+            "dependencies": ["d803f677-40fe-4aa5-9697-864a9c396797"],
+            "type": "q-query",
+            "prompt": "Based on the extracted financial data @d803f677-40fe-4aa5-9697-864a9c396797, calculate the taxable income and estimate the tax liability according to the latest tax rules and regulations.",
+            "outputSource": "approved-sources"
+          }
+        },
+        {
+          "qQuery": {
+            "id": "fbdf0e18-28e2-47df-a185-d43a2c7b117d",
+            "title": "Tax Saving Advice",
+            "dependencies": [
+              "d803f677-40fe-4aa5-9697-864a9c396797",
+              "ee0f322f-c5b8-463b-8b6f-278d884b5985"
+            ],
+            "type": "q-query",
+            "prompt": "Considering the extracted financial data @d803f677-40fe-4aa5-9697-864a9c396797 and the calculated tax liability @ee0f322f-c5b8-463b-8b6f-278d884b5985, provide detailed tax-saving advice. Identify potential deductions the user may be eligible for, and recommend specific strategies to maximize deductions and reduce taxable income. The advice should be tailored to the user's financial situation and aim to help them make informed decisions to optimize their tax savings.",
+            "outputSource": "approved-sources"
+          }
+        },
+        {
+          "qQuery": {
+            "id": "0bb41836-648b-4fe7-b297-09e913d028e1",
+            "title": "Tax Obligations and Relevant Forms",
+            "dependencies": [
+              "d803f677-40fe-4aa5-9697-864a9c396797",
+              "ee0f322f-c5b8-463b-8b6f-278d884b5985",
+              "fbdf0e18-28e2-47df-a185-d43a2c7b117d"
+            ],
+            "type": "q-query",
+            "prompt": "Search for relevant forms and what the user whose accounts are @d803f677-40fe-4aa5-9697-864a9c396797. Find forms and resources the user will need to fulfill their tax obligations outlined in @ee0f322f-c5b8-463b-8b6f-278d884b5985 and @fbdf0e18-28e2-47df-a185-d43a2c7b117d ",
+            "outputSource": "approved-sources"
+          }
+        }
+      ]
     }
-},
+  },
   {
     "appId": "e86c-4ccf-ab75-fa7f4dd37",
-    "name": "Numa Chat",
+    "title": "Numa Chat",
     "description": "Chat with your documents. Ask anything!"
   },
-    {
-      "appId": "445cc8fb-fa7f4dd37",
-      "name": "Q App Two",
-      "description": "This app helps users manage their tasks efficiently."
-    },
-    {
-      "appId": "445cc8fb-e86c--ab75-fa7f4dd37",
-      "name": "Q App Three",
-      "description": "A comprehensive app for tracking fitness goals."
-    },
-    {
-      "appId": "445cfb--4ccf-ab75-fa4dd37",
-      "name": "Q App Four",
-      "description": "An innovative app for learning new languages."
-    }
+  {
+    "appId": "445cc8fb-fa7f4dd37",
+    "title": "Q App Two",
+    "description": "This app helps users manage their tasks efficiently."
+  },
+  {
+    "appId": "445cc8fb-e86c--ab75-fa7f4dd37",
+    "title": "Q App Three",
+    "description": "A comprehensive app for tracking fitness goals."
+  },
+  {
+    "appId": "445cfb--4ccf-ab75-fa4dd37",
+    "title": "Q App Four",
+    "description": "An innovative app for learning new languages."
+  }
 ]
