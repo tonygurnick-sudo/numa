@@ -40,6 +40,11 @@ const clientsProd: Record<string, ClientConfig> = {
     client: 'arcanum-demo',
     clientAccountId: '905418183804',
     createServiceLinkedRole: false,
+    webCrawlerConfigs: [
+      {
+        url: 'https://arcanum.ai/',
+      },
+    ],
   },
   'av-media': {
     client: 'av-media',
@@ -77,6 +82,21 @@ const clientsProd: Record<string, ClientConfig> = {
   'w-advisory': {
     client: 'w-advisory',
     clientAccountId: '746669235417',
+    webCrawlerConfigs: [
+      {
+        url: 'https://www.ato.gov.au/',
+      },
+      {
+        url: 'https://business.gov.au/',
+      },
+      {
+        url: 'https://asic.gov.au/',
+      },
+      {
+        url: 'https://central.xero.com/s/',
+      },
+    ],
+    loadSampleFile: false,
   },
 };
 
