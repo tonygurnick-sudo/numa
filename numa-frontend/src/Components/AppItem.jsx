@@ -1,7 +1,7 @@
 import { Row, Col } from 'react-bootstrap';
 
 const AppItem = ({ appData }) => {
-  console.log(appData)
+
   return (
     <>
       <div className="card card-apps">

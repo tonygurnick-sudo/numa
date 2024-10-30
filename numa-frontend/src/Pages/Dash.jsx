@@ -5,6 +5,7 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { AppItem } from '../Components/AppItem';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
+import { Preloader } from '../Components/Preloader';
 
 import { useAuth } from '../Providers/AuthProvider';
 import {
@@ -16,14 +17,15 @@ import exampleItem from '../Data/ExampleitemToCreate.json';
 //import appsData from '../Data/appsData.json';
 
 const Dash = () => {
-  const { qAppsClient, loading } = useAuth();
+  const { qAppsClient, loading: authLoading } = useAuth();
+
   const [apps, setApps] = useState([]);
   const [libraryApps, setLibraryApps] = useState([]);
-
+  const [loading, setLoading] = useState(true);
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
 
   const fetchApps = async () => {
-    if (!qAppsClient || loading) return;
+    if (!qAppsClient || authLoading) return;
 
     // try {
     //   // temp
@@ -39,6 +41,7 @@ const Dash = () => {
     // }
 
     try {
+      setLoading(true);
       const input = {
         instanceId: APPLICATION_ID,
       };
@@ -49,20 +52,25 @@ const Dash = () => {
       setApps(response.apps);
     } catch (error) {
       console.error('Error fetching Q Apps:', error);
+    } finally {
+      setLoading(false);
     }
 
-    try {
-      const input = {
-        instanceId: APPLICATION_ID,
-      };
+    // try {
+    //   setLoading(true);
+    //   const input = {
+    //     instanceId: APPLICATION_ID,
+    //   };
 
-      const lib_command = new ListLibraryItemsCommand(input);
-      const lib_response = await qAppsClient.send(lib_command);
+    //   const lib_command = new ListLibraryItemsCommand(input);
+    //   const lib_response = await qAppsClient.send(lib_command);
 
-      setLibraryApps(lib_response.libraryItems);
-    } catch (error) {
-      console.error('Error fetching Q Apps:', error);
-    }
+    //   setLibraryApps(lib_response.libraryItems);
+    // } catch (error) {
+    //   console.error('Error fetching Q Apps:', error);
+    // } finally {
+    //   setLoading(false);
+    // }
   };
 
   useEffect(() => {
@@ -96,7 +104,7 @@ const Dash = () => {
             <hr /> */}
 
             {loading ? (
-              <p>Loading Apps...</p>
+              <Preloader />
             ) : (
               <>
                 {apps.map((app) => (
@@ -109,7 +117,7 @@ const Dash = () => {
 
             <h6>Library data:</h6>
             {loading ? (
-              <p>Loading Apps...</p>
+              <Preloader />
             ) : (
               <ul>
                 {libraryApps.map((app) => (
@@ -121,7 +129,6 @@ const Dash = () => {
             )}
           </Row>
         </LayoutDashboard>
-        <div></div>
 
         <Nav nav1on="on" nav2on="" nav3on="" />
       </div>
