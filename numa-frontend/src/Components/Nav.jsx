@@ -1,16 +1,13 @@
-
 import { useNavigate } from 'react-router-dom';
 import Logo from '../assets/images/logo-accelerate.svg';
+import { useAuth } from '../Providers/AuthProvider';
 
 const Nav = () => {
   const navigate = useNavigate();
-
+  const { logout: authLogout } = useAuth();
 
   const logout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('tokenExpiration');
-
+    authLogout();
     navigate('/login');
     window.location.reload(false);
   };
@@ -23,19 +20,12 @@ const Nav = () => {
         </a>
 
         <ul>
-
-
           <li>
-            <a href="/solutions" id="nav_solutions" rel="noopener">
-
-            </a>
+            <a href="/solutions" id="nav_solutions" rel="noopener"></a>
           </li>
-
         </ul>
         <footer>
-          <a href="/my-account"  rel="noopener">
-
-          </a>
+          <a href="/my-account" rel="noopener"></a>
           <button onClick={logout} className="btn-logout">
             Log out
           </button>

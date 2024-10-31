@@ -2,6 +2,7 @@ import {
   S3Client,
   GetObjectCommand,
   PutObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -32,6 +33,25 @@ export const handler = async (event) => {
   }
 
   try {
+    if (event.queryStringParameters?.operation === 'list') {
+      const command = new ListObjectsV2Command({
+        Bucket: BUCKET_NAME,
+      });
+
+      const response = await s3Client.send(command);
+      const files = response.Contents.map((item) => ({
+        key: item.Key,
+        size: item.Size,
+        lastModified: item.LastModified,
+      }));
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ files }),
+      };
+    }
+
     const fileName = event.queryStringParameters?.fileName;
     if (!fileName) {
       return {
@@ -43,7 +63,7 @@ export const handler = async (event) => {
       };
     }
 
-    const fileKey = `${fileName}-${Date.now()}`;
+    const fileKey = fileName;
 
     const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,
