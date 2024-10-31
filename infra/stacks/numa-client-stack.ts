@@ -54,9 +54,17 @@ const clientsProd: Record<string, ClientConfig> = {
     client: 'beyond-expectations',
     clientAccountId: '474668383176',
   },
+  'broken-hill-city-council': {
+    client: 'broken-hill-city-council',
+    clientAccountId: '863518418134',
+  },
   'design-builders': {
     client: 'design-builders',
     clientAccountId: '061039773876',
+  },
+  'lg-pro': {
+    client: 'lg-pro',
+    clientAccountId: '539247480075',
   },
   'modern-sales': {
     client: 'modern-sales',
@@ -109,6 +117,10 @@ const clientsProd: Record<string, ClientConfig> = {
       },
     ],
     loadSampleFile: false,
+  },
+  'warrnambool-city-council': {
+    client: 'warrnambool-city-council',
+    clientAccountId: '440744229592',
   },
 };
 
