@@ -272,25 +272,21 @@ const S3Uploader = () => {
                 </div>
               ) : (
                 <div className="list-group">
-                  {files.map((file) => {
-                    // Remove any suffix after the last dash
-                    const displayName = file.key.replace(/-[^-]*$/, '');
-                    return (
-                      <div
-                        key={file.key}
-                        className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                      >
-                        <div>
-                          <i className="bi bi-file-earmark me-2"></i>
-                          {displayName}
-                        </div>
-                        <div className="text-muted small">
-                          {new Date(file.lastModified).toLocaleDateString()} •{' '}
-                          {(file.size / 1024).toFixed(2)} KB
-                        </div>
+                  {files.map((file) => (
+                    <div
+                      key={file.key}
+                      className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                    >
+                      <div>
+                        <i className="bi bi-file-earmark me-2"></i>
+                        {file.key}
                       </div>
-                    );
-                  })}
+                      <div className="text-muted small">
+                        {new Date(file.lastModified).toLocaleDateString()} •{' '}
+                        {(file.size / 1024).toFixed(2)} KB
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

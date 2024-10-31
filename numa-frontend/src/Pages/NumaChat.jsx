@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Button, Form, Alert } from 'react-bootstrap';
+import { Button, Form, Alert, Container, Row, Col } from 'react-bootstrap';
 import { ChatSyncCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
+import { LayoutDashboard } from '../Layouts/LayoutDashboard';
+import { Breadcrumbs } from '../Components/Breadcrumbs';
+import { Nav } from '../Components/Nav';
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
@@ -96,70 +99,88 @@ const NumaChat = () => {
   };
 
   return (
-    <>
-      <h1 className="mb-2">Numa Chat</h1>
-      <p className="mb-4 fs-lg-1">
-        Chat with your documents using Amazon Q Business. Ask anything!
-      </p>
-      <br />
-      {error && <Alert variant="danger">{error}</Alert>}
-      <div
-        className="chat-messages"
-        style={{
-          height: '400px',
-          overflowY: 'auto',
-          marginBottom: '20px',
-          border: '1px solid #ced4da',
-          borderRadius: '5px',
-          padding: '10px',
-        }}
-      >
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            className={`message ${message.role}`}
-            style={{
-              marginBottom: '10px',
-              padding: '8px',
-              borderRadius: '5px',
-              backgroundColor: message.role === 'user' ? '#e9ecef' : '#f8f9fa',
-            }}
-          >
-            <strong>{message.role === 'user' ? 'You:' : 'AI:'}</strong>{' '}
-            {message.content}
-            {message.role === 'assistant' &&
-              renderSourceAttributions(message.sources)}
-          </div>
-        ))}
-        <div ref={messageEndRef} />
-      </div>
-      <Form onSubmit={handleSubmit}>
-        <Form.Group className="mb-3">
-          <Form.Control
-            as="textarea"
-            rows={3}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            placeholder="Type your message here..."
-          />
-        </Form.Group>
-        <Button
-          variant="primary"
-          type="submit"
-          className="mb-3"
-          disabled={isLoading || !qBusinessClient}
-        >
-          {isLoading ? 'Sending...' : 'Send Message'}
-        </Button>
-        <Button
-          variant="secondary"
-          className="mb-3 ms-2"
-          onClick={() => logout()}
-        >
-          Logout
-        </Button>
-      </Form>
-    </>
+    <div className="dashboard">
+      <Nav />
+      <header className="mb-4">
+        <Container fluid>
+          <Row>
+            <Col lg={8} className="px-5">
+              <Breadcrumbs label={'Chat'} />
+              <h1>Numa Chat</h1>
+            </Col>
+          </Row>
+        </Container>
+      </header>
+
+      <LayoutDashboard>
+        <Row>
+          <Col lg={8}>
+            <p className="mb-4">
+              Chat with your documents using Amazon Q Business. Ask anything!
+            </p>
+            {error && <Alert variant="danger">{error}</Alert>}
+            <div
+              className="chat-messages bg-light p-4 rounded mb-4"
+              style={{
+                height: '400px',
+                overflowY: 'auto',
+              }}
+            >
+              {messages.map((message, index) => (
+                <div
+                  key={index}
+                  className={`message ${message.role} mb-3`}
+                  style={{
+                    padding: '8px',
+                    borderRadius: '5px',
+                    backgroundColor:
+                      message.role === 'user' ? '#e9ecef' : '#ffffff',
+                  }}
+                >
+                  <strong>{message.role === 'user' ? 'You:' : 'AI:'}</strong>{' '}
+                  {message.content}
+                  {message.role === 'assistant' &&
+                    renderSourceAttributions(message.sources)}
+                </div>
+              ))}
+              <div ref={messageEndRef} />
+            </div>
+            <Form onSubmit={handleSubmit}>
+              <Form.Group className="mb-3">
+                <Form.Control
+                  as="textarea"
+                  rows={3}
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  placeholder="Type your message here..."
+                />
+              </Form.Group>
+              <Button
+                variant="primary"
+                type="submit"
+                disabled={isLoading || !qBusinessClient}
+              >
+                {isLoading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" />
+                    Sending...
+                  </>
+                ) : (
+                  'Send Message'
+                )}
+              </Button>
+              <Button
+                variant="outline-secondary"
+                className="ms-2"
+                onClick={() => logout()}
+              >
+                Logout
+              </Button>
+            </Form>
+          </Col>
+        </Row>
+      </LayoutDashboard>
+    </div>
   );
 };
 
