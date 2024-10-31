@@ -78,6 +78,7 @@ const S3Uploader = () => {
   const [syncJobStatus, setSyncJobStatus] = useState(null);
   const [syncJobMetrics, setSyncJobMetrics] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [lastSuccessfulSync, setLastSuccessfulSync] = useState(null);
 
   // Add a ref to track if the initial fetch has been done
   const initialFetchDone = useRef(false);
@@ -268,7 +269,7 @@ const S3Uploader = () => {
         applicationId: '2594236d-712a-4355-8b0e-6a4cef023f75',
         indexId: '0cbbe940-c7ce-4013-b4f8-ce4176fef1d8',
         dataSourceId: 'b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0',
-        maxResults: 1, // We only need the latest sync job
+        maxResults: 10, // Increased to find last successful sync
       };
 
       const command = new ListDataSourceSyncJobsCommand(input);
@@ -283,6 +284,14 @@ const S3Uploader = () => {
         });
         setSyncJobStatus(latestJob.status);
         setSyncJobMetrics(latestJob.metrics);
+      }
+
+      // Find the last successful sync
+      const lastSuccessful = response.history?.find(
+        (job) => job.status === 'SUCCEEDED',
+      );
+      if (lastSuccessful) {
+        setLastSuccessfulSync(lastSuccessful.endTime);
       }
     } catch (err) {
       console.error('Failed to check sync job status', err);
@@ -519,10 +528,10 @@ const S3Uploader = () => {
                         </span>
                       )}
                     </p>
-                    {lastSyncTime && (
+                    {lastSuccessfulSync && (
                       <p className="mb-0 text-muted small">
-                        Last synced:{' '}
-                        {new Date(lastSyncTime).toLocaleString('en-NZ')}
+                        Last successful sync:{' '}
+                        {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
                       </p>
                     )}
                   </div>
@@ -562,8 +571,9 @@ const S3Uploader = () => {
                 <div className="list-group">
                   {files.map((file) => {
                     const isFileSynced =
-                      lastSyncTime &&
-                      new Date(file.lastModified) <= new Date(lastSyncTime);
+                      lastSuccessfulSync &&
+                      new Date(file.lastModified) <=
+                        new Date(lastSuccessfulSync);
                     return (
                       <div
                         key={file.key}
@@ -572,7 +582,7 @@ const S3Uploader = () => {
                         <div>
                           <i className="bi bi-file-earmark me-2"></i>
                           {file.key}
-                          {lastSyncTime && (
+                          {lastSuccessfulSync && (
                             <span
                               className={`ms-2 text-${isFileSynced ? 'success' : 'danger'}`}
                               title={
