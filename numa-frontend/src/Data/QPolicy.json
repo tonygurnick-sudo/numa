@@ -8,6 +8,7 @@
         "qbusiness:List*",
         "qbusiness:DeleteConversation",
         "qbusiness:PutFeedback",
+        "qbusiness:StartDataSourceSyncJob",
         "qapps:*",
         "qbusiness:Get*"
       ],
