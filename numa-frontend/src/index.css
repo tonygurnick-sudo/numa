@@ -66,3 +66,36 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+@keyframes dashedBorder {
+  to {
+    background-position: 100% 100%;
+  }
+}
+
+.upload-container {
+  background-image: linear-gradient(90deg, #dee2e6 50%, transparent 50%),
+    linear-gradient(90deg, #dee2e6 50%, transparent 50%),
+    linear-gradient(0deg, #dee2e6 50%, transparent 50%),
+    linear-gradient(0deg, #dee2e6 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size:
+    15px 2px,
+    15px 2px,
+    2px 15px,
+    2px 15px;
+  background-position:
+    0% 0%,
+    100% 100%,
+    0% 100%,
+    100% 0%;
+  animation: none;
+}
+
+.upload-container.dragging {
+  background-image: linear-gradient(90deg, #6f42c1 50%, transparent 50%),
+    linear-gradient(90deg, #6f42c1 50%, transparent 50%),
+    linear-gradient(0deg, #6f42c1 50%, transparent 50%),
+    linear-gradient(0deg, #6f42c1 50%, transparent 50%);
+  animation: dashedBorder 20s linear infinite;
+}

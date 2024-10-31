@@ -58,6 +58,17 @@ import {
 //     ]
 // }
 
+const dashedBorderKeyframes = `
+  @keyframes dashedBorder {
+    0% {
+      background-position: 0 0, 100% 100%, 0 100%, 100% 0;
+    }
+    100% {
+      background-position: 100% 0, 0 100%, 0 0, 100% 100%;
+    }
+  }
+`;
+
 const S3Uploader = () => {
   const [file, setFile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -82,6 +93,17 @@ const S3Uploader = () => {
 
   // Add a ref to track if the initial fetch has been done
   const initialFetchDone = useRef(false);
+
+  // Add this to the head of the document
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = dashedBorderKeyframes;
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   const handleFileSelect = (event) => {
     setFile(event.target.files[0]);
@@ -411,12 +433,26 @@ const S3Uploader = () => {
               {error && <Alert variant="danger">{error}</Alert>}
 
               <div
-                className={`upload-container bg-light p-4 rounded ${isDragging ? 'border border-primary' : ''}`}
+                className={`upload-container bg-light p-4 rounded ${isDragging ? 'dragging' : ''}`}
                 style={{
                   position: 'relative',
                   minHeight: '200px',
-                  border: '2px dashed #dee2e6',
                   transition: 'all 0.3s ease',
+                  backgroundImage: isDragging
+                    ? `linear-gradient(90deg, #6f42c1 70%, transparent 70%),
+                       linear-gradient(90deg, #6f42c1 70%, transparent 70%),
+                       linear-gradient(0deg, #6f42c1 70%, transparent 70%),
+                       linear-gradient(0deg, #6f42c1 70%, transparent 70%)`
+                    : `linear-gradient(90deg, #dee2e6 70%, transparent 70%),
+                       linear-gradient(90deg, #dee2e6 70%, transparent 70%),
+                       linear-gradient(0deg, #dee2e6 70%, transparent 70%),
+                       linear-gradient(0deg, #dee2e6 70%, transparent 70%)`,
+                  backgroundSize: '15px 2px, 15px 2px, 2px 15px, 2px 15px',
+                  backgroundPosition: '0 0, 0 100%, 0 0, 100% 0',
+                  backgroundRepeat: 'repeat-x, repeat-x, repeat-y, repeat-y',
+                  animation: isDragging
+                    ? 'dashedBorder 8s linear infinite'
+                    : 'none',
                 }}
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
