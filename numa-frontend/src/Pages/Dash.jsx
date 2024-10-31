@@ -10,7 +10,6 @@ import { useAuth } from '../Providers/AuthProvider';
 import {
   ListQAppsCommand,
   ListLibraryItemsCommand,
-  CreateQAppCommand,
 } from '@aws-sdk/client-qapps';
 
 import exampleItem from '../Data/ExampleitemToCreate.json';
@@ -47,15 +46,12 @@ const Dash = () => {
       const command = new ListQAppsCommand(input);
       const response = await qAppsClient.send(command);
 
-      console.log(response);
-
       setApps(response.apps);
     } catch (error) {
       console.error('Error fetching Q Apps:', error);
     }
 
     try {
-      console.log('get library items:');
       const input = {
         instanceId: APPLICATION_ID,
       };
@@ -63,15 +59,11 @@ const Dash = () => {
       const lib_command = new ListLibraryItemsCommand(input);
       const lib_response = await qAppsClient.send(lib_command);
 
-      console.log('lib_response', lib_response);
-
       setLibraryApps(lib_response.libraryItems);
     } catch (error) {
       console.error('Error fetching Q Apps:', error);
     }
   };
-
-  console.log('qAppsClient...', qAppsClient);
 
   useEffect(() => {
     fetchApps();
@@ -82,22 +74,18 @@ const Dash = () => {
       <div className="dashboard">
         <header>
           <Container fluid>
-          <Row>
+            <Row>
               <Col lg={8} className="px-5">
                 <Breadcrumbs label={'Home'} />
                 <h1>Numa Apps</h1>
               </Col>
               <Col lg={4} className="px-5"></Col>
             </Row>
-
-
           </Container>
         </header>
 
         <LayoutDashboard>
-
           <Row>
-
             {/* DUMMY DATA */}
             {/*  <h6>Dummy data:</h6>
            {appsData.map((app) => (
@@ -110,14 +98,13 @@ const Dash = () => {
             {loading ? (
               <p>Loading Apps...</p>
             ) : (
-             <>
-
+              <>
                 {apps.map((app) => (
                   <Col key={app.appId} lg={4} className="flex">
                     <AppItem appData={app} />
                   </Col>
                 ))}
-                </>
+              </>
             )}
 
             <h6>Library data:</h6>

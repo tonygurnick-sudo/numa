@@ -12,7 +12,7 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { useAuth } from '../Providers/AuthProvider';
 import { GetQAppCommand } from '@aws-sdk/client-qapps';
 
-import { NumaChat } from '../Pages/NumaChat';
+import { NumaChat } from './NumaChat';
 //import appsData from '../Data/appsData.json';
 
 const AppDetail = () => {
@@ -22,7 +22,7 @@ const AppDetail = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   const { appId } = useParams(); // Get appId from URL
-  console.log("appId: ",appId);
+  console.log('appId: ', appId);
 
   //const app = appsData.find(a => a.appId === appId); // Find the app by appId
 
@@ -40,14 +40,13 @@ const AppDetail = () => {
       const command = new GetQAppCommand(input);
       const response = await qAppsClient.send(command);
 
-      console.log("get app resp: ",response);
+      console.log('get app resp: ', response);
       setApp(response);
     } catch (error) {
       console.error('Error fetching Q Apps:', error);
     } finally {
       setIsLoading(false);
     }
-
   };
 
   useEffect(() => {
@@ -61,9 +60,7 @@ const AppDetail = () => {
           <Container fluid>
             <Row>
               <Col lg={8} className="px-5">
-              {!isLoading && (
-                <Breadcrumbs label={app?.title} />
-              )}
+                {!isLoading && <Breadcrumbs label={app?.title} />}
                 <h1>{app?.title}</h1>
                 <p>{app?.description}</p>
               </Col>
@@ -101,7 +98,6 @@ const AppDetail = () => {
               )}
             </Row>
           </LayoutDashboard>
-
         ) : (
           <p>Error fetching app details</p>
         )}

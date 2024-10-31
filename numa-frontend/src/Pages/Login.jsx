@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert } from 'react-bootstrap';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
-import { useAuth } from '../Providers/AuthProvider';
 import { jwtDecode } from 'jwt-decode';
 import {
   CognitoIdentityProviderClient,
   RespondToAuthChallengeCommand,
   InitiateAuthCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
+import { useAuth } from '../Providers/AuthProvider';
 
 const NumaLogin = () => {
   const usernameRef = useRef();
@@ -85,6 +85,13 @@ const NumaLogin = () => {
       });
 
       const finalResponse = await respondToAuthChallengeRes.json();
+
+      console.log('auth response: ', finalResponse);
+
+      // Look for error in finalResponse and throw it
+      if (finalResponse.error) {
+        throw new Error(finalResponse.error);
+      }
 
       if (finalResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
         setIsSettingNewPassword(true);

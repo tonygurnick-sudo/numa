@@ -11,6 +11,7 @@ import AppDetail from './Pages/AppDetail';
 
 import { AuthProvider, useAuth } from './Providers/AuthProvider';
 import { NumaChat } from './Pages/NumaChat';
+import { S3Uploader } from './Pages/S3Uploader';
 
 const NumaRoutes = () => {
   return (
@@ -33,8 +34,6 @@ const AppRoutes = () => {
     if (!tokenValidationComplete) {
       return <div>Loading...</div>;
     }
-
-    console.log('user', user);
 
     if (!user) {
       return <Navigate to="/login" replace />;
@@ -70,6 +69,16 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <AppDetail />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Route for S3 uploads */}
+      <Route
+        path="/upload"
+        element={
+          <ProtectedRoute>
+            <S3Uploader />
           </ProtectedRoute>
         }
       />
