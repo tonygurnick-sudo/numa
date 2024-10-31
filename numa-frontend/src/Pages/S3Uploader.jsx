@@ -1,13 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-  Button,
-  Alert,
-  ProgressBar,
-  Container,
-  Row,
-  Col,
-  Modal,
-} from 'react-bootstrap';
+import { useState, useRef, useEffect } from 'react';
+import { Button, Alert, Container, Row, Col, Modal } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
 import axios from 'axios';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
@@ -18,6 +10,7 @@ import {
   StartDataSourceSyncJobCommand,
   ListDataSourceSyncJobsCommand,
 } from '@aws-sdk/client-qbusiness';
+import { FileUploader } from '../Components/FileUploader';
 
 // TODO: Make one API Gateway, since currently we have two.
 // TODO: Add in allowing of any Origin in S3, since currently we allow none.
@@ -58,131 +51,17 @@ import {
 //     ]
 // }
 
-const dashedBorderKeyframes = `
-  @keyframes dashedBorder {
-    0% {
-      background-position: 0 0, 100% 100%, 0 100%, 100% 0;
-    }
-    100% {
-      background-position: 100% 0, 0 100%, 0 0, 100% 100%;
-    }
-  }
-`;
-
 const S3Uploader = () => {
-  const [file, setFile] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [files, setFiles] = useState([]);
-  const { getAccessToken, qBusinessClient } = useAuth();
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [showProgress, setShowProgress] = useState(false);
   const [isLoadingFiles, setIsLoadingFiles] = useState(true);
-  const [lastSyncTime, setLastSyncTime] = useState(null);
   const [syncStatus, setSyncStatus] = useState(null);
-  const [dataSourceStatus, setDataSourceStatus] = useState(null);
-  const [dataSourceLastUpdate, setDataSourceLastUpdate] = useState(null);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncJobStatus, setSyncJobStatus] = useState(null);
-  const [syncJobMetrics, setSyncJobMetrics] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState(null);
-
-  // Add a ref to track if the initial fetch has been done
   const initialFetchDone = useRef(false);
 
-  // Add this to the head of the document
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.innerHTML = dashedBorderKeyframes;
-    document.head.appendChild(style);
-
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
-
-  const handleFileSelect = (event) => {
-    setFile(event.target.files[0]);
-    setError(null);
-    setSuccess(false);
-    setUploadProgress(0);
-  };
-
-  const handleUpload = async () => {
-    if (!file) {
-      console.warn('Upload attempted without file selection');
-      setError('Please select a file first');
-      return;
-    }
-
-    console.log('Upload process initiated', {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type,
-    });
-
-    setError(null);
-    setIsUploading(true);
-    setShowSuccess(false);
-    setShowProgress(true);
-
-    try {
-      console.log('Requesting presigned URL from API Gateway...');
-      const token = await getAccessToken();
-      const response = await axios.get(
-        'https://ajbiwao41h.execute-api.us-east-1.amazonaws.com/presigned-url-upload',
-        {
-          params: { fileName: encodeURIComponent(file.name) },
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-
-      const { uploadUrl, fileKey } = response.data;
-      console.log('Presigned URL received successfully', { fileKey });
-
-      console.log('Initiating S3 upload...', {
-        fileKey,
-        uploadUrl: uploadUrl.substring(0, 100) + '...',
-      });
-      await axios.put(uploadUrl, file, {
-        headers: {},
-        onUploadProgress: (progressEvent) => {
-          const progress = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total,
-          );
-          setUploadProgress(progress);
-          console.log('Upload progress update', {
-            progress: `${progress}%`,
-            loaded: progressEvent.loaded,
-            total: progressEvent.total,
-          });
-        },
-      });
-
-      console.log('File upload completed successfully', { fileKey });
-      setSuccess(true);
-      setFile(null);
-      fetchFiles();
-    } catch (err) {
-      console.error('Upload process failed', {
-        error: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        fileName: file.name,
-      });
-      setError(
-        err.response?.data?.error ||
-          err.response?.data?.message ||
-          'Error uploading file',
-      );
-    } finally {
-      setIsUploading(false);
-    }
-  };
+  const { getAccessToken, qBusinessClient } = useAuth();
 
   const fetchFiles = async () => {
     console.log('Initiating file list fetch...');
@@ -207,7 +86,6 @@ const S3Uploader = () => {
         response: err.response?.data,
         status: err.response?.status,
       });
-      setError('Error fetching existing files');
     } finally {
       setIsLoadingFiles(false);
     }
@@ -231,7 +109,6 @@ const S3Uploader = () => {
 
       console.log('List data sources response', response);
 
-      // Find the specific S3 data source
       const s3DataSource = response.dataSources?.find(
         (ds) => ds.dataSourceId === 'b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0',
       );
@@ -242,10 +119,7 @@ const S3Uploader = () => {
           lastUpdate: s3DataSource.updatedAt,
           id: s3DataSource.dataSourceId,
         });
-        setDataSourceLastUpdate(s3DataSource.updatedAt);
-        setDataSourceStatus(s3DataSource.status);
         setSyncStatus(s3DataSource.status);
-        setLastSyncTime(s3DataSource.updatedAt);
       } else {
         console.warn('S3 data source not found');
       }
@@ -255,7 +129,6 @@ const S3Uploader = () => {
         name: err.name,
         stack: err.stack,
       });
-      setError('Error checking data source status');
     }
   };
 
@@ -271,14 +144,10 @@ const S3Uploader = () => {
       const command = new StartDataSourceSyncJobCommand(input);
       await qBusinessClient.send(command);
 
-      // Close modal and show success
       setShowSyncModal(false);
-      setSuccess(true);
-      // Refresh status
       await checkDataSourceSync();
     } catch (err) {
       console.error('Failed to start sync', err);
-      setError('Failed to start sync: ' + err.message);
     } finally {
       setIsSyncing(false);
     }
@@ -291,7 +160,7 @@ const S3Uploader = () => {
         applicationId: '2594236d-712a-4355-8b0e-6a4cef023f75',
         indexId: '0cbbe940-c7ce-4013-b4f8-ce4176fef1d8',
         dataSourceId: 'b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0',
-        maxResults: 10, // Increased to find last successful sync
+        maxResults: 10,
       };
 
       const command = new ListDataSourceSyncJobsCommand(input);
@@ -305,10 +174,8 @@ const S3Uploader = () => {
           startTime: latestJob.startTime,
         });
         setSyncJobStatus(latestJob.status);
-        setSyncJobMetrics(latestJob.metrics);
       }
 
-      // Find the last successful sync
       const lastSuccessful = response.history?.find(
         (job) => job.status === 'SUCCEEDED',
       );
@@ -321,25 +188,21 @@ const S3Uploader = () => {
   };
 
   useEffect(() => {
-    // Only run these if qBusinessClient is available and initial fetch hasn't been done
     if (qBusinessClient && !initialFetchDone.current) {
       initialFetchDone.current = true;
       fetchFiles();
       checkDataSourceSync();
       checkSyncStatus();
 
-      // Set up periodic checking
       const checkStatus = () => {
         checkDataSourceSync();
         checkSyncStatus();
       };
 
-      // Create interval based on sync status
       const createInterval = () => {
         return setInterval(
           () => {
             checkStatus();
-            // If sync is complete, switch back to longer interval
             if (syncJobStatus !== 'SYNCING') {
               clearInterval(interval);
               interval = setInterval(checkStatus, 30 * 1000);
@@ -351,7 +214,6 @@ const S3Uploader = () => {
 
       let interval = createInterval();
 
-      // Update interval when sync status changes
       if (syncJobStatus === 'SYNCING') {
         clearInterval(interval);
         interval = createInterval();
@@ -359,55 +221,7 @@ const S3Uploader = () => {
 
       return () => clearInterval(interval);
     }
-  }, [qBusinessClient, syncJobStatus]); // Added syncJobStatus to dependencies
-
-  useEffect(() => {
-    let timeoutId;
-    if (success || uploadProgress === 100) {
-      setShowSuccess(true);
-      setShowProgress(true);
-      timeoutId = setTimeout(() => {
-        setShowSuccess(false);
-        setShowProgress(false);
-      }, 10000);
-    }
-    return () => clearTimeout(timeoutId);
-  }, [success, uploadProgress]);
-
-  const handleDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!isDragging) {
-      setIsDragging(true);
-    }
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setIsDragging(false);
-    }
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      setFile(droppedFile);
-      setError(null);
-      setSuccess(false);
-      setUploadProgress(0);
-    }
-  };
+  }, [qBusinessClient, syncJobStatus]);
 
   return (
     <div className="dashboard">
@@ -426,126 +240,17 @@ const S3Uploader = () => {
       <LayoutDashboard>
         <Row>
           <Col lg={6}>
-            {/* Upload Section */}
             <div className="upload-section mb-4">
               <h2 className="h4 mb-3">Upload New File</h2>
-
-              {error && <Alert variant="danger">{error}</Alert>}
-
-              <div
-                className={`upload-container bg-light p-4 rounded ${isDragging ? 'dragging' : ''}`}
-                style={{
-                  position: 'relative',
-                  minHeight: '200px',
-                  transition: 'all 0.3s ease',
-                  backgroundImage: isDragging
-                    ? `linear-gradient(90deg, #6f42c1 70%, transparent 70%),
-                       linear-gradient(90deg, #6f42c1 70%, transparent 70%),
-                       linear-gradient(0deg, #6f42c1 70%, transparent 70%),
-                       linear-gradient(0deg, #6f42c1 70%, transparent 70%)`
-                    : `linear-gradient(90deg, #dee2e6 70%, transparent 70%),
-                       linear-gradient(90deg, #dee2e6 70%, transparent 70%),
-                       linear-gradient(0deg, #dee2e6 70%, transparent 70%),
-                       linear-gradient(0deg, #dee2e6 70%, transparent 70%)`,
-                  backgroundSize: '15px 2px, 15px 2px, 2px 15px, 2px 15px',
-                  backgroundPosition: '0 0, 0 100%, 0 0, 100% 0',
-                  backgroundRepeat: 'repeat-x, repeat-x, repeat-y, repeat-y',
-                  animation: isDragging
-                    ? 'dashedBorder 8s linear infinite'
-                    : 'none',
-                }}
-                onDragEnter={handleDragEnter}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                {isDragging && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      zIndex: 9999,
-                    }}
-                    onDragEnter={handleDragEnter}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                  />
-                )}
-
-                <div className="text-center">
-                  <input
-                    accept="*/*"
-                    style={{ display: 'none' }}
-                    id="file-upload"
-                    type="file"
-                    onChange={handleFileSelect}
-                  />
-
-                  <div className="mb-3">
-                    <i
-                      className="bi bi-cloud-upload"
-                      style={{ fontSize: '2rem' }}
-                    ></i>
-                    <p className="mt-2">Drag and drop your file here, or</p>
-                    <Button
-                      variant="primary"
-                      as="label"
-                      htmlFor="file-upload"
-                      style={{ cursor: 'pointer' }}
-                    >
-                      Select File
-                    </Button>
-                  </div>
-
-                  {file && (
-                    <div className="selected-file mb-3">
-                      <p className="mb-2">Selected: {file.name}</p>
-                      <Button
-                        variant="primary"
-                        onClick={handleUpload}
-                        disabled={!file || uploadProgress > 0 || isUploading}
-                      >
-                        {isUploading ? (
-                          <>
-                            <span className="spinner-border spinner-border-sm me-2" />
-                            Uploading...
-                          </>
-                        ) : (
-                          'Upload'
-                        )}
-                      </Button>
-                    </div>
-                  )}
-
-                  {showProgress && uploadProgress > 0 && (
-                    <div className="w-100 mt-3">
-                      <ProgressBar
-                        now={uploadProgress}
-                        label={`${uploadProgress}%`}
-                        variant="success"
-                        className="mb-2"
-                      />
-                    </div>
-                  )}
-
-                  {showSuccess && (
-                    <Alert variant="success" className="mt-3">
-                      File uploaded successfully!
-                    </Alert>
-                  )}
-                </div>
-              </div>
+              <FileUploader
+                onUploadSuccess={fetchFiles}
+                getAccessToken={getAccessToken}
+              />
             </div>
           </Col>
 
-          {}
-
           <Col lg={6}>
-            {/* Sync Status Section - Moved to top */}
+            {/* Sync Status Section */}
             <div className="sync-status-section mb-4">
               <h2 className="h4 mb-3">Knowledge Base Status</h2>
               <div className="bg-light p-3 rounded">
