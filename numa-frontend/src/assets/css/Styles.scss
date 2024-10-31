@@ -12,17 +12,16 @@
   --color-blue: #4081de;
   --color-eggplant-100: #f4eff5;
   --color-eggplant-200: #ddd0e1;
-  --color-eggplant-600: #9873A6;
-  --color-eggplant-700: #63466D;
+  --color-eggplant-600: #9873a6;
+  --color-eggplant-700: #63466d;
   --color-eggplant-900: #46324e;
   --color-magenta-900: #8e50a7;
-  --color-magenta-700: #B386C5;
+  --color-magenta-700: #b386c5;
   --color-peach-600: #fbf1e9;
   --color-royal-900: #286bcb;
   --color-royal-100: #eef5ff;
   --color-yellow: #f0dfbe;
 }
-
 
 body {
   background-color: var(--color-lt-gray);
@@ -48,23 +47,23 @@ a {
   }
 }
 
-.larger{
+.larger {
   font-size: xxx-large;
 }
 .text-primary {
   color: var(--color-primary) !important;
 }
-.extra_light_grey_bg{
+.extra_light_grey_bg {
   background: #fcfcfc;
 }
-.extra_light2_grey_bg{
+.extra_light2_grey_bg {
   background: #f9f9f9;
 }
 
-.light_grey_bg{
+.light_grey_bg {
   background: var(--color-lt-gray);
 }
-.mid_grey_bg{
+.mid_grey_bg {
   background: var(--color-mid-gray);
 }
 .eggplant-100-bg {
@@ -133,15 +132,13 @@ a {
 .h-100vh {
   height: 100vh;
 }
-.mh_100{
+.mh_100 {
   max-height: 100vh;
 }
-
 
 @mixin gradient-bg {
   background-image: linear-gradient(#824c93, #d0a5c3);
 }
-
 
 /* Layout */
 header {
@@ -170,11 +167,10 @@ header {
       color: var(--color-primary);
     }
   }
-
 }
 
-.numalogin-left, .llmchat-left
-{
+.numalogin-left,
+.llmchat-left {
   position: relative;
 
   .register {
@@ -186,7 +182,6 @@ header {
     left: 0;
     z-index: 999;
   }
-
 
   footer {
     font-style: normal;
@@ -201,8 +196,7 @@ header {
   }
 }
 
-.numalogin-right
- {
+.numalogin-right {
   @include gradient-bg;
 
   .promo_pic_abs {
@@ -214,21 +208,20 @@ header {
 }
 
 /* benefits front pages */
-.benefits_trial{
-
+.benefits_trial {
   color: white;
   padding: 15px;
 
-  h1{
+  h1 {
     text-align: center;
-    color:white;
+    color: white;
     margin-bottom: 60px;
   }
-  h3{
-    color:white;
+  h3 {
+    color: white;
     font-size: 29px;
   }
-  p{
+  p {
     text-align: center;
     font-size: 20px;
   }
@@ -244,25 +237,25 @@ header {
       transform: translate(-50%, -50%);
       opacity: 0;
       visibility: hidden;
-      transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
+      transition:
+        opacity 0.5s ease-in-out,
+        visibility 0.5s ease-in-out;
 
-        img{
-          width: 125px;
-          clear: both;
-          display: block;
-          margin-left: auto;
-          margin-right: auto;
-        }
+      img {
+        width: 125px;
+        clear: both;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+      }
 
-        &.active {
-          opacity: 1;
-          visibility: visible;
-        }
+      &.active {
+        opacity: 1;
+        visibility: visible;
+      }
     }
-
   }
 }
-
 
 nav {
   @include gradient-bg;
@@ -305,15 +298,16 @@ nav {
         }
       }
 
-      &.ai_assistant{
+      &.ai_assistant {
         margin: auto;
         margin-bottom: 7px;
         max-height: 50px;
-        a{
+        a {
           opacity: 0.3;
         }
       }
-      &:hover, &.active_assistant {
+      &:hover,
+      &.active_assistant {
         a {
           opacity: 1;
         }
@@ -360,11 +354,12 @@ nav {
       opacity: 0.6;
       transition: ease all 0.2s;
 
-      img{
+      img {
         margin-top: 10px;
       }
 
-      &:hover, &.on {
+      &:hover,
+      &.on {
         opacity: 1;
 
         &::after {
@@ -395,15 +390,12 @@ nav {
   }
 }
 
-
 .dashboard {
   margin-left: 72px;
 
   .wrapper {
     padding: 48px 48px 24px;
     background: #fff;
-
-
   }
 
   .card.card-apps {
@@ -437,7 +429,7 @@ nav {
       }
 
       .right {
-        text-align: right
+        text-align: right;
       }
 
       .type {
@@ -450,8 +442,6 @@ nav {
       padding: 30px;
       min-height: 112px;
     }
-
-
 
     .card-buttons {
       padding: 0 30px;
@@ -472,8 +462,6 @@ nav {
     }
   }
 
-
-
   .nav-tabs {
     margin: 10px 0;
     border: none;
@@ -492,13 +480,10 @@ nav {
         border-bottom: 3px solid var(--color-primary-hover);
       }
     }
-
   }
-
-
 }
 
-.platform_version{
+.platform_version {
   color: white;
   text-align: center;
   width: 100%;
@@ -515,6 +500,21 @@ nav {
   &:hover {
     background-color: var(--color-primary-hover) !important;
   }
+
+  &.run_btn {
+    border-radius: 3px;
+    font-size: 25px;
+    right: 10px;
+    top: 10px;
+    padding: 2px 20px;
+    line-height: 31px;
+  }
+}
+
+.btn.disabled,
+.btn:disabled,
+fieldset:disabled .btn {
+  background: var(--color-magenta-700);
 }
 
 .btn-secondary {
@@ -530,7 +530,7 @@ nav {
 
 label {
   color: var(--color-dk-gray);
-    font-size: 9px;
-    letter-spacing: .14em;
-    text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }

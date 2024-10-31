@@ -5,6 +5,7 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { AppItem } from '../Components/AppItem';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
+import { Preloader } from '../Components/Preloader';
 
 import { useAuth } from '../Providers/AuthProvider';
 import {
@@ -17,14 +18,15 @@ import exampleItem from '../Data/ExampleitemToCreate.json';
 //import appsData from '../Data/appsData.json';
 
 const Dash = () => {
-  const { qAppsClient, loading } = useAuth();
+  const { qAppsClient, loading: authLoading } = useAuth();
+
   const [apps, setApps] = useState([]);
   const [libraryApps, setLibraryApps] = useState([]);
-
+  const [loading, setLoading] = useState(true);
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
 
   const fetchApps = async () => {
-    if (!qAppsClient || loading) return;
+    if (!qAppsClient || authLoading) return;
 
     // try {
     //   // temp
@@ -40,6 +42,7 @@ const Dash = () => {
     // }
 
     try {
+      setLoading(true);
       const input = {
         instanceId: APPLICATION_ID,
       };
@@ -47,31 +50,29 @@ const Dash = () => {
       const command = new ListQAppsCommand(input);
       const response = await qAppsClient.send(command);
 
-      console.log(response);
-
       setApps(response.apps);
     } catch (error) {
       console.error('Error fetching Q Apps:', error);
+    } finally {
+      setLoading(false);
     }
 
-    try {
-      console.log('get library items:');
-      const input = {
-        instanceId: APPLICATION_ID,
-      };
+    // try {
+    //   setLoading(true);
+    //   const input = {
+    //     instanceId: APPLICATION_ID,
+    //   };
 
-      const lib_command = new ListLibraryItemsCommand(input);
-      const lib_response = await qAppsClient.send(lib_command);
+    //   const lib_command = new ListLibraryItemsCommand(input);
+    //   const lib_response = await qAppsClient.send(lib_command);
 
-      console.log('lib_response', lib_response);
-
-      setLibraryApps(lib_response.libraryItems);
-    } catch (error) {
-      console.error('Error fetching Q Apps:', error);
-    }
+    //   setLibraryApps(lib_response.libraryItems);
+    // } catch (error) {
+    //   console.error('Error fetching Q Apps:', error);
+    // } finally {
+    //   setLoading(false);
+    // }
   };
-
-  console.log('qAppsClient...', qAppsClient);
 
   useEffect(() => {
     fetchApps();
@@ -82,22 +83,18 @@ const Dash = () => {
       <div className="dashboard">
         <header>
           <Container fluid>
-          <Row>
+            <Row>
               <Col lg={8} className="px-5">
                 <Breadcrumbs label={'Home'} />
                 <h1>Numa Apps</h1>
               </Col>
               <Col lg={4} className="px-5"></Col>
             </Row>
-
-
           </Container>
         </header>
 
         <LayoutDashboard>
-
           <Row>
-
             {/* DUMMY DATA */}
             {/*  <h6>Dummy data:</h6>
            {appsData.map((app) => (
@@ -108,21 +105,20 @@ const Dash = () => {
             <hr /> */}
 
             {loading ? (
-              <p>Loading Apps...</p>
+              <Preloader />
             ) : (
-             <>
-
+              <>
                 {apps.map((app) => (
                   <Col key={app.appId} lg={4} className="flex">
                     <AppItem appData={app} />
                   </Col>
                 ))}
-                </>
+              </>
             )}
 
             <h6>Library data:</h6>
             {loading ? (
-              <p>Loading Apps...</p>
+              <Preloader />
             ) : (
               <ul>
                 {libraryApps.map((app) => (
@@ -134,7 +130,6 @@ const Dash = () => {
             )}
           </Row>
         </LayoutDashboard>
-        <div></div>
 
         <Nav nav1on="on" nav2on="" nav3on="" />
       </div>
