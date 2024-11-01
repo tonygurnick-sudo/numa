@@ -13,7 +13,8 @@ import {
   ListLibraryItemsCommand,
 } from '@aws-sdk/client-qapps';
 
-import exampleItem from '../Data/ExampleitemToCreate.json';
+import { createQApp } from '../qAppHelper';
+
 //import appsData from '../Data/appsData.json';
 
 const Dash = () => {
@@ -21,24 +22,15 @@ const Dash = () => {
 
   const [apps, setApps] = useState([]);
   const [libraryApps, setLibraryApps] = useState([]);
+
   const [loading, setLoading] = useState(true);
+  const [response, setResponse] = useState(null);
+  const [error, setError] = useState(null);
+
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
 
   const fetchApps = async () => {
     if (!qAppsClient || authLoading) return;
-
-    // try {
-    //   // temp
-    //   // create this app
-
-    //   console.log('exampleItem', exampleItem);
-
-    //   const create_command = new CreateQAppCommand(exampleItem);
-    //   const create_response = await qAppsClient.send(create_command);
-    //   console.log('response create app: ', create_response);
-    // } catch (error) {
-    //   console.error('Error creating a  Q App:', error);
-    // }
 
     try {
       setLoading(true);
@@ -56,26 +48,35 @@ const Dash = () => {
       setLoading(false);
     }
 
-    // try {
-    //   setLoading(true);
-    //   const input = {
-    //     instanceId: APPLICATION_ID,
-    //   };
+    try {
+      setLoading(true);
+      const input = {
+        instanceId: APPLICATION_ID,
+      };
 
-    //   const lib_command = new ListLibraryItemsCommand(input);
-    //   const lib_response = await qAppsClient.send(lib_command);
+      const lib_command = new ListLibraryItemsCommand(input);
+      const lib_response = await qAppsClient.send(lib_command);
 
-    //   setLibraryApps(lib_response.libraryItems);
-    // } catch (error) {
-    //   console.error('Error fetching Q Apps:', error);
-    // } finally {
-    //   setLoading(false);
-    // }
+      setLibraryApps(lib_response.libraryItems);
+    } catch (error) {
+      console.error('Error fetching Q Apps:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchApps();
   }, []);
+
+  const handleCreateApp = async () => {
+    if (!qAppsClient || authLoading) return;
+
+    // TODO
+    // create a UI form to take in a new app
+    const appPayload = '{ToDo}';
+    createQApp(qAppsClient, appPayload, setLoading, setError, setResponse);
+  };
 
   return (
     <>
@@ -87,7 +88,20 @@ const Dash = () => {
                 <Breadcrumbs label={'Home'} />
                 <h1>Numa Apps</h1>
               </Col>
-              <Col lg={4} className="px-5"></Col>
+              <Col lg={3} className="p-5">
+                <>
+                  {/* TODO  - create app form UI */}
+
+                  <button
+                    type="submit"
+                    id="submit"
+                    className="btn btn-primary x-5 float-end"
+                    onClick={handleCreateApp}
+                  >
+                    Create Demo App
+                  </button>
+                </>
+              </Col>
             </Row>
           </Container>
         </header>
@@ -109,7 +123,7 @@ const Dash = () => {
               <>
                 {apps.map((app) => (
                   <Col key={app.appId} lg={4} className="flex">
-                    <AppItem appData={app} />
+                    <AppItem appData={app} qAppsClient={qAppsClient} />
                   </Col>
                 ))}
               </>
@@ -119,13 +133,13 @@ const Dash = () => {
             {loading ? (
               <Preloader />
             ) : (
-              <ul>
+              <>
                 {libraryApps.map((app) => (
                   <Col key={app.appId} lg={4} className="flex">
-                    <AppItem appData={app} />
+                    <AppItem appData={app} qAppsClient={qAppsClient} />
                   </Col>
                 ))}
-              </ul>
+              </>
             )}
           </Row>
         </LayoutDashboard>
@@ -135,4 +149,5 @@ const Dash = () => {
     </>
   );
 };
+
 export { Dash };
