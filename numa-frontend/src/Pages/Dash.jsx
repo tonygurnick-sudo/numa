@@ -75,7 +75,7 @@ const Dash = () => {
     // TODO
     // create a UI form to take in a new app
     const appPayload = '{ToDo}';
-    createQApp(qAppsClient, appPayload, setLoading, setError, setResponse);
+    createQApp({ qAppsClient, appPayload, setLoading, setError, setResponse });
   };
 
   return (
@@ -86,7 +86,7 @@ const Dash = () => {
             <Row>
               <Col lg={8} className="px-5">
                 <Breadcrumbs clearStack={true} />
-                <h1>Numa Apps</h1>
+                <h1>Dashboard</h1>
               </Col>
               <Col lg={3} className="p-5">
                 <>
@@ -98,7 +98,8 @@ const Dash = () => {
                     className="btn btn-primary x-5 float-end"
                     onClick={handleCreateApp}
                   >
-                    Create Demo App
+                    <i className="bi bi-plus-circle me-2"></i>
+                    Create New App (deploy demo)
                   </button>
                 </>
               </Col>
