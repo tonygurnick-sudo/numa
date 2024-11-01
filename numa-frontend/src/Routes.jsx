@@ -8,6 +8,7 @@ import { NumaLogin } from './Pages/Login';
 import { ResetPassword } from './Pages/ResetPassword';
 import { Dash } from './Pages/Dash';
 import AppDetail from './Pages/AppDetail';
+import { CreateLibItemFromAppID } from './Pages/CreateLibraryItem';
 
 import { AuthProvider, useAuth } from './Providers/AuthProvider';
 import { NumaChat } from './Pages/NumaChat';

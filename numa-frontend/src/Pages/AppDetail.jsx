@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Container, Row, Col } from 'react-bootstrap';
+import { Button, Container, Row, Col } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
 
 import { Nav } from '../Components/Nav';
@@ -14,6 +14,7 @@ import {
   StartQAppSessionCommand,
 } from '@aws-sdk/client-qapps';
 import { NumaChat } from '../Pages/NumaChat';
+import { deleteQAppById } from '../qAppHelper';
 
 const AppDetail = () => {
   const { qAppsClient, loading: authLoading } = useAuth();
@@ -23,13 +24,14 @@ const AppDetail = () => {
   const [sessionId, setSessionId] = useState(null); // Initialize sessionId
   const [sessionDetails, setSessionDetails] = useState(null);
   const [isPolling, setIsPolling] = useState(false);
-  const [sessionLoading, setLoading] = useState(false);
 
   const [app, setApp] = useState([]);
   const [runActive, setRunActive] = useState('disabled');
   const [isLoading, setIsLoading] = useState(true);
   const [inputValues, setInputValues] = useState({});
 
+  const [loading, setLoading] = useState(true);
+  const [response, setResponse] = useState(null);
   const [error, setError] = useState(null);
 
   // Update specific card's input value
@@ -174,18 +176,24 @@ const AppDetail = () => {
     }
   }, [sessionDetails]);
 
+  const handleDeleteApp = async () => {
+    if (!qAppsClient || !appId) return;
+
+    deleteQAppById({ qAppsClient, appId, setLoading, setError, setResponse });
+  };
+
   return (
     <>
       <div className="dashboard">
         <header>
           <Container fluid>
             <Row className="align-items-end">
-              <Col lg={8} className="px-5">
+              <Col lg={9} className="px-5">
                 {!isLoading && <Breadcrumbs label={app?.title} />}
                 <h1>{app?.title}</h1>
                 <p>{app?.description}</p>
               </Col>
-              <Col lg={4} className="px-5 text-end">
+              <Col lg={3} className="px-5 text-end">
                 <div className="d-flex flex-column justify-content-end h-100">
                   <span>
                     Created:{' '}
@@ -194,15 +202,18 @@ const AppDetail = () => {
                       : ''}
                   </span>
                   <span>Status: {app?.status}</span>
-                  <button
+                  <Button
                     type="submit"
                     id="submit"
                     className="btn btn-primary x-5 float-end run_btn"
-                    disabled={runActive || isPolling || sessionLoading}
+                    disabled={runActive || isPolling || loading}
                     onClick={handleRunApp}
                   >
                     Run
-                  </button>
+                  </Button>
+                  <Button variant="danger" onClick={handleDeleteApp}>
+                    Delete
+                  </Button>
                 </div>
               </Col>
             </Row>
