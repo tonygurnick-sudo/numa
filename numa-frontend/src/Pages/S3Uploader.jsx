@@ -60,6 +60,7 @@ const S3Uploader = () => {
   const [syncJobStatus, setSyncJobStatus] = useState(null);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState(null);
   const initialFetchDone = useRef(false);
+  const [currentPath, setCurrentPath] = useState('');
 
   const { getAccessToken, qBusinessClient } = useAuth();
 
@@ -223,6 +224,132 @@ const S3Uploader = () => {
     }
   }, [qBusinessClient, syncJobStatus]);
 
+  const renderFile = (file, depth = 0) => {
+    const isFileSynced =
+      lastSuccessfulSync &&
+      new Date(file.lastModified) <= new Date(lastSuccessfulSync);
+
+    // Get just the filename without the path
+    const fileName = file.key.split('/').pop();
+    const indentLevel = Math.max(0, depth - 1); // Subtract 1 from depth for files
+
+    return (
+      <div
+        key={file.key}
+        className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+      >
+        <div>
+          <span style={{ marginLeft: `${indentLevel * 2}rem` }}>
+            <i className="bi bi-file-earmark me-2"></i>
+            {fileName}
+            {lastSuccessfulSync && (
+              <span
+                className={`ms-2 text-${isFileSynced ? 'success' : 'danger'}`}
+                title={
+                  isFileSynced
+                    ? 'File is synced to knowledge base'
+                    : 'File pending sync to knowledge base'
+                }
+              >
+                <i
+                  className={`bi bi-${
+                    isFileSynced ? 'check-circle-fill' : 'x-circle-fill'
+                  }`}
+                ></i>
+              </span>
+            )}
+          </span>
+        </div>
+        <div className="text-muted small">
+          {new Date(file.lastModified).toLocaleDateString('en-NZ')} •{' '}
+          {(file.size / 1024).toFixed(2)} KB
+        </div>
+      </div>
+    );
+  };
+
+  const renderFilesList = () => {
+    if (isLoadingFiles) {
+      return (
+        <div className="text-center p-4 bg-light rounded">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <p className="mt-3 text-muted">Loading files...</p>
+        </div>
+      );
+    }
+
+    if (files.length === 0) {
+      return (
+        <div className="text-center p-4 bg-light rounded">
+          <i className="bi bi-folder2-open display-4 text-muted"></i>
+          <p className="mt-3 text-muted">No files in knowledge base</p>
+        </div>
+      );
+    }
+
+    // Group files by their folder path
+    const groupedFiles = files.reduce((acc, file) => {
+      const parts = file.key.split('/');
+
+      // Create entries for each folder level
+      for (let i = 0; i < parts.length - 1; i++) {
+        const folderPath = parts.slice(0, i + 1).join('/');
+        if (!acc[folderPath]) {
+          acc[folderPath] = [];
+        }
+      }
+
+      // Add the file to its immediate parent folder
+      const parentPath = parts.slice(0, -1).join('/');
+      if (!acc[parentPath]) {
+        acc[parentPath] = [];
+      }
+      acc[parentPath].push(file);
+
+      return acc;
+    }, {});
+
+    return (
+      <div className="list-group">
+        {/* Root files first */}
+        {groupedFiles['']?.map((file) => renderFile(file, 0))}
+
+        {/* Then folders with their files */}
+        {Object.entries(groupedFiles)
+          .filter(([folder]) => folder !== '')
+          .sort(([pathA], [pathB]) => {
+            const depthA = pathA.split('/').length;
+            const depthB = pathB.split('/').length;
+            return depthA - depthB || pathA.localeCompare(pathB);
+          })
+          .map(([folder, files]) => {
+            const depth = folder.split('/').length;
+            const folderName = folder.split('/').pop();
+            const indentLevel = Math.max(0, depth - 1); // Subtract 1 from depth for folders
+
+            return (
+              <div key={folder}>
+                <div className="list-group-item bg-light d-flex justify-content-between align-items-center">
+                  <div>
+                    <span style={{ marginLeft: `${indentLevel * 2}rem` }}>
+                      <i className="bi bi-folder me-2 text-warning"></i>
+                      <strong>{folderName}</strong>
+                      <span className="ms-2 text-muted small">
+                        ({files.length} files)
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                {files.map((file) => renderFile(file, depth + 1))}
+              </div>
+            );
+          })}
+      </div>
+    );
+  };
+
   return (
     <div className="dashboard">
       <Nav />
@@ -296,59 +423,7 @@ const S3Uploader = () => {
             {/* Files List Section */}
             <div className="files-section">
               <h2 className="h5 mb-3">Knowledge Base Files</h2>
-              {isLoadingFiles ? (
-                <div className="text-center p-4 bg-light rounded">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                  </div>
-                  <p className="mt-3 text-muted">Loading files...</p>
-                </div>
-              ) : files.length === 0 ? (
-                <div className="text-center p-4 bg-light rounded">
-                  <i className="bi bi-folder2-open display-4 text-muted"></i>
-                  <p className="mt-3 text-muted">No files in knowledge base</p>
-                </div>
-              ) : (
-                <div className="list-group">
-                  {files.map((file) => {
-                    const isFileSynced =
-                      lastSuccessfulSync &&
-                      new Date(file.lastModified) <=
-                        new Date(lastSuccessfulSync);
-                    return (
-                      <div
-                        key={file.key}
-                        className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                      >
-                        <div>
-                          <i className="bi bi-file-earmark me-2"></i>
-                          {file.key}
-                          {lastSuccessfulSync && (
-                            <span
-                              className={`ms-2 text-${isFileSynced ? 'success' : 'danger'}`}
-                              title={
-                                isFileSynced
-                                  ? 'File is synced to knowledge base'
-                                  : 'File pending sync to knowledge base'
-                              }
-                            >
-                              <i
-                                className={`bi bi-${isFileSynced ? 'check-circle-fill' : 'x-circle-fill'}`}
-                              ></i>
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-muted small">
-                          {new Date(file.lastModified).toLocaleDateString(
-                            'en-NZ',
-                          )}{' '}
-                          • {(file.size / 1024).toFixed(2)} KB
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              {renderFilesList()}
             </div>
           </Col>
         </Row>
