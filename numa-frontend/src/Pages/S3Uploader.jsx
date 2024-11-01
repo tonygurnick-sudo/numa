@@ -357,7 +357,7 @@ const S3Uploader = () => {
         <Container fluid>
           <Row>
             <Col lg={8} className="px-5">
-              <Breadcrumbs label={'Upload'} />
+              <Breadcrumbs label={'Upload'} clearStack={true} />
               <h1>File Upload</h1>
             </Col>
           </Row>
