@@ -62,6 +62,9 @@ const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
   'modern-sales': {
     clientAccountId: '228743762183',
   },
+  'moira-shire-council': {
+    clientAccountId: '084828600250',
+  },
   nzsba: {
     clientAccountId: '307946678276',
     webCrawlerConfigs: [
@@ -79,6 +82,9 @@ const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
   },
   rooflogic: {
     clientAccountId: '640168445517',
+  },
+  'shire-of-narrogin': {
+    clientAccountId: '491085384376',
   },
   'story-box': {
     clientAccountId: '851725285135',
