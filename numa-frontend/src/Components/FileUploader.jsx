@@ -14,7 +14,7 @@ const dashedBorderKeyframes = `
 `;
 
 const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -22,6 +22,14 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadingFileIndex, setUploadingFileIndex] = useState(0);
+  const [totalFiles, setTotalFiles] = useState(0);
+  const [currentFileName, setCurrentFileName] = useState('');
+  const [detailedError, setDetailedError] = useState(null);
+  const [fileStructure, setFileStructure] = useState({
+    files: [],
+    folders: new Set(),
+  });
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -31,56 +39,125 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
   }, []);
 
   const handleFileSelect = (event) => {
-    setFile(event.target.files[0]);
+    const fileList = Array.from(event.target.files);
+    console.log(
+      'Files to be uploaded:',
+      fileList.map((file) => ({
+        name: file.name,
+        relativePath: file.webkitRelativePath || file.name,
+        size: `${(file.size / 1024).toFixed(2)} KB`,
+        type: file.type || 'application/octet-stream',
+      })),
+    );
+
+    setFiles(fileList);
+    setTotalFiles(fileList.length);
     setError(null);
     setSuccess(false);
     setUploadProgress(0);
   };
 
   const handleUpload = async () => {
-    if (!file) {
-      setError('Please select a file first');
+    if (!files.length) {
+      setError('Please select files first');
       return;
     }
 
     setError(null);
+    setDetailedError(null);
     setIsUploading(true);
     setShowSuccess(false);
     setShowProgress(true);
 
     try {
-      const token = await getAccessToken();
-      const response = await axios.get(
-        'https://ajbiwao41h.execute-api.us-east-1.amazonaws.com/presigned-url-upload',
-        {
-          params: { fileName: encodeURIComponent(file.name) },
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      for (let i = 0; i < files.length; i++) {
+        setUploadingFileIndex(i);
+        const file = files[i];
+        const relativePath =
+          file.customRelativePath || file.webkitRelativePath || file.name;
+        setCurrentFileName(relativePath);
 
-      const { uploadUrl, fileKey } = response.data;
+        console.log('File details:', {
+          name: file.name,
+          relativePath,
+          type: file.type || 'application/octet-stream',
+          size: `${(file.size / 1024).toFixed(2)} KB`,
+        });
 
-      await axios.put(uploadUrl, file, {
-        headers: {},
-        onUploadProgress: (progressEvent) => {
-          const progress = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total,
+        try {
+          const token = await getAccessToken();
+          console.log('Requesting presigned URL for:', relativePath);
+
+          const encodedPath = relativePath
+            .split('/')
+            .map((segment) => encodeURIComponent(segment))
+            .join('/');
+
+          const response = await axios.get(
+            'https://ajbiwao41h.execute-api.us-east-1.amazonaws.com/presigned-url-upload',
+            {
+              params: { fileName: encodedPath },
+              headers: { Authorization: `Bearer ${token}` },
+            },
           );
-          setUploadProgress(progress);
-        },
-      });
 
+          const { uploadUrl } = response.data;
+          console.log('S3 Upload Details:', {
+            destinationPath: relativePath,
+            uploadUrl: uploadUrl.split('?')[0], // Show URL without query parameters
+          });
+
+          await axios.put(uploadUrl, file, {
+            headers: {
+              'Content-Type': file.type || 'application/octet-stream',
+            },
+            onUploadProgress: (progressEvent) => {
+              const fileProgress = Math.round(
+                (progressEvent.loaded * 100) / progressEvent.total,
+              );
+              const overallProgress = Math.round(
+                (i * 100 + fileProgress) / files.length,
+              );
+              setUploadProgress(overallProgress);
+              console.log(
+                `File progress: ${fileProgress}%, Overall: ${overallProgress}%`,
+              );
+            },
+          });
+
+          console.log(`✅ Successfully uploaded to: ${relativePath}`);
+        } catch (fileError) {
+          console.error('❌ Error uploading file:', {
+            file: relativePath,
+            error: fileError.message,
+            response: fileError.response?.data,
+          });
+          throw new Error(
+            `Failed to upload ${relativePath}: ${fileError.message}`,
+          );
+        }
+      }
+
+      console.log('All files uploaded successfully');
       setSuccess(true);
-      setFile(null);
+      setFiles([]);
       onUploadSuccess();
     } catch (err) {
-      setError(
+      console.error('Upload error:', err);
+      const errorMessage =
         err.response?.data?.error ||
-          err.response?.data?.message ||
-          'Error uploading file',
+        err.response?.data?.message ||
+        err.message ||
+        'Error uploading files';
+
+      setError(errorMessage);
+      setDetailedError(
+        `Detailed error: ${JSON.stringify(err.response?.data || err.message, null, 2)}`,
       );
     } finally {
       setIsUploading(false);
+      setUploadingFileIndex(0);
+      setCurrentFileName('');
     }
   };
 
@@ -103,17 +180,83 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
     e.stopPropagation();
   };
 
-  const handleDrop = (e) => {
+  const logItemStructure = (entry, depth = 0) => {
+    const indent = '  '.repeat(depth);
+    if (entry.isDirectory) {
+      console.log(`${indent}📁 ${entry.fullPath}`);
+    } else {
+      console.log(`${indent}📄 ${entry.fullPath}`);
+    }
+  };
+
+  const handleDrop = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
 
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      setFile(droppedFile);
+    const items = Array.from(e.dataTransfer.items);
+    const files = [];
+
+    console.log('Analyzing dropped items:');
+
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry();
+        if (entry.isDirectory) {
+          console.log(`\n📁 Found directory: ${entry.fullPath}`);
+          console.log('Scanning contents...');
+          await readDirectory(entry, files);
+        } else {
+          console.log(`📄 Found file: ${entry.fullPath}`);
+          files.push(item.getAsFile());
+        }
+      }
+    }
+
+    if (files.length) {
+      // Create a set of unique folder paths
+      const folders = new Set();
+      files.forEach((file) => {
+        const path =
+          file.customRelativePath || file.webkitRelativePath || file.name;
+        const parts = path.split('/');
+        // Add all parent folders
+        for (let i = 0; i < parts.length - 1; i++) {
+          folders.add(parts.slice(0, i + 1).join('/'));
+        }
+      });
+
+      setFileStructure({
+        files: files,
+        folders: folders,
+      });
+      setFiles(files);
+      setTotalFiles(files.length);
       setError(null);
       setSuccess(false);
       setUploadProgress(0);
+    }
+  };
+
+  const readDirectory = async (dirEntry, files) => {
+    const reader = dirEntry.createReader();
+
+    const entries = await new Promise((resolve) => {
+      reader.readEntries((entries) => resolve(entries));
+    });
+
+    for (const entry of entries) {
+      logItemStructure(entry, 1);
+
+      if (entry.isFile) {
+        const file = await new Promise((resolve) => {
+          entry.file((file) => resolve(file));
+        });
+        file.customRelativePath = entry.fullPath.substring(1); // Remove leading slash
+        files.push(file);
+      } else if (entry.isDirectory) {
+        await readDirectory(entry, files);
+      }
     }
   };
 
@@ -129,6 +272,78 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
     }
     return () => clearTimeout(timeoutId);
   }, [success, uploadProgress]);
+
+  const renderFileTree = () => {
+    if (!fileStructure.files.length) return null;
+
+    const rootFolder =
+      fileStructure.files[0].customRelativePath?.split('/')[0] ||
+      fileStructure.files[0].webkitRelativePath?.split('/')[0] ||
+      'Files';
+
+    return (
+      <div className="file-tree mt-3 mb-4">
+        <div className="bg-white rounded p-3 border">
+          <div className="d-flex align-items-center mb-2">
+            <i className="bi bi-folder-fill text-warning me-2"></i>
+            <strong>{rootFolder}</strong>
+            <span className="ms-2 text-muted small">
+              ({fileStructure.files.length} files)
+            </span>
+          </div>
+
+          <div className="ms-4">
+            {Array.from(fileStructure.folders)
+              .sort()
+              .map((folder) => {
+                const depth = folder.split('/').length - 1;
+                const folderName = folder.split('/').pop();
+                const filesInFolder = fileStructure.files.filter((file) =>
+                  (
+                    file.customRelativePath || file.webkitRelativePath
+                  ).startsWith(folder + '/'),
+                );
+
+                return (
+                  <div
+                    key={folder}
+                    className="d-flex align-items-center my-1"
+                    style={{ marginLeft: `${depth * 1.5}rem` }}
+                  >
+                    <i className="bi bi-folder text-warning me-2"></i>
+                    <span>{folderName}</span>
+                    <span className="ms-2 text-muted small">
+                      ({filesInFolder.length} files)
+                    </span>
+                  </div>
+                );
+              })}
+
+            {fileStructure.files.map((file) => {
+              const path =
+                file.customRelativePath || file.webkitRelativePath || file.name;
+              const depth = path.split('/').length;
+              const fileName = path.split('/').pop();
+
+              return (
+                <div
+                  key={path}
+                  className="d-flex align-items-center my-1"
+                  style={{ marginLeft: `${depth * 1.5}rem` }}
+                >
+                  <i className="bi bi-file-text me-2 text-secondary"></i>
+                  <span>{fileName}</span>
+                  <span className="ms-2 text-muted small">
+                    ({(file.size / 1024).toFixed(1)} KB)
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -156,7 +371,19 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {error && <Alert variant="danger">{error}</Alert>}
+      {error && (
+        <Alert variant="danger">
+          <div>{error}</div>
+          {detailedError && (
+            <pre
+              className="mt-2 p-2 bg-light"
+              style={{ whiteSpace: 'pre-wrap' }}
+            >
+              {detailedError}
+            </pre>
+          )}
+        </Alert>
+      )}
 
       <div className="text-center">
         <input
@@ -165,56 +392,69 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
           id="file-upload"
           type="file"
           onChange={handleFileSelect}
+          webkitdirectory=""
+          multiple
         />
 
         <div className="mb-3">
           <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
-          <p className="mt-2">Drag and drop your file here, or</p>
+          <p className="mt-2">Drag and drop your files here, or</p>
           <Button
             variant="primary"
             as="label"
             htmlFor="file-upload"
             style={{ cursor: 'pointer' }}
           >
-            Select File
+            Select Files
           </Button>
         </div>
 
-        {file && (
-          <div className="selected-file mb-3">
-            <p className="mb-2">Selected: {file.name}</p>
-            <Button
-              variant="primary"
-              onClick={handleUpload}
-              disabled={!file || uploadProgress > 0 || isUploading}
-            >
-              {isUploading ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-2" />
-                  Uploading...
-                </>
-              ) : (
-                'Upload'
+        {fileStructure.files.length > 0 && (
+          <>
+            {renderFileTree()}
+
+            <div className="selected-file mb-3">
+              {isUploading && (
+                <div className="mb-3">
+                  <p className="mb-2">
+                    Uploading file {uploadingFileIndex + 1} of {totalFiles}
+                  </p>
+                  {currentFileName && (
+                    <p className="mb-2 text-muted small">
+                      Current file: {currentFileName}
+                    </p>
+                  )}
+                  <div className="progress">
+                    <div
+                      className="progress-bar"
+                      style={{ width: `${uploadProgress}%` }}
+                      role="progressbar"
+                    >
+                      {uploadProgress}%
+                    </div>
+                  </div>
+                </div>
               )}
-            </Button>
-          </div>
-        )}
 
-        {showProgress && uploadProgress > 0 && (
-          <div className="w-100 mt-3">
-            <ProgressBar
-              now={uploadProgress}
-              label={`${uploadProgress}%`}
-              variant="success"
-              className="mb-2"
-            />
-          </div>
-        )}
-
-        {showSuccess && (
-          <Alert variant="success" className="mt-3">
-            File uploaded successfully!
-          </Alert>
+              <Button
+                variant="primary"
+                onClick={handleUpload}
+                disabled={!fileStructure.files.length || isUploading}
+              >
+                {isUploading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-cloud-upload me-2"></i>
+                    Upload {fileStructure.files.length} Files
+                  </>
+                )}
+              </Button>
+            </div>
+          </>
         )}
       </div>
     </div>
