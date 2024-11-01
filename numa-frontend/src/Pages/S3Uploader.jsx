@@ -292,7 +292,6 @@ const S3Uploader = () => {
     // Group files by their folder path
     const groupedFiles = files.reduce((acc, file) => {
       const parts = file.key.split('/');
-      let currentPath = '';
 
       // Create entries for each folder level
       for (let i = 0; i < parts.length - 1; i++) {
