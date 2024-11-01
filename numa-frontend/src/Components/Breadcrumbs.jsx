@@ -32,14 +32,14 @@ function Breadcrumbs({ label, clearStack }) {
 
     // Add Home breadcrumb
 
-    if (clearStack || location.pathname === '/home') {
+    if (clearStack || location.pathname === '/dash') {
       // Only show Home breadcrumb as a link when clearing stack
       sessionStorage.removeItem('navigation_stack');
       updatedBreadcrumbs[0] = {
-        label: 'Home',
-        path: '/home',
+        label: 'Dashboard',
+        path: '/dash',
       };
-      if (location.pathname !== '/home') {
+      if (location.pathname !== '/dash') {
         updatedBreadcrumbs.push({
           label: label,
           path: location.pathname,

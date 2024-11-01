@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button, Container, Row, Col } from 'react-bootstrap';
-import { useParams } from 'react-router-dom';
+
+import { useParams, useNavigate } from 'react-router-dom';
 
 import { Nav } from '../Components/Nav';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
@@ -14,9 +15,11 @@ import {
   StartQAppSessionCommand,
 } from '@aws-sdk/client-qapps';
 import { NumaChat } from '../Pages/NumaChat';
-import { deleteQAppById } from '../qAppHelper';
+import { addAppToLibrary, deleteQAppById } from '../qAppHelper';
 
 const AppDetail = () => {
+  const navigate = useNavigate();
+
   const { qAppsClient, loading: authLoading } = useAuth();
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
   const { appId } = useParams(); // Get appId from URL
@@ -176,10 +179,29 @@ const AppDetail = () => {
     }
   }, [sessionDetails]);
 
+  // DELETE
   const handleDeleteApp = async () => {
     if (!qAppsClient || !appId) return;
 
     deleteQAppById({ qAppsClient, appId, setLoading, setError, setResponse });
+  };
+
+  useEffect(() => {
+    if (response?.type === 'delete') {
+      // Redirect to the app list page after delete
+      navigate('/dash');
+    }
+
+    if (response?.type === 'add-app-to-lib') {
+      navigate('/dash');
+    }
+  }, [response]);
+
+  // ADD APP TO LIB
+  const handleAddAppToLib = async () => {
+    if (!qAppsClient || !appId) return;
+
+    addAppToLibrary({ qAppsClient, appId, setLoading, setError, setResponse });
   };
 
   return (
@@ -194,26 +216,52 @@ const AppDetail = () => {
                 <p>{app?.description}</p>
               </Col>
               <Col lg={3} className="px-5 text-end">
-                <div className="d-flex flex-column justify-content-end h-100">
+                <div className="d-flex flex-column justify-content-between h-100 gap-3">
+                  <div className="d-flex flex-column gap-2 align-items-end">
+                    {/* Row with Add to Library and Delete buttons */}
+                    <div className="d-flex gap-2">
+                      <Button
+                        variant="secondary"
+                        className="w-auto"
+                        onClick={handleAddAppToLib}
+                      >
+                        <i className="bi bi-plus-circle me-2"></i> Add to
+                        Library
+                      </Button>
+
+                      <Button
+                        variant="danger"
+                        className="w-auto"
+                        onClick={handleDeleteApp}
+                      >
+                        <i className="bi bi-trash-fill"></i>
+                      </Button>
+                    </div>
+
+                    {/* Run button below the row */}
+                    <Button
+                      type="submit"
+                      id="submit"
+                      className="btn btn-primary run_btn w-auto"
+                      disabled={runActive || isPolling || loading}
+                      onClick={handleRunApp}
+                    >
+                      <i className="bi bi-play-fill me-2"></i> Run
+                    </Button>
+                  </div>
+                </div>
+              </Col>
+              <Col lg={9} className="px-5">
+                <div className="d-flex align-items-center gap-3">
                   <span>
-                    Created:{' '}
+                    <strong>Created:</strong>{' '}
                     {app?.createdAt
                       ? new Date(app.createdAt).toLocaleString()
                       : ''}
                   </span>
-                  <span>Status: {app?.status}</span>
-                  <Button
-                    type="submit"
-                    id="submit"
-                    className="btn btn-primary x-5 float-end run_btn"
-                    disabled={runActive || isPolling || loading}
-                    onClick={handleRunApp}
-                  >
-                    Run
-                  </Button>
-                  <Button variant="danger" onClick={handleDeleteApp}>
-                    Delete
-                  </Button>
+                  <span>
+                    <strong>Status:</strong> {app?.status}
+                  </span>
                 </div>
               </Col>
             </Row>
