@@ -105,7 +105,7 @@ const NumaChat = () => {
         <Container fluid>
           <Row>
             <Col lg={8} className="px-5">
-              <Breadcrumbs label={'Chat'} />
+              <Breadcrumbs label={'Chat'} clearStack={true} />
               <h1>Numa Chat</h1>
             </Col>
           </Row>

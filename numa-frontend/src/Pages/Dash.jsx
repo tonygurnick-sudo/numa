@@ -85,7 +85,7 @@ const Dash = () => {
           <Container fluid>
             <Row>
               <Col lg={8} className="px-5">
-                <Breadcrumbs label={'Home'} />
+                <Breadcrumbs clearStack={true} />
                 <h1>Numa Apps</h1>
               </Col>
               <Col lg={3} className="p-5">
