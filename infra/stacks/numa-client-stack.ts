@@ -138,6 +138,9 @@ const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
   tda: {
     clientAccountId: '575108948290',
   },
+  transit: {
+    clientAccountId: '442426865055',
+  },
   'w-advisory': {
     clientAccountId: '746669235417',
     webCrawlerConfigs: [
