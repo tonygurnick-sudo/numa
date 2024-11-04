@@ -229,16 +229,15 @@ const S3Uploader = () => {
       lastSuccessfulSync &&
       new Date(file.lastModified) <= new Date(lastSuccessfulSync);
 
-    // Get just the filename without the path
     const fileName = file.key.split('/').pop();
-    const indentLevel = Math.max(0, depth - 1); // Subtract 1 from depth for files
+    const indentLevel = Math.max(0, depth - 1);
 
     return (
       <div
         key={file.key}
         className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
       >
-        <div>
+        <div className="text-truncate" style={{ maxWidth: '70%' }}>
           <span style={{ marginLeft: `${indentLevel * 2}rem` }}>
             <i className="bi bi-file-earmark me-2"></i>
             {fileName}
@@ -260,9 +259,9 @@ const S3Uploader = () => {
             )}
           </span>
         </div>
-        <div className="text-muted small">
-          {new Date(file.lastModified).toLocaleDateString('en-NZ')} •{' '}
-          {(file.size / 1024).toFixed(2)} KB
+        <div className="text-muted small text-end">
+          <div>{new Date(file.lastModified).toLocaleDateString('en-NZ')}</div>
+          <div>{(file.size / 1024).toFixed(2)} KB</div>
         </div>
       </div>
     );
