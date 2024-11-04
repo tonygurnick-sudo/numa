@@ -216,7 +216,7 @@ const NumaLogin = () => {
 
   const loginContent = (
     <>
-      <h1>Numa Login</h1>
+      <h2>Numa Login</h2>
 
       {error && <Alert variant="danger">{error}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}

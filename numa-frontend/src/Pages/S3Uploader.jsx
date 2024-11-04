@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, createRef } from 'react';
 import { Button, Alert, Container, Row, Col, Modal } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
 import axios from 'axios';
@@ -60,7 +60,21 @@ const S3Uploader = () => {
   const [syncJobStatus, setSyncJobStatus] = useState(null);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState(null);
   const initialFetchDone = useRef(false);
-  const [currentPath, setCurrentPath] = useState('');
+  const [collapsedFolders, setCollapsedFolders] = useState(new Set());
+  const [folderRefs] = useState(() => {
+    const refs = new Map();
+    // Pre-populate with refs for all possible folder paths from files
+    files.forEach((file) => {
+      const parts = file.key.split('/');
+      for (let i = 0; i < parts.length - 1; i++) {
+        const folderPath = parts.slice(0, i + 1).join('/');
+        if (!refs.has(folderPath)) {
+          refs.set(folderPath, createRef());
+        }
+      }
+    });
+    return refs;
+  });
 
   const { getAccessToken, qBusinessClient } = useAuth();
 
@@ -80,6 +94,17 @@ const S3Uploader = () => {
         fileCount: response.data.files.length,
         files: response.data.files.map((f) => f.key),
       });
+
+      // Initialize collapsed folders when files are loaded
+      const folderPaths = new Set();
+      response.data.files.forEach((file) => {
+        const parts = file.key.split('/');
+        for (let i = 0; i < parts.length - 1; i++) {
+          folderPaths.add(parts.slice(0, i + 1).join('/'));
+        }
+      });
+      setCollapsedFolders(folderPaths);
+
       setFiles(response.data.files);
     } catch (err) {
       console.error('File fetch failed', {
@@ -229,16 +254,15 @@ const S3Uploader = () => {
       lastSuccessfulSync &&
       new Date(file.lastModified) <= new Date(lastSuccessfulSync);
 
-    // Get just the filename without the path
     const fileName = file.key.split('/').pop();
-    const indentLevel = Math.max(0, depth - 1); // Subtract 1 from depth for files
+    const indentLevel = Math.max(0, depth - 1);
 
     return (
       <div
         key={file.key}
         className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
       >
-        <div>
+        <div className="text-truncate" style={{ maxWidth: '70%' }}>
           <span style={{ marginLeft: `${indentLevel * 2}rem` }}>
             <i className="bi bi-file-earmark me-2"></i>
             {fileName}
@@ -260,12 +284,24 @@ const S3Uploader = () => {
             )}
           </span>
         </div>
-        <div className="text-muted small">
-          {new Date(file.lastModified).toLocaleDateString('en-NZ')} •{' '}
-          {(file.size / 1024).toFixed(2)} KB
+        <div className="text-muted small text-end">
+          <div>{new Date(file.lastModified).toLocaleDateString('en-NZ')}</div>
+          <div>{(file.size / 1024).toFixed(2)} KB</div>
         </div>
       </div>
     );
+  };
+
+  const toggleFolder = (folderPath) => {
+    setCollapsedFolders((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(folderPath)) {
+        newSet.delete(folderPath);
+      } else {
+        newSet.add(folderPath);
+      }
+      return newSet;
+    });
   };
 
   const renderFilesList = () => {
@@ -325,15 +361,36 @@ const S3Uploader = () => {
             return depthA - depthB || pathA.localeCompare(pathB);
           })
           .map(([folder, files]) => {
+            const nodeRef = folderRefs.get(folder);
             const depth = folder.split('/').length;
             const folderName = folder.split('/').pop();
-            const indentLevel = Math.max(0, depth - 1); // Subtract 1 from depth for folders
+            const indentLevel = Math.max(0, depth - 1);
+            const isCollapsed = collapsedFolders.has(folder);
+
+            // Check if any parent folder is collapsed
+            const parentFolders = folder.split('/').slice(0, -1);
+            const isParentCollapsed = parentFolders.some((_, index) => {
+              const parentPath = parentFolders.slice(0, index + 1).join('/');
+              return collapsedFolders.has(parentPath);
+            });
+
+            if (isParentCollapsed) {
+              return null;
+            }
 
             return (
               <div key={folder}>
-                <div className="list-group-item bg-light d-flex justify-content-between align-items-center">
+                <div
+                  className="list-group-item bg-light d-flex justify-content-between align-items-center"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => toggleFolder(folder)}
+                >
                   <div>
                     <span style={{ marginLeft: `${indentLevel * 2}rem` }}>
+                      <i
+                        className={`bi bi-chevron-${isCollapsed ? 'right' : 'down'} me-2`}
+                        style={{ transition: 'transform 300ms ease' }}
+                      ></i>
                       <i className="bi bi-folder me-2 text-warning"></i>
                       <strong>{folderName}</strong>
                       <span className="ms-2 text-muted small">
@@ -342,7 +399,15 @@ const S3Uploader = () => {
                     </span>
                   </div>
                 </div>
-                {files.map((file) => renderFile(file, depth + 1))}
+                <div
+                  className={`folder-content ${
+                    isCollapsed
+                      ? 'folder-content-collapsed'
+                      : 'folder-content-expanded'
+                  }`}
+                >
+                  {files.map((file) => renderFile(file, depth + 1))}
+                </div>
               </div>
             );
           })}
