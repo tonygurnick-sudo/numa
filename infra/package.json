@@ -33,7 +33,7 @@
     "@typescript-eslint/eslint-plugin": "8.12.2",
     "@typescript-eslint/parser": "8.12.2",
     "cdktf-cli": "0.20.9",
-    "eslint": "8.57.1",
+    "eslint": "9.14.0",
     "eslint-config-prettier": "9.1.0",
     "eslint-plugin-prettier": "5.2.1",
     "fs-extra": "^11.2.0",
