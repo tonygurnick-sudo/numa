@@ -9,7 +9,7 @@
   "scripts": {
     "get": "cdktf get",
     "build": "tsc",
-    "lint": "eslint --ignore-path ../.gitignore . && tsc --noEmit",
+    "lint": "eslint . && tsc --noEmit",
     "synth": "cdktf synth",
     "compile": "tsc --pretty",
     "test": "tsx --test",
