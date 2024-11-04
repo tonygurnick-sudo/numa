@@ -167,6 +167,10 @@ header {
       color: var(--color-primary);
     }
   }
+
+  @media (max-width: 768px) {
+    margin-top: 60px;
+  }
 }
 
 .numalogin-left,
@@ -264,6 +268,48 @@ nav {
   position: fixed;
   top: 0;
   left: 0;
+  z-index: 1000;
+
+  @media (max-width: 768px) {
+    width: 100%;
+    height: 60px;
+    top: 0;
+    left: 0;
+
+    ul {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      margin: 0;
+      height: 100%;
+      gap: 1.5rem;
+
+      li {
+        margin: 0;
+
+        a {
+          height: auto;
+          padding: 8px;
+        }
+      }
+    }
+
+    .logo-bk {
+      height: 30px;
+      margin: 15px;
+    }
+
+    footer {
+      position: static;
+      width: auto;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 1rem;
+      margin-right: 1rem;
+    }
+  }
 
   ul {
     margin: 20px 0 0;
@@ -392,6 +438,15 @@ nav {
 
 .dashboard {
   margin-left: 72px;
+
+  @media (max-width: 768px) {
+    margin-left: 0;
+    margin-top: 60px;
+
+    .wrapper {
+      padding: 16px !important;
+    }
+  }
 
   .wrapper {
     padding: 48px 48px 24px;

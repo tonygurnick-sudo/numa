@@ -356,7 +356,7 @@ const S3Uploader = () => {
       <header className="mb-4">
         <Container fluid>
           <Row>
-            <Col lg={8} className="px-5">
+            <Col className="px-3 px-lg-5">
               <Breadcrumbs label={'Upload'} clearStack={true} />
               <h1>File Upload</h1>
             </Col>
@@ -365,8 +365,8 @@ const S3Uploader = () => {
       </header>
 
       <LayoutDashboard>
-        <Row>
-          <Col lg={6}>
+        <Row className="g-4">
+          <Col xs={12} lg={6}>
             <div className="upload-section mb-4">
               <h2 className="h4 mb-3">Upload New File</h2>
               <FileUploader
@@ -376,7 +376,7 @@ const S3Uploader = () => {
             </div>
           </Col>
 
-          <Col lg={6}>
+          <Col xs={12} lg={6}>
             {/* Sync Status Section */}
             <div className="sync-status-section mb-4">
               <h2 className="h4 mb-3">Knowledge Base Status</h2>
