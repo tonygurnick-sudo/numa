@@ -52,12 +52,29 @@ const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
   },
   'broken-hill-city-council': {
     clientAccountId: '863518418134',
+    webCrawlerConfigs: [
+      { url: 'https://data.gov.au' },
+      { url: 'https://www.brokenhill.nsw.gov.au/Home' },
+      { url: 'https://www.dpie.nsw.gov.au/home' },
+      { url: 'https://www.visitbrokenhill.com/Home' },
+      { url: 'https://www.digital.nsw.gov.au/' },
+      { url: 'https://www.ombo.nsw.gov.au/' },
+      { url: 'https://lgnsw.org.au/' },
+      { url: 'https://www.olg.nsw.gov.au/' },
+    ],
   },
   'design-builders': {
     clientAccountId: '061039773876',
   },
   'lg-pro': {
     clientAccountId: '539247480075',
+    webCrawlerConfigs: [
+      { url: 'https://www.lgpro.com/' },
+      { url: 'https://www.legislation.vic.gov.au/' },
+      { url: 'https://www.planning.vic.gov.au/planning-schemes' },
+      { url: 'https://discover.data.vic.gov.au/group/local-government' },
+      { url: 'https://www.localgovernment.vic.gov.au/' },
+    ],
   },
   'modern-sales': {
     clientAccountId: '228743762183',
@@ -85,6 +102,23 @@ const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
   },
   'shire-of-narrogin': {
     clientAccountId: '491085384376',
+    webCrawlerConfigs: [
+      { url: 'https://www.legislation.wa.gov.au' },
+      { url: 'https://www.dlgsc.wa.gov.au' },
+      { url: 'https://www.dplh.wa.gov.au' },
+      { url: 'https://www.wa.gov.au/organisation/western-australian-planning-commission' },
+      { url: 'https://www.epa.wa.gov.au' },
+      { url: 'https://www.dwer.wa.gov.au' },
+      { url: 'https://www.commerce.wa.gov.au/worksafe' },
+      { url: 'https://www.walga.asn.au' },
+      { url: 'https://www.mainroads.wa.gov.au' },
+      { url: 'https://www.health.wa.gov.au' },
+      { url: 'https://www.narrogin.wa.gov.au/' },
+      { url: 'https://www.abs.gov.au/' },
+      { url: 'https://dfes.wa.gov.au/' },
+      { url: 'https://www.wa.gov.au/organisation/state-records-office-of-western-australia' },
+      { url: 'https://wheatbelt.wa.gov.au/' },
+    ],
   },
   'story-box': {
     clientAccountId: '851725285135',
