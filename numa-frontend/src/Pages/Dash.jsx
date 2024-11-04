@@ -20,8 +20,8 @@ import { createQApp } from '../qAppHelper';
 const Dash = () => {
   const { qAppsClient, loading: authLoading } = useAuth();
 
-  const [apps, setApps] = useState([]);
   const [libraryApps, setLibraryApps] = useState([]);
+  const [displayApps, setDisplayApps] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [response, setResponse] = useState(null);
@@ -29,25 +29,10 @@ const Dash = () => {
 
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
 
-  const fetchApps = async () => {
+  const fetchLibItems = async () => {
     if (!qAppsClient || authLoading) return;
 
-    try {
-      setLoading(true);
-      const input = {
-        instanceId: APPLICATION_ID,
-      };
-
-      const command = new ListQAppsCommand(input);
-      const response = await qAppsClient.send(command);
-
-      setApps(response.apps);
-    } catch (error) {
-      console.error('Error fetching Q Apps:', error);
-    } finally {
-      setLoading(false);
-    }
-
+    // Get lib apps
     try {
       setLoading(true);
       const input = {
@@ -66,8 +51,40 @@ const Dash = () => {
   };
 
   useEffect(() => {
-    fetchApps();
+    fetchLibItems();
   }, []);
+
+  const fetchApps = async () => {
+    if (!qAppsClient || authLoading) return;
+
+    // Get user appointed apps
+    try {
+      setLoading(true);
+      const input = {
+        instanceId: APPLICATION_ID,
+      };
+
+      const command = new ListQAppsCommand(input);
+      const response = await qAppsClient.send(command);
+
+      // Filter myApps and add a flag
+      const uniqueApps = response.apps.map((app) => ({
+        ...app,
+        isMyApp: libraryApps.some((libApp) => libApp.appID === app.appID),
+      }));
+
+      setDisplayApps(uniqueApps);
+      //setApps(response.apps);
+    } catch (error) {
+      console.error('Error fetching Q Apps:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchApps();
+  }, [libraryApps]);
 
   const handleCreateApp = async () => {
     if (!qAppsClient || authLoading) return;
@@ -109,36 +126,21 @@ const Dash = () => {
 
         <LayoutDashboard>
           <Row>
-            {/* DUMMY DATA */}
-            {/*  <h6>Dummy data:</h6>
-           {appsData.map((app) => (
-              <Col key={app.appId} lg={4} className="flex">
-                <AppItem appData={app} />
-              </Col>
-            ))}
-            <hr /> */}
-
             {loading ? (
               <Preloader />
             ) : (
               <>
-                {apps.map((app) => (
-                  <Col key={app.appId} lg={4} className="flex">
-                    <AppItem appData={app} qAppsClient={qAppsClient} />
-                  </Col>
-                ))}
-              </>
-            )}
-
-            <h6>Library data:</h6>
-            {loading ? (
-              <Preloader />
-            ) : (
-              <>
-                {libraryApps.map((app) => (
-                  <Col key={app.appId} lg={4} className="flex">
-                    <AppItem appData={app} qAppsClient={qAppsClient} />
-                  </Col>
+                {displayApps.map((app) => (
+                  <>
+                    <Col key={app.appId} lg={4} className="flex">
+                      <AppItem
+                        key={app.appId}
+                        appId={app.appId}
+                        instanceId={APPLICATION_ID}
+                        qAppsClient={qAppsClient}
+                      />
+                    </Col>
+                  </>
                 ))}
               </>
             )}
