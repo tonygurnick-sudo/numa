@@ -89,25 +89,27 @@ async function handleInitiateAuth(body) {
   };
 
   try {
-    // Send the full response back to the frontend without stripping any challenge parameters
     const response = await cognito.send(new InitiateAuthCommand(params));
-    return response; // Return the entire response
+    return response;
   } catch (error) {
     console.error('InitiateAuth Error:', error);
-    throw error;
+    throw {
+      message: error.message,
+      type: error.__type,
+      fault: error.$fault,
+      statusCode: error.$metadata?.httpStatusCode,
+    };
   }
 }
 
 async function handleRespondToChallenge(body) {
   const { username, challengeResponses, timestamp } = body;
 
-  // Log the incoming body for debugging
   console.log(
     'RespondToChallenge request body:',
     JSON.stringify(body, null, 2),
   );
 
-  // Check for missing parameters and log specific errors
   if (!username) {
     throw new Error('Missing required parameter: username');
   }
@@ -157,6 +159,11 @@ async function handleRespondToChallenge(body) {
     return response;
   } catch (error) {
     console.error('RespondToAuthChallenge Error:', error);
-    throw error;
+    throw {
+      message: error.message,
+      type: error.__type,
+      fault: error.$fault,
+      statusCode: error.$metadata?.httpStatusCode,
+    };
   }
 }
