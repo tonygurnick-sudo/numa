@@ -1,0 +1,71 @@
+{
+  "appName": "Numa App Workflow",
+  "id": "454545-dgdegd-43g4-345t4g",
+  "appDescription": "Processes a file through S3, Q App, and Lambda, then displays the output.",
+  "version": "1.0.0",
+  "createdDate": "2024-11-01",
+  "tasks": [
+    {
+      "id": "1d5e1b10-0807-4b7d-b8b6-55e6b4a5bcec",
+      "title": "Upload a file",
+      "description": "Uploads a file to the S3 bucket.",
+      "type": "s3-upload",
+      "visible": true,
+      "value": "file-uploader",
+      "params": {
+        "s3Bucket": "numa-knowledge-base",
+        "fileKey": "uploads/input-file.txt"
+      },
+      "order": 1,
+      "nextTask": "8a8b2d12-0f1e-48b8-921a-3f5a97dbb24a"
+    },
+    {
+      "id": "8a8b2d12-0f1e-48b8-921a-3f5a97dbb24a",
+      "title": "Name of Q app",
+      "description": "Runs a Q App using the file uploaded to S3.",
+      "type": "qApp",
+      "visible": false,
+      "value": "2594236d-712a-4355-8b0e-6a4cef023f75",
+      "params": {
+        "version": "1.0",
+        "inputContentRef": "1d5e1b10-0807-4b7d-b8b6-55e6b4a5bcec",
+        "qCardIdRef": "ggg66-0807-4db7d-b8b6-3ff3f3f3e",
+        "responseHandling": "storeResult",
+        "timeout": 3000
+      },
+      "order": 2,
+      "nextTask": "3f8c5d1e-a5d5-4d4b-8d6e-7d5fbe3b4f8d"
+    },
+    {
+      "id": "b204f5da-dc49-48c6-b04c-348e4f4cde9f",
+      "title": "Summarise Content",
+      "description": "Processes the output from the Q App in a Lambda function.",
+      "type": "lambda",
+      "visible": false,
+      "value": "arn:aws:lambda:us-east-1:905418183804:function:numa-knowledge-base-sync-lambda-function",
+      "params": {
+        "invokeType": "RequestResponse",
+        "payload": {
+          "syncInterval": "daily",
+          "inputContent": "8a8b2d12-0f1e-48b8-921a-3f5a97dbb24a",
+          "targetTable": "knowledge_base"
+        }
+      },
+      "order": 3,
+      "nextTask": "3f8c5d1e-a5d5-4d4b-8d6e-7d5fbe3b4f8d"
+    },
+    {
+      "id": "3f8c5d1e-a5d5-4d4b-8d6e-7d5fbe3b4f8d",
+      "title": "Meeting Summary Output",
+      "description": "Displays the final output of the Lambda function in a table format.",
+      "type": "ui-output",
+      "visible": true,
+      "value": "result-viewer",
+      "params": {
+        "dataRef": "b204f5da-dc49-48c6-b04c-348e4f4cde9f",
+        "displayFormat": "table"
+      },
+      "order": 4
+    }
+  ]
+}
