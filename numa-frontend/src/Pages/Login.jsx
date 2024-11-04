@@ -67,6 +67,13 @@ const NumaLogin = () => {
 
       const initiateData = await initiateAuthRes.json();
 
+      // Add error check after initiate response
+      if (initiateData.error) {
+        // If there is an error, throw it and set the error message
+        setError(initiateData.error);
+        throw new Error(initiateData.error);
+      }
+
       // Step 3: Sign SRP session with response from the server
       const signedSrpSession = signSrpSession(srpSession, initiateData);
 
