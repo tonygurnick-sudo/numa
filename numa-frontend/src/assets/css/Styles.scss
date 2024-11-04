@@ -587,3 +587,113 @@ label {
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
+
+/* Folder transitions */
+.folder-content {
+  transition: all 300ms ease-out;
+  overflow: hidden;
+}
+
+.folder-content-collapsed {
+  max-height: 0;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.folder-content-expanded {
+  max-height: 2000px;
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Nav Component Styles */
+.nav-item {
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+}
+
+.dropdown-toggle::after {
+  display: none !important;
+}
+
+.nav-component {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100vh;
+  border-right: 1px solid #eee;
+  width: 60px;
+  background-color: #1a1a1a;
+
+  .divider {
+    width: 80%;
+    height: 1px;
+    background-color: white;
+    margin: 1rem 0;
+    opacity: 1;
+  }
+
+  .nav-links {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0;
+    width: 100%;
+  }
+
+  .nav-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.15rem;
+    color: white;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .icon {
+    font-size: 1.2rem;
+  }
+
+  .footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+  }
+
+  .version {
+    color: white;
+    opacity: 0.5;
+    font-size: 0.8rem;
+  }
+
+  .icon-label {
+    font-size: 0.7rem;
+    margin-top: 0.15rem;
+    color: white;
+    text-align: center;
+  }
+}
+
+.menu-item {
+  color: white;
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: #2a2a2a;
+  }
+}
