@@ -138,6 +138,7 @@ const Dash = () => {
                         appId={app.appId}
                         instanceId={APPLICATION_ID}
                         qAppsClient={qAppsClient}
+                        isMyApp={app.isMyApp}
                       />
                     </Col>
                   </>

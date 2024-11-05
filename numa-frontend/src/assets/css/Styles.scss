@@ -697,3 +697,79 @@ label {
     background-color: #2a2a2a;
   }
 }
+
+/* custom tool tip */
+.tooltip {
+  position: relative;
+  display: inline-block;
+  opacity: 1;
+  z-index: 1050;
+}
+
+.tooltip.float-r {
+  float: right;
+  margin-top: 20px;
+}
+
+.tooltip_icon {
+  width: 20px;
+}
+
+.tooltip .tooltiptext {
+  visibility: hidden;
+  width: 213px;
+  background-color: #555;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 5px 12px;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  margin-left: -60px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.tooltip .tooltiptext.bottom {
+  width: 320px;
+  height: 100px;
+  top: 125%;
+  margin-left: -160px;
+}
+
+.tooltip .tooltiptext.right {
+  width: 480px;
+  height: 80px;
+  top: -10px;
+  left: -490px;
+  margin: 0;
+}
+
+.tooltip .tooltiptext::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #555 transparent transparent transparent;
+}
+
+.tooltip .tooltiptext.bottom::after {
+  top: -10px;
+  border-color: transparent transparent #555 transparent;
+}
+
+.tooltip .tooltiptext.right::after {
+  top: 40%;
+  border-color: transparent transparent transparent #555;
+  margin: 0 0 0 240px;
+}
+
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
