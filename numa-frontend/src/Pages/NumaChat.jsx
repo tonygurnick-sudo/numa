@@ -30,7 +30,6 @@ const NumaChat = () => {
   const [conversations, setConversations] = useState([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [showConversations, setShowConversations] = useState(true);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   // TODO: Make this dynamic
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
@@ -63,19 +62,6 @@ const NumaChat = () => {
 
     fetchConversations();
   }, [qBusinessClient]);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  useEffect(() => {
-    setShowConversations(!isMobile);
-  }, [isMobile]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -175,7 +161,7 @@ const NumaChat = () => {
       <header className="mb-1">
         <Container fluid>
           <Row>
-            <Col lg={12} className="px-3 px-lg-5">
+            <Col lg={12} className="px-5">
               <Breadcrumbs label={'Chat'} clearStack={true} />
               <h1 className="mb-0 fs-3">Numa Chat</h1>
             </Col>
@@ -183,27 +169,24 @@ const NumaChat = () => {
         </Container>
       </header>
 
-      <LayoutDashboard className="flex-grow-1">
-        <div className="chat-layout d-flex">
+      <LayoutDashboard>
+        <div className="chat-layout">
           <div
             className={`sidebar-wrapper ${showConversations ? 'open' : 'closed'}`}
-            style={{
-              position: isMobile ? 'absolute' : 'relative',
-              height: '100%',
-              zIndex: 1000,
-              backgroundColor: 'white',
-              width: showConversations ? '300px' : '0',
-              transition: 'width 0.3s ease',
-              ...(isMobile && {
-                width: '300px',
-                transform: showConversations
-                  ? 'translateX(0)'
-                  : 'translateX(-100%)',
-                transition: 'transform 0.3s ease',
-              }),
-            }}
           >
-            <div className="sidebar-content border-end bg-white h-100">
+            <button
+              className="chevron-button sidebar-toggle"
+              onClick={() => setShowConversations(!showConversations)}
+              aria-label="Show conversations"
+            >
+              {showConversations ? (
+                <ChevronLeft size={20} />
+              ) : (
+                <ChevronRight size={20} />
+              )}
+            </button>
+
+            <div className="sidebar-content border-end bg-white">
               <div className="p-3">
                 <Button
                   variant="primary"
@@ -263,34 +246,19 @@ const NumaChat = () => {
             </div>
           </div>
 
-          <button
-            className={`chevron-button ${showConversations ? 'open' : 'closed'}`}
-            onClick={() => setShowConversations(!showConversations)}
-            aria-label="Show conversations"
+          <div
+            className={`main-content ${showConversations ? 'with-sidebar' : 'full-width'}`}
           >
-            {showConversations ? (
-              <ChevronLeft size={20} />
-            ) : (
-              <ChevronRight size={20} />
-            )}
-          </button>
-
-          <div className="main-content flex-grow-1">
-            <div className="chat-container d-flex flex-column h-100 p-2 p-lg-3">
-              <p className="mb-1 small text-muted">
+            <div className="chat-container">
+              <p>
                 Chat with your documents using Amazon Q Business. Ask anything!
               </p>
-              {error && (
-                <Alert variant="danger" className="py-1 mb-1">
-                  {error}
-                </Alert>
-              )}
+              {error && <Alert variant="danger">{error}</Alert>}
               <div
-                className="chat-messages bg-light p-3 rounded mb-3 flex-grow-1"
+                className="chat-messages bg-light p-4 rounded mb-4"
                 style={{
+                  height: 'calc(100vh - 400px)',
                   overflowY: 'auto',
-                  minHeight: 0,
-                  height: '100%',
                 }}
               >
                 {messages.map((message, index) => (
@@ -312,42 +280,37 @@ const NumaChat = () => {
                 ))}
                 <div ref={messageEndRef} />
               </div>
-              <Form onSubmit={handleSubmit} className="mt-auto">
-                <Form.Group className="mb-2">
+              <Form onSubmit={handleSubmit}>
+                <Form.Group className="mb-3">
                   <Form.Control
                     as="textarea"
-                    rows={isMobile ? 2 : 3}
+                    rows={3}
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     placeholder="Type your message here..."
                   />
                 </Form.Group>
-                <div
-                  className={`d-flex ${isMobile ? 'flex-column' : 'flex-row'} gap-2`}
+                <Button
+                  variant="primary"
+                  type="submit"
+                  disabled={isLoading || !qBusinessClient}
                 >
-                  <Button
-                    variant="primary"
-                    type="submit"
-                    disabled={isLoading || !qBusinessClient}
-                    className={isMobile ? 'w-100' : ''}
-                  >
-                    {isLoading ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm me-2" />
-                        Sending...
-                      </>
-                    ) : (
-                      'Send Message'
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline-secondary"
-                    onClick={() => logout()}
-                    className={isMobile ? 'w-100' : ''}
-                  >
-                    Logout
-                  </Button>
-                </div>
+                  {isLoading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" />
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Message'
+                  )}
+                </Button>
+                <Button
+                  variant="outline-secondary"
+                  className="ms-2"
+                  onClick={() => logout()}
+                >
+                  Logout
+                </Button>
               </Form>
             </div>
           </div>
