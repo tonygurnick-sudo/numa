@@ -30,6 +30,7 @@ export class CoreNumaInfra extends Construct {
     props.loadSampleFile ??= true;
     props.createServiceLinkedRole ??= true;
     props.webCrawlerConfigs ??= [];
+    props.temporaryPasswordValidityDays ??= 30;
 
     const callerId = new DataAwsCallerIdentity(this, 'caller-id', {});
 
@@ -58,6 +59,9 @@ export class CoreNumaInfra extends Construct {
         },
         userPoolAddOns: {
           advancedSecurityMode: 'AUDIT',
+        },
+        passwordPolicy: {
+          temporaryPasswordValidityDays: props.temporaryPasswordValidityDays,
         },
       });
 
@@ -541,4 +545,5 @@ export interface CoreNumaInfraProps {
   loadSampleFile?: boolean;
   createServiceLinkedRole?: boolean;
   webCrawlerConfigs?: WebCrawlerConfig[];
+  temporaryPasswordValidityDays?: number;
 }
