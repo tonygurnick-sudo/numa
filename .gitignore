@@ -101,11 +101,11 @@ yarn-error.log
 .envrc
 
 .pnp.*
-infra/.yarn/*
-!infra/.yarn/patches
-!infra/.yarn/plugins
-!infra/.yarn/releases
-!infra/.yarn/sdks
-!infra/.yarn/versions
+**/.yarn/*
+
+tools/screenshot*.png
+tools/input.csv
+tools/user-details.csv
+tools/ARC-*.zip
 
 .venv/
