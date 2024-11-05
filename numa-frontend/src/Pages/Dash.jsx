@@ -7,23 +7,25 @@ import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { Preloader } from '../Components/Preloader';
 
+import { QAppCreate } from '../Components/QAppCreate';
+
 import { useAuth } from '../Providers/AuthProvider';
 import {
   ListQAppsCommand,
   ListLibraryItemsCommand,
 } from '@aws-sdk/client-qapps';
 
-import { createQApp } from '../qAppHelper';
-
 //import appsData from '../Data/appsData.json';
 
 const Dash = () => {
   const { qAppsClient, loading: authLoading } = useAuth();
 
+  const [numaApps, setNumaApps] = useState([]);
   const [libraryApps, setLibraryApps] = useState([]);
   const [displayApps, setDisplayApps] = useState([]);
 
   const [loading, setLoading] = useState(true);
+
   const [response, setResponse] = useState(null);
   const [error, setError] = useState(null);
 
@@ -54,46 +56,67 @@ const Dash = () => {
     fetchLibItems();
   }, []);
 
-  const fetchApps = async () => {
-    if (!qAppsClient || authLoading) return;
+  // FETCH Q APPS
+  // const fetchApps = async () => {
+  //   if (!qAppsClient || authLoading) return;
 
-    // Get user appointed apps
-    try {
-      setLoading(true);
-      const input = {
-        instanceId: APPLICATION_ID,
-      };
+  //   // Get user appointed apps
+  //   try {
+  //     setLoading(true);
+  //     const input = {
+  //       instanceId: APPLICATION_ID,
+  //     };
 
-      const command = new ListQAppsCommand(input);
-      const response = await qAppsClient.send(command);
+  //     const command = new ListQAppsCommand(input);
+  //     const response = await qAppsClient.send(command);
 
-      // Filter myApps and add a flag
-      const uniqueApps = response.apps.map((app) => ({
-        ...app,
-        isMyApp: libraryApps.some((libApp) => libApp.appID === app.appID),
-      }));
+  //     // Filter myApps and add a flag
+  //     const uniqueApps = response.apps.map((app) => ({
+  //       ...app,
+  //       isMyApp: libraryApps.some((libApp) => libApp.appID === app.appID),
+  //     }));
 
-      setDisplayApps(uniqueApps);
-      //setApps(response.apps);
-    } catch (error) {
-      console.error('Error fetching Q Apps:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     setDisplayApps(uniqueApps);
+  //     //setApps(response.apps);
+  //   } catch (error) {
+  //     console.error('Error fetching Q Apps:', error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+  // useEffect(() => {
+  //   fetchApps();
+  // }, [libraryApps]);
 
   useEffect(() => {
+    const fetchApps = async () => {
+      try {
+        // TODO
+        //const response = await fetch('/api/apps'); // Replace with your actual API endpoint
+        //const appsData = await response.json();
+
+        const response = await fetch('../src/Data/example-manifest.json');
+        const appsData = await response.json();
+
+        setNumaApps(appsData);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching apps:', error);
+        setError(error);
+        setLoading(false);
+      }
+    };
+
     fetchApps();
-  }, [libraryApps]);
+  }, []);
 
-  const handleCreateApp = async () => {
-    if (!qAppsClient || authLoading) return;
-
-    // TODO
-    // create a UI form to take in a new app
-    const appPayload = '{ToDo}';
-    createQApp({ qAppsClient, appPayload, setLoading, setError, setResponse });
-  };
+  // Persist our apps info for the session
+  useEffect(() => {
+    if (numaApps) {
+      sessionStorage.setItem('appsData', JSON.stringify(numaApps));
+    }
+  }, [numaApps]);
 
   return (
     <>
@@ -107,17 +130,12 @@ const Dash = () => {
               </Col>
               <Col lg={3} className="p-5">
                 <>
-                  {/* TODO  - create app form UI */}
-
-                  <button
-                    type="submit"
-                    id="submit"
-                    className="btn btn-primary x-5 float-end"
-                    onClick={handleCreateApp}
-                  >
-                    <i className="bi bi-plus-circle me-2"></i>
-                    Create New App (deploy demo)
-                  </button>
+                  <QAppCreate
+                    qAppsClient={qAppsClient}
+                    setLoading={setLoading}
+                    setError={setError}
+                    setResponse={setResponse}
+                  />
                 </>
               </Col>
             </Row>
