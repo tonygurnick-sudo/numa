@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Row, Col } from 'react-bootstrap';
+import { Alert, Row, Col } from 'react-bootstrap';
 import { Preloader } from '../Components/Preloader';
 
 import { GetQAppCommand } from '@aws-sdk/client-qapps';
 
-const AppItem = ({ appId, instanceId, qAppsClient }) => {
+const AppItem = ({ appId, instanceId, qAppsClient, isMyApp }) => {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [appData, setApp] = useState(null);
@@ -55,6 +55,33 @@ const AppItem = ({ appId, instanceId, qAppsClient }) => {
               <Col lg={8}></Col>
               <Col lg={4}>
                 {error && <Alert variant="danger">{error}</Alert>}
+              </Col>
+            </Row>
+          </div>
+          <div className="card-footer">
+            <Row className="justify-content-end">
+              <Col>
+                {' '}
+                <div className="tooltip clear">
+                  {isMyApp && !loading && (
+                    <>
+                      {isMyApp ? (
+                        <>
+                          <span className="tooltiptext">My App</span>
+                          <h3 className="bi bi-clipboard2-check"></h3>
+                        </>
+                      ) : (
+                        <>
+                          <span className="tooltiptext">Get App</span>
+                          <h3 className="bi bi-clipboard2"></h3>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </Col>
+              <Col>
+                {' '}
                 {appData?.status}{' '}
                 {appData?.status === 'coming_soon' ? (
                   <div className="badge-status comingsoon right">
@@ -68,7 +95,6 @@ const AppItem = ({ appId, instanceId, qAppsClient }) => {
               </Col>
             </Row>
           </div>
-          <div className="card-footer" />
         </a>
       </div>
     </>
