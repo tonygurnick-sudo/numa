@@ -22,6 +22,7 @@ const IDENTITY_POOL_ID = 'us-east-1:facf1439-ef67-48f9-ada4-debb294db187';
 const ROLE_ARN =
   'arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo';
 const REGION = 'us-east-1';
+const API_ENDPOINT = 'https://g59jhyyob7.execute-api.us-east-1.amazonaws.com';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -29,10 +30,6 @@ export const AuthProvider = ({ children }) => {
   const [qBusinessClient, setQBusinessClient] = useState(null);
   const [qAppsClient, setQAppsClient] = useState(null);
   const [tokenValidationComplete, setTokenValidationComplete] = useState(false);
-
-  const cognitoClient = new CognitoIdentityProvider({
-    region: AWS_REGION,
-  });
 
   const decodeToken = (token) => {
     try {
@@ -45,7 +42,6 @@ export const AuthProvider = ({ children }) => {
 
   const isTokenExpired = (decodedToken) => {
     if (!decodedToken?.exp) return true;
-    // Add 5-minute buffer before expiration
     const currentTime = Math.floor(Date.now() / 1000);
     return decodedToken.exp <= currentTime + 300;
   };
@@ -54,25 +50,32 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('🔄 Attempting to refresh tokens...');
       const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        console.log('❌ No refresh token available');
-        throw new Error('No refresh token available');
+      const tokens = getUserInfo();
+
+      console.log('tokens', tokens);
+
+      if (!refreshToken || !tokens.decoded_tokens.idToken) {
+        console.log('❌ No refresh token or ID token available');
+        throw new Error('No refresh token or ID token available');
       }
 
-      const response = await cognitoClient.initiateAuth({
-        AuthFlow: 'REFRESH_TOKEN_AUTH',
-        ClientId: COGNITO_CLIENT_ID,
-        AuthParameters: {
-          REFRESH_TOKEN: refreshToken,
-        },
+      const response = await fetch(`${API_ENDPOINT}/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          refreshToken: refreshToken,
+          username: tokens.decoded_tokens.idToken.sub,
+        }),
       });
 
-      if (!response.AuthenticationResult) {
+      const result = await response.json();
+
+      if (!result.AuthenticationResult) {
         console.log('❌ Failed to refresh tokens - No authentication result');
-        throw new Error('Failed to refresh tokens');
+        throw new Error(result.error || 'Failed to refresh tokens');
       }
 
-      const { AccessToken, IdToken } = response.AuthenticationResult;
+      const { AccessToken, IdToken } = result.AuthenticationResult;
 
       // Update localStorage
       localStorage.setItem('accessToken', AccessToken);
