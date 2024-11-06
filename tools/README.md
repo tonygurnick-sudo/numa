@@ -34,12 +34,14 @@ create-users requires a .csv file of the users to be created to be at input.csv 
 
 The script will need to be run with a profile providing access to the arcanum-q-deployer-prod account. From there it will assume access into the customer's account.
 
-The user-pool-id and web-experience-url can be retrieved from the output of the `cdktf deploy` for setting up the account. If these weren't recorded, they can be retrieved by running `yarn cdktf output numa-customer-name` in the infra directory.
+The client-name is the key in infra/stacks/numa-client-stack.ts:clientsProd, e.g. arcanum-demo.
+
+The web-experience-url can be retrieved from the output of the `cdktf deploy` for setting up the account. If this wasn't recorded, they it be retrieved by running `yarn cdktf output numa-customer-name` in the infra directory.
 
 Run the script in dry-run mode to ensure that the input is correct:
 
 <pre>
-AWS_PROFILE=arcanum-q-deployer-prod yarn create-users <b>account-id</b> <b>user-pool-id</b> <b>web-experience-url</b>
+AWS_PROFILE=arcanum-q-deployer-prod yarn create-users <b>client-name</b> <b>web-experience-url</b>
 </pre>
 
 This will print out the users to be added.
@@ -47,7 +49,7 @@ This will print out the users to be added.
 Then, to run it in "live" mode and actually do things:
 
 <pre>
-AWS_PROFILE=arcanum-q-deployer-prod yarn create-users <b>account-id</b> <b>user-pool-id</b> <b>web-experience-url</b> live
+AWS_PROFILE=arcanum-q-deployer-prod yarn create-users <b>client-name</b> <b>web-experience-url</b> live
 </pre>
 
 This will take a while (potentially around 10 minutes) to run.
@@ -62,8 +64,10 @@ upload-files requires a flat zip file of the files to be indexed. If the files a
 
 The script will need to be run with a profile providing access to the arcanum-q-deployer-prod account. From there it will assume access into the customer's account.
 
+The client-name is the key in infra/stacks/numa-client-stack.ts:clientsProd, e.g. arcanum-demo.
+
 <pre>
-AWS_PROFILE=arcanum-q-deployer-prod yarn upload-files <b>filename.zip</b> <b>account-id<b>
+AWS_PROFILE=arcanum-q-deployer-prod yarn upload-files <b>filename.zip</b> <b>client-name</b>
 </pre>
 
 Once the upload completes, the data source sync will be started and its excution ID printed.
@@ -74,6 +78,8 @@ check-index-progress is for checking the status of an S3 data source sync job. A
 
 The script will need to be run with a profile providing access to the arcanum-q-deployer-prod account. From there it will assume access into the customer's account.
 
+The client-name is the key in infra/stacks/numa-client-stack.ts:clientsProd, e.g. arcanum-demo.
+
 <pre>
-AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progoress <b>account-id<b>
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <b>client-name</b>
 </pre>

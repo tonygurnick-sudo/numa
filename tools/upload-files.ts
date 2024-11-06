@@ -8,6 +8,7 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { QBusinessClient, StartDataSourceSyncJobCommand } from '@aws-sdk/client-qbusiness';
 import { temporaryCredentials, getQInstanceDetails } from './utils';
+import { clientsProd } from '../infra/stacks/numa-client-stack';
 
 const args = argv.slice(2);
 const region = 'us-east-1';
@@ -43,7 +44,8 @@ export async function startSync(credentials, applicationId: string, indexId: str
 }
 
 if (import.meta.filename === process?.argv[1]) {
-  const credentials = temporaryCredentials(args[1]);
+  const accountId = clientsProd[args[1]].clientAccountId;
+  const credentials = temporaryCredentials(accountId);
   console.log('Gathering account details...');
   const accountDetails = await getQInstanceDetails(credentials);
   console.log(accountDetails);

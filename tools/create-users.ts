@@ -7,7 +7,8 @@ import { finished } from 'node:stream/promises';
 import { generate } from 'generate-password';
 import { argv, exit } from 'node:process';
 import chalk from 'chalk';
-import { temporaryCredentials } from "./utils";
+import { getQUserPool, temporaryCredentials, AwsCredentialIdentityProvider } from "./utils";
+import { clientsProd } from "../infra/stacks/numa-client-stack";
 
 const region = 'us-east-1';
 const passwordConfig = {
@@ -23,8 +24,7 @@ const inputFile = 'input.csv';
 const outputFile = 'user-details.csv';
 
 
-export async function createQUsers(accountId: string, userPool: string, qUrl: string, dryRun: boolean): Promise<void> {
-  const credentials = temporaryCredentials(accountId);
+export async function createQUsers(credentials: AwsCredentialIdentityProvider, userPool: string, qUrl: string, dryRun: boolean): Promise<void> {
 
   const client = new CognitoIdentityProviderClient({ region, credentials });
 
@@ -152,10 +152,11 @@ async function activateQLicence(qUrl, username: string, password: string): Promi
 (async (): Promise<void> => {
   const args = argv.slice(2);
 
-  const accountId = args[0];
-  const userPool = args[1];
-  const qUrl = args[2];
-  const dryRun = (args[3] != 'live');
+  const accountId = clientsProd[args[0]].clientAccountId;
+  const credentials = temporaryCredentials(accountId);
+  const userPool = await getQUserPool(credentials);
+  const qUrl = args[1];
+  const dryRun = (args[2] != 'live');
 
-  await createQUsers(accountId, userPool, qUrl, dryRun);
+  await createQUsers(credentials, userPool, qUrl, dryRun);
 })();

@@ -31,7 +31,7 @@ interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
   apps?: Record<string, BaseNumaAppProps>;
 }
 // TODO: Replace this with some external store.
-const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
+export const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
   accumen: {
     clientAccountId: '677276116117',
   },
