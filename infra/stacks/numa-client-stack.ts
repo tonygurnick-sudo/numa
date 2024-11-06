@@ -66,6 +66,22 @@ const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
       { url: 'https://www.olg.nsw.gov.au/' },
     ],
   },
+    corangamite: { 
+      clientAccountId: '442426871546', 
+      webCrawlerConfigs: [ 
+        { url: 'https://data.gov.au' }, 
+        { url: 'https://www.corangamite.vic.gov.au/Home' }, 
+        { url: 'https://www.planning.vic.gov.au/planning-schemes' }, 
+        { url: 'https://data.corangamite.vic.gov.au/pages/home/' }, 
+        { url: 'https://www.cmlibraries.com.au/Home' }, 
+        { url: 'https://visit12apostles.com.au/' }, 
+        { url: 'https://prov.vic.gov.au/' }, 
+        { url: 'https://ovic.vic.gov.au/' }, 
+        { url: 'https://www.legislation.vic.gov.au/' }, 
+        { url: 'https://www.epa.vic.gov.au/' }, 
+        { url: 'https://www.fairwork.gov.au/' }, 
+    ],
+  },
   'design-builders': {
     clientAccountId: '061039773876',
   },
