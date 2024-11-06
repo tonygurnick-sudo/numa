@@ -109,3 +109,8 @@ tools/user-details.csv
 tools/ARC-*.zip
 
 .venv/
+
+.mypy_cache
+
+# Lambda
+lambda_function.zip

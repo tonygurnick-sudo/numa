@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "extract-content-from-file-general"
+version = "0.1.0"
+description = ""
+authors = ["Nathan Douglas <nathan@arcanum.ai>"]
+readme = "README.md"
+packages = [
+    { include = "**/*.py" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.12.0"
+
+boto3 = "1.35.55"
+botocore = "1.35.55"
+filetype = "1.2.0"
+structlog = "24.4.0"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = "1.35.56"
+mypy = "1.10.1"
+pylint = "3.2.5"
+pyright = "1.1.371"
+
+
+[tool.poetry-plugin-lambda-build]
+package-artifact-path = "lambda_function.zip"
+without = "dev"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
