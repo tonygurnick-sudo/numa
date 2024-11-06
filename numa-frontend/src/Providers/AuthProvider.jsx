@@ -13,7 +13,6 @@ import { fromWebToken } from '@aws-sdk/credential-providers';
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
 import QPolicy from '../Data/QPolicy.json';
 
-
 const AuthContext = createContext(null);
 
 // Constants
@@ -53,8 +52,10 @@ export const AuthProvider = ({ children }) => {
 
   const refreshTokens = async () => {
     try {
+      console.log('🔄 Attempting to refresh tokens...');
       const refreshToken = localStorage.getItem('refreshToken');
       if (!refreshToken) {
+        console.log('❌ No refresh token available');
         throw new Error('No refresh token available');
       }
 
@@ -67,6 +68,7 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (!response.AuthenticationResult) {
+        console.log('❌ Failed to refresh tokens - No authentication result');
         throw new Error('Failed to refresh tokens');
       }
 
@@ -92,10 +94,10 @@ export const AuthProvider = ({ children }) => {
         },
       });
 
+      console.log('✅ Successfully refreshed tokens');
       return true;
     } catch (error) {
-      console.error('Error refreshing tokens:', error);
-      // If refresh fails, log out the user
+      console.error('❌ Error refreshing tokens:', error);
       logout();
       return false;
     }
@@ -157,7 +159,6 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user]);
 
-
   const initializeQAppsClient = useCallback(async () => {
     if (!user) return;
 
@@ -198,37 +199,43 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const loadUserFromTokens = async () => {
+      console.log('🔍 Checking token status...');
       const accessToken = localStorage.getItem('accessToken');
       const idToken = localStorage.getItem('idToken');
       const refreshToken = localStorage.getItem('refreshToken');
 
-      if (accessToken && refreshToken && idToken) {
-        const decodedAccessToken = decodeToken(accessToken);
-        const decodedIdToken = decodeToken(idToken);
-
-        if (decodedAccessToken && decodedIdToken) {
-          // Check if access token is expired or about to expire
-          if (isTokenExpired(decodedAccessToken)) {
-            // Try to refresh tokens
-            const refreshed = await refreshTokens();
-            if (!refreshed) {
-              setUser(null);
-            }
-          } else {
-            setUser({
-              tokens: {
-                accessToken,
-                idToken,
-                refreshToken,
-              },
-              decoded_tokens: {
-                accessToken: decodedAccessToken,
-                idToken: decodedIdToken,
-              },
-            });
+      if (refreshToken) {
+        if (
+          !accessToken ||
+          !idToken ||
+          isTokenExpired(decodeToken(accessToken)) ||
+          isTokenExpired(decodeToken(idToken))
+        ) {
+          console.log('⚠️ Tokens expired or missing, attempting refresh...');
+          const refreshed = await refreshTokens();
+          if (!refreshed) {
+            console.log('❌ Token refresh failed, logging out');
+            setUser(null);
           }
+        } else {
+          console.log('✅ Tokens are valid');
+          const decodedAccessToken = decodeToken(accessToken);
+          const decodedIdToken = decodeToken(idToken);
+
+          setUser({
+            tokens: {
+              accessToken,
+              idToken,
+              refreshToken,
+            },
+            decoded_tokens: {
+              accessToken: decodedAccessToken,
+              idToken: decodedIdToken,
+            },
+          });
         }
       } else {
+        console.log('❌ No refresh token found');
         setUser(null);
       }
       setLoading(false);
@@ -238,19 +245,28 @@ export const AuthProvider = ({ children }) => {
     loadUserFromTokens();
   }, []);
 
-  // Set up a token refresh interval
+  // Modify the token refresh interval to be more proactive
   useEffect(() => {
     if (!user) return;
 
     const checkAndRefreshTokens = async () => {
       const decodedAccessToken = user.decoded_tokens.accessToken;
       if (isTokenExpired(decodedAccessToken)) {
-        await refreshTokens();
+        console.log('🕒 Token check: Token expired, attempting refresh...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          logout();
+        }
+      } else {
+        console.log('🕒 Token check: Token still valid');
       }
     };
 
-    // Check tokens every 5 minutes
-    const intervalId = setInterval(checkAndRefreshTokens, 5 * 60 * 1000);
+    // Check tokens every 10 seconds
+    const intervalId = setInterval(checkAndRefreshTokens, 10 * 1000);
+
+    // Also check immediately when this effect runs
+    checkAndRefreshTokens();
 
     return () => clearInterval(intervalId);
   }, [user]);
