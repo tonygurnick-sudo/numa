@@ -8,7 +8,7 @@ import jwt as pyjwt
 import streamlit as st
 from botocore.client import BaseClient
 from dotenv import load_dotenv
-from streamlit_oauth import OAuth2Component
+from streamlit_oauth import OAuth2Component  # type: ignore
 
 UTC = timezone.utc
 
@@ -32,7 +32,6 @@ class QWorkspaceSecrets(TypedDict):
 
 
 # Load secrets from AWS Secrets Manager
-# Load secrets from AWS Secrets Manager
 def load_secret(secret_name: str) -> Dict[str, QWorkspaceSecret] | None:
     """
     Load and parse the SecretString from AWS Secrets Manager.
@@ -45,10 +44,10 @@ def load_secret(secret_name: str) -> Dict[str, QWorkspaceSecret] | None:
         aws_profile = os.getenv("AWS_PROFILE", "qapps")
 
         # Initialize boto3 session and secrets client
-        SESSION = boto3.Session(
+        session = boto3.Session(
             profile_name=aws_profile, region_name=os.getenv("AWS_REGION")
         )
-        secrets_client = SESSION.client("secretsmanager")
+        secrets_client = session.client("secretsmanager")
 
         # Retrieve the secret value from AWS Secrets Manager
         response = secrets_client.get_secret_value(SecretId=secret_name)
@@ -65,7 +64,11 @@ def load_secret(secret_name: str) -> Dict[str, QWorkspaceSecret] | None:
         st.error(f"No SecretString found for {secret_name}")
         return None
     except Exception as e:
-        st.exception(f"Error retrieving secret value for {secret_name}: {e}")
+        st.exception(
+            BaseException(
+                f"Error retrieving secret value for {secret_name}: {e}"
+            )
+        )
         return None
 
 
@@ -213,7 +216,6 @@ class OIDCTokenResponse(TypedDict):
     issuedTokenType: str
     scope: List[str]
     expires_at: datetime
-    scope: List[str]
 
 
 # Retrieve IAM OIDC token using the ID token from Cognito
@@ -322,12 +324,12 @@ def get_qclient(idc_id_token: str) -> BaseClient:
     ):
         assume_role_with_token(idc_id_token)
 
-    assumedSession = boto3.Session(
+    assumed_session = boto3.Session(
         aws_access_key_id=st.session_state.aws_credentials["AccessKeyId"],
         aws_secret_access_key=st.session_state.aws_credentials[
             "SecretAccessKey"
         ],
         aws_session_token=st.session_state.aws_credentials["SessionToken"],
     )
-    amazon_q = assumedSession.client("qapps", os.getenv("AWS_REGION"))
+    amazon_q = assumed_session.client("qapps", os.getenv("AWS_REGION"))
     return amazon_q
