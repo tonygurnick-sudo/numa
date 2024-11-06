@@ -948,6 +948,7 @@ label {
   transition: left 0.3s ease-in-out;
   z-index: 10;
   background-color: white;
+  margin-right: 30px;
 
   &.closed {
     width: 0;
@@ -978,10 +979,10 @@ label {
 }
 
 .chevron-button {
-  position: fixed;
+  position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 1000;
+  z-index: 1001;
   background: white;
   border: 1px solid var(--color-mid-gray);
   border-left: none;
@@ -991,99 +992,36 @@ label {
   border-radius: 0 4px 4px 0;
   margin-left: -1px;
 
+  // Desktop positions (accounting for 72px nav)
   &.open {
-    left: 470px;
+    left: 300px; // 300px + 72px
   }
 
   &.closed {
-    left: 170px;
+    left: 0px; // just nav width
   }
-}
 
-// When conversations are shown
-.sidebar-wrapper.open ~ .chevron-button {
-  left: 372px; // 300px (sidebar) + 72px (nav)
-}
+  // Mobile positions
+  @media (max-width: 768px) {
+    &.closed {
+      left: 0px;
+    }
 
-// When conversations are hidden
-.sidebar-wrapper.closed ~ .chevron-button {
-  left: 72px; // Just nav width
+    &.open {
+      left: 300px;
+    }
+  }
 }
 
 .main-content {
-  flex: 1;
-  transition: width 0.3s ease-in-out;
-  padding: 0 20px;
-  position: absolute;
-  right: 0;
-  height: 100%;
-  width: calc(100% - 372px);
+  transition: margin 0.3s ease;
+  width: 100%;
 
   &.full-width {
-    width: calc(100% - 72px);
-  }
-}
-
-.chat-container {
-  height: 100%;
-  width: 100%;
-  transition: width 0.3s ease-in-out;
-}
-
-.conversation-list {
-  max-height: calc(100vh - 350px);
-  overflow-y: auto;
-
-  &::-webkit-scrollbar {
-    width: 8px;
+    margin-left: 0;
   }
 
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background-color: var(--color-mid-gray);
-    border-radius: 4px;
-  }
-
-  .btn {
-    padding: 0.5rem 1rem;
-    text-align: left;
-    white-space: normal;
-    height: auto;
-
-    &:not(.btn-primary) {
-      background-color: white;
-    }
-
-    &:hover {
-      background-color: var(--color-lt-gray);
-    }
-  }
-}
-
-.chat-messages {
-  .message {
-    &.user {
-      background-color: var(--color-eggplant-100) !important;
-    }
-
-    &.assistant {
-      background-color: white !important;
-    }
-  }
-}
-
-.source-attributions {
-  font-size: 0.875rem;
-  color: var(--color-gray);
-
-  a {
-    color: var(--color-royal-900);
-
-    &:hover {
-      text-decoration: underline;
-    }
+  @media (max-width: 768px) {
+    margin-left: 0 !important;
   }
 }
