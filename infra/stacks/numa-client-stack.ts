@@ -44,6 +44,9 @@ const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
       },
     ],
   },
+  autoshoppe: {
+    clientAccountId: '060795909741',
+  },
   'av-media': {
     clientAccountId: '961341552812',
   },
