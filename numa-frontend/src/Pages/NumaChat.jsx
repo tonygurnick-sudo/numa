@@ -30,6 +30,7 @@ const NumaChat = () => {
   const [conversations, setConversations] = useState([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [showConversations, setShowConversations] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   // TODO: Make this dynamic
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
@@ -62,6 +63,19 @@ const NumaChat = () => {
 
     fetchConversations();
   }, [qBusinessClient]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    setShowConversations(!isMobile);
+  }, [isMobile]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -156,26 +170,40 @@ const NumaChat = () => {
   };
 
   return (
-    <div className="dashboard">
+    <div className="dashboard d-flex flex-column vh-100">
       <Nav />
-      <header className="mb-4">
+      <header className="mb-1">
         <Container fluid>
           <Row>
-            <Col lg={12} className="px-5">
+            <Col lg={12} className="px-3 px-lg-5">
               <Breadcrumbs label={'Chat'} clearStack={true} />
-              <h1>Numa Chat</h1>
+              <h1 className="mb-0 fs-3">Numa Chat</h1>
             </Col>
           </Row>
         </Container>
       </header>
 
-      <LayoutDashboard>
-        <div className="chat-layout">
+      <LayoutDashboard className="flex-grow-1">
+        <div
+          className="chat-layout d-flex"
+          style={{
+            height: isMobile ? 'calc(100vh - 200px)' : 'calc(100vh - 250px)',
+            position: 'relative',
+          }}
+        >
           <div
             className={`sidebar-wrapper ${showConversations ? 'open' : 'closed'}`}
+            style={{
+              position: isMobile ? 'absolute' : 'relative',
+              height: '100%',
+              zIndex: 1000,
+              backgroundColor: 'white',
+              width: showConversations ? '300px' : '0',
+              transition: 'width 0.3s ease',
+            }}
           >
             <button
-              className="chevron-button sidebar-toggle"
+              className={`chevron-button sidebar-toggle ${showConversations ? 'open' : 'closed'}`}
               onClick={() => setShowConversations(!showConversations)}
               aria-label="Show conversations"
             >
@@ -186,7 +214,7 @@ const NumaChat = () => {
               )}
             </button>
 
-            <div className="sidebar-content border-end bg-white">
+            <div className="sidebar-content border-end bg-white h-100">
               <div className="p-3">
                 <Button
                   variant="primary"
@@ -247,18 +275,25 @@ const NumaChat = () => {
           </div>
 
           <div
-            className={`main-content ${showConversations ? 'with-sidebar' : 'full-width'}`}
+            className={`main-content flex-grow-1 ${
+              showConversations && !isMobile ? 'with-sidebar' : 'full-width'
+            }`}
           >
-            <div className="chat-container">
-              <p>
+            <div className="chat-container d-flex flex-column h-100 p-2 p-lg-3">
+              <p className="mb-1 small text-muted">
                 Chat with your documents using Amazon Q Business. Ask anything!
               </p>
-              {error && <Alert variant="danger">{error}</Alert>}
+              {error && (
+                <Alert variant="danger" className="py-1 mb-1">
+                  {error}
+                </Alert>
+              )}
               <div
-                className="chat-messages bg-light p-4 rounded mb-4"
+                className="chat-messages bg-light p-3 rounded mb-3 flex-grow-1"
                 style={{
-                  height: 'calc(100vh - 400px)',
                   overflowY: 'auto',
+                  minHeight: 0,
+                  height: '100%',
                 }}
               >
                 {messages.map((message, index) => (
@@ -280,37 +315,42 @@ const NumaChat = () => {
                 ))}
                 <div ref={messageEndRef} />
               </div>
-              <Form onSubmit={handleSubmit}>
-                <Form.Group className="mb-3">
+              <Form onSubmit={handleSubmit} className="mt-auto">
+                <Form.Group className="mb-2">
                   <Form.Control
                     as="textarea"
-                    rows={3}
+                    rows={isMobile ? 2 : 3}
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     placeholder="Type your message here..."
                   />
                 </Form.Group>
-                <Button
-                  variant="primary"
-                  type="submit"
-                  disabled={isLoading || !qBusinessClient}
+                <div
+                  className={`d-flex ${isMobile ? 'flex-column' : 'flex-row'} gap-2`}
                 >
-                  {isLoading ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" />
-                      Sending...
-                    </>
-                  ) : (
-                    'Send Message'
-                  )}
-                </Button>
-                <Button
-                  variant="outline-secondary"
-                  className="ms-2"
-                  onClick={() => logout()}
-                >
-                  Logout
-                </Button>
+                  <Button
+                    variant="primary"
+                    type="submit"
+                    disabled={isLoading || !qBusinessClient}
+                    className={isMobile ? 'w-100' : ''}
+                  >
+                    {isLoading ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" />
+                        Sending...
+                      </>
+                    ) : (
+                      'Send Message'
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => logout()}
+                    className={isMobile ? 'w-100' : ''}
+                  >
+                    Logout
+                  </Button>
+                </div>
               </Form>
             </div>
           </div>
