@@ -23,8 +23,8 @@ function StepFunctionModule({ task }) {
       </div>
 
       <div className="card-body">
-        <p>lambdaArn: {task?.params.lambdaArn}</p>
-        <p>input from: {task?.params.input.inputContentRef}</p>
+        <p>lambdaArn: {task?.params?.lambdaArn}</p>
+        <p>input from: {task?.params?.input?.inputContentRef}</p>
         <label className="type"></label>
 
         <p>Description: {task.description}</p>

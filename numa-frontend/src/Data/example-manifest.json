@@ -4,8 +4,9 @@
       "appName": "Numa App Workflow",
       "id": "numa-workflow-app-id",
       "type": "numa-app",
+      "status": "Coming Soon",
       "createdDate": "2023-11-06T10:38:12Z",
-      "description": "Processes a file through S3, Q App, and Lambda, then displays the output.",
+      "appDescription": "Processes a file through S3, Q App, and Lambda, then displays the output.",
       "tasks": [
         {
           "id": "upload-file-to-s3-bucket",
@@ -48,10 +49,21 @@
       ]
     },
     {
+      "appName": "Loan Refinancing Calculator",
+      "id": "loan-financing-calculator",
+      "type": "q-app",
+      "qAppId": "dc1427b5-7673-4c26-9add-5bda95c00b30",
+      "status": "Coming Soon",
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "An app to calculate if refinancing a loan is worth it based on current and new loan details."
+    },
+    {
       "appName": "Data Processing App",
       "id": "data-processing-app-id",
       "type": "numa-app",
-      "description": "Processes raw data and generates insights.",
+      "status": "Test",
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "Processes raw data and generates insights.",
       "tasks": [
         {
           "id": "data-ingestion",
@@ -60,14 +72,6 @@
           "params": {
             "bucketName": "raw-data-bucket",
             "fileKey": "raw_data.csv"
-          }
-        },
-        {
-          "id": "data-cleaning",
-          "title": "Data Cleaning",
-          "type": "lambda",
-          "params": {
-            "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:data-cleaning-lambda"
           }
         },
         {
@@ -92,16 +96,10 @@
       "appName": "Machine Learning Model Deployment App",
       "id": "ml-model-deployment-app-id",
       "type": "numa-app",
-      "description": "Deploys a machine learning model to a cloud platform.",
+      "status": "",
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "Deploys a machine learning model to a cloud platform.",
       "tasks": [
-        {
-          "id": "model-training",
-          "title": "Model Training",
-          "type": "lambda",
-          "params": {
-            "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:model-training-lambda"
-          }
-        },
         {
           "id": "model-deployment",
           "title": "Model Deployment",
@@ -110,14 +108,7 @@
             "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:model-deployment-step-function"
           }
         },
-        {
-          "id": "model-monitoring",
-          "title": "Model Monitoring",
-          "type": "lambda",
-          "params": {
-            "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:model-monitoring-lambda"
-          }
-        },
+
         {
           "id": "display-model-metrics",
           "title": "Display Model Metrics",
