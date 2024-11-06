@@ -61,6 +61,7 @@ export class CoreNumaInfra extends Construct {
           advancedSecurityMode: 'AUDIT',
         },
         passwordPolicy: {
+          minimumLength: 8,
           temporaryPasswordValidityDays: props.temporaryPasswordValidityDays,
         },
       });
