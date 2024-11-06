@@ -66,20 +66,20 @@ const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
       { url: 'https://www.olg.nsw.gov.au/' },
     ],
   },
-    corangamite: { 
-      clientAccountId: '442426871546', 
-      webCrawlerConfigs: [ 
-        { url: 'https://data.gov.au' }, 
-        { url: 'https://www.corangamite.vic.gov.au/Home' }, 
-        { url: 'https://www.planning.vic.gov.au/planning-schemes' }, 
-        { url: 'https://data.corangamite.vic.gov.au/pages/home/' }, 
-        { url: 'https://www.cmlibraries.com.au/Home' }, 
-        { url: 'https://visit12apostles.com.au/' }, 
-        { url: 'https://prov.vic.gov.au/' }, 
-        { url: 'https://ovic.vic.gov.au/' }, 
-        { url: 'https://www.legislation.vic.gov.au/' }, 
-        { url: 'https://www.epa.vic.gov.au/' }, 
-        { url: 'https://www.fairwork.gov.au/' }, 
+    corangamite: {
+      clientAccountId: '442426871546',
+      webCrawlerConfigs: [
+        { url: 'https://data.gov.au' },
+        { url: 'https://www.corangamite.vic.gov.au/Home' },
+        { url: 'https://www.planning.vic.gov.au/planning-schemes' },
+        { url: 'https://data.corangamite.vic.gov.au/pages/home/' },
+        { url: 'https://www.cmlibraries.com.au/Home' },
+        { url: 'https://visit12apostles.com.au/' },
+        { url: 'https://prov.vic.gov.au/' },
+        { url: 'https://ovic.vic.gov.au/' },
+        { url: 'https://www.legislation.vic.gov.au/' },
+        { url: 'https://www.epa.vic.gov.au/' },
+        { url: 'https://www.fairwork.gov.au/' },
     ],
   },
   'design-builders': {
@@ -218,6 +218,9 @@ const clientsProd: Record<string, Omit<ClientConfig, 'client'>> = {
       { url: 'https://content.legislation.vic.gov.au/sites/default/files/2024-10/86-127aa224-authorised.pdf' },
       { url: 'https://content.legislation.vic.gov.au/sites/default/files/2023-11/66-7405aa142-authorised.pdf' },
     ],
+  },
+  '30-seconds': {
+    clientAccountId: '593793032721',
   },
 };
 
