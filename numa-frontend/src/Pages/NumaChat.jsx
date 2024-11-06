@@ -184,13 +184,7 @@ const NumaChat = () => {
       </header>
 
       <LayoutDashboard className="flex-grow-1">
-        <div
-          className="chat-layout d-flex"
-          style={{
-            height: isMobile ? 'calc(100vh - 200px)' : 'calc(100vh - 250px)',
-            position: 'relative',
-          }}
-        >
+        <div className="chat-layout d-flex">
           <div
             className={`sidebar-wrapper ${showConversations ? 'open' : 'closed'}`}
             style={{
@@ -200,20 +194,15 @@ const NumaChat = () => {
               backgroundColor: 'white',
               width: showConversations ? '300px' : '0',
               transition: 'width 0.3s ease',
+              ...(isMobile && {
+                width: '300px',
+                transform: showConversations
+                  ? 'translateX(0)'
+                  : 'translateX(-100%)',
+                transition: 'transform 0.3s ease',
+              }),
             }}
           >
-            <button
-              className={`chevron-button sidebar-toggle ${showConversations ? 'open' : 'closed'}`}
-              onClick={() => setShowConversations(!showConversations)}
-              aria-label="Show conversations"
-            >
-              {showConversations ? (
-                <ChevronLeft size={20} />
-              ) : (
-                <ChevronRight size={20} />
-              )}
-            </button>
-
             <div className="sidebar-content border-end bg-white h-100">
               <div className="p-3">
                 <Button
@@ -274,11 +263,19 @@ const NumaChat = () => {
             </div>
           </div>
 
-          <div
-            className={`main-content flex-grow-1 ${
-              showConversations && !isMobile ? 'with-sidebar' : 'full-width'
-            }`}
+          <button
+            className={`chevron-button ${showConversations ? 'open' : 'closed'}`}
+            onClick={() => setShowConversations(!showConversations)}
+            aria-label="Show conversations"
           >
+            {showConversations ? (
+              <ChevronLeft size={20} />
+            ) : (
+              <ChevronRight size={20} />
+            )}
+          </button>
+
+          <div className="main-content flex-grow-1">
             <div className="chat-container d-flex flex-column h-100 p-2 p-lg-3">
               <p className="mb-1 small text-muted">
                 Chat with your documents using Amazon Q Business. Ask anything!
