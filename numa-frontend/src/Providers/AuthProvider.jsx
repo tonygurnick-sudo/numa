@@ -17,7 +17,7 @@ const AuthContext = createContext(null);
 
 // Constants
 const AWS_REGION = 'us-east-1';
-const COGNITO_CLIENT_ID = '2594236d-712a-4355-8b0e-6a4cef023f75'; // Replace with your actual client ID
+const COGNITO_CLIENT_ID = '4gg2u42194gstu0ai6ab4b7179'; // Replace with your actual client ID
 const IDENTITY_POOL_ID = 'us-east-1:facf1439-ef67-48f9-ada4-debb294db187';
 const ROLE_ARN =
   'arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo';
