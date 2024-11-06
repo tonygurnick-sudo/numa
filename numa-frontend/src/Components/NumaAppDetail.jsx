@@ -30,11 +30,6 @@ const NumaAppDetail = ({ appData }) => {
 
   return (
     <>
-      <h2>{appData.appName}</h2>
-      <p>{appData.appDescription}</p>
-
-      <h3>Tasks:</h3>
-
       {appData?.tasks?.map((task, key) => (
         <Col key={task.id} sm={12} md={6} lg={6} xl={6} className="flex">
           <TaskComponent key={key} task={task} />

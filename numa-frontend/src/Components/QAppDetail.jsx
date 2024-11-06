@@ -9,15 +9,10 @@ import { AppCard } from './AppCard';
 import { Preloader } from './Preloader';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { useAuth } from '../Providers/AuthProvider';
-import {
-  GetQAppCommand,
-  GetQAppSessionCommand,
-  StartQAppSessionCommand,
-} from '@aws-sdk/client-qapps';
+import { GetQAppCommand, GetQAppSessionCommand } from '@aws-sdk/client-qapps';
 import { NumaChat } from '../Pages/NumaChat';
-import { addAppToLibrary, deleteQAppById } from '../qAppHelper';
 
-const QAppDetail = (appId) => {
+const QAppDetail = ({ setRunActive, numaAppData }) => {
   const navigate = useNavigate();
 
   const { qAppsClient, loading: authLoading } = useAuth();
@@ -28,7 +23,6 @@ const QAppDetail = (appId) => {
   const [isPolling, setIsPolling] = useState(false);
 
   const [app, setApp] = useState([]);
-  const [runActive, setRunActive] = useState('disabled');
   const [isLoading, setIsLoading] = useState(true);
   const [inputValues, setInputValues] = useState({});
 
@@ -38,6 +32,7 @@ const QAppDetail = (appId) => {
 
   // Update specific card's input value
   const handleInputChange = (cardId, value) => {
+    console.log('input changed');
     setInputValues((prevValues) => ({
       ...prevValues,
       [cardId]: value,
@@ -54,7 +49,7 @@ const QAppDetail = (appId) => {
 
       return isTextInput && !userInput && !defaultValue; // Check if required input is missing
     });
-
+    console.log('set run to active');
     setRunActive(incompleteCards); // Enable/disable based on completeness
   };
 
@@ -62,7 +57,7 @@ const QAppDetail = (appId) => {
     if (!qAppsClient || authLoading) return;
 
     try {
-      const input = { instanceId: APPLICATION_ID, appId: appId };
+      const input = { instanceId: APPLICATION_ID, appId: numaAppData.qAppId };
       const command = new GetQAppCommand(input);
       const response = await qAppsClient.send(command);
       setApp(response); // Set app details in state
@@ -71,34 +66,6 @@ const QAppDetail = (appId) => {
       setError(error); // Set error state
     } finally {
       setIsLoading(false); // Stop loading
-    }
-  };
-
-  const handleRunApp = async () => {
-    try {
-      const payload = {
-        instanceId: APPLICATION_ID,
-        appId: app.appId,
-        appVersion: app.appVersion,
-        initialValues: app.appDefinition.cards
-          .map((card) => {
-            const cardId = card[Object.keys(card)[0]].id;
-            const defaultValue = card[Object.keys(card)[0]].defaultValue;
-            const value = inputValues[cardId] || defaultValue || '';
-            return value ? { cardId, value } : null; // Only include cards with a value
-          })
-          .filter(Boolean), // Filter out nulls
-      };
-
-      const start_command = new StartQAppSessionCommand(payload);
-      const start_response = await qAppsClient.send(start_command);
-
-      if (start_response) {
-        setSessionId(start_response.sessionId); // Store sessionId
-      }
-    } catch (error) {
-      console.error('Error starting app session:', error);
-      setError(error); // Set error state
     }
   };
 
@@ -140,7 +107,7 @@ const QAppDetail = (appId) => {
   // Fetch app details on mount
   useEffect(() => {
     fetchApp();
-  }, []); //
+  }, [numaAppData]); //
 
   // Check required inputs whenever app details change
   useEffect(() => {
@@ -157,6 +124,7 @@ const QAppDetail = (appId) => {
         sessionDetails.status === 'IN_PROGRESS')
     ) {
       setIsPolling(true);
+      setRunActive('disabled');
     } else {
       setIsPolling(false); // Stop polling if status changes
     }
@@ -178,136 +146,40 @@ const QAppDetail = (appId) => {
     }
   }, [sessionDetails]);
 
-  // DELETE
-  const handleDeleteApp = async () => {
-    if (!qAppsClient || !appId) return;
-
-    deleteQAppById({ qAppsClient, appId, setLoading, setError, setResponse });
-  };
-
-  useEffect(() => {
-    if (response?.type === 'delete') {
-      // Redirect to the app list page after delete
-      navigate('/dash');
-    }
-
-    if (response?.type === 'add-app-to-lib') {
-      navigate('/dash');
-    }
-  }, [response]);
-
-  // ADD APP TO LIB
-  const handleAddAppToLib = async () => {
-    if (!qAppsClient || !appId) return;
-
-    addAppToLibrary({ qAppsClient, appId, setLoading, setError, setResponse });
-  };
-
   return (
     <>
-      <div className="dashboard">
-        <header>
-          <Container fluid>
-            <Row className="align-items-end">
-              <Col lg={9} className="px-5">
-                {!isLoading && <Breadcrumbs label={app?.title} />}
-                <h1>{app?.title}</h1>
-                <p>{app?.description}</p>
+      {isLoading ? (
+        <Preloader />
+      ) : app ? (
+        app.name === 'Numa Chat' ? (
+          <NumaChat />
+        ) : (
+          app.appDefinition?.cards?.map((card) => {
+            const cardKey = Object.keys(card)[0];
+            const cardData = card[cardKey];
+            return (
+              <Col
+                key={cardData.id}
+                sm={12}
+                md={6}
+                lg={6}
+                xl={6}
+                className="flex"
+              >
+                <AppCard
+                  card={card}
+                  dependencies={cardData.dependencies || []}
+                  appsCards={app.appDefinition.cards}
+                  onInputChange={handleInputChange}
+                  inputValue={inputValues[cardData.id] || cardData.defaultValue}
+                />
               </Col>
-              <Col lg={3} className="px-5 text-end">
-                <div className="d-flex flex-column justify-content-between h-100 gap-3">
-                  <div className="d-flex flex-column gap-2 align-items-end">
-                    {/* Row with Add to Library and Delete buttons */}
-                    <div className="d-flex gap-2">
-                      <Button
-                        variant="secondary"
-                        className="w-auto"
-                        onClick={handleAddAppToLib}
-                      >
-                        <i className="bi bi-plus-circle me-2"></i> Add to
-                        Library
-                      </Button>
-
-                      <Button
-                        variant="danger"
-                        className="w-auto"
-                        onClick={handleDeleteApp}
-                      >
-                        <i className="bi bi-trash-fill"></i>
-                      </Button>
-                    </div>
-
-                    {/* Run button below the row */}
-                    <Button
-                      type="submit"
-                      id="submit"
-                      className="btn btn-primary run_btn w-auto"
-                      disabled={runActive || isPolling || loading}
-                      onClick={handleRunApp}
-                    >
-                      <i className="bi bi-play-fill me-2"></i> Run
-                    </Button>
-                  </div>
-                </div>
-              </Col>
-              <Col lg={9} className="px-5">
-                <div className="d-flex align-items-center gap-3">
-                  <span>
-                    <strong>Created:</strong>{' '}
-                    {app?.createdAt
-                      ? new Date(app.createdAt).toLocaleString()
-                      : ''}
-                  </span>
-                  <span>
-                    <strong>Status:</strong> {app?.status}
-                  </span>
-                </div>
-              </Col>
-            </Row>
-          </Container>
-        </header>
-
-        <LayoutDashboard>
-          <Row>
-            {isLoading ? (
-              <Preloader />
-            ) : app ? (
-              app.name === 'Numa Chat' ? (
-                <NumaChat />
-              ) : (
-                app.appDefinition?.cards?.map((card) => {
-                  const cardKey = Object.keys(card)[0];
-                  const cardData = card[cardKey];
-                  return (
-                    <Col
-                      key={cardData.id}
-                      sm={12}
-                      md={6}
-                      lg={6}
-                      xl={6}
-                      className="flex"
-                    >
-                      <AppCard
-                        card={card}
-                        dependencies={cardData.dependencies || []}
-                        appsCards={app.appDefinition.cards}
-                        onInputChange={handleInputChange}
-                        inputValue={
-                          inputValues[cardData.id] || cardData.defaultValue
-                        }
-                      />
-                    </Col>
-                  );
-                })
-              )
-            ) : (
-              <p>Error fetching app details</p>
-            )}
-          </Row>
-        </LayoutDashboard>
-
-        <Nav nav1on="on" nav2on="" nav3on="" />
-      </div>
+            );
+          })
+        )
+      ) : (
+        <p>Error fetching app details</p>
+      )}
     </>
   );
 };
