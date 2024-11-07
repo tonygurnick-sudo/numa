@@ -2,6 +2,7 @@ import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdk
 import { Construct } from 'constructs';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
 import { BaseNumaApp, BaseNumaAppProps } from '../constructs/base-numa-app-construct';
+import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import _clientConfigProd from '../../clientConfigProd.json';
 import _clientConfigDev from '../../clientConfigDev.json';
 
@@ -19,6 +20,11 @@ export class NumaClientStack extends ArcanumStack {
     });
 
     new CoreNumaInfra(this, 'numa', {
+      ...props.config,
+      environmentName: props.environmentName,
+    });
+
+    new NumaFrontendInfra(this, 'numa-frontend', {
       ...props.config,
       environmentName: props.environmentName,
     });
