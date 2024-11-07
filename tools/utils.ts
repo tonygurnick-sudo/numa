@@ -2,7 +2,7 @@ import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
 import { ListApplicationsCommand, ListDataSourcesCommand, ListIndicesCommand, QBusinessClient } from '@aws-sdk/client-qbusiness';
 import { ListBucketsCommand, S3Client } from '@aws-sdk/client-s3';
 import { AwsCredentialIdentityProvider } from '@smithy/types';
-export { AwsCredentialIdentityProvider } from '@smithy/types';
+export { type AwsCredentialIdentityProvider } from '@smithy/types';
 import { CognitoIdentityProviderClient, ListUserPoolsCommand } from '@aws-sdk/client-cognito-identity-provider';
 
 const region = 'us-east-1';
