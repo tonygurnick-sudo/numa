@@ -50,11 +50,11 @@ class QAppResponse(TypedDict):
 
 # Assuming AMAZON_Q_APP_ID and REGION are stored in the selected account in session state
 def create_q_app_with_version(
-    qclient, app_title: str, description: str, app_id: str, app_version: str
-) -> QAppResponse:
+    q_client, app_title: str, description: str, app_id: str, app_version: str
+) -> QAppResponse | None:
     """
     Create a Q App and add a tag with the given appID and version.
-    :param qclient: The Q client to interact with the Q service.
+    :param q_client: The Q client to interact with the Q service.
     :param app_title: The title of the Q App.
     :param description: The description of the Q App.
     :param app_id: The ID of the Q App (used as UUID).
@@ -88,7 +88,7 @@ def create_q_app_with_version(
         }
 
         # Create the Q App
-        response = qclient.create_q_app(**q_app_definition)
+        response = q_client.create_q_app(**q_app_definition)
         print(f"Q App created with appID {app_id} and version {app_version}")
         return response
     except Exception as e:
@@ -97,12 +97,12 @@ def create_q_app_with_version(
 
 
 def list_library(
-    qclient: BaseClient, verbose: bool = False
+    q_client: BaseClient, verbose: bool = False
 ) -> List[QAppResponse]:
     """
     List all library items from Q.
 
-    :param qclient: The Q client to interact with the Q service.
+    :param q_client: The Q client to interact with the Q service.
     :param verbose: Whether to print verbose output.
     :return: A list of Q App responses.
     """
@@ -113,7 +113,7 @@ def list_library(
         ]["q_app_id"]
 
         # Define the request with the specific type
-        qListDef: Dict[str, str] = {"instanceId": amazon_q_app_id}
+        q_list_def: Dict[str, str] = {"instanceId": amazon_q_app_id}
         all_library_items: List[QAppResponse] = []
         next_token: Optional[str] = None
         more_items = True  # Variable to control loop
@@ -121,11 +121,11 @@ def list_library(
         while more_items:
             # Add NextToken to the request if it exists
             if next_token:
-                qListDef["NextToken"] = next_token
+                q_list_def["NextToken"] = next_token
 
             # Expecting the response to be a dictionary with known keys and types
             response: Dict[str, List[QAppResponse]] = (
-                qclient.list_library_items(**qListDef)
+                q_client.list_library_items(**q_list_def)  # type: ignore
             )
 
             if verbose:
@@ -149,11 +149,11 @@ def list_library(
         raise
 
 
-def get_app(qclient: BaseClient, q_app_id: str) -> QAppResponse:
+def get_app(q_client: BaseClient, q_app_id: str) -> QAppResponse:
     """
     Get the Q App details.
 
-    :param qclient: The Q client to interact with the Q service.
+    :param q_client: The Q client to interact with the Q service.
     :param q_app_id: The ID of the Q App.
     :return: The Q App response.
     """
@@ -163,36 +163,36 @@ def get_app(qclient: BaseClient, q_app_id: str) -> QAppResponse:
             st.session_state.selected_account
         ]["q_app_id"]
 
-        qGetDef: Dict[str, str] = {
+        q_get_def: Dict[str, str] = {
             "instanceId": amazon_q_app_id,
             "appId": q_app_id,
         }
 
-        response: QAppResponse = qclient.get_q_app(**qGetDef)
+        response: QAppResponse = q_client.get_q_app(**q_get_def)  # type: ignore
         return response
     except Exception as e:
         st.error(f"Error getting Q App: {e}")
         raise
 
 
-def get_all_q_apps(qclient: BaseClient) -> List[QAppResponse]:
+def get_all_q_apps(q_client: BaseClient) -> List[QAppResponse]:
     """
     Get all Q Apps from the Q instance, based on the library.
     Get the Library and then fetch each app's details.
 
-    :param qclient: The Q client to interact with the Q service.
+    :param q_client: The Q client to interact with the Q service.
     :return: A list of Q App responses.
     """
     try:
         # Fetch the library items
         st.write("Fetching all Q Apps from the Library...")
-        library_items: List[QAppResponse] = list_library(qclient)
+        library_items: List[QAppResponse] = list_library(q_client)
 
         all_apps_data: List[QAppResponse] = []
 
         for item in library_items:
             try:
-                app_data: QAppResponse = get_app(qclient, item["appId"])
+                app_data: QAppResponse = get_app(q_client, item["appId"])
                 all_apps_data.append(app_data)
             except Exception as app_err:
                 st.error(

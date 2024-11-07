@@ -6,25 +6,6 @@ import streamlit as st
 from utils import s3_utils  # Ensure s3_utils is imported for S3 operations
 
 
-def download_file_ui(bucket_name: str):
-    """
-    Display UI for downloading a file from the S3 bucket.
-    :param bucket_name: The name of the S3 bucket.
-    """
-    download_file = st.text_input("Enter file name to download from S3")
-    if st.button("Download from S3") and download_file:
-        download_path = f"downloads/{download_file}"  # Example local path
-        success = s3_utils.download_file_from_s3(
-            bucket_name, download_file, download_path
-        )
-        if success:
-            st.success(
-                f"Downloaded {download_file} from S3 to {download_path}."
-            )
-        else:
-            st.error(f"Failed to download {download_file} from S3.")
-
-
 def display_app_details(app_info: Dict):
     """
     Display app details with action buttons and additional status information, including debug info.
@@ -161,7 +142,7 @@ def compare_instance_and_s3_apps(
     :param s3_objects: List of S3 objects containing metadata.
     :return: Dictionary with categorized app information.
     """
-    comparison_result = {
+    comparison_result: dict[str, list[dict]] = {
         "deployed": [],  # Apps in both S3 and the instance
         "not_deployed": [],  # Apps only in S3
         "only_in_instance": [],  # Apps only in the instance
@@ -257,9 +238,7 @@ def compare_instance_and_s3_apps(
     return comparison_result
 
 
-def display_comparison_ui(
-    instance_apps: List[Dict], s3_objects: List[Dict], bucket_name: str
-):
+def display_comparison_ui(instance_apps: List[Dict], s3_objects: List[Dict]):
     """
     Display the comparison result between Q Apps in the instance and S3.
     :param instance_apps: List of apps from the instance.

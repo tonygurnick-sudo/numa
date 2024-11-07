@@ -2,9 +2,7 @@ from datetime import timezone
 
 import streamlit as st
 
-import utils.auth as auth
-import utils.q_utils as q_utils
-from utils import s3_utils, ui_utils
+from utils import auth, q_utils, s3_utils, ui_utils
 
 UTC = timezone.utc
 
@@ -147,11 +145,12 @@ def list_and_display_library_apps() -> None:
             if apps_data:
                 st.write("### Library Apps")
                 for app in apps_data:
-                    ui_utils.display_app_details(app)
+                    ui_utils.display_app_details(app)  # type: ignore
 
                     # Add button to export apps to S3
-                    if st.button(f"Export {app['appId']} to S3"):
-                        s3_utils.export_app_to_s3(S3_BUCKET, app, app["appId"])
+                    # this is broken, there is no export_app_to_s3
+                    # if st.button(f"Export {app['appId']} to S3"):
+                    #     s3_utils.export_app_to_s3(S3_BUCKET, app, app["appId"])
             else:
                 st.write("No apps to display.")
 
@@ -198,9 +197,7 @@ def main():
 
             # Compare and display the Q Apps from the instance with S3
             st.write("### Comparing Q Apps in Instance and S3")
-            ui_utils.display_comparison_ui(
-                instance_apps, s3_objects, bucket_name
-            )
+            ui_utils.display_comparison_ui(instance_apps, s3_objects)  # type: ignore
 
 
 if __name__ == "__main__":

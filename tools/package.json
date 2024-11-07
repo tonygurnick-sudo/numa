@@ -19,10 +19,12 @@
     "tsx": "^4.19.1"
   },
   "scripts": {
-    "lint": "eslint . && tsc --noEmit",
+    "build": "tsc",
+    "check-index-progress": "node --import tsx check-index-progress.ts",
     "create-users": "node --import tsx create-users.ts",
-    "upload-files": "node --import tsx upload-files.ts",
-    "check-index-progress": "node --import tsx check-index-progress.ts"
+    "lint": "eslint . && tsc --noEmit",
+    "test": "tsx --test",
+    "upload-files": "node --import tsx upload-files.ts"
   },
   "packageManager": "yarn@4.5.1",
   "devDependencies": {

@@ -46,7 +46,7 @@ class TestStreamlitApp(unittest.TestCase):
     @patch("streamlit.write")
     @patch("streamlit.error")
     def test_retrieve_oauth2_token(
-        self, mock_error, mock_write, mock_handle_oauth, mock_oauth_config
+        self, mock_error, _mock_write, mock_handle_oauth, mock_oauth_config
     ):
         """Test OAuth2 token retrieval."""
         initialize_session_state()

@@ -1,5 +1,9 @@
 include:
   - project: arcanumai/ci
+    file: pipelines/pre-commit.yml
+  - project: arcanumai/ci
+    file: pipelines/infra.yml
+  - project: arcanumai/ci
     file: pipelines/node.yml
   - project: arcanumai/ci
     file: pipelines/python.yml
@@ -8,11 +12,19 @@ variables:
   PYTHON_VER: "3.12"
 
 .node_job:
-  image: registry.gitlab.com/arcanumai/ci/all-inclusive:latest
   variables:
-    BUILD_DIR: infra
-  before_script:
-    - cd $BUILD_DIR
-    - !reference [.yarn, setup-private-auth]
-    - !reference [.yarn, install]
-    - yarn exec cdktf get
+    BUILD_DIR: tools
+
+python-lint:
+  extends: .poetry-job
+  needs: []
+  variables:
+    PYTHON_WORKING_DIRECTORY: deployer
+  script:
+    - poetry run pylint . --verbose --recursive yes --ignore .venv
+    - poetry run mypy .
+    - poetry run pyright .
+
+python-test:
+  variables:
+    PYTHON_WORKING_DIRECTORY: deployer
