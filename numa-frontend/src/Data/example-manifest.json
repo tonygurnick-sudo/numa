@@ -1,6 +1,66 @@
 {
   "apps": [
     {
+      "appName": "Meeting Tools App",
+      "id": "meeting-tools-app",
+      "type": "numa-app",
+      "status": "Active",
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "Processes meeting notes.",
+      "tasks": [
+        {
+          "id": "upload-files-to-s3",
+          "title": "Upload Files (Optional)",
+          "type": "s3-upload",
+          "params": {
+            "bucketName": "meeting-notes-bucket",
+            "fileKeyPrefix": "meetings/{meetingId}"
+          },
+          "order": 1,
+          "nextTask": "call-step-function"
+        },
+        {
+          "id": "call-step-function",
+          "title": "Process Meeting Notes",
+          "type": "http-request",
+          "endpoint": "meeting-tools",
+          "params": {
+            "payload": {
+              "content": {
+                "uploadedFiles": "meeting-notes-bucket/meetings/1234567890"
+              },
+              "meetingContext": "Discussed project milestones.",
+              "otherNotes": "Follow up with the client.",
+              "template": "Meeting Summary Template"
+            }
+          },
+          "order": 2,
+          "nextTask": "call-q-app"
+        },
+        {
+          "id": "call-q-app",
+          "title": "Process with Q App",
+          "type": "q-app",
+          "params": {
+            "qAppId": "q-app-for-meeting-notes",
+            "inputContentRef": "call-step-function",
+            "outputKey": "q-app-output"
+          },
+          "order": 3,
+          "nextTask": "display-results"
+        },
+        {
+          "id": "display-results",
+          "title": "Display Results",
+          "type": "text-output",
+          "params": {
+            "dataRef": "call-q-app"
+          },
+          "order": 4
+        }
+      ]
+    },
+    {
       "appName": "Numa App Workflow",
       "id": "numa-workflow-app-id",
       "type": "numa-app",
@@ -15,7 +75,9 @@
           "params": {
             "bucketName": "my-bucket",
             "fileKey": "uploads/input_file.txt"
-          }
+          },
+          "order": 1,
+          "nextTask": "process-with-q-app"
         },
         {
           "id": "process-with-q-app",
@@ -25,18 +87,22 @@
             "qAppId": "q-app-123",
             "inputContentRef": "upload-file-to-s3-bucket",
             "outputKey": "q-app-output"
-          }
+          },
+          "order": 2,
+          "nextTask": "process-with-lambda"
         },
         {
           "id": "process-with-lambda",
           "title": "Process with Lambda",
-          "type": "step-function",
+          "type": "backend",
           "params": {
             "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:my-lambda-function",
             "input": {
               "inputContentRef": "process-with-q-app"
             }
-          }
+          },
+          "order": 3,
+          "nextTask": "display-output"
         },
         {
           "id": "display-output",
@@ -44,7 +110,8 @@
           "type": "text-output",
           "params": {
             "dataRef": "process-with-lambda"
-          }
+          },
+          "order": 4
         }
       ]
     },
@@ -67,20 +134,24 @@
       "tasks": [
         {
           "id": "data-ingestion",
-          "title": "Data Ingestion",
+          "title": "Upload a file",
           "type": "s3-upload",
           "params": {
             "bucketName": "raw-data-bucket",
             "fileKey": "raw_data.csv"
-          }
+          },
+          "order": 1,
+          "nextTask": "data-analysis"
         },
         {
           "id": "data-analysis",
           "title": "Data Analysis",
-          "type": "step-function",
+          "type": "backend",
           "params": {
             "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:data-analysis-step-function"
-          }
+          },
+          "order": 2,
+          "nextTask": "display-insights"
         },
         {
           "id": "display-insights",
@@ -88,7 +159,8 @@
           "type": "text-output",
           "params": {
             "dataRef": "data-analysis"
-          }
+          },
+          "order": 3
         }
       ]
     },
@@ -103,10 +175,12 @@
         {
           "id": "model-deployment",
           "title": "Model Deployment",
-          "type": "step-function",
+          "type": "backend",
           "params": {
             "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:model-deployment-step-function"
-          }
+          },
+          "order": 1,
+          "nextTask": "display-model-metrics"
         },
 
         {
@@ -115,7 +189,8 @@
           "type": "text-output",
           "params": {
             "dataRef": "model-monitoring"
-          }
+          },
+          "order": 2
         }
       ]
     }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Button, Container, Row, Col } from 'react-bootstrap';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Alert, Container, Row, Col } from 'react-bootstrap';
+import { useParams } from 'react-router-dom';
 
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
@@ -9,31 +9,29 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { NumaAppDetail } from '../Components/NumaAppDetail';
 import { QAppDetail } from '../Components/QAppDetail';
 import { QAppDetailHeader } from '../Components/QAppDetailHeader';
-
-import { useAuth } from '../Providers/AuthProvider';
+import { NumaAppDetailHeader } from '../Components/NumaAppDetailHeader';
 
 const AppDetail = () => {
-  const navigate = useNavigate();
+  // q parts
+  const [qSsessionId, setQSessionId] = useState(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const [qAppData, setqAppData] = useState([]);
+  const [cardInputValues, setCardInputValues] = useState({});
 
-  const { qAppsClient, loading: authLoading } = useAuth();
-  const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
   const { appId } = useParams(); // Get appId from URL
 
-  const [qAppData, setQAppData] = useState(null);
   const [numaAppData, setNumaAppData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const [runActive, setRunActive] = useState('disabled');
 
-  // Get app details from manifest via sesion
+  // Get app details from manifest via session
   useEffect(() => {
     const fetchData = async () => {
       try {
         const appsData = JSON.parse(sessionStorage.getItem('appsData'));
         const app = appsData.apps.find((app) => app.id === appId);
-
-        console.log(app.type);
 
         setNumaAppData(app);
         setIsLoading(false);
@@ -46,8 +44,6 @@ const AppDetail = () => {
 
     fetchData();
   }, [appId]);
-
-  console.log(runActive);
 
   return (
     <>
@@ -63,11 +59,23 @@ const AppDetail = () => {
               <Col lg={3} className="px-5 text-end">
                 <div className="d-flex flex-column justify-content-between h-100 gap-3">
                   <div className="d-flex flex-column gap-2 align-items-end">
-                    {numaAppData?.type === 'q-app' && (
+                    {numaAppData?.type === 'q-app' ? (
                       <QAppDetailHeader
+                        qAppId={numaAppData.qAppId}
                         qAppData={qAppData}
                         runActive={runActive}
+                        setQSessionId={setQSessionId}
+                        setIsPolling={setIsPolling}
+                        cardInputValues={cardInputValues}
                       />
+                    ) : (
+                      numaAppData?.type === 'numa-app' && (
+                        <NumaAppDetailHeader
+                          numaAppData={numaAppData}
+                          runActive={runActive}
+                          setIsPolling={setIsPolling}
+                        />
+                      )
                     )}
                   </div>
                 </div>
@@ -91,21 +99,32 @@ const AppDetail = () => {
 
         <LayoutDashboard>
           <Row>
+            {error && <Alert variant="danger">{error}</Alert>}
+
             {isLoading ? (
               <Preloader />
-            ) : numaAppData ? (
-              numaAppData.type === 'numa-app' ? (
-                <NumaAppDetail appData={numaAppData} />
+            ) : (
+              numaAppData &&
+              (numaAppData.type === 'numa-app' ? (
+                <NumaAppDetail
+                  appData={numaAppData}
+                  setRunActive={setRunActive}
+                />
               ) : (
                 numaAppData.type === 'q-app' && (
                   <QAppDetail
                     setRunActive={setRunActive}
-                    numaAppData={numaAppData}
+                    qAppId={numaAppData.qAppId}
+                    setqAppData={setqAppData}
+                    qAppData={qAppData}
+                    setIsPolling={setIsPolling}
+                    isPolling={isPolling}
+                    qSsessionId={qSsessionId}
+                    setCardInputValues={setCardInputValues}
+                    cardInputValues={cardInputValues}
                   />
                 )
-              )
-            ) : (
-              <p>Error fetching app details</p>
+              ))
             )}
           </Row>
         </LayoutDashboard>

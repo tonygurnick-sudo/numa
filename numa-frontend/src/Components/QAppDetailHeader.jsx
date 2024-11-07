@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Button, Container, Row, Col } from 'react-bootstrap';
+import { Button } from 'react-bootstrap';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -7,37 +7,40 @@ import { addAppToLibrary, deleteQAppById } from '../qAppHelper';
 import { useAuth } from '../Providers/AuthProvider';
 import { StartQAppSessionCommand } from '@aws-sdk/client-qapps';
 
-const QAppDetailHeader = ({ appId, runActive }) => {
+const QAppDetailHeader = ({
+  qAppId,
+  qAppData,
+  runActive,
+  setQSessionId,
+  setIsPolling,
+  cardInputValues,
+}) => {
   const navigate = useNavigate();
 
   const { qAppsClient, loading: authLoading } = useAuth();
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
-
-  const [qSsessionId, setQSessionId] = useState(null);
-  const [sessionDetails, setSessionDetails] = useState(null);
-  const [isPolling, setIsPolling] = useState(false);
-
-  const [app, setApp] = useState([]);
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [inputValues, setInputValues] = useState({});
 
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState(null);
   const [error, setError] = useState(null);
 
   console.log('run is active: ', runActive);
+
   const handleRunApp = async () => {
+    if (!qAppsClient || authLoading) return;
+
+    console.log('debug - qAppId', qAppId);
+    console.log('debug - qAppData', qAppData);
     try {
       const payload = {
         instanceId: APPLICATION_ID,
-        appId: app.appId,
-        appVersion: app.appVersion,
-        initialValues: app.appDefinition.cards
+        appId: qAppId,
+        appVersion: qAppData.appVersion,
+        initialValues: qAppData.appDefinition.cards
           .map((card) => {
             const cardId = card[Object.keys(card)[0]].id;
             const defaultValue = card[Object.keys(card)[0]].defaultValue;
-            const value = inputValues[cardId] || defaultValue || '';
+            const value = cardInputValues[cardId] || defaultValue || '';
             return value ? { cardId, value } : null; // Only include cards with a value
           })
           .filter(Boolean), // Filter out nulls
@@ -47,6 +50,7 @@ const QAppDetailHeader = ({ appId, runActive }) => {
       const start_response = await qAppsClient.send(start_command);
 
       if (start_response) {
+        setIsPolling(true);
         setQSessionId(start_response.sessionId); // Store sessionId
       }
     } catch (error) {
@@ -57,9 +61,9 @@ const QAppDetailHeader = ({ appId, runActive }) => {
 
   // DELETE
   const handleDeleteApp = async () => {
-    if (!qAppsClient || !appId) return;
+    if (!qAppsClient || !qAppId) return;
 
-    deleteQAppById({ qAppsClient, appId, setLoading, setError, setResponse });
+    deleteQAppById({ qAppsClient, qAppId, setLoading, setError, setResponse });
   };
 
   useEffect(() => {
@@ -75,9 +79,9 @@ const QAppDetailHeader = ({ appId, runActive }) => {
 
   // ADD APP TO LIB
   const handleAddAppToLib = async () => {
-    if (!qAppsClient || !appId) return;
+    if (!qAppsClient || !qAppId) return;
 
-    addAppToLibrary({ qAppsClient, appId, setLoading, setError, setResponse });
+    addAppToLibrary({ qAppsClient, qAppId, setLoading, setError, setResponse });
   };
 
   return (

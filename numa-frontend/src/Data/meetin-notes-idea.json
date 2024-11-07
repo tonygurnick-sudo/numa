@@ -1,0 +1,80 @@
+{
+  "appName": "Meeting Notes App",
+  "id": "meeting-notes-app-id",
+  "type": "numa-app",
+  "status": "Active",
+  "createdDate": "2023-11-06T10:38:12Z",
+  "appDescription": "Processes meeting notes, uploads files to S3, calls a Step Function, and displays the results of a Q App.",
+  "tasks": [
+    {
+      "id": "upload-files-to-s3",
+      "title": "Upload Files (Optional)",
+      "type": "s3-upload",
+      "params": {
+        "bucketName": "meeting-notes-bucket",
+        "fileKeyPrefix": "meetings/{meetingId}"
+      },
+      "order": 1,
+      "nextTask": "call-step-function"
+    },
+    {
+      "id": "call-step-function",
+      "title": "Process Meeting Notes",
+      "type": "backend",
+      "params": {
+        "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:meeting-notes-step-function",
+        "payload": {
+          "uploadedFiles": [
+            {
+              "bucket": "numa-q-dev",
+              "key": "test-showcase-image-meeting-note.jpg",
+              "type": "meetingNotes",
+              "description": "Meeting notes taken by Nathan."
+            }
+          ],
+          "meetingNotes": {
+            "text": "Key points from the meeting...",
+            "description": "Nathans Notes"
+          },
+          "transcript": null,
+          "meetingContext": "Discussed project milestones.",
+          "otherNotes": "Follow up with the client.",
+          "template": "Meeting Summary Template"
+        }
+      },
+      "order": 2,
+      "nextTask": "wait-for-step-function"
+    },
+    {
+      "id": "wait-for-step-function",
+      "title": "Wait for Step Function Completion",
+      "type": "wait",
+      "params": {
+        "waitFor": "call-step-function"
+      },
+      "order": 3,
+      "nextTask": "call-q-app"
+    },
+    {
+      "id": "call-q-app",
+      "title": "Process with Q App",
+      "type": "q-app",
+      "params": {
+        "qAppId": "q-app-for-meeting-notes",
+        "inputContentRef": "call-step-function",
+        "outputKey": "q-app-output"
+      },
+      "order": 4,
+      "nextTask": "display-results"
+    },
+    {
+      "id": "display-results",
+      "title": "Display Results",
+      "type": "text-output",
+      "params": {
+        "dataRef": "call-q-app"
+      },
+      "order": 5
+    }
+  ]
+}

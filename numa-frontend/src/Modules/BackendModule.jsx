@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button, Container, Row, Col } from 'react-bootstrap';
 
-function StepFunctionModule({ task }) {
+function BackendModule({ task }) {
   const [executionStatus, setExecutionStatus] = useState('idle'); // idle, running, success, failed
 
   useEffect(() => {
@@ -36,4 +36,4 @@ function StepFunctionModule({ task }) {
   );
 }
 
-export { StepFunctionModule };
+export { BackendModule };
