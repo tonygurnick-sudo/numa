@@ -6,23 +6,28 @@ import {
   useCallback,
 } from 'react';
 import { jwtDecode } from 'jwt-decode';
-import { CognitoIdentityProvider } from '@aws-sdk/client-cognito-identity-provider';
 import { QBusinessClient } from '@aws-sdk/client-qbusiness';
 import { QAppsClient } from '@aws-sdk/client-qapps';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
 import QPolicy from '../Data/QPolicy.json';
+import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
+import {
+  CognitoIdentityProviderClient,
+  RespondToAuthChallengeCommand,
+  InitiateAuthCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 
 const AuthContext = createContext(null);
 
 // Constants
-const AWS_REGION = 'us-east-1';
-const COGNITO_CLIENT_ID = '4gg2u42194gstu0ai6ab4b7179'; // Replace with your actual client ID
 const IDENTITY_POOL_ID = 'us-east-1:facf1439-ef67-48f9-ada4-debb294db187';
 const ROLE_ARN =
   'arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo';
 const REGION = 'us-east-1';
 const API_ENDPOINT = 'https://g59jhyyob7.execute-api.us-east-1.amazonaws.com';
+const USER_POOL_ID = 'us-east-1_kVPZjTM6a';
+const CLIENT_ID = '48ed21kkeqa0h4jtrs08kbvvvr';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -289,6 +294,116 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const login = async (username, password) => {
+    // Step 1: Create the SRP session
+    const srpSession = createSrpSession(
+      username,
+      password,
+      USER_POOL_ID,
+      false,
+    );
+
+    // Step 2: Send SRP-A to initiate SRP flow
+    const initiateAuthRes = await fetch(`${API_ENDPOINT}/initiate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: username,
+        srpA: srpSession.largeA,
+      }),
+    });
+
+    const initiateData = await initiateAuthRes.json();
+    if (initiateData.error) {
+      throw new Error(initiateData.error);
+    }
+
+    // Step 3: Sign SRP session
+    const signedSrpSession = signSrpSession(srpSession, initiateData);
+
+    // Step 4: Respond to challenge
+    const respondToAuthChallengeRes = await fetch(`${API_ENDPOINT}/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: initiateData.ChallengeParameters.USERNAME,
+        challengeResponses: {
+          PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
+          PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
+        },
+        timestamp: srpSession.timestamp,
+      }),
+    });
+
+    const finalResponse = await respondToAuthChallengeRes.json();
+    if (finalResponse.error) {
+      throw new Error(finalResponse.error);
+    }
+
+    if (finalResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+      return { requiresNewPassword: true, session: finalResponse.Session };
+    }
+
+    await handleLoginSuccess(finalResponse.AuthenticationResult);
+    return { success: true };
+  };
+
+  const setNewPassword = async (username, oldPassword, newPassword) => {
+    const cognitoClient = new CognitoIdentityProviderClient({
+      region: REGION,
+    });
+
+    const initiateAuthCommand = new InitiateAuthCommand({
+      AuthFlow: 'USER_PASSWORD_AUTH',
+      ClientId: CLIENT_ID,
+      AuthParameters: {
+        USERNAME: username,
+        PASSWORD: oldPassword,
+      },
+    });
+
+    const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
+    if (initiateAuthResponse.ChallengeName !== 'NEW_PASSWORD_REQUIRED') {
+      throw new Error('Unexpected authentication response');
+    }
+
+    const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand({
+      ClientId: CLIENT_ID,
+      ChallengeName: 'NEW_PASSWORD_REQUIRED',
+      Session: initiateAuthResponse.Session,
+      ChallengeResponses: {
+        USERNAME: username,
+        NEW_PASSWORD: newPassword,
+      },
+    });
+
+    await cognitoClient.send(respondToAuthChallengeCommand);
+
+    // Login with new password
+    return await login(username, newPassword);
+  };
+
+  const handleLoginSuccess = async (tokens) => {
+    localStorage.setItem('accessToken', tokens.AccessToken);
+    localStorage.setItem('refreshToken', tokens.RefreshToken);
+    localStorage.setItem('idToken', tokens.IdToken);
+
+    const decodedAccessToken = jwtDecode(tokens.AccessToken);
+    const decodedIdToken = jwtDecode(tokens.IdToken);
+
+    setUser({
+      tokens: {
+        accessToken: tokens.AccessToken,
+        idToken: tokens.IdToken,
+        refreshToken: tokens.RefreshToken,
+      },
+      decoded_tokens: {
+        accessToken: decodedAccessToken,
+        idToken: decodedIdToken,
+      },
+    });
+  };
+
   const value = {
     user,
     loading,
@@ -301,6 +416,8 @@ export const AuthProvider = ({ children }) => {
     qBusinessClient,
     qAppsClient,
     setUser,
+    login,
+    setNewPassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
