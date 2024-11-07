@@ -3,6 +3,7 @@
     "outDir": "dist",
     "alwaysStrict": true,
     "declaration": true,
+    "esModuleInterop": true,
     "experimentalDecorators": true,
     "inlineSourceMap": true,
     "inlineSources": true,
@@ -23,12 +24,6 @@
     "target": "ES2022",
     "incremental": true
   },
-  "include": [
-    "**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "cdktf.out",
-    "dist"
-  ]
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "cdktf.out", "dist"]
 }

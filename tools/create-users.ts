@@ -8,7 +8,7 @@ import { generate } from 'generate-password';
 import { argv, exit } from 'node:process';
 import chalk from 'chalk';
 import { getQUserPool, temporaryCredentials, AwsCredentialIdentityProvider } from "./utils";
-import { clientsProd } from "../infra/stacks/numa-client-stack";
+import clientConfigProd from '../clientConfigProd.json';
 
 const region = 'us-east-1';
 const passwordConfig = {
@@ -152,7 +152,7 @@ async function activateQLicence(qUrl, username: string, password: string): Promi
 (async (): Promise<void> => {
   const args = argv.slice(2);
 
-  const accountId = clientsProd[args[0]].clientAccountId;
+  const accountId = clientConfigProd[args[0]].clientAccountId;
   const credentials = temporaryCredentials(accountId);
   const userPool = await getQUserPool(credentials);
   const qUrl = args[1];

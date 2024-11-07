@@ -1,7 +1,7 @@
 import { argv } from 'node:process';
 import { QBusinessClient, ListDataSourceSyncJobsCommand, DataSourceSyncJob } from '@aws-sdk/client-qbusiness';
 import { temporaryCredentials, getQInstanceDetails } from './utils';
-import { clientsProd } from '../infra/stacks/numa-client-stack';
+import clientConfigProd from '../clientConfigProd.json';
 
 const args = argv.slice(2);
 const region = 'us-east-1';
@@ -15,7 +15,7 @@ async function findSyncJobs(credentials, applicationId: string, indexId: string,
 }
 
 if (import.meta.filename === process?.argv[1]) {
-  const accountId = clientsProd[args[0]].clientAccountId;
+  const accountId = clientConfigProd[args[0]].clientAccountId;
   const credentials = temporaryCredentials(accountId);
   console.log('Gathering account details...');
   const accountDetails = await getQInstanceDetails(credentials);
