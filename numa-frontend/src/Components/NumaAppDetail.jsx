@@ -1,13 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Button, Container, Row, Col } from 'react-bootstrap';
+import { Col } from 'react-bootstrap';
 
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { QAppModule } from '../Modules/QAppModule';
-import { StepFunctionModule } from '../Modules/StepFunctionModule';
+import { BackendModule } from '../Modules/BackendModule';
 import { TextOutputModule } from '../Modules/TextOutputModule';
 
-const NumaAppDetail = ({ appData }) => {
-  console.log(appData);
+const NumaAppDetail = ({ appData, setRunActive }) => {
   function TaskComponent({ task }) {
     console.log(task);
     switch (task.type) {
@@ -15,8 +13,8 @@ const NumaAppDetail = ({ appData }) => {
         return <S3UploadModule task={task} />;
       case 'q-app':
         return <QAppModule task={task} />;
-      case 'step-function':
-        return <StepFunctionModule task={task} />;
+      case 'backend':
+        return <BackendModule task={task} />;
       case 'text-output':
         return <TextOutputModule task={task} />;
       default:

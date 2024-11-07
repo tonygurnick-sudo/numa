@@ -1,39 +1,34 @@
 import { useState, useEffect } from 'react';
-import { Button, Container, Row, Col } from 'react-bootstrap';
+import { Alert, Col } from 'react-bootstrap';
 
-import { useNavigate } from 'react-router-dom';
-
-import { Nav } from './Nav';
-import { Breadcrumbs } from './Breadcrumbs';
 import { AppCard } from './AppCard';
 import { Preloader } from './Preloader';
-import { LayoutDashboard } from '../Layouts/LayoutDashboard';
+
 import { useAuth } from '../Providers/AuthProvider';
 import { GetQAppCommand, GetQAppSessionCommand } from '@aws-sdk/client-qapps';
 import { NumaChat } from '../Pages/NumaChat';
 
-const QAppDetail = ({ setRunActive, numaAppData }) => {
-  const navigate = useNavigate();
-
+const QAppDetail = ({
+  setRunActive,
+  qAppId,
+  setqAppData,
+  qAppData,
+  setIsPolling,
+  isPolling,
+  qSsessionId,
+  setCardInputValues,
+  cardInputValues,
+}) => {
   const { qAppsClient, loading: authLoading } = useAuth();
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
 
-  const [sessionId, setSessionId] = useState(null); // Initialize sessionId
-  const [sessionDetails, setSessionDetails] = useState(null);
-  const [isPolling, setIsPolling] = useState(false);
-
-  const [app, setApp] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [inputValues, setInputValues] = useState({});
-
-  const [loading, setLoading] = useState(true);
-  const [response, setResponse] = useState(null);
+  const [qSessionDetails, setQSessionDetails] = useState(null);
   const [error, setError] = useState(null);
 
   // Update specific card's input value
   const handleInputChange = (cardId, value) => {
-    console.log('input changed');
-    setInputValues((prevValues) => ({
+    setCardInputValues((prevValues) => ({
       ...prevValues,
       [cardId]: value,
     }));
@@ -41,15 +36,14 @@ const QAppDetail = ({ setRunActive, numaAppData }) => {
   };
 
   const checkRequiredInputs = () => {
-    const incompleteCards = app?.appDefinition?.cards.some((card) => {
+    const incompleteCards = qAppData?.appDefinition?.cards.some((card) => {
       const cardId = card[Object.keys(card)[0]].id;
       const isTextInput = card[Object.keys(card)[0]].type === 'text-input';
       const defaultValue = card[Object.keys(card)[0]].defaultValue;
-      const userInput = inputValues[cardId];
+      const userInput = cardInputValues[cardId];
 
       return isTextInput && !userInput && !defaultValue; // Check if required input is missing
     });
-    console.log('set run to active');
     setRunActive(incompleteCards); // Enable/disable based on completeness
   };
 
@@ -57,37 +51,37 @@ const QAppDetail = ({ setRunActive, numaAppData }) => {
     if (!qAppsClient || authLoading) return;
 
     try {
-      const input = { instanceId: APPLICATION_ID, appId: numaAppData.qAppId };
+      const input = { instanceId: APPLICATION_ID, appId: qAppId };
       const command = new GetQAppCommand(input);
       const response = await qAppsClient.send(command);
-      setApp(response); // Set app details in state
+      setqAppData(response);
     } catch (error) {
       console.error('Error fetching Q Apps:', error);
-      setError(error); // Set error state
+      setError(error);
     } finally {
-      setIsLoading(false); // Stop loading
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!qSsessionId) return;
 
     const fetchSessionDetails = async () => {
       try {
-        setLoading(true);
+        setIsLoading(true);
         const input = {
           instanceId: APPLICATION_ID,
-          sessionId: sessionId,
+          sessionId: qSsessionId,
         };
         const command = new GetQAppSessionCommand(input);
         const response = await qAppsClient.send(command);
 
-        setSessionDetails(response);
+        setQSessionDetails(response);
       } catch (err) {
         setError(err);
         console.error('Error fetching session details:', err);
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
 
@@ -102,59 +96,60 @@ const QAppDetail = ({ setRunActive, numaAppData }) => {
 
     // Clear interval on component unmount or when sessionId changes
     return () => clearInterval(intervalId);
-  }, [sessionId, qAppsClient, isPolling]);
+  }, [qSsessionId, qAppsClient, isPolling]);
 
   // Fetch app details on mount
   useEffect(() => {
     fetchApp();
-  }, [numaAppData]); //
+  }, [qAppId]); //
 
   // Check required inputs whenever app details change
   useEffect(() => {
-    if (app?.appDefinition?.cards) {
+    if (qAppData?.appDefinition?.cards) {
       checkRequiredInputs();
     }
-  }, [app]);
+  }, [qAppData]);
 
   // Start polling when the session is active
   useEffect(() => {
     if (
-      sessionDetails &&
-      (sessionDetails.status === 'WAITING' ||
-        sessionDetails.status === 'IN_PROGRESS')
+      qSessionDetails &&
+      (qSessionDetails.status === 'WAITING' ||
+        qSessionDetails.status === 'IN_PROGRESS')
     ) {
       setIsPolling(true);
       setRunActive('disabled');
     } else {
-      setIsPolling(false); // Stop polling if status changes
+      setIsPolling(false);
     }
-  }, [sessionDetails]);
+  }, [qSessionDetails]);
 
   // update input values when session details change
   useEffect(() => {
-    if (sessionDetails && sessionDetails.cardStatus) {
+    if (qSessionDetails && qSessionDetails.cardStatus) {
       const updatedInputValues = {};
 
-      Object.entries(sessionDetails.cardStatus).forEach(([cardId, status]) => {
+      Object.entries(qSessionDetails.cardStatus).forEach(([cardId, status]) => {
         updatedInputValues[cardId] = status.currentValue;
       });
 
-      setInputValues((prevValues) => ({
+      setCardInputValues((prevValues) => ({
         ...prevValues,
         ...updatedInputValues,
       }));
     }
-  }, [sessionDetails]);
+  }, [qSessionDetails]);
 
   return (
     <>
+      {error && <Alert variant="danger">{error}</Alert>}
       {isLoading ? (
         <Preloader />
-      ) : app ? (
-        app.name === 'Numa Chat' ? (
+      ) : qAppData ? (
+        qAppData.name === 'Numa Chat' ? (
           <NumaChat />
         ) : (
-          app.appDefinition?.cards?.map((card) => {
+          qAppData.appDefinition?.cards?.map((card) => {
             const cardKey = Object.keys(card)[0];
             const cardData = card[cardKey];
             return (
@@ -169,9 +164,11 @@ const QAppDetail = ({ setRunActive, numaAppData }) => {
                 <AppCard
                   card={card}
                   dependencies={cardData.dependencies || []}
-                  appsCards={app.appDefinition.cards}
+                  appsCards={qAppData.appDefinition.cards}
                   onInputChange={handleInputChange}
-                  inputValue={inputValues[cardData.id] || cardData.defaultValue}
+                  inputValue={
+                    cardInputValues[cardData.id] || cardData.defaultValue
+                  }
                 />
               </Col>
             );
