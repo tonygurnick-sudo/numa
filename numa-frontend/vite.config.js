@@ -18,6 +18,10 @@ export default defineConfig({
       '**/dist/**',
       '**/.{idea,git,cache,output,temp}/**',
       '**/Fixtures/**',
+      '**/*.config.{js,ts}',
+      '**/eslint.config.js',
+      '**/vite.config.js',
+      '**/*TestProvider.{jsx,js}',
     ],
     coverage: {
       exclude: [
@@ -26,6 +30,11 @@ export default defineConfig({
         '**/.{idea,git,cache,output,temp}/**',
         '**/Fixtures/**',
         '**/Tests/**',
+        '**/*.config.{js,ts}',
+        '**/eslint.config.js',
+        '**/vite.config.js',
+        '**/index.{js,jsx}',
+        '**/*TestProvider.{jsx,js}',
       ],
     },
   },
