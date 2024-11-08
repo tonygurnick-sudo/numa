@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest --coverage"
+    "test": "vitest"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity": "^3.668.0",

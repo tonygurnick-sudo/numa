@@ -32,7 +32,7 @@ const CLIENT_ID = '48ed21kkeqa0h4jtrs08kbvvvr';
 // Add a context for test configuration
 const TestConfigContext = createContext(null);
 
-export const AuthProvider = ({ children, testConfig }) => {
+export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [qBusinessClient, setQBusinessClient] = useState(null);
@@ -58,9 +58,8 @@ export const AuthProvider = ({ children, testConfig }) => {
     try {
       console.log('🔄 Attempting to refresh tokens...');
       const refreshToken =
-        testConfig?.initialTokens?.refreshToken ||
-        localStorage.getItem('refreshToken');
-      const tokens = testConfig?.initialTokens || getUserInfo();
+        initialTokens?.refreshToken || localStorage.getItem('refreshToken');
+      const tokens = initialTokens || getUserInfo();
 
       console.log('tokens', tokens);
 
@@ -70,8 +69,8 @@ export const AuthProvider = ({ children, testConfig }) => {
       }
 
       let result;
-      if (testConfig?.refreshHandler) {
-        result = await testConfig.refreshHandler({
+      if (refreshHandler) {
+        result = await refreshHandler({
           refreshToken,
           username: tokens.decoded_tokens.idToken.sub,
         });
@@ -133,22 +132,6 @@ export const AuthProvider = ({ children, testConfig }) => {
     }
 
     return user.tokens.accessToken;
-  };
-
-  const getRefreshToken = () => {
-    return user ? user.tokens.refreshToken : null;
-  };
-
-  const getIdToken = async () => {
-    if (!user) return null;
-
-    // Check if token is expired or about to expire
-    if (isTokenExpired(user.decoded_tokens.idToken)) {
-      const refreshed = await refreshTokens();
-      if (!refreshed) return null;
-    }
-
-    return user.tokens.idToken;
   };
 
   const initializeQBusinessClient = useCallback(async () => {
@@ -217,71 +200,79 @@ export const AuthProvider = ({ children, testConfig }) => {
     }
   }, [user, initializeQBusinessClient, initializeQAppsClient]);
 
-  useEffect(() => {
-    const loadUserFromTokens = async () => {
-      console.log('🔍 Checking token status...');
-      const accessToken = localStorage.getItem('accessToken');
-      const idToken = localStorage.getItem('idToken');
-      const refreshToken = localStorage.getItem('refreshToken');
+  const loadUserFromTokens = async () => {
+    console.log('🔍 Checking token status...');
+    const accessToken = localStorage.getItem('accessToken');
+    const idToken = localStorage.getItem('idToken');
+    const refreshToken = localStorage.getItem('refreshToken');
 
-      if (refreshToken) {
-        if (
-          !accessToken ||
-          !idToken ||
-          isTokenExpired(decodeToken(accessToken)) ||
-          isTokenExpired(decodeToken(idToken))
-        ) {
-          console.log('⚠️ Tokens expired or missing, attempting refresh...');
-          const refreshed = await refreshTokens();
-          if (!refreshed) {
-            console.log('❌ Token refresh failed, logging out');
-            setUser(null);
-          }
-        } else {
-          console.log('✅ Tokens are valid');
-          const decodedAccessToken = decodeToken(accessToken);
-          const decodedIdToken = decodeToken(idToken);
-
-          setUser({
-            tokens: {
-              accessToken,
-              idToken,
-              refreshToken,
-            },
-            decoded_tokens: {
-              accessToken: decodedAccessToken,
-              idToken: decodedIdToken,
-            },
-          });
+    if (refreshToken) {
+      if (
+        !accessToken ||
+        !idToken ||
+        isTokenExpired(decodeToken(accessToken)) ||
+        isTokenExpired(decodeToken(idToken))
+      ) {
+        console.log('⚠️ Tokens expired or missing, attempting refresh...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          console.log('❌ Token refresh failed, logging out');
+          setUser(null);
         }
       } else {
-        console.log('❌ No refresh token found');
-        setUser(null);
-      }
-      setLoading(false);
-      setTokenValidationComplete(true);
-    };
+        console.log('✅ Tokens are valid');
+        const decodedAccessToken = decodeToken(accessToken);
+        const decodedIdToken = decodeToken(idToken);
 
+        setUser({
+          tokens: {
+            accessToken,
+            idToken,
+            refreshToken,
+          },
+          decoded_tokens: {
+            accessToken: decodedAccessToken,
+            idToken: decodedIdToken,
+          },
+        });
+      }
+    } else {
+      console.log('❌ No refresh token found');
+      setUser(null);
+    }
+    setLoading(false);
+    setTokenValidationComplete(true);
+  };
+
+  useEffect(() => {
     loadUserFromTokens();
   }, []);
+
+  const checkAndRefreshTokens = async () => {
+    if (!user || !user.decoded_tokens) {
+      console.log('No user or decoded tokens available');
+      return false;
+    }
+
+    const decodedAccessToken = user.decoded_tokens.accessToken;
+    if (isTokenExpired(decodedAccessToken)) {
+      console.log('🕒 Token check: Token expired, attempting refresh...');
+      const refreshed = await refreshTokens();
+      if (!refreshed) {
+        logout();
+        return false;
+      }
+      return true;
+    }
+
+    console.log('🕒 Token check: Token still valid');
+    return true;
+  };
 
   // Modify the token refresh interval to be more proactive
   useEffect(() => {
     // Skip refresh interval in test mode
-    if (!user || testConfig) return;
-
-    const checkAndRefreshTokens = async () => {
-      const decodedAccessToken = user.decoded_tokens.accessToken;
-      if (isTokenExpired(decodedAccessToken)) {
-        console.log('🕒 Token check: Token expired, attempting refresh...');
-        const refreshed = await refreshTokens();
-        if (!refreshed) {
-          logout();
-        }
-      } else {
-        console.log('🕒 Token check: Token still valid');
-      }
-    };
+    if (!user || initialTokens) return;
 
     // Check tokens every 10 seconds
     const intervalId = setInterval(checkAndRefreshTokens, 10 * 1000);
@@ -419,26 +410,23 @@ export const AuthProvider = ({ children, testConfig }) => {
 
   // Initialize user state from testConfig if available
   useEffect(() => {
-    if (testConfig?.initialTokens) {
-      setUser(testConfig.initialTokens);
+    if (initialTokens) {
+      setUser(initialTokens);
     }
-  }, [testConfig]);
+  }, [initialTokens]);
 
   const value = {
+    isAuthenticated: !!user,
     user,
     loading,
     tokenValidationComplete,
-    getAccessToken,
-    getRefreshToken,
-    getIdToken,
-    getUserInfo,
-    logout,
-    qBusinessClient,
-    qAppsClient,
-    setUser,
     login,
+    logout,
     setNewPassword,
     refreshTokens,
+    getAccessToken,
+    getUserInfo,
+    checkAndRefreshTokens,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -460,7 +448,7 @@ export const TestAuthProvider = ({
   initialTokens,
 }) => {
   return (
-    <AuthProvider testConfig={{ refreshHandler, initialTokens }}>
+    <AuthProvider refreshHandler={refreshHandler} initialTokens={initialTokens}>
       {children}
     </AuthProvider>
   );
