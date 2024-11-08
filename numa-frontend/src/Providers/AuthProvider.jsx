@@ -6,34 +6,38 @@ import {
   useCallback,
 } from 'react';
 import { jwtDecode } from 'jwt-decode';
-import { CognitoIdentityProvider } from '@aws-sdk/client-cognito-identity-provider';
 import { QBusinessClient } from '@aws-sdk/client-qbusiness';
 import { QAppsClient } from '@aws-sdk/client-qapps';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
 import QPolicy from '../Data/QPolicy.json';
-
+import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
+import {
+  CognitoIdentityProviderClient,
+  RespondToAuthChallengeCommand,
+  InitiateAuthCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 
 const AuthContext = createContext(null);
 
 // Constants
-const AWS_REGION = 'us-east-1';
-const COGNITO_CLIENT_ID = '2594236d-712a-4355-8b0e-6a4cef023f75'; // Replace with your actual client ID
 const IDENTITY_POOL_ID = 'us-east-1:facf1439-ef67-48f9-ada4-debb294db187';
 const ROLE_ARN =
   'arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo';
 const REGION = 'us-east-1';
+const API_ENDPOINT = 'https://g59jhyyob7.execute-api.us-east-1.amazonaws.com';
+const USER_POOL_ID = 'us-east-1_kVPZjTM6a';
+const CLIENT_ID = '48ed21kkeqa0h4jtrs08kbvvvr';
 
-export const AuthProvider = ({ children }) => {
+// Add a context for test configuration
+const TestConfigContext = createContext(null);
+
+export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [qBusinessClient, setQBusinessClient] = useState(null);
   const [qAppsClient, setQAppsClient] = useState(null);
   const [tokenValidationComplete, setTokenValidationComplete] = useState(false);
-
-  const cognitoClient = new CognitoIdentityProvider({
-    region: AWS_REGION,
-  });
 
   const decodeToken = (token) => {
     try {
@@ -46,31 +50,48 @@ export const AuthProvider = ({ children }) => {
 
   const isTokenExpired = (decodedToken) => {
     if (!decodedToken?.exp) return true;
-    // Add 5-minute buffer before expiration
     const currentTime = Math.floor(Date.now() / 1000);
     return decodedToken.exp <= currentTime + 300;
   };
 
   const refreshTokens = async () => {
     try {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
+      console.log('🔄 Attempting to refresh tokens...');
+      const refreshToken =
+        initialTokens?.refreshToken || localStorage.getItem('refreshToken');
+      const tokens = initialTokens || getUserInfo();
+
+      console.log('tokens', tokens);
+
+      if (!refreshToken || !tokens?.decoded_tokens?.idToken) {
+        console.log('❌ No refresh token or ID token available');
+        throw new Error('No refresh token or ID token available');
       }
 
-      const response = await cognitoClient.initiateAuth({
-        AuthFlow: 'REFRESH_TOKEN_AUTH',
-        ClientId: COGNITO_CLIENT_ID,
-        AuthParameters: {
-          REFRESH_TOKEN: refreshToken,
-        },
-      });
-
-      if (!response.AuthenticationResult) {
-        throw new Error('Failed to refresh tokens');
+      let result;
+      if (refreshHandler) {
+        result = await refreshHandler({
+          refreshToken,
+          username: tokens.decoded_tokens.idToken.sub,
+        });
+      } else {
+        const response = await fetch(`${API_ENDPOINT}/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            refreshToken: refreshToken,
+            username: tokens.decoded_tokens.idToken.sub,
+          }),
+        });
+        result = await response.json();
       }
 
-      const { AccessToken, IdToken } = response.AuthenticationResult;
+      if (!result.AuthenticationResult) {
+        console.log('❌ Failed to refresh tokens - No authentication result');
+        throw new Error(result.error || 'Failed to refresh tokens');
+      }
+
+      const { AccessToken, IdToken } = result.AuthenticationResult;
 
       // Update localStorage
       localStorage.setItem('accessToken', AccessToken);
@@ -92,10 +113,10 @@ export const AuthProvider = ({ children }) => {
         },
       });
 
+      console.log('✅ Successfully refreshed tokens');
       return true;
     } catch (error) {
-      console.error('Error refreshing tokens:', error);
-      // If refresh fails, log out the user
+      console.error('❌ Error refreshing tokens:', error);
       logout();
       return false;
     }
@@ -111,22 +132,6 @@ export const AuthProvider = ({ children }) => {
     }
 
     return user.tokens.accessToken;
-  };
-
-  const getRefreshToken = () => {
-    return user ? user.tokens.refreshToken : null;
-  };
-
-  const getIdToken = async () => {
-    if (!user) return null;
-
-    // Check if token is expired or about to expire
-    if (isTokenExpired(user.decoded_tokens.idToken)) {
-      const refreshed = await refreshTokens();
-      if (!refreshed) return null;
-    }
-
-    return user.tokens.idToken;
   };
 
   const initializeQBusinessClient = useCallback(async () => {
@@ -156,7 +161,6 @@ export const AuthProvider = ({ children }) => {
       console.error('Error in QBusinessClient initialization:', error);
     }
   }, [user]);
-
 
   const initializeQAppsClient = useCallback(async () => {
     if (!user) return;
@@ -196,61 +200,85 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user, initializeQBusinessClient, initializeQAppsClient]);
 
-  useEffect(() => {
-    const loadUserFromTokens = async () => {
-      const accessToken = localStorage.getItem('accessToken');
-      const idToken = localStorage.getItem('idToken');
-      const refreshToken = localStorage.getItem('refreshToken');
+  const loadUserFromTokens = async () => {
+    console.log('🔍 Checking token status...');
+    const accessToken = localStorage.getItem('accessToken');
+    const idToken = localStorage.getItem('idToken');
+    const refreshToken = localStorage.getItem('refreshToken');
 
-      if (accessToken && refreshToken && idToken) {
+    if (refreshToken) {
+      if (
+        !accessToken ||
+        !idToken ||
+        isTokenExpired(decodeToken(accessToken)) ||
+        isTokenExpired(decodeToken(idToken))
+      ) {
+        console.log('⚠️ Tokens expired or missing, attempting refresh...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          console.log('❌ Token refresh failed, logging out');
+          setUser(null);
+        }
+      } else {
+        console.log('✅ Tokens are valid');
         const decodedAccessToken = decodeToken(accessToken);
         const decodedIdToken = decodeToken(idToken);
 
-        if (decodedAccessToken && decodedIdToken) {
-          // Check if access token is expired or about to expire
-          if (isTokenExpired(decodedAccessToken)) {
-            // Try to refresh tokens
-            const refreshed = await refreshTokens();
-            if (!refreshed) {
-              setUser(null);
-            }
-          } else {
-            setUser({
-              tokens: {
-                accessToken,
-                idToken,
-                refreshToken,
-              },
-              decoded_tokens: {
-                accessToken: decodedAccessToken,
-                idToken: decodedIdToken,
-              },
-            });
-          }
-        }
-      } else {
-        setUser(null);
+        setUser({
+          tokens: {
+            accessToken,
+            idToken,
+            refreshToken,
+          },
+          decoded_tokens: {
+            accessToken: decodedAccessToken,
+            idToken: decodedIdToken,
+          },
+        });
       }
-      setLoading(false);
-      setTokenValidationComplete(true);
-    };
+    } else {
+      console.log('❌ No refresh token found');
+      setUser(null);
+    }
+    setLoading(false);
+    setTokenValidationComplete(true);
+  };
 
+  useEffect(() => {
     loadUserFromTokens();
   }, []);
 
-  // Set up a token refresh interval
-  useEffect(() => {
-    if (!user) return;
+  const checkAndRefreshTokens = async () => {
+    if (!user || !user.decoded_tokens) {
+      console.log('No user or decoded tokens available');
+      return false;
+    }
 
-    const checkAndRefreshTokens = async () => {
-      const decodedAccessToken = user.decoded_tokens.accessToken;
-      if (isTokenExpired(decodedAccessToken)) {
-        await refreshTokens();
+    const decodedAccessToken = user.decoded_tokens.accessToken;
+    if (isTokenExpired(decodedAccessToken)) {
+      console.log('🕒 Token check: Token expired, attempting refresh...');
+      const refreshed = await refreshTokens();
+      if (!refreshed) {
+        logout();
+        return false;
       }
-    };
+      return true;
+    }
 
-    // Check tokens every 5 minutes
-    const intervalId = setInterval(checkAndRefreshTokens, 5 * 60 * 1000);
+    console.log('🕒 Token check: Token still valid');
+    return true;
+  };
+
+  // Modify the token refresh interval to be more proactive
+  useEffect(() => {
+    // Skip refresh interval in test mode
+    if (!user || initialTokens) return;
+
+    // Check tokens every 10 seconds
+    const intervalId = setInterval(checkAndRefreshTokens, 10 * 1000);
+
+    // Also check immediately when this effect runs
+    checkAndRefreshTokens();
 
     return () => clearInterval(intervalId);
   }, [user]);
@@ -270,18 +298,135 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const login = async (username, password) => {
+    // Step 1: Create the SRP session
+    const srpSession = createSrpSession(
+      username,
+      password,
+      USER_POOL_ID,
+      false,
+    );
+
+    // Step 2: Send SRP-A to initiate SRP flow
+    const initiateAuthRes = await fetch(`${API_ENDPOINT}/initiate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: username,
+        srpA: srpSession.largeA,
+      }),
+    });
+
+    const initiateData = await initiateAuthRes.json();
+    if (initiateData.error) {
+      throw new Error(initiateData.error);
+    }
+
+    // Step 3: Sign SRP session
+    const signedSrpSession = signSrpSession(srpSession, initiateData);
+
+    // Step 4: Respond to challenge
+    const respondToAuthChallengeRes = await fetch(`${API_ENDPOINT}/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: initiateData.ChallengeParameters.USERNAME,
+        challengeResponses: {
+          PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
+          PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
+        },
+        timestamp: srpSession.timestamp,
+      }),
+    });
+
+    const finalResponse = await respondToAuthChallengeRes.json();
+    if (finalResponse.error) {
+      throw new Error(finalResponse.error);
+    }
+
+    if (finalResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+      return { requiresNewPassword: true, session: finalResponse.Session };
+    }
+
+    await handleLoginSuccess(finalResponse.AuthenticationResult);
+    return { success: true };
+  };
+
+  const setNewPassword = async (username, oldPassword, newPassword) => {
+    const cognitoClient = new CognitoIdentityProviderClient({
+      region: REGION,
+    });
+
+    const initiateAuthCommand = new InitiateAuthCommand({
+      AuthFlow: 'USER_PASSWORD_AUTH',
+      ClientId: CLIENT_ID,
+      AuthParameters: {
+        USERNAME: username,
+        PASSWORD: oldPassword,
+      },
+    });
+
+    const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
+    if (initiateAuthResponse.ChallengeName !== 'NEW_PASSWORD_REQUIRED') {
+      throw new Error('Unexpected authentication response');
+    }
+
+    const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand({
+      ClientId: CLIENT_ID,
+      ChallengeName: 'NEW_PASSWORD_REQUIRED',
+      Session: initiateAuthResponse.Session,
+      ChallengeResponses: {
+        USERNAME: username,
+        NEW_PASSWORD: newPassword,
+      },
+    });
+
+    await cognitoClient.send(respondToAuthChallengeCommand);
+
+    // Login with new password
+    return await login(username, newPassword);
+  };
+
+  const handleLoginSuccess = async (tokens) => {
+    localStorage.setItem('accessToken', tokens.AccessToken);
+    localStorage.setItem('refreshToken', tokens.RefreshToken);
+    localStorage.setItem('idToken', tokens.IdToken);
+
+    const decodedAccessToken = jwtDecode(tokens.AccessToken);
+    const decodedIdToken = jwtDecode(tokens.IdToken);
+
+    setUser({
+      tokens: {
+        accessToken: tokens.AccessToken,
+        idToken: tokens.IdToken,
+        refreshToken: tokens.RefreshToken,
+      },
+      decoded_tokens: {
+        accessToken: decodedAccessToken,
+        idToken: decodedIdToken,
+      },
+    });
+  };
+
+  // Initialize user state from testConfig if available
+  useEffect(() => {
+    if (initialTokens) {
+      setUser(initialTokens);
+    }
+  }, [initialTokens]);
+
   const value = {
+    isAuthenticated: !!user,
     user,
     loading,
     tokenValidationComplete,
-    getAccessToken,
-    getRefreshToken,
-    getIdToken,
-    getUserInfo,
+    login,
     logout,
-    qBusinessClient,
-    qAppsClient,
-    setUser,
+    setNewPassword,
+    refreshTokens,
+    getAccessToken,
+    getUserInfo,
+    checkAndRefreshTokens,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -294,4 +439,17 @@ export const useAuth = () => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+};
+
+// Create a wrapper for testing
+export const TestAuthProvider = ({
+  children,
+  refreshHandler,
+  initialTokens,
+}) => {
+  return (
+    <AuthProvider refreshHandler={refreshHandler} initialTokens={initialTokens}>
+      {children}
+    </AuthProvider>
+  );
 };

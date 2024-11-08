@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity": "^3.668.0",
@@ -16,6 +17,8 @@
     "@aws-sdk/client-qbusiness": "^3.672.0",
     "@aws-sdk/credential-providers": "^3.670.0",
     "@popperjs/core": "^2.11.8",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.0.1",
     "amazon-cognito-identity-js": "^6.3.12",
     "aws-jwt-verify": "^4.0.1",
     "aws-sdk": "^2.1691.0",
@@ -28,15 +31,19 @@
     "jwt-decode": "^4.0.0",
     "react": "^18.2.0",
     "react-bootstrap": "^2.10.5",
+    "react-bootstrap-icons": "^1.11.4",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.26.2",
-    "react-transition-group": "^4.4.5"
+    "react-transition-group": "^4.4.5",
+    "vitest": "^2.1.4"
   },
   "devDependencies": {
     "@eslint/js": "^8.56.0",
+    "@testing-library/dom": "^10.4.0",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/coverage-v8": "2.1.4",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.31.0",
@@ -45,6 +52,7 @@
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.12",
     "globals": "^13.24.0",
+    "jsdom": "^25.0.1",
     "prettier": "^3.3.3",
     "sass-embedded": "^1.79.4",
     "vite": "^5.1.0"

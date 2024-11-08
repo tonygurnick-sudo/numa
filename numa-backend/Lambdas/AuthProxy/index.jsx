@@ -44,6 +44,8 @@ export const handler = async (event) => {
       result = await handleInitiateAuth(body);
     } else if (path === '/respond') {
       result = await handleRespondToChallenge(body);
+    } else if (path === '/refresh') {
+      result = await handleRefreshToken(body);
     } else {
       return {
         statusCode: 400,
@@ -55,7 +57,7 @@ export const handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify(result), // Send the full result back to the frontend
+      body: JSON.stringify(result),
     };
   } catch (error) {
     console.error('Error:', error);
@@ -98,6 +100,7 @@ async function handleInitiateAuth(body) {
       type: error.__type,
       fault: error.$fault,
       statusCode: error.$metadata?.httpStatusCode,
+      SECRET_HASH: secretHash
     };
   }
 }
@@ -159,6 +162,40 @@ async function handleRespondToChallenge(body) {
     return response;
   } catch (error) {
     console.error('RespondToAuthChallenge Error:', error);
+    throw {
+      message: error.message,
+      type: error.__type,
+      fault: error.$fault,
+      statusCode: error.$metadata?.httpStatusCode,
+      SECRET_HASH: secretHash
+    };
+  }
+}
+
+async function handleRefreshToken(body) {
+  const { refreshToken, username } = body;
+
+  if (!refreshToken) {
+    throw new Error('Missing required parameter: refreshToken');
+  }
+  if (!username) {
+    throw new Error('Missing required parameter: username');
+  }
+
+  const params = {
+    AuthFlow: 'REFRESH_TOKEN_AUTH',
+    ClientId: CLIENT_ID,
+    AuthParameters: {
+      REFRESH_TOKEN: refreshToken,
+      SECRET_HASH: calculateSecretHash(username),
+    },
+  };
+
+  try {
+    const response = await cognito.send(new InitiateAuthCommand(params));
+    return response;
+  } catch (error) {
+    console.error('RefreshToken Error:', error);
     throw {
       message: error.message,
       type: error.__type,
