@@ -162,11 +162,49 @@ const NumaChat = () => {
     );
   };
 
-  const handleConversationSelect = (conversation) => {
+  const fetchConversationHistory = async (conversationId) => {
+    setIsLoading(true);
+    try {
+      const input = {
+        applicationId: APPLICATION_ID,
+        conversationId: conversationId,
+        // You might need to adjust these parameters based on your API
+        maxResults: 50,
+      };
+
+      const command = new ListConversationsCommand(input);
+      const response = await qBusinessClient.send(command);
+
+      // Transform the messages into the format your chat expects
+      const formattedMessages =
+        response.messages?.map((message) => ({
+          role: message.role === 'USER' ? 'user' : 'assistant',
+          content: message.content,
+          id: message.messageId,
+          sources: message.sourceAttributions,
+        })) || [];
+
+      setMessages(formattedMessages);
+
+      // Set the last message ID as the previous message ID for continuation
+      if (formattedMessages.length > 0) {
+        const lastMessage = formattedMessages[formattedMessages.length - 1];
+        setPreviousMessageId(lastMessage.id);
+      }
+    } catch (error) {
+      console.error('Error fetching conversation history:', error);
+      setError('Failed to load conversation history');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleConversationSelect = async (conversation) => {
     setConversationId(conversation.conversationId);
-    // Clear current messages when switching conversations
-    setMessages([]);
-    // TODO: Fetch messages for selected conversation
+    if (isMobile) {
+      setShowConversations(false);
+    }
+    await fetchConversationHistory(conversation.conversationId);
   };
 
   return (
@@ -293,23 +331,32 @@ const NumaChat = () => {
                   height: '100%',
                 }}
               >
-                {messages.map((message, index) => (
-                  <div
-                    key={index}
-                    className={`message ${message.role} mb-3`}
-                    style={{
-                      padding: '8px',
-                      borderRadius: '5px',
-                      backgroundColor:
-                        message.role === 'user' ? '#e9ecef' : '#ffffff',
-                    }}
-                  >
-                    <strong>{message.role === 'user' ? 'You:' : 'AI:'}</strong>{' '}
-                    {message.content}
-                    {message.role === 'assistant' &&
-                      renderSourceAttributions(message.sources)}
+                {isLoading && messages.length === 0 ? (
+                  <div className="text-center">
+                    <span className="spinner-border spinner-border-sm me-2" />
+                    Loading conversation...
                   </div>
-                ))}
+                ) : (
+                  messages.map((message, index) => (
+                    <div
+                      key={index}
+                      className={`message ${message.role} mb-3`}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '5px',
+                        backgroundColor:
+                          message.role === 'user' ? '#e9ecef' : '#ffffff',
+                      }}
+                    >
+                      <strong>
+                        {message.role === 'user' ? 'You:' : 'AI:'}
+                      </strong>{' '}
+                      {message.content}
+                      {message.role === 'assistant' &&
+                        renderSourceAttributions(message.sources)}
+                    </div>
+                  ))
+                )}
                 <div ref={messageEndRef} />
               </div>
               <Form onSubmit={handleSubmit} className="mt-auto">

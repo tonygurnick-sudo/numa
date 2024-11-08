@@ -29,7 +29,10 @@ const API_ENDPOINT = 'https://g59jhyyob7.execute-api.us-east-1.amazonaws.com';
 const USER_POOL_ID = 'us-east-1_kVPZjTM6a';
 const CLIENT_ID = '48ed21kkeqa0h4jtrs08kbvvvr';
 
-export const AuthProvider = ({ children }) => {
+// Add a context for test configuration
+const TestConfigContext = createContext(null);
+
+export const AuthProvider = ({ children, testConfig }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [qBusinessClient, setQBusinessClient] = useState(null);
@@ -54,26 +57,35 @@ export const AuthProvider = ({ children }) => {
   const refreshTokens = async () => {
     try {
       console.log('🔄 Attempting to refresh tokens...');
-      const refreshToken = localStorage.getItem('refreshToken');
-      const tokens = getUserInfo();
+      const refreshToken =
+        testConfig?.initialTokens?.refreshToken ||
+        localStorage.getItem('refreshToken');
+      const tokens = testConfig?.initialTokens || getUserInfo();
 
       console.log('tokens', tokens);
 
-      if (!refreshToken || !tokens.decoded_tokens.idToken) {
+      if (!refreshToken || !tokens?.decoded_tokens?.idToken) {
         console.log('❌ No refresh token or ID token available');
         throw new Error('No refresh token or ID token available');
       }
 
-      const response = await fetch(`${API_ENDPOINT}/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          refreshToken: refreshToken,
+      let result;
+      if (testConfig?.refreshHandler) {
+        result = await testConfig.refreshHandler({
+          refreshToken,
           username: tokens.decoded_tokens.idToken.sub,
-        }),
-      });
-
-      const result = await response.json();
+        });
+      } else {
+        const response = await fetch(`${API_ENDPOINT}/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            refreshToken: refreshToken,
+            username: tokens.decoded_tokens.idToken.sub,
+          }),
+        });
+        result = await response.json();
+      }
 
       if (!result.AuthenticationResult) {
         console.log('❌ Failed to refresh tokens - No authentication result');
@@ -255,7 +267,8 @@ export const AuthProvider = ({ children }) => {
 
   // Modify the token refresh interval to be more proactive
   useEffect(() => {
-    if (!user) return;
+    // Skip refresh interval in test mode
+    if (!user || testConfig) return;
 
     const checkAndRefreshTokens = async () => {
       const decodedAccessToken = user.decoded_tokens.accessToken;
@@ -404,6 +417,13 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
+  // Initialize user state from testConfig if available
+  useEffect(() => {
+    if (testConfig?.initialTokens) {
+      setUser(testConfig.initialTokens);
+    }
+  }, [testConfig]);
+
   const value = {
     user,
     loading,
@@ -418,6 +438,7 @@ export const AuthProvider = ({ children }) => {
     setUser,
     login,
     setNewPassword,
+    refreshTokens,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -430,4 +451,17 @@ export const useAuth = () => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+};
+
+// Create a wrapper for testing
+export const TestAuthProvider = ({
+  children,
+  refreshHandler,
+  initialTokens,
+}) => {
+  return (
+    <AuthProvider testConfig={{ refreshHandler, initialTokens }}>
+      {children}
+    </AuthProvider>
+  );
 };
