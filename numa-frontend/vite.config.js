@@ -1,13 +1,17 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "node_modules/@popperjs/core": "@popperjs/core/dist/umd/popper.min.js",
+      'node_modules/@popperjs/core': '@popperjs/core/dist/umd/popper.min.js',
     },
     extensions: ['.js', '.jsx'],
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
   },
 });
