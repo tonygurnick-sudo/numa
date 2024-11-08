@@ -85,11 +85,6 @@ const TestComponent = ({ onAuth }) => {
 
 describe('AuthProvider', () => {
   let container;
-  const mockTokens = {
-    accessToken: 'mock-access-token',
-    refreshToken: 'mock-refresh-token',
-    idToken: 'mock-id-token',
-  };
 
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';

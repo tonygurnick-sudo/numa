@@ -46,6 +46,7 @@ export default [
       ...reactPlugin.configs.recommended.rules,
       ...reactHooksPlugin.configs.recommended.rules,
       ...importPlugin.configs.recommended.rules,
+      'react-hooks/exhaustive-deps': 'off',
       'react/prop-types': 'off',
       'react-refresh/only-export-components': [
         'warn',
