@@ -56,18 +56,14 @@ def load_secret(secret_name: str) -> Dict[str, QWorkspaceSecret] | None:
         secret_string = response.get("SecretString")
         if secret_string:
             # Parse the SecretString into a dictionary with dynamic secret names
-            secret_data: Dict[str, QWorkspaceSecret] = json.loads(
-                secret_string
-            )
+            secret_data: Dict[str, QWorkspaceSecret] = json.loads(secret_string)
             return secret_data
 
         st.error(f"No SecretString found for {secret_name}")
         return None
     except Exception as e:
         st.exception(
-            BaseException(
-                f"Error retrieving secret value for {secret_name}: {e}"
-            )
+            BaseException(f"Error retrieving secret value for {secret_name}: {e}")
         )
         return None
 
@@ -82,10 +78,7 @@ def retrieve_config_from_secret(secret_name: str, account: str) -> None:
     if "secret_data" not in st.session_state:
         st.session_state.secret_data = load_secret(secret_name)
 
-    if (
-        st.session_state.secret_data
-        and account in st.session_state.secret_data
-    ):
+    if st.session_state.secret_data and account in st.session_state.secret_data:
         st.session_state.current_account = account
         account_data = st.session_state.secret_data[account]
 
@@ -94,10 +87,7 @@ def retrieve_config_from_secret(secret_name: str, account: str) -> None:
             "ClientId": account_data["client_id"],
         }
 
-        if (
-            "session" not in st.session_state
-            or st.session_state.session is None
-        ):
+        if "session" not in st.session_state or st.session_state.session is None:
             st.session_state.session = boto3.Session(profile_name="qapps")
     else:
         st.error(f"Account '{account}' not found in secret '{secret_name}'.")
@@ -153,11 +143,9 @@ def handle_oauth2_token_retrieval_headless() -> None:
                     st.session_state.token["id_token"]
                 )
                 if st.session_state.idc_jwt_token:
-                    st.session_state.idc_jwt_token[
-                        "expires_at"
-                    ] = datetime.now(UTC) + timedelta(
-                        seconds=st.session_state.idc_jwt_token["expiresIn"]
-                    )
+                    st.session_state.idc_jwt_token["expires_at"] = datetime.now(
+                        UTC
+                    ) + timedelta(seconds=st.session_state.idc_jwt_token["expiresIn"])
                 st.rerun()
 
             except KeyError as e:
@@ -226,10 +214,7 @@ def get_iam_oidc_token(id_token: str) -> OIDCTokenResponse | None:
     :return: OIDCTokenResponse containing the IAM OIDC token information, or None if an error occurs.
     """
     try:
-        if (
-            "session" not in st.session_state
-            or st.session_state.session is None
-        ):
+        if "session" not in st.session_state or st.session_state.session is None:
             st.error("Boto3 session is not initialized.")
             return None
 
@@ -237,9 +222,9 @@ def get_iam_oidc_token(id_token: str) -> OIDCTokenResponse | None:
             "sso-oidc", region_name=os.getenv("AWS_REGION")
         )
         response = client.create_token_with_iam(
-            clientId=st.session_state.secret_data[
-                st.session_state.current_account
-            ]["idc_application_id"],
+            clientId=st.session_state.secret_data[st.session_state.current_account][
+                "idc_application_id"
+            ],
             grantType="urn:ietf:params:oauth:grant-type:jwt-bearer",
             assertion=id_token,
         )
@@ -251,8 +236,7 @@ def get_iam_oidc_token(id_token: str) -> OIDCTokenResponse | None:
             idToken=response["idToken"],
             issuedTokenType=response["issuedTokenType"],
             scope=response["scope"],
-            expires_at=datetime.now(UTC)
-            + timedelta(seconds=response["expiresIn"]),
+            expires_at=datetime.now(UTC) + timedelta(seconds=response["expiresIn"]),
         )
     except Exception as e:
         st.error(f"Error retrieving IDC JWT token: {e}")
@@ -266,9 +250,7 @@ def assume_role_with_token(iam_token: str, verbose: bool = False) -> None:
     :param verbose: If True, print verbose output.
     """
     try:
-        decoded_token = pyjwt.decode(
-            iam_token, options={"verify_signature": False}
-        )
+        decoded_token = pyjwt.decode(iam_token, options={"verify_signature": False})
         identity_context = decoded_token.get("sts:identity_context")
 
         if not identity_context:
@@ -276,10 +258,7 @@ def assume_role_with_token(iam_token: str, verbose: bool = False) -> None:
                 st.error("No sts:identity_context found in token")
             return
 
-        if (
-            "session" not in st.session_state
-            or st.session_state.session is None
-        ):
+        if "session" not in st.session_state or st.session_state.session is None:
             st.error("Boto3 session is not initialized.")
             return
 
@@ -289,9 +268,9 @@ def assume_role_with_token(iam_token: str, verbose: bool = False) -> None:
         identity_center_arn = "arn:aws:iam::aws:contextProvider/IdentityCenter"
 
         response = sts_client.assume_role(
-            RoleArn=st.session_state.secret_data[
-                st.session_state.current_account
-            ]["iam_role"],
+            RoleArn=st.session_state.secret_data[st.session_state.current_account][
+                "iam_role"
+            ],
             RoleSessionName="qapp",
             ProvidedContexts=[
                 {
@@ -319,16 +298,12 @@ def get_qclient(idc_id_token: str) -> BaseClient:
     """
     if not st.session_state.aws_credentials:
         assume_role_with_token(idc_id_token)
-    elif st.session_state.aws_credentials["Expiration"] < datetime.now(
-        timezone.utc
-    ):
+    elif st.session_state.aws_credentials["Expiration"] < datetime.now(timezone.utc):
         assume_role_with_token(idc_id_token)
 
     assumed_session = boto3.Session(
         aws_access_key_id=st.session_state.aws_credentials["AccessKeyId"],
-        aws_secret_access_key=st.session_state.aws_credentials[
-            "SecretAccessKey"
-        ],
+        aws_secret_access_key=st.session_state.aws_credentials["SecretAccessKey"],
         aws_session_token=st.session_state.aws_credentials["SessionToken"],
     )
     amazon_q = assumed_session.client("qapps", os.getenv("AWS_REGION"))

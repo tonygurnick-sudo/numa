@@ -15,8 +15,7 @@ def display_app_details(app_info: Dict):
     s3_object = app_info.get("s3_object", {})
 
     app_title = (
-        instance_app.get("title")
-        or s3_object.get("Key", "Unnamed App").split(".")[0]
+        instance_app.get("title") or s3_object.get("Key", "Unnamed App").split(".")[0]
     )
     app_description = instance_app.get("description") or s3_object.get(
         "description", "No description available"
@@ -107,9 +106,7 @@ def display_app_details(app_info: Dict):
         # Export to Numa S3 button
         if app_info.get("status") != "In S3":
             with col5:
-                if st.button(
-                    label="Export to Numa S3", key=f"{app_title}_export"
-                ):
+                if st.button(label="Export to Numa S3", key=f"{app_title}_export"):
                     # Upload the JSON data directly to S3 with appID and version as metadata
                     object_key = f"{app_title}.json"
                     metadata = {
@@ -127,9 +124,7 @@ def display_app_details(app_info: Dict):
                             f"App {app_title} exported to Numa S3 with version {app_version}."
                         )
                     else:
-                        st.error(
-                            f"Failed to export app {app_title} to Numa S3."
-                        )
+                        st.error(f"Failed to export app {app_title} to Numa S3.")
 
 
 def compare_instance_and_s3_apps(
@@ -162,9 +157,7 @@ def compare_instance_and_s3_apps(
         s3_metadata = s3_object.get("RawMetadata", {}).get("Metadata", {})
         s3_app_id = s3_metadata.get("appid")
         s3_version = safe_int_convert(s3_metadata.get("version"))
-        s3_tag = s3_metadata.get(
-            "tag"
-        )  # Assuming there's a tag field in metadata
+        s3_tag = s3_metadata.get("tag")  # Assuming there's a tag field in metadata
 
         if s3_app_id:
             matching_instance_app = instance_app_dict.get(s3_app_id)
@@ -210,9 +203,7 @@ def compare_instance_and_s3_apps(
                     "status": "Not Deployed",
                     "has_tag": bool(s3_tag),
                     "is_parent": False,
-                    "debug_info": {
-                        "reason": "S3 object doesn't have an appId"
-                    },
+                    "debug_info": {"reason": "S3 object doesn't have an appId"},
                 }
             )
 
@@ -229,9 +220,7 @@ def compare_instance_and_s3_apps(
                     "status": "Only in Instance",
                     "has_tag": False,
                     "is_parent": True,
-                    "debug_info": {
-                        "reason": "App exists only in instance, not in S3"
-                    },
+                    "debug_info": {"reason": "App exists only in instance, not in S3"},
                 }
             )
 
@@ -249,9 +238,7 @@ def display_comparison_ui(instance_apps: List[Dict], s3_objects: List[Dict]):
     comparison_result = compare_instance_and_s3_apps(instance_apps, s3_objects)
 
     # Add a checkbox to toggle the visibility of apps only in the instance
-    show_only_in_instance = st.checkbox(
-        "Show Apps Only in the Instance", value=False
-    )
+    show_only_in_instance = st.checkbox("Show Apps Only in the Instance", value=False)
 
     # Display deployed apps (in both S3 and the instance)
     st.write("### Deployed Apps (In S3 and the Instance)")
