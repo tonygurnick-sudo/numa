@@ -28,7 +28,7 @@ const Dash = () => {
         setLoading(false);
       } catch (error) {
         console.error('Error fetching apps:', error);
-        setError(error);
+        setError(error.message);
         setLoading(false);
       }
     };

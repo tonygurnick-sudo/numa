@@ -29,9 +29,6 @@ const API_ENDPOINT = 'https://g59jhyyob7.execute-api.us-east-1.amazonaws.com';
 const USER_POOL_ID = 'us-east-1_kVPZjTM6a';
 const CLIENT_ID = '48ed21kkeqa0h4jtrs08kbvvvr';
 
-// Add a context for test configuration
-const TestConfigContext = createContext(null);
-
 export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -200,51 +197,51 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     }
   }, [user, initializeQBusinessClient, initializeQAppsClient]);
 
-  const loadUserFromTokens = async () => {
-    console.log('🔍 Checking token status...');
-    const accessToken = localStorage.getItem('accessToken');
-    const idToken = localStorage.getItem('idToken');
-    const refreshToken = localStorage.getItem('refreshToken');
+  useEffect(() => {
+    const loadUserFromTokens = async () => {
+      console.log('🔍 Checking token status...');
+      const accessToken = localStorage.getItem('accessToken');
+      const idToken = localStorage.getItem('idToken');
+      const refreshToken = localStorage.getItem('refreshToken');
 
-    if (refreshToken) {
-      if (
-        !accessToken ||
-        !idToken ||
-        isTokenExpired(decodeToken(accessToken)) ||
-        isTokenExpired(decodeToken(idToken))
-      ) {
-        console.log('⚠️ Tokens expired or missing, attempting refresh...');
-        const refreshed = await refreshTokens();
-        if (!refreshed) {
-          console.log('❌ Token refresh failed, logging out');
-          setUser(null);
+      if (refreshToken) {
+        if (
+          !accessToken ||
+          !idToken ||
+          isTokenExpired(decodeToken(accessToken)) ||
+          isTokenExpired(decodeToken(idToken))
+        ) {
+          console.log('⚠️ Tokens expired or missing, attempting refresh...');
+          const refreshed = await refreshTokens();
+          if (!refreshed) {
+            console.log('❌ Token refresh failed, logging out');
+            setUser(null);
+          }
+        } else {
+          console.log('✅ Tokens are valid');
+          const decodedAccessToken = decodeToken(accessToken);
+          const decodedIdToken = decodeToken(idToken);
+
+          setUser({
+            tokens: {
+              accessToken,
+              idToken,
+              refreshToken,
+            },
+            decoded_tokens: {
+              accessToken: decodedAccessToken,
+              idToken: decodedIdToken,
+            },
+          });
         }
       } else {
-        console.log('✅ Tokens are valid');
-        const decodedAccessToken = decodeToken(accessToken);
-        const decodedIdToken = decodeToken(idToken);
-
-        setUser({
-          tokens: {
-            accessToken,
-            idToken,
-            refreshToken,
-          },
-          decoded_tokens: {
-            accessToken: decodedAccessToken,
-            idToken: decodedIdToken,
-          },
-        });
+        console.log('❌ No refresh token found');
+        setUser(null);
       }
-    } else {
-      console.log('❌ No refresh token found');
-      setUser(null);
-    }
-    setLoading(false);
-    setTokenValidationComplete(true);
-  };
+      setLoading(false);
+      setTokenValidationComplete(true);
+    };
 
-  useEffect(() => {
     loadUserFromTokens();
   }, []);
 
@@ -427,6 +424,8 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     getAccessToken,
     getUserInfo,
     checkAndRefreshTokens,
+    qBusinessClient,
+    qAppsClient,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
