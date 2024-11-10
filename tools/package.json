@@ -22,6 +22,7 @@
     "build": "tsc",
     "check-index-progress": "node --import tsx check-index-progress.ts",
     "create-users": "node --import tsx create-users.ts",
+    "delete-users": "node --import tsx delete-users.ts",
     "lint": "eslint . && tsc --noEmit",
     "test": "tsx --test",
     "upload-files": "node --import tsx upload-files.ts"
