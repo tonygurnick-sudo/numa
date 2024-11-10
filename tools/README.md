@@ -58,6 +58,16 @@ Note: If there are some failures to activate users, the script may hang after pr
 
 The created users and their temporary passwords will be written to user-details.csv.
 
+### delete-users
+
+<pre>
+# Dry run to see what would be deleted:
+AWS_PROFILE=arcanum-q-deployer-prod yarn delete-users <b>client-name</b>
+
+# Actually delete the users:
+AWS_PROFILE=arcanum-q-deployer-prod yarn delete-users <b>client-name</b> live
+</pre>
+
 ### upload-files
 
 upload-files requires a flat zip file of the files to be indexed. If the files are being delivered through Jira, this can be created using the "Download all" menu item.
