@@ -53,17 +53,13 @@ class TestStreamlitApp(unittest.TestCase):
         st.session_state.credentials_selected = True
         st.session_state.selected_account = "account1"
 
-        mock_oauth_config.return_value = (
-            None  # Simulate OAuth configuration failure
-        )
+        mock_oauth_config.return_value = None  # Simulate OAuth configuration failure
         retrieve_oauth2_token()
         mock_error.assert_called_with(
             "OAuth2 component could not be configured. Please check your OAUTH_CONFIG."
         )
 
-        mock_oauth_config.return_value = (
-            True  # Simulate OAuth configuration success
-        )
+        mock_oauth_config.return_value = True  # Simulate OAuth configuration success
         retrieve_oauth2_token()
         mock_handle_oauth.assert_called()
 

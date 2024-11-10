@@ -32,9 +32,7 @@ def list_s3_objects_with_metadata(bucket_name: str) -> List[Dict]:
                 object_metadata = s3_client.head_object(
                     Bucket=bucket_name, Key=object_key
                 )
-                s3_app_id = object_metadata.get("Metadata", {}).get(
-                    "appid", None
-                )
+                s3_app_id = object_metadata.get("Metadata", {}).get("appid", None)
 
                 # Add metadata if appId exists
                 if s3_app_id:
@@ -45,9 +43,7 @@ def list_s3_objects_with_metadata(bucket_name: str) -> List[Dict]:
                 objects_with_metadata.append(obj)
 
             except Exception as e:
-                st.warning(
-                    f"Failed to fetch metadata for object {object_key}: {e}"
-                )
+                st.warning(f"Failed to fetch metadata for object {object_key}: {e}")
 
         return objects_with_metadata
 

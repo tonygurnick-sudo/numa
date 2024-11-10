@@ -21,9 +21,7 @@ def initialize_session_state() -> None:
     if "debug_logs" not in st.session_state:
         st.session_state.debug_logs = []  # Store debug logs to display
     if "q_app_response" not in st.session_state:
-        st.session_state.q_app_response = (
-            None  # Store the Q App creation response
-        )
+        st.session_state.q_app_response = None  # Store the Q App creation response
     if "token" not in st.session_state:
         st.session_state.token = None  # Store the OAuth2 token
     if "selected_account" not in st.session_state:
@@ -67,10 +65,7 @@ def retrieve_oauth2_token() -> None:
     """
     Retrieve or refresh the OAuth2 token.
     """
-    if (
-        st.session_state.credentials_selected
-        and st.session_state.selected_account
-    ):
+    if st.session_state.credentials_selected and st.session_state.selected_account:
         st.write(
             f"Authenticating with selected account: {st.session_state.selected_account}"
         )
@@ -102,9 +97,7 @@ def retrieve_oauth2_token() -> None:
                     except Exception as e:
                         st.error(f"Error refreshing token: {e}")
             else:
-                st.error(
-                    "IDC JWT Token is not available. Please authenticate first."
-                )
+                st.error("IDC JWT Token is not available. Please authenticate first.")
 
 
 def list_and_display_library_apps() -> None:
@@ -119,9 +112,7 @@ def list_and_display_library_apps() -> None:
 
             with st.spinner("Fetching Library Apps..."):
                 # Get the Q client using the IDC JWT token
-                qclient = auth.get_qclient(
-                    st.session_state.idc_jwt_token["idToken"]
-                )
+                qclient = auth.get_qclient(st.session_state.idc_jwt_token["idToken"])
 
                 if qclient:
                     # List library items from the Q client
@@ -167,9 +158,7 @@ def main():
     initialize_session_state()
 
     # Set page config and title
-    st.set_page_config(
-        page_title="Amazon Q Apps Deployer", page_icon=":rocket:"
-    )
+    st.set_page_config(page_title="Amazon Q Apps Deployer", page_icon=":rocket:")
     st.title("Amazon Q Apps Deployer")
 
     # Secret loading and account selection

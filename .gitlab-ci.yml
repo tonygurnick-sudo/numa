@@ -15,16 +15,22 @@ variables:
   variables:
     BUILD_DIR: tools
 
+.python-matrix:
+  matrix:
+    - PYTHON_WORKING_DIRECTORY:
+        - deployer
+        - lambdas/extract-content-from-file-general
+
 python-lint:
   extends: .poetry-job
   needs: []
-  variables:
-    PYTHON_WORKING_DIRECTORY: deployer
+  parallel:
+    !reference [.python-matrix]
   script:
     - poetry run pylint . --verbose --recursive yes --ignore .venv
     - poetry run mypy .
     - poetry run pyright .
 
 python-test:
-  variables:
-    PYTHON_WORKING_DIRECTORY: deployer
+  parallel:
+    !reference [.python-matrix]

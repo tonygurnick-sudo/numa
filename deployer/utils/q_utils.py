@@ -96,9 +96,7 @@ def create_q_app_with_version(
         return None
 
 
-def list_library(
-    q_client: BaseClient, verbose: bool = False
-) -> List[QAppResponse]:
+def list_library(q_client: BaseClient, verbose: bool = False) -> List[QAppResponse]:
     """
     List all library items from Q.
 
@@ -124,8 +122,8 @@ def list_library(
                 q_list_def["NextToken"] = next_token
 
             # Expecting the response to be a dictionary with known keys and types
-            response: Dict[str, List[QAppResponse]] = (
-                q_client.list_library_items(**q_list_def)  # type: ignore
+            response: Dict[str, List[QAppResponse]] = q_client.list_library_items(  # type: ignore
+                **q_list_def
             )
 
             if verbose:
@@ -136,9 +134,7 @@ def list_library(
 
             # Check for the presence of a NextToken for pagination
             next_token_value = response.get("NextToken", None)
-            next_token = (
-                next_token_value if isinstance(next_token_value, str) else None
-            )
+            next_token = next_token_value if isinstance(next_token_value, str) else None
 
             # If there is no NextToken, exit the loop
             more_items = bool(next_token)
@@ -195,9 +191,7 @@ def get_all_q_apps(q_client: BaseClient) -> List[QAppResponse]:
                 app_data: QAppResponse = get_app(q_client, item["appId"])
                 all_apps_data.append(app_data)
             except Exception as app_err:
-                st.error(
-                    f"Failed to fetch app details for {item['appId']}: {app_err}"
-                )
+                st.error(f"Failed to fetch app details for {item['appId']}: {app_err}")
 
         return all_apps_data
     except Exception as e:
