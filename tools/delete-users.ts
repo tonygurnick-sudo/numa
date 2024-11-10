@@ -11,8 +11,8 @@ const region = 'us-east-1';
 const inputFile = 'input.csv';
 
 export async function deleteQUsers(
-  credentials: AwsCredentialIdentityProvider, 
-  userPool: string, 
+  credentials: AwsCredentialIdentityProvider,
+  userPool: string,
   dryRun: boolean
 ): Promise<void> {
   const client = new CognitoIdentityProviderClient({ region, credentials });
