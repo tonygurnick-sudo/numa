@@ -8,6 +8,9 @@
   "arcanum-demo": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
+    "apps": {
+      "example": { }
+    },
     "webCrawlerConfigs": [
       {
         "url": "https://arcanum.ai/"

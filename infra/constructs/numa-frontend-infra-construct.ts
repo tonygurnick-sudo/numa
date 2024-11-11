@@ -7,6 +7,7 @@ import { Construct } from 'constructs';
 
 export class NumaFrontendInfra extends Construct {
   readonly frontendBucket: S3Bucket;
+  readonly apiGateway: Apigatewayv2Api;
   constructor(scope: Construct, name: string, props: NumaFrontendInfraProps) {
     super(scope, name);
 
@@ -15,17 +16,17 @@ export class NumaFrontendInfra extends Construct {
       bucket: numaClient + '-fe',
     }).bucket;
 
-    const apiGateway = new Apigatewayv2Api(this, 'api-gw', {
+    this.apiGateway = new Apigatewayv2Api(this, 'api-gw', {
       name: 'numa-gateway',
       protocolType: 'HTTP',
     });
 
     const apiGatewayLogGroup = new CloudwatchLogGroup(this, 'api-gateway-log-group', {
-      name: apiGateway.name + '-access',
+      name: this.apiGateway.name + '-access',
     });
 
     new Apigatewayv2Stage(this, 'api-stage', {
-      apiId: apiGateway.id,
+      apiId: this.apiGateway.id,
       name: '$default',
       autoDeploy: true,
       accessLogSettings: {

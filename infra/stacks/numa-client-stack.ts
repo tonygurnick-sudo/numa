@@ -5,6 +5,7 @@ import { BaseNumaApp, BaseNumaAppProps } from '../constructs/base-numa-app-const
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import _clientConfigProd from '../../clientConfigProd.json';
 import _clientConfigDev from '../../clientConfigDev.json';
+import { ExampleNumaApp } from '../constructs/example-numa-app-construct';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -24,19 +25,22 @@ export class NumaClientStack extends ArcanumStack {
       environmentName: props.environmentName,
     });
 
-    new NumaFrontendInfra(this, 'numa-frontend', {
+    const fe = new NumaFrontendInfra(this, 'numa-frontend', {
       ...props.config,
       environmentName: props.environmentName,
     });
 
     Object.entries(props.config.apps ?? {}).forEach(
-      ([appId, appConfig]) => new (lookupAppFromId(appId))(this, appId, appConfig),
+      ([appId, appConfig]) => new (lookupAppFromId(appId))(this, appId, {
+        ...appConfig,
+        apiGatewayId: fe.apiGateway.id,
+      }),
     );
   }
 }
 
 interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
-  apps?: Record<string, BaseNumaAppProps>;
+  apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId'>>;
 }
 const clientConfigDev = _clientConfigDev as Record<string, Omit<ClientConfig, 'client'>>;
 const clientConfigProd = _clientConfigProd as Record<string, Omit<ClientConfig, 'client'>>;
@@ -55,7 +59,9 @@ export interface NumaClientStackProps extends ArcanumStackProps {
   config?: ClientConfig;
 }
 
-const apps: Record<string, typeof BaseNumaApp> = {};
+const apps: Record<string, typeof BaseNumaApp> = {
+  example: ExampleNumaApp,
+};
 
 function lookupAppFromId(id: string): typeof BaseNumaApp {
   return apps[id] ?? BaseNumaApp;
