@@ -10,15 +10,19 @@ import { Dash } from './Pages/Dash';
 import AppDetail from './Pages/AppDetail';
 
 import { AuthProvider, useAuth } from './Providers/AuthProvider';
+import { NumaAppProvider } from './Providers/NumaAppProvider';
+
 import { NumaChat } from './Pages/NumaChat';
 import { S3Uploader } from './Pages/S3Uploader';
 
 const NumaRoutes = () => {
   return (
     <AuthProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
+      <NumaAppProvider>
+        <Router>
+          <AppRoutes />
+        </Router>
+      </NumaAppProvider>
     </AuthProvider>
   );
 };

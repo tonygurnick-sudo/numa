@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Button, Container, Row, Col } from 'react-bootstrap';
 
-function BackendModule({ task }) {
-  const [executionStatus, setExecutionStatus] = useState('idle'); // idle, running, success, failed
+import { Row, Col } from 'react-bootstrap';
+import { useNumaApp } from '../Providers/NumaAppProvider';
+
+function NumaRequestModule({ task }) {
+  const { loading, numaTaskResponse, error, runActive, startApp, numaAppData } =
+    useNumaApp();
 
   useEffect(() => {
     // Logic to initiate Step Function execution and track its status
@@ -23,7 +26,7 @@ function BackendModule({ task }) {
       </div>
 
       <div className="card-body">
-        <p>lambdaArn: {task?.params?.lambdaArn}</p>
+        <p>endpoint: {task?.endpoint}</p>
         <p>input from: {task?.params?.input?.inputContentRef}</p>
         <label className="type"></label>
 
@@ -36,4 +39,4 @@ function BackendModule({ task }) {
   );
 }
 
-export { BackendModule };
+export { NumaRequestModule };
