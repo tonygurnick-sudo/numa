@@ -7,18 +7,23 @@ import { Preloader } from './Preloader';
 import { useAuth } from '../Providers/AuthProvider';
 import { GetQAppCommand, GetQAppSessionCommand } from '@aws-sdk/client-qapps';
 import { NumaChat } from '../Pages/NumaChat';
+import { useNumaApp } from '../Providers/NumaAppProvider';
 
-const QAppDetail = ({
-  setRunActive,
-  qAppId,
-  setqAppData,
-  qAppData,
-  setIsPolling,
-  isPolling,
-  qSsessionId,
-  setCardInputValues,
-  cardInputValues,
-}) => {
+const QAppDetail = () => {
+  const {
+    setRunActive,
+    qSsessionId,
+    isPolling,
+    setIsPolling,
+    numaAppData,
+    setqAppData,
+    qAppData,
+    setQCardInputValues,
+    qCardInputValues,
+  } = useNumaApp();
+
+  const qAppId = numaAppData.qAppId;
+
   const { qAppsClient, loading: authLoading } = useAuth();
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
 
@@ -28,7 +33,7 @@ const QAppDetail = ({
 
   // Update specific card's input value
   const handleInputChange = (cardId, value) => {
-    setCardInputValues((prevValues) => ({
+    setQCardInputValues((prevValues) => ({
       ...prevValues,
       [cardId]: value,
     }));
@@ -40,7 +45,7 @@ const QAppDetail = ({
       const cardId = card[Object.keys(card)[0]].id;
       const isTextInput = card[Object.keys(card)[0]].type === 'text-input';
       const defaultValue = card[Object.keys(card)[0]].defaultValue;
-      const userInput = cardInputValues[cardId];
+      const userInput = qCardInputValues[cardId];
 
       return isTextInput && !userInput && !defaultValue; // Check if required input is missing
     });
@@ -133,7 +138,7 @@ const QAppDetail = ({
         updatedInputValues[cardId] = status.currentValue;
       });
 
-      setCardInputValues((prevValues) => ({
+      setQCardInputValues((prevValues) => ({
         ...prevValues,
         ...updatedInputValues,
       }));
@@ -167,7 +172,7 @@ const QAppDetail = ({
                   appsCards={qAppData.appDefinition.cards}
                   onInputChange={handleInputChange}
                   inputValue={
-                    cardInputValues[cardData.id] || cardData.defaultValue
+                    qCardInputValues[cardData.id] || cardData.defaultValue
                   }
                 />
               </Col>

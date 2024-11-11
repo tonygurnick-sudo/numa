@@ -20,9 +20,26 @@
           "nextTask": "call-step-function"
         },
         {
+          "id": "meeting-context",
+          "title": "Your Meeting Context (Optional)",
+          "type": "text-input",
+          "order": 1,
+          "nextTask": "call-step-function"
+        },
+        {
+          "id": "template",
+          "title": "Use a Template (Optional)",
+          "type": "text-input",
+          "order": 1,
+          "nextTask": "call-step-function"
+        },
+        {
           "id": "call-step-function",
           "title": "Process Meeting Notes",
           "type": "http-request",
+          "requiredTasks": {
+            "any": ["upload-files-to-s3", "meeting-context", "template"]
+          },
           "endpoint": "meeting-tools",
           "params": {
             "payload": {

@@ -1,4 +1,4 @@
-import { Button, Container, Row, Col } from 'react-bootstrap';
+import { Row, Col } from 'react-bootstrap';
 
 function TextOutputModule({ task }) {
   // Assuming the output data is available in the `params.dataRef` property

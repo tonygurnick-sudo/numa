@@ -3,6 +3,8 @@ import {
   CreateQAppCommand,
   CreateLibraryItemCommand,
   DeleteQAppCommand,
+  ListQAppsCommand,
+  ListLibraryItemsCommand,
 } from '@aws-sdk/client-qapps';
 
 const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
@@ -100,6 +102,57 @@ export const addAppToLibrary = async ({
     }
   } catch (error) {
     console.error('Error adding Q App to lib:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+export const fetchLibItems = async (qAppsClient) => {
+  if (!qAppsClient || authLoading) return;
+
+  // Get lib apps
+  try {
+    setLoading(true);
+    const input = {
+      instanceId: APPLICATION_ID,
+    };
+
+    const lib_command = new ListLibraryItemsCommand(input);
+    const lib_response = await qAppsClient.send(lib_command);
+
+    // TODO
+    //setLibraryApps(lib_response.libraryItems);
+  } catch (error) {
+    console.error('Error fetching Q Apps:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+// FETCH Q APPS
+export const fetchApps = async (qAppsClient) => {
+  if (!qAppsClient) return;
+
+  // Get user appointed apps
+  try {
+    setLoading(true);
+    const input = {
+      instanceId: APPLICATION_ID,
+    };
+
+    const command = new ListQAppsCommand(input);
+    const response = await qAppsClient.send(command);
+
+    // Filter myApps and add a flag
+    const uniqueApps = response.apps.map((app) => ({
+      ...app,
+      isMyApp: libraryApps.some((libApp) => libApp.appID === app.appID),
+    }));
+
+    setDisplayApps(uniqueApps);
+    //setApps(response.apps);
+  } catch (error) {
+    console.error('Error fetching Q Apps:', error);
   } finally {
     setLoading(false);
   }

@@ -6,16 +6,13 @@ import { useNavigate } from 'react-router-dom';
 import { addAppToLibrary, deleteQAppById } from '../qAppHelper';
 import { useAuth } from '../Providers/AuthProvider';
 import { StartQAppSessionCommand } from '@aws-sdk/client-qapps';
+import { useNumaApp } from '../Providers/NumaAppProvider';
 
-const QAppDetailHeader = ({
-  qAppId,
-  qAppData,
-  runActive,
-  setQSessionId,
-  setIsPolling,
-  cardInputValues,
-}) => {
+const QAppDetailHeader = () => {
   const navigate = useNavigate();
+  const { runActive, setQSessionId, setIsPolling, qAppData, qCardInputValues } =
+    useNumaApp();
+  const qAppId = qAppData.appId;
 
   const { qAppsClient, loading: authLoading } = useAuth();
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
@@ -30,7 +27,6 @@ const QAppDetailHeader = ({
     if (!qAppsClient || authLoading) return;
 
     console.log('debug - qAppId', qAppId);
-    console.log('debug - qAppData', qAppData);
     try {
       const payload = {
         instanceId: APPLICATION_ID,
@@ -40,7 +36,7 @@ const QAppDetailHeader = ({
           .map((card) => {
             const cardId = card[Object.keys(card)[0]].id;
             const defaultValue = card[Object.keys(card)[0]].defaultValue;
-            const value = cardInputValues[cardId] || defaultValue || '';
+            const value = qCardInputValues[cardId] || defaultValue || '';
             return value ? { cardId, value } : null; // Only include cards with a value
           })
           .filter(Boolean), // Filter out nulls
