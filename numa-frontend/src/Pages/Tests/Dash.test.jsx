@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { Dash } from '../Dash';
 import { NumaAppProvider } from '../../Providers/NumaAppProvider';
-import manifestData from '../../Data/example-manifest.json';
+import { dashboardFixtures } from './Fixtures/PageFixtures';
 
 // Mock the components used in Dash
 vi.mock('../../Components/Breadcrumbs', () => ({
@@ -35,9 +35,7 @@ vi.mock('../../Layouts/LayoutDashboard', () => ({
 
 // Mock the manifest at the top level with empty apps array
 vi.mock('../Data/example-manifest.json', () => ({
-  default: {
-    apps: [],
-  },
+  default: dashboardFixtures.validApps,
 }));
 
 describe('Dash Component', () => {
@@ -72,8 +70,8 @@ describe('Dash Component', () => {
       expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
     });
 
-    // Check if apps are rendered using imported manifest data
-    manifestData.apps.forEach((app) => {
+    // Check if apps are rendered using fixture data
+    dashboardFixtures.validApps.apps.forEach((app) => {
       const appCard = screen.getByTestId(`app-card-${app.id}`);
       expect(appCard).toBeInTheDocument();
 
@@ -141,15 +139,7 @@ describe('Dash Component', () => {
       '../Data/example-manifest.json',
       () => ({
         default: {
-          apps: [
-            {
-              id: 'meeting-tools-app',
-              appName: 'Meeting Tools App',
-              appDescription: 'Processes meeting notes.',
-              status: 'Active',
-            },
-            // ... other manifest apps
-          ],
+          apps: [dashboardFixtures.validApps.apps[0]], // Use first app from fixtures
         },
       }),
       { virtual: true },
@@ -197,7 +187,7 @@ describe('Dash Component', () => {
     });
 
     // Check if app cards have correct links
-    manifestData.apps.forEach((app) => {
+    dashboardFixtures.validApps.apps.forEach((app) => {
       const card = screen.getByTestId(`app-card-${app.id}`);
       const link = card.querySelector('a');
       expect(link).toHaveAttribute('href', `/app/${app.id}`);
@@ -224,7 +214,7 @@ describe('Dash Component', () => {
 
     // Verify no app cards are rendered
     const appCards = screen.queryAllByTestId(/^app-card-/);
-    expect(appCards).toHaveLength(5);
+    expect(appCards).toHaveLength(dashboardFixtures.validApps.apps.length);
   });
 
   it('should handle manifest parsing error', async () => {

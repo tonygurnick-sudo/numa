@@ -49,6 +49,7 @@ const Dash = () => {
           sessionStorage.setItem('appsData', JSON.stringify(appsData));
         } catch (manifestError) {
           // If manifest loading fails, set error and empty apps array
+          setLoading(false);
           setError('Failed to load apps: Invalid manifest data');
           setNumaApps([]);
           return;
@@ -129,10 +130,10 @@ const Dash = () => {
                             className="card-body"
                             data-testid="app-description"
                           >
-                            {loading ? (
+                            {app?.appDescription === 'Loading...' ? (
                               <Preloader smallscreen={true} />
                             ) : (
-                              <> {app?.appDescription}</>
+                              <>{app?.appDescription}</>
                             )}
                           </div>
                           <div className="card-buttons">
