@@ -103,7 +103,8 @@ export const NumaAppProvider = ({ children }) => {
     const fetchData = async () => {
       try {
         const appsData = JSON.parse(sessionStorage.getItem('appsData'));
-        const app = appsData.apps.find((app) => app.id === numaAppId);
+        console.log('appsData', appsData);
+        const app = appsData.find((app) => app.id === numaAppId);
         setNumaAppData(app);
         setLoading(false);
       } catch (error) {
