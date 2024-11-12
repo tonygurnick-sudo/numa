@@ -15,6 +15,8 @@ const Dash = () => {
 
   const [response, setResponse] = useState(null);
 
+  console.log('Dash Component Data:', { error, loading, numaApps }); // Debug log
+
   useEffect(() => {
     const fetchApps = async () => {
       try {
@@ -69,26 +71,40 @@ const Dash = () => {
 
         <LayoutDashboard>
           <Row>
-            {error && <Alert variant="danger">{error}</Alert>}
+            {error && (
+              <Alert variant="danger" data-testid="error-message">
+                {error.message || error}
+              </Alert>
+            )}
             {loading ? (
               <Preloader />
             ) : (
               <>
-                {numaApps?.apps?.map((app) => (
+                {numaApps?.map((app) => (
                   <Col key={app.id} lg={4} className="flex">
-                    <div className="card card-apps">
+                    <div
+                      className="card card-apps"
+                      data-testid={`app-card-${app.id}`}
+                    >
                       <a href={`/app/${app.id}`} rel="noopener">
                         <div className="card-header">
                           <Row>
-                            <Col lg={9}>{app?.appName}</Col>
+                            <Col lg={9} data-testid="app-name">
+                              {app?.appName}
+                            </Col>
                             <Col lg={3} className="right">
                               {app?.appVersion && (
-                                <label>v{app?.appVersion}</label>
+                                <label data-testid="app-version">
+                                  v{app?.appVersion}
+                                </label>
                               )}
                             </Col>
                           </Row>
                         </div>
-                        <div className="card-body">
+                        <div
+                          className="card-body"
+                          data-testid="app-description"
+                        >
                           {loading ? (
                             <Preloader smallscreen={true} />
                           ) : (
@@ -108,7 +124,10 @@ const Dash = () => {
                               <div className="tooltip clear"></div>
                             </Col>
                             <Col>
-                              <div className="badge-status comingsoon right">
+                              <div
+                                className="badge-status comingsoon right"
+                                data-testid="app-status"
+                              >
                                 {app?.status}
                               </div>
                             </Col>

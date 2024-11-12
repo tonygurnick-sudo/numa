@@ -3,182 +3,201 @@
  */
 
 import React from 'react';
-import { render } from '@testing-library/react';
-import { waitFor, screen } from '@testing-library/react/pure';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { Dash } from '../Dash';
-import { BrowserRouter } from 'react-router-dom';
-import { AuthProvider } from '../../Providers/AuthProvider';
+import { NumaAppProvider } from '../../Providers/NumaAppProvider';
 
-// Mock example data
-const mockAppsData = {
-  apps: [
-    {
-      id: '1',
-      appName: 'Test App',
-      appVersion: '1.0',
-      appDescription: 'Test Description',
-      status: 'active',
-    },
-  ],
-};
+// Mock the components used in Dash
+vi.mock('../../Components/Breadcrumbs', () => ({
+  Breadcrumbs: () => <div data-testid="mock-breadcrumbs">Breadcrumbs</div>,
+}));
 
-// Wrap component with required providers
-const DashWithProviders = () => (
-  <BrowserRouter>
-    <AuthProvider>
-      <Dash />
-    </AuthProvider>
-  </BrowserRouter>
-);
+vi.mock('../../Components/Nav', () => ({
+  Nav: () => <div data-testid="mock-nav">Nav</div>,
+}));
+
+vi.mock('../../Components/Preloader', () => ({
+  Preloader: ({ smallscreen }) => (
+    <div data-testid={`mock-preloader${smallscreen ? '-small' : ''}`}>
+      Loading...
+    </div>
+  ),
+}));
+
+vi.mock('../../Layouts/LayoutDashboard', () => ({
+  LayoutDashboard: ({ children }) => (
+    <div data-testid="mock-layout-dashboard">{children}</div>
+  ),
+}));
+
+// Mock example app data
+const mockApps = [
+  {
+    id: '1',
+    appName: 'Test App 1',
+    appVersion: '1.0.0',
+    appDescription: 'Test Description 1',
+    status: 'ACTIVE',
+  },
+  {
+    id: '2',
+    appName: 'Test App 2',
+    appVersion: '2.0.0',
+    appDescription: 'Test Description 2',
+    status: 'COMING_SOON',
+  },
+];
 
 describe('Dash Component', () => {
-  let container;
-
   beforeEach(() => {
-    document.body.innerHTML = '<div id="root"></div>';
-    container = document.getElementById('root');
-
     vi.clearAllMocks();
     global.fetch = vi.fn();
+  });
+
+  it('should render loading state initially', () => {
+    render(
+      <NumaAppProvider>
+        <Dash />
+      </NumaAppProvider>,
+    );
+
+    expect(screen.getByTestId('mock-preloader')).toBeInTheDocument();
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+  });
+
+  it('should render apps after successful data fetch', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockApps),
+    });
+
+    render(
+      <NumaAppProvider>
+        <Dash />
+      </NumaAppProvider>,
+    );
+
+    // Wait for apps to load
+    await waitFor(() => {
+      expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
+    });
+
+    // Check if apps are rendered
+    mockApps.forEach((app) => {
+      expect(screen.getByTestId(`app-card-${app.id}`)).toBeInTheDocument();
+      expect(screen.getByText(app.appName)).toBeInTheDocument();
+      expect(screen.getByText(app.appDescription)).toBeInTheDocument();
+      expect(screen.getByText(`v${app.appVersion}`)).toBeInTheDocument();
+      expect(screen.getByText(app.status)).toBeInTheDocument();
+    });
+  });
+
+  it('should handle fetch error correctly', async () => {
+    const errorMessage = 'Failed to fetch apps';
+    global.fetch.mockRejectedValueOnce(new Error(errorMessage));
+
+    render(
+      <NumaAppProvider>
+        <Dash />
+      </NumaAppProvider>,
+    );
+
+    // Wait for error message to appear
+    await waitFor(() => {
+      expect(screen.getByTestId('error-message')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('error-message')).toHaveTextContent(errorMessage);
+  });
+
+  it('should persist apps data to sessionStorage', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockApps),
+    });
 
     // Mock sessionStorage
-    Object.defineProperty(window, 'sessionStorage', {
-      value: {
-        getItem: vi.fn(() => JSON.stringify([])),
-        setItem: vi.fn(),
-        removeItem: vi.fn(),
-        clear: vi.fn(),
-      },
-      writable: true,
-    });
-  });
+    const mockSetItem = vi.fn();
+    Storage.prototype.setItem = mockSetItem;
 
-  describe('Initial Rendering', () => {
-    it('should render loading state initially', () => {
-      render(<DashWithProviders />, { container });
-      expect(screen.getByTestId('preloader')).toBeInTheDocument();
-    });
+    render(
+      <NumaAppProvider>
+        <Dash />
+      </NumaAppProvider>,
+    );
 
-    it('should render dashboard title and create button', () => {
-      render(<DashWithProviders />, { container });
-      expect(
-        screen.getByRole('heading', { name: 'Dashboard' }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: /create/i }),
-      ).toBeInTheDocument();
-    });
-  });
-
-  describe('Data Fetching', () => {
-    it('should render apps data after successful fetch', async () => {
-      // Mock successful fetch
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockAppsData),
-      });
-
-      render(<DashWithProviders />, { container });
-
-      // Wait for app data to load
-      await waitFor(() => {
-        expect(screen.getByText('Test App')).toBeInTheDocument();
-        expect(screen.getByText('Test Description')).toBeInTheDocument();
-        expect(screen.getByText('v1.0')).toBeInTheDocument();
-      });
-
-      // Verify sessionStorage was updated
-      expect(window.sessionStorage.setItem).toHaveBeenCalledWith(
+    // Wait for apps to load
+    await waitFor(() => {
+      expect(mockSetItem).toHaveBeenCalledWith(
         'appsData',
-        JSON.stringify(mockAppsData),
+        JSON.stringify(mockApps),
       );
     });
+  });
 
-    it('should handle fetch failure gracefully', async () => {
-      // Mock failed fetch with error message
-      global.fetch.mockRejectedValueOnce(new Error('Failed to fetch'));
-
-      render(<DashWithProviders />, { container });
-
-      // Wait for error message to appear
-      await waitFor(() => {
-        // Look for error message text with a case-insensitive regex
-        expect(screen.getByText(/failed to fetch/i)).toBeInTheDocument();
-      });
+  it('should render correct layout structure', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockApps),
     });
 
-    it('should handle empty apps data', async () => {
-      // Mock successful fetch with empty apps array
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ apps: [] }),
-      });
+    render(
+      <NumaAppProvider>
+        <Dash />
+      </NumaAppProvider>,
+    );
 
-      render(<DashWithProviders />, { container });
+    // Check for main structural components
+    expect(screen.getByTestId('mock-breadcrumbs')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-layout-dashboard')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-nav')).toBeInTheDocument();
+  });
 
-      // Wait for loading to complete
-      await waitFor(() => {
-        expect(screen.queryByTestId('preloader')).not.toBeInTheDocument();
-      });
+  it('should render app cards with correct links', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockApps),
+    });
 
-      // Verify no app cards are rendered
-      expect(screen.queryByText('Test App')).not.toBeInTheDocument();
+    render(
+      <NumaAppProvider>
+        <Dash />
+      </NumaAppProvider>,
+    );
+
+    // Wait for apps to load
+    await waitFor(() => {
+      expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
+    });
+
+    // Check if app cards have correct links
+    mockApps.forEach((app) => {
+      const card = screen.getByTestId(`app-card-${app.id}`);
+      const link = card.querySelector('a');
+      expect(link).toHaveAttribute('href', `/app/${app.id}`);
     });
   });
 
-  describe('UI Elements', () => {
-    it('should render app cards with correct information', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockAppsData),
-      });
-
-      render(<DashWithProviders />, { container });
-
-      await waitFor(() => {
-        // Check card structure
-        const card = screen.getByText('Test App').closest('.card-apps');
-        expect(card).toBeInTheDocument();
-
-        // Check version label
-        expect(card.querySelector('.card-header label')).toHaveTextContent(
-          'v1.0',
-        );
-
-        // Check description
-        expect(card.querySelector('.card-body')).toHaveTextContent(
-          'Test Description',
-        );
-
-        // Check status badge
-        expect(card.querySelector('.badge-status')).toHaveTextContent('active');
-      });
+  it('should handle empty apps array', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve([]),
     });
 
-    it('should render breadcrumbs navigation', () => {
-      render(<DashWithProviders />, { container });
-      // Note: Actual breadcrumb testing might need to be adjusted based on your Breadcrumbs component implementation
-      expect(screen.getByRole('navigation')).toBeInTheDocument();
+    render(
+      <NumaAppProvider>
+        <Dash />
+      </NumaAppProvider>,
+    );
+
+    // Wait for loading to finish
+    await waitFor(() => {
+      expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
     });
-  });
 
-  describe('Session Storage', () => {
-    it('should persist apps data to session storage', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockAppsData),
-      });
-
-      render(<DashWithProviders />, { container });
-
-      await waitFor(() => {
-        expect(window.sessionStorage.setItem).toHaveBeenCalledWith(
-          'appsData',
-          JSON.stringify(mockAppsData),
-        );
-      });
-    });
+    // Verify no app cards are rendered
+    expect(screen.queryByTestId(/app-card-/)).not.toBeInTheDocument();
   });
 });
