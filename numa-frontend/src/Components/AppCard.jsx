@@ -1,6 +1,28 @@
 import { useEffect, useState } from 'react';
 import { Row, Col } from 'react-bootstrap';
-import { replaceReferences } from '../common';
+
+const replaceReferences = (prompt, dependencies, appsCards) => {
+  let updatedPrompt = prompt || ''; // Ensure prompt is a valid string
+
+  dependencies.forEach((dep) => {
+    // Find the card in appsCards with a matching ID to dep
+    let title = '';
+    appsCards.forEach((card) => {
+      // Iterate over the keys of the card to find the one containing the actual card data
+      const cardData = card[Object.keys(card)[0]];
+      if (cardData.id === dep) {
+        title = '<strong>(' + cardData.title + ')</strong>' || '';
+      }
+    });
+
+    if (title) {
+      const regex = new RegExp(`@${dep}`, 'g');
+      updatedPrompt = updatedPrompt.replace(regex, title);
+    }
+  });
+
+  return updatedPrompt;
+};
 
 const AppCard = ({
   card,

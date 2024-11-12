@@ -16,6 +16,8 @@ import {
   CognitoIdentityProviderClient,
   RespondToAuthChallengeCommand,
   InitiateAuthCommand,
+  ForgotPasswordCommand,
+  ConfirmForgotPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
 const AuthContext = createContext(null);
@@ -412,6 +414,42 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     }
   }, [initialTokens]);
 
+  const requestPasswordReset = async (email) => {
+    try {
+      const command = new ForgotPasswordCommand({
+        Username: email,
+        ClientId: CLIENT_ID,
+      });
+
+      const cognitoClient = new CognitoIdentityProviderClient({
+        region: REGION,
+      });
+      await cognitoClient.send(command);
+      return { success: true };
+    } catch (error) {
+      throw new Error(`Error requesting password reset: ${error.message}`);
+    }
+  };
+
+  const confirmPasswordReset = async (email, code, newPassword) => {
+    try {
+      const command = new ConfirmForgotPasswordCommand({
+        Username: email,
+        ClientId: CLIENT_ID,
+        ConfirmationCode: code,
+        Password: newPassword,
+      });
+
+      const cognitoClient = new CognitoIdentityProviderClient({
+        region: REGION,
+      });
+      await cognitoClient.send(command);
+      return { success: true };
+    } catch (error) {
+      throw new Error(`Error resetting password: ${error.message}`);
+    }
+  };
+
   const value = {
     isAuthenticated: !!user,
     user,
@@ -426,6 +464,8 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     checkAndRefreshTokens,
     qBusinessClient,
     qAppsClient,
+    requestPasswordReset,
+    confirmPasswordReset,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
