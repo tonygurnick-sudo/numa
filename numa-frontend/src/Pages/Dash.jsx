@@ -18,11 +18,13 @@ const Dash = () => {
 
   useEffect(() => {
     const fetchApps = async () => {
+      setLoading(true);
       try {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
         // First try to load from sessionStorage
         const cachedData = sessionStorage.getItem('appsData');
 
-        // Check if there is any data in the cache
         if (cachedData) {
           const parsedData = JSON.parse(cachedData);
           console.log('Loading from cache:', parsedData);
@@ -33,33 +35,35 @@ const Dash = () => {
           }
         }
 
-        // Use the imported manifest and access the apps array
-        const appsData = appsManifest.apps;
-        console.log('Loaded apps:', appsData);
+        // If no valid cached data, load from manifest
+        try {
+          const appsData = appsManifest.apps;
+          console.log('Loading from manifest:', appsData);
 
-        if (!Array.isArray(appsData)) {
-          throw new Error('Data must be an array');
+          if (!Array.isArray(appsData)) {
+            throw new Error('Data must be an array');
+          }
+
+          setNumaApps(appsData);
+          // Save manifest data to sessionStorage directly
+          sessionStorage.setItem('appsData', JSON.stringify(appsData));
+        } catch (manifestError) {
+          // If manifest loading fails, set error and empty apps array
+          setError('Failed to load apps: Invalid manifest data');
+          setNumaApps([]);
+          return;
         }
-
-        setNumaApps(appsData);
-        setLoading(false);
       } catch (error) {
         console.error('Error loading apps:', error);
         setError(`Failed to load apps: ${error.message}`);
-        setNumaApps([]); // Ensure we set an empty array on error
+        setNumaApps([]);
+      } finally {
         setLoading(false);
       }
     };
 
     fetchApps();
-  }, []);
-
-  // Persist our apps info for the session
-  useEffect(() => {
-    if (numaApps) {
-      sessionStorage.setItem('appsData', JSON.stringify(numaApps));
-    }
-  }, [numaApps]);
+  }, [setError, setLoading, setNumaApps]);
 
   return (
     <>
@@ -88,15 +92,18 @@ const Dash = () => {
         <LayoutDashboard>
           <Row>
             {error && (
-              <Alert variant="danger" data-testid="error-message">
-                {error.message || error}
-              </Alert>
+              <Col xs={12}>
+                <Alert variant="danger" data-testid="error-message">
+                  {error}
+                </Alert>
+              </Col>
             )}
             {loading ? (
               <Preloader />
             ) : (
               <>
-                {Array.isArray(numaApps) &&
+                {!error &&
+                  Array.isArray(numaApps) &&
                   numaApps?.map((app) => (
                     <Col key={app.id} lg={4} className="flex">
                       <div
