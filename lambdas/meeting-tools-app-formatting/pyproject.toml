@@ -12,9 +12,9 @@ packages = [
 python = "^3.11"
 
 [tool.poetry.group.dev.dependencies]
-mypy = "1.10.1"
-pylint = "3.2.5"
-pyright = "1.1.371"
+mypy = "1.13.0"
+pylint = "3.3.1"
+pyright = "1.1.388"
 
 [tool.poetry-plugin-lambda-build]
 package-artifact-path = "lambda_function.zip"
