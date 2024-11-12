@@ -490,12 +490,36 @@ export class CoreNumaInfra extends Construct {
               },
             },
             repositoryConfigurations: {
-              document: {
+              attachment: {
                 fieldMappings: [
                   {
-                    dataSourceFieldName: 'content',
-                    indexFieldName: 'document_content',
-                    indexFieldType: 'STRING',
+                    dataSourceFieldName: "category",
+                    indexFieldName: "_category",
+                    indexFieldType: "STRING"
+                  },
+                  {
+                    dataSourceFieldName: "sourceUrl",
+                    indexFieldName: "_source_uri",
+                    indexFieldType: "STRING"
+                  },
+                ]
+              },
+              webPage: {
+                fieldMappings: [
+                  {
+                    dataSourceFieldName: "category",
+                    indexFieldName: "_category",
+                    indexFieldType: "STRING"
+                  },
+                  {
+                    dataSourceFieldName: "sourceUrl",
+                    indexFieldName: "_source_uri",
+                    indexFieldType: "STRING"
+                  },
+                  {
+                    dataSourceFieldName: "title",
+                    indexFieldName: "_document_title",
+                    indexFieldType: "STRING"
                   },
                 ],
               },
