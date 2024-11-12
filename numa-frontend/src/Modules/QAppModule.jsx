@@ -12,28 +12,7 @@ function QAppModule({ task }) {
 
   if (!task) return;
 
-  return (
-    <div className="card card-apps">
-      <div className="card-header">
-        <Row>
-          <Col lg={12}>
-            {task?.title}
-
-            <label className="type"></label>
-          </Col>
-        </Row>
-      </div>
-
-      <div className="card-body">
-        <h2>Q App</h2>
-        <p>App ID: {task.value}</p>
-        <p>Description: {task.description}</p>
-        <textarea rows="10" className="form-control" />
-      </div>
-
-      <div className="card-footer" />
-    </div>
-  );
+  return null;
 }
 
 export { QAppModule };

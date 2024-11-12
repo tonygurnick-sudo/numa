@@ -4,17 +4,23 @@ import { Alert, Col } from 'react-bootstrap';
 import { AppCard } from './AppCard';
 import { Preloader } from './Preloader';
 
-import { useAuth } from '../Providers/AuthProvider';
-import { GetQAppCommand, GetQAppSessionCommand } from '@aws-sdk/client-qapps';
 import { NumaChat } from '../Pages/NumaChat';
+
+import { useAuth } from '../Providers/AuthProvider';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 
+import { GetQAppCommand, GetQAppSessionCommand } from '@aws-sdk/client-qapps';
+
 const QAppDetail = () => {
+  const { qAppsClient, loading: authLoading } = useAuth();
+  const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
   const {
     setRunActive,
     qSsessionId,
     isPolling,
     setIsPolling,
+    loading,
+    setLoading,
     numaAppData,
     setqAppData,
     qAppData,
@@ -24,10 +30,6 @@ const QAppDetail = () => {
 
   const qAppId = numaAppData.qAppId;
 
-  const { qAppsClient, loading: authLoading } = useAuth();
-  const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
-
-  const [isLoading, setIsLoading] = useState(true);
   const [qSessionDetails, setQSessionDetails] = useState(null);
   const [error, setError] = useState(null);
 
@@ -53,18 +55,20 @@ const QAppDetail = () => {
   };
 
   const fetchApp = async () => {
+    console.log('fetch app info', authLoading);
     if (!qAppsClient || authLoading) return;
 
     try {
       const input = { instanceId: APPLICATION_ID, appId: qAppId };
       const command = new GetQAppCommand(input);
       const response = await qAppsClient.send(command);
+      console.log(response);
       setqAppData(response);
     } catch (error) {
       console.error('Error fetching Q Apps:', error);
       setError(error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -73,7 +77,7 @@ const QAppDetail = () => {
 
     const fetchSessionDetails = async () => {
       try {
-        setIsLoading(true);
+        setLoading(true);
         const input = {
           instanceId: APPLICATION_ID,
           sessionId: qSsessionId,
@@ -86,7 +90,7 @@ const QAppDetail = () => {
         setError(err);
         console.error('Error fetching session details:', err);
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
 
@@ -148,7 +152,7 @@ const QAppDetail = () => {
   return (
     <>
       {error && <Alert variant="danger">{error}</Alert>}
-      {isLoading ? (
+      {loading ? (
         <Preloader />
       ) : qAppData ? (
         qAppData.name === 'Numa Chat' ? (
