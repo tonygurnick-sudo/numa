@@ -23,21 +23,24 @@ const Dash = () => {
       try {
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        // First try to load from sessionStorage
-        const cachedData = sessionStorage.getItem('appsData');
+        // TODO
+        // load from cache if cache time less than x
 
-        if (cachedData) {
-          const parsedData = JSON.parse(cachedData);
-          console.log('Loading from cache:', parsedData);
-          if (Array.isArray(parsedData) && parsedData.length > 0) {
-            setNumaApps(parsedData);
-            setLoading(false);
-            return;
-          }
-        }
+        // First try to load from sessionStorage
+        // const cachedData = sessionStorage.getItem('appsData');
+
+        // if (cachedData) {
+        //   const parsedData = JSON.parse(cachedData);
+        //   console.log('Loading from cache:', parsedData);
+        //   if (Array.isArray(parsedData) && parsedData.length > 0) {
+        //     setNumaApps(parsedData);
+        //     setLoading(false);
+        //     return;
+        //   }
+        // }
 
         // If no valid cached data, fetch from manifest
-        const response = await fetch('/manifest.json', {
+        const response = await fetch('../src/Data/example-manifest.json', {
           headers: {
             'Content-Type': 'application/json',
           },
