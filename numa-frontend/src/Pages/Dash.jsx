@@ -6,42 +6,67 @@ import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { Preloader } from '../Components/Preloader';
 
-import { QAppCreate } from '../Components/QAppCreate';
 import { useNumaApp } from '../Providers/NumaAppProvider';
+
+// Remove or comment out the direct import
+// import appsManifest from '../Data/example-manifest.json';
 
 const Dash = () => {
   const { error, setError, loading, setLoading, setNumaApps, numaApps } =
     useNumaApp();
 
-  const [response, setResponse] = useState(null);
+  console.log('Dash Component Data:', { error, loading, numaApps }); // Debug log
 
   useEffect(() => {
     const fetchApps = async () => {
+      setLoading(true);
       try {
-        // TODO
-        //const response = await fetch('/api/apps'); // Replace with your actual API endpoint
-        //const appsData = await response.json();
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
-        const response = await fetch('../src/Data/example-manifest.json');
-        const appsData = await response.json();
+        // First try to load from sessionStorage
+        const cachedData = sessionStorage.getItem('appsData');
+
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          console.log('Loading from cache:', parsedData);
+          if (Array.isArray(parsedData) && parsedData.length > 0) {
+            setNumaApps(parsedData);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // If no valid cached data, fetch from manifest
+        const response = await fetch('/manifest.json', {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch manifest');
+        }
+
+        const manifestData = await response.json();
+        const appsData = manifestData.apps;
+
+        if (!Array.isArray(appsData)) {
+          throw new Error('Data must be an array');
+        }
+
         setNumaApps(appsData);
-        setLoading(false);
+        sessionStorage.setItem('appsData', JSON.stringify(appsData));
       } catch (error) {
-        console.error('Error fetching apps:', error);
-        setError(error);
+        console.error('Error loading apps:', error);
+        setError(`Failed to load apps: ${error.message}`);
+        setNumaApps([]);
+      } finally {
         setLoading(false);
       }
     };
 
     fetchApps();
-  }, []);
-
-  // Persist our apps info for the session
-  useEffect(() => {
-    if (numaApps) {
-      sessionStorage.setItem('appsData', JSON.stringify(numaApps));
-    }
-  }, [numaApps]);
+  }, [setError, setLoading, setNumaApps]);
 
   return (
     <>
@@ -69,55 +94,76 @@ const Dash = () => {
 
         <LayoutDashboard>
           <Row>
-            {error && <Alert variant="danger">{error}</Alert>}
+            {error && (
+              <Col xs={12}>
+                <Alert variant="danger" data-testid="error-message">
+                  {error}
+                </Alert>
+              </Col>
+            )}
             {loading ? (
               <Preloader />
             ) : (
               <>
-                {numaApps?.apps?.map((app) => (
-                  <Col key={app.id} lg={4} className="flex">
-                    <div className="card card-apps">
-                      <a href={`/app/${app.id}`} rel="noopener">
-                        <div className="card-header">
-                          <Row>
-                            <Col lg={9}>{app?.appName}</Col>
-                            <Col lg={3} className="right">
-                              {app?.appVersion && (
-                                <label>v{app?.appVersion}</label>
-                              )}
-                            </Col>
-                          </Row>
-                        </div>
-                        <div className="card-body">
-                          {loading ? (
-                            <Preloader smallscreen={true} />
-                          ) : (
-                            <> {app?.appDescription}</>
-                          )}
-                        </div>
-                        <div className="card-buttons">
-                          <Row>
-                            <Col lg={8}></Col>
-                            <Col lg={4}></Col>
-                          </Row>
-                        </div>
-                        <div className="card-footer">
-                          <Row className="justify-content-end">
-                            <Col>
-                              {' '}
-                              <div className="tooltip clear"></div>
-                            </Col>
-                            <Col>
-                              <div className="badge-status comingsoon right">
-                                {app?.status}
-                              </div>
-                            </Col>
-                          </Row>
-                        </div>
-                      </a>
-                    </div>
-                  </Col>
-                ))}
+                {!error &&
+                  Array.isArray(numaApps) &&
+                  numaApps?.map((app) => (
+                    <Col key={app.id} lg={4} className="flex">
+                      <div
+                        className="card card-apps"
+                        data-testid={`app-card-${app.id}`}
+                      >
+                        <a href={`/app/${app.id}`} rel="noopener">
+                          <div className="card-header">
+                            <Row>
+                              <Col lg={9} data-testid="app-name">
+                                {app?.appName}
+                              </Col>
+                              <Col lg={3} className="right">
+                                {app?.appVersion && (
+                                  <label data-testid="app-version">
+                                    v{app?.appVersion}
+                                  </label>
+                                )}
+                              </Col>
+                            </Row>
+                          </div>
+                          <div
+                            className="card-body"
+                            data-testid="app-description"
+                          >
+                            {app?.appDescription === 'Loading...' ? (
+                              <Preloader smallscreen={true} />
+                            ) : (
+                              <>{app?.appDescription}</>
+                            )}
+                          </div>
+                          <div className="card-buttons">
+                            <Row>
+                              <Col lg={8}></Col>
+                              <Col lg={4}></Col>
+                            </Row>
+                          </div>
+                          <div className="card-footer">
+                            <Row className="justify-content-end">
+                              <Col>
+                                {' '}
+                                <div className="tooltip clear"></div>
+                              </Col>
+                              <Col>
+                                <div
+                                  className="badge-status comingsoon right"
+                                  data-testid="app-status"
+                                >
+                                  {app?.status}
+                                </div>
+                              </Col>
+                            </Row>
+                          </div>
+                        </a>
+                      </div>
+                    </Col>
+                  ))}
               </>
             )}
           </Row>

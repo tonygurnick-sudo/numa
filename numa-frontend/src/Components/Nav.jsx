@@ -50,6 +50,7 @@ const Nav = () => {
           <Dropdown.Toggle
             variant="link"
             id="nav-dropdown"
+            data-testid="mobile-menu-button"
             style={{
               color: 'white',
               border: 'none',

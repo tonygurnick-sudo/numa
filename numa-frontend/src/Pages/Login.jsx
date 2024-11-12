@@ -2,7 +2,6 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert } from 'react-bootstrap';
-import { jwtDecode } from 'jwt-decode';
 import { useAuth } from '../Providers/AuthProvider';
 
 const NumaLogin = () => {
@@ -50,10 +49,8 @@ const NumaLogin = () => {
         clearInputs();
       } else {
         setSuccess('Login successful.');
-        setTimeout(() => {
-          navigate('/dash');
-          clearInputs();
-        }, 1500);
+        navigate('/dash');
+        clearInputs();
       }
     } catch (error) {
       console.error('Error during authentication:', error);
@@ -85,9 +82,7 @@ const NumaLogin = () => {
       );
       setIsSettingNewPassword(false);
       clearInputs();
-      setTimeout(() => {
-        navigate('/dash');
-      }, 1500);
+      navigate('/dash');
     } catch (error) {
       console.error('Error setting new password:', error);
       setError(

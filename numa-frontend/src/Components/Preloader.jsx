@@ -5,11 +5,11 @@ const Preloader = ({ smallscreen }) => {
   return (
     <>
       {smallscreen ? (
-        <div className="preloader_small">
+        <div className="preloader_small" data-testid="preloader">
           <Wrap />
         </div>
       ) : (
-        <div className="preloader">
+        <div className="preloader" data-testid="preloader">
           <Wrap />
         </div>
       )}

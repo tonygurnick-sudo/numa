@@ -16,6 +16,8 @@ import {
   CognitoIdentityProviderClient,
   RespondToAuthChallengeCommand,
   InitiateAuthCommand,
+  ForgotPasswordCommand,
+  ConfirmForgotPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
 const AuthContext = createContext(null);
@@ -28,9 +30,6 @@ const REGION = 'us-east-1';
 const API_ENDPOINT = 'https://g59jhyyob7.execute-api.us-east-1.amazonaws.com';
 const USER_POOL_ID = 'us-east-1_kVPZjTM6a';
 const CLIENT_ID = '48ed21kkeqa0h4jtrs08kbvvvr';
-
-// Add a context for test configuration
-const TestConfigContext = createContext(null);
 
 export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const [user, setUser] = useState(null);
@@ -200,51 +199,51 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     }
   }, [user, initializeQBusinessClient, initializeQAppsClient]);
 
-  const loadUserFromTokens = async () => {
-    console.log('🔍 Checking token status...');
-    const accessToken = localStorage.getItem('accessToken');
-    const idToken = localStorage.getItem('idToken');
-    const refreshToken = localStorage.getItem('refreshToken');
+  useEffect(() => {
+    const loadUserFromTokens = async () => {
+      console.log('🔍 Checking token status...');
+      const accessToken = localStorage.getItem('accessToken');
+      const idToken = localStorage.getItem('idToken');
+      const refreshToken = localStorage.getItem('refreshToken');
 
-    if (refreshToken) {
-      if (
-        !accessToken ||
-        !idToken ||
-        isTokenExpired(decodeToken(accessToken)) ||
-        isTokenExpired(decodeToken(idToken))
-      ) {
-        console.log('⚠️ Tokens expired or missing, attempting refresh...');
-        const refreshed = await refreshTokens();
-        if (!refreshed) {
-          console.log('❌ Token refresh failed, logging out');
-          setUser(null);
+      if (refreshToken) {
+        if (
+          !accessToken ||
+          !idToken ||
+          isTokenExpired(decodeToken(accessToken)) ||
+          isTokenExpired(decodeToken(idToken))
+        ) {
+          console.log('⚠️ Tokens expired or missing, attempting refresh...');
+          const refreshed = await refreshTokens();
+          if (!refreshed) {
+            console.log('❌ Token refresh failed, logging out');
+            setUser(null);
+          }
+        } else {
+          console.log('✅ Tokens are valid');
+          const decodedAccessToken = decodeToken(accessToken);
+          const decodedIdToken = decodeToken(idToken);
+
+          setUser({
+            tokens: {
+              accessToken,
+              idToken,
+              refreshToken,
+            },
+            decoded_tokens: {
+              accessToken: decodedAccessToken,
+              idToken: decodedIdToken,
+            },
+          });
         }
       } else {
-        console.log('✅ Tokens are valid');
-        const decodedAccessToken = decodeToken(accessToken);
-        const decodedIdToken = decodeToken(idToken);
-
-        setUser({
-          tokens: {
-            accessToken,
-            idToken,
-            refreshToken,
-          },
-          decoded_tokens: {
-            accessToken: decodedAccessToken,
-            idToken: decodedIdToken,
-          },
-        });
+        console.log('❌ No refresh token found');
+        setUser(null);
       }
-    } else {
-      console.log('❌ No refresh token found');
-      setUser(null);
-    }
-    setLoading(false);
-    setTokenValidationComplete(true);
-  };
+      setLoading(false);
+      setTokenValidationComplete(true);
+    };
 
-  useEffect(() => {
     loadUserFromTokens();
   }, []);
 
@@ -415,6 +414,42 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     }
   }, [initialTokens]);
 
+  const requestPasswordReset = async (email) => {
+    try {
+      const command = new ForgotPasswordCommand({
+        Username: email,
+        ClientId: CLIENT_ID,
+      });
+
+      const cognitoClient = new CognitoIdentityProviderClient({
+        region: REGION,
+      });
+      await cognitoClient.send(command);
+      return { success: true };
+    } catch (error) {
+      throw new Error(`Error requesting password reset: ${error.message}`);
+    }
+  };
+
+  const confirmPasswordReset = async (email, code, newPassword) => {
+    try {
+      const command = new ConfirmForgotPasswordCommand({
+        Username: email,
+        ClientId: CLIENT_ID,
+        ConfirmationCode: code,
+        Password: newPassword,
+      });
+
+      const cognitoClient = new CognitoIdentityProviderClient({
+        region: REGION,
+      });
+      await cognitoClient.send(command);
+      return { success: true };
+    } catch (error) {
+      throw new Error(`Error resetting password: ${error.message}`);
+    }
+  };
+
   const value = {
     isAuthenticated: !!user,
     user,
@@ -427,6 +462,10 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     getAccessToken,
     getUserInfo,
     checkAndRefreshTokens,
+    qBusinessClient,
+    qAppsClient,
+    requestPasswordReset,
+    confirmPasswordReset,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
