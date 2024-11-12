@@ -2,41 +2,35 @@ import { useState, useEffect, useRef } from 'react';
 import { Row, Col, Form } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 
-function TextInputModule({ task, onComplete }) {
-  const { setTaskInputValues } = useNumaApp();
-  const [inputValue, setInputValue] = useState(''); // Local state for the input value
-  const [isTaskComplete, setIsTaskComplete] = useState(false);
-  const inputRef = useRef();
+function TextInputModule({ task, onComplete, onNotComplete }) {
+  const { taskInputValues, updateTaskInputValue } = useNumaApp();
+  const [inputValue, setInputValue] = useState(taskInputValues[task.id] || '');
 
-  // Handle the input change locally (no immediate global state update)
+  // const [isTaskComplete, setIsTaskComplete] = useState(false);
+  // const inputRef = useRef();
+
+  // Update the input value locally
   const handleInputChange = (e) => {
-    setInputValue(e.target.value); // Update local state for the input value
+    setInputValue(e.target.value);
   };
 
-  // Handle blur event when the input loses focus
-  const handleBlur = () => {
-    if (inputValue.trim() !== '' && !isTaskComplete) {
-      setIsTaskComplete(true); // Mark task as complete
-      // setTaskInputValues(task.id, inputValue); // Commit input value to global state
+  // Commit the input value to the global state on blur or Enter
+  const handleCommit = () => {
+    updateTaskInputValue(task.id, inputValue);
+
+    // Call the appropriate callback based on whether the input has content
+    if (inputValue.trim() !== '') {
+      onComplete();
+    } else {
+      onNotComplete();
     }
   };
 
-  // Handle Enter key press to submit the task and update the global state
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && inputValue.trim() !== '') {
-      setIsTaskComplete(true); // Mark task as complete
-      onComplete(); // Trigger task completion
-      //setTaskInputValues(task.id, inputValue); // Commit input value to global state
-      inputRef.current.blur(); // Optionally blur the input field after completion
+    if (e.key === 'Enter') {
+      handleCommit();
     }
   };
-
-  useEffect(() => {
-    // Ensure the input field retains focus during typing (only if it's not complete)
-    if (inputRef.current && !isTaskComplete) {
-      inputRef.current.focus();
-    }
-  }, [isTaskComplete]);
 
   return (
     <div className="card card-apps">
@@ -54,19 +48,12 @@ function TextInputModule({ task, onComplete }) {
           <Form.Control
             type="text"
             placeholder="Enter text here..."
-            value={inputValue} // Local state for the input value
-            onChange={handleInputChange} // Update local state on input change
-            onBlur={handleBlur} // Commit input value to global state when losing focus
-            onKeyPress={handleKeyPress} // Commit input value when Enter is pressed
-            ref={inputRef}
+            value={inputValue}
+            onChange={handleInputChange}
+            onBlur={handleCommit}
+            onKeyPress={handleKeyPress}
           />
         </Form.Group>
-
-        {!isTaskComplete && (
-          <p className="text-warning mt-2">
-            Please fill out the text input to proceed.
-          </p>
-        )}
       </div>
     </div>
   );

@@ -1,11 +1,12 @@
 import { Row, Col } from 'react-bootstrap';
+import { useNumaApp } from '../Providers/NumaAppProvider';
 
 function TextOutputModule({ task }) {
   // Assuming the output data is available in the `params.dataRef` property
+  const { numaTaskResponse } = useNumaApp();
+  console.log('numaTaskResponse', numaTaskResponse);
 
   if (!task) return;
-
-  const outputData = task.params.dataRef;
 
   return (
     <div className="card card-apps">
@@ -19,13 +20,13 @@ function TextOutputModule({ task }) {
       </div>
 
       <div className="card-body">
-        {/* Display the output data in a suitable format */}
-        <pre>{JSON.stringify(outputData, null, 2)}</pre>
-        {/* Or, if you want to display it in a more specific way: */}
-        <p>Output: {outputData.someProperty}</p>
-
-        <p>Description: {task.description}</p>
-        <textarea rows="10" className="form-control" />
+        {/* Textarea for displaying data */}
+        <textarea
+          rows="10"
+          className="form-control"
+          value={numaTaskResponse?.data || ''}
+          readOnly
+        />
       </div>
 
       <div className="card-footer" />

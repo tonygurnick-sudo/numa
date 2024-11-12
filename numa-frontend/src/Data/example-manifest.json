@@ -20,14 +20,14 @@
           "nextTask": "call-step-function"
         },
         {
-          "id": "meeting-context",
+          "id": "meeting-context-task",
           "title": "Your Meeting Context (Optional)",
           "type": "text-input",
           "order": 1,
           "nextTask": "call-step-function"
         },
         {
-          "id": "template",
+          "id": "template-task",
           "title": "Use a Template (Optional)",
           "type": "text-input",
           "order": 1,
@@ -38,7 +38,11 @@
           "title": "Process Meeting Notes",
           "type": "http-request",
           "requiredTasks": {
-            "any": ["upload-files-to-s3", "meeting-context", "template"]
+            "any": [
+              "upload-files-to-s3",
+              "meeting-context-task",
+              "template-task"
+            ]
           },
           "endpoint": "meeting-tools",
           "params": {
@@ -46,25 +50,12 @@
               "content": {
                 "uploadedFiles": "meeting-notes-bucket/meetings/1234567890"
               },
-              "meetingContext": "Discussed project milestones.",
-              "otherNotes": "Follow up with the client.",
-              "template": "Meeting Summary Template"
+              "meetingContext": "@meeting-context-task",
+              "template": "@template-task"
             }
           },
           "order": 2,
           "nextTask": "call-q-app"
-        },
-        {
-          "id": "call-q-app",
-          "title": "Process with Q App",
-          "type": "q-app",
-          "params": {
-            "qAppId": "q-app-for-meeting-notes",
-            "inputContentRef": "call-step-function",
-            "outputKey": "q-app-output"
-          },
-          "order": 3,
-          "nextTask": "display-results"
         },
         {
           "id": "display-results",
