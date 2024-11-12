@@ -6,7 +6,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
-import { Breadcrumbs } from '../Breadcrumbs';
+import { Breadcrumbs } from '../../Components/Breadcrumbs';
 import { MemoryRouter, useNavigate, useLocation } from 'react-router-dom';
 
 // Mock react-router-dom hooks

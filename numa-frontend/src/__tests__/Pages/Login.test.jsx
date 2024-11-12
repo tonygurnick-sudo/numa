@@ -15,7 +15,7 @@ import {
   afterAll,
 } from 'vitest';
 import '@testing-library/jest-dom';
-import { NumaLogin } from '../Login';
+import { NumaLogin } from '../../Pages/Login';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from '../../Providers/AuthProvider';
 

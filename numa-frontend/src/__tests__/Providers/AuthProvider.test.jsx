@@ -7,9 +7,13 @@ import { render, act } from '@testing-library/react';
 import { waitFor } from '@testing-library/react/pure';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
-import { AuthProvider, useAuth, TestAuthProvider } from '../AuthProvider';
+import {
+  AuthProvider,
+  useAuth,
+  TestAuthProvider,
+} from '../../Providers/AuthProvider';
 import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
-import { authTestTokens } from './Fixtures/AuthTestTokens';
+import { authTestTokens } from '../Fixtures/AuthTestTokens';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 
 // Add these mocks at the top of the file, after the imports
@@ -73,6 +77,8 @@ vi.mock('@aws-sdk/client-cognito-identity-provider', () => ({
   })),
   RespondToAuthChallengeCommand: vi.fn(),
   InitiateAuthCommand: vi.fn(),
+  ForgotPasswordCommand: vi.fn(),
+  ConfirmForgotPasswordCommand: vi.fn(),
 }));
 
 const TestComponent = ({ onAuth }) => {
@@ -848,6 +854,88 @@ describe('AuthProvider', () => {
         expect(lastCall.getUserInfo()).toBeNull();
         expect(lastCall.isAuthenticated).toBe(false);
       });
+    });
+  });
+
+  describe('Password Reset Functions', () => {
+    it('should handle password reset request successfully', async () => {
+      const onAuth = vi.fn();
+      render(
+        <TestAuthProvider>
+          <TestComponent onAuth={onAuth} />
+        </TestAuthProvider>,
+      );
+
+      const auth = await waitFor(() => onAuth.mock.calls[0][0]);
+
+      const result = await auth.requestPasswordReset('test@example.com');
+      expect(result).toEqual({ success: true });
+      expect(CognitoIdentityProviderClient).toHaveBeenCalled();
+    });
+
+    it('should handle password reset request failure', async () => {
+      // Mock the CognitoIdentityProviderClient to throw an error
+      vi.mocked(CognitoIdentityProviderClient).mockImplementationOnce(() => ({
+        send: vi.fn().mockRejectedValue(new Error('Password reset failed')),
+      }));
+
+      const onAuth = vi.fn();
+      render(
+        <TestAuthProvider>
+          <TestComponent onAuth={onAuth} />
+        </TestAuthProvider>,
+      );
+
+      const auth = await waitFor(() => onAuth.mock.calls[0][0]);
+
+      await expect(
+        auth.requestPasswordReset('test@example.com'),
+      ).rejects.toThrow(
+        'Error requesting password reset: Password reset failed',
+      );
+    });
+
+    it('should handle password reset confirmation successfully', async () => {
+      const onAuth = vi.fn();
+      render(
+        <TestAuthProvider>
+          <TestComponent onAuth={onAuth} />
+        </TestAuthProvider>,
+      );
+
+      const auth = await waitFor(() => onAuth.mock.calls[0][0]);
+
+      const result = await auth.confirmPasswordReset(
+        'test@example.com',
+        '123456',
+        'newPassword123',
+      );
+      expect(result).toEqual({ success: true });
+      expect(CognitoIdentityProviderClient).toHaveBeenCalled();
+    });
+
+    it('should handle password reset confirmation failure', async () => {
+      // Mock the CognitoIdentityProviderClient to throw an error
+      vi.mocked(CognitoIdentityProviderClient).mockImplementationOnce(() => ({
+        send: vi.fn().mockRejectedValue(new Error('Invalid confirmation code')),
+      }));
+
+      const onAuth = vi.fn();
+      render(
+        <TestAuthProvider>
+          <TestComponent onAuth={onAuth} />
+        </TestAuthProvider>,
+      );
+
+      const auth = await waitFor(() => onAuth.mock.calls[0][0]);
+
+      await expect(
+        auth.confirmPasswordReset(
+          'test@example.com',
+          '123456',
+          'newPassword123',
+        ),
+      ).rejects.toThrow('Error resetting password: Invalid confirmation code');
     });
   });
 });

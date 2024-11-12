@@ -8,7 +8,8 @@ import { Preloader } from '../Components/Preloader';
 
 import { useNumaApp } from '../Providers/NumaAppProvider';
 
-import appsManifest from '../Data/example-manifest.json'; // Import the JSON directly
+// Remove or comment out the direct import
+// import appsManifest from '../Data/example-manifest.json';
 
 const Dash = () => {
   const { error, setError, loading, setLoading, setNumaApps, numaApps } =
@@ -35,25 +36,26 @@ const Dash = () => {
           }
         }
 
-        // If no valid cached data, load from manifest
-        try {
-          const appsData = appsManifest.apps;
-          console.log('Loading from manifest:', appsData);
+        // If no valid cached data, fetch from manifest
+        const response = await fetch('/manifest.json', {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
 
-          if (!Array.isArray(appsData)) {
-            throw new Error('Data must be an array');
-          }
-
-          setNumaApps(appsData);
-          // Save manifest data to sessionStorage directly
-          sessionStorage.setItem('appsData', JSON.stringify(appsData));
-        } catch (manifestError) {
-          // If manifest loading fails, set error and empty apps array
-          setLoading(false);
-          setError('Failed to load apps: Invalid manifest data');
-          setNumaApps([]);
-          return;
+        if (!response.ok) {
+          throw new Error('Failed to fetch manifest');
         }
+
+        const manifestData = await response.json();
+        const appsData = manifestData.apps;
+
+        if (!Array.isArray(appsData)) {
+          throw new Error('Data must be an array');
+        }
+
+        setNumaApps(appsData);
+        sessionStorage.setItem('appsData', JSON.stringify(appsData));
       } catch (error) {
         console.error('Error loading apps:', error);
         setError(`Failed to load apps: ${error.message}`);

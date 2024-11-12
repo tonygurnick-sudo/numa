@@ -219,7 +219,12 @@ export const dashboardFixtures = {
       },
     ],
   },
-  invalidApps: {
+  invalidArrayApps: {
     apps: 'this is not an array',
+  },
+  invalidObjectApps: {
+    apps: {
+      this: 'is not an array',
+    },
   },
 };

@@ -6,9 +6,9 @@ import React from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
-import { Dash } from '../Dash';
+import { Dash } from '../../Pages/Dash';
 import { NumaAppProvider } from '../../Providers/NumaAppProvider';
-import { dashboardFixtures } from './Fixtures/PageFixtures';
+import { dashboardFixtures } from '../Fixtures/PageFixtures';
 
 // Mock the components used in Dash
 vi.mock('../../Components/Breadcrumbs', () => ({
@@ -33,17 +33,10 @@ vi.mock('../../Layouts/LayoutDashboard', () => ({
   ),
 }));
 
-// Mock the manifest at the top level with empty apps array
-vi.mock('../Data/example-manifest.json', () => ({
-  default: dashboardFixtures.validApps,
-}));
-
 describe('Dash Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
-
-    // Reset all mocks before each test
     vi.resetModules();
   });
 
@@ -59,23 +52,24 @@ describe('Dash Component', () => {
   });
 
   it('should render apps from manifest data', async () => {
+    sessionStorage.setItem(
+      'appsData',
+      JSON.stringify(dashboardFixtures.validApps.apps),
+    );
+
     render(
       <NumaAppProvider>
         <Dash />
       </NumaAppProvider>,
     );
 
-    // Wait for apps to load
     await waitFor(() => {
       expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
     });
 
-    // Check if apps are rendered using fixture data
     dashboardFixtures.validApps.apps.forEach((app) => {
       const appCard = screen.getByTestId(`app-card-${app.id}`);
       expect(appCard).toBeInTheDocument();
-
-      // Check app name and description within the specific card
       expect(
         appCard.querySelector('[data-testid="app-name"]'),
       ).toHaveTextContent(app.appName);
@@ -89,20 +83,9 @@ describe('Dash Component', () => {
   });
 
   it('should load data from sessionStorage if available', async () => {
-    const cachedApps = [
-      {
-        id: 'cached-app-id',
-        appName: 'Cached App',
-        appDescription: 'Cached Description',
-        status: 'Active',
-      },
-    ];
+    const cachedApps = [dashboardFixtures.validApps.apps[0]]; // Use first app from fixtures
 
-    // Set up sessionStorage before rendering
     sessionStorage.setItem('appsData', JSON.stringify(cachedApps));
-
-    // Reset module mocks to ensure clean state
-    vi.resetModules();
 
     render(
       <NumaAppProvider>
@@ -110,39 +93,47 @@ describe('Dash Component', () => {
       </NumaAppProvider>,
     );
 
-    // Wait for loading to complete
     await waitFor(() => {
       expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
     });
 
-    // Verify the number of app cards
     const allAppCards = screen.getAllByTestId(/^app-card-/);
     expect(allAppCards).toHaveLength(1);
 
-    // Verify the cached app content
-    const cachedAppCard = screen.getByTestId('app-card-cached-app-id');
+    const cachedApp = cachedApps[0];
+    const cachedAppCard = screen.getByTestId(`app-card-${cachedApp.id}`);
     expect(within(cachedAppCard).getByTestId('app-name')).toHaveTextContent(
-      'Cached App',
+      cachedApp.appName,
     );
     expect(
       within(cachedAppCard).getByTestId('app-description'),
-    ).toHaveTextContent('Cached Description');
+    ).toHaveTextContent(cachedApp.appDescription);
     expect(within(cachedAppCard).getByTestId('app-status')).toHaveTextContent(
-      'Active',
+      cachedApp.status,
     );
   });
 
-  // Separate test for manifest data
-  it('should load data from manifest when no sessionStorage data exists', async () => {
-    // Reset the manifest mock to include test data
-    vi.mock(
-      '../Data/example-manifest.json',
-      () => ({
-        default: {
-          apps: [dashboardFixtures.validApps.apps[0]], // Use first app from fixtures
-        },
-      }),
-      { virtual: true },
+  it('should handle empty apps array', async () => {
+    sessionStorage.setItem('appsData', JSON.stringify([]));
+
+    render(
+      <NumaAppProvider>
+        <Dash />
+      </NumaAppProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
+    });
+
+    const appCards = screen.queryAllByTestId(/^app-card-/);
+    expect(appCards).toHaveLength(0);
+  });
+
+  it('should render app cards with correct links', async () => {
+    sessionStorage.setItem(
+      'appsData',
+      JSON.stringify(dashboardFixtures.validApps.apps),
     );
 
     render(
@@ -155,10 +146,11 @@ describe('Dash Component', () => {
       expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
     });
 
-    // Verify manifest data is loaded
-    expect(
-      screen.getByTestId('app-card-meeting-tools-app'),
-    ).toBeInTheDocument();
+    dashboardFixtures.validApps.apps.forEach((app) => {
+      const card = screen.getByTestId(`app-card-${app.id}`);
+      const link = card.querySelector('a');
+      expect(link).toHaveAttribute('href', `/app/${app.id}`);
+    });
   });
 
   it('should render correct layout structure', async () => {
@@ -174,66 +166,17 @@ describe('Dash Component', () => {
     expect(screen.getByTestId('mock-nav')).toBeInTheDocument();
   });
 
-  it('should render app cards with correct links', async () => {
-    render(
-      <NumaAppProvider>
-        <Dash />
-      </NumaAppProvider>,
-    );
-
-    // Wait for apps to load
-    await waitFor(() => {
-      expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
-    });
-
-    // Check if app cards have correct links
-    dashboardFixtures.validApps.apps.forEach((app) => {
-      const card = screen.getByTestId(`app-card-${app.id}`);
-      const link = card.querySelector('a');
-      expect(link).toHaveAttribute('href', `/app/${app.id}`);
-    });
-  });
-
-  it('should handle empty apps array', async () => {
-    // Ensure both sessionStorage and manifest are empty
-    sessionStorage.clear();
-
-    // Reset modules to ensure clean state
-    vi.resetModules();
-
-    render(
-      <NumaAppProvider>
-        <Dash />
-      </NumaAppProvider>,
-    );
-
-    // Wait for loading to finish
-    await waitFor(() => {
-      expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
-    });
-
-    // Verify no app cards are rendered
-    const appCards = screen.queryAllByTestId(/^app-card-/);
-    expect(appCards).toHaveLength(dashboardFixtures.validApps.apps.length);
-  });
-
   it('should handle manifest parsing error', async () => {
-    // Mock console.error to prevent error output in tests
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    // Mock the manifest to throw error
-    vi.mock(
-      '../Data/example-manifest.json',
-      () => {
-        const error = new Error('Failed to parse manifest');
-        error.code = 'MODULE_NOT_FOUND';
-        throw error;
-      },
-      { virtual: true },
-    );
-
-    // Clear any cached data
+    // Clear any existing sessionStorage
     sessionStorage.clear();
+
+    // Mock fetch to return the invalid apps structure
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(dashboardFixtures.invalidArrayApps), // Use the invalid fixture directly
+    });
 
     render(
       <NumaAppProvider>
@@ -241,16 +184,25 @@ describe('Dash Component', () => {
       </NumaAppProvider>,
     );
 
-    // Wait for loading to finish
     await waitFor(() => {
       expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
     });
 
-    // Instead of checking for error message, verify fallback behavior
-    const appCards = screen.getAllByTestId(/^app-card-/);
-    expect(appCards.length).toBeGreaterThan(0);
+    // Verify error state
+    expect(screen.getByTestId('error-message')).toBeInTheDocument();
+    expect(screen.getByTestId('error-message')).toHaveTextContent(
+      'Failed to load apps: Data must be an array',
+    );
 
-    // Clean up
+    // Verify fetch was called with the correct URL
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/manifest.json'),
+      expect.any(Object),
+    );
+
+    // Verify error was logged
+    expect(consoleSpy).toHaveBeenCalled();
+
     consoleSpy.mockRestore();
   });
 });

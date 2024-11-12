@@ -29,7 +29,7 @@ export default defineConfig({
         '**/dist/**',
         '**/.{idea,git,cache,output,temp}/**',
         '**/Fixtures/**',
-        '**/Tests/**',
+        '**/__tests__/**',
         '**/*.config.{js,ts}',
         '**/eslint.config.js',
         '**/vite.config.js',
