@@ -273,6 +273,8 @@ describe('AuthProvider', () => {
       });
 
       const onAuth = vi.fn();
+      let auth;
+
       render(
         <TestAuthProvider
           refreshHandler={mockRefreshHandler}
@@ -282,18 +284,25 @@ describe('AuthProvider', () => {
         </TestAuthProvider>,
       );
 
+      // Wait for auth to be initialized
       await waitFor(() => {
         expect(onAuth).toHaveBeenCalled();
       });
 
-      const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+      auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
 
-      // Wait for the token refresh to complete
-      const token = await act(async () => {
-        return await auth.getAccessToken();
+      // Get the access token and wait for refresh
+      let token;
+      await act(async () => {
+        token = await auth.getAccessToken();
       });
 
-      expect(mockRefreshHandler).toHaveBeenCalled();
+      // Wait specifically for the refresh handler to be called
+      await waitFor(() => {
+        expect(mockRefreshHandler).toHaveBeenCalled();
+      });
+
+      // Verify the token matches the refreshed token
       expect(token).toBe(
         authTestTokens.refreshResponses.success.AuthenticationResult
           .AccessToken,

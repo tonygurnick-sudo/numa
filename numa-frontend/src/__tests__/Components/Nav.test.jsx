@@ -2,38 +2,33 @@
  * @vitest-environment jsdom
  */
 
+// Import mocks first
+import {
+  setupNavigationMocks,
+  clearNavigationMocks,
+  MockMemoryRouter,
+} from '../Mocks/NavigationMock';
+import {
+  setupAuthMocks,
+  clearAuthMocks,
+  MockAuthProvider,
+} from '../Mocks/AuthMock';
+
+// Regular imports
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { Nav } from '../../Components/Nav';
-import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../Providers/AuthProvider';
-
-// Mock react-router-dom and AuthProvider
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: vi.fn(),
-  };
-});
-
-vi.mock('../../Providers/AuthProvider', () => ({
-  useAuth: vi.fn(),
-}));
+import { NumaAppProvider } from '../../Providers/NumaAppProvider';
 
 describe('Nav Component', () => {
-  const mockNavigate = vi.fn();
-  const mockLogout = vi.fn();
+  const { mockNavigate } = setupNavigationMocks();
+  const { logout: mockLogout } = setupAuthMocks();
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // Setup router mock
-    useNavigate.mockReturnValue(mockNavigate);
-
-    // Setup auth mock
-    useAuth.mockReturnValue({ logout: mockLogout });
+    clearNavigationMocks();
+    clearAuthMocks();
 
     // Mock window.innerWidth
     Object.defineProperty(window, 'innerWidth', {
@@ -42,12 +37,18 @@ describe('Nav Component', () => {
     });
   });
 
-  const renderWithRouter = (ui) => {
-    return render(<MemoryRouter>{ui}</MemoryRouter>);
+  const renderWithProviders = (ui) => {
+    return render(
+      <MockAuthProvider>
+        <MockMemoryRouter>
+          <NumaAppProvider>{ui}</NumaAppProvider>
+        </MockMemoryRouter>
+      </MockAuthProvider>,
+    );
   };
 
-  it('should render desktop navigation by default', () => {
-    renderWithRouter(<Nav />);
+  it('renders without crashing', () => {
+    renderWithProviders(<Nav />);
 
     expect(screen.getByText('Dash')).toBeInTheDocument();
     expect(screen.getByText('Chat')).toBeInTheDocument();
@@ -63,7 +64,7 @@ describe('Nav Component', () => {
     // Trigger resize event
     fireEvent(window, new Event('resize'));
 
-    renderWithRouter(<Nav />);
+    renderWithProviders(<Nav />);
 
     // Check for mobile menu button using data-testid
     const dropdownButton = screen.getByTestId('mobile-menu-button');
@@ -76,7 +77,7 @@ describe('Nav Component', () => {
     window.innerWidth = 768;
     fireEvent(window, new Event('resize'));
 
-    renderWithRouter(<Nav />);
+    renderWithProviders(<Nav />);
 
     // Open mobile menu using data-testid
     const menuButton = screen.getByTestId('mobile-menu-button');
@@ -90,7 +91,7 @@ describe('Nav Component', () => {
   });
 
   it('should handle navigation clicks correctly', () => {
-    renderWithRouter(<Nav />);
+    renderWithProviders(<Nav />);
 
     // Test dashboard navigation
     fireEvent.click(screen.getByText('Dash'));
@@ -117,7 +118,7 @@ describe('Nav Component', () => {
     });
 
     it('should handle mobile menu navigation clicks correctly', () => {
-      renderWithRouter(<Nav />);
+      renderWithProviders(<Nav />);
 
       // Open mobile menu
       const menuButton = screen.getByTestId('mobile-menu-button');
@@ -147,7 +148,7 @@ describe('Nav Component', () => {
     });
 
     it('should render mobile navigation elements correctly', () => {
-      renderWithRouter(<Nav />);
+      renderWithProviders(<Nav />);
 
       // Check for mobile-specific elements
       const menuButton = screen.getByTestId('mobile-menu-button');
@@ -173,7 +174,7 @@ describe('Nav Component', () => {
   it('should handle window resize from desktop to mobile', () => {
     // Start with desktop width
     window.innerWidth = 1024;
-    renderWithRouter(<Nav />);
+    renderWithProviders(<Nav />);
 
     // Initially should show desktop nav
     expect(screen.getByText('Dash')).toBeInTheDocument();
@@ -191,7 +192,7 @@ describe('Nav Component', () => {
   it('should handle window resize from mobile to desktop', () => {
     // Start with mobile width
     window.innerWidth = 768;
-    renderWithRouter(<Nav />);
+    renderWithProviders(<Nav />);
 
     // Initially should show mobile nav
     expect(screen.queryByText('Dash')).not.toBeInTheDocument();

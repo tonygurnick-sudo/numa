@@ -1,14 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import {
-  Button,
-  Form,
-  Alert,
-  Container,
-  Row,
-  Col,
-  Collapse,
-} from 'react-bootstrap';
-import { ChevronDown, ChevronRight, ChevronLeft } from 'react-bootstrap-icons';
+import { Button, Form, Alert, Container, Row, Col } from 'react-bootstrap';
+import { ChevronRight, ChevronLeft } from 'react-bootstrap-icons';
 import {
   ChatSyncCommand,
   ListConversationsCommand,
@@ -225,6 +217,7 @@ const NumaChat = () => {
         <div className="chat-layout d-flex">
           <div
             className={`sidebar-wrapper ${showConversations ? 'open' : 'closed'}`}
+            data-testid="sidebar-wrapper"
             style={{
               position: isMobile ? 'absolute' : 'relative',
               height: '100%',
@@ -359,7 +352,11 @@ const NumaChat = () => {
                 )}
                 <div ref={messageEndRef} />
               </div>
-              <Form onSubmit={handleSubmit} className="mt-auto">
+              <Form
+                onSubmit={handleSubmit}
+                className="mt-auto"
+                data-testid="chat-form"
+              >
                 <Form.Group className="mb-2">
                   <Form.Control
                     as="textarea"
@@ -371,6 +368,7 @@ const NumaChat = () => {
                 </Form.Group>
                 <div
                   className={`d-flex ${isMobile ? 'flex-column' : 'flex-row'} gap-2`}
+                  data-testid="button-container"
                 >
                   <Button
                     variant="primary"
