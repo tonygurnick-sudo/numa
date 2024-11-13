@@ -13,25 +13,39 @@
           "title": "Upload Files (Optional)",
           "type": "s3-upload",
           "params": {
-            "bucketName": "meeting-notes-bucket",
-            "fileKeyPrefix": "meetings/{meetingId}"
+            "bucketName": "meeting-notes-bucket"
           },
-          "order": 1,
-          "nextTask": "call-step-function"
+          "order": 1
+        },
+        {
+          "id": "meeting-notes-task",
+          "title": "Your Meeting Notes (Optional)",
+          "type": "text-input",
+          "order": 1
+        },
+        {
+          "id": "meeting-notes-description-task",
+          "title": "Describe your meeting notes",
+          "type": "text-input",
+          "order": 1
         },
         {
           "id": "meeting-context-task",
-          "title": "Your Meeting Context (Optional)",
+          "title": "Your Meeting Context",
           "type": "text-input",
-          "order": 1,
-          "nextTask": "call-step-function"
+          "order": 1
         },
         {
-          "id": "template-task",
-          "title": "Use a Template (Optional)",
+          "id": "transcript-task",
+          "title": "Transcript",
           "type": "text-input",
-          "order": 1,
-          "nextTask": "call-step-function"
+          "order": 1
+        },
+        {
+          "id": "other-notes",
+          "title": "Other Notes",
+          "type": "text-input",
+          "order": 1
         },
         {
           "id": "call-step-function",
@@ -40,29 +54,51 @@
           "requiredTasks": {
             "any": [
               "upload-files-to-s3",
-              "meeting-context-task",
-              "template-task"
+              "meeting-notes-task",
+              "transcript-task"
             ]
           },
           "endpoint": "meeting-tools",
           "params": {
             "payload": {
-              "content": {
-                "uploadedFiles": "meeting-notes-bucket/meetings/1234567890"
+              "uploadedFiles": [
+                {
+                  "bucket": "numa-q-dev",
+                  "key": "@upload-files-to-s3",
+                  "type": "meetingNotes",
+                  "description": "Meeting Notes."
+                }
+              ],
+              "meetingNotes": {
+                "text": "@meeting-notes-task",
+                "description": "@meeting-notes-description-task"
               },
+              "transcript": "@transcript-task",
               "meetingContext": "@meeting-context-task",
-              "template": "@template-task"
+              "otherNotes": "@other-notes",
+              "template": "No idea about a template..."
             }
           },
-          "order": 2,
-          "nextTask": "call-q-app"
+          "order": 2
+        },
+        {
+          "id": "process-with-q-app",
+          "title": "Process with Q App",
+          "type": "q-app",
+          "params": {
+            "qAppId": "q-app-123",
+            "inputContentRef": "@call-step-function",
+            "qInputCardId": "the-uuid-of-the-input-card-to-populate",
+            "qOutputCardId": "the-uuid-of-the-output-card-to-get-value-from"
+          },
+          "order": 3
         },
         {
           "id": "display-results",
           "title": "Display Results",
           "type": "text-output",
           "params": {
-            "dataRef": "call-q-app"
+            "dataRef": "process-with-q-app"
           },
           "order": 4
         }
@@ -84,8 +120,7 @@
             "bucketName": "my-bucket",
             "fileKey": "uploads/input_file.txt"
           },
-          "order": 1,
-          "nextTask": "process-with-q-app"
+          "order": 1
         },
         {
           "id": "process-with-q-app",
@@ -96,8 +131,7 @@
             "inputContentRef": "upload-file-to-s3-bucket",
             "outputKey": "q-app-output"
           },
-          "order": 2,
-          "nextTask": "process-with-lambda"
+          "order": 2
         },
         {
           "id": "process-with-lambda",
@@ -109,8 +143,7 @@
               "inputContentRef": "process-with-q-app"
             }
           },
-          "order": 3,
-          "nextTask": "display-output"
+          "order": 3
         },
         {
           "id": "display-output",
@@ -141,25 +174,28 @@
       "appDescription": "Processes raw data and generates insights.",
       "tasks": [
         {
-          "id": "data-ingestion",
+          "id": "upload-files-to-s3",
           "title": "Upload a file",
           "type": "s3-upload",
           "params": {
             "bucketName": "raw-data-bucket",
-            "fileKey": "raw_data.csv"
+            "fileKeyPrefix": "processed-files/"
           },
-          "order": 1,
-          "nextTask": "data-analysis"
+          "order": 1
         },
         {
           "id": "data-analysis",
           "title": "Data Analysis",
-          "type": "backend",
+          "type": "http-request",
+          "endpoint": "data-analys-etc",
           "params": {
-            "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:data-analysis-step-function"
+            "payload": {
+              "content": {
+                "uploadedFiles": "@upload-files-to-s3"
+              }
+            }
           },
-          "order": 2,
-          "nextTask": "display-insights"
+          "order": 2
         },
         {
           "id": "display-insights",
@@ -187,8 +223,7 @@
           "params": {
             "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:model-deployment-step-function"
           },
-          "order": 1,
-          "nextTask": "display-model-metrics"
+          "order": 1
         },
 
         {

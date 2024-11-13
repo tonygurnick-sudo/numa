@@ -81,7 +81,6 @@ export const NumaAppProvider = ({ children }) => {
       if (!task.requiredTasks) return true; // No dependencies mean it's valid
       const { any } = task.requiredTasks;
       if (any) {
-        console.log('found some any', any);
         return any.some(
           (requiredTaskId) => taskCompletionStatus[requiredTaskId],
         );
@@ -103,7 +102,6 @@ export const NumaAppProvider = ({ children }) => {
     const fetchData = async () => {
       try {
         const appsData = JSON.parse(sessionStorage.getItem('appsData'));
-        console.log('appsData', appsData);
         const app = appsData.find((app) => app.id === numaAppId);
         setNumaAppData(app);
         setLoading(false);
@@ -117,7 +115,7 @@ export const NumaAppProvider = ({ children }) => {
     fetchData();
   }, [numaAppId]);
 
-  const handleRunButtonClick = async (appId, appData) => {
+  const handleRunButtonClick = async (appData) => {
     try {
       setLoading(true);
       let currentResults = {}; // To store results of each task
@@ -137,6 +135,13 @@ export const NumaAppProvider = ({ children }) => {
           // Assume taskInputValues are already populated for input tasks
           currentResults[task.id] = taskInputValues[task.id] || '';
           console.log(`Input task result: ${currentResults[task.id]}`);
+        }
+
+        if (task.type === 's3-upload') {
+          // Handle S3 upload task, storing the resulting file key (or URL) in currentResults
+          const uploadedFilePath = taskInputValues[task.id];
+          currentResults[task.id] = uploadedFilePath;
+          console.log(`S3 upload result: ${currentResults[task.id]}`);
         }
 
         if (task.type === 'http-request') {

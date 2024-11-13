@@ -21,8 +21,6 @@ const QAppDetailHeader = () => {
   const [response, setResponse] = useState(null);
   const [error, setError] = useState(null);
 
-  console.log('run is active: ', runActive);
-
   const handleRunApp = async () => {
     if (!qAppsClient || authLoading) return;
 

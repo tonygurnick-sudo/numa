@@ -3,21 +3,15 @@ import { useNumaApp } from '../Providers/NumaAppProvider';
 import { Button } from 'react-bootstrap';
 
 const NumaAppItemHeader = () => {
-  const {
-    loading,
-    numaTaskResponse,
-    error,
-    runActive,
-    handleRunButtonClick,
-    numaAppData,
-  } = useNumaApp();
+  const { loading, error, runActive, handleRunButtonClick, numaAppData } =
+    useNumaApp();
 
   const appId = numaAppData.id;
 
   const handleRunApp = async () => {
     try {
       // Using context's startApp function
-      await handleRunButtonClick(appId, numaAppData);
+      await handleRunButtonClick(numaAppData);
     } catch (error) {
       // No need to set the error here as `startApp` in the context already handles it
       console.error('Error starting app session:', error);
