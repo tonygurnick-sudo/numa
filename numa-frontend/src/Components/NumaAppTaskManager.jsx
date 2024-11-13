@@ -1,10 +1,7 @@
-import { useState, useEffect } from 'react';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 
 import { Col } from 'react-bootstrap';
 import { S3UploadModule } from '../Modules/S3UploadModule';
-import { QAppModule } from '../Modules/QAppModule';
-import { NumaRequestModule } from '../Modules/NumaRequestModule';
 import { TextInputModule } from '../Modules/TextInputModule';
 import { TextOutputModule } from '../Modules/TextOutputModule';
 
@@ -13,7 +10,7 @@ const NumaAppTaskManager = () => {
     useNumaApp();
 
   function handleTaskCompletion(taskId) {
-    console.log('task complete run...', taskId);
+    console.log('task complete update...', taskId);
     updateTaskCompletionStatus(taskId); // Let the provider handle updating the task status
   }
 
@@ -39,6 +36,7 @@ const NumaAppTaskManager = () => {
             key={task.id}
             task={task}
             onComplete={() => handleTaskCompletion(task.id)}
+            onNotComplete={() => handleTaskIncomplete(task.id)}
           />
         );
       case 'text-output':
@@ -56,7 +54,7 @@ const NumaAppTaskManager = () => {
     <>
       {numaAppData?.tasks
         ?.filter(
-          (task) => task.type !== 'q-app-' && task.type !== 'http-request',
+          (task) => task.type !== 'q-app' && task.type !== 'http-request',
         ) // Filter out q-app- and http-request tasks
         .map((task) => (
           <Col key={task.id} sm={12} md={6} lg={6} xl={6} className="flex">
