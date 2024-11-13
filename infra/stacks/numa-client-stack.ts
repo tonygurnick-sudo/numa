@@ -9,16 +9,31 @@ import { ExampleNumaApp } from '../constructs/example-numa-app-construct';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
+
+    // need domain name for certificate and also callback
+    // do we delegate a whole NS? ideally not
+    // OK, create a CNAME and a TXT for cert.
+
+
     props.config ??= lookupConfigForClient(props.client, props.environmentName as EnvironmentName);
-    const deployerAccount =
-      (props.environmentName as EnvironmentName) == EnvironmentName.prod ? '207567759910' : '324037291751';
+    const environmentConfig = (props.environmentName as EnvironmentName) == EnvironmentName.prod ? {
+      deployerAccount: '207567759910',
+      domainSuffix: 'numa.arcanum.ai',
+      hostedZone: 'Z05615802D0KHGAAOFX9U',
+    } : {
+      deployerAccount: '324037291751',
+      domainSuffix: 'numa-dev.arcanum.ai',
+      hostedZone: '',
+    };
+    const deployerRole = `arn:aws:iam::${environmentConfig.deployerAccount}:role/admin-delegated-access`;
     super(scope, name, {
       ...props,
       assumeRoleList: [
-        { roleArn: `arn:aws:iam::${deployerAccount}:role/admin-delegated-access` },
+        { roleArn: deployerRole },
         { roleArn: `arn:aws:iam::${props.config.clientAccountId}:role/ArcanumAIAccess` },
       ],
     });
+    const domainName = props.config.customDomain ?? `${props.client}.${environmentConfig.domainSuffix}`;
 
     new CoreNumaInfra(this, 'numa', {
       ...props.config,
