@@ -4,7 +4,7 @@ import dataclasses
 import textract
 
 
-def lambda_handler(event, context) -> dict:
+def lambda_handler(event: dict, _context: dict) -> dict:
     bucket = event["bucket"]
     key = event["key"]
 

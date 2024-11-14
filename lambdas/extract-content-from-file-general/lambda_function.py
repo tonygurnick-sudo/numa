@@ -4,7 +4,6 @@ The `lambda_handler` function processes the event by identifying the S3 bucket a
 `extract_text_from_file_using_textract` or `extract_text_from_image_using_vision_model` based on the file type."""
 
 import argparse
-from typing import Any, Dict
 
 import boto3
 
@@ -14,7 +13,7 @@ import textract
 s3_client = boto3.client("s3")
 
 
-def lambda_handler(event: Dict[str, Any], _context: dict) -> Dict[str, Any]:
+def lambda_handler(event: dict, _context: dict) -> dict:
     bucket = event["bucket"]
     key = event["key"]
 
