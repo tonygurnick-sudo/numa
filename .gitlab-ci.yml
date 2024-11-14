@@ -20,6 +20,8 @@ variables:
     - PYTHON_WORKING_DIRECTORY:
         - deployer
         - lambdas/extract-content-from-file-general
+        - lambdas/extract-content-from-pdf-structured
+        - lambdas/meeting-tools-app-formatting
 
 python-lint:
   extends: .poetry-job
