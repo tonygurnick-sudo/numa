@@ -19,8 +19,7 @@ variables:
   matrix:
     - PYTHON_WORKING_DIRECTORY:
         - deployer
-        - lambdas/extract-content-from-file-general
-        - lambdas/extract-content-from-pdf-structured
+        - lambdas/extract-content-from-file
         - lambdas/meeting-tools-app-formatting
 
 python-lint:
