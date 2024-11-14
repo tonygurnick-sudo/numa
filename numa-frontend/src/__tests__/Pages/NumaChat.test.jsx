@@ -1,64 +1,26 @@
 /**
  * @vitest-environment jsdom
  */
+import '@testing-library/jest-dom';
+import { MockBreadcrumbs, MockLayoutDashboard } from '../Mocks/ComponentMock';
+import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
+import { MockAwsClient } from '../Mocks/AwsClientMocks';
 
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import '@testing-library/jest-dom';
 import { NumaChat } from '../../Pages/NumaChat';
+import { authHandlers } from '../Mocks/AuthMock';
 
-// Mock the AWS SDK commands
-vi.mock('@aws-sdk/client-qbusiness', () => ({
-  ChatSyncCommand: vi.fn(),
-  ListConversationsCommand: vi.fn(),
-}));
+const { qBusinessClient: mockQBusinessClient } = authHandlers;
 
-// Mock the components used in NumaChat
-vi.mock('../../Components/Breadcrumbs', () => ({
-  Breadcrumbs: () => <div data-testid="mock-breadcrumbs">Breadcrumbs</div>,
-}));
-
-vi.mock('../../Components/Nav', () => ({
-  Nav: () => <div data-testid="mock-nav">Nav</div>,
-}));
-
-vi.mock('../../Layouts/LayoutDashboard', () => ({
-  LayoutDashboard: ({ children }) => (
-    <div data-testid="mock-layout-dashboard">{children}</div>
-  ),
-}));
-
-// Mock AuthProvider context
-const mockQBusinessClient = {
-  send: vi.fn(),
+const renderChat = () => {
+  return renderWithProviders(<NumaChat />);
 };
-
-const mockAuthContext = {
-  user: {
-    decoded_tokens: {
-      idToken: {
-        'cognito:groups': ['TestGroup'],
-      },
-    },
-  },
-  logout: vi.fn(),
-  qBusinessClient: mockQBusinessClient,
-};
-
-vi.mock('../../Providers/AuthProvider', () => ({
-  useAuth: () => mockAuthContext,
-  AuthProvider: ({ children }) => <div>{children}</div>,
-}));
-
-beforeEach(() => {
-  // Mock scrollIntoView
-  Element.prototype.scrollIntoView = vi.fn();
-});
 
 describe('NumaChat Component', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockQBusinessClient.send.mockReset();
+    clearAllMocks();
+    Element.prototype.scrollIntoView = vi.fn();
   });
 
   /**
@@ -66,7 +28,7 @@ describe('NumaChat Component', () => {
    */
   it('should render initial layout correctly', () => {
     // Render the NumaChat component
-    render(<NumaChat />);
+    renderChat();
 
     // Check that the title is present
     expect(screen.getByText('Numa Chat')).toBeInTheDocument();
@@ -74,7 +36,9 @@ describe('NumaChat Component', () => {
     // Verify all mock components are rendered
     expect(screen.getByTestId('mock-nav')).toBeInTheDocument();
     expect(screen.getByTestId('mock-breadcrumbs')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-layout-dashboard')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('mock-layout-dashboard-outer'),
+    ).toBeInTheDocument();
 
     // Verify welcome message is displayed
     expect(
@@ -103,7 +67,7 @@ describe('NumaChat Component', () => {
     });
 
     // Render the component
-    render(<NumaChat />);
+    renderChat();
 
     // Wait for and verify the conversation appears in the sidebar
     await waitFor(() => {
@@ -126,7 +90,7 @@ describe('NumaChat Component', () => {
     });
 
     // Render the chat component
-    render(<NumaChat />);
+    renderChat();
 
     // Get the input field and send button
     const input = screen.getByPlaceholderText('Type your message here...');
@@ -172,7 +136,7 @@ describe('NumaChat Component', () => {
     mockQBusinessClient.send.mockRejectedValueOnce(new Error('API Error'));
 
     // Render the chat component
-    render(<NumaChat />);
+    renderChat();
 
     // Get the input field and send button
     const input = screen.getByPlaceholderText('Type your message here...');
@@ -196,7 +160,7 @@ describe('NumaChat Component', () => {
   it('should handle new chat creation', async () => {
     mockQBusinessClient.send.mockResolvedValueOnce({ conversations: [] });
 
-    render(<NumaChat />);
+    renderChat();
 
     const newChatButton = screen.getByText('New Chat');
 
@@ -246,7 +210,7 @@ describe('NumaChat Component', () => {
       .mockResolvedValueOnce({ conversations: mockConversations })
       .mockResolvedValueOnce(mockMessages);
 
-    render(<NumaChat />);
+    renderChat();
 
     await waitFor(() => {
       expect(screen.getByText('Test Chat 1')).toBeInTheDocument();
@@ -279,7 +243,7 @@ describe('NumaChat Component', () => {
 
 describe('NumaChat Mobile Component', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    clearAllMocks();
     mockQBusinessClient.send.mockReset();
 
     // Set viewport to mobile width
@@ -297,7 +261,7 @@ describe('NumaChat Mobile Component', () => {
    * Verifies that conversations sidebar starts hidden on mobile
    */
   it('should start with conversations hidden on mobile', () => {
-    render(<NumaChat />);
+    renderChat();
 
     const sidebar = screen.getByTestId('sidebar-wrapper');
     expect(sidebar).toHaveClass('closed');
@@ -307,7 +271,7 @@ describe('NumaChat Mobile Component', () => {
    * Tests the mobile sidebar toggle functionality
    */
   it('should toggle conversation sidebar when chevron clicked', () => {
-    render(<NumaChat />);
+    renderChat();
 
     const sidebar = screen.getByTestId('sidebar-wrapper');
     const toggleButton = screen.getByLabelText('Show conversations');
@@ -340,7 +304,7 @@ describe('NumaChat Mobile Component', () => {
       .mockResolvedValueOnce({ conversations: mockConversations })
       .mockResolvedValueOnce({ messages: [] });
 
-    render(<NumaChat />);
+    renderChat();
 
     // Open sidebar
     const toggleButton = screen.getByLabelText('Show conversations');
@@ -362,7 +326,7 @@ describe('NumaChat Mobile Component', () => {
    * Verifies mobile-specific textarea properties
    */
   it('should use mobile-specific textarea rows', () => {
-    render(<NumaChat />);
+    renderChat();
 
     const textarea = screen.getByPlaceholderText('Type your message here...');
     expect(textarea).toHaveAttribute('rows', '2'); // Mobile uses 2 rows instead of 3
@@ -372,7 +336,7 @@ describe('NumaChat Mobile Component', () => {
    * Verifies mobile-specific button layout
    */
   it('should stack buttons vertically on mobile', () => {
-    render(<NumaChat />);
+    renderChat();
 
     const buttonContainer = screen.getByTestId('button-container');
     expect(buttonContainer).toHaveClass('flex-column');
@@ -406,7 +370,7 @@ describe('NumaChat Source Attributions', () => {
       ],
     });
 
-    render(<NumaChat />);
+    renderChat();
 
     const input = screen.getByPlaceholderText('Type your message here...');
     const sendButton = screen.getByText('Send Message');
@@ -451,7 +415,7 @@ describe('NumaChat Source Attributions', () => {
       sourceAttributions: [], // Empty sources
     });
 
-    render(<NumaChat />);
+    renderChat();
 
     const input = screen.getByPlaceholderText('Type your message here...');
     const sendButton = screen.getByText('Send Message');
@@ -476,7 +440,7 @@ describe('NumaChat Source Attributions', () => {
       // sourceAttributions field omitted entirely
     });
 
-    render(<NumaChat />);
+    renderChat();
 
     const input = screen.getByPlaceholderText('Type your message here...');
     const sendButton = screen.getByText('Send Message');
@@ -492,7 +456,7 @@ describe('NumaChat Source Attributions', () => {
 
 describe('NumaChat Responsive Behavior', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    clearAllMocks();
     mockQBusinessClient.send.mockReset();
 
     // Start with desktop width
@@ -508,7 +472,7 @@ describe('NumaChat Responsive Behavior', () => {
    * Tests responsive layout changes
    */
   it('should adapt layout when transitioning from desktop to mobile', async () => {
-    render(<NumaChat />);
+    renderChat();
 
     // Verify desktop layout
     const sidebar = screen.getByTestId('sidebar-wrapper');
@@ -561,7 +525,7 @@ describe('NumaChat Responsive Behavior', () => {
       systemMessageId: 'msg-1',
     });
 
-    render(<NumaChat />);
+    renderChat();
 
     // Add a message in desktop view
     const input = screen.getByPlaceholderText('Type your message here...');

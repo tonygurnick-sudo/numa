@@ -3,54 +3,27 @@
  */
 
 // Import mock handlers and providers
-import {
-  setupNavigationMocks,
-  clearNavigationMocks,
-  MockMemoryRouter,
-} from '../Mocks/NavigationMock';
-import {
-  setupAuthMocks,
-  clearAuthMocks,
-  MockAuthProvider,
-} from '../Mocks/AuthMock';
-import {
-  MockBreadcrumbs,
-  MockPreloader,
-  MockLayoutDashboard,
-} from '../Mocks/ComponentMock';
+import { MockPreloader } from '../Mocks/ComponentMock';
+import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
 
 // Regular imports
-import React from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { Dash } from '../../Pages/Dash';
-import { NumaAppProvider } from '../../Providers/NumaAppProvider';
 import { dashboardFixtures } from '../Fixtures/AppFixtures';
 
 describe('Dash Component', () => {
-  const { mockNavigate } = setupNavigationMocks();
-  const { logout: mockLogout } = setupAuthMocks();
-
   beforeEach(() => {
-    vi.clearAllMocks();
-    clearNavigationMocks();
-    clearAuthMocks();
+    clearAllMocks();
   });
 
-  const renderWithProviders = (ui) => {
-    return render(
-      <MockAuthProvider>
-        <MockMemoryRouter>
-          <NumaAppProvider>{ui}</NumaAppProvider>
-        </MockMemoryRouter>
-      </MockAuthProvider>,
-    );
+  const renderDash = () => {
+    return renderWithProviders(<Dash />, { withNumaApp: true });
   };
 
   it('should render loading state initially', () => {
-    renderWithProviders(<Dash />);
-
+    renderDash();
     expect(screen.getByTestId('mock-preloader')).toBeInTheDocument();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
   });
@@ -62,7 +35,7 @@ describe('Dash Component', () => {
       json: () => Promise.resolve(dashboardFixtures.validApps),
     });
 
-    renderWithProviders(<Dash />);
+    renderDash();
 
     // First verify loading state
     expect(screen.getByTestId('mock-preloader')).toBeInTheDocument();
@@ -101,7 +74,7 @@ describe('Dash Component', () => {
       json: () => Promise.resolve([]),
     });
 
-    renderWithProviders(<Dash />);
+    renderDash();
 
     await waitFor(() => {
       expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
@@ -118,7 +91,7 @@ describe('Dash Component', () => {
       json: () => Promise.resolve(dashboardFixtures.validApps),
     });
 
-    renderWithProviders(<Dash />);
+    renderDash();
 
     await waitFor(() => {
       expect(screen.queryByTestId('mock-preloader')).not.toBeInTheDocument();
@@ -132,7 +105,7 @@ describe('Dash Component', () => {
   });
 
   it('should render correct layout structure', async () => {
-    renderWithProviders(<Dash />);
+    renderDash();
 
     // Check for main structural components
     expect(screen.getByTestId('mock-breadcrumbs')).toBeInTheDocument();
@@ -152,7 +125,7 @@ describe('Dash Component', () => {
       json: () => Promise.resolve(dashboardFixtures.invalidArrayApps),
     });
 
-    renderWithProviders(<Dash />);
+    renderDash();
 
     // First verify loading state
     expect(screen.getByTestId('mock-preloader')).toBeInTheDocument();

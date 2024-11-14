@@ -3,6 +3,7 @@ import React from 'react';
 
 export const navigationHandlers = {
   mockNavigate: vi.fn(),
+  currentRoute: '/dash',
 };
 
 // Create Router context
@@ -18,12 +19,13 @@ export const MockMemoryRouter = ({ children }) => (
 );
 
 // Mock the module BEFORE any imports
-vi.mock('react-router-dom', () => {
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
   return {
-    __esModule: true,
+    ...actual,
     useNavigate: () => navigationHandlers.mockNavigate,
     MemoryRouter: ({ children }) => children,
-    useLocation: () => ({ pathname: '/' }),
+    useLocation: () => ({ pathname: navigationHandlers.currentRoute }),
     useParams: () => ({}),
   };
 });

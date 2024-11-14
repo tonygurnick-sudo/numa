@@ -1,11 +1,33 @@
 import { vi } from 'vitest';
 import React from 'react';
 
-// Define handlers first
+// Define mock QBusinessClient
+const mockQBusinessClient = {
+  send: vi.fn(),
+};
+
+// Define all auth handlers
 export const authHandlers = {
   logout: vi.fn(),
   requestPasswordReset: vi.fn(),
   confirmPasswordReset: vi.fn(),
+  login: vi.fn(),
+  setNewPassword: vi.fn(),
+  setError: vi.fn(),
+  setLoading: vi.fn(),
+  setNewPasswordRequired: vi.fn(),
+  isAuthenticated: false,
+  loading: false,
+  error: null,
+  user: {
+    decoded_tokens: {
+      idToken: {
+        'cognito:groups': ['TestGroup'],
+      },
+    },
+  },
+  qBusinessClient: mockQBusinessClient,
+  newPasswordRequired: false,
 };
 
 // Create the actual mock context and provider
@@ -27,15 +49,14 @@ vi.mock('../../Providers/AuthProvider', () => {
 
 // Update setupAuthMocks to return the handlers
 export const setupAuthMocks = () => {
-  // Reset all handlers to their initial state
-  authHandlers.logout.mockReset();
-  authHandlers.requestPasswordReset.mockReset();
-  authHandlers.confirmPasswordReset.mockReset();
+  clearAuthMocks();
   return authHandlers;
 };
 
 export const clearAuthMocks = () => {
-  authHandlers.logout.mockReset();
-  authHandlers.requestPasswordReset.mockReset();
-  authHandlers.confirmPasswordReset.mockReset();
+  Object.values(authHandlers).forEach((handler) => {
+    if (typeof handler === 'function') {
+      handler.mockReset();
+    }
+  });
 };
