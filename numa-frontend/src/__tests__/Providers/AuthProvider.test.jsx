@@ -1,6 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
+import {
+  setupAwsMocks,
+  mockCognitoIdentityProviderClient,
+} from '../Mocks/AwsMock';
 
 import React from 'react';
 import { render, act } from '@testing-library/react';
@@ -16,70 +20,7 @@ import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-
 import { authTestTokens } from '../Fixtures/AuthTestTokens';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 
-// Add these mocks at the top of the file, after the imports
-vi.mock('@aws-sdk/client-sts', () => ({
-  STSClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({
-      Credentials: {
-        AccessKeyId: 'mock-access-key',
-        SecretAccessKey: 'mock-secret-key',
-        SessionToken: 'mock-session-token',
-        Expiration: new Date(Date.now() + 3600 * 1000),
-      },
-    }),
-  })),
-  AssumeRoleWithWebIdentityCommand: vi.fn(),
-}));
-
-vi.mock('@aws-sdk/client-cognito-identity', () => ({
-  CognitoIdentityClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({
-      IdentityId: 'mock-identity-id',
-      Credentials: {
-        AccessKeyId: 'mock-access-key',
-        SecretAccessKey: 'mock-secret-key',
-        SessionToken: 'mock-session-token',
-        Expiration: new Date(Date.now() + 3600 * 1000),
-      },
-    }),
-  })),
-  GetIdCommand: vi.fn(),
-  GetCredentialsForIdentityCommand: vi.fn(),
-}));
-
-// Add these mocks for AWS SDK clients
-vi.mock('@aws-sdk/client-qbusiness', () => ({
-  QBusinessClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({}),
-  })),
-}));
-
-vi.mock('@aws-sdk/client-qapps', () => ({
-  QAppsClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({}),
-  })),
-}));
-
-vi.mock('@aws-sdk/credential-providers', () => ({
-  fromWebToken: vi.fn().mockImplementation(() => async () => ({
-    accessKeyId: 'mock-access-key',
-    secretAccessKey: 'mock-secret-key',
-    sessionToken: 'mock-session-token',
-  })),
-}));
-
-vi.mock('@aws-sdk/client-cognito-identity-provider', () => ({
-  CognitoIdentityProviderClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({
-      ChallengeName: 'NEW_PASSWORD_REQUIRED',
-      Session: 'mock-session',
-    }),
-  })),
-  RespondToAuthChallengeCommand: vi.fn(),
-  InitiateAuthCommand: vi.fn(),
-  ForgotPasswordCommand: vi.fn(),
-  ConfirmForgotPasswordCommand: vi.fn(),
-}));
+setupAwsMocks();
 
 const TestComponent = ({ onAuth }) => {
   const auth = useAuth();
@@ -267,29 +208,42 @@ describe('AuthProvider', () => {
         .fn()
         .mockResolvedValue(authTestTokens.refreshResponses.success);
 
-      // Mock localStorage getItem to return the expired tokens
-      window.localStorage.getItem.mockImplementation((key) => {
-        return authTestTokens.expired.tokens[key];
-      });
-
-      const onAuth = vi.fn();
-      let auth;
-
-      render(
-        <TestAuthProvider
-          refreshHandler={mockRefreshHandler}
-          initialTokens={authTestTokens.expired}
-        >
-          <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+      // Mock localStorage getItem to return the expired tokens consistently
+      window.localStorage.getItem.mockImplementation(
+        (key) => authTestTokens.expired.tokens[key],
       );
 
-      // Wait for auth to be initialized
-      await waitFor(() => {
-        expect(onAuth).toHaveBeenCalled();
+      const onAuth = vi.fn();
+
+      // Ensure expired tokens are actually expired
+      const expiredTokens = {
+        ...authTestTokens.expired,
+        decoded_tokens: {
+          accessToken: { exp: Math.floor(Date.now() / 1000) - 3600 }, // 1 hour in the past
+          idToken: {
+            exp: Math.floor(Date.now() / 1000) - 3600,
+            sub: 'test-user',
+          },
+        },
+      };
+
+      await act(async () => {
+        render(
+          <TestAuthProvider
+            refreshHandler={mockRefreshHandler}
+            initialTokens={expiredTokens}
+          >
+            <TestComponent onAuth={onAuth} />
+          </TestAuthProvider>,
+        );
       });
 
-      auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+      // Wait for auth to be fully initialized
+      const auth = await waitFor(() => {
+        const lastCall = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+        expect(lastCall).toBeTruthy();
+        return lastCall;
+      });
 
       // Get the access token and wait for refresh
       let token;
@@ -297,9 +251,10 @@ describe('AuthProvider', () => {
         token = await auth.getAccessToken();
       });
 
-      // Wait specifically for the refresh handler to be called
-      await waitFor(() => {
-        expect(mockRefreshHandler).toHaveBeenCalled();
+      // Wait for all state updates to complete and verify refresh handler was called
+      expect(mockRefreshHandler).toHaveBeenCalledWith({
+        refreshToken: authTestTokens.expired.tokens.refreshToken,
+        username: 'test-user',
       });
 
       // Verify the token matches the refreshed token
@@ -350,9 +305,11 @@ describe('AuthProvider', () => {
         Session: 'test-session',
       };
 
-      vi.mocked(CognitoIdentityProviderClient).mockImplementation(() => ({
-        send: vi.fn().mockResolvedValueOnce(mockCognitoResponse),
-      }));
+      mockCognitoIdentityProviderClient.CognitoIdentityProviderClient.mockImplementationOnce(
+        () => ({
+          send: vi.fn().mockResolvedValueOnce(mockCognitoResponse),
+        }),
+      );
 
       const onAuth = vi.fn();
       render(
@@ -364,7 +321,9 @@ describe('AuthProvider', () => {
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
 
       await expect(auth.setNewPassword('user', 'old', 'new')).rejects.toThrow();
-      expect(CognitoIdentityProviderClient).toHaveBeenCalled();
+      expect(
+        mockCognitoIdentityProviderClient.CognitoIdentityProviderClient,
+      ).toHaveBeenCalled();
     });
 
     it('should handle loadUserFromTokens with various token states', async () => {

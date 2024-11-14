@@ -28,3 +28,13 @@ export const MockLayoutDashboard = ({ children }) => (
 vi.mock('../../Layouts/LayoutDashboard', () => ({
   LayoutDashboard: MockLayoutDashboard,
 }));
+
+// Mock Nav component
+export const MockNav = () => <div data-testid="mock-nav">Nav</div>;
+vi.mock(
+  '../../Components/Nav',
+  () => ({
+    Nav: MockNav,
+  }),
+  { virtual: true },
+);

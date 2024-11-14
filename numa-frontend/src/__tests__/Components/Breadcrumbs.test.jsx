@@ -1,41 +1,32 @@
 /**
  * @vitest-environment jsdom
  */
+import {
+  MockMemoryRouter,
+  navigationHandlers,
+  clearNavigationMocks,
+} from '../Mocks/NavigationMock';
+import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
-import { Breadcrumbs } from '../../Components/Breadcrumbs';
-import { MemoryRouter, useNavigate, useLocation } from 'react-router-dom';
 
-// Mock react-router-dom hooks
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: vi.fn(),
-    useLocation: vi.fn(),
-  };
-});
+import { Breadcrumbs } from '../../Components/Breadcrumbs';
 
 describe('Breadcrumbs Component', () => {
-  const mockNavigate = vi.fn();
   let mockSessionStorage = {};
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    clearAllMocks();
     mockSessionStorage = {};
 
-    // Mock sessionStorage with proper JSON handling
+    // Mock sessionStorage
     Object.defineProperty(window, 'sessionStorage', {
       value: {
-        getItem: vi.fn((key) => {
-          // Return null if key doesn't exist (matches real sessionStorage behavior)
-          return mockSessionStorage[key] || null;
-        }),
+        getItem: vi.fn((key) => mockSessionStorage[key] || null),
         setItem: vi.fn((key, value) => {
-          // Ensure value is a string (matches real sessionStorage behavior)
           mockSessionStorage[key] = String(value);
         }),
         removeItem: vi.fn((key) => {
@@ -44,19 +35,15 @@ describe('Breadcrumbs Component', () => {
       },
       writable: true,
     });
-
-    // Setup router mocks
-    useNavigate.mockReturnValue(mockNavigate);
-    useLocation.mockReturnValue({ pathname: '/dash' });
   });
 
-  const renderWithRouter = (ui, { route = '/dash' } = {}) => {
-    useLocation.mockReturnValue({ pathname: route });
-    return render(<MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>);
+  const renderBreadcrumbs = (props = {}, route = '/dash') => {
+    navigationHandlers.currentRoute = route;
+    return renderWithProviders(<Breadcrumbs {...props} />);
   };
 
   it('should render dashboard breadcrumb on initial load', () => {
-    renderWithRouter(<Breadcrumbs />);
+    renderBreadcrumbs();
 
     // Initial load should show Dashboard
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
@@ -84,9 +71,7 @@ describe('Breadcrumbs Component', () => {
     ]);
     mockSessionStorage['navigation_stack'] = initialStack;
 
-    renderWithRouter(<Breadcrumbs clearStack={true} label="New Page" />, {
-      route: '/new/path',
-    });
+    renderBreadcrumbs({ clearStack: true, label: 'New Page' }, '/new/path');
 
     // Parse the actual stack and compare objects instead of strings
     const actualStack = JSON.parse(mockSessionStorage['navigation_stack']);
@@ -108,23 +93,15 @@ describe('Breadcrumbs Component', () => {
   it('should build navigation stack correctly', async () => {
     // First render dashboard with empty initial stack
     mockSessionStorage['navigation_stack'] = JSON.stringify([]);
-    const { rerender } = renderWithRouter(<Breadcrumbs label="Dashboard" />);
+    const { rerender } = renderBreadcrumbs({ label: 'Dashboard' });
 
     // Navigate to a new page
-    useLocation.mockReturnValue({ pathname: '/app/1' });
-    rerender(
-      <MemoryRouter>
-        <Breadcrumbs label="App 1" />
-      </MemoryRouter>,
-    );
+    navigationHandlers.currentRoute = '/app/1';
+    rerender(<Breadcrumbs label="App 1" />);
 
     // Navigate to another page
-    useLocation.mockReturnValue({ pathname: '/app/1/settings' });
-    rerender(
-      <MemoryRouter>
-        <Breadcrumbs label="Settings" />
-      </MemoryRouter>,
-    );
+    navigationHandlers.currentRoute = '/app/1/settings';
+    rerender(<Breadcrumbs label="Settings" />);
 
     await waitFor(() => {
       const navigationStack = JSON.parse(
@@ -158,14 +135,29 @@ describe('Breadcrumbs Component', () => {
       { path: '/app/1/settings', label: 'Settings' },
     ]);
 
-    renderWithRouter(<Breadcrumbs />, { route: '/app/1/settings' });
+    // Set current route to match the last item in navigation stack
+    navigationHandlers.currentRoute = '/app/1/settings';
+
+    const { rerender } = renderBreadcrumbs(
+      { label: 'Settings' },
+      '/app/1/settings',
+    );
+
+    // Verify all breadcrumbs are rendered
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('App 1')).toBeInTheDocument();
+    expect(screen.getByText('Settings')).toBeInTheDocument();
 
     // Click the "App 1" breadcrumb
     const appLink = screen.getByText('App 1');
     fireEvent.click(appLink);
 
     // Check if navigation occurred
-    expect(mockNavigate).toHaveBeenCalledWith('/app/1');
+    expect(navigationHandlers.mockNavigate).toHaveBeenCalledWith('/app/1');
+
+    // Update current route to match navigation
+    navigationHandlers.currentRoute = '/app/1';
+    rerender(<Breadcrumbs label="App 1" />);
 
     // Check if navigation stack was updated
     await waitFor(() => {
@@ -185,7 +177,7 @@ describe('Breadcrumbs Component', () => {
       { path: '/app/1', label: 'App 1' }, // Duplicate
     ]);
 
-    renderWithRouter(<Breadcrumbs />, { route: '/app/1' });
+    renderBreadcrumbs({}, '/app/1');
 
     // Check that duplicates are removed
     const navigationStack = JSON.parse(
@@ -200,7 +192,7 @@ describe('Breadcrumbs Component', () => {
       { path: '/app/1', label: 'App 1' },
     ]);
 
-    renderWithRouter(<Breadcrumbs />, { route: '/app/1' });
+    renderBreadcrumbs({}, '/app/1');
 
     // Check for separator
     expect(screen.getByText('>')).toBeInTheDocument();
@@ -212,7 +204,7 @@ describe('Breadcrumbs Component', () => {
       { path: '/app/1', label: 'App 1' },
     ]);
 
-    renderWithRouter(<Breadcrumbs />, { route: '/app/1' });
+    renderBreadcrumbs({}, '/app/1');
 
     // Dashboard should be a link
     expect(screen.getByText('Dashboard').tagName).toBe('A');
@@ -226,7 +218,7 @@ describe('Breadcrumbs Component', () => {
     mockSessionStorage['navigation_stack'] = JSON.stringify([]);
 
     // Render with route '/dash' since that's the dashboard route
-    renderWithRouter(<Breadcrumbs />, { route: '/dash' });
+    renderBreadcrumbs({}, '/dash');
 
     const navigationStack = JSON.parse(
       mockSessionStorage['navigation_stack'] || '[]',
@@ -246,7 +238,7 @@ describe('Breadcrumbs Component', () => {
       { path: '/app/1', label: 'App 1' },
     ]);
 
-    renderWithRouter(<Breadcrumbs />, { route: '/dash' });
+    renderBreadcrumbs({}, '/dash');
 
     // Check that only dashboard remains
     const navigationStack = JSON.parse(
@@ -263,15 +255,11 @@ describe('Breadcrumbs Component', () => {
     ]);
 
     // First render with Dashboard
-    const { rerender } = renderWithRouter(<Breadcrumbs />, { route: '/dash' });
+    const { rerender } = renderBreadcrumbs({}, '/dash');
 
     // Add App 1 to UI and stack
-    useLocation.mockReturnValue({ pathname: '/app/1' });
-    rerender(
-      <MemoryRouter>
-        <Breadcrumbs label="App 1" />
-      </MemoryRouter>,
-    );
+    navigationHandlers.currentRoute = '/app/1';
+    rerender(<Breadcrumbs label="App 1" />);
 
     // Manually modify the stack to create the edge case
     // Now the UI will show Dashboard > App 1, but stack only has Dashboard

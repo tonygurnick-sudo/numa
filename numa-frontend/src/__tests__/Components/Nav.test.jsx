@@ -13,13 +13,13 @@ import {
   clearAuthMocks,
   MockAuthProvider,
 } from '../Mocks/AuthMock';
+import { renderWithProviders } from '../Mocks/ProviderWrapper';
 
 // Regular imports
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { Nav } from '../../Components/Nav';
-import { NumaAppProvider } from '../../Providers/NumaAppProvider';
 
 describe('Nav Component', () => {
   const { mockNavigate } = setupNavigationMocks();
@@ -36,16 +36,6 @@ describe('Nav Component', () => {
       value: 1024,
     });
   });
-
-  const renderWithProviders = (ui) => {
-    return render(
-      <MockAuthProvider>
-        <MockMemoryRouter>
-          <NumaAppProvider>{ui}</NumaAppProvider>
-        </MockMemoryRouter>
-      </MockAuthProvider>,
-    );
-  };
 
   it('renders without crashing', () => {
     renderWithProviders(<Nav />);

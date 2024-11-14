@@ -2,8 +2,9 @@
  * @vitest-environment jsdom
  */
 
-import React from 'react';
-import { render } from '@testing-library/react';
+import { navigationHandlers } from '../Mocks/NavigationMock';
+import { authHandlers } from '../Mocks/AuthMock';
+
 import { waitFor, screen, fireEvent } from '@testing-library/react/pure';
 import {
   describe,
@@ -16,48 +17,13 @@ import {
 } from 'vitest';
 import '@testing-library/jest-dom';
 import { NumaLogin } from '../../Pages/Login';
-import { BrowserRouter } from 'react-router-dom';
-import { AuthProvider } from '../../Providers/AuthProvider';
+import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
 
-// Mock useNavigate
-const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
-});
+// Use navigationHandlers.mockNavigate instead of mockNavigate
+const { mockNavigate } = navigationHandlers;
 
 // Create mock auth functions
-const mockLogin = vi.fn();
-const mockSetNewPassword = vi.fn();
-
-// Mock the entire AuthProvider context
-vi.mock('../../Providers/AuthProvider', () => ({
-  AuthProvider: ({ children }) => children,
-  useAuth: () => ({
-    login: mockLogin,
-    setNewPassword: mockSetNewPassword,
-    isAuthenticated: false,
-    loading: false,
-    error: null,
-    user: null,
-    setError: vi.fn(),
-    setLoading: vi.fn(),
-    setNewPasswordRequired: vi.fn(),
-    newPasswordRequired: false,
-  }),
-}));
-
-const renderWithProviders = (ui, { container } = {}) => {
-  return render(
-    <AuthProvider>
-      <BrowserRouter>{ui}</BrowserRouter>
-    </AuthProvider>,
-    { container },
-  );
-};
+const { login: mockLogin, setNewPassword: mockSetNewPassword } = authHandlers;
 
 // Configure Vitest to use a custom error formatter
 vi.setConfig({
@@ -106,10 +72,7 @@ expect.extend({
 
 describe('NumaLogin Component', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockLogin.mockReset();
-    mockSetNewPassword.mockReset();
-    mockNavigate.mockReset();
+    clearAllMocks();
   });
 
   it('should handle successful login flow', async () => {

@@ -1,18 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
-import {
-  clearNavigationMocks,
-  MockMemoryRouter,
-} from '../Mocks/NavigationMock';
-import {
-  setupAuthMocks,
-  clearAuthMocks,
-  MockAuthProvider,
-} from '../Mocks/AuthMock';
+import { setupAuthMocks } from '../Mocks/AuthMock';
+import { clearAllMocks, renderWithProviders } from '../Mocks/ProviderWrapper';
 
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { ResetPassword } from '../../Pages/ResetPassword';
 
@@ -20,18 +13,8 @@ describe('ResetPassword Component', () => {
   // Get the auth handlers from setupAuthMocks
   const authHandlers = setupAuthMocks();
 
-  const renderWithProviders = (ui) => {
-    return render(
-      <MockAuthProvider>
-        <MockMemoryRouter>{ui}</MockMemoryRouter>
-      </MockAuthProvider>,
-    );
-  };
-
   beforeEach(() => {
-    vi.clearAllMocks();
-    clearNavigationMocks();
-    clearAuthMocks();
+    clearAllMocks();
   });
 
   it('should render initial password reset request form', () => {
