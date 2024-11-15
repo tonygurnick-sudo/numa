@@ -1,13 +1,29 @@
 import { useNavigate } from 'react-router-dom';
 import Logo from '../assets/images/logo-accelerate.svg';
+
 import { useAuth } from '../Providers/AuthProvider';
+import { useNumaApp } from '../Providers/NumaAppProvider';
+
 import { useState, useEffect } from 'react';
-import { Navbar, Button, Dropdown } from 'react-bootstrap';
+import { Navbar, Button, Dropdown, ProgressBar } from 'react-bootstrap';
 
 const Nav = () => {
   const navigate = useNavigate();
   const { logout: authLogout } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  const { progress, runActive, handleRunButtonClick, numaAppData } =
+    useNumaApp();
+
+  const handleRunApp = async () => {
+    try {
+      // Using context's startApp function
+      await handleRunButtonClick(numaAppData);
+    } catch (error) {
+      // No need to set the error here as `startApp` in the context already handles it
+      console.error('Error starting app session:', error);
+    }
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -45,6 +61,29 @@ const Nav = () => {
             style={{ height: '50px' }}
           />
         </Navbar.Brand>
+
+        <div className="d-flex align-items-center">
+          <ProgressBar
+            now={progress}
+            label={`${Math.round(progress)}%`}
+            animated
+            variant="success"
+            className="flex-grow-1 progress-bar"
+          />
+          <Button
+            type="submit"
+            id="submit"
+            className="btn btn-primary run_btn  d-inline-flex align-items-center"
+            disabled={runActive}
+            onClick={handleRunApp}
+          >
+            Run{' '}
+            <i
+              style={{ lineHeight: '1px' }}
+              className={`bi bi-arrow-right ${!runActive ? 'bounce-icon' : ''}`}
+            ></i>
+          </Button>
+        </div>
 
         <Dropdown align="end" style={{ display: 'flex', alignItems: 'center' }}>
           <Dropdown.Toggle

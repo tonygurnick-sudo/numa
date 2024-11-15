@@ -27,24 +27,13 @@ const AppDetail = () => {
       <header>
         <Container fluid>
           <Row className="align-items-end">
-            <Col lg={9} className="px-5">
+            <Col lg={8} className="px-5">
               {!isLoading && <Breadcrumbs label={numaAppData?.appName} />}
               <h1>{numaAppData?.appName}</h1>
               <p>{numaAppData?.appDescription}</p>
             </Col>
-            <Col lg={3} className="px-5 text-end">
-              <div className="d-flex flex-column justify-content-between h-100 gap-3">
-                <div className="d-flex flex-column gap-2 align-items-end">
-                  {numaAppData?.type === 'q-app' ? (
-                    <QAppDetailHeader />
-                  ) : (
-                    numaAppData?.type === 'numa-app' && <NumaAppItemHeader />
-                  )}
-                </div>
-              </div>
-            </Col>
-            <Col lg={9} className="px-5">
-              <div className="d-flex align-items-center gap-3">
+            <Col lg={4} className="pe-5 ps-2 text-end">
+              <div className="d-flex flex-column gap-3 mb-4">
                 <span>
                   <strong>Created:</strong>{' '}
                   {numaAppData?.createdDate
@@ -55,7 +44,16 @@ const AppDetail = () => {
                   <strong>Status:</strong> {numaAppData?.status}
                 </span>
               </div>
+
+              <div className="d-flex flex-row gap-2 align-items-end">
+                {numaAppData?.type === 'q-app' ? (
+                  <QAppDetailHeader />
+                ) : (
+                  numaAppData?.type === 'numa-app' && <NumaAppItemHeader />
+                )}
+              </div>
             </Col>
+            <Col lg={9} className="px-5"></Col>
           </Row>
         </Container>
       </header>

@@ -1,15 +1,21 @@
 import '../assets/css/Preloader.scss';
 
 // eslint-disable-next-line react/prop-types
-const Preloader = ({ smallscreen }) => {
+const Preloader = ({ smallscreen, overlayParent }) => {
   return (
     <>
       {smallscreen ? (
-        <div className="preloader_small" data-testid="preloader">
+        <div
+          className={`preloader_small ${overlayParent ? 'overlay' : ''}`}
+          data-testid="preloader"
+        >
           <Wrap />
         </div>
       ) : (
-        <div className="preloader" data-testid="preloader">
+        <div
+          className={`preloader ${overlayParent ? 'overlay' : ''}`}
+          data-testid="preloader"
+        >
           <Wrap />
         </div>
       )}

@@ -54,19 +54,28 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
     <div className="card card-apps">
       <div className="card-header">
         <Row>
-          <Col lg={12}>
+          <Col lg={10}>
             {task?.title}
             <br />
+          </Col>
+          <Col>
+            {task?.required && (
+              <i
+                title="Required to run the app"
+                className="bi bi-exclamation-circle"
+              ></i>
+            )}
           </Col>
         </Row>
       </div>
 
       <div className="card-body">
+        {task?.description}
+        <br /> <br />
         <Form.Group controlId={`file-upload-${task.id}`}>
           <Form.Label>Select a file to upload:</Form.Label>
           <Form.Control type="file" onChange={handleFileChange} />
         </Form.Group>
-
         <Button
           onClick={handleUpload}
           disabled={!selectedFile || uploadStatus === 'Uploading...'}
@@ -74,7 +83,6 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
         >
           Upload
         </Button>
-
         {uploadStatus && <p className="mt-2">{uploadStatus}</p>}
         {/* Display the selected file name or uploaded file path */}
         {taskInputValues[task.id] && !uploadStatus && (

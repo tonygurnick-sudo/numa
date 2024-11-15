@@ -6,44 +6,30 @@
       "type": "numa-app",
       "status": "Active",
       "createdDate": "2023-11-06T10:38:12Z",
-      "appDescription": "Processes meeting notes.",
+      "appDescription": "The Meeting Insights and Analysis Tool is designed to transform raw meeting data into comprehensive summaries, insightful analyses, and actionable outputs. Whether your meetings are in person, virtual, or a blend of both, this app helps you make the most out of your meeting notes and transcripts by providing structured, automated reports and follow-up resources.",
       "tasks": [
         {
           "id": "upload-files-to-s3",
-          "title": "Upload Files (Optional)",
+          "title": "Upload Files",
+          "description": "Upload your notes or transcript from your meeting",
           "type": "s3-upload",
+          "required": true,
           "params": {
             "bucketName": "meeting-notes-bucket"
           },
           "order": 1
         },
         {
-          "id": "meeting-notes-task",
-          "title": "Your Meeting Notes (Optional)",
+          "id": "template-task",
+          "title": "Template",
           "type": "text-input",
-          "order": 1
-        },
-        {
-          "id": "meeting-notes-description-task",
-          "title": "Describe your meeting notes",
-          "type": "text-input",
-          "order": 1
-        },
-        {
-          "id": "meeting-context-task",
-          "title": "Your Meeting Context",
-          "type": "text-input",
-          "order": 1
-        },
-        {
-          "id": "transcript-task",
-          "title": "Transcript",
-          "type": "text-input",
+          "default": "This is a default {{Template}}. Maybe we can alter the content for {{This_item}}",
           "order": 1
         },
         {
           "id": "other-notes",
           "title": "Other Notes",
+          "description": "Include any other notes that might be useful.",
           "type": "text-input",
           "order": 1
         },
@@ -52,11 +38,7 @@
           "title": "Process Meeting Notes",
           "type": "http-request",
           "requiredTasks": {
-            "any": [
-              "upload-files-to-s3",
-              "meeting-notes-task",
-              "transcript-task"
-            ]
+            "any": ["@upload-files-to-s3"]
           },
           "endpoint": "meeting-tools",
           "params": {
@@ -64,19 +46,9 @@
               "uploadedFiles": [
                 {
                   "bucket": "numa-q-dev",
-                  "key": "@upload-files-to-s3",
-                  "type": "meetingNotes",
-                  "description": "Meeting Notes."
+                  "key": "@upload-files-to-s3"
                 }
-              ],
-              "meetingNotes": {
-                "text": "@meeting-notes-task",
-                "description": "@meeting-notes-description-task"
-              },
-              "transcript": "@transcript-task",
-              "meetingContext": "@meeting-context-task",
-              "otherNotes": "@other-notes",
-              "template": "No idea about a template..."
+              ]
             }
           },
           "order": 2
@@ -85,11 +57,24 @@
           "id": "process-with-q-app",
           "title": "Process with Q App",
           "type": "q-app",
+          "appVersion": "1",
           "params": {
             "qAppId": "q-app-123",
-            "inputContentRef": "@call-step-function",
-            "qInputCardId": "the-uuid-of-the-input-card-to-populate",
-            "qOutputCardId": "the-uuid-of-the-output-card-to-get-value-from"
+            "inputs": [
+              {
+                "inputContentRef": "@call-step-function",
+                "qInputCardId": "input-card-id-1"
+              },
+              {
+                "inputContentRef": "@template-task",
+                "qInputCardId": "input-card-id-2"
+              },
+              {
+                "inputContentRef": "@other-notes",
+                "qInputCardId": "input-card-id-3"
+              }
+            ],
+            "qOutputCardId": "output-card-id"
           },
           "order": 3
         },
@@ -98,7 +83,7 @@
           "title": "Display Results",
           "type": "text-output",
           "params": {
-            "dataRef": "process-with-q-app"
+            "dataRef": "@process-with-q-app"
           },
           "order": 4
         }
