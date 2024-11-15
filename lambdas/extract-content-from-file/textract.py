@@ -1,10 +1,8 @@
 """Manages AWS Textract operations to handle PDF/TIFF document extraction."""
 
-import os
 import time
+import typing
 from collections import defaultdict
-from dataclasses import dataclass, field
-from typing import List
 
 import boto3
 import structlog
@@ -17,24 +15,9 @@ textract_client = boto3.client("textract")
 WAIT_TIME = 10
 
 
-@dataclass
-class DocumentPage:
-    page_number: int = 0
-    num_words: int = 0
-    text: str = ""
-
-
-@dataclass
-class Document:
-    name: str = ""
-    num_pages: int = 0
-    total_num_words: int = 0
-    text: List[DocumentPage] = field(default_factory=list)
-
-
-def _get_text_on_pages(response: list) -> dict:
-    pages: dict[str, str] = defaultdict(str)
-    for block in response:
+def _get_pages(blocks: list[dict]) -> typing.Dict[int, str]:
+    pages: dict[int, str] = defaultdict(str)
+    for block in blocks:
         if block["BlockType"] == "LINE":
             page = block["Page"]
             pages[page] += block["Text"] + "\n"
@@ -97,32 +80,7 @@ def _start_job(bucket_name: str, object_name: str) -> str:
     return job_id
 
 
-def _get_page_count(blocks: list) -> int:
-    pages = []
-    for block in blocks:
-        if block["BlockType"] == "LINE":
-            pages.append(block["Page"])
-    return max([0, *pages])
-
-
-def get_text_from_document(bucket: str, key: str) -> Document:
+def get_pages_from_document(bucket: str, key: str) -> typing.Dict[int, str]:
     job_id = _start_job(bucket, key)
     blocks = _get_blocks(job_id)
-    pages = _get_text_on_pages(blocks)
-
-    document_pages: List[DocumentPage] = []
-    for page, text in pages.items():
-        page_info = DocumentPage()
-        page_info.page_number = page
-        page_info.num_words = len(text.split())
-        page_info.text = text
-        document_pages.append(page_info)
-
-    document = Document(
-        name=os.path.basename(key),
-        num_pages=_get_page_count(blocks),
-        total_num_words=sum(page.num_words for page in document_pages),
-        text=document_pages,
-    )
-
-    return document
+    return _get_pages(blocks)
