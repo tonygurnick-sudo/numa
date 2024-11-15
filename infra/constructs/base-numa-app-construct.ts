@@ -19,7 +19,7 @@ export class BaseNumaApp extends Construct {
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     super(scope, name);
     this.apiGatewayId = props.apiGatewayId;
-    this.prefix = this.prepPathPart(props.pathPrefix ?? '');
+    this.prefix = '/api' + this.prepPathPart(props.pathPrefix ?? '');
   }
 
   addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): void {
