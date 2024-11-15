@@ -15,6 +15,7 @@ import { AcmCertificate } from '@cdktf/provider-aws/lib/acm-certificate';
 import { AcmCertificateValidation } from '@cdktf/provider-aws/lib/acm-certificate-validation';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { S3BucketPolicy } from '@cdktf/provider-aws/lib/s3-bucket-policy';
+import { Fn } from 'cdktf';
 
 export class NumaFrontendInfra extends Construct {
   readonly frontendBucket: S3Bucket;
@@ -131,6 +132,17 @@ export class NumaFrontendInfra extends Construct {
             originAccessIdentity: accessIdentity.cloudfrontAccessIdentityPath,
           },
         },
+        {
+          domainName: Fn.replace(this.apiGateway.apiEndpoint, '/^(http|ws)s:\/\//', ''),
+          originId: 'api-gateway',
+          customOriginConfig: {
+            httpPort: 80,
+            httpsPort: 443,
+            originProtocolPolicy: 'https-only',
+            originSslProtocols: ['TLSv1.2'],
+            originReadTimeout: 30,
+          },
+        }
       ],
       defaultRootObject: 'index.html',
       customErrorResponse: [
@@ -149,7 +161,17 @@ export class NumaFrontendInfra extends Construct {
         acmCertificateArn: certificate.arn,
         sslSupportMethod: 'sni-only',
       },
-      orderedCacheBehavior: [], // TODO
+      orderedCacheBehavior: [
+        {
+          targetOriginId: 'api-gateway',
+          allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+          cachedMethods: ['GET', 'HEAD'],
+          pathPattern: '/api/*',
+          viewerProtocolPolicy: 'redirect-to-https',
+          compress: true,
+          cachePolicyId: defaultCachePolicy.id, // TODO
+        }
+      ],
       dependsOn: [validation],
     });
 
@@ -196,8 +218,8 @@ export class NumaFrontendInfra extends Construct {
       },
     })
 
-    new TerraformOutput(this, 'distribution', {
-      value: distribution.domainName,
+    new TerraformOutput(this, 'domain', {
+      value: certificate.domainName,
     });
   }
 }
