@@ -1,12 +1,12 @@
+import { useState } from 'react';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 
-import { Button } from 'react-bootstrap';
+import { Button, ProgressBar } from 'react-bootstrap';
 
 const NumaAppItemHeader = () => {
-  const { loading, error, runActive, handleRunButtonClick, numaAppData } =
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const { error, progress, runActive, handleRunButtonClick, numaAppData } =
     useNumaApp();
-
-  const appId = numaAppData.id;
 
   const handleRunApp = async () => {
     try {
@@ -20,19 +20,39 @@ const NumaAppItemHeader = () => {
 
   return (
     <>
-      <div className="d-flex gap-2"></div>
-
-      {error && <p className="text-danger">Error: {error.message}</p>}
-
-      <Button
-        type="submit"
-        id="submit"
-        className="btn btn-primary run_btn w-auto"
-        disabled={runActive}
-        onClick={handleRunApp}
+      <div
+        className="d-flex flex-row gap-2 align-items-center"
+        style={{ width: '100%' }}
       >
-        <i className="bi bi-play-fill me-2"></i> Run
-      </Button>
+        {!isMobile && (
+          <div className="flex-grow-1 mb-3">
+            <div className="d-flex align-items-center">
+              <ProgressBar
+                now={progress}
+                label={`${Math.round(progress)}%`}
+                animated
+                variant="success"
+                className="flex-grow-1 progress-bar"
+              />
+              <Button
+                type="submit"
+                id="submit"
+                className="btn btn-primary run_btn w-auto d-inline-flex align-items-center"
+                disabled={runActive}
+                onClick={handleRunApp}
+              >
+                Run{' '}
+                <i
+                  style={{ lineHeight: '1px' }}
+                  className={`bi bi-arrow-right ${!runActive ? 'bounce-icon' : ''}`}
+                ></i>
+              </Button>
+            </div>
+            Complete the required items to run
+          </div>
+        )}
+      </div>
+      {error && <p className="text-danger">Error: {error.message}</p>}
     </>
   );
 };

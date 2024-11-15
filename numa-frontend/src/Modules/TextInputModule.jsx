@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { Row, Col, Form } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
+import { Preloader } from '../Components/Preloader';
 
 function TextInputModule({ task, onComplete, onNotComplete }) {
-  const { taskInputValues, updateTaskInputValue } = useNumaApp();
-  const [inputValue, setInputValue] = useState(taskInputValues[task.id] || '');
+  const { loading, setLoading, taskInputValues, updateTaskInputValue } =
+    useNumaApp();
+  const [inputValue, setInputValue] = useState(
+    taskInputValues[task.id] || task.default || '',
+  );
 
   // const [isTaskComplete, setIsTaskComplete] = useState(false);
   // const inputRef = useRef();
@@ -43,10 +47,14 @@ function TextInputModule({ task, onComplete, onNotComplete }) {
         </Row>
       </div>
       <div className="card-body">
+        {task?.description}
+        <br /> <br />
+        {loading && <Preloader smallscreen={true} overlayParent={true} />}
         <Form.Group controlId={`text-input-${task.id}`}>
           <Form.Label>{task?.title}</Form.Label>
           <Form.Control
-            type="text"
+            as="textarea"
+            rows={7}
             placeholder="Enter text here..."
             value={inputValue}
             onChange={handleInputChange}

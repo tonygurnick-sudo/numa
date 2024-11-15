@@ -5,9 +5,46 @@ import {
   DeleteQAppCommand,
   ListQAppsCommand,
   ListLibraryItemsCommand,
+  StartQAppSessionCommand,
 } from '@aws-sdk/client-qapps';
 
 const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
+
+/*
+ *   Run a Q app by starting a session
+ */
+export const sendInputToQApp = async ({ qAppsClient, qAppData }) => {
+  if (!qAppsClient) return;
+  console.log('debug - qAppData', qAppData);
+  console.log('debug - qAppId', qAppData.qAppId);
+  const qAppId = qAppData.qAppId;
+
+  try {
+    const payload = {
+      instanceId: APPLICATION_ID,
+      appId: qAppId,
+      appVersion: qAppData.appVersion,
+      initialValues: qAppData.appDefinition.cards
+        .map((card) => {
+          const cardId = card[Object.keys(card)[0]].id;
+          const defaultValue = card[Object.keys(card)[0]].defaultValue;
+          return { cardId, value: defaultValue || '' };
+        })
+        .filter((card) => card.value !== ''), // Filter out cards without a value
+    };
+
+    const start_command = new StartQAppSessionCommand(payload);
+    const start_response = await qAppsClient.send(start_command);
+
+    if (start_response) {
+      console.log('Q App session started successfully:', start_response);
+      return start_response.sessionId;
+    }
+  } catch (error) {
+    console.error('Error starting app session:', error);
+  }
+};
+
 /*
  *   Used to delete a Q app from the user accounta
  */
@@ -108,11 +145,10 @@ export const addAppToLibrary = async ({
 };
 
 export const fetchLibItems = async (qAppsClient) => {
-  if (!qAppsClient || authLoading) return;
+  if (!qAppsClient) return;
 
   // Get lib apps
   try {
-    setLoading(true);
     const input = {
       instanceId: APPLICATION_ID,
     };
@@ -124,36 +160,31 @@ export const fetchLibItems = async (qAppsClient) => {
     //setLibraryApps(lib_response.libraryItems);
   } catch (error) {
     console.error('Error fetching Q Apps:', error);
-  } finally {
-    setLoading(false);
   }
 };
 
 // FETCH Q APPS
-export const fetchApps = async (qAppsClient) => {
-  if (!qAppsClient) return;
+// export const fetchApps = async (qAppsClient) => {
+//   if (!qAppsClient) return;
 
-  // Get user appointed apps
-  try {
-    setLoading(true);
-    const input = {
-      instanceId: APPLICATION_ID,
-    };
+//   // Get user appointed apps
+//   try {
+//     const input = {
+//       instanceId: APPLICATION_ID,
+//     };
 
-    const command = new ListQAppsCommand(input);
-    const response = await qAppsClient.send(command);
+//     const command = new ListQAppsCommand(input);
+//     const response = await qAppsClient.send(command);
 
-    // Filter myApps and add a flag
-    const uniqueApps = response.apps.map((app) => ({
-      ...app,
-      isMyApp: libraryApps.some((libApp) => libApp.appID === app.appID),
-    }));
+//     // Filter myApps and add a flag
+//     const uniqueApps = response.apps.map((app) => ({
+//       ...app,
+//       isMyApp: libraryApps.some((libApp) => libApp.appID === app.appID),
+//     }));
 
-    setDisplayApps(uniqueApps);
-    //setApps(response.apps);
-  } catch (error) {
-    console.error('Error fetching Q Apps:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+//     return uniqueApps;
+//     //setApps(response.apps);
+//   } catch (error) {
+//     console.error('Error fetching Q Apps:', error);
+//   }
+// };
