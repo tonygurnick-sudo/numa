@@ -5,9 +5,16 @@ import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group
 import { CloudfrontDistribution } from '@cdktf/provider-aws/lib/cloudfront-distribution';
 import { CloudfrontCachePolicy } from '@cdktf/provider-aws/lib/cloudfront-cache-policy';
 import { CloudfrontOriginAccessIdentity } from '@cdktf/provider-aws/lib/cloudfront-origin-access-identity';
+import { Route53Record } from '@cdktf/provider-aws/lib/route53-record';
 import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
 import { Construct } from 'constructs';
 import { TerraformOutput } from 'cdktf';
+import { DataAwsRoute53Zone } from '@cdktf/provider-aws/lib/data-aws-route53-zone';
+import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
+import { AcmCertificate } from '@cdktf/provider-aws/lib/acm-certificate';
+import { AcmCertificateValidation } from '@cdktf/provider-aws/lib/acm-certificate-validation';
+import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import { S3BucketPolicy } from '@cdktf/provider-aws/lib/s3-bucket-policy';
 
 export class NumaFrontendInfra extends Construct {
   readonly frontendBucket: S3Bucket;
@@ -15,32 +22,38 @@ export class NumaFrontendInfra extends Construct {
   constructor(scope: Construct, name: string, props: NumaFrontendInfraProps) {
     super(scope, name);
 
-    // const hostedZoneProvider = new AwsProvider(this, 'prod-provider', {
-    //   profile: process.env['AWS_PROD_PROFILE'],
-    //   assumeRole: [
-    //     {
-    //       roleArn: process.env['AWS_PROD_ROLE_ARN'],
-    //     },
-    //   ],
-    //   alias: 'dns-provider',
-    //   defaultTags: defaultTags,
-    // });
 
-    // const certificateProvider = new AwsProvider(this, 'certificate-provider', {
-    //   region: 'us-east-1', // Needs to be us-east-1 to work with Cloudfront.
-    //   assumeRole: [
-    //     {
-    //       roleArn: process.env['AWS_CLIENT_ROLE_ARN'],
-    //     },
-    //   ],
-    //   alias: 'certificate-provider',
-    //   defaultTags: defaultTags,
-    // });
+    const hostedZone = new DataAwsRoute53Zone(this, 'zone', {
+      provider: props.hostedZoneProvider,
+      zoneId: props.zoneId,
+    });
 
-    // Create certificate
-    // Create validation record
-    // Create validation
-    //
+
+    const certificate = new AcmCertificate(this, 'certificate', {
+      domainName: props.domainName,
+      validationMethod: 'DNS',
+      lifecycle: {
+        createBeforeDestroy: true,
+      },
+      provider: props.certificateProvider
+    });
+
+    const dvo = certificate.domainValidationOptions.get(0);
+    const validationRecord = new Route53Record(this, 'validation-record', {
+      allowOverwrite: true,
+      provider: props.hostedZoneProvider,
+      zoneId: props.zoneId,
+      name: dvo.resourceRecordName,
+      records: [dvo.resourceRecordValue],
+      type: dvo.resourceRecordType,
+      ttl: 300,
+    });
+
+    const validation = new AcmCertificateValidation(this, 'validation', {
+      certificateArn: certificate.arn,
+      provider: props.certificateProvider,
+      dependsOn: [validationRecord],
+    });
 
     const numaClient = `numa-${props.client}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}`;
     this.frontendBucket = new PrivateBucket(this, 'frontend-bucket', {
@@ -101,8 +114,8 @@ export class NumaFrontendInfra extends Construct {
     const accessIdentity = new CloudfrontOriginAccessIdentity(this, 'identity', {});
 
     const distribution = new CloudfrontDistribution(this, 'cloudfront', {
-      aliases: [], // TODO
-      enabled: true, // TODO
+      aliases: [props.domainName],
+      enabled: true,
       defaultCacheBehavior: {
         allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
         cachedMethods: ['GET', 'HEAD'],
@@ -118,17 +131,70 @@ export class NumaFrontendInfra extends Construct {
             originAccessIdentity: accessIdentity.cloudfrontAccessIdentityPath,
           },
         },
-      ], // TODO
+      ],
+      defaultRootObject: 'index.html',
+      customErrorResponse: [
+        {
+          errorCode: 404,
+          responsePagePath: '/index.html',
+          responseCode: 200,
+        },
+      ],
       restrictions: {
         geoRestriction: {
           restrictionType: 'none',
         },
       },
       viewerCertificate: {
-        cloudfrontDefaultCertificate: true,
-        // acmCertificateArn: '' // TODO
+        acmCertificateArn: certificate.arn,
+        sslSupportMethod: 'sni-only',
       },
+      orderedCacheBehavior: [], // TODO
+      dependsOn: [validation],
     });
+
+    const policyDoc = new DataAwsIamPolicyDocument(this, 'bucketPolicyDoc', {
+      statement: [
+        {
+          actions: ['s3:GetObject'],
+          resources: [`${this.frontendBucket.arn}/*`],
+          principals: [
+            {
+              type: 'AWS',
+              identifiers: [accessIdentity.iamArn],
+            },
+          ],
+        },
+        {
+          actions: ['s3:ListBucket'],
+          resources: [this.frontendBucket.arn],
+          principals: [
+            {
+              type: 'AWS',
+              identifiers: [accessIdentity.iamArn],
+            },
+          ],
+        },
+      ],
+    });
+
+    new S3BucketPolicy(this, 'bucketPolicy', {
+      bucket: this.frontendBucket.bucket,
+      policy: policyDoc.json,
+    });
+
+    new Route53Record(this, 'record', {
+      zoneId: hostedZone.zoneId,
+      provider: hostedZone.provider,
+      name: certificate.domainName,
+      // name: props.client, // TODO
+      type: 'A',
+      alias: {
+        name: distribution.domainName,
+        zoneId: distribution.hostedZoneId,
+        evaluateTargetHealth: true,
+      },
+    })
 
     new TerraformOutput(this, 'distribution', {
       value: distribution.domainName,
@@ -139,4 +205,8 @@ export class NumaFrontendInfra extends Construct {
 export interface NumaFrontendInfraProps {
   client: string;
   environmentName: string;
+  zoneId: string;
+  domainName: string;
+  hostedZoneProvider: AwsProvider;
+  certificateProvider: AwsProvider;
 }

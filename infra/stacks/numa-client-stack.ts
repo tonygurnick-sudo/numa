@@ -3,6 +3,7 @@ import { Construct } from 'constructs';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
 import { BaseNumaApp, BaseNumaAppProps } from '../constructs/base-numa-app-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
+import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import _clientConfigProd from '../../clientConfigProd.json';
 import _clientConfigDev from '../../clientConfigDev.json';
 import { ExampleNumaApp } from '../constructs/example-numa-app-construct';
@@ -26,12 +27,32 @@ export class NumaClientStack extends ArcanumStack {
       hostedZone: '',
     };
     const deployerRole = `arn:aws:iam::${environmentConfig.deployerAccount}:role/admin-delegated-access`;
+    const clientRole = `arn:aws:iam::${props.config.clientAccountId}:role/ArcanumAIAccess`;
     super(scope, name, {
       ...props,
       assumeRoleList: [
         { roleArn: deployerRole },
-        { roleArn: `arn:aws:iam::${props.config.clientAccountId}:role/ArcanumAIAccess` },
+        { roleArn: clientRole },
       ],
+    });
+
+    const hostedZoneProvider = new AwsProvider(this, 'hosted-zone-provider', {
+      assumeRole: [
+        {
+          roleArn: deployerRole
+        },
+      ],
+      alias: 'dns-provider',
+      defaultTags: this.provider.defaultTags,
+    });
+    const certificateProvider = new AwsProvider(this, 'certificate-provider', {
+      region: 'us-east-1', // Needs to be us-east-1 to work with Cloudfront.
+      assumeRole: [
+        { roleArn: deployerRole },
+        { roleArn: clientRole },
+      ],
+      alias: 'certificate-provider',
+      defaultTags: this.provider.defaultTags,
     });
     const domainName = props.config.customDomain ?? `${props.client}.${environmentConfig.domainSuffix}`;
 
@@ -43,6 +64,10 @@ export class NumaClientStack extends ArcanumStack {
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
       ...props.config,
       environmentName: props.environmentName,
+      domainName,
+      zoneId: environmentConfig.hostedZone,
+      hostedZoneProvider,
+      certificateProvider,
     });
 
     Object.entries(props.config.apps ?? {}).forEach(
