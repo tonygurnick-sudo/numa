@@ -169,7 +169,7 @@ export class NumaFrontendInfra extends Construct {
           pathPattern: '/api/*',
           viewerProtocolPolicy: 'redirect-to-https',
           compress: true,
-          cachePolicyId: defaultCachePolicy.id, // TODO
+          cachePolicyId: defaultCachePolicy.id, // TODO: Use a cache policy that reflects what we actually want.
         }
       ],
       dependsOn: [validation],
@@ -209,7 +209,6 @@ export class NumaFrontendInfra extends Construct {
       zoneId: hostedZone.zoneId,
       provider: hostedZone.provider,
       name: certificate.domainName,
-      // name: props.client, // TODO
       type: 'A',
       alias: {
         name: distribution.domainName,
