@@ -3,7 +3,7 @@
  */
 
 // Import mocks first
-import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
+import { renderWithProviders, clearAllMocks } from './Mocks/ProviderWrapper';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';

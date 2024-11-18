@@ -260,6 +260,7 @@ const S3Uploader = () => {
     return (
       <div
         key={file.key}
+        data-testid="file-item"
         className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
       >
         <div className="text-truncate" style={{ maxWidth: '70%' }}>
@@ -308,7 +309,10 @@ const S3Uploader = () => {
     if (isLoadingFiles) {
       return (
         <div className="text-center p-4 bg-light rounded">
-          <div className="spinner-border text-primary" role="status">
+          <div
+            className="spinner-border text-primary"
+            data-testid="loading-spinner"
+          >
             <span className="visually-hidden">Loading...</span>
           </div>
           <p className="mt-3 text-muted">Loading files...</p>
@@ -478,6 +482,7 @@ const S3Uploader = () => {
                         : 'Start new sync'
                     }
                     className="d-flex align-items-center gap-2 px-3 py-2"
+                    data-testid="sync-button"
                   >
                     <i className="bi bi-arrow-clockwise"></i>
                   </Button>

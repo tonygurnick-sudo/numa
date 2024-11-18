@@ -1,9 +1,43 @@
 import { vi } from 'vitest';
 import React from 'react';
+import {
+  ListDataSourcesCommand,
+  ListDataSourceSyncJobsCommand,
+} from '@aws-sdk/client-qbusiness';
 
-// Define mock QBusinessClient
+// Mock data for QBusiness responses
+const mockDataSource = {
+  dataSources: [
+    {
+      dataSourceId: 'b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0',
+      status: 'ACTIVE',
+      updatedAt: new Date(),
+    },
+  ],
+};
+
+const mockSyncJobs = {
+  history: [
+    {
+      status: 'SUCCEEDED',
+      endTime: new Date(),
+      startTime: new Date(),
+      metrics: {},
+    },
+  ],
+};
+
+// Define mock QBusinessClient with specific command handling
 const mockQBusinessClient = {
-  send: vi.fn(),
+  send: vi.fn().mockImplementation((command) => {
+    if (command instanceof ListDataSourcesCommand) {
+      return Promise.resolve(mockDataSource);
+    }
+    if (command instanceof ListDataSourceSyncJobsCommand) {
+      return Promise.resolve(mockSyncJobs);
+    }
+    return Promise.resolve({});
+  }),
 };
 
 // Define all auth handlers
@@ -16,7 +50,8 @@ export const authHandlers = {
   setError: vi.fn(),
   setLoading: vi.fn(),
   setNewPasswordRequired: vi.fn(),
-  isAuthenticated: false,
+  getAccessToken: vi.fn().mockResolvedValue('mock-token'),
+  isAuthenticated: true,
   loading: false,
   error: null,
   user: {

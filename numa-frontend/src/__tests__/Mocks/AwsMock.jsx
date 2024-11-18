@@ -35,8 +35,36 @@ export const mockCognitoIdentityClient = {
 // Mock QBusiness Client
 export const mockQBusinessClient = {
   QBusinessClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({}),
+    send: vi.fn().mockImplementation((command) => {
+      if (command.constructor.name === 'ListDataSourcesCommand') {
+        return Promise.resolve({
+          dataSources: [
+            {
+              dataSourceId: 'b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0',
+              status: 'ACTIVE',
+              updatedAt: new Date(),
+            },
+          ],
+        });
+      }
+      if (command.constructor.name === 'ListDataSourceSyncJobsCommand') {
+        return Promise.resolve({
+          history: [
+            {
+              status: 'SUCCEEDED',
+              endTime: new Date(),
+              startTime: new Date(),
+              metrics: {},
+            },
+          ],
+        });
+      }
+      return Promise.resolve({});
+    }),
   })),
+  ListDataSourcesCommand: vi.fn(),
+  StartDataSourceSyncJobCommand: vi.fn(),
+  ListDataSourceSyncJobsCommand: vi.fn(),
 };
 
 // Mock QApps Client
