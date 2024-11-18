@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "structured-data-extraction"
+version = "0.1.0"
+description = ""
+authors = ["Nathan Douglas <nathan@arcanum.ai>"]
+readme = "README.md"
+packages = [
+    { include = "**/*.py" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+boto3 = "1.35.58"
+botocore = "1.35.58"
+structlog = "24.4.0"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = "1.35.58"
+mypy = "1.13.0"
+pylint = "3.3.1"
+pyright = "1.1.388"
+
+[tool.poetry-plugin-lambda-build]
+package-artifact-path = "lambda_function.zip"
+without = "dev"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

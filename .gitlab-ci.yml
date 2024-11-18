@@ -21,6 +21,7 @@ variables:
         - deployer
         - lambdas/extract-content-from-file
         - lambdas/meeting-tools-app-formatting
+        - lambdas/structured-data-extraction
 
 python-lint:
   extends: .poetry-job
