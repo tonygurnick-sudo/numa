@@ -40,7 +40,7 @@ export class BaseNumaApp extends Construct {
       role: role.arn,
       filename,
       sourceCodeHash: Fn.filebase64sha256(filename),
-      runtime: props.runtime ?? 'python3.12',
+      runtime: props.runtime ?? 'python3.13',
       handler: props.handler ?? 'lambda_function.handler',
       timeout: 29, // API Gateway will only way 30 seconds. Let's try to come in under that.
     });
