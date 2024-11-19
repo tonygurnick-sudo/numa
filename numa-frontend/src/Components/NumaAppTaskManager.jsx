@@ -1,25 +1,43 @@
+import { useState, useEffect } from 'react';
+import { Tab, Tabs, Col, Row } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
-
-import { Col } from 'react-bootstrap';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
 import { TextOutputModule } from '../Modules/TextOutputModule';
 
 const NumaAppTaskManager = () => {
-  const { updateTaskCompletionStatus, taskCompletionStatus, numaAppData } =
-    useNumaApp();
+  const {
+    appRunning,
+    updateTaskCompletionStatus,
 
-  function handleTaskCompletion(taskId) {
-    console.log('task complete update...', taskId);
-    updateTaskCompletionStatus(taskId); // Let the provider handle updating the task status
-  }
+    numaAppData,
+  } = useNumaApp();
+  const [activeTab, setActiveTab] = useState('inputs');
+  const [isFading, setIsFading] = useState(false);
 
-  function handleTaskIncomplete(taskId) {
-    console.log('task incomplete...', taskId);
-    updateTaskCompletionStatus(taskId, false); // Mark task as incomplete
-  }
+  const handleTaskCompletion = (taskId) => {
+    console.log('Task complete update...', taskId);
+    updateTaskCompletionStatus(taskId);
+  };
 
-  function TaskComponent({ task }) {
+  const handleTaskIncomplete = (taskId) => {
+    console.log('Task incomplete...', taskId);
+    updateTaskCompletionStatus(taskId, false);
+  };
+
+  useEffect(() => {
+    if (appRunning) {
+      // Trigger fade and tab switch
+      setIsFading(true);
+      const timer = setTimeout(() => {
+        setActiveTab('outputs'); // Switch to "Outputs" tab
+        setIsFading(false); // Reset fading
+      }, 500); // Match the fade duration
+      return () => clearTimeout(timer);
+    }
+  }, [appRunning]);
+
+  const renderTaskComponent = (task) => {
     switch (task.type) {
       case 'text-input':
         return (
@@ -44,23 +62,55 @@ const NumaAppTaskManager = () => {
       default:
         return <p>Unknown task type</p>;
     }
-  }
+  };
 
   if (!numaAppData) {
     return <div>Loading...</div>;
   }
 
+  const inputTasks = numaAppData?.tasks?.filter(
+    (task) => task.type === 'text-input' || task.type === 's3-upload',
+  );
+  const outputTasks = numaAppData?.tasks?.filter(
+    (task) => task.type === 'text-output',
+  );
+
   return (
     <>
-      {numaAppData?.tasks
-        ?.filter(
-          (task) => task.type !== 'q-app' && task.type !== 'http-request',
-        ) // Filter out q-app- and http-request tasks
-        .map((task) => (
-          <Col key={task.id} sm={12} md={6} lg={6} xl={6} className="flex">
-            <TaskComponent task={task} />
-          </Col>
-        ))}
+      <Tabs
+        id="task-tabs"
+        activeKey={activeTab}
+        onSelect={(k) => setActiveTab(k)}
+        className="mb-3"
+      >
+        <Tab eventKey="inputs" title="Inputs">
+          <Row>
+            {inputTasks.map((task) => (
+              <Col key={task.id} sm={12} md={6} lg={6} xl={6}>
+                {renderTaskComponent(task)}
+              </Col>
+            ))}
+          </Row>
+        </Tab>
+        <Tab eventKey="outputs" title="Reults">
+          <Row>
+            {outputTasks.map((task) => (
+              <Col key={task.id} sm={12} md={12} lg={12} xl={12}>
+                {renderTaskComponent(task)}
+              </Col>
+            ))}
+          </Row>
+        </Tab>
+      </Tabs>
+      {/* Use a CSS stylesheet or inline style */}
+      <style>
+        {`
+    .fade-tab {
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+    }
+  `}
+      </style>
     </>
   );
 };

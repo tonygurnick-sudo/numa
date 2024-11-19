@@ -4,6 +4,7 @@ import {
   CreateLibraryItemCommand,
   DeleteQAppCommand,
   ListQAppsCommand,
+  GetQAppSessionCommand,
   ListLibraryItemsCommand,
   StartQAppSessionCommand,
 } from '@aws-sdk/client-qapps';
@@ -19,26 +20,80 @@ export const sendInputToQApp = async ({ qAppsClient, qAppData }) => {
   console.log('debug - qAppId', qAppData.qAppId);
   const qAppId = qAppData.qAppId;
 
+  // Mocked session ID and response
+  const mockSessionId = 'mock-session-id-12345';
+
   try {
     const payload = {
       instanceId: APPLICATION_ID,
       appId: qAppId,
       appVersion: qAppData.appVersion,
-      initialValues: qAppData.appDefinition.cards
-        .map((card) => {
-          const cardId = card[Object.keys(card)[0]].id;
-          const defaultValue = card[Object.keys(card)[0]].defaultValue;
-          return { cardId, value: defaultValue || '' };
-        })
-        .filter((card) => card.value !== ''), // Filter out cards without a value
+      initialValues: qAppData.appDefinition.cards,
     };
-
+    console.log('start payload:', payload);
     const start_command = new StartQAppSessionCommand(payload);
-    const start_response = await qAppsClient.send(start_command);
+    //const start_response = await qAppsClient.send(start_command);
 
+    // Simulating an API response.
+    const start_response = { sessionId: mockSessionId }; // Simulated response
+
+    console.log('start_response:', start_response);
     if (start_response) {
       console.log('Q App session started successfully:', start_response);
       return start_response.sessionId;
+    }
+  } catch (error) {
+    console.error('Error starting app session:', error);
+  }
+};
+
+/*
+ *   Get a Q app response with a sessionId
+ */
+export const getSessionQApp = async ({ qAppsClient, sessionId }) => {
+  if (!qAppsClient) return;
+  console.log('debug - sessionId', sessionId);
+
+  // Mocked session ID and response
+  const mockSessionId = 'mock-session-id-12345';
+
+  try {
+    const input = {
+      instanceId: sessionId,
+      sessionId: APPLICATION_ID,
+    };
+
+    const get_command = new GetQAppSessionCommand(input);
+    //const get_response = await qAppsClient.send(get_command);
+
+    // Simulating an API response with detailed cardStatus for two cards.
+    const mockResponse = {
+      sessionId: mockSessionId,
+      cardStatus: {
+        '60796c48-3cfa-44a5-9b4e-b60f76d470f7': {
+          currentState: 'COMPLETED',
+          currentValue:
+            'Summary of the discussion including key points and takeaways.',
+        },
+        '6539cff8-a245-43cc-b8c1-18f6dcd483d0': {
+          currentState: 'COMPLETED',
+          currentValue:
+            'Actions and next steps outlined based on meeting insights.',
+        },
+      },
+      sessionArn:
+        'arn:aws:qapps:us-west-2:0123456789012:application/a929ecd6-5765-4ec7-bd3e-2ca90098b18e/qapp/65e7dce7-226a-47f9-b689-22850becef89/session/1fca878e-64c5-4dc4-b1d9-c93effed4e82',
+      status: 'COMPLETED',
+    };
+
+    // Adding a delay
+    const get_response = await new Promise((resolve) =>
+      setTimeout(() => resolve(mockResponse), 5000),
+    );
+
+    console.log('start_response:', get_response);
+    if (get_response) {
+      return get_response;
     }
   } catch (error) {
     console.error('Error starting app session:', error);

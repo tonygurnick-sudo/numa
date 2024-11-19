@@ -111,7 +111,7 @@ const Dash = () => {
                 {!error &&
                   Array.isArray(numaApps) &&
                   numaApps?.map((app) => (
-                    <Col key={app.id} lg={4} className="flex">
+                    <Col key={app.id} lg={6} className="flex">
                       <div
                         className="card card-apps"
                         data-testid={`app-card-${app.id}`}
