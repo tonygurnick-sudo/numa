@@ -104,5 +104,7 @@ const apps: Record<string, typeof BaseNumaApp> = {
 };
 
 function lookupAppFromId(id: string): typeof BaseNumaApp {
-  return apps[id] ?? BaseNumaApp;
+  const app = apps[id];
+  if (!app) throw new Error('Unknown app: ' + id);
+  return app;
 }
