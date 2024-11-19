@@ -23,7 +23,7 @@ export class BaseNumaApp extends Construct {
     this.apiGatewayId = props.apiGatewayId;
     this.prefix = '/api' + this.prepPathPart(props.pathPrefix ?? '');
     this.logGroup = new CloudwatchLogGroup(this, 'log-group', {
-      name,
+      name: '/numa/' + name,
     });
   }
 
@@ -50,7 +50,7 @@ export class BaseNumaApp extends Construct {
       timeout: 29, // API Gateway will only way 30 seconds. Let's try to come in under that.
       loggingConfig: {
         logFormat: 'JSON',
-        logGroup: this.logGroup.arn,
+        logGroup: this.logGroup.name,
         systemLogLevel: 'INFO',
       },
     });
