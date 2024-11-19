@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { Apigatewayv2Route } from '@cdktf/provider-aws/lib/apigatewayv2-route';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { Fn } from 'cdktf';
+import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,10 +17,14 @@ const __dirname = path.dirname(__filename);
 export class BaseNumaApp extends Construct {
   private apiGatewayId: string;
   private prefix: string;
+  private logGroup: CloudwatchLogGroup;
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     super(scope, name);
     this.apiGatewayId = props.apiGatewayId;
     this.prefix = '/api' + this.prepPathPart(props.pathPrefix ?? '');
+    this.logGroup = new CloudwatchLogGroup(this, 'log-group', {
+      name,
+    });
   }
 
   addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): void {
@@ -43,6 +48,11 @@ export class BaseNumaApp extends Construct {
       runtime: props.runtime ?? 'python3.13',
       handler: props.handler ?? 'lambda_function.handler',
       timeout: 29, // API Gateway will only way 30 seconds. Let's try to come in under that.
+      loggingConfig: {
+        logFormat: 'JSON',
+        logGroup: this.logGroup.arn,
+        systemLogLevel: 'INFO',
+      },
     });
 
     if (props.route) {
