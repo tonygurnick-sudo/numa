@@ -4,7 +4,7 @@ import { useNumaApp } from '../Providers/NumaAppProvider';
 import { Button, ProgressBar } from 'react-bootstrap';
 
 const NumaAppItemHeader = () => {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isMobile] = useState(window.innerWidth <= 768);
   const { error, progress, runActive, handleRunButtonClick, numaAppData } =
     useNumaApp();
 

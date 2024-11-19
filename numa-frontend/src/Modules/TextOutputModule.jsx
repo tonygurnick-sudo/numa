@@ -1,10 +1,12 @@
 import { Row, Col } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
+import { Preloader } from '../Components/Preloader';
 
 function TextOutputModule({ task }) {
-  // Assuming the output data is available in the `params.dataRef` property
-  const { numaTaskResponse } = useNumaApp();
-  console.log('numaTaskResponse', numaTaskResponse);
+  const { loading, numaTaskResponses } = useNumaApp();
+  const taskResponse = numaTaskResponses.find(
+    (response) => response.taskId === task.id,
+  );
 
   if (!task) return;
 
@@ -20,11 +22,12 @@ function TextOutputModule({ task }) {
       </div>
 
       <div className="card-body">
+        {loading && <Preloader smallscreen={true} overlayParent={true} />}
         {/* Textarea for displaying data */}
         <textarea
           rows="10"
           className="form-control"
-          value={numaTaskResponse?.data || ''}
+          value={taskResponse?.result || ''}
           readOnly
         />
       </div>

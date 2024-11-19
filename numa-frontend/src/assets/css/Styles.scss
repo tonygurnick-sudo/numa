@@ -85,6 +85,12 @@ a {
   opacity: 0.6;
   color: inherit !important;
 }
+.text-success {
+  color: green;
+}
+.success-shadow {
+  box-shadow: 1px 1px 8px #b1d4b1;
+}
 
 .text-mid {
   font-family: 'Metropolis Semi Bold';
@@ -102,7 +108,13 @@ a {
 .flexcenter {
   align-items: center;
 }
-
+.required-item {
+  line-height: 12px;
+  position: absolute;
+  top: 48px;
+  right: 13px;
+  font-size: 10px;
+}
 .subheading {
   width: auto;
   padding-right: 40px;

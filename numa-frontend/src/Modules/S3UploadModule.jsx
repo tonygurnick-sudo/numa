@@ -7,6 +7,8 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadedFilePath, setUploadedFilePath] = useState('');
+  console.log('s3 task: ', taskInputValues);
+  console.log('s3 task id: ', taskInputValues[task.id]);
 
   // Extracting task parameters
   const bucketName = task?.params.bucketName;
@@ -51,19 +53,29 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
   };
 
   return (
-    <div className="card card-apps">
+    <div
+      className={`card card-apps ${
+        taskInputValues[task.id] && !uploadStatus ? 'success-shadow' : ''
+      }`}
+    >
       <div className="card-header">
         <Row>
-          <Col lg={10}>
-            {task?.title}
+          <Col lg={9}>{task?.title}</Col>
+          <Col lg={3}>
+            {taskInputValues[task.id] &&
+              uploadStatus === 'Upload successful!' && (
+                <i className="bi bi-check-circle-fill text-success"></i>
+              )}
             <br />
-          </Col>
-          <Col>
             {task?.required && (
-              <i
-                title="Required to run the app"
-                className="bi bi-exclamation-circle"
-              ></i>
+              <small className="required-item ">
+                <i
+                  title="Required to run the app"
+                  className="bi bi-exclamation-circle"
+                >
+                  required
+                </i>
+              </small>
             )}
           </Col>
         </Row>
@@ -85,7 +97,7 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
         </Button>
         {uploadStatus && <p className="mt-2">{uploadStatus}</p>}
         {/* Display the selected file name or uploaded file path */}
-        {taskInputValues[task.id] && !uploadStatus && (
+        {taskInputValues[task.id] && uploadStatus === 'Upload successful!' && (
           <p className="mt-2">
             File: <strong>{taskInputValues[task.id]}</strong>
           </p>

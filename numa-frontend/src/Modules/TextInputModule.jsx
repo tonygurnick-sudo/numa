@@ -1,17 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Row, Col, Form } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { Preloader } from '../Components/Preloader';
 
 function TextInputModule({ task, onComplete, onNotComplete }) {
-  const { loading, setLoading, taskInputValues, updateTaskInputValue } =
-    useNumaApp();
-  const [inputValue, setInputValue] = useState(
-    taskInputValues[task.id] || task.default || '',
-  );
+  const { loading, taskInputValues, updateTaskInputValue } = useNumaApp();
+  const [inputValue, setInputValue] = useState('');
 
   // const [isTaskComplete, setIsTaskComplete] = useState(false);
   // const inputRef = useRef();
+
+  // Set the input value on the first render based on taskInputValues or task.default
+  useEffect(() => {
+    // Check if the taskInputValue already exists, else fall back to task.default
+    const initialValue = taskInputValues[task.id] || task.default || '';
+    setInputValue(initialValue);
+
+    // Update the global state as well when the component mounts (initial setup)
+    if (initialValue !== taskInputValues[task.id]) {
+      updateTaskInputValue(task.id, initialValue);
+    }
+  }, [task.id, taskInputValues, task.default, updateTaskInputValue]);
 
   // Update the input value locally
   const handleInputChange = (e) => {

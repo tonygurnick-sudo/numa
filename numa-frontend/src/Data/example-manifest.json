@@ -23,11 +23,11 @@
           "id": "template-task",
           "title": "Template",
           "type": "text-input",
-          "default": "This is a default {{Template}}. Maybe we can alter the content for {{This_item}}",
+          "default": "- summarise the discussion\n- summarise the event\n- outline the requirements\n- actions and next steps",
           "order": 1
         },
         {
-          "id": "other-notes",
+          "id": "other-notes (Optional)",
           "title": "Other Notes",
           "description": "Include any other notes that might be useful.",
           "type": "text-input",
@@ -57,33 +57,51 @@
           "id": "process-with-q-app",
           "title": "Process with Q App",
           "type": "q-app",
-          "appVersion": "1",
+          "appVersion": "22",
           "params": {
-            "qAppId": "q-app-123",
+            "qAppId": "83e3051a-0e90-4746-8b39-f66c16f33ee3",
             "inputs": [
               {
                 "inputContentRef": "@call-step-function",
-                "qInputCardId": "input-card-id-1"
+                "qInputCardId": "30076f25-5b2a-4f98-a49d-972ade90483e"
               },
               {
                 "inputContentRef": "@template-task",
-                "qInputCardId": "input-card-id-2"
+                "qInputCardId": "3a99e5d2-3611-42de-bccf-895f881c666e"
               },
               {
                 "inputContentRef": "@other-notes",
-                "qInputCardId": "input-card-id-3"
+                "qInputCardId": "313ccd36-ad32-443a-ba8b-9d0c1ef383a4"
               }
             ],
-            "qOutputCardId": "output-card-id"
+            "outputs": [
+              {
+                "outputContentRef": "@show-meeting-summary",
+                "qOutputCardId": "60796c48-3cfa-44a5-9b4e-b60f76d470f7"
+              },
+              {
+                "outputContentRef": "@show-template-results",
+                "qOutputCardId": "6539cff8-a245-43cc-b8c1-18f6dcd483d0"
+              }
+            ]
           },
           "order": 3
         },
         {
-          "id": "display-results",
-          "title": "Display Results",
+          "id": "meeting-summary-results",
+          "title": "Meeting Summary & Analysis",
           "type": "text-output",
           "params": {
-            "dataRef": "@process-with-q-app"
+            "dataRef": "@show-meeting-summary"
+          },
+          "order": 4
+        },
+        {
+          "id": "template-results",
+          "title": "Template Results",
+          "type": "text-output",
+          "params": {
+            "dataRef": "@show-template-results"
           },
           "order": 4
         }
