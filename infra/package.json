@@ -22,7 +22,7 @@
     "@arcanumai/cdktf-util": "^1.14.0",
     "@arcanumai/private-bucket-construct": "^1.2.1",
     "@arcanumai/typescript-lambda-construct": "^1.2.4",
-    "@cdktf/provider-aws": "^19.36.0",
+    "@cdktf/provider-aws": "^19.42.0",
     "cdktf": "~0.20.0",
     "constructs": "~10"
   },

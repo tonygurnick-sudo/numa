@@ -38,7 +38,7 @@ __metadata:
     "@arcanumai/private-bucket-construct": "npm:^1.2.1"
     "@arcanumai/typescript-lambda-construct": "npm:^1.2.4"
     "@cdktf/node-pty-prebuilt-multiarch": "npm:^0.10.1-pre.11"
-    "@cdktf/provider-aws": "npm:^19.36.0"
+    "@cdktf/provider-aws": "npm:^19.42.0"
     "@types/fs-extra": "npm:^11"
     "@types/node": "npm:22.9.0"
     "@typescript-eslint/eslint-plugin": "npm:8.15.0"
@@ -265,13 +265,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cdktf/provider-aws@npm:^19.36.0":
-  version: 19.41.1
-  resolution: "@cdktf/provider-aws@npm:19.41.1"
+"@cdktf/provider-aws@npm:^19.42.0":
+  version: 19.42.0
+  resolution: "@cdktf/provider-aws@npm:19.42.0"
   peerDependencies:
     cdktf: ^0.20.0
     constructs: ^10.3.0
-  checksum: 10c0/a696df4af7904d7755432d1b7a23905bd00d158997b2ea193c1e8cb9ca000b13b8cb1f6d40d66f31f218a7c04d440d6c5873560337613265d481bbb1503800a4
+  checksum: 10c0/8a505e8e5821b2f06bc14d77f4f3e7bdee4783ad4dd31ef23fa0bf637741452eec1dd9de8f526d43f41d0b6bf6e8a6122a023c7c0b6efa9b74d65cd0246d42f2
   languageName: node
   linkType: hard
 

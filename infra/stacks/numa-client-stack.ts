@@ -17,16 +17,7 @@ export class NumaClientStack extends ArcanumStack {
 
 
     props.config ??= lookupConfigForClient(props.client, props.environmentName as EnvironmentName);
-    const environmentConfig = (props.environmentName as EnvironmentName) == EnvironmentName.prod ? {
-      deployerAccount: '207567759910',
-      domainSuffix: 'numa.arcanum.ai',
-      hostedZone: 'Z05615802D0KHGAAOFX9U',
-    } : {
-      deployerAccount: '324037291751',
-      domainSuffix: 'numa-dev.arcanum.ai',
-      hostedZone: '',
-    };
-    const deployerRole = `arn:aws:iam::${environmentConfig.deployerAccount}:role/admin-delegated-access`;
+    const deployerRole = `arn:aws:iam::${props.arcanumNumaAccount}:role/admin-delegated-access`;
     const clientRole = `arn:aws:iam::${props.config.clientAccountId}:role/ArcanumAIAccess`;
     super(scope, name, {
       ...props,
@@ -54,7 +45,7 @@ export class NumaClientStack extends ArcanumStack {
       alias: 'certificate-provider',
       defaultTags: this.provider.defaultTags,
     });
-    const domainName = props.config.customDomain ?? `${props.client}.${environmentConfig.domainSuffix}`;
+    const domainName = props.config.customDomain ?? `${props.client}.${props.domainSuffix}`;
 
     new CoreNumaInfra(this, 'numa', {
       ...props.config,
@@ -65,7 +56,7 @@ export class NumaClientStack extends ArcanumStack {
       ...props.config,
       environmentName: props.environmentName,
       domainName,
-      zoneId: environmentConfig.hostedZone,
+      zoneId: props.hostedZone,
       hostedZoneProvider,
       certificateProvider,
     });
@@ -97,6 +88,9 @@ function lookupConfigForClient(client: string, environmentName?: EnvironmentName
 export interface NumaClientStackProps extends ArcanumStackProps {
   client: string;
   config?: ClientConfig;
+  domainSuffix: string;
+  hostedZone: string;
+  arcanumNumaAccount: string;
 }
 
 const apps: Record<string, typeof BaseNumaApp> = {

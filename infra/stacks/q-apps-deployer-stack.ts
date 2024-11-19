@@ -1,4 +1,4 @@
-import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdktf-util';
+import { ArcanumStack, ArcanumStackProps } from '@arcanumai/cdktf-util';
 import { Construct } from 'constructs';
 import { PublicS3Bucket } from '../constructs/public-s3-bucket-construct';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
@@ -7,16 +7,9 @@ import { TerraformOutput } from 'cdktf';
 
 export class QAppsDeployerStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: QAppsDeployerStackProps) {
-    const environmentConfig = (props.environmentName as EnvironmentName) == EnvironmentName.prod ? {
-      deployerAccount: '207567759910',
-      domainSuffix: 'numa.arcanum.ai',
-    } : {
-      deployerAccount: '324037291751',
-      domainSuffix: 'numa-dev.arcanum.ai',
-    };
     props.assumeRoleList = [
       {
-        roleArn: `arn:aws:iam::${environmentConfig.deployerAccount}:role/admin-delegated-access`,
+        roleArn: `arn:aws:iam::${props.arcanumNumaAccount}:role/admin-delegated-access`,
       },
     ];
     super(scope, name, props);
@@ -30,7 +23,7 @@ export class QAppsDeployerStack extends ArcanumStack {
     });
 
     const zone = new Route53Zone(this, 'route53-zone', {
-      name: environmentConfig.domainSuffix,
+      name: props.domainSuffix,
     });
 
     new TerraformOutput(this, 'zone-id', {
@@ -42,4 +35,6 @@ export class QAppsDeployerStack extends ArcanumStack {
 export interface QAppsDeployerStackProps extends ArcanumStackProps {
   templateBucketName: string;
   appsBucketName: string;
+  arcanumNumaAccount: string;
+  domainSuffix: string;
 }

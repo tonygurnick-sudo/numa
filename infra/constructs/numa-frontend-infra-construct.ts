@@ -62,7 +62,7 @@ export class NumaFrontendInfra extends Construct {
     }).bucket;
 
     this.apiGateway = new Apigatewayv2Api(this, 'api-gw', {
-      name: 'numa-gateway',
+      name: numaClient + '-numa-gateway',
       protocolType: 'HTTP',
     });
 
