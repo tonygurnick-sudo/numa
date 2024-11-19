@@ -11,11 +11,6 @@ import { ExampleNumaApp } from '../constructs/example-numa-app-construct';
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
 
-    // need domain name for certificate and also callback
-    // do we delegate a whole NS? ideally not
-    // OK, create a CNAME and a TXT for cert.
-
-
     props.config ??= lookupConfigForClient(props.client, props.environmentName as EnvironmentName);
     const deployerRole = `arn:aws:iam::${props.arcanumNumaAccount}:role/admin-delegated-access`;
     const clientRole = `arn:aws:iam::${props.config.clientAccountId}:role/ArcanumAIAccess`;
