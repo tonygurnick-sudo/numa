@@ -566,6 +566,7 @@ export interface CoreNumaInfraProps {
   identityProvider?: 'oidc' | 'idc';
   indexType?: 'ENTERPRISE' | 'STARTER';
   region?: string;
+  customDomain?: string;
   clientAccountId?: string;
   loadSampleFile?: boolean;
   createServiceLinkedRole?: boolean;

@@ -5,7 +5,7 @@ __metadata:
   version: 8
   cacheKey: 10c0
 
-"@arcanumai/cdktf-util@npm:^1.13.0, @arcanumai/cdktf-util@npm:^1.14.0":
+"@arcanumai/cdktf-util@npm:^1.14.0":
   version: 1.14.0
   resolution: "@arcanumai/cdktf-util@npm:1.14.0::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Fcdktf-util%2F-%2F%40arcanumai%2Fcdktf-util-1.14.0.tgz"
   checksum: 10c0/a3b572acf8cee4cc49f553bcff74365de35ca5813e8c3c9e109d8a8cb51985915bdaf117ec06e317c4412c2051bf05dd47ec30bd5fa6e8d42eeaef8d1a8b0fda
@@ -34,11 +34,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@arcanumai/q-apps-deployer-infra@workspace:."
   dependencies:
-    "@arcanumai/cdktf-util": "npm:^1.13.0"
+    "@arcanumai/cdktf-util": "npm:^1.14.0"
     "@arcanumai/private-bucket-construct": "npm:^1.2.1"
     "@arcanumai/typescript-lambda-construct": "npm:^1.2.4"
     "@cdktf/node-pty-prebuilt-multiarch": "npm:^0.10.1-pre.11"
-    "@cdktf/provider-aws": "npm:^19.36.0"
+    "@cdktf/provider-aws": "npm:^19.42.0"
     "@types/fs-extra": "npm:^11"
     "@types/node": "npm:22.9.0"
     "@typescript-eslint/eslint-plugin": "npm:8.15.0"
@@ -265,13 +265,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cdktf/provider-aws@npm:^19.36.0":
-  version: 19.41.1
-  resolution: "@cdktf/provider-aws@npm:19.41.1"
+"@cdktf/provider-aws@npm:^19.42.0":
+  version: 19.42.0
+  resolution: "@cdktf/provider-aws@npm:19.42.0"
   peerDependencies:
     cdktf: ^0.20.0
     constructs: ^10.3.0
-  checksum: 10c0/a696df4af7904d7755432d1b7a23905bd00d158997b2ea193c1e8cb9ca000b13b8cb1f6d40d66f31f218a7c04d440d6c5873560337613265d481bbb1503800a4
+  checksum: 10c0/8a505e8e5821b2f06bc14d77f4f3e7bdee4783ad4dd31ef23fa0bf637741452eec1dd9de8f526d43f41d0b6bf6e8a6122a023c7c0b6efa9b74d65cd0246d42f2
   languageName: node
   linkType: hard
 
@@ -1645,7 +1645,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cdktf@npm:0.20.10, cdktf@npm:~0.20.0":
+"cdktf@npm:0.20.10":
   version: 0.20.10
   resolution: "cdktf@npm:0.20.10"
   dependencies:
@@ -1655,6 +1655,19 @@ __metadata:
   peerDependencies:
     constructs: ^10.3.0
   checksum: 10c0/a26e8068ced42d959144d83c61ef27c643fc4d981608d930370c1fc0b2c1878e1ec9c7268e2cf3e66c54d12ac5757bf0b5640c8a1a072ce6d843affda4ab352d
+  languageName: node
+  linkType: hard
+
+"cdktf@npm:~0.20.0":
+  version: 0.20.9
+  resolution: "cdktf@npm:0.20.9"
+  dependencies:
+    archiver: "npm:6.0.2"
+    json-stable-stringify: "npm:1.1.1"
+    semver: "npm:7.6.3"
+  peerDependencies:
+    constructs: ^10.3.0
+  checksum: 10c0/47d66213eba086d6683f50e71e54575da5c6306684f3ec0e147feca0e2d2ebcd5d2f7520922a8e54f89ada4f2083d292b00ad1d10eaa77a56cef84c4d8ffc479
   languageName: node
   linkType: hard
 
