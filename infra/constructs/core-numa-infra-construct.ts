@@ -19,6 +19,7 @@ import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as path from 'node:path';
+import { WebDataSourceConstruct } from './data-sources/web-datasource-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -487,76 +488,13 @@ export class CoreNumaInfra extends Construct {
 
     for (const crawlerDataSource of props.webCrawlerConfigs) {
       const cleanedUrl = crawlerDataSource.url.replaceAll(/[^a-zA-Z0-9_-]/g, '-');
-      new CloudcontrolapiResource(this, `data-source-${cleanedUrl}`, {
-        typeName: 'AWS::QBusiness::DataSource',
-        desiredState: Fn.jsonencode({
-          ApplicationId: application.id,
-          Configuration: {
-            type: 'WEBCRAWLERV2',
-            syncMode: 'FULL_CRAWL',
-            connectionConfiguration: {
-              repositoryEndpointMetadata: {
-                seedUrlConnections: [
-                  {
-                    seedUrl: crawlerDataSource.url,
-                  },
-                ],
-              },
-            },
-            repositoryConfigurations: {
-              attachment: {
-                fieldMappings: [
-                  {
-                    dataSourceFieldName: "category",
-                    indexFieldName: "_category",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "sourceUrl",
-                    indexFieldName: "_source_uri",
-                    indexFieldType: "STRING"
-                  },
-                ]
-              },
-              webPage: {
-                fieldMappings: [
-                  {
-                    dataSourceFieldName: "category",
-                    indexFieldName: "_category",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "sourceUrl",
-                    indexFieldName: "_source_uri",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "title",
-                    indexFieldName: "_document_title",
-                    indexFieldType: "STRING"
-                  },
-                ],
-              },
-            },
-            additionalProperties: {
-              rateLimit: '300',
-              honorRobots: true,
-              maxFileSize: '50',
-              maxLinksPerUrl: '100',
-              crawlDepth: '10',
-              crawlSubDomain: true,
-              crawlAllDomain: false,
-              crawlAttachments: true,
-              // TODO
-            },
-          },
-          DisplayName: `${numaClient}-web-${cleanedUrl}`,
-          IndexId: indexId,
-          RoleArn: dataRole.arn,
-          SyncSchedule: 'cron(0 0 ? * * *)',
-        }),
+      new WebDataSourceConstruct(this, `data-source-${cleanedUrl}`, {
+        displayName: `${numaClient}-web-${cleanedUrl}`,
+        url: crawlerDataSource.url,
+        applicationId: application.id,
+        indexId: indexId,
+        roleArn: dataRole.arn,
       });
-      // TODO: Trigger an initial crawl.
     }
 
     new TerraformOutput(this, 'webex-url', {
