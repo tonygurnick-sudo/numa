@@ -1645,7 +1645,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cdktf@npm:0.20.10":
+"cdktf@npm:0.20.10, cdktf@npm:~0.20.0":
   version: 0.20.10
   resolution: "cdktf@npm:0.20.10"
   dependencies:
@@ -1655,19 +1655,6 @@ __metadata:
   peerDependencies:
     constructs: ^10.3.0
   checksum: 10c0/a26e8068ced42d959144d83c61ef27c643fc4d981608d930370c1fc0b2c1878e1ec9c7268e2cf3e66c54d12ac5757bf0b5640c8a1a072ce6d843affda4ab352d
-  languageName: node
-  linkType: hard
-
-"cdktf@npm:~0.20.0":
-  version: 0.20.9
-  resolution: "cdktf@npm:0.20.9"
-  dependencies:
-    archiver: "npm:6.0.2"
-    json-stable-stringify: "npm:1.1.1"
-    semver: "npm:7.6.3"
-  peerDependencies:
-    constructs: ^10.3.0
-  checksum: 10c0/47d66213eba086d6683f50e71e54575da5c6306684f3ec0e147feca0e2d2ebcd5d2f7520922a8e54f89ada4f2083d292b00ad1d10eaa77a56cef84c4d8ffc479
   languageName: node
   linkType: hard
 
