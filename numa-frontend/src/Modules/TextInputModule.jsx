@@ -49,9 +49,14 @@ function TextInputModule({ task, onComplete, onNotComplete }) {
     <div className="card card-apps">
       <div className="card-header">
         <Row>
-          <Col lg={12}>
+          <Col lg={9}>
             {task?.title}
             <br />
+          </Col>
+          <Col lg={3}>
+            <small className="required-item ">
+              {task?.required ? <>required</> : <>optional</>}
+            </small>
           </Col>
         </Row>
       </div>

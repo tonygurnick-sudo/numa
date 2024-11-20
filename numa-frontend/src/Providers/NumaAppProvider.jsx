@@ -1,7 +1,13 @@
 import { createContext, useState, useContext, useEffect } from 'react';
 import { useAuth } from '../Providers/AuthProvider';
 import { v4 as uuidv4 } from 'uuid';
-import { sendInputToQApp, getSessionQApp } from '../qAppHelper';
+import {
+  startQappGetSession,
+  getSessionQApp,
+  updateQSessionData,
+  fetchAndEncodeFile,
+  importFileToQApp,
+} from '../qAppHelper';
 
 // Create the context
 const NumaAppContext = createContext();
@@ -194,13 +200,14 @@ export const NumaAppProvider = ({ children }) => {
           const response = await fakeHttpRequestFunction(payload);
           console.log('HTTP Request response:', response);
 
+          // no longer needed possibly
           // Format and store response for later use (stringified or processed)
-          const formattedResponse = {
-            success: response?.success || false,
-            data: response?.data || {},
-          };
+          // const formattedResponse = {
+          //   success: response?.success || false,
+          //   data: response?.data || {},
+          // };
 
-          currentResults[task.id] = formattedResponse;
+          currentResults[task.id] = response?.data;
 
           if (!response) {
             throw new Error('HTTP request failed');
@@ -214,8 +221,15 @@ export const NumaAppProvider = ({ children }) => {
             const inputParamsArray = task.params.inputs;
             const initialValues = [];
 
+            const sessionId = await startQappGetSession({
+              qAppsClient,
+              qAppId: task.params.qAppId,
+              appVersion: task.appVersion,
+            });
+
             for (const inputParam of inputParamsArray) {
-              const { inputContentRef, qInputCardId } = inputParam;
+              const { inputContentRef, qInputCardId, base64encode } =
+                inputParam;
 
               // Use the global resolveReference function to get the value from currentResults
               const inputValue = resolveReference(
@@ -226,8 +240,29 @@ export const NumaAppProvider = ({ children }) => {
                 `Fetching input from task ${inputContentRef} (resolved: ${inputValue}) for card ${qInputCardId}`,
               );
 
-              // Check if the inputValue is not undefined, empty, or null
-              if (
+              // If `base64encode` is true, handle the file as required
+              if (base64encode && inputValue) {
+                console.log(
+                  `Base64 encoding enabled for card: ${qInputCardId}`,
+                );
+                const { base64Content, fileName } =
+                  await fetchAndEncodeFile(inputValue);
+
+                console.log('file encoded: ', base64Content);
+                if (sessionId) {
+                  const fileId = importFileToQApp({
+                    qAppId: task.params.qAppId,
+                    qInputCardId,
+                    base64Content,
+                    fileName,
+                    sessionId,
+                  });
+                  console.log(`File uploaded, received fileId: ${fileId}`);
+
+                  // Add the file ID to the initial values
+                  initialValues.push({ cardId: qInputCardId, value: fileId });
+                }
+              } else if (
                 inputValue !== undefined &&
                 inputValue !== null &&
                 inputValue !== ''
@@ -248,12 +283,14 @@ export const NumaAppProvider = ({ children }) => {
               },
             };
 
-            const sessionId = await sendInputToQApp({
+            // adjust to an update call
+            // not sure if its the same session id that we get back
+            const new_sessionId = await updateQSessionData({
               qAppsClient,
               qAppData,
             });
 
-            console.log(`Q App session started, session ID: ${sessionId}`);
+            console.log(`Q App session updated, session ID: ${new_sessionId}`);
 
             // Poll for results
             const pollInterval = 2000; // milliseconds
@@ -317,6 +354,7 @@ export const NumaAppProvider = ({ children }) => {
             throw error;
           }
         }
+
         console.log('currentResults', currentResults);
 
         if (task.type === 'text-output') {
@@ -369,7 +407,10 @@ export const NumaAppProvider = ({ children }) => {
     // Simulate HTTP request delay
     return new Promise((resolve) => {
       setTimeout(() => {
-        resolve({ success: true, data: 'We did it!' });
+        resolve({
+          success: true,
+          data: 'http://localhost:5173/example-file.txt',
+        });
       }, 1000);
     });
   };
