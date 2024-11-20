@@ -48,7 +48,15 @@ export class CoreNumaInfra extends Construct {
       });
       const cognitoDomain = numaClient;
 
-      pool = new CognitoUserPool(this, 'user-pool', {
+
+      const mfa = (props.mfa ?? false) ? {
+        mfaConfiguration: 'ON',
+        softwareTokenMfaConfiguration: {
+          enabled: true,
+        },
+      } : {
+        mfaConfiguration: 'OFF',
+      }
         name: numaClient,
         usernameAttributes: ['email'],
         lambdaConfig: {
@@ -61,9 +69,10 @@ export class CoreNumaInfra extends Construct {
           advancedSecurityMode: 'AUDIT',
         },
         passwordPolicy: {
-          minimumLength: 8,
+          minimumLength: props.passwordLength ?? 8,
           temporaryPasswordValidityDays: props.temporaryPasswordValidityDays,
         },
+        ...mfa,
       });
 
       new TerraformOutput(this, 'user-pool-id', {
@@ -572,4 +581,6 @@ export interface CoreNumaInfraProps {
   createServiceLinkedRole?: boolean;
   webCrawlerConfigs?: WebCrawlerConfig[];
   temporaryPasswordValidityDays?: number;
+  passwordLength?: number;
+  mfa?: boolean;
 }
