@@ -1,5 +1,3 @@
-"""Implements the Bedrock Claude model to extract text and image data."""
-
 import base64
 import json
 import os
@@ -11,8 +9,11 @@ import structlog
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+CLAUDE_3_5_SONNET_INPUT_PRICE = 0.003
+CLAUDE_3_5_SONNET_OUTPUT_PRICE = 0.015
+
 MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024  # 5MB
-LLM_QUERY = """Below is an image of some meeting notes. Please scrape and return the text from the image. If there are images/drawings, describe what they are in as much detail as possible as part of your extraction. E.g. drawing: a drawing of a dog. Just return the extract text and image/drawing information from the document."""
+GET_TEXT_FROM_IMAGE_QUERY = """Below is an image of some meeting notes. Please scrape and return the text from the image. If there are images/drawings, describe what they are in as much detail as possible as part of your extraction. E.g. drawing: a drawing of a dog. Just return the extract text and image/drawing information from the document."""
 
 logger = structlog.get_logger(__name__)
 s3_client = boto3.client("s3")
@@ -32,7 +33,6 @@ class GPTResponse:
     metadata: dict
 
 
-# NOTE: This is a simplified version of the same class from the machine learning tasks codebase
 class BedrockClaude3Model:
     def __init__(
         self,
@@ -40,8 +40,6 @@ class BedrockClaude3Model:
         model_args: dict | None = None,
         bedrock_region_name: str | None = None,
     ):
-        config = Config(read_timeout=1000)
-
         self.model_args = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": 2048,
@@ -55,7 +53,7 @@ class BedrockClaude3Model:
             service_name="bedrock-runtime",
             region_name=bedrock_region_name
             or os.getenv("AWS_BEDROCK_REGION", "us-west-2"),
-            config=config,
+            config=Config(read_timeout=1000),
         )
 
     def _invoke_model(self, multimodal_messages: list) -> dict:
@@ -85,18 +83,55 @@ class BedrockClaude3Model:
         except Exception as e:
             raise BedrockModelFailedException("Invalid response format") from e
 
-    def run_with_messages(self, messages: list) -> GPTResponse:
+    def run(
+        self,
+        query: str,
+    ) -> GPTResponse:
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": query},
+                ],
+            }
+        ]
+        response = self._invoke_model(messages)
+        return self._process_response(response)
+
+    def run_with_messages(self, messages: list[dict]) -> GPTResponse:
         """Allows for more customisation of the input messages and roles"""
         response = self._invoke_model(messages)
         return self._process_response(response)
 
 
+def __calculate_cost(metadata: dict) -> tuple:
+    """Calculate the cost of using the Claude model"""
+    input_price = CLAUDE_3_5_SONNET_INPUT_PRICE / 1000
+    output_price = CLAUDE_3_5_SONNET_OUTPUT_PRICE / 1000
+    input_cost = metadata["input_tokens"] * input_price
+    output_cost = metadata["output_tokens"] * output_price
+    total_cost = input_cost + output_cost
+    return input_cost, output_cost, total_cost
+
+
+def log_usage(name: str, metadata: dict):
+    combined_metadata = {}
+    combined_metadata["input_tokens"] = metadata["input_tokens"]
+    combined_metadata["output_tokens"] = metadata["output_tokens"]
+    combined_metadata["total_tokens"] = (
+        metadata["input_tokens"] + metadata["output_tokens"]
+    )
+    input_cost, output_cost, total_cost = __calculate_cost(metadata)
+    combined_metadata["input_cost"] = input_cost
+    combined_metadata["output_cost"] = output_cost
+    combined_metadata["total_cost"] = total_cost
+    logger.info(f"Bedrock Usage for {name}:", **combined_metadata)
+
+
 def get_text_from_image(bucket: str, key: str) -> str:
-    # Get image file from S3
     s3_file_object = s3_client.get_object(Bucket=bucket, Key=key)
     file_content = s3_file_object["Body"].read()
 
-    # Determine media type and encode file content
     content_type = filetype.guess(file_content)
     if content_type:
         media_type = content_type.mime
@@ -104,7 +139,6 @@ def get_text_from_image(bucket: str, key: str) -> str:
         raise UnsupportedFiletypeError("Could not get media type")
     data = base64.b64encode(file_content).decode("utf-8")
 
-    # Get response from bedrock
     model = BedrockClaude3Model(bedrock_region_name="us-east-1")
     documents = [
         {
@@ -120,7 +154,7 @@ def get_text_from_image(bucket: str, key: str) -> str:
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": LLM_QUERY},
+                {"type": "text", "text": GET_TEXT_FROM_IMAGE_QUERY},
                 *documents,
             ],
         }

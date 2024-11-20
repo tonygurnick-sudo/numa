@@ -1,12 +1,12 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-import bedrock
 from bedrock import (
     BedrockClaude3Model,
     BedrockModelFailedException,
     GPTResponse,
     UnsupportedFiletypeError,
+    get_text_from_image,
 )
 
 
@@ -36,7 +36,7 @@ class TestBedrock(unittest.TestCase):
 
         model = BedrockClaude3Model()
         with self.assertRaises(BedrockModelFailedException) as context:
-            model.run_with_messages([])
+            model.run("")
 
         self.assertEqual(str(context.exception), "Could not invoke model")
 
@@ -93,7 +93,7 @@ class TestExtractTextFromImageUsingVisionModel(unittest.TestCase):
         mock_response = GPTResponse(response=[{"text": "Extracted text"}], metadata={})
         mock_run_with_messages.return_value = mock_response
 
-        result = bedrock.get_text_from_image("test-bucket", "test-key")
+        result = get_text_from_image("test-bucket", "test-key")
 
         self.assertEqual(result, "Extracted text")
         mock_get_object.assert_called_once_with(Bucket="test-bucket", Key="test-key")
@@ -112,7 +112,7 @@ class TestExtractTextFromImageUsingVisionModel(unittest.TestCase):
         mock_guess.return_value = None
 
         with self.assertRaises(UnsupportedFiletypeError):
-            bedrock.get_text_from_image("test-bucket", "test-key")
+            get_text_from_image("test-bucket", "test-key")
 
         mock_get_object.assert_called_once_with(Bucket="test-bucket", Key="test-key")
         mock_guess.assert_called_once()
