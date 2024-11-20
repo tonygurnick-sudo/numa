@@ -7,8 +7,6 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadedFilePath, setUploadedFilePath] = useState('');
-  console.log('s3 task: ', taskInputValues);
-  console.log('s3 task id: ', taskInputValues[task.id]);
 
   // Extracting task parameters
   const bucketName = task?.params.bucketName;
@@ -34,8 +32,6 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
 
       // Simulate an S3 upload (replace with actual S3 upload logic)
       const simulatedFileKey = selectedFile.name;
-      console.log('Uploading to:', bucketName);
-      console.log('File Key:', simulatedFileKey);
 
       // Simulated delay for the upload process
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -64,19 +60,12 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
           <Col lg={3}>
             {taskInputValues[task.id] &&
               uploadStatus === 'Upload successful!' && (
-                <i className="bi bi-check-circle-fill text-success"></i>
+                <i className="bi bi-check-circle-fill text-success right"></i>
               )}
             <br />
-            {task?.required && (
-              <small className="required-item ">
-                <i
-                  title="Required to run the app"
-                  className="bi bi-exclamation-circle"
-                >
-                  required
-                </i>
-              </small>
-            )}
+            <small className="required-item ">
+              {task?.required ? <>required</> : <>optional</>}
+            </small>
           </Col>
         </Row>
       </div>

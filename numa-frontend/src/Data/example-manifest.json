@@ -27,8 +27,9 @@
           "order": 1
         },
         {
-          "id": "other-notes (Optional)",
+          "id": "other-notes",
           "title": "Other Notes",
+          "required": false,
           "description": "Include any other notes that might be useful.",
           "type": "text-input",
           "order": 1
@@ -63,6 +64,7 @@
             "inputs": [
               {
                 "inputContentRef": "@call-step-function",
+                "base64encode": true,
                 "qInputCardId": "30076f25-5b2a-4f98-a49d-972ade90483e"
               },
               {
