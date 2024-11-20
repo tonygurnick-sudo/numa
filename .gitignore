@@ -114,3 +114,5 @@ tools/ARC-*.zip
 
 # Lambda
 lambda_function.zip
+
+tools/*.csv
