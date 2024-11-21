@@ -152,251 +152,229 @@ export const NumaAppProvider = ({ children }) => {
     fetchData();
   }, [numaAppId]);
 
-  const handleRunButtonClick = async (appData) => {
+  // Task Processing Functions
+  const processTextInputTask = (task, currentResults) => {
+    currentResults[task.id] = taskInputValues[task.id] || '';
+    console.log(`Input task result: ${currentResults[task.id]}`);
+    return currentResults;
+  };
+
+  const processS3UploadTask = (task, currentResults) => {
+    const uploadedFilePath = taskInputValues[task.id];
+    currentResults[task.id] = uploadedFilePath;
+    console.log(`S3 upload result: ${currentResults[task.id]}`);
+    return currentResults;
+  };
+
+  const processHttpRequestTask = async (task, currentResults) => {
+    const templatePayload = task.params?.payload;
+    const payload = createPayloadFromTemplate(
+      templatePayload,
+      taskInputValues,
+      currentResults,
+    );
+    console.log('Generated Payload for http-request:', payload);
+
+    const response = await fakeHttpRequestFunction(payload);
+    console.log('HTTP Request response:', response);
+
+    if (!response) {
+      throw new Error('HTTP request failed');
+    }
+
+    currentResults[task.id] = response?.data;
+    return currentResults;
+  };
+
+  const processQAppSession = async (sessionId, qAppData) => {
+    const new_sessionId = await updateQSessionData({
+      qAppsClient,
+      qAppData,
+    });
+    console.log(`Q App session updated, session ID: ${new_sessionId}`);
+    return new_sessionId;
+  };
+
+  const pollQAppSession = async (sessionId) => {
+    const pollInterval = 2000;
+    let polling = true;
+    let sessionResponse = null;
+
+    while (polling) {
+      sessionResponse = await getSessionQApp({
+        qAppsClient,
+        sessionId,
+      });
+      console.log(`Q App session response:`, sessionResponse);
+
+      if (sessionResponse?.status === 'COMPLETED') {
+        polling = false;
+      } else if (sessionResponse?.status === 'FAILED') {
+        polling = false;
+        throw new Error('Q App session failed');
+      } else {
+        console.log('Session not completed yet, waiting for next poll...');
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+    }
+    return sessionResponse;
+  };
+
+  const processQAppTask = async (task, currentResults) => {
+    console.log(`Processing Q-App task with ID: ${task.id}`);
+    const inputParamsArray = task.params.inputs;
+    const initialValues = [];
+
+    const sessionId = await startQappGetSession({
+      qAppsClient,
+      qAppId: task.params.qAppId,
+      appVersion: task.appVersion,
+    });
+
+    for (const inputParam of inputParamsArray) {
+      const { inputContentRef, qInputCardId, base64encode } = inputParam;
+      const inputValue = resolveReference(inputContentRef, currentResults);
+      console.log(
+        `Fetching input from task ${inputContentRef} (resolved: ${inputValue}) for card ${qInputCardId}`,
+      );
+
+      if (base64encode && inputValue) {
+        console.log(`Base64 encoding enabled for card: ${qInputCardId}`);
+        const { base64Content, fileName } = await fetchAndEncodeFile(inputValue);
+        console.log('file encoded: ', base64Content);
+
+        if (sessionId) {
+          const fileId = await importFileToQApp({
+            qAppId: task.params.qAppId,
+            qInputCardId,
+            base64Content,
+            fileName,
+            sessionId,
+          });
+          console.log(`File uploaded, received fileId: ${fileId}`);
+          initialValues.push({ cardId: qInputCardId, value: fileId });
+        }
+      } else if (inputValue !== undefined && inputValue !== null && inputValue !== '') {
+        initialValues.push({ cardId: qInputCardId, value: inputValue });
+      } else {
+        console.warn(`Skipping empty or null value for card ${qInputCardId}`);
+      }
+    }
+
+    const qAppData = {
+      qAppId: task.params.qAppId,
+      appVersion: task.appVersion,
+      appDefinition: {
+        cards: initialValues,
+      },
+    };
+
+    await processQAppSession(sessionId, qAppData);
+    const sessionResponse = await pollQAppSession(sessionId);
+
+    // Process the output cards and map them to the correct output references
+    if (sessionResponse?.cardStatus) {
+      for (const [cardId, cardData] of Object.entries(sessionResponse.cardStatus)) {
+        console.log('Processing output card:', cardId);
+        console.log('Card data:', cardData);
+
+        // Match cardId to outputContentRef ID
+        const matchingOutput = task.params.outputs.find(
+          (output) => output.qOutputCardId === cardId
+        );
+
+        if (matchingOutput) {
+          const outputId = matchingOutput.outputContentRef.replace('@', '');
+          currentResults[outputId] = cardData.currentValue;
+          console.log(
+            `Updated currentResults[${outputId}] with value:`,
+            cardData.currentValue
+          );
+        }
+      }
+    }
+
+    // Store the full session response in the task results
+    currentResults[task.id] = {
+      status: sessionResponse?.status,
+      cardStatus: sessionResponse?.cardStatus
+    };
+
+    console.log('Final currentResults:', currentResults);
+    return currentResults;
+  };
+
+  const processTextOutputTask = (task, currentResults) => {
+    const outputRef = task.params?.dataRef;
+    console.log('Output task, outputRef:', outputRef);
+
+    const outputResult = resolveReference(outputRef, currentResults);
+    console.log('Output task, outputResult:', outputResult);
+
+    if (outputResult) {
+      const resultToDisplay = typeof outputResult === 'object'
+        ? JSON.stringify(outputResult)
+        : outputResult;
+
+      setNumaTaskResponses((prevResponses) => [
+        ...prevResponses.filter((response) => response.taskId !== task.id),
+        { taskId: task.id, result: resultToDisplay },
+      ]);
+    }
+    return currentResults;
+  };
+
+  const initializeJobExecution = () => {
     const jobID = uuidv4();
     const dateTime = new Date().toISOString();
+    setAppRunning(true);
+    setLoading(true);
+    return { jobID, dateTime };
+  };
 
+  const saveJobResults = (jobID, dateTime, currentResults) => {
+    const existingJobs = JSON.parse(localStorage.getItem('numaJobs')) || [];
+    existingJobs.push({ jobID, dateTime, results: currentResults });
+    localStorage.setItem('numaJobs', JSON.stringify(existingJobs));
+  };
+
+  const handleRunButtonClick = async (appData) => {
+    const { jobID, dateTime } = initializeJobExecution();
     let currentResults = {};
 
     try {
-      setAppRunning(true);
-      setLoading(true);
-
-      // Sort tasks by their `order` property
       const orderedTasks = appData.tasks
         .slice()
         .sort((a, b) => a.order - b.order);
 
-      // Process each task in order
       for (const task of orderedTasks) {
-        console.log(
-          `Processing task with order ${task.order} and type ${task.type}`,
-        );
+        console.log(`Processing task with order ${task.order} and type ${task.type}`);
 
-        if (task.type === 'text-input') {
-          // Assume taskInputValues are already populated for input tasks
-          currentResults[task.id] = taskInputValues[task.id] || '';
-          console.log(`Input task result: ${currentResults[task.id]}`);
+        switch (task.type) {
+          case 'text-input':
+            currentResults = processTextInputTask(task, currentResults);
+            break;
+          case 's3-upload':
+            currentResults = processS3UploadTask(task, currentResults);
+            break;
+          case 'http-request':
+            currentResults = await processHttpRequestTask(task, currentResults);
+            break;
+          case 'q-app':
+            currentResults = await processQAppTask(task, currentResults);
+            break;
+          case 'text-output':
+            currentResults = processTextOutputTask(task, currentResults);
+            break;
+          default:
+            console.warn(`Unknown task type: ${task.type}`);
         }
-
-        if (task.type === 's3-upload') {
-          // Handle S3 upload task, storing the resulting file key (or URL) in currentResults
-          const uploadedFilePath = taskInputValues[task.id];
-          currentResults[task.id] = uploadedFilePath;
-          console.log(`S3 upload result: ${currentResults[task.id]}`);
-        }
-
-        if (task.type === 'http-request') {
-          // Extract and build payload for the http-request task
-          const templatePayload = task.params?.payload;
-          const payload = createPayloadFromTemplate(
-            templatePayload,
-            taskInputValues,
-            currentResults,
-          );
-          console.log('Generated Payload for http-request:', payload);
-
-          // Replace this with actual HTTP request logic
-          const response = await fakeHttpRequestFunction(payload);
-          console.log('HTTP Request response:', response);
-
-          // no longer needed possibly
-          // Format and store response for later use (stringified or processed)
-          // const formattedResponse = {
-          //   success: response?.success || false,
-          //   data: response?.data || {},
-          // };
-
-          currentResults[task.id] = response?.data;
-
-          if (!response) {
-            throw new Error('HTTP request failed');
-          }
-        }
-
-        if (task.type === 'q-app') {
-          // Handle `q-app` task logic
-          console.log(`Processing Q-App task with ID: ${task.id}`);
-          try {
-            const inputParamsArray = task.params.inputs;
-            const initialValues = [];
-
-            const sessionId = await startQappGetSession({
-              qAppsClient,
-              qAppId: task.params.qAppId,
-              appVersion: task.appVersion,
-            });
-
-            for (const inputParam of inputParamsArray) {
-              const { inputContentRef, qInputCardId, base64encode } =
-                inputParam;
-
-              // Use the global resolveReference function to get the value from currentResults
-              const inputValue = resolveReference(
-                inputContentRef,
-                currentResults,
-              );
-              console.log(
-                `Fetching input from task ${inputContentRef} (resolved: ${inputValue}) for card ${qInputCardId}`,
-              );
-
-              // If `base64encode` is true, handle the file as required
-              if (base64encode && inputValue) {
-                console.log(
-                  `Base64 encoding enabled for card: ${qInputCardId}`,
-                );
-                const { base64Content, fileName } =
-                  await fetchAndEncodeFile(inputValue);
-
-                console.log('file encoded: ', base64Content);
-                if (sessionId) {
-                  const fileId = importFileToQApp({
-                    qAppId: task.params.qAppId,
-                    qInputCardId,
-                    base64Content,
-                    fileName,
-                    sessionId,
-                  });
-                  console.log(`File uploaded, received fileId: ${fileId}`);
-
-                  // Add the file ID to the initial values
-                  initialValues.push({ cardId: qInputCardId, value: fileId });
-                }
-              } else if (
-                inputValue !== undefined &&
-                inputValue !== null &&
-                inputValue !== ''
-              ) {
-                initialValues.push({ cardId: qInputCardId, value: inputValue });
-              } else {
-                console.warn(
-                  `Skipping empty or null value for card ${qInputCardId}`,
-                );
-              }
-            }
-
-            const qAppData = {
-              qAppId: task.params.qAppId,
-              appVersion: task.appVersion,
-              appDefinition: {
-                cards: initialValues,
-              },
-            };
-
-            // adjust to an update call
-            // not sure if its the same session id that we get back
-            const new_sessionId = await updateQSessionData({
-              qAppsClient,
-              qAppData,
-            });
-
-            console.log(`Q App session updated, session ID: ${new_sessionId}`);
-
-            // Poll for results
-            const pollInterval = 2000; // milliseconds
-            let polling = true;
-
-            // Ensure the task results object is initialized
-            currentResults[task.id] = currentResults[task.id] || {};
-
-            while (polling) {
-              const sessionResponse = await getSessionQApp({
-                qAppsClient,
-                sessionId,
-              });
-              console.log(`Q App session response:`, sessionResponse);
-
-              if (sessionResponse.status === 'COMPLETED') {
-                for (const [cardId, cardData] of Object.entries(
-                  sessionResponse.cardStatus,
-                )) {
-                  console.log('in loop - cardId to lookup...', cardId);
-                  console.log('task.params.outputs...', task.params.outputs);
-
-                  // Match cardId to outputContentRef ID
-                  const matchingOutput = task.params.outputs.find(
-                    (output) => output.qOutputCardId === cardId,
-                  );
-                  console.log('matchingOutput...', matchingOutput);
-                  if (matchingOutput) {
-                    const outputId = matchingOutput.outputContentRef.replace(
-                      '@',
-                      '',
-                    );
-
-                    console.log('output id to create...', outputId);
-                    currentResults[outputId] = cardData.currentValue;
-
-                    console.log(
-                      `Updated currentResults[${outputId}] with state: ${cardData.currentState} and value: ${cardData.currentValue}`,
-                    );
-                  }
-                }
-                polling = false;
-              } else {
-                console.log(
-                  'Session not completed yet, waiting for next poll...',
-                );
-                await new Promise((resolve) =>
-                  setTimeout(resolve, pollInterval),
-                );
-              }
-            }
-
-            console.log('Q App session processing complete.');
-
-            console.log(
-              `Updated currentResults for task ${task.id}:`,
-              currentResults[task.id],
-            );
-          } catch (error) {
-            console.error(`Error processing Q-App task ${task.id}:`, error);
-            throw error;
-          }
-        }
-
-        console.log('currentResults', currentResults);
-
-        if (task.type === 'text-output') {
-          const outputRef = task.params?.dataRef;
-          console.log('Output task, outputRef:', outputRef);
-
-          // Resolve the reference using resolveReference
-          const outputResult = resolveReference(outputRef, currentResults);
-          console.log('Output task, outputResult:', outputResult);
-
-          if (outputResult) {
-            // Safely handle the output result
-            const resultToDisplay =
-              typeof outputResult === 'object'
-                ? JSON.stringify(outputResult)
-                : outputResult;
-
-            console.log('Output task, showing result:', resultToDisplay);
-
-            // Update the state for the specific task
-            setNumaTaskResponses((prevResponses) => [
-              ...prevResponses.filter(
-                (response) => response.taskId !== task.id,
-              ), // Remove old response if present
-              { taskId: task.id, result: resultToDisplay }, // Add the new response
-            ]);
-          } else {
-            console.log('No result found for outputRef:', outputRef);
-          }
-        }
-
-        // Add additional task types and their handling logic as needed
       }
     } catch (err) {
       console.error('Error processing tasks:', err);
       setError(err);
     } finally {
-      // Save job results in local storage with the jobID as the reference
-      const existingJobs = JSON.parse(localStorage.getItem('numaJobs')) || [];
-      existingJobs.push({ jobID, dateTime, results: currentResults });
-      localStorage.setItem('numaJobs', JSON.stringify(existingJobs));
-
+      saveJobResults(jobID, dateTime, currentResults);
       setLoading(false);
       setAppRunning(true);
     }
