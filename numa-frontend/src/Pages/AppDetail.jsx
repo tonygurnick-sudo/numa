@@ -6,6 +6,7 @@ import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { Preloader } from '../Components/Preloader';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
+import { JobHistorySidebar } from '../Components/JobHistorySidebar';
 
 import { QAppDetail } from '../Components/QAppDetail';
 import { QAppDetailHeader } from '../Components/QAppDetailHeader';
@@ -24,6 +25,7 @@ const AppDetail = () => {
 
   return (
     <div className="dashboard">
+      <JobHistorySidebar />
       <header>
         <Container fluid>
           <Row className="align-items-end">

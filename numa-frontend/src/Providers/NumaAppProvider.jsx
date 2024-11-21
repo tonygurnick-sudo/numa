@@ -188,8 +188,8 @@ export const NumaAppProvider = ({ children }) => {
 
   const processQAppSession = async (sessionId, qAppData) => {
     const new_sessionId = await updateQSessionData({
-      qAppsClient,
       qAppData,
+      sessionId
     });
     console.log(`Q App session updated, session ID: ${new_sessionId}`);
     return new_sessionId;
@@ -333,9 +333,32 @@ export const NumaAppProvider = ({ children }) => {
   };
 
   const saveJobResults = (jobID, dateTime, currentResults) => {
-    const existingJobs = JSON.parse(localStorage.getItem('numaJobs')) || [];
-    existingJobs.push({ jobID, dateTime, results: currentResults });
+    const existingJobs = JSON.parse(localStorage.getItem('numaJobs')) || {};
+
+    // Initialize the app's jobs array if it doesn't exist
+    if (!existingJobs[numaAppId]) {
+      existingJobs[numaAppId] = [];
+    }
+
+    // Add the new job to the app's jobs array
+    existingJobs[numaAppId].push({
+      jobID,
+      dateTime,
+      results: currentResults,
+      appName: numaAppData?.appName || 'Unknown App'
+    });
+
     localStorage.setItem('numaJobs', JSON.stringify(existingJobs));
+    console.log(`Job saved for app ${numaAppId}:`, {
+      jobID,
+      dateTime,
+      appName: numaAppData?.appName
+    });
+  };
+
+  const getAppJobs = () => {
+    const allJobs = JSON.parse(localStorage.getItem('numaJobs')) || {};
+    return allJobs[numaAppId] || [];
   };
 
   const handleRunButtonClick = async (appData) => {
@@ -438,6 +461,7 @@ export const NumaAppProvider = ({ children }) => {
         qCardInputValues,
         setQSessionId,
         qSsessionId,
+        getAppJobs
       }}
     >
       {children}

@@ -53,28 +53,20 @@ export const startQappGetSession = async ({
 /*
  *   updat an already running Q app session
  */
-export const updateQSessionData = async ({ qAppsClient, qAppData }) => {
-  if (!qAppsClient) return;
-  console.log('debug - qAppData', qAppData);
-  console.log('debug - qAppId', qAppData.qAppId);
-  const qAppId = qAppData.qAppId;
-
-  // Mocked session ID and response
-  const mockSessionId = 'mock-session-id-12345';
+export const updateQSessionData = async ({ qAppData, sessionId }) => {
 
   try {
     const payload = {
       instanceId: APPLICATION_ID,
-      appId: qAppId,
-      appVersion: qAppData.appVersion,
-      initialValues: qAppData.appDefinition.cards,
+      sessionId: sessionId,
+      values: qAppData.appDefinition.cards,
     };
     console.log('start payload:', payload);
     const command = new UpdateQAppSessionCommand(payload);
     //const response = await qAppsClient.send(command);
 
     // Simulating an API response.
-    const response = { sessionId: mockSessionId }; // Simulated response
+    const response = { sessionId: sessionId }; // Simulated response
 
     console.log('update response:', response);
     if (response) {
