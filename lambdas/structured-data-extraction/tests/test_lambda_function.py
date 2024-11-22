@@ -64,7 +64,7 @@ class TestLambdaFunction(unittest.TestCase):
         mock_model.return_value = mock_response
 
         event = {
-            "content": {"text": ["Page 1 content", "Page 2 content"]},
+            "content": {"pages": ["Page 1 content", "Page 2 content"]},
             "config": "personal_finance",
             "data_extraction_type": "page_by_page",
         }
@@ -140,7 +140,7 @@ class TestLambdaFunction(unittest.TestCase):
 
         model = mock_model()
         prompt = "Extract relevant data from {document}"
-        extracted_data = {"text": ["Page 1 content", "Page 2 content"]}
+        extracted_data = {"pages": ["Page 1 content", "Page 2 content"]}
         result = extraction_page_by_page(
             model, prompt, extracted_data, tool_array_key="data"
         )
