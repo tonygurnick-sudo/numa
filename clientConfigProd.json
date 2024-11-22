@@ -23,6 +23,9 @@
   "autoshoppe": {
     "clientAccountId": "060795909741"
   },
+  "align-me": {
+    "clientAccountId": "048723025977"
+  },
   "av-media": {
     "clientAccountId": "961341552812"
   },
@@ -110,6 +113,17 @@
       },
       {
         "url": "https://www.fairwork.gov.au/"
+      }
+    ]
+  },
+  "delta-insurance": {
+    "clientAccountId": "842676001293",
+    "webCrawlerConfigs": [
+      {
+        "url": "https://deltaunderwriting.com/"
+      },
+      {
+        "url": "https://www.deltainsurance.co.nz/"
       }
     ]
   },
