@@ -98,7 +98,7 @@ def extraction_page_by_page(
 ) -> list[dict]:
     """Exract data from multiple pages and extend the results to a list."""
     all_results: list[dict] = []
-    for page in extracted_data["text"][:MAX_PAGES]:  # Limit to MAX_PAGES
+    for page in extracted_data["pages"][:MAX_PAGES]:  # Limit to MAX_PAGES
         results = get_data_extraction_result(model, prompt, page, tool_array_key)
         all_results.extend(results)
 
