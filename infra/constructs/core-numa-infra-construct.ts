@@ -57,7 +57,7 @@ export class CoreNumaInfra extends Construct {
       } : {
         mfaConfiguration: 'OFF',
       }
-      new CognitoUserPool(this, 'user-pool', {
+      pool = new CognitoUserPool(this, 'user-pool', {
         name: numaClient,
         usernameAttributes: ['email'],
         lambdaConfig: {
