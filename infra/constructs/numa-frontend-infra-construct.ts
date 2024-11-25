@@ -16,6 +16,7 @@ import { AcmCertificateValidation } from '@cdktf/provider-aws/lib/acm-certificat
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { S3BucketPolicy } from '@cdktf/provider-aws/lib/s3-bucket-policy';
 import { Fn } from 'cdktf';
+import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 
 export class NumaFrontendInfra extends Construct {
   readonly frontendBucket: S3Bucket;
@@ -60,6 +61,13 @@ export class NumaFrontendInfra extends Construct {
     this.frontendBucket = new PrivateBucket(this, 'frontend-bucket', {
       bucket: numaClient + '-fe',
     }).bucket;
+
+    new S3Object(this, 'iframe-object', {
+      bucket: this.frontendBucket.bucket,
+      key: 'q',
+      content: `<html><body><iframe src="${props.webExUrl}" frameborder="0" style="overflow:hidden;height:100%;width:100%" height="100%" width="100%"></iframe></body></html>`,
+      contentType: 'text/html; charset=utf-8',
+    });
 
     this.apiGateway = new Apigatewayv2Api(this, 'api-gw', {
       name: numaClient + '-numa-gateway',
@@ -230,4 +238,5 @@ export interface NumaFrontendInfraProps {
   domainName: string;
   hostedZoneProvider: AwsProvider;
   certificateProvider: AwsProvider;
+  webExUrl: string;
 }

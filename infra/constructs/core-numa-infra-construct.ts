@@ -21,6 +21,7 @@ import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as path from 'node:path';
 
 export class CoreNumaInfra extends Construct {
+  readonly webExUrl: string;
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
 
@@ -361,15 +362,18 @@ export class CoreNumaInfra extends Construct {
       desiredState: Fn.jsonencode({
         ApplicationId: applicationId,
         RoleArn: role.arn,
+        Origins: [
+          `https://${props.domainName}`,
+        ],
         ...webexIdentityConfig,
       }),
     });
 
-    const webexEndpoint = Fn.lookup(Fn.jsondecode(webexperience.properties), 'DefaultEndpoint');
+    this.webExUrl = Fn.lookup(Fn.jsondecode(webexperience.properties), 'DefaultEndpoint');
 
     // TODO: Workout how this will work for IdC and how to incorporate it.
     new SetCallbackUrl(this, 'callback', {
-      callbackAddress: webexEndpoint + 'authorization-code/callback',
+      callbackAddress: this.webExUrl + 'authorization-code/callback',
       userPoolClientId: userPoolClient.id,
       userPoolId: pool.id,
     });
@@ -556,7 +560,7 @@ export class CoreNumaInfra extends Construct {
     }
 
     new TerraformOutput(this, 'webex-url', {
-      value: webexEndpoint,
+      value: this.webExUrl,
     });
 
     new TerraformOutput(this, 'data-bucket', { value: dataBucket.bucket.bucket });
@@ -576,7 +580,7 @@ export interface CoreNumaInfraProps {
   identityProvider?: 'oidc' | 'idc';
   indexType?: 'ENTERPRISE' | 'STARTER';
   region?: string;
-  customDomain?: string;
+  domainName: string;
   clientAccountId?: string;
   loadSampleFile?: boolean;
   createServiceLinkedRole?: boolean;
