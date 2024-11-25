@@ -11,7 +11,11 @@ import { ExampleNumaApp } from '../constructs/example-numa-app-construct';
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
 
-    props.config ??= lookupConfigForClient(props.client, props.environmentName as EnvironmentName);
+
+    const defaults = {
+      domainSuffix: props.domainSuffix,
+    }
+    props.config ??= lookupConfigForClient(props.client, props.environmentName as EnvironmentName, defaults);
     const deployerRole = `arn:aws:iam::${props.arcanumNumaAccount}:role/admin-delegated-access`;
     const clientRole = `arn:aws:iam::${props.config.clientAccountId}:role/ArcanumAIAccess`;
     super(scope, name, {
@@ -40,9 +44,8 @@ export class NumaClientStack extends ArcanumStack {
       alias: 'certificate-provider',
       defaultTags: this.provider.defaultTags,
     });
-    const domainName = props.config.customDomain ?? `${props.client}.${props.domainSuffix}`;
 
-    new CoreNumaInfra(this, 'numa', {
+    const core = new CoreNumaInfra(this, 'numa', {
       ...props.config,
       environmentName: props.environmentName,
     });
@@ -50,10 +53,10 @@ export class NumaClientStack extends ArcanumStack {
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
       ...props.config,
       environmentName: props.environmentName,
-      domainName,
       zoneId: props.hostedZone,
       hostedZoneProvider,
       certificateProvider,
+      webExUrl: core.webExUrl,
     });
 
     Object.entries(props.config.apps ?? {}).forEach(
@@ -66,18 +69,22 @@ export class NumaClientStack extends ArcanumStack {
 }
 
 interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
+  customDomain?: string,
   apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId'>>;
 }
-const clientConfigDev = _clientConfigDev as Record<string, Omit<ClientConfig, 'client'>>;
-const clientConfigProd = _clientConfigProd as Record<string, Omit<ClientConfig, 'client'>>;
+type InputConfig = Omit<ClientConfig, 'client' | 'domainName'>;
+const clientConfigDev = _clientConfigDev as Record<string, InputConfig>;
+const clientConfigProd = _clientConfigProd as Record<string, InputConfig>;
 
 export function listNumaClients(environmentName?: EnvironmentName): string[] {
   return Object.keys(environmentName == EnvironmentName.prod ? clientConfigProd : clientConfigDev);
 }
 
-function lookupConfigForClient(client: string, environmentName?: EnvironmentName): ClientConfig {
+function lookupConfigForClient(client: string, environmentName: EnvironmentName, defaults: Record<string, string>): ClientConfig {
   if (!listNumaClients(environmentName).includes(client)) throw new Error('Invalid client.');
-  return { client, ...(environmentName == EnvironmentName.prod ? clientConfigProd : clientConfigDev)[client] };
+  const config = (environmentName == EnvironmentName.prod ? clientConfigProd : clientConfigDev)[client];
+  const domainName = config.customDomain ?? `${client}.${defaults.domainSuffix}`;
+  return { client, domainName, ...config };
 }
 
 export interface NumaClientStackProps extends ArcanumStackProps {
