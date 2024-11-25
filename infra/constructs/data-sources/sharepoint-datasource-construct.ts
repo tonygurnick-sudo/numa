@@ -5,6 +5,42 @@ import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 
+type SharePointSchedule = 'hourly' | 'daily' | 'weekly' | string;
+
+function getCronExpression(schedule: SharePointSchedule): string {
+  switch (schedule) {
+    case 'hourly':
+      return 'cron(0 * ? * * *)';
+    case 'daily':
+      return 'cron(0 0 ? * * *)';
+    case 'weekly':
+      return 'cron(0 0 ? * SUN *)';
+    default:
+      // If it's not one of our predefined schedules, assume it's a valid cron expression
+      return schedule.startsWith('cron(') ? schedule : `cron(${schedule})`;
+  }
+}
+
+interface SharePointConfiguration {
+  enableDeletionProtection?: boolean;
+  deletionProtectionThreshold?: string;
+  crawlListData?: boolean;
+  crawlComments?: boolean;
+  crawlPages?: boolean;
+  crawlFiles?: boolean;
+  crawlEvents?: boolean;
+  crawlLinks?: boolean;
+  crawlAttachment?: boolean;
+  maxFileSizeInMegaBytes?: string;
+  inclusionFileTypePatterns?: string[];
+  exclusionFileTypePatterns?: string[];
+  inclusionFileNamePatterns?: string[];
+  exclusionFileNamePatterns?: string[];
+  inclusionFilePath?: string[];
+  exclusionFilePath?: string[];
+  schedule?: SharePointSchedule;
+}
+
 export class SharePointDataSourceConstruct extends CloudcontrolapiResource {
   constructor(scope: Construct, name: string, props: SharePointDataSourceConstructProps) {
     const secret = new SecretsmanagerSecret(scope, name + '-secret', {});
@@ -12,7 +48,84 @@ export class SharePointDataSourceConstruct extends CloudcontrolapiResource {
       bucketPrefix: 'certificate',
     });
     const role = new IamRole(scope, name + '-role', {
-      // TODO: Fill in
+      assumeRolePolicy: JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [{
+          Sid: 'AllowsAmazonQToAssumeRoleForServicePrincipal',
+          Effect: 'Allow',
+          Principal: {
+            Service: 'qbusiness.amazonaws.com'
+          },
+          Action: 'sts:AssumeRole',
+          Condition: {
+            StringEquals: {
+              'aws:SourceAccount': '${aws:PrincipalAccount}'
+            },
+            ArnLike: {
+              'aws:SourceArn': `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}`
+            }
+          }
+        }]
+      }),
+      inlinePolicy: [{
+        name: 'sharepoint-datasource-policy',
+        policy: JSON.stringify({
+          Version: '2012-10-17',
+          Statement: [{
+            Sid: 'AllowsAmazonQToGetS3Objects',
+            Action: ['s3:GetObject'],
+            Resource: [`${certificateBucket.bucket.arn}/*`],
+            Effect: 'Allow',
+            Condition: {
+              StringEquals: {
+                'aws:ResourceAccount': '\${aws:PrincipalAccount}'
+              }
+            }
+          },
+          {
+            Sid: 'AllowsAmazonQToGetSecret',
+            Effect: 'Allow',
+            Action: ['secretsmanager:GetSecretValue'],
+            Resource: [secret.arn]
+          },
+          {
+            Sid: 'AllowsAmazonQToDecryptSecret',
+            Effect: 'Allow',
+            Action: ['kms:Decrypt'],
+            Resource: [`arn:aws:kms:${props.region}:\${aws:PrincipalAccount}:key/*`],
+            Condition: {
+              StringLike: {
+                'kms:ViaService': ['secretsmanager.*.amazonaws.com']
+              }
+            }
+          },
+          {
+            Sid: 'AllowsAmazonQToIngestDocuments',
+            Effect: 'Allow',
+            Action: [
+              'qbusiness:BatchPutDocument',
+              'qbusiness:BatchDeleteDocument'
+            ],
+            Resource: `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`
+          },
+          {
+            Sid: 'AllowsAmazonQToIngestPrincipalMapping',
+            Effect: 'Allow',
+            Action: [
+              'qbusiness:PutGroup',
+              'qbusiness:CreateUser',
+              'qbusiness:DeleteGroup',
+              'qbusiness:UpdateUser',
+              'qbusiness:ListGroups'
+            ],
+            Resource: [
+              `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}`,
+              `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`,
+              `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}/data-source/*`
+            ]
+          }]
+        })
+      }]
     });
     super(scope, name, {
       typeName: 'AWS::QBusiness::DataSource',
@@ -40,39 +153,38 @@ export class SharePointDataSourceConstruct extends CloudcontrolapiResource {
           IndexId: props.indexId,
           RoleArn: role.arn,
           enableIdentityCrawler: true,
-          SyncSchedule: 'cron(0 0 ? * * *)',
+          SyncSchedule: getCronExpression(props.configuration?.schedule ?? 'daily'),
           additionalProperties: {
-            inclusionFileTypePatterns: [],
-            crawlPages: true,
-            deletionProtectionThreshold: "0",
+            inclusionFileTypePatterns: props.configuration?.inclusionFileTypePatterns ?? [],
+            crawlPages: props.configuration?.crawlPages ?? true,
+            deletionProtectionThreshold: props.configuration?.deletionProtectionThreshold ?? "0",
             aclConfiguration: "ACLWithLDAPEmailFmt",
             proxyPort: "",
             includeSupportedFileType: false,
             isCrawlAdGroupMapping: false,
-            crawlListData: true,
-            crawlComments: true,
+            crawlListData: props.configuration?.crawlListData ?? true,
+            crawlComments: props.configuration?.crawlComments ?? true,
             fieldForUserId: "uuid",
-            enableDeletionProtection: false,
+            enableDeletionProtection: props.configuration?.enableDeletionProtection ?? false,
             inclusionOneNoteSectionNamePatterns: [],
-            crawlFiles: true,
+            crawlFiles: props.configuration?.crawlFiles ?? true,
             linkTitleFilterRegEx: [],
             exclusionOneNoteSectionNamePatterns: [],
-            exclusionFilePath: [],
-            exclusionFileTypePatterns: [],
+            exclusionFilePath: props.configuration?.exclusionFilePath ?? [],
+            exclusionFileTypePatterns: props.configuration?.exclusionFileTypePatterns ?? [],
             inclusionOneNotePageNamePatterns: [],
-            maxFileSizeInMegaBytes: "50",
+            maxFileSizeInMegaBytes: props.configuration?.maxFileSizeInMegaBytes ?? "50",
             isCrawlLocalGroupMapping: true,
-            crawlEvents: true,
+            crawlEvents: props.configuration?.crawlEvents ?? true,
             pageTitleFilterRegEx: [],
-            crawlLinks: true,
-            crawlAttachment: true,
+            crawlLinks: props.configuration?.crawlLinks ?? true,
+            crawlAttachment: props.configuration?.crawlAttachment ?? true,
             exclusionOneNotePageNamePatterns: [],
-            exclusionFileNamePatterns: [],
+            exclusionFileNamePatterns: props.configuration?.exclusionFileNamePatterns ?? [],
             eventTitleFilterRegEx: [],
-            inclusionFileNamePatterns: [],
+            inclusionFileNamePatterns: props.configuration?.inclusionFileNamePatterns ?? [],
             crawlAcl: true,
-            inclusionFilePath: []
-            // TODO: Make these configurable.
+            inclusionFilePath: props.configuration?.inclusionFilePath ?? []
           },
           repositoryConfigurations: {
             repositoryConfigurations: {
@@ -256,7 +368,6 @@ export class SharePointDataSourceConstruct extends CloudcontrolapiResource {
     // TODO: Trigger an initial crawl.
   }
 }
-
 export interface SharePointDataSourceConstructProps extends Omit<CloudcontrolapiResourceConfig, 'typeName' | 'desiredState'> {
   /**
    * Name to be used when displaying the data source in console.
@@ -275,11 +386,19 @@ export interface SharePointDataSourceConstructProps extends Omit<Cloudcontrolapi
    */
   indexId: string;
   /**
-   *
+   * Sharepoint Domain.
    */
   domain: string;
   /**
-   *
+   * Sharepoint Tenant ID.
    */
   tenantId: string;
+  /**
+   * Region of the QBusiness Application.
+   */
+  region: string;
+  /**
+   * SharePoint configuration.
+   */
+  configuration?: SharePointConfiguration;
 }

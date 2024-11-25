@@ -1,1 +1,38 @@
-{}
+{
+  "arcanum-demo": {
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "apps": {
+      "example": {}
+    },
+    "webCrawlerConfigs": [
+      {
+        "url": "https://arcanum.ai/"
+      }
+    ],
+    "sharePointConfigs": {
+      "tenantId": "1234567890",
+      "domain": "arcanum.ai",
+      "siteUrls": ["https://arcanum.ai/"],
+      "configuration": {
+        "enableDeletionProtection": false,
+        "deletionProtectionThreshold": "0",
+        "crawlListData": true,
+        "crawlComments": true,
+        "crawlPages": true,
+        "crawlFiles": true,
+        "crawlEvents": true,
+        "crawlLinks": true,
+        "crawlAttachment": true,
+        "maxFileSizeInMegaBytes": "50",
+        "inclusionFileTypePatterns": [],
+        "exclusionFileTypePatterns": [],
+        "inclusionFileNamePatterns": [],
+        "exclusionFileNamePatterns": [],
+        "inclusionFilePath": [],
+        "exclusionFilePath": [],
+        "schedule": "daily"
+      }
+    }
+  }
+}
