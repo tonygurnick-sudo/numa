@@ -20,7 +20,7 @@ import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as path from 'node:path';
 import { WebDataSourceConstruct } from './data-sources/web-datasource-construct';
-import { SharePointDataSourceConstruct } from './data-sources/sharepoint-datasource-construct';
+import { SharePointDataSourceConstruct, SharePointDataSourceConstructProps } from './data-sources/sharepoint-datasource-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -498,8 +498,17 @@ export class CoreNumaInfra extends Construct {
       });
     }
 
-    for (const SharePointDataSource of props.SharePointConfigs) {
-      new SharePointDataSourceConstruct(this, SharePointDataSource.name, {});
+    for (const sharePointDataSource of props.sharePointConfigs ?? []) {
+      new SharePointDataSourceConstruct(this, sharePointDataSource.name, {
+        displayName: sharePointDataSource.displayName,
+        siteUrls: sharePointDataSource.siteUrls,
+        applicationId: applicationId,
+        indexId: indexId,
+        domain: sharePointDataSource.domain,
+        tenantId: sharePointDataSource.tenantId,
+        region: props.region ?? 'us-east-1',
+        configuration: sharePointDataSource.configuration
+      });
     }
 
     new TerraformOutput(this, 'webex-url', {
@@ -531,4 +540,5 @@ export interface CoreNumaInfraProps {
   temporaryPasswordValidityDays?: number;
   passwordLength?: number;
   mfa?: boolean;
+  sharePointConfigs?: SharePointDataSourceConstructProps[];	
 }
