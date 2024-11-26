@@ -32,7 +32,7 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
       bucketPrefix: 'certificate',
     });
     const role = new IamRole(scope, name + '-role', {
-      assumeRolePolicy: JSON.stringify({
+      assumeRolePolicy: Fn.jsonencode({
         Version: '2012-10-17',
         Statement: [{
           Sid: 'AllowsAmazonQToAssumeRoleForServicePrincipal',
@@ -53,7 +53,7 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
       }),
       inlinePolicy: [{
         name: 'sharepoint-datasource-policy',
-        policy: JSON.stringify({
+        policy: Fn.jsonencode({
           Version: '2012-10-17',
           Statement: [{
             Sid: 'AllowsAmazonQToGetS3Objects',

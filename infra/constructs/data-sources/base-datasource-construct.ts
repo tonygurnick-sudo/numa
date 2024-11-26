@@ -22,7 +22,7 @@ export interface BaseDataSourceConfig extends Omit<CloudcontrolapiResourceConfig
   region: string;
   /**
    * Schedule for data source synchronization.
-   * @default 'weekly'
+   * @default 'daily'
    */
   schedule?: Schedule;
 }
@@ -52,7 +52,7 @@ export abstract class BaseDataSourceConstruct extends CloudcontrolapiResource {
         DisplayName: config.displayName,
         IndexId: config.indexId,
         Configuration: {
-          SyncSchedule: BaseDataSourceConstruct.getCronExpressionStatic(config.schedule ?? 'weekly'),
+          SyncSchedule: BaseDataSourceConstruct.getCronExpressionStatic(config.schedule ?? 'daily'),
         },
       }),
     });
