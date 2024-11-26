@@ -28,10 +28,7 @@ export interface BaseDataSourceConfig extends Omit<CloudcontrolapiResourceConfig
 }
 
 export abstract class BaseDataSourceConstruct extends CloudcontrolapiResource {
-  protected readonly applicationId: string;
-  protected readonly indexId: string;
-  protected readonly region: string;
-  protected desiredState: string;
+  protected readonly desiredState!: string;
 
   private static getCronExpressionStatic(schedule: Schedule): string {
     switch (schedule) {
@@ -55,21 +52,9 @@ export abstract class BaseDataSourceConstruct extends CloudcontrolapiResource {
         DisplayName: config.displayName,
         IndexId: config.indexId,
         Configuration: {
-          SyncSchedule: BaseDataSourceConstruct.getCronExpressionStatic(config.schedule ?? 'daily'),
+          SyncSchedule: BaseDataSourceConstruct.getCronExpressionStatic(config.schedule ?? 'weekly'),
         },
       }),
-    });
-
-    this.applicationId = config.applicationId;
-    this.indexId = config.indexId;
-    this.region = config.region;
-    this.desiredState = JSON.stringify({
-      ApplicationId: config.applicationId,
-      DisplayName: config.displayName,
-      IndexId: config.indexId,
-      Configuration: {
-        SyncSchedule: this.getCronExpression(config.schedule ?? 'weekly'),
-      },
     });
   }
 

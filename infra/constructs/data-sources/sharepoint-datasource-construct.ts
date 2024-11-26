@@ -1,10 +1,9 @@
-import { CloudcontrolapiResource, CloudcontrolapiResourceConfig } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
 import { Construct } from 'constructs';
 import { Fn, TerraformOutput } from 'cdktf';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
-import { BaseDataSourceConstruct, Schedule } from './base-datasource-construct';
+import { BaseDataSourceConfig, BaseDataSourceConstruct, Schedule } from './base-datasource-construct';
 
 interface SharePointConfiguration {
   enableDeletionProtection?: boolean;
@@ -118,8 +117,41 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
       indexId: props.indexId,
       displayName: props.displayName,
       region: props.region,
-      schedule: props.configuration?.schedule,
+      schedule: props.configuration?.schedule ?? 'daily',
     });
+
+    const defaultAdditionalProperties = {
+      aclConfiguration: "ACLWithLDAPEmailFmt",
+      proxyPort: "",
+      includeSupportedFileType: false,
+      isCrawlAdGroupMapping: false,
+      fieldForUserId: "uuid",
+      inclusionOneNoteSectionNamePatterns: [],
+      linkTitleFilterRegEx: [],
+      exclusionOneNoteSectionNamePatterns: [],
+      inclusionOneNotePageNamePatterns: [],
+      isCrawlLocalGroupMapping: true,
+      pageTitleFilterRegEx: [],
+      exclusionOneNotePageNamePatterns: [],
+      eventTitleFilterRegEx: [],
+      crawlAcl: true,
+      inclusionFileTypePatterns: [],
+      crawlPages: true,
+      deletionProtectionThreshold: "0",
+      crawlListData: true,
+      crawlComments: true,
+      enableDeletionProtection: false,
+      crawlFiles: true,
+      exclusionFilePath: [],
+      exclusionFileTypePatterns: [],
+      maxFileSizeInMegaBytes: "50",
+      crawlEvents: true,
+      crawlLinks: true,
+      crawlAttachment: true,
+      exclusionFileNamePatterns: [],
+      inclusionFileNamePatterns: [],
+      inclusionFilePath: []
+    };
 
     this.desiredState = Fn.jsonencode({
       ApplicationId: props.applicationId,
@@ -146,36 +178,8 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
         enableIdentityCrawler: true,
         SyncSchedule: this.getCronExpression(props.configuration?.schedule ?? 'daily'),
         additionalProperties: {
-          inclusionFileTypePatterns: props.configuration?.inclusionFileTypePatterns ?? [],
-          crawlPages: props.configuration?.crawlPages ?? true,
-          deletionProtectionThreshold: props.configuration?.deletionProtectionThreshold ?? "0",
-          aclConfiguration: "ACLWithLDAPEmailFmt",
-          proxyPort: "",
-          includeSupportedFileType: false,
-          isCrawlAdGroupMapping: false,
-          crawlListData: props.configuration?.crawlListData ?? true,
-          crawlComments: props.configuration?.crawlComments ?? true,
-          fieldForUserId: "uuid",
-          enableDeletionProtection: props.configuration?.enableDeletionProtection ?? false,
-          inclusionOneNoteSectionNamePatterns: [],
-          crawlFiles: props.configuration?.crawlFiles ?? true,
-          linkTitleFilterRegEx: [],
-          exclusionOneNoteSectionNamePatterns: [],
-          exclusionFilePath: props.configuration?.exclusionFilePath ?? [],
-          exclusionFileTypePatterns: props.configuration?.exclusionFileTypePatterns ?? [],
-          inclusionOneNotePageNamePatterns: [],
-          maxFileSizeInMegaBytes: props.configuration?.maxFileSizeInMegaBytes ?? "50",
-          isCrawlLocalGroupMapping: true,
-          crawlEvents: props.configuration?.crawlEvents ?? true,
-          pageTitleFilterRegEx: [],
-          crawlLinks: props.configuration?.crawlLinks ?? true,
-          crawlAttachment: props.configuration?.crawlAttachment ?? true,
-          exclusionOneNotePageNamePatterns: [],
-          exclusionFileNamePatterns: props.configuration?.exclusionFileNamePatterns ?? [],
-          eventTitleFilterRegEx: [],
-          inclusionFileNamePatterns: props.configuration?.inclusionFileNamePatterns ?? [],
-          crawlAcl: true,
-          inclusionFilePath: props.configuration?.inclusionFilePath ?? []
+          ...defaultAdditionalProperties,
+          ...props.configuration
         },
         repositoryConfigurations: {
           repositoryConfigurations: {
@@ -359,7 +363,7 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
   }
 }
 
-export interface SharePointDataSourceConstructProps extends Omit<CloudcontrolapiResourceConfig, 'typeName' | 'desiredState'> {
+export interface SharePointDataSourceConstructProps extends BaseDataSourceConfig {
   /**
    * Name to be used when displaying the data source in console.
    */

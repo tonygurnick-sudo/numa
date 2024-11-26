@@ -1,7 +1,6 @@
-import { CloudcontrolapiResource, CloudcontrolapiResourceConfig } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
 import { Construct } from 'constructs';
 import { Fn } from 'cdktf';
-import { BaseDataSourceConstruct } from './base-datasource-construct';
+import { BaseDataSourceConfig, BaseDataSourceConstruct } from './base-datasource-construct';
 
 export class WebDataSourceConstruct extends BaseDataSourceConstruct {
   constructor(scope: Construct, name: string, props: WebDataSourceConstructProps) {
@@ -82,7 +81,7 @@ export class WebDataSourceConstruct extends BaseDataSourceConstruct {
   }
 }
 
-export interface WebDataSourceConstructProps extends Omit<CloudcontrolapiResourceConfig, 'typeName' | 'desiredState'> {
+export interface WebDataSourceConstructProps extends BaseDataSourceConfig {
   /**
    * Name to be used when displaying the data source in console.
    */
