@@ -50,7 +50,7 @@
     "clientAccountId": "474668383176",
     "webCrawlerConfigs": [
       {
-        "siteMapFiles": ["/workspaces/numa/beyond-expectations-sitemap.xml"]
+        "siteMapFiles": ["infra\\client-sitemaps\beyond-expectations-sitemap.xml"]
       },
       {
         "url": "https://help.core.cin7.com/hc/en-us/sections/10207278703247-Getting-started"
