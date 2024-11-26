@@ -47,7 +47,18 @@
     ]
   },
   "beyond-expectations": {
-    "clientAccountId": "474668383176"
+    "clientAccountId": "474668383176",
+    "webCrawlerConfigs": [
+      {
+        "siteMapFiles": ["/workspaces/numa/beyond-expectations-sitemap.xml"]
+      },
+      {
+        "url": "https://help.core.cin7.com/hc/en-us/sections/10207278703247-Getting-started"
+      },
+      {
+        "url": "https://help.core.cin7.com/hc/en-us/categories/8314483542671-General"
+      }
+    ]
   },
   "broken-hill-city-council": {
     "clientAccountId": "863518418134",
