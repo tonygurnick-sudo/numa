@@ -19,6 +19,9 @@ variables:
   matrix:
     - PYTHON_WORKING_DIRECTORY:
         - deployer
+        - lambdas/example-1
+        - lambdas/example-2
+        - lambdas/example-3
         - lambdas/extract-content-from-file
         - lambdas/meeting-tools-app-formatting
         - lambdas/structured-data-extraction
