@@ -11,6 +11,7 @@
       }
     ],
     "sharePointConfigs": {
+      "displayName": "arcanum-demo-dev",
       "tenantId": "1234567890",
       "domain": "arcanum.ai",
       "siteUrls": ["https://arcanum.ai/"],

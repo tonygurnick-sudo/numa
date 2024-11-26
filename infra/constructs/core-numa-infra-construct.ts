@@ -494,12 +494,13 @@ export class CoreNumaInfra extends Construct {
         url: crawlerDataSource.url,
         applicationId: application.id,
         indexId: indexId,
+        region: props.region ?? 'us-east-1',
         roleArn: dataRole.arn,
       });
     }
 
     for (const sharePointDataSource of props.sharePointConfigs ?? []) {
-      new SharePointDataSourceConstruct(this, sharePointDataSource.name, {
+      new SharePointDataSourceConstruct(this, `data-source-sharepoint-${sharePointDataSource.displayName}`, {
         displayName: sharePointDataSource.displayName,
         siteUrls: sharePointDataSource.siteUrls,
         applicationId: applicationId,

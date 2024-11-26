@@ -4,6 +4,7 @@ import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 import { BaseDataSourceConfig, BaseDataSourceConstruct, Schedule } from './base-datasource-construct';
+import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 
 interface SharePointConfiguration {
   enableDeletionProtection?: boolean;
@@ -27,11 +28,12 @@ interface SharePointConfiguration {
 
 export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
   constructor(scope: Construct, name: string, props: SharePointDataSourceConstructProps) {
-    const secret = new SecretsmanagerSecret(scope, name + '-secret', {});
-    const certificateBucket = new PrivateBucket(scope, name + '-certificate-bucket', {
+    const secret = new SecretsmanagerSecret(scope, `${name}-secret`, {});
+    const certificateBucket = new PrivateBucket(scope, `${name}-certificate-bucket`, {
       bucketPrefix: 'certificate',
     });
-    const role = new IamRole(scope, name + '-role', {
+
+    const role = new IamRole(scope, `${name}-role`, {
       assumeRolePolicy: Fn.jsonencode({
         Version: '2012-10-17',
         Statement: [{
@@ -43,73 +45,75 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
           Action: 'sts:AssumeRole',
           Condition: {
             StringEquals: {
-              'aws:SourceAccount': '${aws:PrincipalAccount}'
+              'aws:SourceAccount': '$${aws:PrincipalAccount}'
             },
             ArnLike: {
-              'aws:SourceArn': `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}`
+              'aws:SourceArn': `arn:aws:qbusiness:${props.region}:\$\${aws:PrincipalAccount}:application/${props.applicationId}`
             }
           }
         }]
-      }),
-      inlinePolicy: [{
-        name: 'sharepoint-datasource-policy',
-        policy: Fn.jsonencode({
-          Version: '2012-10-17',
-          Statement: [{
-            Sid: 'AllowsAmazonQToGetS3Objects',
-            Action: ['s3:GetObject'],
-            Resource: [`${certificateBucket.bucket.arn}/*`],
-            Effect: 'Allow',
-            Condition: {
-              StringEquals: {
-                'aws:ResourceAccount': '\${aws:PrincipalAccount}'
-              }
+      })
+    });
+
+    new IamRolePolicy(scope, `${name}-policy`, {
+      name: `${name}-policy`,
+      role: role.name,
+      policy: Fn.jsonencode({
+        Version: '2012-10-17',
+        Statement: [{
+          Sid: 'AllowsAmazonQToGetS3Objects',
+          Action: ['s3:GetObject'],
+          Resource: [`${certificateBucket.bucket.arn}/*`],
+          Effect: 'Allow',
+          Condition: {
+            StringEquals: {
+              'aws:ResourceAccount': '\${aws:PrincipalAccount}'
             }
-          },
-          {
-            Sid: 'AllowsAmazonQToGetSecret',
-            Effect: 'Allow',
-            Action: ['secretsmanager:GetSecretValue'],
-            Resource: [secret.arn]
-          },
-          {
-            Sid: 'AllowsAmazonQToDecryptSecret',
-            Effect: 'Allow',
-            Action: ['kms:Decrypt'],
-            Resource: [`arn:aws:kms:${props.region}:\${aws:PrincipalAccount}:key/*`],
-            Condition: {
-              StringLike: {
-                'kms:ViaService': ['secretsmanager.*.amazonaws.com']
-              }
+          }
+        },
+        {
+          Sid: 'AllowsAmazonQToGetSecret',
+          Effect: 'Allow',
+          Action: ['secretsmanager:GetSecretValue'],
+          Resource: [secret.arn]
+        },
+        {
+          Sid: 'AllowsAmazonQToDecryptSecret',
+          Effect: 'Allow',
+          Action: ['kms:Decrypt'],
+          Resource: [`arn:aws:kms:${props.region}:\${aws:PrincipalAccount}:key/*`],
+          Condition: {
+            StringLike: {
+              'kms:ViaService': ['secretsmanager.*.amazonaws.com']
             }
-          },
-          {
-            Sid: 'AllowsAmazonQToIngestDocuments',
-            Effect: 'Allow',
-            Action: [
-              'qbusiness:BatchPutDocument',
-              'qbusiness:BatchDeleteDocument'
-            ],
-            Resource: `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`
-          },
-          {
-            Sid: 'AllowsAmazonQToIngestPrincipalMapping',
-            Effect: 'Allow',
-            Action: [
-              'qbusiness:PutGroup',
-              'qbusiness:CreateUser',
-              'qbusiness:DeleteGroup',
-              'qbusiness:UpdateUser',
-              'qbusiness:ListGroups'
-            ],
-            Resource: [
-              `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}`,
-              `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`,
-              `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}/data-source/*`
-            ]
-          }]
-        })
-      }]
+          }
+        },
+        {
+          Sid: 'AllowsAmazonQToIngestDocuments',
+          Effect: 'Allow',
+          Action: [
+            'qbusiness:BatchPutDocument',
+            'qbusiness:BatchDeleteDocument'
+          ],
+          Resource: `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`
+        },
+        {
+          Sid: 'AllowsAmazonQToIngestPrincipalMapping',
+          Effect: 'Allow',
+          Action: [
+            'qbusiness:PutGroup',
+            'qbusiness:CreateUser',
+            'qbusiness:DeleteGroup',
+            'qbusiness:UpdateUser',
+            'qbusiness:ListGroups'
+          ],
+          Resource: [
+            `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}`,
+            `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`,
+            `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}/data-source/*`
+          ]
+        }]
+      })
     });
 
     super(scope, name, {
@@ -117,7 +121,7 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
       indexId: props.indexId,
       displayName: props.displayName,
       region: props.region,
-      schedule: props.configuration?.schedule ?? 'daily',
+      schedule: props.configuration?.schedule,
     });
 
     const defaultAdditionalProperties = {

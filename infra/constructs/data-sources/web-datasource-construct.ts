@@ -12,6 +12,10 @@ interface WebConfiguration {
   crawlSubDomain?: boolean;
   crawlAllDomain?: boolean;
   crawlAttachments?: boolean;
+  /**
+   * Schedule for data source synchronization.
+   * @default 'weekly'
+   */
   schedule?: Schedule;
 }
 
