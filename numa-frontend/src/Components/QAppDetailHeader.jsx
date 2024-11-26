@@ -53,6 +53,7 @@ const QAppDetailHeader = () => {
     }
   };
 
+
   // DELETE
   const handleDeleteApp = async () => {
     if (!qAppsClient || !qAppId) return;
