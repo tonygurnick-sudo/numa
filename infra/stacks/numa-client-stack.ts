@@ -1,3 +1,4 @@
+import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdktf-util';
 import { Construct } from 'constructs';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
@@ -51,19 +52,24 @@ export class NumaClientStack extends ArcanumStack {
       webExUrl: core.webExUrl,
     });
 
-    Object.entries(props.config.apps ?? {}).forEach(
-      ([appId, appConfig]) =>
-        new (lookupAppFromId(appId))(this, appId, {
-          ...appConfig,
-          apiGatewayId: fe.apiGateway.id,
-        }),
-    );
+    const outputsBucket = new PrivateBucket(this, 'outputs-bucket', {
+      bucket: `numa-${props.client}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}` + '-outputs',
+    });
+
+    Object.entries(props.config.apps ?? {}).forEach(([appId, appConfig]) => {
+      const app = lookupAppFromId(appId);
+      new app(this, appId, {
+        ...appConfig,
+        apiGatewayId: fe.apiGateway.id,
+        outputsBucket: outputsBucket.bucket,
+      });
+    });
   }
 }
 
 interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
   customDomain?: string;
-  apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId'>>;
+  apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId' | 'outputsBucket'>>;
 }
 type InputConfig = Omit<ClientConfig, 'client' | 'domainName'>;
 const clientConfigDev = _clientConfigDev as Record<string, InputConfig>;

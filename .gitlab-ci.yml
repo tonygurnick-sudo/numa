@@ -25,6 +25,8 @@ variables:
         - lambdas/extract-content-from-file
         - lambdas/meeting-tools-app-formatting
         - lambdas/structured-data-extraction
+        - lambdas/step-function-start
+        - lambdas/step-function-status
         - lib/bedrock
 
 python-lint:

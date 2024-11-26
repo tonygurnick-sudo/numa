@@ -1,7 +1,38 @@
+import enum
 import logging
 import os
+import typing
 
 import structlog
+
+
+# see https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html#api-gateway-simple-proxy-for-lambda-output-format
+class ApiGatewayProxyIntegrationResponse(typing.TypedDict):
+    body: str
+    headers: typing.NotRequired[dict[str, str]]
+    isBase64Encoded: typing.NotRequired[bool]
+    multiValueHeaders: typing.NotRequired[dict[str, list[str]]]
+    statusCode: int
+
+
+class StepFunctionProcessingStatus(typing.TypedDict):
+    status: typing.Literal["PROCESSING"]
+    result: typing.NotRequired[dict]
+
+
+class StepFunctionSuccessStatus(typing.TypedDict):
+    status: typing.Literal["SUCCESS"]
+    result: dict
+
+
+class StepFunctionErrorStatus(typing.TypedDict):
+    status: typing.Literal["UNKNOWN"] | typing.Literal["FAILURE"]
+    message: str
+
+
+StepFunctionStatus = (
+    StepFunctionProcessingStatus | StepFunctionSuccessStatus | StepFunctionErrorStatus
+)
 
 
 def setup_logging():

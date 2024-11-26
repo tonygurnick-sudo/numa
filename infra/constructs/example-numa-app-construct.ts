@@ -1,3 +1,6 @@
+import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
+import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import { BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
 
@@ -7,26 +10,87 @@ export class ExampleNumaApp extends BaseNumaApp {
     super(scope, name, props);
 
     // Add a lambda that responds to a POST at ${prefix}/a
-    this.addLambdaFunction(this, 'post-lambda', {
+    this.addLambdaFunction(this, 'post-lambda-example', {
       route: {
         verb: 'POST',
         path: 'a',
       },
-      functionName: 'example-1',
+      lambdaDirectory: 'example-1',
     });
 
     // Add a lambda that responds to a GET at ${prefix}/b
-    this.addLambdaFunction(this, 'get-lambda', {
+    this.addLambdaFunction(this, 'get-lambda-example', {
       route: {
         verb: 'GET',
         path: 'b',
       },
-      functionName: 'example-2',
+      lambdaDirectory: 'example-2',
     });
 
     // Add a lambda that doesn't have a route, e.g. for use in a Step Function.
-    this.addLambdaFunction(this, 'non-routed-lambda', {
-      functionName: 'example-3',
+    const stepFunctionLambda = this.addLambdaFunction(this, 'non-routed-lambda-example', {
+      lambdaDirectory: 'example-3',
+      timeout: 900,
+    });
+
+    const stepFunctionDefinition: asl.StateMachine = {
+      StartAt: 'WriteProcessingStatus',
+      States: {
+        WriteProcessingStatus: {
+          Type: 'Task',
+          Next: 'RunLambda',
+          Parameters: {
+            Body: '{"status":"PROCESSING"}',
+            Bucket: `${props.outputsBucket}`,
+            'Key.$': `States.Format('{}/{}/status.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)`,
+          },
+          Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
+        },
+        RunLambda: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::lambda:invoke',
+          Parameters: {
+            FunctionName: `${stepFunctionLambda.arn}`,
+            Payload: {},
+          },
+          Next: 'WriteSuccessStatus',
+        },
+        WriteSuccessStatus: {
+          Type: 'Task',
+          Next: 'Success',
+          Parameters: {
+            Body: '{"status":"SUCCESS","result":{}}',
+            Bucket: `${props.outputsBucket}`,
+            'Key.$': `States.Format('{}/{}/status.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)`,
+          },
+          Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
+        },
+        Success: {
+          Type: 'Succeed',
+        },
+      },
+    };
+
+    const stepFunctionName = 'example-step-function';
+    const stepFunctionPolicy = new IamPolicy(this, stepFunctionName + '_additional-policy', {
+      policy: new DataAwsIamPolicyDocument(this, stepFunctionName + '_additional-policy-document', {
+        statement: [
+          {
+            actions: ['lambda:InvokeFunction'],
+            resources: [stepFunctionLambda.arn],
+          },
+          {
+            actions: ['iam:PassRole'],
+            resources: [stepFunctionLambda.role],
+          },
+        ],
+      }).json,
+    });
+    this.addStepFunction(this, stepFunctionName, {
+      appName: name,
+      outputsBucket: props.outputsBucket,
+      policyArns: [stepFunctionPolicy.arn],
+      stepFunctionDefinition,
     });
   }
 }
