@@ -9,13 +9,24 @@
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "apps": {
-      "example": { }
+      "example": {}
     },
     "webCrawlerConfigs": [
       {
         "url": "https://arcanum.ai/"
       }
     ]
+  },
+  "arcanum-demo-nick": {
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "sharePointConfigs": [{
+      "displayName": "arcanum-demo-nick",
+      "tenantId": "1234567890",
+      "domain": "arcanum-test",
+      "siteUrls": ["https://arcanum.ai.sharepoint.test/"],
+      "configuration": {}
+    }]
   },
   "arcanum-prod-numa-demo": {
     "clientAccountId": "619071323471"

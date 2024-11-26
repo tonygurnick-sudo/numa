@@ -34,7 +34,7 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
     });
 
     const role = new IamRole(scope, `${name}-role`, {
-      assumeRolePolicy: Fn.jsonencode({
+      assumeRolePolicy: JSON.stringify({
         Version: '2012-10-17',
         Statement: [{
           Sid: 'AllowsAmazonQToAssumeRoleForServicePrincipal',
@@ -58,7 +58,7 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
     new IamRolePolicy(scope, `${name}-policy`, {
       name: `${name}-policy`,
       role: role.name,
-      policy: Fn.jsonencode({
+      policy: JSON.stringify({
         Version: '2012-10-17',
         Statement: [{
           Sid: 'AllowsAmazonQToGetS3Objects',
@@ -67,7 +67,7 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
           Effect: 'Allow',
           Condition: {
             StringEquals: {
-              'aws:ResourceAccount': '\${aws:PrincipalAccount}'
+              'aws:ResourceAccount': '$${aws:PrincipalAccount}'
             }
           }
         },
@@ -81,7 +81,7 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
           Sid: 'AllowsAmazonQToDecryptSecret',
           Effect: 'Allow',
           Action: ['kms:Decrypt'],
-          Resource: [`arn:aws:kms:${props.region}:\${aws:PrincipalAccount}:key/*`],
+          Resource: [`arn:aws:kms:${props.region}:\$\${aws:PrincipalAccount}:key/*`],
           Condition: {
             StringLike: {
               'kms:ViaService': ['secretsmanager.*.amazonaws.com']
@@ -95,7 +95,7 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
             'qbusiness:BatchPutDocument',
             'qbusiness:BatchDeleteDocument'
           ],
-          Resource: `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`
+          Resource: `arn:aws:qbusiness:${props.region}:\$\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`
         },
         {
           Sid: 'AllowsAmazonQToIngestPrincipalMapping',
@@ -108,9 +108,9 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
             'qbusiness:ListGroups'
           ],
           Resource: [
-            `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}`,
-            `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`,
-            `arn:aws:qbusiness:${props.region}:\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}/data-source/*`
+            `arn:aws:qbusiness:${props.region}:\$\${aws:PrincipalAccount}:application/${props.applicationId}`,
+            `arn:aws:qbusiness:${props.region}:\$\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`,
+            `arn:aws:qbusiness:${props.region}:\$\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}/data-source/*`
           ]
         }]
       })
