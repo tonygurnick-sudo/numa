@@ -24,7 +24,7 @@ To install the dependencies run:
 yarn install
 ```
 
-If you receive error messages about dependencies not being found, see [the setup instructions for yarn >= 2](https://gitlab.com/arcanumai/cdktf-resources#migrating-to-yarn--v2).
+If you receive error messages about dependencies not being found, see [the setup instructions for yarn >= 2](https://gitlab.com/arcanumai/cdktf-resources/-/blob/main/README.md#accessing-the-packages).
 
 ### AWS Profiles
 
@@ -34,10 +34,28 @@ The deploy script for this project requires you to have access to the arcanum-q-
 
 Usage of this project is facilitated via the `yarn cdktf` helper script. This requires a `TF_ENVIRONMENT` variable to be set. For all development, this should be set to `dev`.
 
+---
+
+**Note**
+
+Some stack require the lambdas to be build, a quick way of doing that is (from
+the infra directory):
+
+```bash
+for directory in ../lambdas/*/; do
+pushd $directory;
+poetry build-lambda;
+popd;
+done;
+```
+
+---
+
 The main command to give to `yarn cdktf` is `plan`. This will produce a plan of the changes that the infracode will make to the infrastructure.
 
 ```bash
 export TF_ENVIRONMENT=dev # Only need to do this once per shell.
+export AWS_REGION=us-east-1
 yarn cdktf plan
 ```
 
