@@ -9,6 +9,7 @@ import os
 import boto3
 
 import bedrock
+import helpers
 import textract
 
 s3_client = boto3.client("s3")
@@ -34,6 +35,8 @@ class Document:
 
 
 def lambda_handler(event: dict, _context: dict) -> dict:
+    helpers.setup_logging()
+
     input_bucket = event["input_bucket"]
     output_bucket = event.get("output_bucket", input_bucket)
     input_key = event["input_key"]

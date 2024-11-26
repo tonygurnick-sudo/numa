@@ -13,6 +13,7 @@ python = "~3.12.0"
 
 bedrock = {path = "../../lib/bedrock", develop = true}
 boto3 = "1.35.71"
+helpers = {path = "../../lib/helpers", develop = true}
 structlog = "24.4.0"
 
 [tool.poetry.group.dev.dependencies]

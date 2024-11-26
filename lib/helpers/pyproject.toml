@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "helpers"
+version = "0.1.0"
+description = ""
+authors = ["Arcanum AI"]
+readme = "README.md"
+packages = [
+    { include = "helpers" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+structlog = "24.4.0"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "1.13.0"
+pylint = "3.3.1"
+pyright = "1.1.389"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

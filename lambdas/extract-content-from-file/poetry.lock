@@ -540,6 +540,22 @@ files = [
 ]
 
 [[package]]
+name = "helpers"
+version = "0.1.0"
+description = ""
+optional = false
+python-versions = "^3.12"
+files = []
+develop = true
+
+[package.dependencies]
+structlog = "24.4.0"
+
+[package.source]
+type = "directory"
+url = "../../lib/helpers"
+
+[[package]]
 name = "isort"
 version = "5.13.2"
 description = "A Python utility / library to sort Python imports."
@@ -832,4 +848,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "~3.12.0"
-content-hash = "98ed37127364c6e8c7bf4b7922a193b8d5dc4ee2a1868f3b64565bbf6cf41b16"
+content-hash = "c66e4801131ed84fb17a0429e6991ed5ea1ec0efa8b161f406696444925e7c62"
