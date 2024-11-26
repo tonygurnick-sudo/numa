@@ -271,8 +271,8 @@ __metadata:
   linkType: hard
 
 "@aws-sdk/client-s3@npm:^3.676.0":
-  version: 3.699.0
-  resolution: "@aws-sdk/client-s3@npm:3.699.0"
+  version: 3.700.0
+  resolution: "@aws-sdk/client-s3@npm:3.700.0"
   dependencies:
     "@aws-crypto/sha1-browser": "npm:5.2.0"
     "@aws-crypto/sha256-browser": "npm:5.2.0"
@@ -332,7 +332,7 @@ __metadata:
     "@smithy/util-utf8": "npm:^3.0.0"
     "@smithy/util-waiter": "npm:^3.1.9"
     tslib: "npm:^2.6.2"
-  checksum: 10c0/65afc42a25ef44506e9bc0f4c790ebc36f341d2b469ba2a5c9e18e8cbbaa0b484aacbdc9efb25d9e0f3ec4724608488beadf1b7560f26ed25f61fe43d69963ca
+  checksum: 10c0/ca72bb49949a5f5b221b7a3d6979dd5ad2a92fdc42522652b89191254478932e1f2e73f1f50921a82ff04c401d0bfcfa8cd946f4dd29a14571fccf35977fa8ba
   languageName: node
   linkType: hard
 
@@ -667,8 +667,8 @@ __metadata:
   linkType: hard
 
 "@aws-sdk/lib-storage@npm:^3.676.0":
-  version: 3.699.0
-  resolution: "@aws-sdk/lib-storage@npm:3.699.0"
+  version: 3.700.0
+  resolution: "@aws-sdk/lib-storage@npm:3.700.0"
   dependencies:
     "@smithy/abort-controller": "npm:^3.1.7"
     "@smithy/middleware-endpoint": "npm:^3.2.3"
@@ -678,8 +678,8 @@ __metadata:
     stream-browserify: "npm:3.0.0"
     tslib: "npm:^2.6.2"
   peerDependencies:
-    "@aws-sdk/client-s3": ^3.699.0
-  checksum: 10c0/aae6880730b5d870af10d3421be4913ecf562c3b290069c112c835e55b0928c4a4f1b953e9564e591effd7a329ed19323989dfb094d4f5170ad379da9b53e707
+    "@aws-sdk/client-s3": ^3.700.0
+  checksum: 10c0/41605fe7b4c5b4841e89dfa9ce01215d7eeff41e7221bd34fbd7d695715cdeec211d43a421ec5acb6462ff0d583cc4ce849d6f41f179dd20a25419cfb8661daf
   languageName: node
   linkType: hard
 
