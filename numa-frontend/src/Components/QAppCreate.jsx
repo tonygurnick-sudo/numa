@@ -1,10 +1,14 @@
-import { Button } from 'react-bootstrap';
+import { useState } from 'react';
+import { Button, Alert } from 'react-bootstrap';
 
 import { useAuth } from '../Providers/AuthProvider';
 import { createQApp } from '../qAppHelper';
 
-const QAppCreate = ({ setLoading, setError, setResponse }) => {
+const QAppCreate = () => {
   const { qAppsClient, loading: authLoading } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [response, setResponse] = useState(null);
 
   const handleCreateApp = async () => {
     if (!qAppsClient || authLoading) return;
@@ -17,16 +21,36 @@ const QAppCreate = ({ setLoading, setError, setResponse }) => {
 
   return (
     <>
-      {/* TODO  - create app form UI */}
+      {error && (
+        <Alert variant="danger" onClose={() => setError(null)} dismissible>
+          {error}
+        </Alert>
+      )}
+
+      {response && (
+        <Alert variant="success" onClose={() => setResponse(null)} dismissible>
+          App created successfully!
+        </Alert>
+      )}
 
       <Button
         type="submit"
         id="submit"
         className="btn btn-primary x-5 float-end"
         onClick={handleCreateApp}
+        disabled={loading || authLoading}
       >
-        <i className="bi bi-plus-circle me-2"></i>
-        Create New App (deploy a Q demo)
+        {loading ? (
+          <>
+            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Creating...
+          </>
+        ) : (
+          <>
+            <i className="bi bi-plus-circle me-2"></i>
+            Create New App (deploy a Q demo)
+          </>
+        )}
       </Button>
     </>
   );

@@ -5,20 +5,24 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { Preloader } from '../Components/Preloader';
+import { QAppCreate } from '../Components/QAppCreate';
 
 import { useNumaApp } from '../Providers/NumaAppProvider';
-
-// Remove or comment out the direct import
-// import appsManifest from '../Data/example-manifest.json';
+import { useAuth } from '../Providers/AuthProvider';
+import { fetchApps } from '../qAppHelper';
 
 const Dash = () => {
   const { error, setError, loading, setLoading, setNumaApps, numaApps } =
     useNumaApp();
+  const { qAppsClient } = useAuth();
+  const [qApps, setQApps] = useState([]);
+  const [qAppsLoading, setQAppsLoading] = useState(false);
+  const [qAppsError, setQAppsError] = useState(null);
 
   console.log('Dash Component Data:', { error, loading, numaApps }); // Debug log
 
   useEffect(() => {
-    const fetchApps = async () => {
+    const fetchAppsFromManifest = async () => {
       setLoading(true);
       try {
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -68,8 +72,30 @@ const Dash = () => {
       }
     };
 
-    fetchApps();
+    fetchAppsFromManifest();
   }, [setError, setLoading, setNumaApps]);
+
+  // // New effect for fetching Q Apps
+  // useEffect(() => {
+  //   const loadQApps = async () => {
+  //     if (!qAppsClient) return;
+
+  //     setQAppsLoading(true);
+  //     try {
+  //       const apps = await fetchApps(qAppsClient);
+  //       if (apps) {
+  //         setQApps(apps);
+  //       }
+  //     } catch (error) {
+  //       console.error('Error loading Q Apps:', error);
+  //       setQAppsError(error.message);
+  //     } finally {
+  //       setQAppsLoading(false);
+  //     }
+  //   };
+
+  //   loadQApps();
+  // }, [qAppsClient]);
 
   return (
     <>
@@ -83,12 +109,7 @@ const Dash = () => {
               </Col>
               <Col lg={3} className="p-5">
                 <>
-                  {/* here if we want to create app functionality */}
-                  {/* <QAppCreate
-                    setLoading={setLoading}
-                    setError={setError}
-                    setResponse={setResponse}
-                  /> */}
+                  <QAppCreate />
                 </>
               </Col>
             </Row>
@@ -167,6 +188,51 @@ const Dash = () => {
                       </div>
                     </Col>
                   ))}
+
+                {/* Q Apps Section */}
+                {/* <Col xs={12}>
+                  <h2 className="mt-4">Q Apps</h2>
+                  {qAppsError && (
+                    <Alert variant="danger" className="my-3">
+                      Error loading Q Apps: {qAppsError}
+                    </Alert>
+                  )}
+                  {qAppsLoading ? (
+                    <Preloader />
+                  ) : (
+                    <Row>
+                      {qApps?.map((app) => (
+                        <Col key={app.id} lg={6} className="flex">
+                          <div className="card card-apps">
+                            <div className="card-header">
+                              <Row>
+                                <Col lg={9}>{app?.title}</Col>
+                                <Col lg={3} className="right">
+                                  <label>v{app?.version || '1.0'}</label>
+                                </Col>
+                              </Row>
+                            </div>
+                            <div className="card-body">
+                              {app?.description}
+                            </div>
+                            <div className="card-footer">
+                              <Row className="justify-content-end">
+                                <Col>
+                                  <div className="tooltip clear"></div>
+                                </Col>
+                                <Col>
+                                  <div className="badge-status active right">
+                                    Active
+                                  </div>
+                                </Col>
+                              </Row>
+                            </div>
+                          </div>
+                        </Col>
+                      ))}
+                    </Row>
+                  )}
+                </Col> */}
               </>
             )}
           </Row>

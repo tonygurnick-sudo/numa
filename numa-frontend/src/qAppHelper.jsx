@@ -1,4 +1,4 @@
-import exampleItem from './Data/ExampleitemToCreate.json';
+import exampleItem from './Data/Meeting_Tools_Q_App_v27.json';
 import {
   CreateQAppCommand,
   CreateLibraryItemCommand,
@@ -20,57 +20,52 @@ export const startQappGetSession = async ({
   qAppsClient,
   qAppId,
   appVersion,
+  initialValues,
 }) => {
   if (!qAppsClient) return;
-
-  // Mocked session ID and response
-  const mockSessionId = 'mock-session-id-12345';
 
   try {
     const payload = {
       instanceId: APPLICATION_ID,
       appId: qAppId,
-      appVersion: appVersion,
-      initialValues: null,
+      appVersion: Number(appVersion),
+      initialValues: Array.isArray(initialValues) ? initialValues : []
     };
     console.log('start payload:', payload);
-    const start_command = new StartQAppSessionCommand(payload);
-    //const start_response = await qAppsClient.send(start_command);
+    const command = new StartQAppSessionCommand(payload);
+    const response = await qAppsClient.send(command);
 
-    // Simulating an API response.
-    const start_response = { sessionId: mockSessionId }; // Simulated response
-
-    console.log('start_response:', start_response);
-    if (start_response) {
-      console.log('Q App session started successfully:', start_response);
-      return start_response.sessionId;
+    if (response) {
+      console.log('Q App session started successfully:', response);
+      return response.sessionId;
     }
   } catch (error) {
     console.error('Error starting app session:', error);
+    throw error;
   }
 };
 
 /*
  *   updat an already running Q app session
  */
-export const updateQSessionData = async ({ qAppData, sessionId }) => {
+export const updateQSessionData = async ({ qAppsClient, sessionId, values }) => {
 
   try {
     const payload = {
       instanceId: APPLICATION_ID,
       sessionId: sessionId,
-      values: qAppData.appDefinition.cards,
+      values: values,
     };
-    console.log('start payload:', payload);
+    console.log('update payload:', payload);
     const command = new UpdateQAppSessionCommand(payload);
-    //const response = await qAppsClient.send(command);
+    const response = await qAppsClient.send(command);
 
     // Simulating an API response.
-    const response = { sessionId: sessionId }; // Simulated response
+   // const response = { sessionId: sessionId }; // Simulated response
 
     console.log('update response:', response);
     if (response) {
-      console.log('Q App session started successfully:', response);
+
       return response.sessionId;
     }
   } catch (error) {
@@ -83,48 +78,18 @@ export const updateQSessionData = async ({ qAppData, sessionId }) => {
  */
 export const getSessionQApp = async ({ qAppsClient, sessionId }) => {
   if (!qAppsClient) return;
-  console.log('debug - sessionId', sessionId);
-
-  // Mocked session ID and response
-  const mockSessionId = 'mock-session-id-12345';
 
   try {
     const input = {
-      instanceId: sessionId,
-      sessionId: APPLICATION_ID,
+      instanceId: APPLICATION_ID,
+      sessionId: sessionId,
     };
 
-    const get_command = new GetQAppSessionCommand(input);
-    //const get_response = await qAppsClient.send(get_command);
+    const command = new GetQAppSessionCommand(input);
+    const resoponse = await qAppsClient.send(command);
 
-    // Simulating an API response with detailed cardStatus for two cards.
-    const mockResponse = {
-      sessionId: mockSessionId,
-      cardStatus: {
-        '60796c48-3cfa-44a5-9b4e-b60f76d470f7': {
-          currentState: 'COMPLETED',
-          currentValue:
-            'Mocked resp: Summary of the discussion including key points and takeaways.',
-        },
-        '6539cff8-a245-43cc-b8c1-18f6dcd483d0': {
-          currentState: 'COMPLETED',
-          currentValue:
-            'Mocked resp: Actions and next steps outlined based on meeting insights.',
-        },
-      },
-      sessionArn:
-        'arn:aws:qapps:us-west-2:0123456789012:application/a929ecd6-5765-4ec7-bd3e-2ca90098b18e/qapp/65e7dce7-226a-47f9-b689-22850becef89/session/1fca878e-64c5-4dc4-b1d9-c93effed4e82',
-      status: 'COMPLETED',
-    };
-
-    // Adding a delay
-    const get_response = await new Promise((resolve) =>
-      setTimeout(() => resolve(mockResponse), 5000),
-    );
-
-    console.log('start_response:', get_response);
-    if (get_response) {
-      return get_response;
+    if (resoponse) {
+      return resoponse;
     }
   } catch (error) {
     console.error('Error starting app session:', error);
@@ -136,30 +101,38 @@ export const getSessionQApp = async ({ qAppsClient, sessionId }) => {
  */
 export const fetchAndEncodeFile = async (fileUrl) => {
   if (!fileUrl) return;
-  console.log(fileUrl);
+
   try {
     // Extract the filename from the URL
     const urlParts = fileUrl.split('/');
-    const fileName = urlParts[urlParts.length - 1] || 'default.txt'; // Fallback in case filename is not present
+    const fileName = urlParts[urlParts.length - 1] || 'default.txt';
 
     const response = await fetch(fileUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch file from URL: ${fileUrl}`);
     }
-    const blob = await response.blob();
-    const reader = new FileReader();
-    console.log('fileName', fileName);
-    console.log('blob', blob);
 
-    // Base64 encoding
-    const base64Content = await new Promise((resolve, reject) => {
-      reader.onloadend = () => resolve(reader.result.split(',')[1]); // Base64 string
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    // Get the text content
+    const text = await response.text();
 
-    // Return both the base64 content and the filename
-    return { base64Content, fileName };
+    // Convert text to base64 with proper padding
+    const base64Content = btoa(unescape(encodeURIComponent(text)));
+
+    // Ensure proper base64 padding
+    const paddedBase64 = base64Content + '='.repeat((4 - base64Content.length % 4) % 4);
+
+    // Additional validation
+    const isValidBase64 = /^[A-Za-z0-9+/]+={0,3}$/.test(paddedBase64);
+    if (!isValidBase64) {
+      console.log('Invalid characters:', paddedBase64.match(/[^A-Za-z0-9+/=]/g));
+    }
+
+    // Validate base64 string (including proper padding)
+    if (!paddedBase64 || !isValidBase64) {
+      throw new Error('Invalid base64 string format after encoding');
+    }
+
+    return { base64Content: paddedBase64, fileName };
   } catch (error) {
     console.error(`Error fetching or encoding file: ${error}`);
     throw error;
@@ -171,44 +144,86 @@ export const fetchAndEncodeFile = async (fileUrl) => {
  */
 export const importFileToQApp = async ({
   qAppsClient,
-  qAppData,
   sessionId,
+  qAppId,
   cardId,
   fileName,
   base64Content,
 }) => {
-  if (!qAppsClient) return;
+  // Validate all required fields
+  const requiredFields = {
+    qAppsClient,
+    cardId,
+    qAppId,
+    fileName,
+    base64Content,
+    sessionId,
+  };
 
-  const qAppId = qAppData.qAppId;
+  for (const [field, value] of Object.entries(requiredFields)) {
+    if (!value) {
+      throw new Error(`Missing required field: ${field}`);
+    }
+  }
 
   try {
+    // Remove any data URL prefix if present
+    const cleanBase64 = base64Content.replace(/^data:[^;]+;base64,/, '');
+
+    // Calculate and add required padding
+    let paddedBase64 = cleanBase64;
+    const padding = 4 - (paddedBase64.length % 4);
+    if (padding !== 4) {  // only add padding if needed
+        paddedBase64 = paddedBase64 + '='.repeat(padding);
+    }
+
+    // Add the data URL prefix for text files
+    const dataUrl = `data:text/plain;base64,${paddedBase64}`;
+
+    // Try decoding to verify content
+    try {
+        const decoded = atob(paddedBase64);
+    } catch (e) {
+        console.error('Failed to decode base64:', e);
+        throw new Error('Invalid base64 encoding');
+    }
+
     const payload = {
-      appId: qAppId,
-      cardId: cardId,
-      fileContentsBase64: base64Content,
-      fileName: fileName,
-      instanceId: APPLICATION_ID,
-      scope: 'SESSION',
-      sessionId: sessionId,
+        appId: qAppId,
+        cardId: cardId,
+        fileContentsBase64: dataUrl,  // Use the full data URL
+        fileName: fileName,
+        instanceId: APPLICATION_ID,
+        scope: 'SESSION',
+        sessionId: sessionId,
     };
 
-    console.log('start payload:', payload);
+    // Log full payload structure (without actual base64 content)
+    console.log('Import file payload structure:', {
+        ...payload,
+        fileContentsBase64: `<data URL length: ${dataUrl.length}>`,
+    });
+
     const command = new ImportDocumentCommand(payload);
-    //const start_response = await qAppsClient.send(command);
+    const response = await qAppsClient.send(command);
 
-    // Simulating an API response.
-    const mockResponse = {
-      fileId: 'mock-file-id-12345', // Simulated unique file ID
-    };
-    const response = mockResponse; // Simulated response
-
-    console.log('response:', response);
     if (response) {
       console.log('File imported successfully:', response);
       return response.fileId;
+    } else {
+      throw new Error('No response received from import command');
     }
   } catch (error) {
-    console.error('Error starting app session:', error);
+    // Enhanced error logging
+    console.error('Error importing file:', {
+      message: error.message,
+      name: error.name,
+      code: error.$metadata?.httpStatusCode,
+      requestId: error.$metadata?.requestId,
+      cfId: error.$metadata?.cfId,
+      extendedRequestId: error.$metadata?.extendedRequestId
+    });
+    throw error;
   }
 };
 
@@ -217,12 +232,12 @@ export const importFileToQApp = async ({
  */
 export const deleteQAppById = async ({
   qAppsClient,
-  appId,
+  qAppId,
   setLoading,
   setError,
   setResponse,
 }) => {
-  if (!qAppsClient || !appId) {
+  if (!qAppsClient || !qAppId) {
     console.error('Missing required parameters.');
     return;
   }
@@ -231,7 +246,7 @@ export const deleteQAppById = async ({
     setLoading(true);
 
     const command = new DeleteQAppCommand({
-      appId,
+      appId:qAppId,
       instanceId: APPLICATION_ID,
     });
 
@@ -255,25 +270,37 @@ export const createQApp = async ({
   setResponse,
 }) => {
   if (!qAppsClient) {
-    console.error('Missing required parameters.');
+    const error = 'Q Apps client is not initialized';
+    console.error(error);
+    setError(error);
     return;
   }
 
   try {
     setLoading(true);
+    setError(null);
+    setResponse(null);
 
-    // TODO wire up actual appPayload instead of using example data
-    console.log('exampleItem', exampleItem);
+    console.log('Creating Q App with configuration:', exampleItem);
 
     const command = new CreateQAppCommand(exampleItem);
     const response = await qAppsClient.send(command);
-    console.log('response create app: ', response);
+    console.log('Q App created successfully:', response);
 
     if (response) {
-      setResponse({ response, type: 'create' });
+      setResponse({
+        response,
+        type: 'create',
+        message: `Q App created successfully with ID: ${response.id}`,
+        timestamp: new Date().toISOString()
+      });
     }
   } catch (error) {
-    setError(error.message || 'Error creating a Q App');
+    console.error('Error creating Q App:', error);
+    setError(
+      error.message ||
+      'Failed to create Q App. Please check your configuration and try again.'
+    );
   } finally {
     setLoading(false);
   }
@@ -331,27 +358,19 @@ export const fetchLibItems = async (qAppsClient) => {
 };
 
 // FETCH Q APPS
-// export const fetchApps = async (qAppsClient) => {
-//   if (!qAppsClient) return;
+export const fetchApps = async (qAppsClient) => {
+  if (!qAppsClient) return;
 
-//   // Get user appointed apps
-//   try {
-//     const input = {
-//       instanceId: APPLICATION_ID,
-//     };
+  try {
+    const input = {
+      instanceId: APPLICATION_ID,
+    };
 
-//     const command = new ListQAppsCommand(input);
-//     const response = await qAppsClient.send(command);
+    const command = new ListQAppsCommand(input);
+    const response = await qAppsClient.send(command);
 
-//     // Filter myApps and add a flag
-//     const uniqueApps = response.apps.map((app) => ({
-//       ...app,
-//       isMyApp: libraryApps.some((libApp) => libApp.appID === app.appID),
-//     }));
-
-//     return uniqueApps;
-//     //setApps(response.apps);
-//   } catch (error) {
-//     console.error('Error fetching Q Apps:', error);
-//   }
-// };
+    return response.apps;
+  } catch (error) {
+    console.error('Error fetching Q Apps:', error);
+  }
+};

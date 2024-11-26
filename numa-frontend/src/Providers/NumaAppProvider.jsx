@@ -186,15 +186,6 @@ export const NumaAppProvider = ({ children }) => {
     return currentResults;
   };
 
-  const processQAppSession = async (sessionId, qAppData) => {
-    const new_sessionId = await updateQSessionData({
-      qAppData,
-      sessionId
-    });
-    console.log(`Q App session updated, session ID: ${new_sessionId}`);
-    return new_sessionId;
-  };
-
   const pollQAppSession = async (sessionId) => {
     const pollInterval = 2000;
     let polling = true;
@@ -223,60 +214,69 @@ export const NumaAppProvider = ({ children }) => {
   const processQAppTask = async (task, currentResults) => {
     console.log(`Processing Q-App task with ID: ${task.id}`);
     const inputParamsArray = task.params.inputs;
-    const initialValues = [];
+    const updateValues = [];
 
-    const sessionId = await startQappGetSession({
+    // Start session with built initialValues
+    let sessionId = await startQappGetSession({
       qAppsClient,
       qAppId: task.params.qAppId,
       appVersion: task.appVersion,
+      initialValues: null
     });
 
+    if (!sessionId) {
+      console.error('Failed to start Q App session');
+      return;
+    }
+
+    // Single loop to handle both regular inputs and file imports
     for (const inputParam of inputParamsArray) {
       const { inputContentRef, qInputCardId, base64encode } = inputParam;
       const inputValue = resolveReference(inputContentRef, currentResults);
       console.log(
-        `Fetching input from task ${inputContentRef} (resolved: ${inputValue}) for card ${qInputCardId}`,
+        `Processing input from task ${inputContentRef} (resolved: ${inputValue}) for card ${qInputCardId}`,
       );
 
       if (base64encode && inputValue) {
-        console.log(`Base64 encoding enabled for card: ${qInputCardId}`);
         const { base64Content, fileName } = await fetchAndEncodeFile(inputValue);
         console.log('file encoded: ', base64Content);
 
-        if (sessionId) {
-          const fileId = await importFileToQApp({
-            qAppId: task.params.qAppId,
-            qInputCardId,
-            base64Content,
-            fileName,
-            sessionId,
-          });
-          console.log(`File uploaded, received fileId: ${fileId}`);
-          initialValues.push({ cardId: qInputCardId, value: fileId });
+
+
+        const fileId = await importFileToQApp({
+          qAppsClient,
+          sessionId,
+          qAppId: task.params.qAppId,
+          cardId: qInputCardId,
+          fileName,
+          base64Content,
+        });
+
+        if (!fileId) {
+          console.error('No fileId received from import');
+          return;
         }
+
+        updateValues.push({ cardId: qInputCardId, value: fileId });
       } else if (inputValue !== undefined && inputValue !== null && inputValue !== '') {
-        initialValues.push({ cardId: qInputCardId, value: inputValue });
-      } else {
-        console.warn(`Skipping empty or null value for card ${qInputCardId}`);
+        updateValues.push({ cardId: qInputCardId, value: inputValue });
       }
     }
 
-    const qAppData = {
-      qAppId: task.params.qAppId,
-      appVersion: task.appVersion,
-      appDefinition: {
-        cards: initialValues,
-      },
-    };
+    // Update session with all values at once
+    if (updateValues.length > 0) {
+      await updateQSessionData({
+        qAppsClient,
+        sessionId,
+        values: updateValues
+      });
+    }
 
-    await processQAppSession(sessionId, qAppData);
     const sessionResponse = await pollQAppSession(sessionId);
 
     // Process the output cards and map them to the correct output references
     if (sessionResponse?.cardStatus) {
       for (const [cardId, cardData] of Object.entries(sessionResponse.cardStatus)) {
-        console.log('Processing output card:', cardId);
-        console.log('Card data:', cardData);
 
         // Match cardId to outputContentRef ID
         const matchingOutput = task.params.outputs.find(
@@ -306,10 +306,7 @@ export const NumaAppProvider = ({ children }) => {
 
   const processTextOutputTask = (task, currentResults) => {
     const outputRef = task.params?.dataRef;
-    console.log('Output task, outputRef:', outputRef);
-
     const outputResult = resolveReference(outputRef, currentResults);
-    console.log('Output task, outputResult:', outputResult);
 
     if (outputResult) {
       const resultToDisplay = typeof outputResult === 'object'
@@ -410,7 +407,7 @@ export const NumaAppProvider = ({ children }) => {
       setTimeout(() => {
         resolve({
           success: true,
-          data: 'http://localhost:5173/example-file.txt',
+          data: 'http://localhost:5173/example-meeting-transcript.txt',
         });
       }, 1000);
     });

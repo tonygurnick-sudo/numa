@@ -15,7 +15,7 @@
           "type": "s3-upload",
           "required": true,
           "params": {
-            "bucketName": "meeting-notes-bucket"
+            "bucketName": "numa-meeting-notes"
           },
           "order": 1
         },
@@ -32,6 +32,7 @@
           "required": false,
           "description": "Include any other notes that might be useful.",
           "type": "text-input",
+          "default": ".",
           "order": 1
         },
         {
@@ -58,32 +59,32 @@
           "id": "process-with-q-app",
           "title": "Process with Q App",
           "type": "q-app",
-          "appVersion": "22",
+          "appVersion": "1",
           "params": {
-            "qAppId": "83e3051a-0e90-4746-8b39-f66c16f33ee3",
+            "qAppId": "d152ee6f-a1e8-40ea-810e-aa006790a897",
             "inputs": [
               {
                 "inputContentRef": "@call-step-function",
                 "base64encode": true,
-                "qInputCardId": "30076f25-5b2a-4f98-a49d-972ade90483e"
+                "qInputCardId": "049d6293-781a-4f81-bb1e-2c325c854af6"
               },
               {
                 "inputContentRef": "@template-task",
-                "qInputCardId": "3a99e5d2-3611-42de-bccf-895f881c666e"
+                "qInputCardId": "205e13b4-1e56-4596-a5e1-68f0b11dae94"
               },
               {
                 "inputContentRef": "@other-notes",
-                "qInputCardId": "313ccd36-ad32-443a-ba8b-9d0c1ef383a4"
+                "qInputCardId": "a588c763-c6c5-4a0d-a157-cf5f27face3c"
               }
             ],
             "outputs": [
               {
                 "outputContentRef": "@show-meeting-summary",
-                "qOutputCardId": "60796c48-3cfa-44a5-9b4e-b60f76d470f7"
+                "qOutputCardId": "cfab5818-6cbe-483b-8c46-c3e1a6288ea6"
               },
               {
                 "outputContentRef": "@show-template-results",
-                "qOutputCardId": "6539cff8-a245-43cc-b8c1-18f6dcd483d0"
+                "qOutputCardId": "000f12a3-489b-4fc7-8f31-7d9a7c31a54f"
               }
             ]
           },
@@ -160,6 +161,16 @@
           "order": 4
         }
       ]
+    },
+    {
+      "appName": "Meeting Tools App Native Q App",
+      "id": "loan-financing-calculator",
+      "type": "q-app",
+      "appVersion": 1,
+      "qAppId": "d152ee6f-a1e8-40ea-810e-aa006790a897",
+      "status": "Coming Soon",
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "An app to calculate if refinancing a loan is worth it based on current and new loan details."
     },
     {
       "appName": "Loan Refinancing Calculator",
