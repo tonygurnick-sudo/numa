@@ -24,7 +24,7 @@ To install the dependencies run:
 yarn install
 ```
 
-If you receive error messages about dependencies not being found, see [the setup instructions for yarn >= 2](https://gitlab.com/arcanumai/cdktf-resources#migrating-to-yarn--v2).
+If you receive error messages about dependencies not being found, see [the setup instructions for yarn >= 2](https://gitlab.com/arcanumai/cdktf-resources/-/blob/main/README.md#accessing-the-packages).
 
 ### AWS Profiles
 
