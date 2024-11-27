@@ -425,7 +425,7 @@ export class CoreNumaInfra extends Construct {
         Statement: {
           Effect: 'Allow',
           Principal: {
-            Service: ['qbusiness.amazonaws.com', 'cloudformation.amazonaws.com'],
+            Service: ['qbusiness.amazonaws.com'],
           },
           Action: ['sts:AssumeRole'],
           // TODO: Set correct conditions to properly scope assumption.
@@ -495,7 +495,7 @@ export class CoreNumaInfra extends Construct {
         applicationId: application.id,
         indexId: indexId,
         region: props.region ?? 'us-east-1',
-        roleArn: dataRole.arn,
+        dataSourceRoleArn: dataRole.arn,
       });
     }
 
@@ -509,7 +509,7 @@ export class CoreNumaInfra extends Construct {
         tenantId: sharePointDataSource.tenantId,
         region: props.region ?? 'us-east-1',
         configuration: sharePointDataSource.configuration,
-        roleArn: dataRole.arn,
+        dataSourceRoleArn: dataRole.arn,
       });
     }
 
@@ -542,5 +542,5 @@ export interface CoreNumaInfraProps {
   temporaryPasswordValidityDays?: number;
   passwordLength?: number;
   mfa?: boolean;
-  sharePointConfigs?: SharePointDataSourceConstructProps[];	
+  sharePointConfigs?: SharePointDataSourceConstructProps[];
 }

@@ -95,7 +95,7 @@ export class WebDataSourceConstruct extends BaseDataSourceConstruct {
         },
         DisplayName: props.displayName,
         IndexId: props.indexId,
-        RoleArn: props.roleArn,
+        RoleArn: props.dataSourceRoleArn,
         SyncSchedule: this.getCronExpression(props.configuration?.schedule ?? 'weekly'),
       },
     });
@@ -122,7 +122,7 @@ export interface WebDataSourceConstructProps extends BaseDataSourceConfig {
   /**
    * ARN of the role to use for the datasource.
    */
-  roleArn: string;
+  dataSourceRoleArn: string;
   /**
    * Web crawler configuration.
    */
