@@ -492,8 +492,11 @@ export class CoreNumaInfra extends Construct {
           throw new Error('Empty web crawler configuration');
         }
 
-      const cleanedUrl = (crawlerDataSource.url ?? crawlerDataSource.siteMapFiles?.[0] ?? '')
-        .replaceAll(/[^a-zA-Z0-9_-]/g, '-');
+        const cleanedUrl = (crawlerDataSource.url ??
+          (crawlerDataSource.siteMapFiles?.[0] ?
+            path.basename(crawlerDataSource.siteMapFiles[0][crawlerDataSource.siteMapFiles[0].length - 1]) :
+            ''
+          )).replace(/[^a-zA-Z0-9_-]/g, '-');
 
       let repositoryEndpointMetadata: {
         seedUrlConnections?: { seedUrl: string }[];
@@ -513,7 +516,7 @@ export class CoreNumaInfra extends Construct {
         };
       } else if (crawlerDataSource.siteMapFiles?.[0]) {
         try {
-          const siteMapFile = crawlerDataSource.siteMapFiles[0];
+          const siteMapFile = path.join(process.cwd(), ...crawlerDataSource.siteMapFiles[0]);
 
           if (!fs.existsSync(siteMapFile)) {
             throw new Error(`Sitemap file not found: ${siteMapFile}`);
@@ -580,19 +583,9 @@ export class CoreNumaInfra extends Construct {
                     },
                     {
                       dataSourceFieldName: "title",
-                      indexFieldName: "wc_title",
+                      indexFieldName: "_document_title",
                       indexFieldType: "STRING"
                     },
-                    {
-                      dataSourceFieldName: "htmlSize",
-                      indexFieldName: "wc_html_size",
-                      indexFieldType: "LONG"
-                    },
-                    {
-                      dataSourceFieldName: "content",
-                      indexFieldName: "_document_content",
-                      indexFieldType: "STRING"
-                    }
                   ]
                 },
                 attachment: {
@@ -629,13 +622,13 @@ export class CoreNumaInfra extends Construct {
                 rateLimit: '300',
                 honorRobots: true,
                 maxFileSize: '50',
-                maxLinksPerUrl: '1000',
+                maxLinksPerUrl: '100',
                 crawlDepth: '10',
                 crawlSubDomain: true,
                 crawlAllDomain: false,
                 crawlAttachments: true,
                 maxFileSizeInMegaBytes: '50',
-                inclusionURLCrawlPatterns: [`${baseUrl}/*`],
+                inclusionURLCrawlPatterns: [`${baseUrl}/`],
                 exclusionURLCrawlPatterns: []
               }
             },
@@ -663,7 +656,7 @@ export class CoreNumaInfra extends Construct {
 
 interface WebCrawlerConfig {
   url?: string;
-  siteMapFiles?: string[];
+  siteMapFiles?: string[][];
 }
 
 export interface CoreNumaInfraProps {
