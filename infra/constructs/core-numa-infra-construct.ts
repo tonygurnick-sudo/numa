@@ -486,10 +486,11 @@ export class CoreNumaInfra extends Construct {
     });
     const dataSourceId = Fn.lookup(Fn.jsondecode(s3DataSource.properties), 'DataSourceId');
 
-    for (const crawlerDataSource of (props.webCrawlerConfigs ?? [])) {
-      if (!crawlerDataSource.url && (!crawlerDataSource.siteMapFiles?.[0])) {
-        continue;
-      }
+    if (props.webCrawlerConfigs) {
+      for (const crawlerDataSource of props.webCrawlerConfigs) {
+        if (!crawlerDataSource.url && (!crawlerDataSource.siteMapFiles?.[0])) {
+          throw new Error('Empty web crawler configuration');
+        }
 
       const cleanedUrl = (crawlerDataSource.url ?? crawlerDataSource.siteMapFiles?.[0] ?? '')
         .replaceAll(/[^a-zA-Z0-9_-]/g, '-');
@@ -561,23 +562,8 @@ export class CoreNumaInfra extends Construct {
             Configuration: {
               type: 'WEBCRAWLERV2',
               syncMode: 'FULL_CRAWL',
-              syncConfiguration: {
-                fullCrawl: {
-                  enabled: true,
-                  schedule: 'cron(0 0 ? * * *)'
-                },
-                incrementalCrawl: {
-                  enabled: true,
-                  schedule: 'cron(0 */6 ? * * *)'
-                }
-              },
               connectionConfiguration: {
-                repositoryEndpointMetadata,
-                sitemapConfiguration: {
-                  enabled: true,
-                  followSitemapLinks: true,
-                  respectSitemapPriorities: true
-                }
+                repositoryEndpointMetadata
               },
               repositoryConfigurations: {
                 webPage: {
@@ -643,17 +629,12 @@ export class CoreNumaInfra extends Construct {
                 rateLimit: '300',
                 honorRobots: true,
                 maxFileSize: '50',
-                maxLinksPerUrl: '100',
+                maxLinksPerUrl: '1000',
                 crawlDepth: '10',
                 crawlSubDomain: true,
                 crawlAllDomain: false,
                 crawlAttachments: true,
                 maxFileSizeInMegaBytes: '50',
-                sitemapCrawling: {
-                  enabled: true,
-                  followLinks: true,
-                  maxUrls: 100
-                },
                 urlPatterns: {
                   include: [`${baseUrl}/*`],
                   exclude: []
@@ -662,7 +643,8 @@ export class CoreNumaInfra extends Construct {
             },
             DisplayName: `${numaClient}-web-${cleanedUrl}`,
             IndexId: indexId,
-            RoleArn: dataRole.arn
+            RoleArn: dataRole.arn,
+            SyncSchedule: 'cron(0 0 ? * * *)'
           }),
         });
       }
@@ -678,6 +660,7 @@ export class CoreNumaInfra extends Construct {
     new TerraformOutput(this, 'data-source-id', { value: dataSourceId });
     new TerraformOutput(this, 'index-id', { value: indexId });
   }
+}
 }
 
 interface WebCrawlerConfig {
