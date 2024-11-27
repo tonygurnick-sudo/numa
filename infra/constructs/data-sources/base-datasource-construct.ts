@@ -28,8 +28,6 @@ export interface BaseDataSourceConfig extends Omit<CloudcontrolapiResourceConfig
 }
 
 export abstract class BaseDataSourceConstruct extends CloudcontrolapiResource {
-  protected desiredState!: string;
-
   private static getCronExpressionStatic(schedule: Schedule): string {
     switch (schedule) {
       case 'hourly':

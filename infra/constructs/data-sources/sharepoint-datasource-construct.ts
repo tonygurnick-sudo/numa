@@ -1,10 +1,9 @@
 import { Construct } from 'constructs';
 import { Fn, TerraformOutput } from 'cdktf';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
-import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
-import { BaseDataSourceConfig, BaseDataSourceConstruct, Schedule } from './base-datasource-construct';
-import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
+import { BaseDataSourceConfig, Schedule } from './base-datasource-construct';
+import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
 
 interface SharePointConfiguration {
   enableDeletionProtection?: boolean;
@@ -26,104 +25,19 @@ interface SharePointConfiguration {
   schedule?: Schedule;
 }
 
-export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
+export class SharePointDataSourceConstruct extends CloudcontrolapiResource {
   constructor(scope: Construct, name: string, props: SharePointDataSourceConstructProps) {
-    const secret = new SecretsmanagerSecret(scope, `${name}-secret`, {});
+    if (!props.roleArn) {
+      throw new Error('roleArn is required and must have qbusiness.amazonaws.com as a trusted entity');
+    }
+
+    
     const certificateBucket = new PrivateBucket(scope, `${name}-certificate-bucket`, {
       bucketPrefix: 'certificate',
     });
-
-    const role = new IamRole(scope, `${name}-role`, {
-      assumeRolePolicy: JSON.stringify({
-        Version: '2012-10-17',
-        Statement: [{
-          Sid: 'AllowsAmazonQToAssumeRoleForServicePrincipal',
-          Effect: 'Allow',
-          Principal: {
-            Service: 'qbusiness.amazonaws.com'
-          },
-          Action: 'sts:AssumeRole',
-          Condition: {
-            StringEquals: {
-              'aws:SourceAccount': '$${aws:PrincipalAccount}'
-            },
-            ArnLike: {
-              'aws:SourceArn': `arn:aws:qbusiness:${props.region}:\$\${aws:PrincipalAccount}:application/${props.applicationId}`
-            }
-          }
-        }]
-      })
-    });
-
-    new IamRolePolicy(scope, `${name}-policy`, {
-      name: `${name}-policy`,
-      role: role.name,
-      policy: JSON.stringify({
-        Version: '2012-10-17',
-        Statement: [{
-          Sid: 'AllowsAmazonQToGetS3Objects',
-          Action: ['s3:GetObject'],
-          Resource: [`${certificateBucket.bucket.arn}/*`],
-          Effect: 'Allow',
-          Condition: {
-            StringEquals: {
-              'aws:ResourceAccount': '$${aws:PrincipalAccount}'
-            }
-          }
-        },
-        {
-          Sid: 'AllowsAmazonQToGetSecret',
-          Effect: 'Allow',
-          Action: ['secretsmanager:GetSecretValue'],
-          Resource: [secret.arn]
-        },
-        {
-          Sid: 'AllowsAmazonQToDecryptSecret',
-          Effect: 'Allow',
-          Action: ['kms:Decrypt'],
-          Resource: [`arn:aws:kms:${props.region}:\$\${aws:PrincipalAccount}:key/*`],
-          Condition: {
-            StringLike: {
-              'kms:ViaService': ['secretsmanager.*.amazonaws.com']
-            }
-          }
-        },
-        {
-          Sid: 'AllowsAmazonQToIngestDocuments',
-          Effect: 'Allow',
-          Action: [
-            'qbusiness:BatchPutDocument',
-            'qbusiness:BatchDeleteDocument'
-          ],
-          Resource: `arn:aws:qbusiness:${props.region}:\$\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`
-        },
-        {
-          Sid: 'AllowsAmazonQToIngestPrincipalMapping',
-          Effect: 'Allow',
-          Action: [
-            'qbusiness:PutGroup',
-            'qbusiness:CreateUser',
-            'qbusiness:DeleteGroup',
-            'qbusiness:UpdateUser',
-            'qbusiness:ListGroups'
-          ],
-          Resource: [
-            `arn:aws:qbusiness:${props.region}:\$\${aws:PrincipalAccount}:application/${props.applicationId}`,
-            `arn:aws:qbusiness:${props.region}:\$\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}`,
-            `arn:aws:qbusiness:${props.region}:\$\${aws:PrincipalAccount}:application/${props.applicationId}/index/${props.indexId}/data-source/*`
-          ]
-        }]
-      })
-    });
-
-    super(scope, name, {
-      applicationId: props.applicationId,
-      indexId: props.indexId,
-      displayName: props.displayName,
-      region: props.region,
-      schedule: props.configuration?.schedule,
-    });
-
+    
+    const secret = new SecretsmanagerSecret(scope, `${name}-secret`, {});
+    
     const defaultAdditionalProperties = {
       aclConfiguration: "ACLWithLDAPEmailFmt",
       proxyPort: "",
@@ -157,11 +71,14 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
       inclusionFilePath: []
     };
 
-    this.desiredState = Fn.jsonencode({
-      ApplicationId: props.applicationId,
-      IndexId: props.indexId,
-      DisplayName: props.displayName,
-      Configuration: {
+    super(scope, name, {
+      ...props,
+      typeName: 'AWS::QBusiness::DataSource',
+      desiredState: Fn.jsonencode({
+        ApplicationId: props.applicationId,
+        IndexId: props.indexId,
+        DisplayName: props.displayName,
+        Configuration: {
         type: 'SHAREPOINTV2',
         syncMode: 'FORCED_FULL_CRAWL',
         connectionConfiguration: {
@@ -170,7 +87,7 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
             domain: props.domain,
             siteUrls: props.siteUrls,
             repositoryAdditionalProperties: {
-              s3BucketName: certificateBucket.bucket,
+              s3BucketName: certificateBucket.bucket.bucket,
               s3certificateName: 'certificate.crt',
               authType: 'OAuth2Certificate',
               version: 'Online',
@@ -178,9 +95,8 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
           },
         },
         secretArn: secret.arn,
-        RoleArn: role.arn,
+        RoleArn: props.roleArn,
         enableIdentityCrawler: true,
-        SyncSchedule: this.getCronExpression(props.configuration?.schedule ?? 'daily'),
         additionalProperties: {
           ...defaultAdditionalProperties,
           ...props.configuration
@@ -358,7 +274,8 @@ export class SharePointDataSourceConstruct extends BaseDataSourceConstruct {
             }
           }
         },
-      }
+        }
+      }),
     });
 
     new TerraformOutput(this, 'secret-arn', {
@@ -396,4 +313,8 @@ export interface SharePointDataSourceConstructProps extends BaseDataSourceConfig
    * SharePoint configuration.
    */
   configuration?: SharePointConfiguration;
+  /**
+   * ARN of the IAM role to use for the data source.
+   */
+  roleArn: string;
 }
