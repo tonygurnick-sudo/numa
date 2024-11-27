@@ -497,7 +497,7 @@ export class CoreNumaInfra extends Construct {
 
       let repositoryEndpointMetadata: {
         seedUrlConnections?: { seedUrl: string }[];
-        siteMapLocation?: string;
+        s3SiteMapUrl?: string;
       } = {};
 
       let baseUrl: string | undefined;
@@ -544,7 +544,7 @@ export class CoreNumaInfra extends Construct {
           });
 
           repositoryEndpointMetadata = {
-            siteMapLocation: `s3://${dataBucket.bucket.bucket}/sitemaps/${xmlFileName}`,
+            s3SiteMapUrl: `s3://${dataBucket.bucket.bucket}/sitemaps/${xmlFileName}`,
             seedUrlConnections: [{ seedUrl: baseUrl }]
           };
         } catch (err) {
@@ -635,10 +635,8 @@ export class CoreNumaInfra extends Construct {
                 crawlAllDomain: false,
                 crawlAttachments: true,
                 maxFileSizeInMegaBytes: '50',
-                urlPatterns: {
-                  include: [`${baseUrl}/*`],
-                  exclude: []
-                }
+                inclusionURLCrawlPatterns: [`${baseUrl}/*`],
+                exclusionURLCrawlPatterns: []
               }
             },
             DisplayName: `${numaClient}-web-${cleanedUrl}`,
