@@ -500,8 +500,9 @@ export class CoreNumaInfra extends Construct {
     }
 
     for (const sharePointDataSource of props.sharePointConfigs ?? []) {
-      new SharePointDataSourceConstruct(this, `data-source-sharepoint-${sharePointDataSource.displayName}`, {
-        displayName: sharePointDataSource.displayName,
+      const cleanedDomain = sharePointDataSource.domain.replaceAll(/[^a-zA-Z0-9_-]/g, '-');
+      new SharePointDataSourceConstruct(this, `data-source-sharepoint-${cleanedDomain}`, {
+        displayName: `${numaClient}-share-point-${cleanedDomain}`,
         siteUrls: sharePointDataSource.siteUrls,
         applicationId: applicationId,
         indexId: indexId,
