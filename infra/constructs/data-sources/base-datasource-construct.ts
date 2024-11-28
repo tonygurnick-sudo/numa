@@ -56,19 +56,6 @@ interface OtherFieldMapping {
 }
 
 export abstract class DataSource extends CloudcontrolapiResource {
-  private static getCronExpressionStatic(schedule: Schedule): string {
-    switch (schedule) {
-      case 'hourly':
-        return 'cron(0 * ? * * *)';
-      case 'daily':
-        return 'cron(0 0 ? * * *)';
-      case 'weekly':
-        return 'cron(0 0 ? * SUN *)';
-      default:
-        return schedule.startsWith('cron(') ? schedule : `cron(${schedule})`;
-    }
-  }
-
   constructor(scope: Construct, name: string, props: BaseDataSourceProps) {
     const configuration = {
       syncMode: props.syncMode ?? 'FULL_CRAWL',
@@ -88,12 +75,21 @@ export abstract class DataSource extends CloudcontrolapiResource {
         RoleArn: props.dataSourceRoleArn,
         Configuration: configuration,
         Type: props.type,
-        SyncSchedule: DataSource.getCronExpressionStatic(props.schedule ?? 'daily'),
+        SyncSchedule: getCronExpression(props.schedule ?? 'daily'),
       }),
     });
   }
+}
 
-  protected getCronExpression(schedule: Schedule): string {
-    return DataSource.getCronExpressionStatic(schedule);
+function getCronExpression(schedule: Schedule): string {
+  switch (schedule) {
+    case 'hourly':
+      return 'cron(0 * ? * * *)';
+    case 'daily':
+      return 'cron(0 0 ? * * *)';
+    case 'weekly':
+      return 'cron(0 0 ? * SUN *)';
+    default:
+      return schedule.startsWith('cron(') ? schedule : `cron(${schedule})`;
   }
 }
