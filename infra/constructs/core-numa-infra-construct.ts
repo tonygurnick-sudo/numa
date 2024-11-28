@@ -20,7 +20,7 @@ import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as path from 'node:path';
 import { WebDataSourceConstruct } from './data-sources/web-datasource-construct';
-import { SharePointDataSource, SharePointDataSourceConstructProps } from './data-sources/sharepoint-datasource-construct';
+import { SharePointDataSource, SharePointConfiguration } from './data-sources/sharepoint-datasource-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -529,6 +529,13 @@ interface WebCrawlerConfig {
   url: string;
 }
 
+interface SharePointConfig {
+  tenantId: string;
+  domain: string;
+  siteUrls: string[];
+  configuration: SharePointConfiguration;
+}
+
 export interface CoreNumaInfraProps {
   client: string;
   environmentName: string;
@@ -543,5 +550,5 @@ export interface CoreNumaInfraProps {
   temporaryPasswordValidityDays?: number;
   passwordLength?: number;
   mfa?: boolean;
-  sharePointConfigs?: SharePointDataSourceConstructProps[];
+  sharePointConfigs?: SharePointConfig[];
 }

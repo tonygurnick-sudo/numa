@@ -4,7 +4,7 @@ import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 import { DataSourceProps, DataSource, Schedule } from './base-datasource-construct';
 
-interface SharePointConfiguration {
+export interface SharePointConfiguration {
   enableDeletionProtection?: boolean;
   deletionProtectionThreshold?: string;
   crawlListData?: boolean;
