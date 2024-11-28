@@ -276,21 +276,9 @@ export class SharePointDataSource extends DataSource {
 
 export interface SharePointDataSourceProps extends DataSourceProps {
   /**
-   * Name to be used when displaying the data source in console.
-   */
-  displayName: string;
-  /**
    * Host URLs of the SharePoint account.
    */
   siteUrls: string[],
-  /**
-   * ID of the QBusiness Application to create the datasource on.
-   */
-  applicationId: string;
-  /**
-   * ID of the QBusiness Index to create the datasource on.
-   */
-  indexId: string;
   /**
    * Sharepoint Domain.
    */
@@ -303,8 +291,4 @@ export interface SharePointDataSourceProps extends DataSourceProps {
    * SharePoint configuration.
    */
   configuration?: SharePointConfiguration;
-  /**
-   * ARN of the IAM role to use for the data source.
-   */
-  dataSourceRoleArn: string;
 }

@@ -29,6 +29,10 @@ interface BaseDataSourceProps extends Omit<CloudcontrolapiResourceConfig, 'typeN
   configuration: Record<string, string | object | boolean>;
   syncMode?: string;
   repositoryConfigurations: Record<string, RepositoryConfiguration>;
+  /**
+   * ARN of the IAM role to use for the data source.
+   */
+  dataSourceRoleArn: string;
 }
 
 export type DataSourceProps = Omit<BaseDataSourceProps, 'type' | 'configuration' | 'repositoryConfigurations'>;

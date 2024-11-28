@@ -95,25 +95,9 @@ export class WebDataSourceConstruct extends DataSource {
 
 export interface WebDataSourceConstructProps extends DataSourceProps {
   /**
-   * Name to be used when displaying the data source in console.
-   */
-  displayName: string;
-  /**
    * URL to crawl.
    */
   url: string;
-  /**
-   * ID of the QBusiness Application to create the datasource on.
-   */
-  applicationId: string;
-  /**
-   * ID of the QBusiness Index to create the datasource on.
-   */
-  indexId: string;
-  /**
-   * ARN of the role to use for the datasource.
-   */
-  dataSourceRoleArn: string;
   /**
    * Web crawler configuration.
    */
