@@ -417,24 +417,31 @@ export class CoreNumaInfra extends Construct {
       });
     }
 
+    const dataSourceRoleAssumptionDoc = new DataAwsIamPolicyDocument(this, 'data-source-role-assumption', {
+      statement: [
+        {
+          effect: 'Allow',
+          principals: [
+            {
+              type: 'Service',
+              identifiers: ['qbusiness.amazonaws.com'],
+            },
+          ],
+          actions: ['sts:AssumeRole'],
+          condition: [
+            {
+              test: 'StringEquals',
+              variable: 'aws:SourceAccount',
+              values: ['&{Aws:PrincipalAccount}'], // Use &{} to avoid Terraform subsitution.
+            },
+          ]
+        },
+      ],
+    });
+
     const dataRole = new IamRole(this, 'data-source-role', {
       name: `data-source-role-${numaClient}`,
-      // TODO: Replace stringify with a proper document.
-      assumeRolePolicy: JSON.stringify({
-        Version: '2012-10-17',
-        Statement: {
-          Effect: 'Allow',
-          Principal: {
-            Service: ['qbusiness.amazonaws.com'],
-          },
-          Action: ['sts:AssumeRole'],
-          Condition: {
-            StringEquals: {
-              'aws:SourceAccount': '$${Aws:PrincipalAccount}', // Double $ for Terraform escape.
-            }
-          },
-        },
-      }),
+      assumeRolePolicy: dataSourceRoleAssumptionDoc.json,
     });
 
     // TODO: Correctly scope this policy to avoid being overly permissive.
