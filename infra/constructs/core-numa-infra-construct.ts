@@ -428,12 +428,11 @@ export class CoreNumaInfra extends Construct {
             Service: ['qbusiness.amazonaws.com'],
           },
           Action: ['sts:AssumeRole'],
-          // TODO: Set correct conditions to properly scope assumption.
-          // Condition: {
-          //   StringEquals: {
-          //     'aws:SourceAccount': '',
-          //   }
-          // },
+          Condition: {
+            StringEquals: {
+              'aws:SourceAccount': '$${Aws:PrincipalAccount}', // Double $ for Terraform escape.
+            }
+          },
         },
       }),
     });
