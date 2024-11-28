@@ -25,7 +25,7 @@ export interface SharePointConfiguration {
 }
 
 export class SharePointDataSource extends DataSource {
-  constructor(scope: Construct, name: string, props: SharePointDataSourceConstructProps) {
+  constructor(scope: Construct, name: string, props: SharePointDataSourceProps) {
     if (!props.dataSourceRoleArn) {
       throw new Error('roleArn is required and must have qbusiness.amazonaws.com as a trusted entity');
     }
@@ -274,7 +274,7 @@ export class SharePointDataSource extends DataSource {
   }
 }
 
-export interface SharePointDataSourceConstructProps extends DataSourceProps {
+export interface SharePointDataSourceProps extends DataSourceProps {
   /**
    * Name to be used when displaying the data source in console.
    */
