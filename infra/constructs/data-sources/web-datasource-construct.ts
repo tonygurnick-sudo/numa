@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { DataSourceProps, DataSource, Schedule } from './base-datasource-construct';
+import { DataSourceProps, DataSource, Schedule, RepositoryConfiguration } from './base-datasource-construct';
 
 // Add new interface for web configuration
 interface WebConfiguration {
@@ -17,6 +17,43 @@ interface WebConfiguration {
    */
   schedule?: Schedule;
 }
+
+const repositoryConfigurations: Record<string, RepositoryConfiguration> = {
+  attachment: {
+    fieldMappings: [
+      {
+        dataSourceFieldName: "category",
+        indexFieldName: "_category",
+        indexFieldType: "STRING"
+      },
+      {
+        dataSourceFieldName: "sourceUrl",
+        indexFieldName: "_source_uri",
+        indexFieldType: "STRING"
+      },
+    ]
+  },
+  webPage: {
+    fieldMappings: [
+      {
+        dataSourceFieldName: "category",
+        indexFieldName: "_category",
+        indexFieldType: "STRING"
+      },
+      {
+        dataSourceFieldName: "sourceUrl",
+        indexFieldName: "_source_uri",
+        indexFieldType: "STRING"
+      },
+      {
+        dataSourceFieldName: "title",
+        indexFieldName: "_document_title",
+        indexFieldType: "STRING"
+      },
+    ],
+  },
+};
+
 
 export class WebDataSourceConstruct extends DataSource {
   constructor(scope: Construct, name: string, props: WebDataSourceConstructProps) {
@@ -54,41 +91,7 @@ export class WebDataSourceConstruct extends DataSource {
           ...props.configuration
         },
       },
-      repositoryConfigurations: {
-        attachment: {
-          fieldMappings: [
-            {
-              dataSourceFieldName: "category",
-              indexFieldName: "_category",
-              indexFieldType: "STRING"
-            },
-            {
-              dataSourceFieldName: "sourceUrl",
-              indexFieldName: "_source_uri",
-              indexFieldType: "STRING"
-            },
-          ]
-        },
-        webPage: {
-          fieldMappings: [
-            {
-              dataSourceFieldName: "category",
-              indexFieldName: "_category",
-              indexFieldType: "STRING"
-            },
-            {
-              dataSourceFieldName: "sourceUrl",
-              indexFieldName: "_source_uri",
-              indexFieldType: "STRING"
-            },
-            {
-              dataSourceFieldName: "title",
-              indexFieldName: "_document_title",
-              indexFieldType: "STRING"
-            },
-          ],
-        },
-      },
+      repositoryConfigurations,
     });
   }
 }
