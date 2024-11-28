@@ -1,9 +1,8 @@
 import { Construct } from 'constructs';
-import { Fn, TerraformOutput } from 'cdktf';
+import { TerraformOutput } from 'cdktf';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
-import { BaseDataSourceConfig, Schedule } from './base-datasource-construct';
-import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
+import { DataSourceConfig as DataSourceProps, DataSource, Schedule } from './base-datasource-construct';
 
 interface SharePointConfiguration {
   enableDeletionProtection?: boolean;
@@ -25,7 +24,7 @@ interface SharePointConfiguration {
   schedule?: Schedule;
 }
 
-export class SharePointDataSourceConstruct extends CloudcontrolapiResource {
+export class SharePointDataSource extends DataSource {
   constructor(scope: Construct, name: string, props: SharePointDataSourceConstructProps) {
     if (!props.dataSourceRoleArn) {
       throw new Error('roleArn is required and must have qbusiness.amazonaws.com as a trusted entity');
@@ -284,7 +283,7 @@ export class SharePointDataSourceConstruct extends CloudcontrolapiResource {
   }
 }
 
-export interface SharePointDataSourceConstructProps extends BaseDataSourceConfig {
+export interface SharePointDataSourceConstructProps extends DataSourceProps {
   /**
    * Name to be used when displaying the data source in console.
    */

@@ -1,6 +1,6 @@
 import { Construct } from 'constructs';
 import { Fn } from 'cdktf';
-import { BaseDataSourceConfig, BaseDataSourceConstruct, Schedule } from './base-datasource-construct';
+import { DataSourceConfig, DataSource, Schedule } from './base-datasource-construct';
 
 // Add new interface for web configuration
 interface WebConfiguration {
@@ -19,7 +19,7 @@ interface WebConfiguration {
   schedule?: Schedule;
 }
 
-export class WebDataSourceConstruct extends BaseDataSourceConstruct {
+export class WebDataSourceConstruct extends DataSource {
   constructor(scope: Construct, name: string, props: WebDataSourceConstructProps) {
     super(scope, name, {
       applicationId: props.applicationId,
@@ -102,7 +102,7 @@ export class WebDataSourceConstruct extends BaseDataSourceConstruct {
   }
 }
 
-export interface WebDataSourceConstructProps extends BaseDataSourceConfig {
+export interface WebDataSourceConstructProps extends DataSourceConfig {
   /**
    * Name to be used when displaying the data source in console.
    */

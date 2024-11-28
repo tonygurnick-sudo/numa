@@ -27,7 +27,7 @@ export interface BaseDataSourceConfig extends Omit<CloudcontrolapiResourceConfig
   schedule?: Schedule;
 }
 
-export abstract class BaseDataSourceConstruct extends CloudcontrolapiResource {
+export abstract class DataSource extends CloudcontrolapiResource {
   private static getCronExpressionStatic(schedule: Schedule): string {
     switch (schedule) {
       case 'hourly':
@@ -57,6 +57,6 @@ export abstract class BaseDataSourceConstruct extends CloudcontrolapiResource {
   }
 
   protected getCronExpression(schedule: Schedule): string {
-    return BaseDataSourceConstruct.getCronExpressionStatic(schedule);
+    return DataSource.getCronExpressionStatic(schedule);
   }
-} 
+}

@@ -20,7 +20,7 @@ import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as path from 'node:path';
 import { WebDataSourceConstruct } from './data-sources/web-datasource-construct';
-import { SharePointDataSourceConstruct, SharePointDataSourceConstructProps } from './data-sources/sharepoint-datasource-construct';
+import { SharePointDataSource, SharePointDataSourceConstructProps } from './data-sources/sharepoint-datasource-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -501,7 +501,7 @@ export class CoreNumaInfra extends Construct {
 
     for (const sharePointDataSource of props.sharePointConfigs ?? []) {
       const cleanedDomain = sharePointDataSource.domain.replaceAll(/[^a-zA-Z0-9_-]/g, '-');
-      new SharePointDataSourceConstruct(this, `data-source-sharepoint-${cleanedDomain}`, {
+      new SharePointDataSource(this, `data-source-sharepoint-${cleanedDomain}`, {
         displayName: `${numaClient}-share-point-${cleanedDomain}`,
         siteUrls: sharePointDataSource.siteUrls,
         applicationId: applicationId,
