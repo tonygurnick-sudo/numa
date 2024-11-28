@@ -72,7 +72,7 @@ export class SharePointDataSource extends DataSource {
 
     super(scope, name, {
       ...props,
-      type: 'SHAREPOINTV2',
+      dataSourceType: 'SHAREPOINTV2',
       syncMode: 'FORCED_FULL_CRAWL',
       configuration: {
         connectionConfiguration: {

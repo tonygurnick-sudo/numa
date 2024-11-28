@@ -25,7 +25,10 @@ interface BaseDataSourceProps extends Omit<CloudcontrolapiResourceConfig, 'typeN
    * @default 'daily'
    */
   schedule?: Schedule;
-  type: string;
+  /**
+   * The type of datasource, from AWS documentation. https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/connectors-list.html
+   */
+  dataSourceType: string;
   configuration: Record<string, string | object | boolean>;
   syncMode?: string;
   repositoryConfigurations: Record<string, RepositoryConfiguration>;
@@ -35,7 +38,7 @@ interface BaseDataSourceProps extends Omit<CloudcontrolapiResourceConfig, 'typeN
   dataSourceRoleArn: string;
 }
 
-export type DataSourceProps = Omit<BaseDataSourceProps, 'type' | 'configuration' | 'repositoryConfigurations'>;
+export type DataSourceProps = Omit<BaseDataSourceProps, 'dataSourceType' | 'configuration' | 'repositoryConfigurations'>;
 
 interface RepositoryConfiguration {
   fieldMappings: FieldMapping[];
@@ -60,7 +63,7 @@ export abstract class DataSource extends CloudcontrolapiResource {
     const configuration = {
       syncMode: props.syncMode ?? 'FULL_CRAWL',
       ingestionMode: 'SCHEDULED',
-      type: props.type,
+      type: props.dataSourceType,
       repositoryConfigurations: props.repositoryConfigurations,
       ...props.configuration,
     };
@@ -74,7 +77,7 @@ export abstract class DataSource extends CloudcontrolapiResource {
         IndexId: props.indexId,
         RoleArn: props.dataSourceRoleArn,
         Configuration: configuration,
-        Type: props.type,
+        Type: props.dataSourceType,
         SyncSchedule: getCronExpression(props.schedule ?? 'daily'),
       }),
     });

@@ -37,7 +37,7 @@ export class WebDataSourceConstruct extends DataSource {
       displayName: props.displayName,
       region: props.region,
       schedule: props.configuration?.schedule ?? 'weekly',
-      type: 'WEBCRAWLERV2',
+      dataSourceType: 'WEBCRAWLERV2',
       dataSourceRoleArn: props.dataSourceRoleArn,
       configuration: {
         connectionConfiguration: {
