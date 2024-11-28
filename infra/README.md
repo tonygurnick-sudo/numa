@@ -84,3 +84,37 @@ The client-id must be the name of an entry from the clientsProd list in numa-cli
 Linting can be run with `yarn lint`. This will run eslint and then tsc for type checking.
 
 Tests (TODO) can be run with `yarn test`.
+
+## Web Crawler Configuration
+
+The Numa infrastructure supports two methods for configuring web crawlers:
+
+1. Direct URL Crawling
+The simplest method is to specify URLs directly in the client configuration:
+
+"webCrawlerConfigs": [
+  {
+    "url": "https://example.com"
+  }
+]
+
+2. Sitemap-based Crawling
+For more comprehensive crawling, you can use XML sitemaps.
+
+Download the client's sitemap and save it in the client-sitemaps directory
+Configure the crawler to use this sitemap in the client configuration:
+
+"webCrawlerConfigs": [
+  {
+    "siteMapFiles": [
+      ["client-sitemaps", "client-name-sitemap.xml"]
+    ]
+  }
+]
+
+Important Notes:
+
+1. Before deploying: You must manually download and place the sitemap   file in the client-sitemaps directory
+3. The sitemap path is relative to the project root
+4. You can combine both URL-based and sitemap-based configurations for the same client
+5. Sitemaps must be in valid XML format
