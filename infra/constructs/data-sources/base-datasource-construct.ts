@@ -3,7 +3,7 @@ import { Construct } from 'constructs';
 
 export type Schedule = 'hourly' | 'daily' | 'weekly' | string;
 
-export interface BaseDataSourceConfig extends Omit<CloudcontrolapiResourceConfig, 'typeName' | 'desiredState'> {
+interface BaseDataSourceProps extends Omit<CloudcontrolapiResourceConfig, 'typeName' | 'desiredState'> {
   /**
    * ID of the QBusiness Application to create the datasource on.
    */
@@ -25,6 +25,30 @@ export interface BaseDataSourceConfig extends Omit<CloudcontrolapiResourceConfig
    * @default 'daily'
    */
   schedule?: Schedule;
+  type: string;
+  configuration: Record<string, string | object | boolean>;
+  syncMode?: string;
+  repositoryConfigurations: Record<string, RepositoryConfiguration>;
+}
+
+export type DataSourceProps = Omit<BaseDataSourceProps, 'type' | 'configuration' | 'repositoryConfigurations'>;
+
+interface RepositoryConfiguration {
+  fieldMappings: FieldMapping[];
+}
+
+type FieldMapping = (DateFieldMapping | OtherFieldMapping) & {
+  indexFieldName: string;
+  dataSourceFieldName: string;
+}
+
+interface DateFieldMapping {
+  dateFieldFormat: string;
+  indexFieldType: 'DATE';
+}
+
+interface OtherFieldMapping {
+  indexFieldType: 'STRING' | 'STRING_LIST' | 'LONG';
 }
 
 export abstract class DataSource extends CloudcontrolapiResource {
@@ -41,17 +65,26 @@ export abstract class DataSource extends CloudcontrolapiResource {
     }
   }
 
-  constructor(scope: Construct, name: string, config: BaseDataSourceConfig) {
+  constructor(scope: Construct, name: string, props: BaseDataSourceProps) {
+    const configuration = {
+      syncMode: props.syncMode ?? 'FULL_CRAWL',
+      ingestionMode: 'SCHEDULED',
+      type: props.type,
+      repositoryConfigurations: props.repositoryConfigurations,
+      ...props.configuration,
+    };
+
     super(scope, name, {
-      ...config,
+      ...props,
       typeName: 'AWS::QBusiness::DataSource',
       desiredState: JSON.stringify({
-        ApplicationId: config.applicationId,
-        DisplayName: config.displayName,
-        IndexId: config.indexId,
-        Configuration: {
-          SyncSchedule: BaseDataSourceConstruct.getCronExpressionStatic(config.schedule ?? 'daily'),
-        },
+        ApplicationId: props.applicationId,
+        DisplayName: props.displayName,
+        IndexId: props.indexId,
+        RoleArn: props.dataSourceRoleArn,
+        Configuration: configuration,
+        Type: props.type,
+        SyncSchedule: DataSource.getCronExpressionStatic(props.schedule ?? 'daily'),
       }),
     });
   }

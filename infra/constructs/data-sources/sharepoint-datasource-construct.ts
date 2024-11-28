@@ -2,7 +2,7 @@ import { Construct } from 'constructs';
 import { TerraformOutput } from 'cdktf';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
-import { DataSourceConfig as DataSourceProps, DataSource, Schedule } from './base-datasource-construct';
+import { DataSourceProps, DataSource, Schedule } from './base-datasource-construct';
 
 interface SharePointConfiguration {
   enableDeletionProtection?: boolean;
@@ -72,209 +72,200 @@ export class SharePointDataSource extends DataSource {
 
     super(scope, name, {
       ...props,
-      typeName: 'AWS::QBusiness::DataSource',
-      desiredState: Fn.jsonencode({
-        ApplicationId: props.applicationId,
-        IndexId: props.indexId,
-        DisplayName: props.displayName,
-        RoleArn: props.dataSourceRoleArn,
-        Configuration: {
-          type: 'SHAREPOINTV2',
-          syncMode: 'FORCED_FULL_CRAWL',
-          connectionConfiguration: {
-            repositoryEndpointMetadata: {
-              tenantId: props.tenantId,
-              domain: props.domain,
-              siteUrls: props.siteUrls,
-              repositoryAdditionalProperties: {
-                s3BucketName: certificateBucket.bucket.bucket,
-                s3certificateName: 'certificate.crt',
-                authType: 'OAuth2Certificate',
-                version: 'Online',
-              }
-            },
-          },
-          secretArn: secret.arn,
-          enableIdentityCrawler: true,
-          additionalProperties: {
-            ...defaultAdditionalProperties,
-            ...props.configuration
-          },
-          repositoryConfigurations: {
-            repositoryConfigurations: {
-              link: {
-                fieldMappings: [
-                  {
-                    dataSourceFieldName: "createdAt",
-                    indexFieldName: "_created_at",
-                    dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    indexFieldType: "DATE"
-                  },
-                  {
-                    dataSourceFieldName: "lastModifiedDateTime",
-                    indexFieldName: "_last_updated_at",
-                    dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    indexFieldType: "DATE"
-                  },
-                  {
-                    dataSourceFieldName: "title",
-                    indexFieldName: "_document_title",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "sourceUri",
-                    indexFieldName: "_source_uri",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "category",
-                    indexFieldName: "_category",
-                    indexFieldType: "STRING"
-                  }
-                ]
-              },
-              comment: {
-                fieldMappings: [
-                  {
-                    dataSourceFieldName: "createdDateTime",
-                    indexFieldName: "_created_at",
-                    dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    indexFieldType: "DATE"
-                  },
-                  {
-                    dataSourceFieldName: "author",
-                    indexFieldName: "_authors",
-                    indexFieldType: "STRING_LIST"
-                  },
-                  {
-                    dataSourceFieldName: "category",
-                    indexFieldName: "_category",
-                    indexFieldType: "STRING"
-                  }
-                ]
-              },
-              file: {
-                fieldMappings: [
-                  {
-                    dataSourceFieldName: "title",
-                    indexFieldName: "_document_title",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "lastModifiedDateTime",
-                    indexFieldName: "_last_updated_at",
-                    dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    indexFieldType: "DATE"
-                  },
-                  {
-                    dataSourceFieldName: "sourceUri",
-                    indexFieldName: "_source_uri",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "createdAt",
-                    indexFieldName: "_created_at",
-                    dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    indexFieldType: "DATE"
-                  },
-                  {
-                    dataSourceFieldName: "author",
-                    indexFieldName: "_authors",
-                    indexFieldType: "STRING_LIST"
-                  },
-                  {
-                    dataSourceFieldName: "category",
-                    indexFieldName: "_category",
-                    indexFieldType: "STRING"
-                  }
-                ]
-              },
-              page: {
-                fieldMappings: [
-                  {
-                    dataSourceFieldName: "createdDateTime",
-                    indexFieldName: "_created_at",
-                    dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    indexFieldType: "DATE"
-                  },
-                  {
-                    dataSourceFieldName: "lastModifiedDateTime",
-                    indexFieldName: "_last_updated_at",
-                    dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    indexFieldType: "DATE"
-                  },
-                  {
-                    dataSourceFieldName: "title",
-                    indexFieldName: "_document_title",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "sourceUri",
-                    indexFieldName: "_source_uri",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "category",
-                    indexFieldName: "_category",
-                    indexFieldType: "STRING"
-                  }
-                ]
-              },
-              event: {
-                fieldMappings: [
-                  {
-                    dataSourceFieldName: "title",
-                    indexFieldName: "_document_title",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "lastModifiedDateTime",
-                    indexFieldName: "_last_updated_at",
-                    dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    indexFieldType: "DATE"
-                  },
-                  {
-                    dataSourceFieldName: "sourceUri",
-                    indexFieldName: "_source_uri",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "createdDate",
-                    indexFieldName: "_created_at",
-                    dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    indexFieldType: "DATE"
-                  },
-                  {
-                    dataSourceFieldName: "category",
-                    indexFieldName: "_category",
-                    indexFieldType: "STRING"
-                  }
-                ]
-              },
-              attachment: {
-                fieldMappings: [
-                  {
-                    dataSourceFieldName: "parentCreatedDate",
-                    indexFieldName: "_created_at",
-                    dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    indexFieldType: "DATE"
-                  },
-                  {
-                    dataSourceFieldName: "sourceUri",
-                    indexFieldName: "_source_uri",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "category",
-                    indexFieldName: "_category",
-                    indexFieldType: "STRING"
-                  }
-                ]
-              }
+      type: 'SHAREPOINTV2',
+      syncMode: 'FORCED_FULL_CRAWL',
+      configuration: {
+        connectionConfiguration: {
+          repositoryEndpointMetadata: {
+            tenantId: props.tenantId,
+            domain: props.domain,
+            siteUrls: props.siteUrls,
+            repositoryAdditionalProperties: {
+              s3BucketName: certificateBucket.bucket.bucket,
+              s3certificateName: 'certificate.crt',
+              authType: 'OAuth2Certificate',
+              version: 'Online',
             }
           },
+        },
+        secretArn: secret.arn,
+        enableIdentityCrawler: true,
+        additionalProperties: {
+          ...defaultAdditionalProperties,
+          ...props.configuration
+        },
+      },
+      repositoryConfigurations: {
+        link: {
+          fieldMappings: [
+            {
+              dataSourceFieldName: "createdAt",
+              indexFieldName: "_created_at",
+              dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
+              indexFieldType: "DATE"
+            },
+            {
+              dataSourceFieldName: "lastModifiedDateTime",
+              indexFieldName: "_last_updated_at",
+              dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
+              indexFieldType: "DATE"
+            },
+            {
+              dataSourceFieldName: "title",
+              indexFieldName: "_document_title",
+              indexFieldType: "STRING"
+            },
+            {
+              dataSourceFieldName: "sourceUri",
+              indexFieldName: "_source_uri",
+              indexFieldType: "STRING"
+            },
+            {
+              dataSourceFieldName: "category",
+              indexFieldName: "_category",
+              indexFieldType: "STRING"
+            }
+          ]
+        },
+        comment: {
+          fieldMappings: [
+            {
+              dataSourceFieldName: "createdDateTime",
+              indexFieldName: "_created_at",
+              dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
+              indexFieldType: "DATE"
+            },
+            {
+              dataSourceFieldName: "author",
+              indexFieldName: "_authors",
+              indexFieldType: "STRING_LIST"
+            },
+            {
+              dataSourceFieldName: "category",
+              indexFieldName: "_category",
+              indexFieldType: "STRING"
+            }
+          ]
+        },
+        file: {
+          fieldMappings: [
+            {
+              dataSourceFieldName: "title",
+              indexFieldName: "_document_title",
+              indexFieldType: "STRING"
+            },
+            {
+              dataSourceFieldName: "lastModifiedDateTime",
+              indexFieldName: "_last_updated_at",
+              dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
+              indexFieldType: "DATE"
+            },
+            {
+              dataSourceFieldName: "sourceUri",
+              indexFieldName: "_source_uri",
+              indexFieldType: "STRING"
+            },
+            {
+              dataSourceFieldName: "createdAt",
+              indexFieldName: "_created_at",
+              dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
+              indexFieldType: "DATE"
+            },
+            {
+              dataSourceFieldName: "author",
+              indexFieldName: "_authors",
+              indexFieldType: "STRING_LIST"
+            },
+            {
+              dataSourceFieldName: "category",
+              indexFieldName: "_category",
+              indexFieldType: "STRING"
+            }
+          ]
+        },
+        page: {
+          fieldMappings: [
+            {
+              dataSourceFieldName: "createdDateTime",
+              indexFieldName: "_created_at",
+              dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
+              indexFieldType: "DATE"
+            },
+            {
+              dataSourceFieldName: "lastModifiedDateTime",
+              indexFieldName: "_last_updated_at",
+              dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
+              indexFieldType: "DATE"
+            },
+            {
+              dataSourceFieldName: "title",
+              indexFieldName: "_document_title",
+              indexFieldType: "STRING"
+            },
+            {
+              dataSourceFieldName: "sourceUri",
+              indexFieldName: "_source_uri",
+              indexFieldType: "STRING"
+            },
+            {
+              dataSourceFieldName: "category",
+              indexFieldName: "_category",
+              indexFieldType: "STRING"
+            }
+          ]
+        },
+        event: {
+          fieldMappings: [
+            {
+              dataSourceFieldName: "title",
+              indexFieldName: "_document_title",
+              indexFieldType: "STRING"
+            },
+            {
+              dataSourceFieldName: "lastModifiedDateTime",
+              indexFieldName: "_last_updated_at",
+              dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
+              indexFieldType: "DATE"
+            },
+            {
+              dataSourceFieldName: "sourceUri",
+              indexFieldName: "_source_uri",
+              indexFieldType: "STRING"
+            },
+            {
+              dataSourceFieldName: "createdDate",
+              indexFieldName: "_created_at",
+              dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
+              indexFieldType: "DATE"
+            },
+            {
+              dataSourceFieldName: "category",
+              indexFieldName: "_category",
+              indexFieldType: "STRING"
+            }
+          ]
+        },
+        attachment: {
+          fieldMappings: [
+            {
+              dataSourceFieldName: "parentCreatedDate",
+              indexFieldName: "_created_at",
+              dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
+              indexFieldType: "DATE"
+            },
+            {
+              dataSourceFieldName: "sourceUri",
+              indexFieldName: "_source_uri",
+              indexFieldType: "STRING"
+            },
+            {
+              dataSourceFieldName: "category",
+              indexFieldName: "_category",
+              indexFieldType: "STRING"
+            }
+          ]
         }
-      }),
+      }
     });
 
     new TerraformOutput(this, 'secret-arn', {
