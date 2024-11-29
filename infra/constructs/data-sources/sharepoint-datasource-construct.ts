@@ -208,7 +208,9 @@ export class SharePointDataSource extends DataSource {
       bucketPrefix: 'certificate',
     });
 
-    const secret = new SecretsmanagerSecret(scope, `${name}-secret`, {});
+    const secret = new SecretsmanagerSecret(scope, `${name}-secret`, {
+      namePrefix: 'sharepoint-secret'
+    });
 
     const defaultAdditionalProperties = {
       aclConfiguration: "ACLWithLDAPEmailFmt",
