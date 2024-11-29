@@ -72,7 +72,7 @@ interface OtherFieldMapping {
 
 export abstract class DataSource extends CloudcontrolapiResource {
   constructor(scope: Construct, name: string, props: BaseDataSourceProps) {
-    const configuration = {
+    const combinedConfiguration = {
       syncMode: props.syncMode ?? 'FULL_CRAWL',
       ingestionMode: 'SCHEDULED',
       type: props.dataSourceType,
@@ -88,7 +88,7 @@ export abstract class DataSource extends CloudcontrolapiResource {
         DisplayName: props.displayName,
         IndexId: props.indexId,
         RoleArn: props.dataSourceRoleArn,
-        Configuration: configuration,
+        Configuration: combinedConfiguration,
         Type: props.dataSourceType,
         SyncSchedule: getCronExpression(props.schedule ?? 'daily'),
       }),
