@@ -89,8 +89,10 @@ The script will need to be run with a profile providing access to the arcanum-q-
 The client-name is the key in infra/stacks/numa-client-stack.ts:clientsProd, e.g. arcanum-demo.
 
 Usage:
+
 ```bash
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> [options]
+
 Options:
 
 --list: List all data sources
@@ -102,7 +104,8 @@ Options:
 --start-sync --data-source-id <id>: Start sync for specific data source
 
 Examples:
-bashCopy# 1. Default: Check S3 data source status
+
+1. Default: Check S3 data source status
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name>
 
 # 2. List all available data sources
