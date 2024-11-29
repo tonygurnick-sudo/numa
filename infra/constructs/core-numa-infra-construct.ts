@@ -20,7 +20,6 @@ import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as path from 'node:path';
 import * as fs from 'fs';
-import * as fs from 'fs';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -653,12 +652,9 @@ export class CoreNumaInfra extends Construct {
   }
 }
   }
-}
-}
+
 
 interface WebCrawlerConfig {
-  url?: string;
-  siteMapFiles?: string[][];
   url?: string;
   siteMapFiles?: string[][];
 }
