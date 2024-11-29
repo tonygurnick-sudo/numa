@@ -98,11 +98,11 @@ export class WebDataSourceConstruct extends DataSource {
 
 export interface WebDataSourceConstructProps extends DataSourceProps {
   /**
-   * URL to crawl.
-   */
-  url: string;
-  /**
    * Web crawler configuration.
    */
   configuration?: WebConfiguration;
+  /**
+   * URL to crawl.
+   */
+  url: string;
 }

@@ -279,19 +279,19 @@ export class SharePointDataSource extends DataSource {
 
 export interface SharePointDataSourceProps extends DataSourceProps {
   /**
-   * Host URLs of the SharePoint account.
+   * SharePoint configuration.
    */
-  siteUrls: string[],
+  configuration?: SharePointConfiguration;
   /**
    * Sharepoint Domain.
    */
   domain: string;
   /**
+   * Host URLs of the SharePoint account.
+   */
+  siteUrls: string[],
+  /**
    * Sharepoint Tenant ID.
    */
   tenantId: string;
-  /**
-   * SharePoint configuration.
-   */
-  configuration?: SharePointConfiguration;
 }
