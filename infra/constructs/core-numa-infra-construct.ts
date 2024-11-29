@@ -493,17 +493,34 @@ export class CoreNumaInfra extends Construct {
     });
     const dataSourceId = Fn.lookup(Fn.jsondecode(s3DataSource.properties), 'DataSourceId');
 
+    const siteMapBucket = new PrivateBucket(this, 'site-map-bucket', {
+      bucket: numaClient + '-sitemaps',
+    });
+
+
     for (const crawlerDataSource of props.webCrawlerConfigs) {
-      const cleanedUrl = crawlerDataSource.url.replaceAll(/[^a-zA-Z0-9_-]/g, '-');
+      crawlerDataSource.siteMapFiles ??= [];
+      const siteMapFiles = crawlerDataSource.siteMapFiles?.map((siteMapPath) => path.join(...siteMapPath));
+      if (!crawlerDataSource.url && (crawlerDataSource.siteMapFiles.length == 0)) {
+        throw new Error('Empty web crawler configuration');
+      }
+
+      const cleanedUrl = (crawlerDataSource.url ?? siteMapFiles[0]).replace(/[^a-zA-Z0-9_-]/g, '-');
+
       new WebDataSourceConstruct(this, `data-source-${cleanedUrl}`, {
         displayName: `${numaClient}-web-${cleanedUrl}`,
-        url: crawlerDataSource.url,
+        url: crawlerDataSource?.url,
+        siteMapFiles,
         applicationId: application.id,
         indexId: indexId,
         region: props.region ?? 'us-east-1',
         dataSourceRoleArn: dataRole.arn,
+        siteMapBucket: siteMapBucket.bucket,
       });
+
+      // TODO: Trigger an initial crawl.
     }
+
 
     for (const sharePointDataSource of props.sharePointConfigs ?? []) {
       const cleanedDomain = sharePointDataSource.domain.replaceAll(/[^a-zA-Z0-9_-]/g, '-');
@@ -531,8 +548,10 @@ export class CoreNumaInfra extends Construct {
   }
 }
 
+
 interface WebCrawlerConfig {
-  url: string;
+  url?: string;
+  siteMapFiles?: string[][];
 }
 
 interface SharePointConfig {
