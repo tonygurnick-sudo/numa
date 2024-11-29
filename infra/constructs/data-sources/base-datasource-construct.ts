@@ -1,9 +1,9 @@
-import { CloudcontrolapiResource, CloudcontrolapiResourceConfig } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
+import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
 import { Construct } from 'constructs';
 
 export type Schedule = 'hourly' | 'daily' | 'weekly' | string;
 
-interface BaseDataSourceProps extends Omit<CloudcontrolapiResourceConfig, 'typeName' | 'desiredState'> {
+interface BaseDataSourceProps {
   /**
    * ID of the QBusiness Application to create the datasource on.
    */
@@ -70,8 +70,9 @@ interface OtherFieldMapping {
   indexFieldType: 'STRING' | 'STRING_LIST' | 'LONG';
 }
 
-export abstract class DataSource extends CloudcontrolapiResource {
+export abstract class DataSource extends Construct {
   constructor(scope: Construct, name: string, props: BaseDataSourceProps) {
+    super(scope, name);
     const combinedConfiguration = {
       syncMode: props.syncMode ?? 'FULL_CRAWL',
       ingestionMode: 'SCHEDULED',
@@ -80,7 +81,7 @@ export abstract class DataSource extends CloudcontrolapiResource {
       ...props.dataSourceConfiguration,
     };
 
-    super(scope, name, {
+    new CloudcontrolapiResource(this, 'data-source', {
       ...props,
       typeName: 'AWS::QBusiness::DataSource',
       desiredState: JSON.stringify({
