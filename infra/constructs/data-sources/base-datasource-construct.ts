@@ -49,7 +49,7 @@ interface BaseDataSourceProps extends Omit<CloudcontrolapiResourceConfig, 'typeN
   syncMode?: 'FULL_CRAWL' | 'FORCED_FULL_CRAWL' | string;
 }
 
-export type DataSourceProps = Omit<BaseDataSourceProps, 'dataSourceType' | 'configuration' | 'repositoryConfigurations'>;
+export type DataSourceProps = Omit<BaseDataSourceProps, 'dataSourceType' | 'dataSourceConfiguration' | 'repositoryConfigurations'>;
 
 
 export interface RepositoryConfiguration {
