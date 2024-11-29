@@ -84,12 +84,38 @@ Once the upload completes, the data source sync will be started and its excution
 
 ### check-index-progress
 
-check-index-progress is for checking the status of an S3 data source sync job. At the moment, it is limited to showing the most recent one.
-
 The script will need to be run with a profile providing access to the arcanum-q-deployer-prod account. From there it will assume access into the customer's account.
 
 The client-name is the key in infra/stacks/numa-client-stack.ts:clientsProd, e.g. arcanum-demo.
 
-<pre>
-AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <b>client-name</b>
-</pre>
+Usage:
+```bash
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> [options]
+Options:
+
+--list: List all data sources
+--all: Check all data sources
+--data-source-id <id>: Check specific data source
+--sync-status: Show sync status
+--start-sync: Start a sync
+--start-sync --all: Start sync for all data sources
+--start-sync --data-source-id <id>: Start sync for specific data source
+
+Examples:
+bashCopy# 1. Default: Check S3 data source status
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name>
+
+# 2. List all available data sources
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --list
+
+# 3. Start sync for specific data source
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --start-sync --data-source-id 70ba69cb-eddd-44b8-89e4-cf888c6343e3
+
+# 4. Check sync status for all data sources
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --sync-status
+
+# 5. Check sync status for specific data source
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --sync-status --data-source-id 70ba69cb-eddd-44b8-89e4-cf888c6343e3
+
+# 6. Start sync for all data sources
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --start-sync --all
