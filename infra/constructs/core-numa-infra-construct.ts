@@ -19,6 +19,7 @@ import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as path from 'node:path';
+import * as fs from 'fs';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -485,77 +486,158 @@ export class CoreNumaInfra extends Construct {
     });
     const dataSourceId = Fn.lookup(Fn.jsondecode(s3DataSource.properties), 'DataSourceId');
 
-    for (const crawlerDataSource of props.webCrawlerConfigs) {
-      const cleanedUrl = crawlerDataSource.url.replaceAll(/[^a-zA-Z0-9_-]/g, '-');
-      new CloudcontrolapiResource(this, `data-source-${cleanedUrl}`, {
-        typeName: 'AWS::QBusiness::DataSource',
-        desiredState: Fn.jsonencode({
-          ApplicationId: application.id,
-          Configuration: {
-            type: 'WEBCRAWLERV2',
-            syncMode: 'FULL_CRAWL',
-            connectionConfiguration: {
-              repositoryEndpointMetadata: {
-                seedUrlConnections: [
-                  {
-                    seedUrl: crawlerDataSource.url,
-                  },
-                ],
-              },
+    if (props.webCrawlerConfigs) {
+      for (const crawlerDataSource of props.webCrawlerConfigs) {
+        if (!crawlerDataSource.url && (!crawlerDataSource.siteMapFiles?.[0])) {
+          throw new Error('Empty web crawler configuration');
+        }
+
+        const cleanedUrl = (crawlerDataSource.url ??
+          (crawlerDataSource.siteMapFiles?.[0]?.at(-1) ??
+            ''
+          )).replace(/[^a-zA-Z0-9_-]/g, '-');
+
+      let repositoryEndpointMetadata: {
+        seedUrlConnections?: { seedUrl: string }[];
+        s3SiteMapUrl?: string;
+      } = {};
+
+      let baseUrl: string | undefined;
+
+      if (crawlerDataSource.url) {
+        baseUrl = new URL(crawlerDataSource.url).origin;
+        repositoryEndpointMetadata = {
+          seedUrlConnections: [
+            {
+              seedUrl: crawlerDataSource.url,
             },
-            repositoryConfigurations: {
-              attachment: {
-                fieldMappings: [
-                  {
-                    dataSourceFieldName: "category",
-                    indexFieldName: "_category",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "sourceUrl",
-                    indexFieldName: "_source_uri",
-                    indexFieldType: "STRING"
-                  },
-                ]
+          ],
+        };
+      } else if (crawlerDataSource.siteMapFiles?.[0]) {
+        try {
+          const siteMapFile = path.join(process.cwd(), ...crawlerDataSource.siteMapFiles[0]);
+
+          if (!fs.existsSync(siteMapFile)) {
+            throw new Error(`Sitemap file not found: ${siteMapFile}`);
+          }
+
+          const siteMapContent = fs.readFileSync(siteMapFile, 'utf8');
+          if (!siteMapContent.includes('xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"')) {
+            throw new Error('Sitemap missing required namespace');
+          }
+
+          // Extract all URLs from sitemap
+          const urlMatches = siteMapContent.match(/<loc>(.*?)<\/loc>/g) || [];
+          const urls = urlMatches.map(match => match.replace(/<\/?loc>/g, ''));
+
+          // Extract base URL from first URL
+          if (urls[0]) {
+            baseUrl = new URL(urls[0]).origin;
+          } else {
+            throw new Error('No valid URLs found in sitemap');
+          }
+
+          const xmlFileName = path.basename(siteMapFile);
+          new S3Object(this, `sitemap-xml-${cleanedUrl}`, {
+            bucket: dataBucket.bucket.bucket,
+            key: `sitemaps/${xmlFileName}`,
+            source: siteMapFile,
+            contentType: 'application/xml'
+          });
+
+          repositoryEndpointMetadata = {
+            s3SiteMapUrl: `s3://${dataBucket.bucket.bucket}/sitemaps/${xmlFileName}`,
+            seedUrlConnections: [{ seedUrl: baseUrl }]
+          };
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error('Unknown error occurred');
+          throw error;
+        }
+      }
+
+      if (Object.keys(repositoryEndpointMetadata).length > 0 && baseUrl) {
+
+        new CloudcontrolapiResource(this, `data-source-${cleanedUrl}`, {
+          typeName: 'AWS::QBusiness::DataSource',
+          desiredState: Fn.jsonencode({
+            ApplicationId: application.id,
+            Configuration: {
+              type: 'WEBCRAWLERV2',
+              syncMode: 'FULL_CRAWL',
+              connectionConfiguration: {
+                repositoryEndpointMetadata
               },
-              webPage: {
-                fieldMappings: [
-                  {
-                    dataSourceFieldName: "category",
-                    indexFieldName: "_category",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "sourceUrl",
-                    indexFieldName: "_source_uri",
-                    indexFieldType: "STRING"
-                  },
-                  {
-                    dataSourceFieldName: "title",
-                    indexFieldName: "_document_title",
-                    indexFieldType: "STRING"
-                  },
-                ],
+              repositoryConfigurations: {
+                webPage: {
+                  fieldMappings: [
+                    {
+                      dataSourceFieldName: "category",
+                      indexFieldName: "_category",
+                      indexFieldType: "STRING"
+                    },
+                    {
+                      dataSourceFieldName: "sourceUrl",
+                      indexFieldName: "_source_uri",
+                      indexFieldType: "STRING"
+                    },
+                    {
+                      dataSourceFieldName: "title",
+                      indexFieldName: "_document_title",
+                      indexFieldType: "STRING"
+                    },
+                  ]
+                },
+                attachment: {
+                  fieldMappings: [
+                    {
+                      dataSourceFieldName: "category",
+                      indexFieldName: "_category",
+                      indexFieldType: "STRING"
+                    },
+                    {
+                      dataSourceFieldName: "sourceUrl",
+                      indexFieldName: "_source_uri",
+                      indexFieldType: "STRING"
+                    },
+                    {
+                      dataSourceFieldName: "fileName",
+                      indexFieldName: "wc_file_name",
+                      indexFieldType: "STRING"
+                    },
+                    {
+                      dataSourceFieldName: "fileType",
+                      indexFieldName: "wc_file_type",
+                      indexFieldType: "STRING"
+                    },
+                    {
+                      dataSourceFieldName: "fileSize",
+                      indexFieldName: "wc_file_size",
+                      indexFieldType: "LONG"
+                    }
+                  ]
+                }
               },
+              additionalProperties: {
+                rateLimit: '300',
+                honorRobots: true,
+                maxFileSize: '50',
+                maxLinksPerUrl: '100',
+                crawlDepth: '10',
+                crawlSubDomain: true,
+                crawlAllDomain: false,
+                crawlAttachments: true,
+                maxFileSizeInMegaBytes: '50',
+                inclusionURLCrawlPatterns: [`${baseUrl}/`],
+                exclusionURLCrawlPatterns: []
+              }
             },
-            additionalProperties: {
-              rateLimit: '300',
-              honorRobots: true,
-              maxFileSize: '50',
-              maxLinksPerUrl: '100',
-              crawlDepth: '10',
-              crawlSubDomain: true,
-              crawlAllDomain: false,
-              crawlAttachments: true,
-              // TODO
-            },
-          },
-          DisplayName: `${numaClient}-web-${cleanedUrl}`,
-          IndexId: indexId,
-          RoleArn: dataRole.arn,
-          SyncSchedule: 'cron(0 0 ? * * *)',
-        }),
-      });
+            DisplayName: `${numaClient}-web-${cleanedUrl}`,
+            IndexId: indexId,
+            RoleArn: dataRole.arn,
+            SyncSchedule: 'cron(0 0 ? * * *)'
+          }),
+        });
+      }
       // TODO: Trigger an initial crawl.
     }
 
@@ -569,9 +651,12 @@ export class CoreNumaInfra extends Construct {
     new TerraformOutput(this, 'index-id', { value: indexId });
   }
 }
+  }
+
 
 interface WebCrawlerConfig {
-  url: string;
+  url?: string;
+  siteMapFiles?: string[][];
 }
 
 export interface CoreNumaInfraProps {
