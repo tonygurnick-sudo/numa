@@ -247,7 +247,7 @@ export class SharePointDataSource extends DataSource {
       ...props,
       dataSourceType: 'SHAREPOINTV2',
       syncMode: 'FORCED_FULL_CRAWL',
-      configuration: {
+      dataSourceConfiguration: {
         connectionConfiguration: {
           repositoryEndpointMetadata: {
             tenantId: props.tenantId,

@@ -9,36 +9,44 @@ interface BaseDataSourceProps extends Omit<CloudcontrolapiResourceConfig, 'typeN
    */
   applicationId: string;
   /**
-   * ID of the QBusiness Index to create the datasource on.
+   * Additional values to be passed to the data source. These largely depend on the connector type. Common values are split out to separate parameters.
    */
-  indexId: string;
+  dataSourceConfiguration: Record<string, string | object | boolean>;
+  /**
+   * ARN of the IAM role to use for the data source.
+   */
+  dataSourceRoleArn: string;
+  /**
+   * The type of datasource, from AWS documentation. https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/connectors-list.html
+   */
+  dataSourceType: string;
   /**
    * Name to be used when displaying the data source in console.
    */
   displayName: string;
   /**
+   * ID of the QBusiness Index to create the datasource on.
+   */
+  indexId: string;
+  /**
    * Region of the QBusiness Application.
    */
   region: string;
+  /**
+   * Map of the configurations for the repository, mapping input fields to index fields.
+   */
+  repositoryConfigurations: Record<string, RepositoryConfiguration>;
   /**
    * Schedule for data source synchronization.
    * @default 'daily'
    */
   schedule?: Schedule;
   /**
-   * The type of datasource, from AWS documentation. https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/connectors-list.html
+   * The method to use for indexing. Use FORCE_FULL_CRAWL for a fresh crawl each time or FULL_CRAWL for incremental.
+   * Different connectors may have additional options.
+   * @default FULL_CRAWL
    */
-  dataSourceType: string;
-  configuration: Record<string, string | object | boolean>;
-  syncMode?: string;
-  /**
-   * Map of the configurations for the repository, mapping input fields to index fields.
-   */
-  repositoryConfigurations: Record<string, RepositoryConfiguration>;
-  /**
-   * ARN of the IAM role to use for the data source.
-   */
-  dataSourceRoleArn: string;
+  syncMode?: 'FULL_CRAWL' | 'FORCED_FULL_CRAWL' | string;
 }
 
 export type DataSourceProps = Omit<BaseDataSourceProps, 'dataSourceType' | 'configuration' | 'repositoryConfigurations'>;
@@ -69,7 +77,7 @@ export abstract class DataSource extends CloudcontrolapiResource {
       ingestionMode: 'SCHEDULED',
       type: props.dataSourceType,
       repositoryConfigurations: props.repositoryConfigurations,
-      ...props.configuration,
+      ...props.dataSourceConfiguration,
     };
 
     super(scope, name, {

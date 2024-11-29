@@ -76,7 +76,7 @@ export class WebDataSourceConstruct extends DataSource {
       schedule: props.configuration?.schedule ?? 'weekly',
       dataSourceType: 'WEBCRAWLERV2',
       dataSourceRoleArn: props.dataSourceRoleArn,
-      configuration: {
+      dataSourceConfiguration: {
         connectionConfiguration: {
           repositoryEndpointMetadata: {
             seedUrlConnections: [
