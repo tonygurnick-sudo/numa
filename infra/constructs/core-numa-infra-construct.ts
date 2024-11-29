@@ -493,8 +493,7 @@ export class CoreNumaInfra extends Construct {
         }
 
         const cleanedUrl = (crawlerDataSource.url ??
-          (crawlerDataSource.siteMapFiles?.[0] ?
-            path.basename(crawlerDataSource.siteMapFiles[0][crawlerDataSource.siteMapFiles[0].length - 1]) :
+          (crawlerDataSource.siteMapFiles?.[0]?.at(-1) ??
             ''
           )).replace(/[^a-zA-Z0-9_-]/g, '-');
 
