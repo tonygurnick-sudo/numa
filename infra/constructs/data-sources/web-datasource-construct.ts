@@ -90,7 +90,7 @@ export class WebDataSourceConstruct extends DataSource {
         ],
       };
     } else if (props.siteMapFiles) {
-      const siteMapFile = path.join(process.cwd(), ...props.siteMapFiles[0]);
+      const siteMapFile = path.join(process.cwd(), props.siteMapFiles[0]);
 
       if (!fs.existsSync(siteMapFile)) {
         throw new Error(`Sitemap file not found: ${siteMapFile}`);
