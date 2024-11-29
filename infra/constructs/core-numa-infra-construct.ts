@@ -432,7 +432,7 @@ export class CoreNumaInfra extends Construct {
             {
               test: 'StringEquals',
               variable: 'aws:SourceAccount',
-              values: ['&{Aws:PrincipalAccount}'], // Use &{} to avoid Terraform subsitution.
+              values: [callerId.accountId],
             },
           ]
         },
