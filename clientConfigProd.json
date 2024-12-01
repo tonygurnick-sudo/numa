@@ -71,15 +71,13 @@
     "clientAccountId": "474668383176",
     "webCrawlerConfigs": [
       {
-      "siteMapFiles": [
-          ["client-sitemaps", "beyond-expectations-sitemap.xml"]
-      ]
-        },
-      {
-        "url": "https://help.core.cin7.com/hc/en-us/sections/10207278703247-Getting-started"
+        "url": "https://help.core.cin7.com/hc/en-us/articles/9034481552783-Getting-Started-Guide"
       },
       {
-        "url": "https://help.core.cin7.com/hc/en-us/categories/8314483542671-General"
+        "url": "https://help.core.cin7.com/hc/en-us/articles/9034569676431-Setting-Up-a-Logistics-Path-for-Production-Components"
+      },
+      {
+        "url": "https://help.core.cin7.com/hc/en-us/articles/9034429844111-Account-Summary-Report"
       }
     ]
   },
