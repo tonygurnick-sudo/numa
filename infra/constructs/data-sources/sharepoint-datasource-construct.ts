@@ -1,6 +1,5 @@
 import { Construct } from 'constructs';
 import { TerraformOutput } from 'cdktf';
-import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 import { DataSourceProps, DataSource, Schedule } from './base-datasource-construct';
 import { RepositoryConfiguration } from './base-datasource-construct';
@@ -203,11 +202,6 @@ export class SharePointDataSource extends DataSource {
       throw new Error('roleArn is required and must have qbusiness.amazonaws.com as a trusted entity');
     }
 
-
-    const certificateBucket = new PrivateBucket(scope, `${name}-certificate-bucket`, {
-      bucketPrefix: 'certificate',
-    });
-
     const secret = new SecretsmanagerSecret(scope, `${name}-secret`, {
       namePrefix: 'sharepoint-secret'
     });
@@ -256,9 +250,8 @@ export class SharePointDataSource extends DataSource {
             domain: props.domain,
             siteUrls: props.siteUrls,
             repositoryAdditionalProperties: {
-              s3BucketName: certificateBucket.bucket.bucket,
-              s3certificateName: 'certificate.crt',
-              authType: 'OAuth2Certificate',
+              onPremVersion: '',
+              authType: 'OAuth2App',
               version: 'Online',
             }
           },
