@@ -38,12 +38,18 @@ export class BaseNumaApp extends Construct {
       assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
     });
 
-    const policyArns = [
-      'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
-      ...(props.policyArns || []),
-    ];
+    const additionalPolicyArns = !props.policyStatements
+      ? []
+      : [
+          new IamPolicy(this, name + '_policy', {
+            policy: new DataAwsIamPolicyDocument(this, name + '_policy-document', {
+              statement: props.policyStatements || [],
+            }).json,
+          }).arn,
+        ];
+
     new IamRolePolicyAttachmentsExclusive(scope, name + '_role-policy', {
-      policyArns,
+      policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', ...additionalPolicyArns],
       roleName: role.name,
     });
 
@@ -88,8 +94,8 @@ export class BaseNumaApp extends Construct {
   }
 
   addStepFunction(scope: Construct, name: string, props: AddStepFunctionProps): void {
-    const baseStepFunctionPolicy = new IamPolicy(this, name + '_base-policy', {
-      policy: new DataAwsIamPolicyDocument(this, name + '_base-policy-document', {
+    const stepFunctionPolicy = new IamPolicy(this, name + '_policy', {
+      policy: new DataAwsIamPolicyDocument(this, name + '_policy-document', {
         statement: [
           {
             actions: ['s3:PutObject'],
@@ -110,6 +116,7 @@ export class BaseNumaApp extends Construct {
             ],
             resources: ['*'],
           },
+          ...(props.policyStatements || []),
         ],
       }).json,
     });
@@ -120,9 +127,8 @@ export class BaseNumaApp extends Construct {
       }),
     });
 
-    const policyArns = [baseStepFunctionPolicy.arn, ...(props.policyArns || [])];
     new IamRolePolicyAttachmentsExclusive(scope, name + '_role-policy', {
-      policyArns,
+      policyArns: [stepFunctionPolicy.arn],
       roleName: stepFunctionRole.name,
     });
 
@@ -137,18 +143,6 @@ export class BaseNumaApp extends Construct {
       publish: true,
     });
 
-    const startPolicy = new IamPolicy(this, name + '-start_policy', {
-      policy: new DataAwsIamPolicyDocument(this, name + '-start_policy-document', {
-        statement: [
-          {
-            actions: ['states:StartExecution'],
-            effect: 'Allow',
-            resources: [stepFunction.arn],
-          },
-        ],
-      }).json,
-    });
-
     this.addLambdaFunction(scope, name + '-start', {
       route: {
         verb: 'POST',
@@ -161,19 +155,13 @@ export class BaseNumaApp extends Construct {
           APP_NAME: props.appName,
         },
       },
-      policyArns: [startPolicy.arn],
-    });
-
-    const statusPolicy = new IamPolicy(this, name + '-status_policy', {
-      policy: new DataAwsIamPolicyDocument(this, name + '-status_policy-document', {
-        statement: [
-          {
-            actions: ['s3:GetObject'],
-            effect: 'Allow',
-            resources: [`${props.outputsBucket.arn}/${props.appName}`],
-          },
-        ],
-      }).json,
+      policyStatements: [
+        {
+          actions: ['states:StartExecution'],
+          effect: 'Allow',
+          resources: [stepFunction.arn],
+        },
+      ],
     });
 
     this.addLambdaFunction(scope, name + '-status', {
@@ -188,7 +176,13 @@ export class BaseNumaApp extends Construct {
           APP_NAME: props.appName,
         },
       },
-      policyArns: [statusPolicy.arn],
+      policyStatements: [
+        {
+          actions: ['s3:GetObject'],
+          effect: 'Allow',
+          resources: [`${props.outputsBucket.arn}/${props.appName}`],
+        },
+      ],
     });
   }
 
@@ -210,11 +204,17 @@ export interface RouteDefinition {
   path: string;
 }
 
+export interface PolicyStatement {
+  actions: string[];
+  effect?: string;
+  resources: string[];
+}
+
 export interface AddLambdaFunctionProps {
   environment?: Environment;
   handler?: string;
   lambdaDirectory: string;
-  policyArns?: string[];
+  policyStatements?: PolicyStatement[];
   route?: RouteDefinition;
   runtime?: string;
   timeout?: number;
@@ -223,7 +223,7 @@ export interface AddLambdaFunctionProps {
 export interface AddStepFunctionProps {
   appName: string;
   outputsBucket: S3Bucket;
-  policyArns?: string[];
+  policyStatements?: PolicyStatement[];
   stepFunctionDefinition: asl.StateMachine;
 }
 

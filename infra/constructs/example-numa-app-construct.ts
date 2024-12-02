@@ -1,5 +1,3 @@
-import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
-import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import { BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
@@ -71,25 +69,19 @@ export class ExampleNumaApp extends BaseNumaApp {
       },
     };
 
-    const stepFunctionName = 'example-step-function';
-    const stepFunctionPolicy = new IamPolicy(this, stepFunctionName + '_additional-policy', {
-      policy: new DataAwsIamPolicyDocument(this, stepFunctionName + '_additional-policy-document', {
-        statement: [
-          {
-            actions: ['lambda:InvokeFunction'],
-            resources: [stepFunctionLambda.arn],
-          },
-          {
-            actions: ['iam:PassRole'],
-            resources: [stepFunctionLambda.role],
-          },
-        ],
-      }).json,
-    });
-    this.addStepFunction(this, stepFunctionName, {
+    this.addStepFunction(this, 'example-step-function', {
       appName: name,
       outputsBucket: props.outputsBucket,
-      policyArns: [stepFunctionPolicy.arn],
+      policyStatements: [
+        {
+          actions: ['lambda:InvokeFunction'],
+          resources: [stepFunctionLambda.arn],
+        },
+        {
+          actions: ['iam:PassRole'],
+          resources: [stepFunctionLambda.role],
+        },
+      ],
       stepFunctionDefinition,
     });
   }
