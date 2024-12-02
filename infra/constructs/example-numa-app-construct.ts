@@ -1,7 +1,6 @@
 import { Construct } from 'constructs';
 import { BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
 
-
 export class ExampleNumaApp extends BaseNumaApp {
   constructor(scope: Construct, name: string, props: ExampleNumaAppProps) {
     props.pathPrefix ??= 'example';
@@ -11,7 +10,7 @@ export class ExampleNumaApp extends BaseNumaApp {
     this.addLambdaFunction(this, 'post-lambda', {
       route: {
         verb: 'POST',
-        path: 'a'
+        path: 'a',
       },
       functionName: 'example-1',
     });
@@ -32,4 +31,4 @@ export class ExampleNumaApp extends BaseNumaApp {
   }
 }
 
-export interface ExampleNumaAppProps extends BaseNumaAppProps { } // eslint-disable-line @typescript-eslint/no-empty-object-type
+export interface ExampleNumaAppProps extends BaseNumaAppProps {} // eslint-disable-line @typescript-eslint/no-empty-object-type

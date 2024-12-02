@@ -9,7 +9,7 @@
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "apps": {
-      "example": {}
+      "example-app": {}
     },
     "webCrawlerConfigs": [
       {
@@ -20,23 +20,31 @@
   "arcanum-demo-nick": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "sharePointConfigs": [{
-      "displayName": "arcanum-demo-nick",
-      "tenantId": "1234567890",
-      "domain": "arcanum-test",
-      "siteUrls": ["https://arcanum.ai.sharepoint.test/"],
-      "configuration": {}
-    }]
+    "sharePointConfigs": [
+      {
+        "displayName": "arcanum-demo-nick",
+        "tenantId": "1234567890",
+        "domain": "arcanum-test",
+        "siteUrls": [
+          "https://arcanum.ai.sharepoint.test/"
+        ],
+        "configuration": {}
+      }
+    ]
   },
   "arcanum-dave-2": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "sharePointConfigs": [{
-      "tenantId": "221f9237-8475-4dd1-b01b-ec3d5660d813",
-      "domain": "arcanum-test",
-      "siteUrls": ["https://arcanum.ai.sharepoint.test/"],
-      "configuration": {}
-    }]
+    "sharePointConfigs": [
+      {
+        "tenantId": "221f9237-8475-4dd1-b01b-ec3d5660d813",
+        "domain": "arcanum-test",
+        "siteUrls": [
+          "https://arcanum.ai.sharepoint.test/"
+        ],
+        "configuration": {}
+      }
+    ]
   },
   "arcanum-prod-numa-demo": {
     "clientAccountId": "619071323471"
@@ -275,7 +283,9 @@
       {
         "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29",
         "domain": "nzsta.sharepoint.com",
-        "siteUrls": ["https://nzsta.sharepoint.com/sites/Company"],
+        "siteUrls": [
+          "https://nzsta.sharepoint.com/sites/Company"
+        ],
         "configuration": {}
       }
     ]
