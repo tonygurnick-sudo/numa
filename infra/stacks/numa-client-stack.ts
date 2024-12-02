@@ -1,3 +1,4 @@
+import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdktf-util';
 import { Construct } from 'constructs';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
@@ -10,26 +11,21 @@ import { ExampleNumaApp } from '../constructs/example-numa-app-construct';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
-
-
     const defaults = {
       domainSuffix: props.domainSuffix,
-    }
+    };
     props.config ??= lookupConfigForClient(props.client, props.environmentName as EnvironmentName, defaults);
     const deployerRole = `arn:aws:iam::${props.arcanumNumaAccount}:role/admin-delegated-access`;
     const clientRole = `arn:aws:iam::${props.config.clientAccountId}:role/ArcanumAIAccess`;
     super(scope, name, {
       ...props,
-      assumeRoleList: [
-        { roleArn: deployerRole },
-        { roleArn: clientRole },
-      ],
+      assumeRoleList: [{ roleArn: deployerRole }, { roleArn: clientRole }],
     });
 
     const hostedZoneProvider = new AwsProvider(this, 'hosted-zone-provider', {
       assumeRole: [
         {
-          roleArn: deployerRole
+          roleArn: deployerRole,
         },
       ],
       alias: 'dns-provider',
@@ -37,10 +33,7 @@ export class NumaClientStack extends ArcanumStack {
     });
     const certificateProvider = new AwsProvider(this, 'certificate-provider', {
       region: 'us-east-1', // Needs to be us-east-1 to work with Cloudfront.
-      assumeRole: [
-        { roleArn: deployerRole },
-        { roleArn: clientRole },
-      ],
+      assumeRole: [{ roleArn: deployerRole }, { roleArn: clientRole }],
       alias: 'certificate-provider',
       defaultTags: this.provider.defaultTags,
     });
@@ -59,18 +52,24 @@ export class NumaClientStack extends ArcanumStack {
       webExUrl: core.webExUrl,
     });
 
-    Object.entries(props.config.apps ?? {}).forEach(
-      ([appId, appConfig]) => new (lookupAppFromId(appId))(this, appId, {
+    const outputsBucket = new PrivateBucket(this, 'outputs-bucket', {
+      bucket: `numa-${props.client}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}` + '-outputs',
+    });
+
+    Object.entries(props.config.apps ?? {}).forEach(([appId, appConfig]) => {
+      const app = lookupAppFromId(appId);
+      new app(this, appId, {
         ...appConfig,
         apiGatewayId: fe.apiGateway.id,
-      }),
-    );
+        outputsBucket: outputsBucket.bucket,
+      });
+    });
   }
 }
 
 interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
-  customDomain?: string,
-  apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId'>>;
+  customDomain?: string;
+  apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId' | 'outputsBucket'>>;
 }
 type InputConfig = Omit<ClientConfig, 'client' | 'domainName'>;
 const clientConfigDev = _clientConfigDev as Record<string, InputConfig>;
@@ -80,7 +79,11 @@ export function listNumaClients(environmentName?: EnvironmentName): string[] {
   return Object.keys(environmentName == EnvironmentName.prod ? clientConfigProd : clientConfigDev);
 }
 
-function lookupConfigForClient(client: string, environmentName: EnvironmentName, defaults: Record<string, string>): ClientConfig {
+function lookupConfigForClient(
+  client: string,
+  environmentName: EnvironmentName,
+  defaults: Record<string, string>,
+): ClientConfig {
   if (!listNumaClients(environmentName).includes(client)) throw new Error('Invalid client.');
   const config = (environmentName == EnvironmentName.prod ? clientConfigProd : clientConfigDev)[client];
   const domainName = config.customDomain ?? `${client}.${defaults.domainSuffix}`;
@@ -96,7 +99,7 @@ export interface NumaClientStackProps extends ArcanumStackProps {
 }
 
 const apps: Record<string, typeof BaseNumaApp> = {
-  example: ExampleNumaApp,
+  'example-app': ExampleNumaApp,
 };
 
 function lookupAppFromId(id: string): typeof BaseNumaApp {

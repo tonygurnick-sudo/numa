@@ -1,0 +1,17 @@
+[MESSAGES CONTROL]
+# See https://pylint.pycqa.org/en/latest/user_guide/checkers/features.html
+disable=
+    broad-exception-caught,
+    broad-exception-raised,
+    design,
+    duplicate-code,
+    fixme,
+    format,
+    logging-fstring-interpolation,
+    missing-docstring,
+    no-else-raise,
+    no-else-return,
+    wrong-import-order,
+
+[REPORTS]
+msg-template={path}:{line}:{column} [{symbol}] {msg}
