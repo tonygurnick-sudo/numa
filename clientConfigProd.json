@@ -270,6 +270,14 @@
       {
         "url": "https://www.education.govt.nz/"
       }
+    ],
+    "sharePointConfigs": [
+      {
+        "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29",
+        "domain": "nzsta.sharepoint.com",
+        "siteUrls": ["https://nzsta.sharepoint.com/sites/Company"],
+        "configuration": {}
+      }
     ]
   },
   "rooflogic": {
