@@ -215,8 +215,8 @@ __metadata:
   linkType: hard
 
 "@aws-sdk/client-qbusiness@npm:^3.675.0":
-  version: 3.699.0
-  resolution: "@aws-sdk/client-qbusiness@npm:3.699.0"
+  version: 3.703.0
+  resolution: "@aws-sdk/client-qbusiness@npm:3.703.0"
   dependencies:
     "@aws-crypto/sha256-browser": "npm:5.2.0"
     "@aws-crypto/sha256-js": "npm:5.2.0"
@@ -266,13 +266,13 @@ __metadata:
     "@types/uuid": "npm:^9.0.1"
     tslib: "npm:^2.6.2"
     uuid: "npm:^9.0.1"
-  checksum: 10c0/0b566b463ac6842a84f10b08fdb2865855494d314daf7e2be9f53c0f002f3b4175e9b3c7b418595826e5cc2c8043ddc72f392c6ef5f40721ba8f9ac0685ac98a
+  checksum: 10c0/1fff276fff0b13cf48b1382b602686ef57628816160157aec5f4a12ad1c062abc213c7e2d2c4e9f1e132e356a47b0d2d7c7723a4bca95d53bc87f875f6b15419
   languageName: node
   linkType: hard
 
 "@aws-sdk/client-s3@npm:^3.676.0":
-  version: 3.701.0
-  resolution: "@aws-sdk/client-s3@npm:3.701.0"
+  version: 3.703.0
+  resolution: "@aws-sdk/client-s3@npm:3.703.0"
   dependencies:
     "@aws-crypto/sha1-browser": "npm:5.2.0"
     "@aws-crypto/sha256-browser": "npm:5.2.0"
@@ -332,7 +332,7 @@ __metadata:
     "@smithy/util-utf8": "npm:^3.0.0"
     "@smithy/util-waiter": "npm:^3.1.9"
     tslib: "npm:^2.6.2"
-  checksum: 10c0/b7eeb84dddb1c5581de6210ecdfd943a1f94582d30bf58e7ce2ff7ecdbfee68edf01838c0f78f015ebfb134f60cb27d6827f85b78ad8b90cb6516a072425987f
+  checksum: 10c0/eba492878a32cad0709383af4d56b9df95e8de02d99963cb9e3bdb60ade49c8617c857340bd0348711f2212b9ca6d9f7dc00ea80c001ac31afcdeee6824b702d
   languageName: node
   linkType: hard
 
@@ -667,8 +667,8 @@ __metadata:
   linkType: hard
 
 "@aws-sdk/lib-storage@npm:^3.676.0":
-  version: 3.701.0
-  resolution: "@aws-sdk/lib-storage@npm:3.701.0"
+  version: 3.703.0
+  resolution: "@aws-sdk/lib-storage@npm:3.703.0"
   dependencies:
     "@smithy/abort-controller": "npm:^3.1.7"
     "@smithy/middleware-endpoint": "npm:^3.2.3"
@@ -678,8 +678,8 @@ __metadata:
     stream-browserify: "npm:3.0.0"
     tslib: "npm:^2.6.2"
   peerDependencies:
-    "@aws-sdk/client-s3": ^3.701.0
-  checksum: 10c0/3fd27a46ceadf7b3bcb9c226e70a2045e93e60641a3cff058397d3bac3d8a013f32c038ef6f4f914ea561f9a13eaf2c4739dd5d3cdb1e020537db095eb10dfb7
+    "@aws-sdk/client-s3": ^3.703.0
+  checksum: 10c0/18972ae77f17ba19120fff3c6f2e448ab3dfaa2b741532fb99b3d9afc247dd698196c757dd3d76e7628fef284c0152fedfec43cbd8608e9354ea179039faae3b
   languageName: node
   linkType: hard
 
