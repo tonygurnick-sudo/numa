@@ -29,6 +29,7 @@ variables:
         - lambdas/step-function-start
         - lambdas/step-function-status
         - lib/bedrock
+        - lib/helpers
 
 python-lint:
   extends: .poetry-job
