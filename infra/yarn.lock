@@ -39,6 +39,7 @@ __metadata:
     "@arcanumai/typescript-lambda-construct": "npm:^1.2.4"
     "@cdktf/node-pty-prebuilt-multiarch": "npm:^0.10.1-pre.11"
     "@cdktf/provider-aws": "npm:^19.42.0"
+    "@cdktf/provider-random": "npm:^11.0.3"
     "@types/fs-extra": "npm:^11"
     "@types/node": "npm:22.10.1"
     "@typescript-eslint/eslint-plugin": "npm:8.17.0"
@@ -287,6 +288,16 @@ __metadata:
     fs-extra: "npm:8.1.0"
     glob: "npm:10.4.5"
   checksum: 10c0/cb7a7ec0ca23effe0d07f8885ae185bdf47ee8cd895bef1d66bb55e4c3578d8f31afe6466fae8ef2c20ea9c26e14a5c04be012602a128a0663ebaf0e9566986a
+  languageName: node
+  linkType: hard
+
+"@cdktf/provider-random@npm:^11.0.3":
+  version: 11.0.3
+  resolution: "@cdktf/provider-random@npm:11.0.3"
+  peerDependencies:
+    cdktf: ^0.20.0
+    constructs: ^10.3.0
+  checksum: 10c0/37e7f40f7f2643965227f3e4f6aee484b0bcba4eba14c79483dc16e3d300c7839245c8fe7530d5d3cc84f50f49e036ed63e90210621e4ea172c875f0673eab32
   languageName: node
   linkType: hard
 

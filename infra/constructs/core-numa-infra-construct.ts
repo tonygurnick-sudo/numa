@@ -21,6 +21,9 @@ import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as path from 'node:path';
 import { WebDataSourceConstruct } from './data-sources/web-datasource-construct';
 import { SharePointDataSource, SharePointConfiguration } from './data-sources/sharepoint-datasource-construct';
+import { CognitoUser } from '@cdktf/provider-aws/lib/cognito-user';
+import { password } from '@cdktf/provider-random';
+import { RandomProvider } from '@cdktf/provider-random/lib/provider';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -88,6 +91,39 @@ export class CoreNumaInfra extends Construct {
       new CognitoUserPoolDomain(this, 'domain', {
         userPoolId: pool.id,
         domain: cognitoDomain,
+      });
+
+      new RandomProvider(this, 'random-provider', {});
+      const systemUserPassword = new password.Password(this, 'oassword', {
+        length: 64,
+        minLower: 5,
+        minNumeric: 5,
+        minSpecial: 5,
+        minUpper: 5,
+      }).result;
+      const systemUserEmail = 'numa-system-user@arcanum.ai';
+      new CognitoUser(this, 'system-user', {
+        enabled: true,
+        username: systemUserEmail,
+        attributes: {
+          email: systemUserEmail,
+        },
+        password: systemUserPassword,
+        userPoolId: pool.id,
+      });
+      const systemUserSecret = new SecretsmanagerSecret(this, 'system-user-secret-manager-secret', {
+        name: `${props.client}-system-user-password`,
+      });
+      new SecretsmanagerSecretVersion(this, 'system-user-secret-version', {
+        secretId: systemUserSecret.arn,
+        secretString: JSON.stringify({
+          username: systemUserEmail,
+          password: systemUserPassword,
+        }),
+      });
+
+      new TerraformOutput(this, 'system-user-secret', {
+        value: systemUserSecret.arn,
       });
 
       userPoolClient = new CognitoUserPoolClient(this, 'client', {
