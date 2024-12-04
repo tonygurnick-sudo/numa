@@ -28,172 +28,172 @@ const repositoryConfigurations: Record<string, RepositoryConfiguration> = {
   link: {
     fieldMappings: [
       {
-        dataSourceFieldName: "createdAt",
-        indexFieldName: "_created_at",
+        dataSourceFieldName: 'createdAt',
+        indexFieldName: '_created_at',
         dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        indexFieldType: "DATE"
+        indexFieldType: 'DATE',
       },
       {
-        dataSourceFieldName: "lastModifiedDateTime",
-        indexFieldName: "_last_updated_at",
+        dataSourceFieldName: 'lastModifiedDateTime',
+        indexFieldName: '_last_updated_at',
         dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        indexFieldType: "DATE"
+        indexFieldType: 'DATE',
       },
       {
-        dataSourceFieldName: "title",
-        indexFieldName: "_document_title",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'title',
+        indexFieldName: '_document_title',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "sourceUri",
-        indexFieldName: "_source_uri",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'sourceUri',
+        indexFieldName: '_source_uri',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "category",
-        indexFieldName: "_category",
-        indexFieldType: "STRING"
-      }
-    ]
+        dataSourceFieldName: 'category',
+        indexFieldName: '_category',
+        indexFieldType: 'STRING',
+      },
+    ],
   },
   comment: {
     fieldMappings: [
       {
-        dataSourceFieldName: "createdDateTime",
-        indexFieldName: "_created_at",
+        dataSourceFieldName: 'createdDateTime',
+        indexFieldName: '_created_at',
         dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        indexFieldType: "DATE"
+        indexFieldType: 'DATE',
       },
       {
-        dataSourceFieldName: "author",
-        indexFieldName: "_authors",
-        indexFieldType: "STRING_LIST"
+        dataSourceFieldName: 'author',
+        indexFieldName: '_authors',
+        indexFieldType: 'STRING_LIST',
       },
       {
-        dataSourceFieldName: "category",
-        indexFieldName: "_category",
-        indexFieldType: "STRING"
-      }
-    ]
+        dataSourceFieldName: 'category',
+        indexFieldName: '_category',
+        indexFieldType: 'STRING',
+      },
+    ],
   },
   file: {
     fieldMappings: [
       {
-        dataSourceFieldName: "title",
-        indexFieldName: "_document_title",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'title',
+        indexFieldName: '_document_title',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "lastModifiedDateTime",
-        indexFieldName: "_last_updated_at",
+        dataSourceFieldName: 'lastModifiedDateTime',
+        indexFieldName: '_last_updated_at',
         dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        indexFieldType: "DATE"
+        indexFieldType: 'DATE',
       },
       {
-        dataSourceFieldName: "sourceUri",
-        indexFieldName: "_source_uri",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'sourceUri',
+        indexFieldName: '_source_uri',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "createdAt",
-        indexFieldName: "_created_at",
+        dataSourceFieldName: 'createdAt',
+        indexFieldName: '_created_at',
         dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        indexFieldType: "DATE"
+        indexFieldType: 'DATE',
       },
       {
-        dataSourceFieldName: "author",
-        indexFieldName: "_authors",
-        indexFieldType: "STRING_LIST"
+        dataSourceFieldName: 'author',
+        indexFieldName: '_authors',
+        indexFieldType: 'STRING_LIST',
       },
       {
-        dataSourceFieldName: "category",
-        indexFieldName: "_category",
-        indexFieldType: "STRING"
-      }
-    ]
+        dataSourceFieldName: 'category',
+        indexFieldName: '_category',
+        indexFieldType: 'STRING',
+      },
+    ],
   },
   page: {
     fieldMappings: [
       {
-        dataSourceFieldName: "createdDateTime",
-        indexFieldName: "_created_at",
+        dataSourceFieldName: 'createdDateTime',
+        indexFieldName: '_created_at',
         dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        indexFieldType: "DATE"
+        indexFieldType: 'DATE',
       },
       {
-        dataSourceFieldName: "lastModifiedDateTime",
-        indexFieldName: "_last_updated_at",
+        dataSourceFieldName: 'lastModifiedDateTime',
+        indexFieldName: '_last_updated_at',
         dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        indexFieldType: "DATE"
+        indexFieldType: 'DATE',
       },
       {
-        dataSourceFieldName: "title",
-        indexFieldName: "_document_title",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'title',
+        indexFieldName: '_document_title',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "sourceUri",
-        indexFieldName: "_source_uri",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'sourceUri',
+        indexFieldName: '_source_uri',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "category",
-        indexFieldName: "_category",
-        indexFieldType: "STRING"
-      }
-    ]
+        dataSourceFieldName: 'category',
+        indexFieldName: '_category',
+        indexFieldType: 'STRING',
+      },
+    ],
   },
   event: {
     fieldMappings: [
       {
-        dataSourceFieldName: "title",
-        indexFieldName: "_document_title",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'title',
+        indexFieldName: '_document_title',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "lastModifiedDateTime",
-        indexFieldName: "_last_updated_at",
+        dataSourceFieldName: 'lastModifiedDateTime',
+        indexFieldName: '_last_updated_at',
         dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        indexFieldType: "DATE"
+        indexFieldType: 'DATE',
       },
       {
-        dataSourceFieldName: "sourceUri",
-        indexFieldName: "_source_uri",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'sourceUri',
+        indexFieldName: '_source_uri',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "createdDate",
-        indexFieldName: "_created_at",
+        dataSourceFieldName: 'createdDate',
+        indexFieldName: '_created_at',
         dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        indexFieldType: "DATE"
+        indexFieldType: 'DATE',
       },
       {
-        dataSourceFieldName: "category",
-        indexFieldName: "_category",
-        indexFieldType: "STRING"
-      }
-    ]
+        dataSourceFieldName: 'category',
+        indexFieldName: '_category',
+        indexFieldType: 'STRING',
+      },
+    ],
   },
   attachment: {
     fieldMappings: [
       {
-        dataSourceFieldName: "parentCreatedDate",
-        indexFieldName: "_created_at",
+        dataSourceFieldName: 'parentCreatedDate',
+        indexFieldName: '_created_at',
         dateFieldFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        indexFieldType: "DATE"
+        indexFieldType: 'DATE',
       },
       {
-        dataSourceFieldName: "sourceUri",
-        indexFieldName: "_source_uri",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'sourceUri',
+        indexFieldName: '_source_uri',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "category",
-        indexFieldName: "_category",
-        indexFieldType: "STRING"
-      }
-    ]
-  }
+        dataSourceFieldName: 'category',
+        indexFieldName: '_category',
+        indexFieldType: 'STRING',
+      },
+    ],
+  },
 };
 
 export class SharePointDataSource extends DataSource {
@@ -203,15 +203,15 @@ export class SharePointDataSource extends DataSource {
     }
 
     const secret = new SecretsmanagerSecret(scope, `${name}-secret`, {
-      namePrefix: 'sharepoint-secret'
+      namePrefix: `QBusines-sharepoint-secret`,
     });
 
     const defaultAdditionalProperties = {
-      aclConfiguration: "ACLWithLDAPEmailFmt",
-      proxyPort: "",
+      aclConfiguration: 'ACLWithLDAPEmailFmt',
+      proxyPort: '',
       includeSupportedFileType: false,
       isCrawlAdGroupMapping: false,
-      fieldForUserId: "uuid",
+      fieldForUserId: 'uuid',
       inclusionOneNoteSectionNamePatterns: [],
       linkTitleFilterRegEx: [],
       exclusionOneNoteSectionNamePatterns: [],
@@ -223,20 +223,20 @@ export class SharePointDataSource extends DataSource {
       crawlAcl: true,
       inclusionFileTypePatterns: [],
       crawlPages: true,
-      deletionProtectionThreshold: "0",
+      deletionProtectionThreshold: '0',
       crawlListData: true,
       crawlComments: true,
       enableDeletionProtection: false,
       crawlFiles: true,
       exclusionFilePath: [],
       exclusionFileTypePatterns: [],
-      maxFileSizeInMegaBytes: "50",
+      maxFileSizeInMegaBytes: '50',
       crawlEvents: true,
       crawlLinks: true,
       crawlAttachment: true,
       exclusionFileNamePatterns: [],
       inclusionFileNamePatterns: [],
-      inclusionFilePath: []
+      inclusionFilePath: [],
     };
 
     super(scope, name, {
@@ -253,14 +253,14 @@ export class SharePointDataSource extends DataSource {
               onPremVersion: '',
               authType: 'OAuth2App',
               version: 'Online',
-            }
+            },
           },
         },
         secretArn: secret.arn,
         enableIdentityCrawler: true,
         additionalProperties: {
           ...defaultAdditionalProperties,
-          ...props.configuration
+          ...props.configuration,
         },
       },
       repositoryConfigurations,
@@ -284,7 +284,7 @@ export interface SharePointDataSourceProps extends DataSourceProps {
   /**
    * Host URLs of the SharePoint account.
    */
-  siteUrls: string[],
+  siteUrls: string[];
   /**
    * Sharepoint Tenant ID.
    */
