@@ -5,6 +5,7 @@ import { BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
 export class ExampleNumaApp extends BaseNumaApp {
   constructor(scope: Construct, name: string, props: ExampleNumaAppProps) {
     props.pathPrefix ??= 'example';
+    props.enableJobs = true;
     super(scope, name, props);
 
     // Add a lambda that responds to a POST at ${prefix}/a
@@ -72,7 +73,7 @@ export class ExampleNumaApp extends BaseNumaApp {
     this.addStepFunction(this, 'example-step-function', {
       appName: name,
       outputsBucket: props.outputsBucket,
-      policyStatements: [
+      additionalPolicyStatements: [
         {
           actions: ['lambda:InvokeFunction'],
           resources: [stepFunctionLambda.arn],
