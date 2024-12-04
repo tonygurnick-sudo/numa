@@ -14,7 +14,7 @@ boto3 = "^1.34.0"
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.35.71"
 mypy = "1.13.0"
-pylint = "3.3.1"
+pylint = "3.3.2"
 pyright = "1.1.389"
 
 [tool.poetry-plugin-lambda-build]
