@@ -24,12 +24,10 @@ export class NumaFrontendInfra extends Construct {
   constructor(scope: Construct, name: string, props: NumaFrontendInfraProps) {
     super(scope, name);
 
-
     const hostedZone = new DataAwsRoute53Zone(this, 'zone', {
       provider: props.hostedZoneProvider,
       zoneId: props.zoneId,
     });
-
 
     const certificate = new AcmCertificate(this, 'certificate', {
       domainName: props.domainName,
@@ -37,7 +35,7 @@ export class NumaFrontendInfra extends Construct {
       lifecycle: {
         createBeforeDestroy: true,
       },
-      provider: props.certificateProvider
+      provider: props.certificateProvider,
     });
 
     const dvo = certificate.domainValidationOptions.get(0);
@@ -120,6 +118,24 @@ export class NumaFrontendInfra extends Construct {
       },
     });
 
+    const apiCachePolicy = new CloudfrontCachePolicy(this, 'apiCachePolicy', {
+      name: `${props.client.replaceAll('.', '-')}-api-cache-policy`,
+      parametersInCacheKeyAndForwardedToOrigin: {
+        cookiesConfig: {
+          cookieBehavior: 'none',
+        },
+        headersConfig: {
+          headerBehavior: 'none',
+        },
+        queryStringsConfig: {
+          queryStringBehavior: 'none',
+        },
+      },
+      minTtl: 0,
+      defaultTtl: 0,
+      maxTtl: 3600,
+    });
+
     const accessIdentity = new CloudfrontOriginAccessIdentity(this, 'identity', {});
 
     const distribution = new CloudfrontDistribution(this, 'cloudfront', {
@@ -150,7 +166,7 @@ export class NumaFrontendInfra extends Construct {
             originSslProtocols: ['TLSv1.2'],
             originReadTimeout: 30,
           },
-        }
+        },
       ],
       defaultRootObject: 'index.html',
       customErrorResponse: [
@@ -177,8 +193,8 @@ export class NumaFrontendInfra extends Construct {
           pathPattern: '/api/*',
           viewerProtocolPolicy: 'redirect-to-https',
           compress: true,
-          cachePolicyId: defaultCachePolicy.id, // TODO: Use a cache policy that reflects what we actually want.
-        }
+          cachePolicyId: apiCachePolicy.id,
+        },
       ],
       dependsOn: [validation],
     });
@@ -223,7 +239,7 @@ export class NumaFrontendInfra extends Construct {
         zoneId: distribution.hostedZoneId,
         evaluateTargetHealth: true,
       },
-    })
+    });
 
     new TerraformOutput(this, 'domain', {
       value: certificate.domainName,

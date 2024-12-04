@@ -42,7 +42,7 @@
       "configuration": {}
     }],
     "apps": {
-      "example": {}
+      "example-app": {}
     }
   },
   "arcanum-prod-numa-demo": {

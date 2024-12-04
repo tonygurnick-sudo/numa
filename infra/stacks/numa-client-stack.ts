@@ -58,7 +58,7 @@ export class NumaClientStack extends ArcanumStack {
 
     Object.entries(props.config.apps ?? {}).forEach(([appId, appConfig]) => {
       const app = lookupAppFromId(appId);
-      new app(this, appId, {
+      new app(this, `${props.client}-${appId}`, {
         ...appConfig,
         apiGatewayId: fe.apiGateway.id,
         outputsBucket: outputsBucket.bucket,

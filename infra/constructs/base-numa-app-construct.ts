@@ -2,7 +2,6 @@ import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
 import { Apigatewayv2Integration } from '@cdktf/provider-aws/lib/apigatewayv2-integration';
 import { Apigatewayv2Route } from '@cdktf/provider-aws/lib/apigatewayv2-route';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
-import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
@@ -15,6 +14,11 @@ import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
 import path from 'node:path';
 import { fileURLToPath } from 'url';
+import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
+import {
+  DataAwsIamPolicyDocument,
+  DataAwsIamPolicyDocumentStatement,
+} from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,13 +27,19 @@ export class BaseNumaApp extends Construct {
   private apiGatewayId: string;
   private prefix: string;
   private logGroup: CloudwatchLogGroup;
+  protected jobsTable?: DynamodbTable;
+
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     super(scope, name);
     this.apiGatewayId = props.apiGatewayId;
     this.prefix = '/api' + this.prepPathPart(props.pathPrefix ?? '');
     this.logGroup = new CloudwatchLogGroup(this, 'log-group', {
-      name: '/numa/' + name,
+      name: '/numa/' + this.node.id,
     });
+
+    if (props.enableJobs) {
+      this.setupJobs();
+    }
   }
 
   addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): LambdaFunction {
@@ -38,12 +48,12 @@ export class BaseNumaApp extends Construct {
       assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
     });
 
-    const additionalPolicyArns = !props.policyStatements
+    const additionalPolicyArns = !props.additionalPolicyStatements
       ? []
       : [
           new IamPolicy(this, name + '_policy', {
             policy: new DataAwsIamPolicyDocument(this, name + '_policy-document', {
-              statement: props.policyStatements || [],
+              statement: props.additionalPolicyStatements,
             }).json,
           }).arn,
         ];
@@ -68,6 +78,7 @@ export class BaseNumaApp extends Construct {
         logGroup: this.logGroup.name,
         systemLogLevel: 'INFO',
       },
+      environment: props.environment,
     });
 
     if (props.route) {
@@ -116,7 +127,7 @@ export class BaseNumaApp extends Construct {
             ],
             resources: ['*'],
           },
-          ...(props.policyStatements || []),
+          ...(props.additionalPolicyStatements || []),
         ],
       }).json,
     });
@@ -155,7 +166,7 @@ export class BaseNumaApp extends Construct {
           APP_NAME: props.appName,
         },
       },
-      policyStatements: [
+      additionalPolicyStatements: [
         {
           actions: ['states:StartExecution'],
           effect: 'Allow',
@@ -176,13 +187,83 @@ export class BaseNumaApp extends Construct {
           APP_NAME: props.appName,
         },
       },
-      policyStatements: [
+      additionalPolicyStatements: [
         {
           actions: ['s3:GetObject'],
           effect: 'Allow',
           resources: [`${props.outputsBucket.arn}/${props.appName}`],
         },
       ],
+    });
+  }
+
+  protected setupJobs(): void {
+    // Create DynamoDB table with same naming convention as before
+    const tableName = `${this.node.id}-recent-jobs`;
+    const table = (this.jobsTable = new DynamodbTable(this, 'jobs-table', {
+      name: tableName,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'jobID',
+      attribute: [
+        { name: 'jobID', type: 'S' },
+        { name: 'dateTime', type: 'S' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'date-time-index',
+          hashKey: 'dateTime',
+          projectionType: 'ALL',
+        },
+      ],
+    }));
+
+    // Set the base path for jobs
+    const jobsBasePath = '/jobs';
+
+    // Define API operations
+    type Operation = RouteDefinition & {
+      handler: string;
+    };
+
+    const operations: Operation[] = [
+      { verb: 'POST', path: jobsBasePath, handler: 'create_job.handler' },
+      { verb: 'GET', path: jobsBasePath, handler: 'list_jobs.handler' },
+      { verb: 'GET', path: `${jobsBasePath}/{job_id}`, handler: 'get_job.handler' },
+      { verb: 'PUT', path: `${jobsBasePath}/{job_id}`, handler: 'update_job.handler' },
+    ];
+
+    operations.forEach((op) => {
+      const lambdaName = `jobs-${op.verb.toLowerCase()}-${op.path.replace(/[{}]/g, '').replaceAll(/\//g, '')}`;
+
+      // Create the lambda function
+      this.addLambdaFunction(this, lambdaName, {
+        route: {
+          verb: op.verb,
+          path: op.path,
+        },
+        handler: op.handler,
+        lambdaDirectory: 'numa-recent-jobs',
+        runtime: 'python3.13',
+        environment: {
+          variables: {
+            DYNAMODB_TABLE: table.arn,
+          },
+        },
+        additionalPolicyStatements: [
+          {
+            effect: 'Allow',
+            actions: [
+              'dynamodb:PutItem',
+              'dynamodb:GetItem',
+              'dynamodb:UpdateItem',
+              'dynamodb:DeleteItem',
+              'dynamodb:Query',
+              'dynamodb:Scan',
+            ],
+            resources: [table.arn, `${table.arn}/index/*`],
+          },
+        ],
+      });
     });
   }
 
@@ -195,26 +276,18 @@ export class BaseNumaApp extends Construct {
   }
 }
 
-export interface Environment {
-  variables: Record<string, string>;
-}
-
 export interface RouteDefinition {
-  verb: 'GET' | 'POST' | 'HEAD';
+  verb: 'GET' | 'POST' | 'HEAD' | 'PUT';
   path: string;
 }
 
-export interface PolicyStatement {
-  actions: string[];
-  effect?: string;
-  resources: string[];
-}
-
 export interface AddLambdaFunctionProps {
-  environment?: Environment;
+  additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
+  environment?: {
+    variables: Record<string, string>;
+  };
   handler?: string;
   lambdaDirectory: string;
-  policyStatements?: PolicyStatement[];
   route?: RouteDefinition;
   runtime?: string;
   timeout?: number;
@@ -223,12 +296,13 @@ export interface AddLambdaFunctionProps {
 export interface AddStepFunctionProps {
   appName: string;
   outputsBucket: S3Bucket;
-  policyStatements?: PolicyStatement[];
+  additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
   stepFunctionDefinition: asl.StateMachine;
 }
 
 export interface BaseNumaAppProps {
   apiGatewayId: string;
+  enableJobs?: boolean; // Optional flag to enable jobs functionality
   pathPrefix?: string;
   outputsBucket: S3Bucket;
 }

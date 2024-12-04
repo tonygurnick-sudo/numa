@@ -24,6 +24,7 @@ variables:
         - lambdas/example-3
         - lambdas/extract-content-from-file
         - lambdas/meeting-tools-app-formatting
+        - lambdas/numa-recent-jobs
         - lambdas/structured-data-extraction
         - lambdas/step-function-start
         - lambdas/step-function-status
@@ -32,13 +33,11 @@ variables:
 python-lint:
   extends: .poetry-job
   needs: []
-  parallel:
-    !reference [.python-matrix]
+  parallel: !reference [.python-matrix]
   script:
     - poetry run pylint . --verbose --recursive yes --ignore .venv
     - poetry run mypy .
     - poetry run pyright .
 
 python-test:
-  parallel:
-    !reference [.python-matrix]
+  parallel: !reference [.python-matrix]
