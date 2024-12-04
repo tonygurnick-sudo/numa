@@ -51,15 +51,17 @@ export class CoreNumaInfra extends Construct {
       });
       const cognitoDomain = numaClient;
 
-
-      const mfa = (props.mfa ?? false) ? {
-        mfaConfiguration: 'ON',
-        softwareTokenMfaConfiguration: {
-          enabled: true,
-        },
-      } : {
-        mfaConfiguration: 'OFF',
-      }
+      const mfa =
+        (props.mfa ?? false)
+          ? {
+              mfaConfiguration: 'ON',
+              softwareTokenMfaConfiguration: {
+                enabled: true,
+              },
+            }
+          : {
+              mfaConfiguration: 'OFF',
+            };
       pool = new CognitoUserPool(this, 'user-pool', {
         name: numaClient,
         usernameAttributes: ['email'],
@@ -359,15 +361,19 @@ export class CoreNumaInfra extends Construct {
     });
     const applicationId = Fn.lookup(Fn.jsondecode(application.properties), 'ApplicationId');
 
+    const origins = props.enableIFrame
+      ? {
+          Origins: [`https://${props.domainName}`],
+        }
+      : {};
+
     const webexperience = new CloudcontrolapiResource(this, 'web-experience', {
       typeName: 'AWS::QBusiness::WebExperience',
       desiredState: Fn.jsonencode({
         ApplicationId: applicationId,
         RoleArn: role.arn,
-        Origins: [
-          `https://${props.domainName}`,
-        ],
         ...webexIdentityConfig,
+        ...origins,
       }),
     });
 
@@ -434,7 +440,7 @@ export class CoreNumaInfra extends Construct {
               variable: 'aws:SourceAccount',
               values: [callerId.accountId],
             },
-          ]
+          ],
         },
       ],
     });
@@ -497,11 +503,10 @@ export class CoreNumaInfra extends Construct {
       bucket: numaClient + '-sitemaps',
     });
 
-
     for (const crawlerDataSource of props.webCrawlerConfigs) {
       crawlerDataSource.siteMapFiles ??= [];
       const siteMapFiles = crawlerDataSource.siteMapFiles?.map((siteMapPath) => path.join(...siteMapPath));
-      if (!crawlerDataSource.url && (crawlerDataSource.siteMapFiles.length == 0)) {
+      if (!crawlerDataSource.url && crawlerDataSource.siteMapFiles.length == 0) {
         throw new Error('Empty web crawler configuration');
       }
 
@@ -520,7 +525,6 @@ export class CoreNumaInfra extends Construct {
 
       // TODO: Trigger an initial crawl.
     }
-
 
     for (const sharePointDataSource of props.sharePointConfigs ?? []) {
       const cleanedDomain = sharePointDataSource.domain.replaceAll(/[^a-zA-Z0-9_-]/g, '-');
@@ -548,7 +552,6 @@ export class CoreNumaInfra extends Construct {
   }
 }
 
-
 interface WebCrawlerConfig {
   url?: string;
   siteMapFiles?: string[][];
@@ -564,6 +567,12 @@ interface SharePointConfig {
 export interface CoreNumaInfraProps {
   client: string;
   environmentName: string;
+  /**
+   * Enable iFrame support. Not supported on every account.
+   *
+   * @default false
+   */
+  enableIFrame?: boolean;
   identityProvider?: 'oidc' | 'idc';
   indexType?: 'ENTERPRISE' | 'STARTER';
   region?: string;
