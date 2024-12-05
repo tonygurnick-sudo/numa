@@ -38,8 +38,8 @@ Usage of this project is facilitated via the `yarn cdktf` helper script. This re
 
 **Note**
 
-Some stack require the lambdas to be build, a quick way of doing that is (from
-the infra directory):
+Some stacks require the lambdas to be build, a quick way of doing that on Linux
+is (from the infra directory):
 
 ```bash
 for directory in ../lambdas/*/; do
@@ -47,6 +47,36 @@ pushd $directory;
 poetry build-lambda;
 popd;
 done;
+```
+
+On Mac it's a little more complicated:
+
+```bash
+rm -rf build_venv
+python3.12 -m venv build_venv
+source build_venv/bin/activate
+
+for directory in ../lambdas/*/; do
+pushd $directory;
+    rm -rf lambda_function.build;
+    rm -f lambda_function.zip;
+    pip install \
+        --quiet \
+        --disable-pip-version-check \
+        --platform manylinux2014_x86_64 \
+        --target=lambda_function.build \
+        --python-version 3.12 \
+        --only-binary=:all: \
+        .
+    pushd lambda_function.build;
+        zip --quiet --recurse-paths ../lambda_function.zip *
+    popd
+    rm -rf lambda_function.build;
+popd;
+done;
+
+deactivate
+rm -rf build_venv
 ```
 
 ---
@@ -90,31 +120,31 @@ Tests (TODO) can be run with `yarn test`.
 The Numa infrastructure supports two methods for configuring web crawlers:
 
 1. Direct URL Crawling
-The simplest method is to specify URLs directly in the client configuration:
+   The simplest method is to specify URLs directly in the client configuration:
 
 "webCrawlerConfigs": [
-  {
-    "url": "https://example.com"
-  }
+{
+"url": "https://example.com"
+}
 ]
 
 2. Sitemap-based Crawling
-For more comprehensive crawling, you can use XML sitemaps.
+   For more comprehensive crawling, you can use XML sitemaps.
 
 Download the client's sitemap and save it in the client-sitemaps directory
 Configure the crawler to use this sitemap in the client configuration:
 
 "webCrawlerConfigs": [
-  {
-    "siteMapFiles": [
-      ["client-sitemaps", "client-name-sitemap.xml"]
-    ]
-  }
+{
+"siteMapFiles": [
+["client-sitemaps", "client-name-sitemap.xml"]
+]
+}
 ]
 
 Important Notes:
 
-1. Before deploying: You must manually download and place the sitemap   file in the client-sitemaps directory
-3. The sitemap path is relative to the project root
-4. You can combine both URL-based and sitemap-based configurations for the same client
-5. Sitemaps must be in valid XML format
+1. Before deploying: You must manually download and place the sitemap file in the client-sitemaps directory
+2. The sitemap path is relative to the project root
+3. You can combine both URL-based and sitemap-based configurations for the same client
+4. Sitemaps must be in valid XML format
