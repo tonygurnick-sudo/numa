@@ -15,7 +15,7 @@ class TestLambdaFunction(unittest.TestCase):
     @patch("lambda_function.s3_client")
     @patch("bedrock.get_text_from_image")
     @patch("textract.get_pages_from_document")
-    def test_lambda_handler_txt_file(
+    def test_handler_txt_file(
         self,
         mock_textract,
         mock_bedrock,
@@ -30,7 +30,7 @@ class TestLambdaFunction(unittest.TestCase):
             "return_content": True,
         }
 
-        response = lambda_function.lambda_handler(event, {})
+        response = lambda_function.handler(event, {})
 
         self.assertEqual(response["content"], "Sample text content\n")
 
@@ -59,7 +59,7 @@ class TestLambdaFunction(unittest.TestCase):
     @patch("lambda_function.s3_client")
     @patch("bedrock.get_text_from_image")
     @patch("textract.get_pages_from_document")
-    def test_lambda_handler_empty_txt_file(
+    def test_handler_empty_txt_file(
         self,
         mock_textract,
         mock_bedrock,
@@ -74,7 +74,7 @@ class TestLambdaFunction(unittest.TestCase):
             "return_content": True,
         }
 
-        response = lambda_function.lambda_handler(event, {})
+        response = lambda_function.handler(event, {})
 
         self.assertEqual(response["content"], "\n")
 
@@ -99,7 +99,7 @@ class TestLambdaFunction(unittest.TestCase):
         mock_bedrock.assert_not_called()
 
     @patch("lambda_function.s3_client")
-    def test_lambda_handler_unsupported_filetype_error(
+    def test_handler_unsupported_filetype_error(
         self,
         mock_s3_client,
     ):
@@ -109,7 +109,7 @@ class TestLambdaFunction(unittest.TestCase):
         }
 
         with self.assertRaises(lambda_function.UnsupportedFileFormat):
-            lambda_function.lambda_handler(event, {})
+            lambda_function.handler(event, {})
 
         mock_s3_client.get_object.assert_not_called()
         mock_s3_client.put_object.assert_not_called()
@@ -117,7 +117,7 @@ class TestLambdaFunction(unittest.TestCase):
     @patch("lambda_function.s3_client")
     @patch("textract.get_pages_from_document")
     @patch("bedrock.get_text_from_image")
-    def test_lambda_handler_s3_exception(
+    def test_handler_s3_exception(
         self,
         mock_bedrock,
         mock_textract,
@@ -131,7 +131,7 @@ class TestLambdaFunction(unittest.TestCase):
         }
 
         with self.assertRaises(TestException):
-            lambda_function.lambda_handler(event, {})
+            lambda_function.handler(event, {})
 
         mock_s3_client.get_object.assert_called_once_with(
             Bucket="test-bucket",
@@ -143,7 +143,7 @@ class TestLambdaFunction(unittest.TestCase):
     @patch("lambda_function.s3_client")
     @patch("bedrock.get_text_from_image", return_value="Sample image content")
     @patch("textract.get_pages_from_document")
-    def test_lambda_handler_image(
+    def test_handler_image(
         self,
         mock_textract,
         mock_bedrock,
@@ -155,7 +155,7 @@ class TestLambdaFunction(unittest.TestCase):
             "return_content": True,
         }
 
-        response = lambda_function.lambda_handler(event, {})
+        response = lambda_function.handler(event, {})
 
         self.assertEqual(response["content"], "Sample image content\n")
 
@@ -181,7 +181,7 @@ class TestLambdaFunction(unittest.TestCase):
     @patch("lambda_function.s3_client")
     @patch("bedrock.get_text_from_image")
     @patch("textract.get_pages_from_document", return_value={1: "Sample pdf content"})
-    def test_lambda_handler_pdf(
+    def test_handler_pdf(
         self,
         mock_textract,
         mock_bedrock,
@@ -193,7 +193,7 @@ class TestLambdaFunction(unittest.TestCase):
             "return_content": True,
         }
 
-        response = lambda_function.lambda_handler(event, {})
+        response = lambda_function.handler(event, {})
 
         self.assertEqual(response["content"], "Sample pdf content\n")
 

@@ -8,7 +8,7 @@ MAX_TOKENS = 8000
 MAX_PAGES = 30
 
 
-def lambda_handler(event: dict, _context: dict) -> list[dict]:
+def handler(event: dict, _context: dict) -> list[dict]:
     extracted_data = event["content"]
     config = event.get("config") or "personal_finance"
     data_extraction_type = (
@@ -127,7 +127,7 @@ def main():
         "data_extraction_type": args.data_extraction_type,
     }
     test_context = {}
-    result = lambda_handler(test_event, test_context)
+    result = handler(test_event, test_context)
     print(result)
 
 
