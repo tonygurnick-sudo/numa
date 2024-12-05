@@ -370,13 +370,13 @@ testutils = ["gitpython (>3)"]
 
 [[package]]
 name = "pyright"
-version = "1.1.389"
+version = "1.1.390"
 description = "Command line wrapper for pyright"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "pyright-1.1.389-py3-none-any.whl", hash = "sha256:41e9620bba9254406dc1f621a88ceab5a88af4c826feb4f614d95691ed243a60"},
-    {file = "pyright-1.1.389.tar.gz", hash = "sha256:716bf8cc174ab8b4dcf6828c3298cac05c5ed775dda9910106a5dcfe4c7fe220"},
+    {file = "pyright-1.1.390-py3-none-any.whl", hash = "sha256:ecebfba5b6b50af7c1a44c2ba144ba2ab542c227eb49bc1f16984ff714e0e110"},
+    {file = "pyright-1.1.390.tar.gz", hash = "sha256:aad7f160c49e0fbf8209507a15e17b781f63a86a1facb69ca877c71ef2e9538d"},
 ]
 
 [package.dependencies]
@@ -401,13 +401,13 @@ files = [
 
 [[package]]
 name = "types-fpdf2"
-version = "2.8.1.20241011"
+version = "2.8.1.20241204"
 description = "Typing stubs for fpdf2"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "types-fpdf2-2.8.1.20241011.tar.gz", hash = "sha256:5a95fe40544025c5f6c7244f0c6a7a4de1151d15e3f88ca97ac0e4e674e8d95e"},
-    {file = "types_fpdf2-2.8.1.20241011-py3-none-any.whl", hash = "sha256:34d8ade10f4e85a838aad1443bffb8803d6d4737341afa450b06f18efb5abd28"},
+    {file = "types_fpdf2-2.8.1.20241204-py3-none-any.whl", hash = "sha256:be49b16095bbfb649f9013d4f51578ff9ea0bc4bc7c36dfd65e7924bb510f3ef"},
+    {file = "types_fpdf2-2.8.1.20241204.tar.gz", hash = "sha256:122a1908a01c01fadc74cc40095cb49de92fbb12f70f1f189c719192bea302b0"},
 ]
 
 [package.dependencies]
@@ -427,4 +427,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "04c487eeab21c8dc624883abcb2d0a78d6b6abb7308cfa6f4405f9f8ea6a43aa"
+content-hash = "d6b786736972192de18a0d08d13b7fe79920c78955143f4a67c6d0bbd4b36a97"
