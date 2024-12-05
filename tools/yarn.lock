@@ -215,8 +215,8 @@ __metadata:
   linkType: hard
 
 "@aws-sdk/client-qbusiness@npm:^3.675.0":
-  version: 3.705.0
-  resolution: "@aws-sdk/client-qbusiness@npm:3.705.0"
+  version: 3.707.0
+  resolution: "@aws-sdk/client-qbusiness@npm:3.707.0"
   dependencies:
     "@aws-crypto/sha256-browser": "npm:5.2.0"
     "@aws-crypto/sha256-js": "npm:5.2.0"
@@ -266,7 +266,7 @@ __metadata:
     "@types/uuid": "npm:^9.0.1"
     tslib: "npm:^2.6.2"
     uuid: "npm:^9.0.1"
-  checksum: 10c0/9548da8605e5f1137d75e104748f3cac069cbdea813f82e751a412cb80cc6c87f132a58b83b5312dd4d57e12cac168eebc27c5a27b324c18bbb9466f3c163838
+  checksum: 10c0/cafb9b52336f1a64afc46d07fbd250063a9a3148ae9618f08713b7dad8f5fdae53d0d9e93623a7e7c6e06d070fccbf3a26ed05d957bf1d85c8b2d68104eba814
   languageName: node
   linkType: hard
 
