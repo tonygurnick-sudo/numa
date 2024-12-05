@@ -16,8 +16,8 @@ fpdf2 = "2.8.1"
 [tool.poetry.group.dev.dependencies]
 mypy = "1.13.0"
 pylint = "3.3.2"
-pyright = "1.1.389"
-types-fpdf2 = "2.8.1.20241011"
+pyright = "1.1.390"
+types-fpdf2 = "2.8.1.20241204"
 
 [build-system]
 requires = ["poetry-core"]
