@@ -2,11 +2,7 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
-from lambda_function import (
-    extract_full_document,
-    extraction_page_by_page,
-    lambda_handler,
-)
+from lambda_function import extract_full_document, extraction_page_by_page, handler
 
 
 class TestLambdaFunction(unittest.TestCase):
@@ -22,7 +18,7 @@ class TestLambdaFunction(unittest.TestCase):
         },
     )
     @patch("bedrock.BedrockClaude3Model")
-    def test_lambda_handler_single_extraction(self, mock_model):
+    def test_handler_single_extraction(self, mock_model):
         # Mocking the model's response
         mock_response = MagicMock()
         mock_response.run.return_value.response = [
@@ -37,7 +33,7 @@ class TestLambdaFunction(unittest.TestCase):
         }
         context = {}
 
-        result = lambda_handler(event, context)
+        result = handler(event, context)
         expected_result = [{"field": "value"}]
 
         self.assertEqual(result, expected_result)
@@ -55,7 +51,7 @@ class TestLambdaFunction(unittest.TestCase):
         },
     )
     @patch("bedrock.BedrockClaude3Model")
-    def test_lambda_handler_multiple_extraction(self, mock_model):
+    def test_handler_multiple_extraction(self, mock_model):
         # Mocking the model's response for each page
         mock_response = MagicMock()
         mock_response.run.return_value.response = [
@@ -70,13 +66,13 @@ class TestLambdaFunction(unittest.TestCase):
         }
         context = {}
 
-        result = lambda_handler(event, context)
+        result = handler(event, context)
         expected_result = [{"field": "value"}, {"field": "value"}]
 
         self.assertEqual(result, expected_result)
         self.assertEqual(mock_response.run.call_count, 2)
 
-    def test_lambda_handler_invalid_config(self):
+    def test_handler_invalid_config(self):
         # Test for unknown configuration
         event = {
             "content": "This is some sample content",
@@ -86,12 +82,12 @@ class TestLambdaFunction(unittest.TestCase):
         test_context = {}  # Rename to avoid conflict
 
         with self.assertRaises(ValueError) as exception_context:
-            lambda_handler(event, test_context)
+            handler(event, test_context)
         self.assertIn(
             "Unknown config 'unknown_config'", str(exception_context.exception)
         )
 
-    def test_lambda_handler_invalid_extraction_type(self):
+    def test_handler_invalid_extraction_type(self):
         # Test for invalid data_extraction_type
         event = {
             "content": "This is some sample content",
@@ -101,7 +97,7 @@ class TestLambdaFunction(unittest.TestCase):
         test_context = {}  # Rename to avoid conflict
 
         with self.assertRaises(ValueError) as exception_context:
-            lambda_handler(event, test_context)
+            handler(event, test_context)
         self.assertIn(
             "Unknown data_extraction_type 'invalid_type'",
             str(exception_context.exception),

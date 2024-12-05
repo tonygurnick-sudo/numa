@@ -25,10 +25,12 @@ variables:
         - lambdas/extract-content-from-file
         - lambdas/meeting-tools-app-formatting
         - lambdas/numa-recent-jobs
-        - lambdas/structured-data-extraction
         - lambdas/step-function-start
         - lambdas/step-function-status
+        - lambdas/structured-data-extraction
         - lib/bedrock
+        - lib/helpers
+        - lib/markdown-to-pdf
 
 python-lint:
   extends: .poetry-job

@@ -191,7 +191,7 @@ export class BaseNumaApp extends Construct {
         {
           actions: ['s3:GetObject'],
           effect: 'Allow',
-          resources: [`${props.outputsBucket.arn}/${props.appName}`],
+          resources: [`${props.outputsBucket.arn}/${props.appName}/*`],
         },
       ],
     });

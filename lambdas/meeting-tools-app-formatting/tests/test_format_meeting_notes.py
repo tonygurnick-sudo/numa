@@ -1,6 +1,6 @@
 import unittest
 
-from lambda_function import lambda_handler
+from lambda_function import handler
 
 
 class TestFormatMeetingNotesLambda(unittest.TestCase):
@@ -13,7 +13,7 @@ class TestFormatMeetingNotesLambda(unittest.TestCase):
             }
         }
 
-        response = lambda_handler(event, {})
+        response = handler(event, {})
 
         self.assertIn("meetingTextStructured", response)
         self.assertIn("Meeting Transcript", response["meetingTextStructured"])
@@ -30,7 +30,7 @@ class TestFormatMeetingNotesLambda(unittest.TestCase):
             }
         }
 
-        response = lambda_handler(event, {})
+        response = handler(event, {})
 
         self.assertIn("meetingTextStructured", response)
         self.assertIn("Notes Description", response["meetingTextStructured"])
@@ -51,7 +51,7 @@ class TestFormatMeetingNotesLambda(unittest.TestCase):
             },
         }
 
-        response = lambda_handler(event, {})
+        response = handler(event, {})
 
         self.assertIn("meetingTextStructured", response)
         self.assertIn("Transcript Description", response["meetingTextStructured"])
@@ -75,7 +75,7 @@ class TestFormatMeetingNotesLambda(unittest.TestCase):
             ]
         }
 
-        response = lambda_handler(event, {})
+        response = handler(event, {})
 
         self.assertIn("meetingTextStructured", response)
         self.assertIn("File Transcript", response["meetingTextStructured"])
@@ -94,7 +94,7 @@ class TestFormatMeetingNotesLambda(unittest.TestCase):
             "template": "Template 1",
         }
 
-        response = lambda_handler(event, {})
+        response = handler(event, {})
 
         self.assertIn("meetingTextStructured", response)
         self.assertIn("Transcript Description", response["meetingTextStructured"])
@@ -107,7 +107,7 @@ class TestFormatMeetingNotesLambda(unittest.TestCase):
         # Test case where neither transcript nor meeting notes are provided
         event = {}
 
-        response = lambda_handler(event, {})
+        response = handler(event, {})
 
         self.assertIn("error", response)
         self.assertEqual(
@@ -132,7 +132,7 @@ class TestFormatMeetingNotesLambda(unittest.TestCase):
             ]
         }
 
-        response = lambda_handler(event, {})
+        response = handler(event, {})
 
         self.assertIn("error", response)
         self.assertEqual(

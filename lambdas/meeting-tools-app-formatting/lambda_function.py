@@ -3,7 +3,7 @@
 import argparse
 
 
-def lambda_handler(event: dict, _context: dict) -> dict:
+def handler(event: dict, _context: dict) -> dict:
     # Extract inputs from event
     uploaded_files = event.get("uploadedFiles") or []
     meeting_notes = event.get("meetingNotes") or {}
@@ -93,7 +93,7 @@ def main():
         "template": args.template,
     }
     test_context = {}
-    result = lambda_handler(test_event, test_context)
+    result = handler(test_event, test_context)
     print(result)
 
 

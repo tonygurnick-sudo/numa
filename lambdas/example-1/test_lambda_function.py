@@ -5,5 +5,5 @@ import lambda_function
 
 
 class TestLambdaFunction(unittest.TestCase):
-    def test_lambda_handler(self):
+    def test_handler(self):
         lambda_function.handler({}, {})

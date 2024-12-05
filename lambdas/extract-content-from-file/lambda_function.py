@@ -34,7 +34,7 @@ class Document:
     pages: list[DocumentPage] = dataclasses.field(default_factory=list)
 
 
-def lambda_handler(event: dict, _context: dict) -> dict:
+def handler(event: dict, _context: dict) -> dict:
     helpers.setup_logging()
 
     input_bucket = event["input_bucket"]
@@ -134,7 +134,7 @@ def main():
         "input_key": args.key,
     }
     test_context = {}
-    result = lambda_handler(test_event, test_context)
+    result = handler(test_event, test_context)
     print(result)
 
 
