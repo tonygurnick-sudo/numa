@@ -11,28 +11,13 @@ function TextOutputModule({ task }) {
   if (!task) return;
 
   return (
-    <div className="card card-apps">
-      <div className="card-header">
-        <Row>
-          <Col lg={12}>
-            {task?.title}
-            <br />
-          </Col>
-        </Row>
-      </div>
+    <div>
 
-      <div className="card-body">
-        {loading && <Preloader smallscreen={true} overlayParent={true} />}
         {/* Textarea for displaying data */}
-        <textarea
-          rows="10"
-          className="form-control"
-          value={taskResponse?.result || ''}
-          readOnly
-        />
-      </div>
-
-      <div className="card-footer" />
+        <p className="output-text">
+          {loading && <Preloader smallscreen={true}  />}
+          {taskResponse?.result || ''}
+        </p>
     </div>
   );
 }

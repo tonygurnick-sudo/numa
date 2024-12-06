@@ -1,0 +1,134 @@
+import React from 'react';
+import { Button, ProgressBar } from 'react-bootstrap';
+
+const WizardNavigation = ({
+  preRunSteps,
+  postRunSteps,
+  activeStep,
+  onStepClick,
+  isStepComplete,
+  isStepDisabled,
+  runButtonProps,
+  processingProgress,
+  processingStatus,
+}) => {
+  const { isRunning, disabled, onClick, ...otherRunButtonProps } = runButtonProps;
+
+  // Show post-run steps if app is running or has been run (has results)
+  const hasBeenRun = isRunning || postRunSteps.some((_, index) => isStepComplete?.(index + preRunSteps.length));
+
+  return (
+    <div className="wizard-navigation">
+      <div className="input-section-wrapper">
+        <div className="step-section">
+          <div className="section-label">Inputs</div>
+          <div className="step-group pre-run">
+            {preRunSteps.map((step, index) => (
+              <div key={step.id} className="step-container">
+                <div
+                  className={`step-indicator ${
+                    activeStep === index ? 'active' : ''
+                  } ${isStepComplete?.(index) ? 'completed' : ''}`}
+                  onClick={() => !isStepDisabled?.(index) && onStepClick(index)}
+                >
+                  <span className="step-number">{index + 1}</span>
+                  <div className="step-label-container">
+                    <span className="step-label">{step.title}</span>
+                    {step?.required && (
+                      <span className="required-label" title="Required item to run">
+                        req
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {index < preRunSteps.length - 1 && <div className="step-connector" />}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="run-button-container">
+          <div className="run-button-wrapper">
+            <Button
+              type="submit"
+              id="submit"
+              className="run-app-button"
+              disabled={disabled}
+              onClick={onClick}
+              {...otherRunButtonProps}
+            >
+              {isRunning ? (
+                <>
+                  <span
+                    className="spinner-border spinner-border-sm"
+                    role="status"
+                    aria-hidden="true"
+                  ></span>
+                  <span className="ms-2">Running...</span>
+                </>
+              ) : (
+                <>
+                  Run App{' '}
+                  <i
+                    style={{ lineHeight: '1px' }}
+                    className={`bi bi-arrow-right ${
+                      !disabled ? 'bounce-icon' : ''
+                    }`}
+                  ></i>
+                </>
+              )}
+            </Button>
+            <div className="run-status-text">
+              {!isRunning && disabled && (
+                <>Complete the required items to run</>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="step-section">
+        <div className="section-label">Results</div>
+        {isRunning && (
+          <div className="processing-container">
+            <ProgressBar
+              now={processingProgress}
+              label={`${Math.round(processingProgress)}%`}
+              animated
+              style={{
+                width: '50%',
+                margin: '0 auto 10px auto',
+              }}
+            />
+            <div className="processing-status">{processingStatus}</div>
+          </div>
+        )}
+        <div className={`step-group post-run ${hasBeenRun ? 'show' : ''}`}>
+          {postRunSteps.map((step, index) => (
+            <div key={step.id} className="step-container">
+              <div
+                className={`step-indicator ${
+                  activeStep === index + preRunSteps.length ? 'active' : ''
+                } ${isStepComplete?.(index + preRunSteps.length) ? 'completed' : ''} ${
+                  isStepDisabled?.(index + preRunSteps.length) ? 'disabled' : ''
+                }`}
+                onClick={() =>
+                  !isStepDisabled?.(index + preRunSteps.length) &&
+                  onStepClick(index + preRunSteps.length)
+                }
+              >
+
+                <div className="step-label-container">
+                  <span className="step-label">{step.title}</span>
+                </div>
+              </div>
+              {index < postRunSteps.length - 1 && <div className="step-connector" />}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export { WizardNavigation };

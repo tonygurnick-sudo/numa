@@ -5,6 +5,9 @@
       "id": "meeting-tools-app",
       "type": "numa-app",
       "status": "Active",
+      "appVersion": 0.02,
+      "category": "productivity",
+      "tags": ["meeting", "analysis", "productivity", "insights", "note-taking", "transcript", "meeting-minutes", "action-items", "follow-up", "summary", "reporting"],
       "createdDate": "2023-11-06T10:38:12Z",
       "appDescription": "The Meeting Insights and Analysis Tool is designed to transform raw meeting data into comprehensive summaries, insightful analyses, and actionable outputs. Whether your meetings are in person, virtual, or a blend of both, this app helps you make the most out of your meeting notes and transcripts by providing structured, automated reports and follow-up resources.",
       "tasks": [
@@ -115,6 +118,8 @@
       "id": "numa-workflow-app-id",
       "type": "numa-app",
       "status": "Coming Soon",
+      "category": "hr",
+      "tags": ["risk-assessment", "governance", "audit", "regulatory"],
       "createdDate": "2023-11-06T10:38:12Z",
       "appDescription": "Processes a file through S3, Q App, and Lambda, then displays the output.",
       "tasks": [
@@ -164,11 +169,13 @@
     },
     {
       "appName": "Meeting Tools App Native Q App",
-      "id": "loan-financing-calculator",
+      "id": "meeting-tools-app",
       "type": "q-app",
       "appVersion": 1,
       "qAppId": "d152ee6f-a1e8-40ea-810e-aa006790a897",
       "status": "Coming Soon",
+      "category": "productivity",
+      "tags": ["recruitment", "hiring", "talent", "screening"],
       "createdDate": "2023-11-06T10:38:12Z",
       "appDescription": "An app to calculate if refinancing a loan is worth it based on current and new loan details."
     },
@@ -178,6 +185,8 @@
       "type": "q-app",
       "qAppId": "dc1427b5-7673-4c26-9add-5bda95c00b30",
       "status": "Coming Soon",
+      "category": "finance",
+      "tags": ["templates", "documentation", "workflow", "automation"],
       "createdDate": "2023-11-06T10:38:12Z",
       "appDescription": "An app to calculate if refinancing a loan is worth it based on current and new loan details."
     },
@@ -186,6 +195,8 @@
       "id": "data-processing-app-id",
       "type": "numa-app",
       "status": "Test",
+      "category": "general",
+      "tags": ["ai-analysis", "extraction", "insights", "documents"],
       "createdDate": "2023-11-06T10:38:12Z",
       "appDescription": "Processes raw data and generates insights.",
       "tasks": [
@@ -229,6 +240,8 @@
       "id": "ml-model-deployment-app-id",
       "type": "numa-app",
       "status": "",
+      "category": "compliance",
+      "tags": [],
       "createdDate": "2023-11-06T10:38:12Z",
       "appDescription": "Deploys a machine learning model to a cloud platform.",
       "tasks": [

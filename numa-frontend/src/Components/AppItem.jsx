@@ -1,103 +1,112 @@
 import { useState, useEffect } from 'react';
 import { Alert, Row, Col } from 'react-bootstrap';
-import { Preloader } from '../Components/Preloader';
+import { Preloader } from './Preloader';
 
 import { GetQAppCommand } from '@aws-sdk/client-qapps';
 
-const AppItem = ({ appId, instanceId, qAppsClient, isMyApp }) => {
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [appData, setApp] = useState(null);
+const AppItem = ({ app }) => {
+  // Get first 3 tags for display
+  const displayTags = app?.tags?.slice(0, 3) || [];
 
-  const fetchApp = async () => {
-    try {
-      const input = { instanceId: instanceId, appId: appId };
-      const command = new GetQAppCommand(input);
-      const response = await qAppsClient.send(command);
-
-      setApp(response);
-    } catch (error) {
-      console.error('Error fetching Q Apps:', error);
-      setError(error);
-    } finally {
-      setLoading(false);
-    }
+  const getCategoryColor = (category) => {
+    const categoryColors = {
+      productivity: 'green',
+      finance: 'purple',
+      sales: 'blue',
+      // Add more categories as needed
+    };
+    return categoryColors[category] || 'blue';
   };
 
-  // Fetch app details on mount
-  useEffect(() => {
-    if (!qAppsClient) return;
-
-    fetchApp();
-  }, []);
-
   return (
-    <>
-      <div className="card card-apps">
-        <a href={`/app/${appId}`} rel="noopener">
-          <div className="card-header">
-            <Row>
-              <Col lg={9}>{appData?.title}</Col>
-              <Col lg={3} className="right">
-                {appData?.appVersion && <label>v{appData?.appVersion}</label>}
-              </Col>
-            </Row>
+    <Col key={app.id} lg={4} className="flex">
+      <div className="card card-apps" data-testid={`app-card-${app.id}`}>
+        <div className={`card-category ${app?.category?.toLowerCase()}`}>
+          {app?.category || '\u00A0'}
+        </div>
+        <div className="card-header">
+          <div className="header-top">
+            <div className="app-name">
+              <i className="bi bi-window app-item-icon"></i>
+              <a href={`/app/${app.id}`} rel="noopener">
+                {app?.appName}
+              </a>
+            </div>
+            <div className="header-right">
+            </div>
+
           </div>
-          <div className="card-body">
-            {loading ? (
+          <div className="app-tags">
+            {displayTags.map((tag, index) => (
+              <span
+                key={index}
+                className={`tag-pill tag-${['green', 'purple', 'blue'][index % 3]}`}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+
+        </div>
+
+        <div className="card-body">
+        <hr />
+          <div className="app-info">
+            <div className="app-description">{app.appDescription === 'Loading...' ? (
               <Preloader smallscreen={true} />
             ) : (
-              <> {appData?.description}</>
-            )}
+              <div className="description-text">{app.appDescription}</div>
+            )}</div>
           </div>
-          <div className="card-buttons">
-            <Row>
-              <Col lg={8}></Col>
-              <Col lg={4}>
-                {error && <Alert variant="danger">{error}</Alert>}
-              </Col>
-            </Row>
-          </div>
-          <div className="card-footer">
-            <Row className="justify-content-end">
-              <Col>
-                {' '}
-                <div className="tooltip clear">
-                  {isMyApp && !loading && (
-                    <>
-                      {isMyApp ? (
-                        <>
-                          <span className="tooltiptext">My App</span>
-                          <h3 className="bi bi-clipboard2-check"></h3>
-                        </>
-                      ) : (
-                        <>
-                          <span className="tooltiptext">Get App</span>
-                          <h3 className="bi bi-clipboard2"></h3>
-                        </>
-                      )}
-                    </>
-                  )}
+        </div>
+        <div className="card-footer">
+          <div className="footer-content">
+            <div className="footer-left">
+              <div className="d-flex align-items-center gap-4 mb-3">
+                <div className="likes">
+                  <i className="bi bi-download"></i>
+                  <span>238</span>
                 </div>
-              </Col>
-              <Col>
-                {' '}
-                {appData?.status}{' '}
-                {appData?.status === 'coming_soon' ? (
-                  <div className="badge-status comingsoon right">
-                    Coming Soon
+                <div className="likes">
+                  <i className="bi bi-heart"></i>
+                  <span>45</span>
+                </div>
+              </div>
+              <div className="d-flex align-items-center gap-3">
+                <div className="app-status">
+                  <span className={`status ${app.status.toLowerCase()}`}>
+                    {app.status}
+                  </span>
+                </div>
+                <div className="badge-status">
+                  <span className="badge rounded-pill">
+                    {app.appVersion && (
+                      <label data-testid="app-version">
+                        v{app.appVersion}
+                      </label>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="footer-right">
+              <a href={`/app/${app.id}`} rel="noopener">
+                <div className="icon-flip-container">
+                  <div className="icon-flipper">
+                    <div className="front">
+                      <i className="bi bi-arrow-right-circle"></i>
+                    </div>
+                    <div className="back">
+                      <i className="bi bi-arrow-right-circle"></i>
+                    </div>
                   </div>
-                ) : appData?.status === 'PUBLISHED' ? (
-                  <>
-                    <i className="bi bi-box-arrow-in-up-right"></i>
-                  </>
-                ) : null}
-              </Col>
-            </Row>
+                </div>
+              </a>
+            </div>
           </div>
-        </a>
+        </div>
       </div>
-    </>
+    </Col>
   );
 };
 

@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Logo from '../assets/images/logo-accelerate.svg';
 
 import { useAuth } from '../Providers/AuthProvider';
@@ -9,6 +9,7 @@ import { Navbar, Button, Dropdown, ProgressBar } from 'react-bootstrap';
 
 const Nav = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { logout: authLogout } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
@@ -40,6 +41,8 @@ const Nav = () => {
     window.location.reload(false);
   };
 
+  const isAppDetailPage = location.pathname.startsWith('/app/');
+
   const MobileNav = () => (
     <Navbar
       fixed="top"
@@ -63,26 +66,30 @@ const Nav = () => {
         </Navbar.Brand>
 
         <div className="d-flex align-items-center">
-          <ProgressBar
-            now={progress}
-            label={`${Math.round(progress)}%`}
-            animated
-            variant="success"
-            className="flex-grow-1 progress-bar"
-          />
-          <Button
-            type="submit"
-            id="submit"
-            className="btn btn-primary run_btn  d-inline-flex align-items-center"
-            disabled={runActive}
-            onClick={handleRunApp}
-          >
-            Run{' '}
-            <i
-              style={{ lineHeight: '1px' }}
-              className={`bi bi-arrow-right ${!runActive ? 'bounce-icon' : ''}`}
-            ></i>
-          </Button>
+          {isAppDetailPage && (
+            <>
+              <ProgressBar
+                now={progress}
+                label={`${Math.round(progress)}%`}
+                animated
+                variant="success"
+                className="flex-grow-1 progress-bar"
+              />
+              <Button
+                type="submit"
+                id="submit"
+                className="btn btn-primary run_btn  d-inline-flex align-items-center"
+                disabled={runActive}
+                onClick={handleRunApp}
+              >
+                Run{' '}
+                <i
+                  style={{ lineHeight: '1px' }}
+                  className={`bi bi-arrow-right ${!runActive ? 'bounce-icon' : ''}`}
+                ></i>
+              </Button>
+            </>
+          )}
         </div>
 
         <Dropdown align="end" style={{ display: 'flex', alignItems: 'center' }}>
@@ -197,8 +204,15 @@ const Nav = () => {
           >
             <i className="bi bi-gear-fill icon"></i>
           </div>
-          <button className="btn-logout" onClick={logout}>
-            Log out
+          <button
+            onClick={logout}
+            className="btn-logout"
+            title="Logout"
+          >
+            <div className="icon-with-text">
+              <i className="bi bi-box-arrow-right"></i>
+              <span>Log out</span>
+            </div>
           </button>
           <span className="version">v0.1</span>
         </footer>
