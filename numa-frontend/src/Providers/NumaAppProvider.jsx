@@ -67,11 +67,14 @@ export const NumaAppProvider = ({ children }) => {
 
   const [loading, setLoading] = useState(true);
   const [numaTaskResponses, setNumaTaskResponses] = useState([]);
-
   const [error, setError] = useState(null);
   const [isPolling, setIsPolling] = useState(false);
   const [runActive, setRunActive] = useState('disabled');
   const [appRunning, setAppRunning] = useState(false);
+
+  // New states for processing progress
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingStatus, setProcessingStatus] = useState('');
 
   // Numa related
   const [numaApps, setNumaApps] = useState([]);
@@ -86,6 +89,13 @@ export const NumaAppProvider = ({ children }) => {
   const [qCardInputValues, setQCardInputValues] = useState({});
 
   const [taskCompletionStatus, setTaskCompletionStatus] = useState({});
+
+  // Function to get app jobs from local storage
+  const getAppJobs = () => {
+    const jobsKey = `appJobs_${numaAppId}`;
+    const storedJobs = localStorage.getItem(jobsKey);
+    return storedJobs ? JSON.parse(storedJobs) : [];
+  };
 
   const checkRunActive = () => {
     if (!numaAppData || !numaAppData.tasks) {
@@ -353,11 +363,6 @@ export const NumaAppProvider = ({ children }) => {
     });
   };
 
-  const getAppJobs = () => {
-    const allJobs = JSON.parse(localStorage.getItem('numaJobs')) || {};
-    return allJobs[numaAppId] || [];
-  };
-
   const handleRunButtonClick = async (appData) => {
     const { jobID, dateTime } = initializeJobExecution();
     let currentResults = {};
@@ -367,9 +372,34 @@ export const NumaAppProvider = ({ children }) => {
         .slice()
         .sort((a, b) => a.order - b.order);
 
+      const totalTasks = orderedTasks.length;
+      let completedTasks = 0;
+
       for (const task of orderedTasks) {
         console.log(`Processing task with order ${task.order} and type ${task.type}`);
 
+        // Update status message based on task type
+        switch (task.type) {
+          case 'text-input':
+            setProcessingStatus('Processing input data...');
+            break;
+          case 's3-upload':
+            setProcessingStatus('Uploading files...');
+            break;
+          case 'http-request':
+            setProcessingStatus('Gathering data...');
+            break;
+          case 'q-app':
+            setProcessingStatus('Running analysis...');
+            break;
+          case 'text-output':
+            setProcessingStatus('Generating output...');
+            break;
+          default:
+            setProcessingStatus('Processing...');
+        }
+
+        // Process the task
         switch (task.type) {
           case 'text-input':
             currentResults = processTextInputTask(task, currentResults);
@@ -389,14 +419,27 @@ export const NumaAppProvider = ({ children }) => {
           default:
             console.warn(`Unknown task type: ${task.type}`);
         }
+
+        // Update progress
+        completedTasks++;
+        setProcessingProgress((completedTasks / totalTasks) * 100);
       }
+
+      // Save results and update UI state after successful completion
+      saveJobResults(jobID, dateTime, currentResults);
+      setProcessingStatus('Complete!');
     } catch (err) {
       console.error('Error processing tasks:', err);
       setError(err);
+      setProcessingStatus('Error occurred during processing');
     } finally {
-      saveJobResults(jobID, dateTime, currentResults);
       setLoading(false);
-      setAppRunning(true);
+      setAppRunning(false);
+      // Reset progress after a delay
+      setTimeout(() => {
+        setProcessingProgress(0);
+        setProcessingStatus('');
+      }, 2000);
     }
   };
 
@@ -419,6 +462,7 @@ export const NumaAppProvider = ({ children }) => {
       ...prev,
       [taskId]: value,
     }));
+    checkRunActive();
   };
 
   function updateTaskCompletionStatus(taskId, isComplete = true) {
@@ -433,32 +477,41 @@ export const NumaAppProvider = ({ children }) => {
       value={{
         loading,
         setLoading,
-        appRunning,
-        numaTaskResponses,
         error,
         setError,
-        isPolling,
-        setIsPolling,
-        runActive,
+        numaApps,
+        setNumaApps,
+        numaAppData,
+        setNumaAppData,
+        numaAppId,
+        setNumaAppId,
+        taskInputValues,
+        setTaskInputValues,
+        taskCompletionStatus,
+        setTaskCompletionStatus,
+        updateTaskCompletionStatus,
         progress,
         setProgress,
+        runActive,
         setRunActive,
+        numaTaskResponses,
+        setNumaTaskResponses,
         handleRunButtonClick,
-        setNumaApps,
-        numaApps,
-        setNumaAppId,
-        numaAppData,
-        taskInputValues,
-        updateTaskInputValue,
-        updateTaskCompletionStatus,
-        taskCompletionStatus,
-        setqAppData,
         qAppData,
-        setQCardInputValues,
-        qCardInputValues,
-        setQSessionId,
+        setqAppData,
         qSsessionId,
-        getAppJobs
+        setQSessionId,
+        qCardInputValues,
+        setQCardInputValues,
+        isPolling,
+        setIsPolling,
+        appRunning,
+        setAppRunning,
+        processingProgress,
+        setProcessingProgress,
+        processingStatus,
+        setProcessingStatus,
+        getAppJobs,
       }}
     >
       {children}

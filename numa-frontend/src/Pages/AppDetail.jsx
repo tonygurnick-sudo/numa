@@ -13,7 +13,7 @@ import { QAppDetailHeader } from '../Components/QAppDetailHeader';
 
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { NumaAppItemHeader } from '../Components/NumaAppItemHeader';
-import { NumaAppTaskManager } from '../Components/NumaAppTaskManager';
+import AppWizard from '../Components/AppWizard';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
@@ -28,14 +28,22 @@ const AppDetail = () => {
       <JobHistorySidebar />
       <header>
         <Container fluid>
-          <Row className="align-items-end">
+          {!isLoading && <Breadcrumbs label={numaAppData?.appName} />}
+          <Row>
             <Col lg={8} className="px-5">
-              {!isLoading && <Breadcrumbs label={numaAppData?.appName} />}
-              <h1>{numaAppData?.appName}</h1>
+              <h1 className="mb-3">{numaAppData?.appName}</h1>
               <p>{numaAppData?.appDescription}</p>
             </Col>
-            <Col lg={4} className="pe-5 ps-2 text-end">
-              <div className="d-flex flex-column gap-3 mb-4">
+            <Col lg={4} className="pe-4 text-end">
+              <div className="d-flex flex-column gap-2">
+                {numaAppData?.category && (
+                  <span>
+                    <strong>Category:</strong>{' '}
+                    <span className={`category-tag ${numaAppData.category.toLowerCase()}`}>
+                      {numaAppData.category}
+                    </span>
+                  </span>
+                )}
                 <span>
                   <strong>Created:</strong>{' '}
                   {numaAppData?.createdDate
@@ -46,36 +54,37 @@ const AppDetail = () => {
                   <strong>Status:</strong> {numaAppData?.status}
                 </span>
               </div>
-
-              <div className="d-flex flex-row gap-2 align-items-end">
-                {numaAppData?.type === 'q-app' ? (
-                  <QAppDetailHeader />
-                ) : (
-                  numaAppData?.type === 'numa-app' && <NumaAppItemHeader />
-                )}
-              </div>
             </Col>
-            <Col lg={9} className="px-5"></Col>
           </Row>
+          <hr style={{
+            width: '65%',
+            margin: '0 auto 1rem auto',
+            height: '2px',
+            marginTop: '15px',
+            backgroundColor: '#dee2e6'
+          }}/>
         </Container>
       </header>
 
-      <LayoutDashboard>
-        <Row>
-          {error && <Alert variant="danger">{error}</Alert>}
+      <main className="flex-grow-1">
+        <Container fluid>
 
-          {isLoading ? (
-            <Preloader />
-          ) : (
-            numaAppData &&
-            (numaAppData.type === 'numa-app' ? (
-              <NumaAppTaskManager />
-            ) : (
-              numaAppData.type === 'q-app' && <QAppDetail />
-            ))
-          )}
-        </Row>
-      </LayoutDashboard>
+              {error && <Alert variant="danger">{error}</Alert>}
+
+              {isLoading ? (
+                <Preloader />
+              ) : (
+                numaAppData && (
+                  numaAppData.type === 'numa-app' ? (
+                    <AppWizard manifest={numaAppData} />
+                  ) : (
+                    numaAppData.type === 'q-app' && <QAppDetail />
+                  )
+                )
+              )}
+
+        </Container>
+      </main>
 
       <Nav nav1on="on" nav2on="" nav3on="" />
     </div>

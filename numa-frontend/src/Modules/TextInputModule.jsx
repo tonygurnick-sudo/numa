@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Row, Col, Form } from 'react-bootstrap';
+import { Form } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { Preloader } from '../Components/Preloader';
 
-function TextInputModule({ task, onComplete, onNotComplete }) {
-  const { loading, taskInputValues, updateTaskInputValue } = useNumaApp();
+function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
+  const { loading, taskInputValues } = useNumaApp();
   const [inputValue, setInputValue] = useState('');
 
   // const [isTaskComplete, setIsTaskComplete] = useState(false);
@@ -18,9 +18,9 @@ function TextInputModule({ task, onComplete, onNotComplete }) {
 
     // Update the global state as well when the component mounts (initial setup)
     if (initialValue !== taskInputValues[task.id]) {
-      updateTaskInputValue(task.id, initialValue);
+      onChange(initialValue);
     }
-  }, [task.id, taskInputValues, task.default, updateTaskInputValue]);
+  }, [task.id, taskInputValues, task.default, onChange]);
 
   // Update the input value locally
   const handleInputChange = (e) => {
@@ -29,7 +29,7 @@ function TextInputModule({ task, onComplete, onNotComplete }) {
 
   // Commit the input value to the global state on blur or Enter
   const handleCommit = () => {
-    updateTaskInputValue(task.id, inputValue);
+    onChange(inputValue);
 
     // Call the appropriate callback based on whether the input has content
     if (inputValue.trim() !== '') {
@@ -46,23 +46,8 @@ function TextInputModule({ task, onComplete, onNotComplete }) {
   };
 
   return (
-    <div className="card card-apps">
-      <div className="card-header">
-        <Row>
-          <Col lg={9}>
-            {task?.title}
-            <br />
-          </Col>
-          <Col lg={3}>
-            <small className="required-item ">
-              {task?.required ? <>required</> : <>optional</>}
-            </small>
-          </Col>
-        </Row>
-      </div>
-      <div className="card-body">
-        {task?.description}
-        <br /> <br />
+    <>
+          {task.title && <h3>{task.title}</h3>}
         {loading && <Preloader smallscreen={true} overlayParent={true} />}
         <Form.Group controlId={`text-input-${task.id}`}>
           <Form.Label>{task?.title}</Form.Label>
@@ -76,8 +61,7 @@ function TextInputModule({ task, onComplete, onNotComplete }) {
             onKeyPress={handleKeyPress}
           />
         </Form.Group>
-      </div>
-    </div>
+</>
   );
 }
 

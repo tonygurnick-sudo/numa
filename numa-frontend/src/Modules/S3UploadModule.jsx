@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNumaApp } from '../Providers/NumaAppProvider';
+import { Preloader } from '../Components/Preloader';
 import { Row, Col, Button, Form } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
 import axios from 'axios';
 
-function S3UploadModule({ task, onComplete, onNotComplete }) {
-  const { taskInputValues, updateTaskInputValue } = useNumaApp();
+function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
+  const { loading } = useNumaApp();
   const { getAccessToken } = useAuth();
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
@@ -25,11 +26,7 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
       setUploadProgress(0);
       setError(null);
       setUploadedFileName('');
-
-      // Only call onNotComplete if the task was previously marked as complete
-      if (taskInputValues[task.id]) {
-        onNotComplete();
-      }
+      onNotComplete();
     }
   };
 
@@ -80,14 +77,13 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
         },
       });
 
-
       setUploadStatus('Upload successful!');
       setUploadedFilePath(s3ObjectUrl);
       setUploadedFileName(relativePath);
 
-      // Update the global task input values with the full S3 URL
-      updateTaskInputValue(task.id, s3ObjectUrl);
-      onComplete(); // Mark task as complete
+      // Use the onChange prop to update the value
+      onChange(s3ObjectUrl);
+      onComplete();
     } catch (error) {
       console.error('Error during file upload:', error);
       const errorMessage =
@@ -101,92 +97,61 @@ function S3UploadModule({ task, onComplete, onNotComplete }) {
   };
 
   return (
-    <div
-      className={`card card-apps ${
-        taskInputValues[task.id] && !uploadStatus ? 'success-shadow' : ''
-      }`}
-    >
-      <div className="card-header">
-        <Row>
-          <Col lg={9}>{task?.title}</Col>
-          <Col lg={3}>
-            {taskInputValues[task.id] && uploadStatus === 'Upload successful!' && (
-              <i className="bi bi-check-circle-fill text-success right"></i>
-            )}
-            <br />
-            <small className="required-item">
-              {task?.required ? <>required</> : <>optional</>}
-            </small>
-          </Col>
-        </Row>
-      </div>
+    <div className="task-container">
+      {task.title && <h3>{task.title}</h3>}
+      {task.description && <p>{task.description}</p>}
 
-      <div className="card-body">
-        {task?.description && (
-          <>
-            {task.description}
-            <br /> <br />
-          </>
-        )}
+      {loading && <Preloader smallscreen={true} overlayParent={true} />}
 
-        <Form.Group controlId={`file-upload-${task.id}`}>
-          <Form.Label>Select a file to upload:</Form.Label>
-          <Form.Control
-            type="file"
-            onChange={handleFileChange}
+      <Form.Group controlId={`file-upload-${task.id}`}>
+        <Form.Label>Select a file to upload:</Form.Label>
+        <Form.Control
+          type="file"
+          onChange={handleFileChange}
+          disabled={uploadStatus === 'Uploading...'}
+        />
+      </Form.Group>
+
+      {selectedFile && (
+        <div className="mt-2">
+          <p>Selected file: {selectedFile.name}</p>
+          <Button
+            onClick={handleUpload}
             disabled={uploadStatus === 'Uploading...'}
-          />
-        </Form.Group>
+            variant="primary"
+          >
+            {uploadStatus === 'Uploading...' ? 'Uploading...' : 'Upload File'}
+          </Button>
+        </div>
+      )}
 
-        {selectedFile && (
-          <div className="mt-2">
-            <p>Selected file: {selectedFile.name}</p>
-            <Button
-              onClick={handleUpload}
-              disabled={uploadStatus === 'Uploading...'}
-              variant="primary"
-            >
-              {uploadStatus === 'Uploading...' ? 'Uploading...' : 'Upload File'}
-            </Button>
-          </div>
-        )}
-
-        {uploadStatus && (
-          <div className="mt-3">
-            {uploadStatus === 'Uploading...' && (
-              <div className="progress mb-2">
-                <div
-                  className="progress-bar"
-                  role="progressbar"
-                  style={{ width: `${uploadProgress}%` }}
-                  aria-valuenow={uploadProgress}
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                >
-                  {uploadProgress}%
-                </div>
+      {uploadStatus && (
+        <div className="mt-3">
+          {uploadStatus === 'Uploading...' && (
+            <div className="progress mb-2">
+              <div
+                className="progress-bar"
+                role="progressbar"
+                style={{ width: `${uploadProgress}%` }}
+                aria-valuenow={uploadProgress}
+                aria-valuemin="0"
+                aria-valuemax="100"
+              >
+                {uploadProgress}%
               </div>
-            )}
-            <p className={uploadStatus.includes('failed') ? 'text-danger' : 'text-success'}>
-              {uploadStatus}
-            </p>
-          </div>
-        )}
-
-        {error && (
-          <div className="alert alert-danger mt-3" role="alert">
-            {error}
-          </div>
-        )}
-
-        {taskInputValues[task.id] && uploadStatus === 'Upload successful!' && (
-          <p className="mt-2">
-            File: <strong>{uploadedFileName}</strong>
+            </div>
+          )}
+          <p className={uploadStatus.includes('failed') ? 'text-danger' : 'text-success'}>
+            {uploadStatus}
           </p>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="card-footer"></div>
+      {error && (
+        <div className="alert alert-danger mt-3" role="alert">
+          {error}
+        </div>
+      )}
     </div>
   );
 }

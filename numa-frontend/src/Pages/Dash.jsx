@@ -6,6 +6,7 @@ import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { Preloader } from '../Components/Preloader';
 import { QAppCreate } from '../Components/QAppCreate';
+import { AppItem } from '../Components/AppItem';
 
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { useAuth } from '../Providers/AuthProvider';
@@ -75,27 +76,27 @@ const Dash = () => {
     fetchAppsFromManifest();
   }, [setError, setLoading, setNumaApps]);
 
-  // // New effect for fetching Q Apps
-  // useEffect(() => {
-  //   const loadQApps = async () => {
-  //     if (!qAppsClient) return;
+  // New effect for fetching Q Apps
+  useEffect(() => {
+    const loadQApps = async () => {
+      if (!qAppsClient) return;
 
-  //     setQAppsLoading(true);
-  //     try {
-  //       const apps = await fetchApps(qAppsClient);
-  //       if (apps) {
-  //         setQApps(apps);
-  //       }
-  //     } catch (error) {
-  //       console.error('Error loading Q Apps:', error);
-  //       setQAppsError(error.message);
-  //     } finally {
-  //       setQAppsLoading(false);
-  //     }
-  //   };
+      setQAppsLoading(true);
+      try {
+        const apps = await fetchApps(qAppsClient);
+        if (apps) {
+          setQApps(apps);
+        }
+      } catch (error) {
+        console.error('Error loading Q Apps:', error);
+        setQAppsError(error.message);
+      } finally {
+        setQAppsLoading(false);
+      }
+    };
 
-  //   loadQApps();
-  // }, [qAppsClient]);
+    loadQApps();
+  }, [qAppsClient]);
 
   return (
     <>
@@ -103,9 +104,9 @@ const Dash = () => {
         <header>
           <Container fluid>
             <Row>
-              <Col lg={8} className="px-5">
-                <Breadcrumbs clearStack={true} />
-                <h1>Dashboard</h1>
+              <Col lg={9} className="px-5">
+              <Breadcrumbs label={'Dashboard'} />
+                <h1>Numa & Q Library</h1>
               </Col>
               <Col lg={3} className="p-5">
                 <>
@@ -132,61 +133,7 @@ const Dash = () => {
                 {!error &&
                   Array.isArray(numaApps) &&
                   numaApps?.map((app) => (
-                    <Col key={app.id} lg={6} className="flex">
-                      <div
-                        className="card card-apps"
-                        data-testid={`app-card-${app.id}`}
-                      >
-                        <a href={`/app/${app.id}`} rel="noopener">
-                          <div className="card-header">
-                            <Row>
-                              <Col lg={9} data-testid="app-name">
-                                {app?.appName}
-                              </Col>
-                              <Col lg={3} className="right">
-                                {app?.appVersion && (
-                                  <label data-testid="app-version">
-                                    v{app?.appVersion}
-                                  </label>
-                                )}
-                              </Col>
-                            </Row>
-                          </div>
-                          <div
-                            className="card-body"
-                            data-testid="app-description"
-                          >
-                            {app?.appDescription === 'Loading...' ? (
-                              <Preloader smallscreen={true} />
-                            ) : (
-                              <>{app?.appDescription}</>
-                            )}
-                          </div>
-                          <div className="card-buttons">
-                            <Row>
-                              <Col lg={8}></Col>
-                              <Col lg={4}></Col>
-                            </Row>
-                          </div>
-                          <div className="card-footer">
-                            <Row className="justify-content-end">
-                              <Col>
-                                {' '}
-                                <div className="tooltip clear"></div>
-                              </Col>
-                              <Col>
-                                <div
-                                  className="badge-status comingsoon right"
-                                  data-testid="app-status"
-                                >
-                                  {app?.status}
-                                </div>
-                              </Col>
-                            </Row>
-                          </div>
-                        </a>
-                      </div>
-                    </Col>
+                    <AppItem key={app.id} app={app} />
                   ))}
 
                 {/* Q Apps Section */}

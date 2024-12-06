@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Row, Col } from 'react-bootstrap';
+import { S3UploadModule } from '../Modules/S3UploadModule';
+import { useNumaApp } from '../Providers/NumaAppProvider';
 
-const replaceReferences = (prompt, dependencies, appsCards) => {
-  let updatedPrompt = prompt || ''; // Ensure prompt is a valid string
+const replaceReferences = (prompt, dependencies = [], appsCards = []) => {
+  let updatedPrompt = prompt || '';
+
+  if (!dependencies || !appsCards) return updatedPrompt;
 
   dependencies.forEach((dep) => {
-    // Find the card in appsCards with a matching ID to dep
     let title = '';
     appsCards.forEach((card) => {
-      // Iterate over the keys of the card to find the one containing the actual card data
       const cardData = card[Object.keys(card)[0]];
-      if (cardData.id === dep) {
+      if (cardData && cardData.id === dep) {
         title = '<strong>(' + cardData.title + ')</strong>' || '';
       }
     });
@@ -30,90 +32,160 @@ const AppCard = ({
   appsCards,
   onInputChange,
   inputValue,
+  sessionResults,
 }) => {
-  // Assuming prompt and defaultValue are nested in the card's first key object
+  const { updateTaskCompletionStatus } = useNumaApp();
   const this_card = card[Object.keys(card)[0]];
 
-  // Run replaceReferences function to swap @ references with titles
-  // (may not be needed at this time)
+  // console.log('AppCard Render:', {
+  //   cardId: this_card.id,
+  //   cardType: this_card.type,
+  //   hasSessionResults: !!sessionResults,
+  //   sessionStatus: sessionResults?.status,
+  //   cardStatus: sessionResults?.cardStatus?.[this_card.id],
+  // });
+
+  // Initialize with inputValue if it exists, otherwise use defaultValue
+  const [localInputValue, setLocalInputValue] = useState(inputValue || this_card.defaultValue || '');
+
+  // Update local state when inputValue prop changes or when session results arrive
+  useEffect(() => {
+    if (inputValue !== undefined && inputValue !== localInputValue) {
+      console.log('Updating input value:', { cardId: this_card.id, inputValue });
+      setLocalInputValue(inputValue);
+    } else if (sessionResults?.cardStatus?.[this_card.id]?.currentValue !== undefined) {
+      // console.log('Updating from session results:', {
+      //   cardId: this_card.id,
+      //   value: sessionResults.cardStatus[this_card.id].currentValue,
+      // });
+      setLocalInputValue(sessionResults.cardStatus[this_card.id].currentValue);
+    }
+  }, [inputValue, sessionResults]);
+
+  // Set initial value and notify parent when component mounts
+  useEffect(() => {
+    if (!inputValue && this_card.defaultValue) {
+      onInputChange(this_card.defaultValue);
+    }
+  }, []);
+
   const description = replaceReferences(
-    this_card.prompt || this_card.defaultValue, // Use the card's prompt or default value
+    this_card.placeholder,
     dependencies,
     appsCards,
   );
 
   const handleChange = (e) => {
-    onInputChange(this_card.id, e.target.value); // Pass updated value up to parent
+    const newValue = e.target.value;
+    setLocalInputValue(newValue);
+    onInputChange(newValue);
   };
 
-  // Logic to handle different card types
+  const handleTaskComplete = () => {
+    updateTaskCompletionStatus(this_card.id, true);
+  };
+
+  const handleTaskNotComplete = () => {
+    updateTaskCompletionStatus(this_card.id, false);
+  };
+
   const renderCardByType = () => {
+    const outputValue = sessionResults?.cardStatus?.[this_card.id]?.currentValue;
+    const isCompleted = sessionResults?.cardStatus?.[this_card.id]?.currentState === 'COMPLETED';
+    const isGenerating = sessionResults && !isCompleted;
+
+    // console.log('Rendering card:', {
+    //   cardId: this_card.id,
+    //   type: this_card.type,
+    //   outputValue,
+    //   isCompleted,
+    //   isGenerating,
+    // });
+
     switch (this_card.type) {
       case 'text-input':
         return (
-          <div className="card-body">
+          <div className="card-body p-0">
             <textarea
               rows="10"
-              value={inputValue}
-              placeholder={this_card.placeholder}
+              value={localInputValue}
+              placeholder={this_card.placeholder || ''}
               onChange={handleChange}
-              className="form-control"
+              className="form-control w-100"
+              style={{
+                minHeight: '120px',
+                resize: 'vertical',
+                maxWidth: '100%',
+                overflowX: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word'
+              }}
+            />
+          </div>
+        );
+      case 'file-input':
+        return (
+          <div className="card-body p-0">
+            <S3UploadModule
+              task={this_card}
+              onComplete={handleTaskComplete}
+              onNotComplete={handleTaskNotComplete}
+              onChange={onInputChange}
             />
           </div>
         );
       case 'q-query':
+      case 'text-output':
         return (
-          <div className="card-body">
-            <textarea
-              rows="10"
-              value={
-                inputValue ||
-                'Generating text as soon as required inputs are filled'
-              }
-              placeholder={this_card.placeholder}
-              onChange={handleChange}
-              className="form-control"
-              disabled
-            />
 
-            <p>.</p>
-          </div>
+
+        <p className="output-text">
+        {outputValue || (isGenerating ? 'Generating output...' : 'Waiting for input...')}
+        </p>
+
+
         );
-
       default:
         return <div className="card-body">Unsupported card type</div>;
     }
   };
 
+  const renderCardContent = () => {
+    return renderCardByType();
+  };
+
   return (
-    <>
-      <div className="card card-apps">
-        <div className="card-header">
-          <Row>
-            <Col lg={12}>
-              {this_card.title}
-              <br />
-              <label className="type">
-                {this_card.type === 'q-query' ? 'Output- Text' : this_card.type}
-              </label>
+    <div className="w-100">
+      <div className="card-header py-3">
+        <Row className="g-2 mx-0">
+          <Col xs={12} md={8} className="px-0">
+            {this_card.title && (
+              <h3 className="mb-2 mb-md-0 text-break">{this_card.title}</h3>
+            )}
+          </Col>
+          {this_card.description && (
+            <Col xs={12} md={4} className="px-0 text-md-end">
+              <small className="text-muted d-block text-break">{this_card.description}</small>
             </Col>
-          </Row>
-        </div>
-        {renderCardByType()}
-
-        {/* <div className="card-buttons">
-        <Row>
-          <Col lg={8}>
-
-                 </Col>
-          <Col lg={4}>
-            {status === 'coming_soon' ? <div className="badge-status comingsoon right">Coming Soon</div> : ''}
+          )}
+        </Row>
+      </div>
+      <div className="card-body">
+        <Row className="g-3 mx-0">
+          <Col xs={12} className="px-0">
+            {description && (
+              <div className="card-description mb-3">
+                <div
+                  className="text-break"
+                  dangerouslySetInnerHTML={{ __html: description }}
+                />
+              </div>
+            )}
+            {renderCardContent()}
           </Col>
         </Row>
-      </div> */}
-        <div className="card-footer" />
       </div>
-    </>
+    </div>
   );
 };
 
