@@ -27,6 +27,7 @@ import { RandomProvider } from '@cdktf/provider-random/lib/provider';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
+  readonly userPoolClient?: CognitoUserPoolClient;
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
 
@@ -46,7 +47,6 @@ export class CoreNumaInfra extends Construct {
     let appIdentityConfig;
     let webexIdentityConfig;
     let pool = { id: '', name: '', endpoint: '' };
-    let userPoolClient = { id: '', clientSecret: '' };
 
     if (props.identityProvider == 'oidc') {
       const at = new AdjustToken(this, 'token-adjuster', {
@@ -126,7 +126,7 @@ export class CoreNumaInfra extends Construct {
         value: systemUserSecret.arn,
       });
 
-      userPoolClient = new CognitoUserPoolClient(this, 'client', {
+      this.userPoolClient = new CognitoUserPoolClient(this, 'client', {
         userPoolId: pool.id,
         name: numaClient,
         generateSecret: true,
@@ -150,7 +150,7 @@ export class CoreNumaInfra extends Construct {
         allowClassicFlow: true,
         cognitoIdentityProviders: [
           {
-            clientId: userPoolClient.id,
+            clientId: this.userPoolClient.id,
             providerName: pool.endpoint,
           },
         ],
@@ -224,7 +224,7 @@ export class CoreNumaInfra extends Construct {
         typeName: 'AWS::IAM::OIDCProvider',
         desiredState: Fn.jsonencode({
           Url: `https://cognito-idp.${region}.amazonaws.com/${pool.id}`,
-          ClientIdList: [userPoolClient.id],
+          ClientIdList: [this.userPoolClient.id],
         }),
       });
       const oidcArn = Fn.lookup(Fn.jsondecode(oidc.properties), 'Arn');
@@ -277,12 +277,12 @@ export class CoreNumaInfra extends Construct {
 
       new SecretsmanagerSecretVersion(this, 'secret-version', {
         secretId: secret.id,
-        secretString: `{"client_secret": "${userPoolClient.clientSecret}"}`,
+        secretString: `{"client_secret": "${this.userPoolClient.clientSecret}"}`,
       });
 
       appIdentityConfig = {
         IdentityType: 'AWS_IAM_IDP_OIDC',
-        ClientIdsForOIDC: [userPoolClient.id],
+        ClientIdsForOIDC: [this.userPoolClient.id],
         IamIdentityProviderArn: oidcArn,
         RoleArn: `arn:aws:iam::${callerId.accountId}:role/aws-service-role/qbusiness.amazonaws.com/AWSServiceRoleForQBusiness`, // TODO: Dynamic.
       };
@@ -416,11 +416,13 @@ export class CoreNumaInfra extends Construct {
     this.webExUrl = Fn.lookup(Fn.jsondecode(webexperience.properties), 'DefaultEndpoint');
 
     // TODO: Workout how this will work for IdC and how to incorporate it.
-    new SetCallbackUrl(this, 'callback', {
-      callbackAddress: this.webExUrl + 'authorization-code/callback',
-      userPoolClientId: userPoolClient.id,
-      userPoolId: pool.id,
-    });
+    if (this.userPoolClient) {
+      new SetCallbackUrl(this, 'callback', {
+        callbackAddress: this.webExUrl + 'authorization-code/callback',
+        userPoolClientId: this.userPoolClient.id,
+        userPoolId: pool.id,
+      });
+    }
 
     const index = new CloudcontrolapiResource(this, 'index', {
       typeName: 'AWS::QBusiness::Index',

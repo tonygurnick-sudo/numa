@@ -44,7 +44,8 @@ is (from the infra directory):
 ```bash
 for directory in ../lambdas/*/; do
 pushd $directory;
-poetry build-lambda;
+[ -f pyproject.toml ] && poetry build-lambda;
+[ -f package.json ] && yarn && yarn bundle;
 popd;
 done;
 ```
