@@ -63,7 +63,7 @@ export class BaseNumaApp extends Construct {
       roleName: role.name,
     });
 
-    const filename = path.resolve(__dirname, '..', '..', 'lambdas', props.lambdaDirectory, 'lambda_function.zip');
+    const filename = path.resolve(__dirname, '..', '..', '..', 'lambdas', props.lambdaDirectory, 'lambda_function.zip');
 
     const lf = new LambdaFunction(this, name + '_lambda', {
       functionName: scope.node.id + '_' + name,
@@ -277,7 +277,7 @@ export class BaseNumaApp extends Construct {
 }
 
 export interface RouteDefinition {
-  verb: 'GET' | 'POST' | 'HEAD' | 'PUT';
+  verb: 'GET' | 'POST' | 'HEAD' | 'PUT' | 'OPTIONS';
   path: string;
 }
 

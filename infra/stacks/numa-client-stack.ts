@@ -2,12 +2,12 @@ import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdktf-util';
 import { Construct } from 'constructs';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
-import { BaseNumaApp, BaseNumaAppProps } from '../constructs/base-numa-app-construct';
+import { BaseNumaApp, BaseNumaAppProps } from '../constructs/apps/base-numa-app-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import _clientConfigProd from '../../clientConfigProd.json';
 import _clientConfigDev from '../../clientConfigDev.json';
-import { ExampleNumaApp } from '../constructs/example-numa-app-construct';
+import { CoreNumaApp, ExampleNumaApp } from '../constructs/apps';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -54,6 +54,13 @@ export class NumaClientStack extends ArcanumStack {
 
     const outputsBucket = new PrivateBucket(this, 'outputs-bucket', {
       bucket: `numa-${props.client}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}` + '-outputs',
+    });
+
+    new CoreNumaApp(this, `${props.client}-core`, {
+      apiGatewayId: fe.apiGateway.id,
+      outputsBucket: outputsBucket.bucket,
+      clientId: core.userPoolClient?.id ?? '',
+      clientSecret: core.userPoolClient?.clientSecret ?? '',
     });
 
     Object.entries(props.config.apps ?? {}).forEach(([appId, appConfig]) => {

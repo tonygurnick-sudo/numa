@@ -11,9 +11,11 @@ include:
 variables:
   PYTHON_VER: "3.12"
 
-.node_job:
-  variables:
-    BUILD_DIR: tools
+.node-matrix:
+  matrix:
+    - BUILD_DIR:
+        - tools
+        - lambdas/srp-proxy
 
 .python-matrix:
   matrix:
@@ -43,3 +45,12 @@ python-lint:
 
 python-test:
   parallel: !reference [.python-matrix]
+
+node-lint:
+  parallel: !reference [.node-matrix]
+
+node-test:
+  parallel: !reference [.node-matrix]
+
+node-build:
+  parallel: !reference [.node-matrix]

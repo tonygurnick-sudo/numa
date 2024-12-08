@@ -35,12 +35,6 @@
   "arcanum-dave-2": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "sharePointConfigs": [{
-      "tenantId": "221f9237-8475-4dd1-b01b-ec3d5660d813",
-      "domain": "arcanum-test",
-      "siteUrls": ["https://arcanum.ai.sharepoint.test/"],
-      "configuration": {}
-    }],
     "apps": {
       "example-app": {}
     }
