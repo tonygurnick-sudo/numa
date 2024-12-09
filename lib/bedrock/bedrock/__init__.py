@@ -19,10 +19,6 @@ logger = structlog.get_logger(__name__)
 s3_client = boto3.client("s3")
 
 
-class BedrockModelFailedException(Exception):
-    pass
-
-
 class UnsupportedFiletypeError(Exception):
     pass
 
@@ -63,25 +59,17 @@ class BedrockClaude3Model:
             **self.model_args,
             "messages": multimodal_messages,
         }
-        try:
-            return self.bedrock_client.invoke_model(
-                modelId=self.model_id,
-                body=json.dumps(request_body),
-            )
-        except ClientError as e:
-            raise BedrockModelFailedException("Could not invoke model") from e
-        except Exception as e:
-            raise BedrockModelFailedException("Could not invoke model") from e
+        return self.bedrock_client.invoke_model(
+            modelId=self.model_id,
+            body=json.dumps(request_body),
+        )
 
     def _process_response(self, response: dict, name_for_logging: str) -> GPTResponse:
-        try:
-            result = json.loads(response["body"].read())
-            metadata = {
-                "input_tokens": result["usage"]["input_tokens"],
-                "output_tokens": result["usage"]["output_tokens"],
-            }
-        except Exception as e:
-            raise BedrockModelFailedException("Invalid response format") from e
+        result = json.loads(response["body"].read())
+        metadata = {
+            "input_tokens": result["usage"]["input_tokens"],
+            "output_tokens": result["usage"]["output_tokens"],
+        }
 
         if name_for_logging:
             log_usage(name_for_logging, metadata)
