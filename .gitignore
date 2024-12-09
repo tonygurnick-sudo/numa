@@ -1,8 +1,6 @@
 **/node_modules
 **/dist
-**.env
-**install-state.gz
-**yarn.lock
+**/.env
+**/install-state.gz
 
-numa-frontend/yarn.lock
 numa-frontend/coverage
