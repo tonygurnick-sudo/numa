@@ -1,13 +1,14 @@
-import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdktf-util';
-import { Construct } from 'constructs';
-import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
-import { BaseNumaApp, BaseNumaAppProps } from '../constructs/apps/base-numa-app-construct';
-import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
+import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
-import _clientConfigProd from '../../clientConfigProd.json';
+import { Construct } from 'constructs';
 import _clientConfigDev from '../../clientConfigDev.json';
+import _clientConfigProd from '../../clientConfigProd.json';
 import { CoreNumaApp, ExampleNumaApp } from '../constructs/apps';
+import { BaseNumaApp, BaseNumaAppProps } from '../constructs/apps/base-numa-app-construct';
+import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
+import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
+import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -107,6 +108,7 @@ export interface NumaClientStackProps extends ArcanumStackProps {
 
 const apps: Record<string, typeof BaseNumaApp> = {
   'example-app': ExampleNumaApp,
+  'nzsba-policy-builder': NZSBAPolicyBuilder,
 };
 
 function lookupAppFromId(id: string): typeof BaseNumaApp {

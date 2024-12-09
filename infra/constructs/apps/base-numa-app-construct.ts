@@ -9,7 +9,6 @@ import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
 import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
-import * as asl from 'asl-types';
 import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
 import path from 'node:path';
@@ -133,6 +132,7 @@ export class BaseNumaApp extends Construct {
     });
 
     const stepFunctionRole = new IamRole(scope, name + '_role', {
+      name: scope.node.id + '_' + name,
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'states.amazonaws.com',
       }),
@@ -145,7 +145,7 @@ export class BaseNumaApp extends Construct {
 
     const stepFunction = new SfnStateMachine(this, name + '_step-function', {
       name: scope.node.id + '_' + name + '_step-function',
-      definition: JSON.stringify(props.stepFunctionDefinition),
+      definition: props.stepFunctionDefinition,
       roleArn: stepFunctionRole.arn,
       loggingConfiguration: {
         level: 'ALL',
@@ -297,7 +297,7 @@ export interface AddStepFunctionProps {
   appName: string;
   outputsBucket: S3Bucket;
   additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
-  stepFunctionDefinition: asl.StateMachine;
+  stepFunctionDefinition: string;
 }
 
 export interface BaseNumaAppProps {

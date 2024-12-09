@@ -4,6 +4,8 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 
+from aws_lambda_powertools.utilities.typing import LambdaContext
+
 import lambda_function
 
 
@@ -17,9 +19,10 @@ class TestLambdaFunction(unittest.TestCase):
         event = {
             "job_id": "test-job-id",
         }
-        context = {
-            "function_name": "test_function",
-        }
+
+        context = LambdaContext()
+        context._function_name = "test_function"
+
         response = lambda_function.handler(event, context)
         self.assertEqual(response["statusCode"], 200)
         status_response = json.loads(response["body"])
@@ -36,9 +39,10 @@ class TestLambdaFunction(unittest.TestCase):
         event = {
             "job_id": "test-job-id",
         }
-        context = {
-            "function_name": "test_function",
-        }
+
+        context = LambdaContext()
+        context._function_name = "test_function"
+
         s3_mock.get_object.side_effect = Exception("Some error")
         response = lambda_function.handler(event, context)
         self.assertEqual(response["statusCode"], 503)

@@ -58,22 +58,25 @@ python3.12 -m venv build_venv
 source build_venv/bin/activate
 
 for directory in ../lambdas/*/; do
-pushd $directory;
-    rm -rf lambda_function.build;
-    rm -f lambda_function.zip;
-    pip install \
-        --quiet \
-        --disable-pip-version-check \
-        --platform manylinux2014_x86_64 \
-        --target=lambda_function.build \
-        --python-version 3.12 \
-        --only-binary=:all: \
-        .
-    pushd lambda_function.build;
-        zip --quiet --recurse-paths ../lambda_function.zip *
-    popd
-    rm -rf lambda_function.build;
-popd;
+    case $directory in
+        *srp-proxy*) continue;;
+    esac
+    pushd $directory;
+        rm -rf lambda_function.build;
+        rm -f lambda_function.zip;
+        pip install \
+            --quiet \
+            --disable-pip-version-check \
+            --platform manylinux2014_x86_64 \
+            --target=lambda_function.build \
+            --python-version 3.12 \
+            --only-binary=:all: \
+            .
+        pushd lambda_function.build;
+            zip --quiet --recurse-paths ../lambda_function.zip *
+        popd
+        rm -rf lambda_function.build;
+    popd;
 done;
 
 deactivate

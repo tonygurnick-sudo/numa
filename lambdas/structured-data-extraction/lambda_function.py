@@ -8,7 +8,7 @@ MAX_TOKENS = 8000
 MAX_PAGES = 30
 
 
-def handler(event: dict, _context: dict) -> list[dict]:
+def handler(event: dict, _context) -> list[dict]:
     extracted_data = event["content"]
     config = event.get("config") or "personal_finance"
     data_extraction_type = (
