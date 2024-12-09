@@ -24,6 +24,7 @@ import { SharePointDataSource, SharePointConfiguration } from './data-sources/sh
 import { CognitoUser } from '@cdktf/provider-aws/lib/cognito-user';
 import { password } from '@cdktf/provider-random';
 import { RandomProvider } from '@cdktf/provider-random/lib/provider';
+import { BoxConfiguration, BoxDataSource } from './data-sources/box-datasource-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -579,6 +580,18 @@ export class CoreNumaInfra extends Construct {
       });
     }
 
+    for (const boxDataSource of props.boxConfigs ?? []) {
+      new BoxDataSource(this, `data-source-box-${boxDataSource.enterpriseId}`, {
+        displayName: `${numaClient}-box-${boxDataSource.enterpriseId}`,
+        enterpriseId: boxDataSource.enterpriseId,
+        applicationId: applicationId,
+        indexId: indexId,
+        region: props.region ?? 'us-east-1',
+        configuration: boxDataSource.configuration,
+        dataSourceRoleArn: dataRole.arn,
+      });
+    }
+
     new TerraformOutput(this, 'webex-url', {
       value: this.webExUrl,
     });
@@ -602,6 +615,11 @@ interface SharePointConfig {
   configuration: SharePointConfiguration;
 }
 
+interface BoxConfig {
+  enterpriseId: string;
+  configuration?: BoxConfiguration;
+}
+
 export interface CoreNumaInfraProps {
   client: string;
   environmentName: string;
@@ -623,4 +641,5 @@ export interface CoreNumaInfraProps {
   passwordLength?: number;
   mfa?: boolean;
   sharePointConfigs?: SharePointConfig[];
+  boxConfigs?: BoxConfig[];
 }
