@@ -223,7 +223,7 @@ export class SharePointDataSource extends DataSource {
       crawlAcl: true,
       inclusionFileTypePatterns: [],
       crawlPages: true,
-      deletionProtectionThreshold: '0',
+      deletionProtectionThreshold: '100',
       crawlListData: true,
       crawlComments: true,
       enableDeletionProtection: false,

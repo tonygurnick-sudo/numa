@@ -132,7 +132,7 @@ export class BoxDataSource extends DataSource {
       folderIDs: [],
       isCrawlAcl: true,
       exclusionPatterns: [],
-      deletionProtectionThreshold: '0',
+      deletionProtectionThreshold: '100',
     };
 
     super(scope, name, {
