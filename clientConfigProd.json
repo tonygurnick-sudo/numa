@@ -20,15 +20,9 @@
   "arcanum-demo-nick": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "sharePointConfigs": [
+    "boxConfigs": [
       {
-        "displayName": "arcanum-demo-nick",
-        "tenantId": "1234567890",
-        "domain": "arcanum-test",
-        "siteUrls": [
-          "https://arcanum.ai.sharepoint.test/"
-        ],
-        "configuration": {}
+        "enterpriseId": "1235149944"
       }
     ]
   },
@@ -276,9 +270,7 @@
       {
         "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29",
         "domain": "nzsta.sharepoint.com",
-        "siteUrls": [
-          "https://nzsta.sharepoint.com/sites/Company"
-        ],
+        "siteUrls": ["https://nzsta.sharepoint.com/sites/Company"],
         "configuration": {}
       }
     ]
