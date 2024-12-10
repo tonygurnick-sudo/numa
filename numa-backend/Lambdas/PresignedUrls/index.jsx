@@ -65,8 +65,14 @@ export const handler = async (event) => {
 
     const fileKey = fileName;
 
+    // Respect the bucket name passed in the query parameters
+    let bucketName = event.queryStringParameters?.bucketName;
+    if (!bucketName) {
+      bucketName = BUCKET_NAME;
+    }
+
     const command = new PutObjectCommand({
-      Bucket: BUCKET_NAME,
+      Bucket: bucketName,
       Key: fileKey,
     });
 

@@ -22,7 +22,7 @@ import {
 
 const AuthContext = createContext(null);
 
-// Constants
+// TODO: Make these values dynamic
 const IDENTITY_POOL_ID = 'us-east-1:facf1439-ef67-48f9-ada4-debb294db187';
 const ROLE_ARN =
   'arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo';

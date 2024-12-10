@@ -39,7 +39,9 @@ const AppDetail = () => {
                 {numaAppData?.category && (
                   <span>
                     <strong>Category:</strong>{' '}
-                    <span className={`category-tag ${numaAppData.category.toLowerCase()}`}>
+                    <span
+                      className={`category-tag ${numaAppData.category.toLowerCase()}`}
+                    >
                       {numaAppData.category}
                     </span>
                   </span>
@@ -56,33 +58,31 @@ const AppDetail = () => {
               </div>
             </Col>
           </Row>
-          <hr style={{
-            width: '65%',
-            margin: '0 auto 1rem auto',
-            height: '2px',
-            marginTop: '15px',
-            backgroundColor: '#dee2e6'
-          }}/>
+          <hr
+            style={{
+              width: '65%',
+              margin: '0 auto 1rem auto',
+              height: '2px',
+              marginTop: '15px',
+              backgroundColor: '#dee2e6',
+            }}
+          />
         </Container>
       </header>
 
       <main className="flex-grow-1">
         <Container fluid>
-
-              {error && <Alert variant="danger">{error}</Alert>}
-
-              {isLoading ? (
-                <Preloader />
-              ) : (
-                numaAppData && (
-                  numaAppData.type === 'numa-app' ? (
-                    <AppWizard manifest={numaAppData} />
-                  ) : (
-                    numaAppData.type === 'q-app' && <QAppDetail />
-                  )
-                )
-              )}
-
+          {error && <Alert variant="danger">{error}</Alert>}
+          {isLoading ? (
+            <Preloader />
+          ) : (
+            numaAppData &&
+            (numaAppData.type === 'numa-app' ? (
+              <AppWizard manifest={numaAppData} />
+            ) : numaAppData.type === 'q-app' ? (
+              <QAppDetail />
+            ) : null)
+          )}
         </Container>
       </main>
 

@@ -1,0 +1,54 @@
+{
+  "appId": "719f10e3-b49e-4cba-af70-567c26de0140",
+  "title": "Loan Refinancing Calculator",
+  "description": "An app to calculate if refinancing a loan is worth it based on current and new loan details",
+  "initialPrompt": "Let's create a helper to calculate if worth refinancing a loan. E.g. Car loan, house etc.\n\nItems to ensure we have as input:\nCurrent loan details - \nTotal purchase amount\ncurrent interest rate\nterm - months\nAny final balloon payment\ncurrent total owing.\n\nInputs of other loan details to compare with:\nNew term\nNew interest rate\nany balloon payments\n\nOutputs we would want to see:\nmonthly payments\ntotal paid\ntotal interest paid",
+  "appVersion": 35,
+  "appDefinition": {
+    "appDefinitionVersion": "1",
+    "cards": [
+      {
+        "textInput": {
+          "id": "26e77c94-70b9-457d-bfc3-b7aa706a322b",
+          "title": "Current Loan details",
+          "dependencies": [],
+          "type": "text-input",
+          "placeholder": "enter all details about your loan, amount, start date, interest, length, balloon payment, current position",
+          "defaultValue": "Loan Amount: $350,000.00\nLoan Date: 5/15/20\nInterest Charge: $120,000.00\nTerm of Loan: 360 months (30 years)\nMonthly Payments: 359 payments of $1,750.00 at 4.500%.\n1 Final Payment: $15,000.00 at 4.500%.\nCurrent Position:\nGross Balance as of 10/30/24: $325,000.00\nAdd Interest on Overdue Balance (ODI): $0.00\nLess Rebate of Future Finance Charge: $25,000.00 CR"
+        }
+      },
+      {
+        "textInput": {
+          "id": "0f1ae5b9-3cee-4910-86af-e7cb97cffc4d",
+          "title": "New Interest Rate",
+          "dependencies": [],
+          "type": "text-input",
+          "placeholder": "Enter the interest rate for the potential new loan (e.g. 4.25%)"
+        }
+      },
+      {
+        "textInput": {
+          "id": "00a18fd8-6b91-41f2-813f-31a1b9950b9f",
+          "title": "New Balloon Payment",
+          "dependencies": [],
+          "type": "text-input",
+          "placeholder": "Enter any final balloon payment amount for the potential new loan"
+        }
+      },
+      {
+        "textInput": {
+          "id": "5790865c-1646-4c46-aaa4-41717d310360",
+          "title": "New Loan Term (months)",
+          "dependencies": [],
+          "type": "text-input",
+          "placeholder": "Enter the term in months for the potential new loan"
+        }
+      },
+      {
+        "SDK_UNKNOWN_MEMBER": {
+          "name": "llm"
+        }
+      }
+    ]
+  }
+}

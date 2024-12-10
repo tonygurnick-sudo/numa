@@ -15,6 +15,7 @@ const QAppDetailHeader = () => {
   const qAppId = qAppData.appId;
 
   const { qAppsClient, loading: authLoading } = useAuth();
+  // TODO: Make these values dynamic
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
 
   const [loading, setLoading] = useState(false);
