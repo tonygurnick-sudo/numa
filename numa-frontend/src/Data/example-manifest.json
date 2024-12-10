@@ -1,6 +1,70 @@
 {
   "apps": [
     {
+      "appName": "Policy Designer",
+      "id": "policy-builder-app",
+      "type": "policy-builder",
+      "status": "Active",
+      "createdDate": "2024-03-20T10:00:00Z",
+      "appDescription": "Create and manage organizational policies with AI assistance. This tool helps draft, review, and format policies while ensuring compliance with industry standards and regulations.",
+      "tasks": [
+        {
+          "id": "policy-type-selection",
+          "title": "Select Policy Type",
+          "type": "dropdown",
+          "required": true,
+          "params": {
+            "options": [
+              "IT Security Policy",
+              "HR Policy",
+              "Compliance Policy",
+              "Operations Policy",
+              "Custom Policy"
+            ]
+          },
+          "order": 1
+        },
+        {
+          "id": "policy-requirements",
+          "title": "Policy Requirements",
+          "type": "text-input",
+          "description": "Describe the key requirements and objectives for this policy",
+          "required": true,
+          "order": 2
+        },
+        {
+          "id": "generate-policy",
+          "title": "Generate Policy Draft",
+          "type": "q-app",
+          "appVersion": "1",
+          "params": {
+            "qAppId": "policy-generator-q-app",
+            "inputs": [
+              {
+                "inputContentRef": "@policy-type-selection",
+                "qInputCardId": "policy-type"
+              },
+              {
+                "inputContentRef": "@policy-requirements",
+                "qInputCardId": "requirements"
+              }
+            ],
+            "qOutputCardId": "policy-draft"
+          },
+          "order": 3
+        },
+        {
+          "id": "display-policy",
+          "title": "Review Policy",
+          "type": "text-output",
+          "params": {
+            "dataRef": "@generate-policy"
+          },
+          "order": 4
+        }
+      ]
+    },
+    {
       "appName": "Meeting Tools App",
       "id": "meeting-tools-app",
       "type": "numa-app",
