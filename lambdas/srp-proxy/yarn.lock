@@ -52,8 +52,8 @@ __metadata:
   linkType: hard
 
 "@aws-sdk/client-cognito-identity-provider@npm:^3.699.0":
-  version: 3.699.0
-  resolution: "@aws-sdk/client-cognito-identity-provider@npm:3.699.0"
+  version: 3.708.0
+  resolution: "@aws-sdk/client-cognito-identity-provider@npm:3.708.0"
   dependencies:
     "@aws-crypto/sha256-browser": "npm:5.2.0"
     "@aws-crypto/sha256-js": "npm:5.2.0"
@@ -96,7 +96,7 @@ __metadata:
     "@smithy/util-retry": "npm:^3.0.10"
     "@smithy/util-utf8": "npm:^3.0.0"
     tslib: "npm:^2.6.2"
-  checksum: 10c0/41f9d182a1241d68c888a08635fa62e1f704af44656cc78efc6f2e057671080efe27aaf857b70a84da63cdc9419fb21a209d972cd32ece03b018556e07c2d2da
+  checksum: 10c0/e9a36c9190d2de68fc6c6fc7bab3248ab0ad9ae1589db0de486697c6f8b5fb34864f7d68285abd83456aa2a5d85592ecef5cf0da8d7da6ae759842a89bb8982e
   languageName: node
   linkType: hard
 
