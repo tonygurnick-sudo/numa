@@ -149,3 +149,29 @@ Important Notes:
 2. The sitemap path is relative to the project root
 3. You can combine both URL-based and sitemap-based configurations for the same client
 4. Sitemaps must be in valid XML format
+
+## Index Configuration
+
+Amazon Q Business requires an index to be configured for each application. There are two types of indexes available:
+
+### Index Types
+- **STARTER**: Default index type
+  - Supports up to 5 units
+  - Each unit provides capacity for 20,000 documents or 200 MB (whichever is reached first)
+
+- **ENTERPRISE**: Advanced index type
+  - Supports up to 50 units
+  - Each unit provides capacity for 20,000 documents or 200 MB (whichever is reached first)
+
+### Configuration
+
+Index configuration can be specified in the client config JSON files (`clientConfigDev.json` and `clientConfigProd.json`):
+
+```json
+{
+  "clientname": {
+    "indexType": "ENTERPRISE",  // Optional. Defaults to "STARTER" if not specified
+    "indexUnits": 5,           // Optional. Defaults to 1 if not specified
+    // ... other configurations
+  }
+}
