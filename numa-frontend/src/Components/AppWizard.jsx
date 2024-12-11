@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Container, Row, Col, Card } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
 import { TextOutputModule } from '../Modules/TextOutputModule';
 import { WizardNavigation } from './WizardNavigation';
+import { Preloader } from '../Components/Preloader'; // Assuming Preloader is imported from this location
 
 const AppWizard = ({ manifest }) => {
   const {
@@ -108,6 +109,22 @@ const AppWizard = ({ manifest }) => {
     updateTaskCompletionStatus(taskId, Boolean(value));
   }, [setTaskInputValues, updateTaskCompletionStatus]);
 
+  const handlePrevStep = () => {
+    if (activeStep > 0) {
+      const newStep = activeStep - 1;
+      setActiveStep(newStep);
+      markDefaultContentComplete(newStep);
+    }
+  };
+
+  const handleNextStep = () => {
+    if (activeStep < visibleTasks.length - 1) {
+      const newStep = activeStep + 1;
+      setActiveStep(newStep);
+      markDefaultContentComplete(newStep);
+    }
+  };
+
   const renderTask = (task) => {
     const handleComplete = () => handleTaskCompletion(task.id, true);
     const handleNotComplete = () => handleTaskCompletion(task.id, false);
@@ -131,6 +148,12 @@ const AppWizard = ({ manifest }) => {
         return <p key={task.id}>Unknown task type</p>;
     }
   };
+
+  if (!numaAppData) {
+    return <div>
+      <Preloader smallscreen={true} overlayParent={true} />
+    </div>;
+  }
 
   return (
     <Container fluid className="app-wizard">
@@ -158,9 +181,26 @@ const AppWizard = ({ manifest }) => {
         <Col xs={12} className="px-2 px-md-4">
           {activeStep < visibleTasks.length && (
             <div className="mb-4">
-
-                {renderTask(visibleTasks[activeStep])}
-
+              {renderTask(visibleTasks[activeStep])}
+              <div className="task-navigation">
+                <Button
+                  variant="primary"
+                  onClick={handlePrevStep}
+                  disabled={activeStep === 0}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleNextStep}
+                  disabled={
+                    activeStep === visibleTasks.length - 1 ||
+                    !taskCompletionStatus[visibleTasks[activeStep].id]
+                  }
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </Col>

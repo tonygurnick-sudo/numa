@@ -1,8 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Container, Row, Col, Card } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button } from 'react-bootstrap';
 import { AppCard } from './AppCard';
 import { WizardNavigation } from './WizardNavigation';
 import { useNumaApp } from '../Providers/NumaAppProvider';
+import { Preloader } from '../Components/Preloader';
+
 
 const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessionResults }) => {
   const {
@@ -25,6 +27,29 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
       setAppRunning(false);
     }
   }, [sessionResults, setAppRunning]);
+
+  // Initialize completedSteps with default values
+  useEffect(() => {
+    if (qAppData?.appDefinition?.cards) {
+      const newCompletedSteps = { ...completedSteps };
+      qAppData.appDefinition.cards.forEach(card => {
+        const cardData = getCardData(card);
+        if (cardData.defaultValue) {
+          newCompletedSteps[cardData.id] = true;
+        }
+      });
+      setCompletedSteps(newCompletedSteps);
+    }
+  }, [qAppData]);
+
+  // Update completedSteps when input changes
+  useEffect(() => {
+    const newCompletedSteps = { ...completedSteps };
+    Object.entries(qCardInputValues).forEach(([cardId, value]) => {
+      newCompletedSteps[cardId] = Boolean(value);
+    });
+    setCompletedSteps(newCompletedSteps);
+  }, [qCardInputValues]);
 
   // Memoize the getCardData function
   const getCardData = useCallback((card) => {
@@ -204,8 +229,23 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
     }
   }, [appRunning, isPolling, calculateProgress, sessionResults]);
 
+  const handlePrevStep = () => {
+    if (activeStep > 0) {
+      const newStep = activeStep - 1;
+      setActiveStep(newStep);
+    }
+  };
+
+  const handleNextStep = () => {
+    if (activeStep < preRunSteps.length - 1) {
+      const newStep = activeStep + 1;
+      setActiveStep(newStep);
+    }
+  };
+
   if (!qAppData?.appDefinition?.cards) {
-    return <div>Loading app data...</div>;
+    return <div>
+              { <Preloader smallscreen={true} overlayParent={true} />}</div>;
   }
 
   // Show results section after clicking Run
@@ -237,24 +277,41 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
             <div className="wizard-content">
               {/* Show current card during input phase */}
               {currentCard && !showResults && (
+                <>
 
-                  <div className="border-0 shadow-sm">
-
-                      <AppCard
-                        key={getCardData(currentCard).id}
-                        card={currentCard}
-                        dependencies={getCardData(currentCard).dependencies || []}
-                        appsCards={qAppData.appDefinition.cards}
-                        onInputChange={(value) => {
-                          const cardData = getCardData(currentCard);
-                          onInputChange(cardData.id, value);
-                        }}
-                        inputValue={qCardInputValues[getCardData(currentCard).id]}
-                        sessionResults={sessionResults}
-                      />
-
+                  <AppCard
+                    key={getCardData(currentCard).id}
+                    card={currentCard}
+                    dependencies={getCardData(currentCard).dependencies || []}
+                    appsCards={qAppData.appDefinition.cards}
+                    onInputChange={(value) => {
+                      const cardData = getCardData(currentCard);
+                      onInputChange(cardData.id, value);
+                    }}
+                    inputValue={qCardInputValues[getCardData(currentCard).id]}
+                    sessionResults={sessionResults}
+                  />
+                  <div className="task-navigation">
+                    <Button
+                      variant="primary"
+                      onClick={handlePrevStep}
+                      disabled={activeStep === 0}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={handleNextStep}
+                      disabled={
+                        activeStep === preRunSteps.length - 1 ||
+                        (!completedSteps[getCardData(currentCard).id] &&
+                         !getCardData(currentCard).defaultValue)
+                      }
+                    >
+                      Next
+                    </Button>
                   </div>
-
+                  </>
               )}
 
               {/* Show results section after running */}

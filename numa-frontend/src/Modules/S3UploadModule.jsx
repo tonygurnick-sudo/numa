@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { Preloader } from '../Components/Preloader';
-import { Row, Col, Button, Form } from 'react-bootstrap';
+import {  Button } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
 import axios from 'axios';
 
@@ -14,6 +14,8 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   const [uploadedFilePath, setUploadedFilePath] = useState('');
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [error, setError] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Extracting task parameters
   const bucketName = task?.params.bucketName;
@@ -28,6 +30,43 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setUploadedFileName('');
       onNotComplete();
     }
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      setSelectedFile(file);
+      setUploadStatus(null);
+      setUploadProgress(0);
+      setError(null);
+      setUploadedFileName('');
+      onNotComplete();
+    }
+  };
+
+  const handleZoneClick = () => {
+    fileInputRef.current.click();
   };
 
   const handleUpload = async () => {
@@ -99,36 +138,48 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   return (
     <div className="task-container">
       {task.title && <h3>{task.title}</h3>}
-      {task.description && <p>{task.description}</p>}
 
-      {loading && <Preloader smallscreen={true} overlayParent={true} />}
-
-      <Form.Group controlId={`file-upload-${task.id}`}>
-        <Form.Label>Select a file to upload:</Form.Label>
-        <Form.Control
+      <div
+        className={`upload-container bg-light p-4 rounded ${isDragging ? 'dragging' : ''}`}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={handleZoneClick}
+      >
+        <input
           type="file"
           onChange={handleFileChange}
-          disabled={uploadStatus === 'Uploading...'}
+          ref={fileInputRef}
+          id={`file-upload-${task.id}`}
+          style={{ display: 'none' }}
         />
-      </Form.Group>
-
-      {selectedFile && (
-        <div className="mt-2">
-          <p>Selected file: {selectedFile.name}</p>
+        <div className="text-center">
+          <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
+          <p className="mt-2">Drag and drop your files here, or</p>
           <Button
-            onClick={handleUpload}
-            disabled={uploadStatus === 'Uploading...'}
             variant="primary"
+            as="label"
+            htmlFor={`file-upload-${task.id}`}
+            style={{ cursor: 'pointer' }}
           >
-            {uploadStatus === 'Uploading...' ? 'Uploading...' : 'Upload File'}
+            Select Files
           </Button>
+          {selectedFile && (
+            <div className="selected-file mt-3">
+              <p className="mb-2">Selected file: {selectedFile.name}</p>
+            </div>
+          )}
         </div>
-      )}
+      </div>
+
+      {error && <div className="alert alert-danger mt-3">{error}</div>}
 
       {uploadStatus && (
         <div className="mt-3">
-          {uploadStatus === 'Uploading...' && (
-            <div className="progress mb-2">
+          <p>{uploadStatus}</p>
+          {uploadProgress > 0 && uploadProgress < 100 && (
+            <div className="progress">
               <div
                 className="progress-bar"
                 role="progressbar"
@@ -141,16 +192,18 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
               </div>
             </div>
           )}
-          <p className={uploadStatus.includes('failed') ? 'text-danger' : 'text-success'}>
-            {uploadStatus}
-          </p>
         </div>
       )}
 
-      {error && (
-        <div className="alert alert-danger mt-3" role="alert">
-          {error}
-        </div>
+      {selectedFile && !uploadStatus && (
+        <Button
+          variant="primary"
+          onClick={handleUpload}
+          className="mt-3"
+          disabled={loading}
+        >
+          Upload
+        </Button>
       )}
     </div>
   );

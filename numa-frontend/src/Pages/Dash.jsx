@@ -104,11 +104,11 @@ const Dash = () => {
         <header>
           <Container fluid>
             <Row>
-              <Col lg={9} className="px-5">
+              <Col lg={9} className="pe-5">
               <Breadcrumbs label={'Dashboard'} />
                 <h1>Numa & Q Library</h1>
               </Col>
-              <Col lg={3} className="p-5">
+              <Col lg={3} className="ps-5">
                 <>
                   <QAppCreate />
                 </>

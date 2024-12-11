@@ -9,6 +9,7 @@ import { useAuth } from '../Providers/AuthProvider';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
+import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
@@ -18,7 +19,7 @@ const NumaChat = () => {
   const [conversationId, setConversationId] = useState(null);
   const [previousMessageId, setPreviousMessageId] = useState(null);
   const messageEndRef = useRef(null);
-  const { user, logout, qBusinessClient } = useAuth();
+  const { user, qBusinessClient } = useAuth();
   const [conversations, setConversations] = useState([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [showConversations, setShowConversations] = useState(true);
@@ -154,51 +155,6 @@ const NumaChat = () => {
     );
   };
 
-  const fetchConversationHistory = async (conversationId) => {
-    setIsLoading(true);
-    try {
-      const input = {
-        applicationId: APPLICATION_ID,
-        conversationId: conversationId,
-        // You might need to adjust these parameters based on your API
-        maxResults: 50,
-      };
-
-      const command = new ListConversationsCommand(input);
-      const response = await qBusinessClient.send(command);
-
-      // Transform the messages into the format your chat expects
-      const formattedMessages =
-        response.messages?.map((message) => ({
-          role: message.role === 'USER' ? 'user' : 'assistant',
-          content: message.content,
-          id: message.messageId,
-          sources: message.sourceAttributions,
-        })) || [];
-
-      setMessages(formattedMessages);
-
-      // Set the last message ID as the previous message ID for continuation
-      if (formattedMessages.length > 0) {
-        const lastMessage = formattedMessages[formattedMessages.length - 1];
-        setPreviousMessageId(lastMessage.id);
-      }
-    } catch (error) {
-      console.error('Error fetching conversation history:', error);
-      setError('Failed to load conversation history');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleConversationSelect = async (conversation) => {
-    setConversationId(conversation.conversationId);
-    if (isMobile) {
-      setShowConversations(false);
-    }
-    await fetchConversationHistory(conversation.conversationId);
-  };
-
   return (
     <div className="dashboard d-flex flex-column vh-100">
       <Nav />
@@ -215,96 +171,17 @@ const NumaChat = () => {
 
       <LayoutDashboard className="flex-grow-1">
         <div className="chat-layout d-flex">
-          <div
-            className={`sidebar-wrapper ${showConversations ? 'open' : 'closed'}`}
-            data-testid="sidebar-wrapper"
-            style={{
-              position: isMobile ? 'absolute' : 'relative',
-              height: '100%',
-              zIndex: 1000,
-              backgroundColor: 'white',
-              width: showConversations ? '300px' : '0',
-              transition: 'width 0.3s ease',
-              ...(isMobile && {
-                width: '300px',
-                transform: showConversations
-                  ? 'translateX(0)'
-                  : 'translateX(-100%)',
-                transition: 'transform 0.3s ease',
-              }),
+          <ChatHistorySidebar
+            qBusinessClient={qBusinessClient}
+            APPLICATION_ID={APPLICATION_ID}
+            onSelectConversation={(messages) => {
+              setMessages(messages);
+              if (messages.length > 0) {
+                setPreviousMessageId(messages[messages.length - 1].id);
+              }
             }}
-          >
-            <div className="sidebar-content border-end bg-white h-100">
-              <div className="p-3">
-                <Button
-                  variant="primary"
-                  className="w-100 mb-3"
-                  onClick={() => {
-                    setConversationId(null);
-                    setPreviousMessageId(null);
-                    setMessages([]);
-                  }}
-                >
-                  New Chat
-                </Button>
-
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h5 className="mb-0">Previous Conversations</h5>
-                </div>
-
-                <hr className="my-3" />
-
-                <div className="conversation-list">
-                  {isLoadingConversations ? (
-                    <div>Loading conversations...</div>
-                  ) : (
-                    <div className="d-flex flex-column gap-2">
-                      {conversations.map((conv) => (
-                        <Button
-                          key={conv.conversationId}
-                          variant={
-                            conversationId === conv.conversationId
-                              ? 'primary'
-                              : 'outline-primary'
-                          }
-                          onClick={() => handleConversationSelect(conv)}
-                          className="text-start w-100"
-                        >
-                          <div className="text-truncate">
-                            {conv.title || 'Untitled Chat'}
-                          </div>
-                          <small className="text-muted d-block">
-                            {new Date(conv.startTime).toLocaleDateString(
-                              'en-US',
-                              {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              },
-                            )}
-                          </small>
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <button
-            className={`chevron-button ${showConversations ? 'open' : 'closed'}`}
-            onClick={() => setShowConversations(!showConversations)}
-            aria-label="Show conversations"
-          >
-            {showConversations ? (
-              <ChevronLeft size={20} />
-            ) : (
-              <ChevronRight size={20} />
-            )}
-          </button>
+            setError={setError}
+          />
 
           <div className="main-content flex-grow-1">
             <div className="chat-container d-flex flex-column h-100 p-2 p-lg-3">
@@ -317,7 +194,7 @@ const NumaChat = () => {
                 </Alert>
               )}
               <div
-                className="chat-messages bg-light p-3 rounded mb-3 flex-grow-1"
+                className="chat-messages bg-light p-3 mb-3 flex-grow-1"
                 style={{
                   overflowY: 'auto',
                   minHeight: 0,
@@ -333,13 +210,7 @@ const NumaChat = () => {
                   messages.map((message, index) => (
                     <div
                       key={index}
-                      className={`message ${message.role} mb-3`}
-                      style={{
-                        padding: '8px',
-                        borderRadius: '5px',
-                        backgroundColor:
-                          message.role === 'user' ? '#e9ecef' : '#ffffff',
-                      }}
+                      className={`message rounded ${message.role} mb-3 p-4`}
                     >
                       <strong>
                         {message.role === 'user' ? 'You:' : 'AI:'}
@@ -357,24 +228,21 @@ const NumaChat = () => {
                 className="mt-auto"
                 data-testid="chat-form"
               >
-                <Form.Group className="mb-2">
+                <Form.Group className="mb-2 position-relative">
                   <Form.Control
                     as="textarea"
-                    rows={isMobile ? 2 : 3}
+                    rows={isMobile ? 3 : 5}
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     placeholder="Type your message here..."
                   />
-                </Form.Group>
-                <div
-                  className={`d-flex ${isMobile ? 'flex-column' : 'flex-row'} gap-2`}
-                  data-testid="button-container"
-                >
+
                   <Button
                     variant="primary"
                     type="submit"
+                    id="send-message-button"
                     disabled={isLoading || !qBusinessClient}
-                    className={isMobile ? 'w-100' : ''}
+                    className={isMobile ? 'w-100' : 'send-message'}
                   >
                     {isLoading ? (
                       <>
@@ -385,14 +253,7 @@ const NumaChat = () => {
                       'Send Message'
                     )}
                   </Button>
-                  <Button
-                    variant="outline-secondary"
-                    onClick={() => logout()}
-                    className={isMobile ? 'w-100' : ''}
-                  >
-                    Logout
-                  </Button>
-                </div>
+                </Form.Group>
               </Form>
             </div>
           </div>

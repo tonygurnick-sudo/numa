@@ -99,7 +99,7 @@
           "required": false,
           "description": "Include any other notes that might be useful.",
           "type": "text-input",
-          "default": ".",
+          "default": "other notes:",
           "order": 1
         },
         {

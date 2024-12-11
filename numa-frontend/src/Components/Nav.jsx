@@ -1,11 +1,11 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import Logo from '../assets/images/logo-accelerate.svg';
+import Logo from '../assets/images/numa-logo.svg';
 
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 
 import { useState, useEffect } from 'react';
-import { Navbar, Button, Dropdown, ProgressBar } from 'react-bootstrap';
+import { Navbar, Button, Dropdown } from 'react-bootstrap';
 
 const Nav = () => {
   const navigate = useNavigate();
@@ -41,68 +41,25 @@ const Nav = () => {
     window.location.reload(false);
   };
 
-  const isAppDetailPage = location.pathname.startsWith('/app/');
-
   const MobileNav = () => (
     <Navbar
       fixed="top"
-      className="container-fluid"
-      style={{
-        backgroundColor: '#1a1a1a',
-        borderBottom: '1px solid #eee',
-        height: '60px',
-        display: 'flex',
-        alignItems: 'center',
-      }}
+      className="container-fluid mobile-nav"
     >
       <div className="d-flex justify-content-between align-items-center w-100">
-        <Navbar.Brand onClick={() => navigate('/dash')} role="button">
+        <Navbar.Brand onClick={() => navigate('/dash')} role="button" className="btn-home-logo-mobile" >
           <img
             src={Logo}
-            className="logo-bk"
             alt="Arcanum"
-            style={{ height: '50px' }}
-          />
+          /> &nbsp;Numa
         </Navbar.Brand>
 
-        <div className="d-flex align-items-center">
-          {isAppDetailPage && (
-            <>
-              <ProgressBar
-                now={progress}
-                label={`${Math.round(progress)}%`}
-                animated
-                variant="success"
-                className="flex-grow-1 progress-bar"
-              />
-              <Button
-                type="submit"
-                id="submit"
-                className="btn btn-primary run_btn  d-inline-flex align-items-center"
-                disabled={runActive}
-                onClick={handleRunApp}
-              >
-                Run{' '}
-                <i
-                  style={{ lineHeight: '1px' }}
-                  className={`bi bi-arrow-right ${!runActive ? 'bounce-icon' : ''}`}
-                ></i>
-              </Button>
-            </>
-          )}
-        </div>
 
         <Dropdown align="end" style={{ display: 'flex', alignItems: 'center' }}>
           <Dropdown.Toggle
             variant="link"
             id="nav-dropdown"
             data-testid="mobile-menu-button"
-            style={{
-              color: 'white',
-              border: 'none',
-              padding: '8px',
-              display: 'flex',
-            }}
           >
             <i className="bi bi-list" style={{ fontSize: '1.8rem' }}></i>
           </Dropdown.Toggle>
@@ -151,7 +108,7 @@ const Nav = () => {
     <>
       <nav className="nav-component">
         <div
-          className="btn-logout"
+          className="btn-home-logo"
           onClick={() => navigate('/dash')}
           role="button"
         >
