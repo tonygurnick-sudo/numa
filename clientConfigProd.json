@@ -3,7 +3,15 @@
     "clientAccountId": "593793032721"
   },
   "accumen": {
-    "clientAccountId": "677276116117"
+    "clientAccountId": "677276116117",
+    "webCrawlerConfigs": [
+      {
+        "url": "https://www.accumen.co.nz/"
+      },
+      {
+        "url": "https://archipro.co.nz/professional/accumen-shapes"
+      }
+    ]
   },
   "arcanum-demo": {
     "clientAccountId": "905418183804",
@@ -151,6 +159,9 @@
       },
       {
         "url": "https://www.deltainsurance.co.nz/"
+      },
+      {
+        "url": "https://deltainsurance.co.nz/pages/brokers/"
       }
     ]
   },
@@ -219,6 +230,32 @@
   },
   "modern-sales": {
     "clientAccountId": "228743762183"
+  },
+  "mosaic": {
+    "clientAccountId": "471112582627",
+    "webCrawlerConfigs": [
+      {
+        "url": "https://www.minterellison.co.nz/"
+      },
+      {
+        "url": "https://www.russellmcveagh.com/insights-news/insights/"
+      },
+      {
+        "url": "https://chapmantripp.com/trends-insights/"
+      },
+      {
+        "url": "https://www.fsc.org.nz/"
+      },
+      {
+        "url": "https://www.fma.govt.nz/news/"
+      },
+      {
+        "url": "https://www.mbie.govt.nz/"
+      },{
+        "url": "https://www.rbnz.govt.nz/"
+      }
+
+    ]
   },
   "moira-shire-council": {
     "clientAccountId": "084828600250",
