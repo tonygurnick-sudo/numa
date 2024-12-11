@@ -1,4 +1,3 @@
-import { Row, Col } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { Preloader } from '../Components/Preloader';
 
@@ -9,11 +8,11 @@ function TextOutputModule({ task }) {
   );
 
   if (!task) return;
+  console.log("task",task);
 
   return (
     <div>
-
-        {/* Textarea for displaying data */}
+        {task.title && <h3>{task.title}</h3>}
         <p className="output-text">
           {loading && <Preloader smallscreen={true}  />}
           {taskResponse?.result || ''}

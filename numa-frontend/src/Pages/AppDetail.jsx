@@ -30,12 +30,12 @@ const AppDetail = () => {
         <Container fluid>
           {!isLoading && <Breadcrumbs label={numaAppData?.appName} />}
           <Row>
-            <Col lg={8} className="px-5">
+            <Col lg={8} className="">
               <h1 className="mb-3">{numaAppData?.appName}</h1>
               <p>{numaAppData?.appDescription}</p>
             </Col>
-            <Col lg={4} className="pe-4 text-end">
-              <div className="d-flex flex-column gap-2">
+            <Col lg={4} sm={12} className="pe-4 app-details-meta">
+              <div className="d-flex flex-column gap-2 text-lg-end text-center">
                 {numaAppData?.category && (
                   <span>
                     <strong>Category:</strong>{' '}

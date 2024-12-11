@@ -19,7 +19,7 @@ const AppItem = ({ app }) => {
   };
 
   return (
-    <Col key={app.id} lg={4} className="flex">
+    <Col key={app.id} lg={4} md={6} sm={12} className="flex mb-4">
       <div className="card card-apps" data-testid={`app-card-${app.id}`}>
         <div className={`card-category ${app?.category?.toLowerCase()}`}>
           {app?.category || '\u00A0'}

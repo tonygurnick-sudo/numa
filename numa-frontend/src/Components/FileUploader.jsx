@@ -375,24 +375,6 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
   return (
     <div
       className={`upload-container bg-light p-4 rounded ${isDragging ? 'dragging' : ''}`}
-      style={{
-        position: 'relative',
-        minHeight: '200px',
-        transition: 'all 0.3s ease',
-        backgroundImage: isDragging
-          ? `linear-gradient(90deg, #6f42c1 70%, transparent 70%),
-             linear-gradient(90deg, #6f42c1 70%, transparent 70%),
-             linear-gradient(0deg, #6f42c1 70%, transparent 70%),
-             linear-gradient(0deg, #6f42c1 70%, transparent 70%)`
-          : `linear-gradient(90deg, #dee2e6 70%, transparent 70%),
-             linear-gradient(90deg, #dee2e6 70%, transparent 70%),
-             linear-gradient(0deg, #dee2e6 70%, transparent 70%),
-             linear-gradient(0deg, #dee2e6 70%, transparent 70%)`,
-        backgroundSize: '15px 2px, 15px 2px, 2px 15px, 2px 15px',
-        backgroundPosition: '0 0, 0 100%, 0 0, 100% 0',
-        backgroundRepeat: 'repeat-x, repeat-x, repeat-y, repeat-y',
-        animation: isDragging ? 'dashedBorder 8s linear infinite' : 'none',
-      }}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}

@@ -19,17 +19,8 @@ const JobHistorySidebar = () => {
         className="job-history-toggle"
         variant="primary"
         size="sm"
-        style={{
-          position: 'fixed',
-          right: '0',
-          top: '50%',
-          transform: 'translateY(-50%) rotate(-90deg)',
-          transformOrigin: 'right bottom',
-          borderRadius: '4px 4px 0 0',
-          zIndex: 1000,
-        }}
       >
-        Job History
+        Recent Runs
       </Button>
 
       <Offcanvas show={show} onHide={handleClose} placement="end">

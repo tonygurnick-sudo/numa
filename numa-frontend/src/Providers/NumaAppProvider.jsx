@@ -422,6 +422,7 @@ export const NumaAppProvider = ({ children }) => {
 
         // Update progress
         completedTasks++;
+        console.log('Completed tasks:', completedTasks);
         setProcessingProgress((completedTasks / totalTasks) * 100);
       }
 
