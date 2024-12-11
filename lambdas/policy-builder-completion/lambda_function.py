@@ -1,6 +1,5 @@
 import io
 import os
-import textwrap
 import uuid
 
 import boto3
@@ -109,21 +108,16 @@ def handler(event: dict, context: LambdaContext) -> dict:
     table_of_contents_spaced = output["table_of_contents"].replace("\n", "\n\n")
 
     logger.info("Building final policy.")
-    final_policy = textwrap.dedent(
-        f"""
-        {output["title"]}
-
-        {output["introduction"]}
-
-        {output["definitions"]}
-
-        {table_of_contents_spaced}
-
-        {policies}
-
-        {output["conclusion"]}
-        """
-    ).strip()
+    final_policy = "\n\n".join(
+        [
+            output["title"],
+            output["introduction"],
+            output["definitions"],
+            table_of_contents_spaced,
+            policies,
+            output["conclusion"],
+        ]
+    )
 
     final_policy_key = __key(app_name, job_id, "final_policy.pdf")
     __write_pdf_to_s3(final_policy, final_policy_key)
