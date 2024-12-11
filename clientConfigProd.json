@@ -247,14 +247,23 @@
         "url": "https://www.fsc.org.nz/"
       },
       {
-        "url": "https://www.fma.govt.nz/news/"
+        "url": "https://www.ey.com/en_nz/insights"
       },
       {
-        "url": "https://www.mbie.govt.nz/"
-      },{
         "url": "https://www.rbnz.govt.nz/"
+      },
+      {
+        "url": "https://kpmg.com/my/en/home/insights.html"
+      },
+      {
+        "url": "https://www.deloitte.com/nz/en/our-thinking.html"
+      },
+      {
+        "url": "https://www.pwc.co.nz/industry-expertise.html"
+      },
+      {
+        "url": "https://www.accenture.com/nz-en/industries/banking"
       }
-
     ]
   },
   "moira-shire-council": {

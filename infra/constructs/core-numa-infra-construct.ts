@@ -425,12 +425,24 @@ export class CoreNumaInfra extends Construct {
       });
     }
 
+    if (props.indexUnits) {
+      if (props.indexType === 'ENTERPRISE' && (props.indexUnits < 1 || props.indexUnits > 50)) {
+        throw new Error('Enterprise index units must be between 1 and 50');
+      }
+      if (props.indexType === 'STARTER' && (props.indexUnits < 1 || props.indexUnits > 5)) {
+        throw new Error('Starter index units must be between 1 and 5');
+      }
+    }
+
     const index = new CloudcontrolapiResource(this, 'index', {
       typeName: 'AWS::QBusiness::Index',
       desiredState: Fn.jsonencode({
         ApplicationId: applicationId,
         DisplayName: numaClient,
         Type: props.indexType,
+        CapacityConfiguration: {
+          Units: props.indexUnits ?? 1,
+        },
       }),
     });
     const indexId = Fn.lookup(Fn.jsondecode(index.properties), 'IndexId');
@@ -631,6 +643,7 @@ export interface CoreNumaInfraProps {
   enableIFrame?: boolean;
   identityProvider?: 'oidc' | 'idc';
   indexType?: 'ENTERPRISE' | 'STARTER';
+  indexUnits?: number;
   region?: string;
   domainName: string;
   clientAccountId?: string;
