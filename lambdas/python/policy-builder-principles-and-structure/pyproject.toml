@@ -20,8 +20,8 @@ structlog = "24.4.0"
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.35.77"
 mypy = "1.13.0"
-pylint = "3.3.1"
-pyright = "1.1.389"
+pylint = "3.3.2"
+pyright = "1.1.390"
 
 [tool.poetry-plugin-lambda-build]
 package-artifact-path = "lambda_function.zip"
