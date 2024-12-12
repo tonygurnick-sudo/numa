@@ -38,50 +38,7 @@ Usage of this project is facilitated via the `yarn cdktf` helper script. This re
 
 **Note**
 
-Some stacks require the lambdas to be build, a quick way of doing that on Linux
-is (from the infra directory):
-
-```bash
-for directory in ../lambdas/*/; do
-pushd $directory;
-[ -f pyproject.toml ] && poetry build-lambda;
-[ -f package.json ] && yarn && yarn bundle;
-popd;
-done;
-```
-
-On Mac it's a little more complicated:
-
-```bash
-rm -rf build_venv
-python3.12 -m venv build_venv
-source build_venv/bin/activate
-
-for directory in ../lambdas/*/; do
-    case $directory in
-        *srp-proxy*) continue;;
-    esac
-    pushd $directory;
-        rm -rf lambda_function.build;
-        rm -f lambda_function.zip;
-        pip install \
-            --quiet \
-            --disable-pip-version-check \
-            --platform manylinux2014_x86_64 \
-            --target=lambda_function.build \
-            --python-version 3.12 \
-            --only-binary=:all: \
-            .
-        pushd lambda_function.build;
-            zip --quiet --recurse-paths ../lambda_function.zip *
-        popd
-        rm -rf lambda_function.build;
-    popd;
-done;
-
-deactivate
-rm -rf build_venv
-```
+Most stacks require the lambdas to be build, just run `package.sh` in the lambdas directory.
 
 ---
 
@@ -158,7 +115,9 @@ Important Notes:
 Amazon Q Business requires an index to be configured for each application. There are two types of indexes available:
 
 ### Index Types
+
 - **STARTER**: Default index type
+
   - Supports up to 5 units
   - Each unit provides capacity for 20,000 documents or 200 MB (whichever is reached first)
 
@@ -173,8 +132,9 @@ Index configuration can be specified in the client config JSON files (`clientCon
 ```json
 {
   "clientname": {
-    "indexType": "ENTERPRISE",  // Optional. Defaults to "STARTER" if not specified
-    "indexUnits": 5,           // Optional. Defaults to 1 if not specified
+    "indexType": "ENTERPRISE", // Optional. Defaults to "STARTER" if not specified
+    "indexUnits": 5 // Optional. Defaults to 1 if not specified
     // ... other configurations
   }
 }
+```

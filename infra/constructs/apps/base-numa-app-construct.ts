@@ -159,7 +159,7 @@ export class BaseNumaApp extends Construct {
         verb: 'POST',
         path: name,
       },
-      lambdaDirectory: 'step-function-start',
+      lambdaDirectory: 'python/step-function-start',
       environment: {
         variables: {
           STEP_FUNCTION_ARN: stepFunction.arn,
@@ -180,7 +180,7 @@ export class BaseNumaApp extends Construct {
         verb: 'GET',
         path: name,
       },
-      lambdaDirectory: 'step-function-status',
+      lambdaDirectory: 'python/step-function-status',
       environment: {
         variables: {
           BUCKET: props.outputsBucket.bucket,
@@ -242,7 +242,7 @@ export class BaseNumaApp extends Construct {
           path: op.path,
         },
         handler: op.handler,
-        lambdaDirectory: 'numa-recent-jobs',
+        lambdaDirectory: 'python/numa-recent-jobs',
         runtime: 'python3.13',
         environment: {
           variables: {

@@ -52,7 +52,7 @@ structlog = "24.4.0"
 
 [package.source]
 type = "directory"
-url = "../../lib/bedrock"
+url = "../../../lib/bedrock"
 
 [[package]]
 name = "boto3"
@@ -685,7 +685,7 @@ structlog = "24.4.0"
 
 [package.source]
 type = "directory"
-url = "../../lib/helpers"
+url = "../../../lib/helpers"
 
 [[package]]
 name = "isort"
@@ -726,7 +726,7 @@ fpdf2 = "2.8.1"
 
 [package.source]
 type = "directory"
-url = "../../lib/markdown-to-pdf"
+url = "../../../lib/markdown-to-pdf"
 
 [[package]]
 name = "mccabe"
@@ -1088,4 +1088,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "~3.12.0"
-content-hash = "4b50c71725526ec042cbcf0a26725a5bb84ae22a59e1e351937f65956f488897"
+content-hash = "8e19383f9d64dbad6e3d40fbb68544b276c91baa7dfc81598c293cc2be27ef05"
