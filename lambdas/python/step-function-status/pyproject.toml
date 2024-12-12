@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "step-function-start"
+name = "step-function-status"
 version = "0.1.0"
 description = ""
 authors = ["ArcanumAI"]
@@ -13,7 +13,7 @@ python = "~3.12.0"
 
 aws-lambda-powertools = "3.3.0"
 boto3 = "1.35.77"
-helpers = {path = "../../lib/helpers", develop = true}
+helpers = {path = "../../../lib/helpers", develop = true}
 structlog = "24.4.0"
 
 [tool.poetry.group.dev.dependencies]

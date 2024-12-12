@@ -16,7 +16,7 @@ export class CoreNumaApp extends BaseNumaApp {
     };
 
     this.addLambdaFunction(this, 'cors', {
-      lambdaDirectory: 'srp-proxy',
+      lambdaDirectory: 'node/srp-proxy',
       runtime: 'nodejs22.x',
       handler: 'index.handler',
       route: {
@@ -26,7 +26,7 @@ export class CoreNumaApp extends BaseNumaApp {
       environment,
     });
     this.addLambdaFunction(this, 'initiate', {
-      lambdaDirectory: 'srp-proxy',
+      lambdaDirectory: 'node/srp-proxy',
       runtime: 'nodejs22.x',
       handler: 'index.handler',
       route: {
@@ -36,7 +36,7 @@ export class CoreNumaApp extends BaseNumaApp {
       environment,
     });
     this.addLambdaFunction(this, 'refresh', {
-      lambdaDirectory: 'srp-proxy',
+      lambdaDirectory: 'node/srp-proxy',
       runtime: 'nodejs22.x',
       handler: 'index.handler',
       route: {
@@ -46,7 +46,7 @@ export class CoreNumaApp extends BaseNumaApp {
       environment,
     });
     this.addLambdaFunction(this, 'respond', {
-      lambdaDirectory: 'srp-proxy',
+      lambdaDirectory: 'node/srp-proxy',
       runtime: 'nodejs22.x',
       handler: 'index.handler',
       route: {

@@ -15,27 +15,27 @@ variables:
   matrix:
     - BUILD_DIR:
         - tools
-        - lambdas/srp-proxy
+        - lambdas/node/srp-proxy
 
 .python-matrix:
   matrix:
     - PYTHON_WORKING_DIRECTORY:
         - deployer
-        - lambdas/example-1
-        - lambdas/example-2
-        - lambdas/example-3
-        - lambdas/extract-content-from-file
-        - lambdas/meeting-tools-app-formatting
-        - lambdas/numa-recent-jobs
-        - lambdas/policy-builder-completion
-        - lambdas/policy-builder-expert-review
-        - lambdas/policy-builder-explainability
-        - lambdas/policy-builder-generation
-        - lambdas/policy-builder-legal-review
-        - lambdas/policy-builder-principles-and-structure
-        - lambdas/step-function-start
-        - lambdas/step-function-status
-        - lambdas/structured-data-extraction
+        - lambdas/python/example-1
+        - lambdas/python/example-2
+        - lambdas/python/example-3
+        - lambdas/python/extract-content-from-file
+        - lambdas/python/meeting-tools-app-formatting
+        - lambdas/python/numa-recent-jobs
+        - lambdas/python/policy-builder-completion
+        - lambdas/python/policy-builder-expert-review
+        - lambdas/python/policy-builder-explainability
+        - lambdas/python/policy-builder-generation
+        - lambdas/python/policy-builder-legal-review
+        - lambdas/python/policy-builder-principles-and-structure
+        - lambdas/python/step-function-start
+        - lambdas/python/step-function-status
+        - lambdas/python/structured-data-extraction
         - lib/bedrock
         - lib/helpers
         - lib/markdown-to-pdf

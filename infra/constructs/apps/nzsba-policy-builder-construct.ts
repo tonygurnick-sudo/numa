@@ -98,10 +98,10 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
       },
     ];
     const lambdaConfig: [string, string, DataAwsIamPolicyDocumentStatement[]][] = [
-      ['completion', 'policy-builder-completion', policyStatements],
-      ['expert-review', 'policy-builder-expert-review', policyStatements],
-      ['generation', 'policy-builder-generation', policyStatements],
-      ['legal-review', 'policy-builder-legal-review', policyStatements],
+      ['completion', 'python/policy-builder-completion', policyStatements],
+      ['expert-review', 'python/policy-builder-expert-review', policyStatements],
+      ['generation', 'python/policy-builder-generation', policyStatements],
+      ['legal-review', 'python/policy-builder-legal-review', policyStatements],
     ];
     const lambdas = new Map(
       lambdaConfig.map(([name, directory, additionalPolicyStatements]) => [

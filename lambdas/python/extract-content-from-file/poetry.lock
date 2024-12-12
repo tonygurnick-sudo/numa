@@ -27,7 +27,7 @@ structlog = "24.4.0"
 
 [package.source]
 type = "directory"
-url = "../../lib/bedrock"
+url = "../../../lib/bedrock"
 
 [[package]]
 name = "boto3"
@@ -560,7 +560,7 @@ structlog = "24.4.0"
 
 [package.source]
 type = "directory"
-url = "../../lib/helpers"
+url = "../../../lib/helpers"
 
 [[package]]
 name = "isort"
@@ -855,4 +855,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "~3.12.0"
-content-hash = "bde466abd3465ae7a2a700246bc217fba8614e114e7088c67c8687cb7b47e606"
+content-hash = "58989f144ab7fe3ba66180ba38718f7041843cfba468928d6f84560afcddeade"

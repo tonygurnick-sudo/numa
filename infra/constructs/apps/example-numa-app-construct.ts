@@ -14,7 +14,7 @@ export class ExampleNumaApp extends BaseNumaApp {
         verb: 'POST',
         path: 'a',
       },
-      lambdaDirectory: 'example-1',
+      lambdaDirectory: 'python/example-1',
     });
 
     // Add a lambda that responds to a GET at ${prefix}/b
@@ -23,12 +23,12 @@ export class ExampleNumaApp extends BaseNumaApp {
         verb: 'GET',
         path: 'b',
       },
-      lambdaDirectory: 'example-2',
+      lambdaDirectory: 'python/example-2',
     });
 
     // Add a lambda that doesn't have a route, e.g. for use in a Step Function.
     const stepFunctionLambda = this.addLambdaFunction(this, 'non-routed-lambda-example', {
-      lambdaDirectory: 'example-3',
+      lambdaDirectory: 'python/example-3',
       timeout: 900,
     });
 

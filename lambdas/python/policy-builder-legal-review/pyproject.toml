@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "step-function-status"
+name = "policy-builder-legal-review"
 version = "0.1.0"
-description = ""
-authors = ["ArcanumAI"]
+description = "Part of the policy builder Step Function"
+authors = ["Arcanum AI"]
 readme = "README.md"
 packages = [
     { include = "**/*.py" },
@@ -12,15 +12,16 @@ packages = [
 python = "~3.12.0"
 
 aws-lambda-powertools = "3.3.0"
+bedrock = {path = "../../../lib/bedrock", develop = true}
 boto3 = "1.35.77"
-helpers = {path = "../../lib/helpers", develop = true}
+helpers = {path = "../../../lib/helpers", develop = true}
 structlog = "24.4.0"
 
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.35.77"
 mypy = "1.13.0"
-pylint = "3.3.2"
-pyright = "1.1.390"
+pylint = "3.3.1"
+pyright = "1.1.389"
 
 [tool.poetry-plugin-lambda-build]
 package-artifact-path = "lambda_function.zip"
