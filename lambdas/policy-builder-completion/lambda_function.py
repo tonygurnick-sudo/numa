@@ -105,7 +105,6 @@ def handler(event: dict, context: LambdaContext) -> dict:
     )
 
     output = document_result.response[0]["input"]
-    table_of_contents_spaced = output["table_of_contents"].replace("\n", "\n\n")
 
     logger.info("Building final policy.")
     final_policy = "\n\n".join(
@@ -113,7 +112,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
             output["title"],
             output["introduction"],
             output["definitions"],
-            table_of_contents_spaced,
+            output["table_of_contents"],
             policies,
             output["conclusion"],
         ]
