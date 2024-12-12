@@ -1,5 +1,6 @@
 import { DataAwsIamPolicyDocumentStatement } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
+import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import { BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
@@ -139,20 +140,24 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
       source: path.join(import.meta.dirname, '..', '..', 'assets', exemplar_policy_file_name),
     });
 
+    function writeStatus(body: Record<string, string>, next: string): asl.State {
+      return {
+        Type: 'Task',
+        Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
+        Parameters: {
+          Body: body,
+          Bucket: props.outputsBucket.bucket,
+          'Key.$': "States.Format('{}/{}/status.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)",
+        },
+        ResultPath: null,
+        Next: next,
+      };
+    }
+
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
       States: {
-        WriteProcessingStatus: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
-          Parameters: {
-            Body: { status: 'PROCESSING' },
-            Bucket: props.outputsBucket.bucket,
-            'Key.$': "States.Format('{}/{}/status.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)",
-          },
-          ResultPath: null,
-          Next: 'Initialize',
-        },
+        WriteProcessingStatus: writeStatus({ status: 'PROCESSING' }, 'Initialize'),
         Initialize: {
           Type: 'Pass',
           Parameters: {
@@ -320,29 +325,14 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
             },
           ],
         },
-        WriteFailureStatus: {
-          Type: 'Task',
-          Next: 'Failure',
-          Parameters: {
-            Body: {
-              status: 'FAILURE',
-              'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
-            },
-            Bucket: `${props.outputsBucket.bucket}`,
-            'Key.$': "States.Format('{}/{}/status.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)",
+        WriteFailureStatus: writeStatus(
+          {
+            status: 'FAILURE',
+            'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
           },
-          Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
-        },
-        WriteSuccessStatus: {
-          Type: 'Task',
-          Next: 'Success',
-          Parameters: {
-            Body: { status: 'SUCCESS', 'result.$': '$' },
-            Bucket: `${props.outputsBucket.bucket}`,
-            'Key.$': "States.Format('{}/{}/status.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)",
-          },
-          Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
-        },
+          'Failure',
+        ),
+        WriteSuccessStatus: writeStatus({ status: 'SUCCESS', 'result.$': '$' }, 'Success'),
         Success: {
           Type: 'Succeed',
         },
