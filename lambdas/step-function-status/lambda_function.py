@@ -3,6 +3,7 @@ import os
 
 import boto3
 import structlog
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import helpers
 
@@ -10,12 +11,15 @@ s3_client = boto3.client("s3")
 logger = structlog.get_logger()
 
 
-def handler(event: dict, context: dict) -> helpers.ApiGatewayProxyIntegrationResponse:
+def handler(
+    event: dict,
+    context: LambdaContext,
+) -> helpers.ApiGatewayProxyIntegrationResponse:
     helpers.setup_logging()
     job_id = event["job_id"]
     structlog.contextvars.bind_contextvars(
         job_id=job_id,
-        function_name=context["function_name"],
+        function_name=context.function_name,
     )
 
     app_name = os.environ["APP_NAME"]

@@ -6,6 +6,7 @@ import uuid
 
 import boto3
 import structlog
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import helpers
 
@@ -18,12 +19,15 @@ class StartExecutionResponse(typing.TypedDict):
     startDate: datetime.datetime
 
 
-def handler(event: dict, context: dict) -> helpers.ApiGatewayProxyIntegrationResponse:
+def handler(
+    event: dict,
+    context: LambdaContext,
+) -> helpers.ApiGatewayProxyIntegrationResponse:
     helpers.setup_logging()
     job_id = str(uuid.uuid4())
     structlog.contextvars.bind_contextvars(
         job_id=job_id,
-        function_name=context["function_name"],
+        function_name=context.function_name,
     )
 
     app_name = os.environ["APP_NAME"]

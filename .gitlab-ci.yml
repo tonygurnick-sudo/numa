@@ -27,6 +27,12 @@ variables:
         - lambdas/extract-content-from-file
         - lambdas/meeting-tools-app-formatting
         - lambdas/numa-recent-jobs
+        - lambdas/policy-builder-completion
+        - lambdas/policy-builder-expert-review
+        - lambdas/policy-builder-explainability
+        - lambdas/policy-builder-generation
+        - lambdas/policy-builder-legal-review
+        - lambdas/policy-builder-principles-and-structure
         - lambdas/step-function-start
         - lambdas/step-function-status
         - lambdas/structured-data-extraction

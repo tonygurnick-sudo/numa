@@ -4,6 +4,8 @@ import os
 import unittest
 from unittest.mock import patch
 
+from aws_lambda_powertools.utilities.typing import LambdaContext
+
 import lambda_function
 
 
@@ -15,9 +17,10 @@ class TestLambdaFunction(unittest.TestCase):
         event = {
             "foo": "bar",
         }
-        context = {
-            "function_name": "test_function",
-        }
+
+        context = LambdaContext()
+        context._function_name = "test_function"
+
         response = lambda_function.handler(event, context)
         self.assertEqual(response["statusCode"], 200)
         job_id = json.loads(response["body"])["job_id"]
@@ -36,9 +39,10 @@ class TestLambdaFunction(unittest.TestCase):
         event = {
             "job_id": "test-job-id",
         }
-        context = {
-            "function_name": "test_function",
-        }
+
+        context = LambdaContext()
+        context._function_name = "test_function"
+
         step_function_mock.start_execution.side_effect = Exception("Some error")
         response = lambda_function.handler(event, context)
         self.assertEqual(response["statusCode"], 503)

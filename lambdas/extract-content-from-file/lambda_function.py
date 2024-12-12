@@ -34,7 +34,7 @@ class Document:
     pages: list[DocumentPage] = dataclasses.field(default_factory=list)
 
 
-def handler(event: dict, _context: dict) -> dict:
+def handler(event: dict, _context) -> dict:
     helpers.setup_logging()
 
     input_bucket = event["input_bucket"]

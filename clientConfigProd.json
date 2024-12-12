@@ -17,7 +17,8 @@
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "apps": {
-      "example-app": {}
+      "example-app": {},
+      "nzsba-policy-builder": {}
     },
     "webCrawlerConfigs": [
       {
@@ -33,6 +34,13 @@
         "enterpriseId": "1235149944"
       }
     ]
+  },
+  "arcanum-demo-sebastian": {
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "apps": {
+      "nzsba-policy-builder": {}
+    }
   },
   "arcanum-dave-2": {
     "clientAccountId": "905418183804",

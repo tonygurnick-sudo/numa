@@ -83,7 +83,7 @@ export class ExampleNumaApp extends BaseNumaApp {
           resources: [stepFunctionLambda.role],
         },
       ],
-      stepFunctionDefinition,
+      stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
     });
   }
 }

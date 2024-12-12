@@ -3,7 +3,7 @@
 import argparse
 
 
-def handler(event: dict, _context: dict) -> dict:
+def handler(event: dict, _context) -> dict:
     # Extract inputs from event
     uploaded_files = event.get("uploadedFiles") or []
     meeting_notes = event.get("meetingNotes") or {}

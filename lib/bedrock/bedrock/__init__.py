@@ -19,10 +19,6 @@ logger = structlog.get_logger(__name__)
 s3_client = boto3.client("s3")
 
 
-class BedrockModelFailedException(Exception):
-    pass
-
-
 class UnsupportedFiletypeError(Exception):
     pass
 
@@ -56,36 +52,36 @@ class BedrockClaude3Model:
             config=Config(read_timeout=1000),
         )
 
-    def _invoke_model(self, multimodal_messages: list) -> dict:
+    def _invoke_model(self, multimodal_messages: list, name_for_logging: str) -> dict:
+        if name_for_logging:
+            logger.info(f"Invoke model for {name_for_logging}")
+
         request_body = {
             **self.model_args,
             "messages": multimodal_messages,
         }
-        try:
-            return self.bedrock_client.invoke_model(
-                modelId=self.model_id,
-                body=json.dumps(request_body),
-            )
-        except ClientError as e:
-            raise BedrockModelFailedException("Could not invoke model") from e
-        except Exception as e:
-            raise BedrockModelFailedException("Could not invoke model") from e
+        return self.bedrock_client.invoke_model(
+            modelId=self.model_id,
+            body=json.dumps(request_body),
+        )
 
-    def _process_response(self, response: dict) -> GPTResponse:
-        try:
-            result = json.loads(response["body"].read())
-            metadata = {
-                "input_tokens": result["usage"]["input_tokens"],
-                "output_tokens": result["usage"]["output_tokens"],
-            }
-            content = result.get("content", [])
-            return GPTResponse(content, metadata)
-        except Exception as e:
-            raise BedrockModelFailedException("Invalid response format") from e
+    def _process_response(self, response: dict, name_for_logging: str) -> GPTResponse:
+        result = json.loads(response["body"].read())
+        metadata = {
+            "input_tokens": result["usage"]["input_tokens"],
+            "output_tokens": result["usage"]["output_tokens"],
+        }
+
+        if name_for_logging:
+            log_usage(name_for_logging, metadata)
+
+        content = result.get("content", [])
+        return GPTResponse(content, metadata)
 
     def run(
         self,
         query: str,
+        name_for_logging: str = "",
     ) -> GPTResponse:
         messages = [
             {
@@ -95,13 +91,17 @@ class BedrockClaude3Model:
                 ],
             }
         ]
-        response = self._invoke_model(messages)
-        return self._process_response(response)
+        response = self._invoke_model(messages, name_for_logging)
+        return self._process_response(response, name_for_logging)
 
-    def run_with_messages(self, messages: list[dict]) -> GPTResponse:
+    def run_with_messages(
+        self,
+        messages: list[dict],
+        name_for_logging: str = "",
+    ) -> GPTResponse:
         """Allows for more customisation of the input messages and roles"""
-        response = self._invoke_model(messages)
-        return self._process_response(response)
+        response = self._invoke_model(messages, name_for_logging)
+        return self._process_response(response, name_for_logging)
 
 
 def __calculate_cost(metadata: dict) -> tuple:
