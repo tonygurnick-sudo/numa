@@ -53,7 +53,8 @@ class BedrockClaude3Model:
         )
 
     def _invoke_model(self, multimodal_messages: list, name_for_logging: str) -> dict:
-        logger.info(f"Invoke model for {name_for_logging}")
+        if name_for_logging:
+            logger.info(f"Invoke model for {name_for_logging}")
 
         request_body = {
             **self.model_args,
