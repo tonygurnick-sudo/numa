@@ -25,6 +25,10 @@ import { CognitoUser } from '@cdktf/provider-aws/lib/cognito-user';
 import { password } from '@cdktf/provider-random';
 import { RandomProvider } from '@cdktf/provider-random/lib/provider';
 import { BoxConfiguration, BoxDataSource } from './data-sources/box-datasource-construct';
+import {
+  QBusinessChatControlConfigurer,
+  QBusinessChatControlConfigurerProps,
+} from './q-business-chat-control-configurer-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -404,6 +408,14 @@ export class CoreNumaInfra extends Construct {
         }
       : {};
 
+    new QBusinessChatControlConfigurer(this, 'chat-control', {
+      applicationId,
+      enableDirectLLMAccess: props.enableDirectLLMAccess,
+      enableLLMKnowledgeFallback: props.enableLLMKnowledgeFallback,
+      region,
+      accountId: callerId.accountId,
+    });
+
     const webexperience = new CloudcontrolapiResource(this, 'web-experience', {
       typeName: 'AWS::QBusiness::WebExperience',
       desiredState: Fn.jsonencode({
@@ -632,7 +644,11 @@ interface BoxConfig {
   configuration?: BoxConfiguration;
 }
 
-export interface CoreNumaInfraProps {
+export interface CoreNumaInfraProps
+  extends _CoreNumaInfraProps,
+    Omit<QBusinessChatControlConfigurerProps, 'applicationId' | 'region' | 'accountId'> {}
+
+interface _CoreNumaInfraProps {
   client: string;
   environmentName: string;
   /**
