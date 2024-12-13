@@ -125,8 +125,12 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
 
   const handleRunApp = useCallback(async (e) => {
     e.preventDefault();
+    console.log('Starting app execution');
     try {
       setAppRunning(true);
+      setProcessingProgress(0);
+      console.log('Set initial states - running: true, progress: 0');
+
       // Mark all input steps as complete
       const newCompletedSteps = { ...completedSteps };
       inputCards.forEach(card => {
@@ -134,27 +138,60 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
         newCompletedSteps[cardData.id] = true;
       });
       setCompletedSteps(newCompletedSteps);
+      console.log('Marked input steps as complete');
 
       // Move to first output step
       if (outputCards.length > 0) {
         const targetStep = inputCards.length;
         setActiveStep(targetStep);
+        console.log('Moved to first output step:', targetStep);
       }
 
+      console.log('Calling onRunApp');
       await onRunApp();
     } catch (error) {
       console.error('Error running app:', error);
       setAppRunning(false);
+      setProcessingProgress(0);
     }
-  }, [completedSteps, inputCards, outputCards, onRunApp, setAppRunning, getCardData]);
+  }, [completedSteps, inputCards, outputCards, onRunApp, setAppRunning, getCardData, setProcessingProgress]);
 
-  // Add effect to handle active state when running app
+  // Effect to track session results and update progress
   useEffect(() => {
-    if (appRunning && outputCards.length > 0) {
-      const targetStep = inputCards.length;
-      setActiveStep(targetStep);
+    console.log('Processing session results:', sessionResults);
+    if (sessionResults?.status) {
+      // Calculate progress based on card statuses
+      if (sessionResults.cardStatus) {
+        const cards = Object.values(sessionResults.cardStatus);
+        const totalCards = cards.length;
+        const completedCards = cards.filter(card => card.currentState === 'COMPLETED').length;
+        const runningCards = cards.filter(card => card.currentState === 'RUNNING').length;
+
+        // Calculate progress percentage
+        const progress = Math.round(((completedCards + (runningCards * 0.5)) / totalCards) * 100);
+        console.log('Progress calculation:', {
+          totalCards,
+          completedCards,
+          runningCards,
+          progress,
+          isRunning: appRunning || isPolling
+        });
+
+        if (appRunning || isPolling) {
+          setProcessingProgress(progress);
+          setProcessingStatus(progress === 100 ? 'Complete!' : 'Processing...');
+        }
+      }
+
+      // Update app running state
+      if (!['WAITING', 'IN_PROGRESS'].includes(sessionResults.status)) {
+        console.log('Session completed, updating states');
+        setProcessingProgress(100);
+        setProcessingStatus('Analysis complete');
+        setAppRunning(false);
+      }
     }
-  }, [appRunning, outputCards.length, inputCards.length]);
+  }, [sessionResults, setAppRunning, setProcessingProgress, setProcessingStatus, appRunning, isPolling]);
 
   // Check if all required tasks are complete
   const areRequiredTasksComplete = useCallback(() => {
@@ -206,29 +243,6 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
     [allCards, activeStep]
   );
 
-  // Calculate progress based on completed output cards
-  const calculateProgress = useCallback(() => {
-    if (!outputCards.length || !sessionResults?.cardStatus) return 0;
-
-    const completedCards = outputCards.filter(card => {
-      const cardData = getCardData(card);
-      return sessionResults.cardStatus[cardData.id]?.currentState === 'COMPLETED';
-    });
-
-    return (completedCards.length / outputCards.length) * 100;
-  }, [outputCards, sessionResults, getCardData]);
-
-  useEffect(() => {
-    if (appRunning || isPolling) {
-      const progress = calculateProgress();
-      setProcessingProgress(progress);
-      setProcessingStatus(progress === 100 ? 'Complete!' : 'Processing...');
-    } else {
-      setProcessingProgress(0);
-      setProcessingStatus('');
-    }
-  }, [appRunning, isPolling, calculateProgress, sessionResults]);
-
   const handlePrevStep = () => {
     if (activeStep > 0) {
       const newStep = activeStep - 1;
@@ -249,7 +263,7 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
   }
 
   // Show results section after clicking Run
-  const showResults = appRunning || isPolling || (sessionResults && sessionResults.status === 'COMPLETED');
+  const showResults = appRunning || isPolling;
 
   return (
     <Container fluid className="app-wizard py-3 py-md-4">
@@ -275,63 +289,55 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
             </div>
 
             <div className="wizard-content">
-              {/* Show current card during input phase */}
-              {currentCard && !showResults && (
-                <>
-
-                  <AppCard
-                    key={getCardData(currentCard).id}
-                    card={currentCard}
-                    dependencies={getCardData(currentCard).dependencies || []}
-                    appsCards={qAppData.appDefinition.cards}
-                    onInputChange={(value) => {
-                      const cardData = getCardData(currentCard);
-                      onInputChange(cardData.id, value);
-                    }}
-                    inputValue={qCardInputValues[getCardData(currentCard).id]}
-                    sessionResults={sessionResults}
-                  />
-                  <div className="task-navigation">
-                    <Button
-                      variant="primary"
-                      onClick={handlePrevStep}
-                      disabled={activeStep === 0}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={handleNextStep}
-                      disabled={
-                        activeStep === preRunSteps.length - 1 ||
-                        (!completedSteps[getCardData(currentCard).id] &&
-                         !getCardData(currentCard).defaultValue)
-                      }
-                    >
-                      Next
-                    </Button>
-                  </div>
-                  </>
-              )}
-
-              {/* Show results section after running */}
-              {showResults && (
+              {/* Show either the current card or results */}
+              {showResults ? (
                 <div className="results-section">
-                  {outputCards.map(card => (
-                    <div key={getCardData(card).id} className="mb-3">
-
-                          <AppCard
-                            card={card}
-                            dependencies={getCardData(card).dependencies || []}
-                            appsCards={qAppData.appDefinition.cards}
-                            onInputChange={() => {}}
-                            sessionResults={sessionResults}
-                          />
-
-
-                    </div>
-                  ))}
+                  {outputCards.map((card) => {
+                    const cardData = getCardData(card);
+                    return (
+                      <AppCard
+                        key={cardData.id}
+                        card={card}
+                        dependencies={cardData.dependencies || []}
+                        appsCards={qAppData.appDefinition.cards}
+                        sessionResults={sessionResults}
+                      />
+                    );
+                  })}
                 </div>
+              ) : (
+                currentCard && (
+                  <>
+                    <AppCard
+                      key={getCardData(currentCard).id}
+                      card={currentCard}
+                      dependencies={getCardData(currentCard).dependencies || []}
+                      appsCards={qAppData.appDefinition.cards}
+                      onInputChange={(value) => {
+                        const cardData = getCardData(currentCard);
+                        onInputChange(cardData.id, value);
+                      }}
+                      inputValue={qCardInputValues[getCardData(currentCard).id]}
+                      sessionResults={sessionResults}
+                    />
+                    <div className="task-navigation">
+                      <Button
+                        variant="primary"
+                        onClick={handlePrevStep}
+                        disabled={activeStep === 0}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={handleNextStep}
+                        disabled={activeStep === preRunSteps.length - 1}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </>
+                )
               )}
             </div>
           </div>

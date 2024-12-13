@@ -65,8 +65,11 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
     }
   };
 
-  const handleZoneClick = () => {
-    fileInputRef.current.click();
+  const handleZoneClick = (e) => {
+    // Only trigger file input if clicking directly on the upload zone or button
+    if (!selectedFile && e.target === e.currentTarget) {
+      fileInputRef.current.click();
+    }
   };
 
   const handleUpload = async () => {
@@ -146,6 +149,12 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={handleZoneClick}
+        style={{
+          border: '2px dashed #ccc',
+          minHeight: '200px',
+          position: 'relative',
+          cursor: selectedFile ? 'default' : 'pointer'
+        }}
       >
         <input
           type="file"
@@ -161,7 +170,8 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
             variant="primary"
             as="label"
             htmlFor={`file-upload-${task.id}`}
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
           >
             Select Files
           </Button>

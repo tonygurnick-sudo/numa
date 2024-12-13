@@ -11,7 +11,7 @@ import { useNumaApp } from '../Providers/NumaAppProvider';
 import { GetQAppCommand, GetQAppSessionCommand, StartQAppSessionCommand } from '@aws-sdk/client-qapps';
 
 const QAppDetail = () => {
-  const { qAppsClient, loading: authLoading } = useAuth();
+  const { qAppsClient } = useAuth();
   // TODO: Make these values dynamic
   const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
   const {
@@ -19,8 +19,6 @@ const QAppDetail = () => {
     qSsessionId,
     isPolling,
     setIsPolling,
-    loading,
-    setLoading,
     numaAppData,
     setqAppData,
     qAppData,
@@ -44,7 +42,7 @@ const QAppDetail = () => {
   };
 
   const handleRunApp = async () => {
-    if (!qAppsClient || authLoading || !qAppId || !qAppData) return;
+    if (!qAppsClient || !qAppId || !qAppData) return;
 
     try {
       const payload = {
@@ -91,10 +89,9 @@ const QAppDetail = () => {
   };
 
   const fetchApp = async () => {
-    if (!qAppsClient || authLoading || !qAppId) return;
+    if (!qAppsClient || !qAppId) return;
 
     try {
-      setLoading(true);
       const input = { instanceId: APPLICATION_ID, appId: qAppId };
       const command = new GetQAppCommand(input);
       const response = await qAppsClient.send(command);
@@ -102,8 +99,6 @@ const QAppDetail = () => {
     } catch (error) {
       console.error('Error fetching Q Apps:', error);
       setError(error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -112,19 +107,17 @@ const QAppDetail = () => {
 
     const fetchSessionDetails = async () => {
       try {
-        setLoading(true);
         const input = {
           instanceId: APPLICATION_ID,
           sessionId: qSsessionId,
         };
         const command = new GetQAppSessionCommand(input);
         const response = await qAppsClient.send(command);
+        console.log('Session details fetched:', response);
         setQSessionDetails(response);
       } catch (err) {
         setError(err);
         console.error('Error fetching session details:', err);
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -134,7 +127,7 @@ const QAppDetail = () => {
       if (isPolling) {
         fetchSessionDetails();
       }
-    }, 5000);
+    }, 2000);
 
     return () => clearInterval(intervalId);
   }, [qSsessionId, qAppsClient, isPolling]);
@@ -182,9 +175,7 @@ const QAppDetail = () => {
   return (
     <>
       {error && <Alert variant="danger">{error.message || 'An error occurred'}</Alert>}
-      {loading ? (
-        <Preloader />
-      ) : qAppData ? (
+      {qAppData ? (
         <QAppWizard
           qAppData={qAppData}
           onInputChange={handleInputChange}
