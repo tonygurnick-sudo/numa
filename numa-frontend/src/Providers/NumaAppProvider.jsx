@@ -196,122 +196,70 @@ export const NumaAppProvider = ({ children }) => {
     return currentResults;
   };
 
-  const pollQAppSession = async (sessionId) => {
-    const pollInterval = 2000;
+  const pollQAppSession = async (sessionId, updateProgress) => {
+    console.log('Starting to poll Q-App session:', sessionId);
     let polling = true;
     let sessionResponse = null;
 
     while (polling) {
-      sessionResponse = await getSessionQApp({
-        qAppsClient,
-        sessionId,
-      });
-      console.log(`Q App session response:`, sessionResponse);
-
-      if (sessionResponse?.status === 'COMPLETED') {
-        polling = false;
-      } else if (sessionResponse?.status === 'FAILED') {
-        polling = false;
-        throw new Error('Q App session failed');
-      } else {
-        console.log('Session not completed yet, waiting for next poll...');
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-      }
-    }
-    return sessionResponse;
-  };
-
-  const processQAppTask = async (task, currentResults) => {
-    console.log(`Processing Q-App task with ID: ${task.id}`);
-    const inputParamsArray = task.params.inputs;
-    const updateValues = [];
-
-    // Start session with built initialValues
-    let sessionId = await startQappGetSession({
-      qAppsClient,
-      qAppId: task.params.qAppId,
-      appVersion: task.appVersion,
-      initialValues: null
-    });
-
-    if (!sessionId) {
-      console.error('Failed to start Q App session');
-      return;
-    }
-
-    // Single loop to handle both regular inputs and file imports
-    for (const inputParam of inputParamsArray) {
-      const { inputContentRef, qInputCardId, base64encode } = inputParam;
-      const inputValue = resolveReference(inputContentRef, currentResults);
-      console.log(
-        `Processing input from task ${inputContentRef} (resolved: ${inputValue}) for card ${qInputCardId}`,
-      );
-
-      if (base64encode && inputValue) {
-        const { base64Content, fileName } = await fetchAndEncodeFile(inputValue);
-        console.log('file encoded: ', base64Content);
-
-
-
-        const fileId = await importFileToQApp({
+      try {
+        console.log('Polling Q-App session...');
+        sessionResponse = await getSessionQApp({
           qAppsClient,
           sessionId,
-          qAppId: task.params.qAppId,
-          cardId: qInputCardId,
-          fileName,
-          base64Content,
         });
+        console.log('Session response:', sessionResponse);
 
-        if (!fileId) {
-          console.error('No fileId received from import');
-          return;
+        if (sessionResponse?.status === 'COMPLETED') {
+          console.log('Q-App session completed');
+          polling = false;
+          return { ...sessionResponse, progress: 100 };
+        } else if (sessionResponse?.status === 'FAILED') {
+          console.log('Q-App session failed');
+          polling = false;
+          throw new Error('Q App session failed');
         }
 
-        updateValues.push({ cardId: qInputCardId, value: fileId });
-      } else if (inputValue !== undefined && inputValue !== null && inputValue !== '') {
-        updateValues.push({ cardId: qInputCardId, value: inputValue });
+        // Calculate progress from card statuses
+        let progress = 0;
+        if (sessionResponse?.cardStatus) {
+          const cards = Object.values(sessionResponse.cardStatus);
+          const totalCards = cards.length;
+          const completedCards = cards.filter(card => card.currentState === 'COMPLETED').length;
+          const runningCards = cards.filter(card => card.currentState === 'RUNNING').length;
+
+          // Count completed cards fully and running cards as half complete
+          progress = Math.round(((completedCards + (runningCards * 0.5)) / totalCards) * 100);
+          progress = Math.min(progress, 99); // Cap at 99% until fully complete
+
+          console.log(`QApp Progress Details:
+            Total Cards: ${totalCards}
+            Completed: ${completedCards}
+            Running: ${runningCards}
+            Progress: ${progress}%`);
+
+          // Call the progress update callback
+          if (updateProgress) {
+            console.log('Calling progress update callback with:', progress);
+            updateProgress(progress);
+          } else {
+            console.warn('No progress update callback provided');
+          }
+        } else {
+          console.log('No card status in session response');
+        }
+
+        sessionResponse.progress = progress || 5; // Minimum 5% progress
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+      } catch (error) {
+        console.error('Error polling Q App session:', error);
+        polling = false;
+        throw error;
       }
     }
 
-    // Update session with all values at once
-    if (updateValues.length > 0) {
-      await updateQSessionData({
-        qAppsClient,
-        sessionId,
-        values: updateValues
-      });
-    }
-
-    const sessionResponse = await pollQAppSession(sessionId);
-
-    // Process the output cards and map them to the correct output references
-    if (sessionResponse?.cardStatus) {
-      for (const [cardId, cardData] of Object.entries(sessionResponse.cardStatus)) {
-
-        // Match cardId to outputContentRef ID
-        const matchingOutput = task.params.outputs.find(
-          (output) => output.qOutputCardId === cardId
-        );
-
-        if (matchingOutput) {
-          const outputId = matchingOutput.outputContentRef.replace('@', '');
-          currentResults[outputId] = cardData.currentValue;
-          console.log(
-            `Updated currentResults[${outputId}] with value:`,
-            cardData.currentValue
-          );
-        }
-      }
-    }
-
-    // Store the full session response in the task results
-    currentResults[task.id] = {
-      status: sessionResponse?.status,
-      cardStatus: sessionResponse?.cardStatus
-    };
-
-    console.log('Final currentResults:', currentResults);
-    return currentResults;
+    return sessionResponse;
   };
 
   const processTextOutputTask = (task, currentResults) => {
@@ -363,84 +311,225 @@ export const NumaAppProvider = ({ children }) => {
     });
   };
 
-  const handleRunButtonClick = async (appData) => {
+  const calculateTaskWeight = (task) => {
+    if (task.type === 'q-app') {
+      // Count input and output cards for Q-Apps
+      const cardCount = (task.params.inputs?.length || 0) + (task.params.outputs?.length || 0);
+      return cardCount || 1; // Minimum weight of 1
+    }
+    return 1; // Regular tasks count as 1
+  };
+
+  const calculateTotalWeight = (tasks) => {
+    return tasks.reduce((sum, task) => sum + calculateTaskWeight(task), 0);
+  };
+
+  const createProgressUpdater = (completedWeight, qappWeight, totalWeight) => {
+    return (progress) => {
+      console.log('updateQAppProgress called with progress:', progress);
+      console.log('Current weights - completed:', completedWeight, 'qapp:', qappWeight, 'total:', totalWeight);
+
+      const qappContribution = (progress / 100) * qappWeight;
+      const currentProgress = Math.min(
+        Math.round(((completedWeight + qappContribution) / totalWeight) * 100),
+        99
+      );
+      console.log('Progress calculation:', {
+        qappContribution,
+        completedWeight,
+        totalWeight,
+        currentProgress
+      });
+
+      console.log(`Q-App progress update: ${progress}% -> Overall: ${currentProgress}%`);
+      setProcessingProgress(currentProgress);
+    };
+  };
+
+  const handleQAppTask = async (task, currentResults, completedWeight, qappWeight, totalWeight) => {
+    console.log('Starting Q-App task execution');
+    setProcessingStatus('Running analysis...');
+    setIsPolling(true);
+    setAppRunning(true);
+    console.log('Q-App weight set to:', qappWeight);
+
+    try {
+      console.log('Initiating Q-App session');
+      const sessionId = await startQappGetSession({
+        qAppsClient,
+        qAppId: task.params.qAppId,
+        appVersion: task.appVersion,
+        initialValues: null
+      });
+      console.log('Q-App session started with ID:', sessionId);
+
+      // Handle inputs before polling
+      const updateValues = [];
+      const inputParamsArray = task.params.inputs;
+
+      // Process all inputs (both files and regular values)
+      for (const inputParam of inputParamsArray) {
+        const { inputContentRef, qInputCardId, base64encode } = inputParam;
+        const inputValue = resolveReference(inputContentRef, currentResults);
+        console.log(
+          `Processing input from task ${inputContentRef} (resolved: ${inputValue}) for card ${qInputCardId}`,
+        );
+
+        if (base64encode && inputValue) {
+          try {
+            const { base64Content, fileName } = await fetchAndEncodeFile(inputValue);
+            console.log('file encoded: ', base64Content);
+
+            const fileId = await importFileToQApp({
+              qAppsClient,
+              sessionId,
+              qAppId: task.params.qAppId,
+              cardId: qInputCardId,
+              fileName,
+              base64Content,
+            });
+
+            if (!fileId) {
+              console.error('No fileId received from import');
+              return;
+            }
+
+            updateValues.push({ cardId: qInputCardId, value: fileId });
+            console.log(`File imported successfully, got fileId: ${fileId}`);
+          } catch (error) {
+            console.error('Error importing file:', error);
+            throw error;
+          }
+        } else if (inputValue !== undefined && inputValue !== null && inputValue !== '') {
+          updateValues.push({ cardId: qInputCardId, value: inputValue });
+        }
+      }
+
+      // Update session with all values at once
+      if (updateValues.length > 0) {
+        console.log('Updating Q-App session with values:', updateValues);
+        await updateQSessionData({
+          qAppsClient,
+          sessionId,
+          values: updateValues
+        });
+      }
+
+      console.log('Starting Q-App polling with progress updates');
+      const updateProgress = createProgressUpdater(completedWeight, qappWeight, totalWeight);
+      const sessionResponse = await pollQAppSession(sessionId, updateProgress);
+      console.log('Q-App polling completed, result:', sessionResponse);
+
+      // Process the output cards and map them to the correct output references
+      if (sessionResponse?.cardStatus) {
+        for (const [cardId, cardData] of Object.entries(sessionResponse.cardStatus)) {
+          // Match cardId to outputContentRef ID
+          const matchingOutput = task.params.outputs.find(
+            (output) => output.qOutputCardId === cardId
+          );
+
+          if (matchingOutput) {
+            const outputId = matchingOutput.outputContentRef.replace('@', '');
+            currentResults[outputId] = cardData.currentValue;
+            console.log(
+              `Updated currentResults[${outputId}] with value:`,
+              cardData.currentValue
+            );
+          }
+        }
+      }
+
+      // Add final Q-App contribution
+      currentResults[task.id] = {
+        status: sessionResponse?.status,
+        cardStatus: sessionResponse?.cardStatus
+      };
+      console.log('Q-App task completed');
+      return currentResults;
+    } catch (error) {
+      console.error('Error in Q-App task execution:', error);
+      throw error;
+    } finally {
+      console.log('Cleaning up Q-App task states');
+      setIsPolling(false);
+      setAppRunning(false);
+    }
+  };
+
+  const handleRunButtonClick = async () => {
+    if (!numaAppData || !numaAppData.tasks) return;
+
     const { jobID, dateTime } = initializeJobExecution();
     let currentResults = {};
 
     try {
-      const orderedTasks = appData.tasks
-        .slice()
-        .sort((a, b) => a.order - b.order);
-
-      const totalTasks = orderedTasks.length;
-      let completedTasks = 0;
+      const orderedTasks = numaAppData.tasks.slice().sort((a, b) => a.order - b.order);
+      const totalWeight = calculateTotalWeight(orderedTasks);
+      let completedWeight = 0;
+      let qappWeight = 0;
+      console.log(`Total task weight: ${totalWeight}`);
 
       for (const task of orderedTasks) {
-        console.log(`Processing task with order ${task.order} and type ${task.type}`);
+        const taskWeight = calculateTaskWeight(task);
+        console.log(`Processing task: ${task.type} (weight: ${taskWeight})`);
 
-        // Update status message based on task type
         switch (task.type) {
           case 'text-input':
             setProcessingStatus('Processing input data...');
+            currentResults = processTextInputTask(task, currentResults);
+            completedWeight += taskWeight;
             break;
+
           case 's3-upload':
             setProcessingStatus('Uploading files...');
+            currentResults = processS3UploadTask(task, currentResults);
+            completedWeight += taskWeight;
             break;
+
           case 'http-request':
             setProcessingStatus('Gathering data...');
+            currentResults = await processHttpRequestTask(task, currentResults);
+            completedWeight += taskWeight;
             break;
+
           case 'q-app':
-            setProcessingStatus('Running analysis...');
+            qappWeight = taskWeight;
+            currentResults = await handleQAppTask(task, currentResults, completedWeight, qappWeight, totalWeight);
+            completedWeight += qappWeight;
             break;
+
           case 'text-output':
             setProcessingStatus('Generating output...');
-            break;
-          default:
-            setProcessingStatus('Processing...');
-        }
-
-        // Process the task
-        switch (task.type) {
-          case 'text-input':
-            currentResults = processTextInputTask(task, currentResults);
-            break;
-          case 's3-upload':
-            currentResults = processS3UploadTask(task, currentResults);
-            break;
-          case 'http-request':
-            currentResults = await processHttpRequestTask(task, currentResults);
-            break;
-          case 'q-app':
-            currentResults = await processQAppTask(task, currentResults);
-            break;
-          case 'text-output':
             currentResults = processTextOutputTask(task, currentResults);
+            completedWeight += taskWeight;
             break;
+
           default:
             console.warn(`Unknown task type: ${task.type}`);
+            break;
         }
 
-        // Update progress
-        completedTasks++;
-        console.log('Completed tasks:', completedTasks);
-        setProcessingProgress((completedTasks / totalTasks) * 100);
+        // Update task completion status
+        setTaskCompletionStatus((prev) => ({
+          ...prev,
+          [task.id]: true,
+        }));
       }
 
-      // Save results and update UI state after successful completion
+      // Save final results
       saveJobResults(jobID, dateTime, currentResults);
+      setProcessingProgress(100);
       setProcessingStatus('Complete!');
-    } catch (err) {
-      console.error('Error processing tasks:', err);
-      setError(err);
-      setProcessingStatus('Error occurred during processing');
+      console.log('All tasks completed successfully');
+
+    } catch (error) {
+      console.error('Error executing tasks:', error);
+      setProcessingStatus('Error occurred');
+      setError(error);
+      throw error;
     } finally {
       setLoading(false);
       setAppRunning(false);
-      // Reset progress after a delay
-      setTimeout(() => {
-        setProcessingProgress(0);
-        setProcessingStatus('');
-      }, 2000);
     }
   };
 
@@ -459,10 +548,15 @@ export const NumaAppProvider = ({ children }) => {
 
   // Function to update a specific task input value
   const updateTaskInputValue = (taskId, value) => {
-    setTaskInputValues((prev) => ({
-      ...prev,
-      [taskId]: value,
-    }));
+    console.log('Updating task input value:', { taskId, value });
+    setTaskInputValues((prev) => {
+      const newValues = {
+        ...prev,
+        [taskId]: value,
+      };
+      console.log('New task input values:', newValues);
+      return newValues;
+    });
     checkRunActive();
   };
 
@@ -488,6 +582,7 @@ export const NumaAppProvider = ({ children }) => {
         setNumaAppId,
         taskInputValues,
         setTaskInputValues,
+        updateTaskInputValue,
         taskCompletionStatus,
         setTaskCompletionStatus,
         updateTaskCompletionStatus,

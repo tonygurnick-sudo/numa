@@ -73,15 +73,19 @@ const AppDetail = () => {
       <main className="flex-grow-1">
         <Container fluid>
           {error && <Alert variant="danger">{error}</Alert>}
-          {isLoading ? (
-            <Preloader />
-          ) : (
-            numaAppData &&
-            (numaAppData.type === 'numa-app' ? (
-              <AppWizard manifest={numaAppData} />
-            ) : numaAppData.type === 'q-app' ? (
-              <QAppDetail />
-            ) : null)
+          <div className={`transition-opacity duration-150 ${isLoading ? 'opacity-0' : 'opacity-100'}`}>
+            {numaAppData && (
+              numaAppData.type === 'numa-app' ? (
+                <AppWizard manifest={numaAppData} />
+              ) : numaAppData.type === 'q-app' ? (
+                <QAppDetail />
+              ) : null
+            )}
+          </div>
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Preloader />
+            </div>
           )}
         </Container>
       </main>

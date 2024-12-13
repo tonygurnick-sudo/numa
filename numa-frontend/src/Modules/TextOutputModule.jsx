@@ -11,12 +11,14 @@ function TextOutputModule({ task }) {
   console.log("task",task);
 
   return (
-    <div>
-        {task.title && <h3>{task.title}</h3>}
+    <div className="output-module">
+      {task.title && <h4>{task.title}</h4>}
+      <div className="output-container">
+        {loading && <Preloader smallscreen={true} />}
         <p className="output-text">
-          {loading && <Preloader smallscreen={true}  />}
           {taskResponse?.result || ''}
         </p>
+      </div>
     </div>
   );
 }

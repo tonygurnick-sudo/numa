@@ -16,6 +16,7 @@ const AppWizard = ({ manifest }) => {
     appRunning,
     setTaskCompletionStatus,
     updateTaskCompletionStatus,
+    updateTaskInputValue,
     processingProgress,
     processingStatus,
     setAppRunning,
@@ -107,7 +108,9 @@ const AppWizard = ({ manifest }) => {
       [taskId]: value
     }));
     updateTaskCompletionStatus(taskId, Boolean(value));
-  }, [setTaskInputValues, updateTaskCompletionStatus]);
+    // Call updateTaskInputValue to ensure proper state management
+    updateTaskInputValue(taskId, value);
+  }, [setTaskInputValues, updateTaskCompletionStatus, updateTaskInputValue]);
 
   const handlePrevStep = () => {
     if (activeStep > 0) {

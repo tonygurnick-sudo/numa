@@ -95,6 +95,7 @@ const WizardNavigation = ({
               now={processingProgress}
               label={`${Math.round(processingProgress)}%`}
               animated
+              variant="primary"
               style={{
                 width: '50%',
                 margin: '0 auto 10px auto',

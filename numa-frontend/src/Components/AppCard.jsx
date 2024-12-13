@@ -137,8 +137,6 @@ const AppCard = ({
       case 'q-query':
       case 'text-output':
         return (
-
-
         <p className="output-text">
         {outputValue || (isGenerating ? 'Generating output...' : 'Waiting for input...')}
         </p>
