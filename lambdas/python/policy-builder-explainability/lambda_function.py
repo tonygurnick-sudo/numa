@@ -1,5 +1,5 @@
-import io
 import os
+import typing
 import uuid
 
 import boto3
@@ -35,12 +35,15 @@ def __read_string_from_s3(key) -> str:
     return response["Body"].read().decode("utf-8")
 
 
-def __write_pdf_to_s3(markdown: str, file_name: str):
+def __write_string_to_s3(string: str, key: str):
     bucket = os.environ.get("BUCKET")
-    buffer = io.BytesIO()
-    markdown_to_pdf.convert(markdown, buffer)
-    buffer.seek(0)
-    s3_client.upload_fileobj(buffer, bucket, file_name)
+    s3_client.put_object(Body=string.encode("utf-8"), Bucket=bucket, Key=key)
+
+
+def __write_file_object_to_s3(fileobj: typing.BinaryIO, file_name: str):
+    bucket = os.environ.get("BUCKET")
+    fileobj.seek(0)
+    s3_client.upload_fileobj(fileobj, bucket, file_name)
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
@@ -114,9 +117,19 @@ def handler(event: dict, context: LambdaContext) -> dict:
         "ai explainability",
     )
 
-    explainability_key = __key(app_name, job_id, "explainability.pdf")
-    __write_pdf_to_s3(result.response[0]["text"], explainability_key)
+    explainability = result.response[0]["text"]
+
+    explainability_markdown_key = __key(app_name, job_id, "explainability.md")
+    __write_string_to_s3(explainability, explainability_markdown_key)
+
+    explainability_html = markdown_to_pdf.markdown_to_html(explainability)
+    explainability_html_key = __key(app_name, job_id, "explainability.html")
+    __write_string_to_s3(explainability_html, explainability_html_key)
+
+    explainability_pdf = markdown_to_pdf.html_to_pdf(explainability_html)
+    explainability_pdf_key = __key(app_name, job_id, "explainability.pdf")
+    __write_file_object_to_s3(explainability_pdf, explainability_pdf_key)
 
     return {
-        "explainability_key": explainability_key,
+        "explainability_pdf_key": explainability_pdf_key,
     }

@@ -1,5 +1,4 @@
 import os
-import pathlib
 import textwrap
 import unittest
 from unittest.mock import patch
@@ -26,12 +25,16 @@ INPUT_TEXT = textwrap.dedent(
 class TestConvert(unittest.TestCase):
     @patch.dict(os.environ, {"APP_NAME": "test-app", "LOG_TO_CONSOLE": "true"})
     def test(self):
-        output_path = pathlib.Path("test.pdf").resolve()
-        if output_path.is_file():
-            output_path.unlink()
-        with open(output_path, "bw") as out:
-            markdown_to_pdf.convert(INPUT_TEXT, out)
-        self.assertTrue(output_path.is_file())
+        html = markdown_to_pdf.markdown_to_html(INPUT_TEXT)
+        self.assertTrue("<h1>Foo</h1>" in html)
+        self.assertTrue("<p>Foo text.</p>" in html)
+        self.assertTrue("<h2>Bar</h2>" in html)
+        self.assertTrue("<p>Bar text.</p>" in html)
+        self.assertTrue("<h3>Baz</h3>" in html)
+        self.assertTrue("<p>Baz text.</p>" in html)
+
+        pdf = markdown_to_pdf.html_to_pdf(html).read()
+        self.assertTrue(len(pdf) > 0)
 
 
 if __name__ == "__main__":
