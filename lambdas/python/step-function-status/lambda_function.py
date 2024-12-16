@@ -16,7 +16,7 @@ def handler(
     context: LambdaContext,
 ) -> helpers.ApiGatewayProxyIntegrationResponse:
     helpers.setup_logging()
-    job_id = event["job_id"]
+    job_id = event.get("queryStringParameters", {}).get("job_id")
     structlog.contextvars.bind_contextvars(
         job_id=job_id,
         function_name=context.function_name,
