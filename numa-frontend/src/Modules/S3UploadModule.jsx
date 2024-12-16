@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { Preloader } from '../Components/Preloader';
-import {  Button } from 'react-bootstrap';
+import { Button } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
 import axios from 'axios';
 
@@ -89,7 +89,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       // Get presigned URL with bucket name
       console.log('Requesting presigned URL for:', {
         fileName: relativePath,
-        bucketName: bucketName
+        bucketName: bucketName,
       });
 
       const response = await axios.get(
@@ -97,10 +97,10 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
         {
           params: {
             fileName: encodedPath,
-            bucketName: bucketName
+            bucketName: bucketName,
           },
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
 
       const { uploadUrl } = response.data;
@@ -113,7 +113,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
         },
         onUploadProgress: (progressEvent) => {
           const progress = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
+            (progressEvent.loaded * 100) / progressEvent.total,
           );
           setUploadProgress(progress);
         },
@@ -149,12 +149,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={handleZoneClick}
-        style={{
-          border: '2px dashed #ccc',
-          minHeight: '200px',
-          position: 'relative',
-          cursor: selectedFile ? 'default' : 'pointer'
-        }}
       >
         <input
           type="file"
@@ -180,41 +174,40 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
               <p className="mb-2">Selected file: {selectedFile.name}</p>
             </div>
           )}
-        </div>
-      </div>
+          {selectedFile && !uploadStatus && (
+            <Button
+              variant="primary"
+              onClick={handleUpload}
+              className="mt-3"
+              disabled={loading}
+            >
+              Upload
+            </Button>
+          )}
 
-      {error && <div className="alert alert-danger mt-3">{error}</div>}
+          {error && <div className="alert alert-danger mt-3">{error}</div>}
 
-      {uploadStatus && (
-        <div className="mt-3">
-          <p>{uploadStatus}</p>
-          {uploadProgress > 0 && uploadProgress < 100 && (
-            <div className="progress">
-              <div
-                className="progress-bar"
-                role="progressbar"
-                style={{ width: `${uploadProgress}%` }}
-                aria-valuenow={uploadProgress}
-                aria-valuemin="0"
-                aria-valuemax="100"
-              >
-                {uploadProgress}%
-              </div>
+          {uploadStatus && (
+            <div className="mt-3">
+              <p>{uploadStatus}</p>
+              {uploadProgress > 0 && uploadProgress < 100 && (
+                <div className="progress">
+                  <div
+                    className="progress-bar"
+                    role="progressbar"
+                    style={{ width: `${uploadProgress}%` }}
+                    aria-valuenow={uploadProgress}
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                  >
+                    {uploadProgress}%
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
-
-      {selectedFile && !uploadStatus && (
-        <Button
-          variant="primary"
-          onClick={handleUpload}
-          className="mt-3"
-          disabled={loading}
-        >
-          Upload
-        </Button>
-      )}
+      </div>
     </div>
   );
 }

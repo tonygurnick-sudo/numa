@@ -20,8 +20,6 @@ const Dash = () => {
   const [qAppsLoading, setQAppsLoading] = useState(false);
   const [qAppsError, setQAppsError] = useState(null);
 
-  console.log('Dash Component Data:', { error, loading, numaApps }); // Debug log
-
   useEffect(() => {
     const fetchAppsFromManifest = async () => {
       setLoading(true);
@@ -74,7 +72,7 @@ const Dash = () => {
     };
 
     fetchAppsFromManifest();
-  }, [setError, setLoading, setNumaApps]);
+  }, [setError]);
 
   // New effect for fetching Q Apps
   useEffect(() => {
@@ -105,7 +103,7 @@ const Dash = () => {
           <Container fluid>
             <Row>
               <Col lg={9} className="pe-5">
-              <Breadcrumbs label={'Dashboard'} />
+                <Breadcrumbs label={'Dashboard'} />
                 <h1>Numa & Q Library</h1>
               </Col>
               <Col lg={3} className="ps-5">
@@ -132,9 +130,7 @@ const Dash = () => {
               <>
                 {!error &&
                   Array.isArray(numaApps) &&
-                  numaApps?.map((app) => (
-                    <AppItem key={app.id} app={app} />
-                  ))}
+                  numaApps?.map((app) => <AppItem key={app.id} app={app} />)}
 
                 {/* Q Apps Section */}
                 {/* <Col xs={12}>

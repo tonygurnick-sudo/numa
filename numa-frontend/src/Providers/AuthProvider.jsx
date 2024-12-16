@@ -22,14 +22,12 @@ import {
 
 const AuthContext = createContext(null);
 
-// TODO: Make these values dynamic
-const IDENTITY_POOL_ID = 'us-east-1:facf1439-ef67-48f9-ada4-debb294db187';
-const ROLE_ARN =
-  'arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo';
-const REGION = 'us-east-1';
-const API_ENDPOINT = 'https://g59jhyyob7.execute-api.us-east-1.amazonaws.com';
-const USER_POOL_ID = 'us-east-1_kVPZjTM6a';
-const CLIENT_ID = '48ed21kkeqa0h4jtrs08kbvvvr';
+const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+const REGION = window.sessionStorage.getItem('REGION');
+const API_ENDPOINT = window.sessionStorage.getItem('API_ENDPOINT');
+const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
 
 export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const [user, setUser] = useState(null);

@@ -92,9 +92,8 @@ export const NumaAppProvider = ({ children }) => {
 
   // Function to get app jobs from local storage
   const getAppJobs = () => {
-    const jobsKey = `appJobs_${numaAppId}`;
-    const storedJobs = localStorage.getItem(jobsKey);
-    return storedJobs ? JSON.parse(storedJobs) : [];
+    const allJobs = JSON.parse(localStorage.getItem('numaJobs')) || {};
+    return allJobs[numaAppId] || [];
   };
 
   const checkRunActive = () => {
@@ -225,11 +224,17 @@ export const NumaAppProvider = ({ children }) => {
         if (sessionResponse?.cardStatus) {
           const cards = Object.values(sessionResponse.cardStatus);
           const totalCards = cards.length;
-          const completedCards = cards.filter(card => card.currentState === 'COMPLETED').length;
-          const runningCards = cards.filter(card => card.currentState === 'RUNNING').length;
+          const completedCards = cards.filter(
+            (card) => card.currentState === 'COMPLETED',
+          ).length;
+          const runningCards = cards.filter(
+            (card) => card.currentState === 'RUNNING',
+          ).length;
 
           // Count completed cards fully and running cards as half complete
-          progress = Math.round(((completedCards + (runningCards * 0.5)) / totalCards) * 100);
+          progress = Math.round(
+            ((completedCards + runningCards * 0.5) / totalCards) * 100,
+          );
           progress = Math.min(progress, 99); // Cap at 99% until fully complete
 
           console.log(`QApp Progress Details:
@@ -250,8 +255,7 @@ export const NumaAppProvider = ({ children }) => {
         }
 
         sessionResponse.progress = progress || 5; // Minimum 5% progress
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (error) {
         console.error('Error polling Q App session:', error);
         polling = false;
@@ -267,9 +271,10 @@ export const NumaAppProvider = ({ children }) => {
     const outputResult = resolveReference(outputRef, currentResults);
 
     if (outputResult) {
-      const resultToDisplay = typeof outputResult === 'object'
-        ? JSON.stringify(outputResult)
-        : outputResult;
+      const resultToDisplay =
+        typeof outputResult === 'object'
+          ? JSON.stringify(outputResult)
+          : outputResult;
 
       setNumaTaskResponses((prevResponses) => [
         ...prevResponses.filter((response) => response.taskId !== task.id),
@@ -300,21 +305,22 @@ export const NumaAppProvider = ({ children }) => {
       jobID,
       dateTime,
       results: currentResults,
-      appName: numaAppData?.appName || 'Unknown App'
+      appName: numaAppData?.appName || 'Unknown App',
     });
 
     localStorage.setItem('numaJobs', JSON.stringify(existingJobs));
     console.log(`Job saved for app ${numaAppId}:`, {
       jobID,
       dateTime,
-      appName: numaAppData?.appName
+      appName: numaAppData?.appName,
     });
   };
 
   const calculateTaskWeight = (task) => {
     if (task.type === 'q-app') {
       // Count input and output cards for Q-Apps
-      const cardCount = (task.params.inputs?.length || 0) + (task.params.outputs?.length || 0);
+      const cardCount =
+        (task.params.inputs?.length || 0) + (task.params.outputs?.length || 0);
       return cardCount || 1; // Minimum weight of 1
     }
     return 1; // Regular tasks count as 1
@@ -327,26 +333,41 @@ export const NumaAppProvider = ({ children }) => {
   const createProgressUpdater = (completedWeight, qappWeight, totalWeight) => {
     return (progress) => {
       console.log('updateQAppProgress called with progress:', progress);
-      console.log('Current weights - completed:', completedWeight, 'qapp:', qappWeight, 'total:', totalWeight);
+      console.log(
+        'Current weights - completed:',
+        completedWeight,
+        'qapp:',
+        qappWeight,
+        'total:',
+        totalWeight,
+      );
 
       const qappContribution = (progress / 100) * qappWeight;
       const currentProgress = Math.min(
         Math.round(((completedWeight + qappContribution) / totalWeight) * 100),
-        99
+        99,
       );
       console.log('Progress calculation:', {
         qappContribution,
         completedWeight,
         totalWeight,
-        currentProgress
+        currentProgress,
       });
 
-      console.log(`Q-App progress update: ${progress}% -> Overall: ${currentProgress}%`);
+      console.log(
+        `Q-App progress update: ${progress}% -> Overall: ${currentProgress}%`,
+      );
       setProcessingProgress(currentProgress);
     };
   };
 
-  const handleQAppTask = async (task, currentResults, completedWeight, qappWeight, totalWeight) => {
+  const handleQAppTask = async (
+    task,
+    currentResults,
+    completedWeight,
+    qappWeight,
+    totalWeight,
+  ) => {
     console.log('Starting Q-App task execution');
     setProcessingStatus('Running analysis...');
     setIsPolling(true);
@@ -359,7 +380,7 @@ export const NumaAppProvider = ({ children }) => {
         qAppsClient,
         qAppId: task.params.qAppId,
         appVersion: task.appVersion,
-        initialValues: null
+        initialValues: null,
       });
       console.log('Q-App session started with ID:', sessionId);
 
@@ -377,7 +398,8 @@ export const NumaAppProvider = ({ children }) => {
 
         if (base64encode && inputValue) {
           try {
-            const { base64Content, fileName } = await fetchAndEncodeFile(inputValue);
+            const { base64Content, fileName } =
+              await fetchAndEncodeFile(inputValue);
             console.log('file encoded: ', base64Content);
 
             const fileId = await importFileToQApp({
@@ -400,7 +422,11 @@ export const NumaAppProvider = ({ children }) => {
             console.error('Error importing file:', error);
             throw error;
           }
-        } else if (inputValue !== undefined && inputValue !== null && inputValue !== '') {
+        } else if (
+          inputValue !== undefined &&
+          inputValue !== null &&
+          inputValue !== ''
+        ) {
           updateValues.push({ cardId: qInputCardId, value: inputValue });
         }
       }
@@ -411,21 +437,27 @@ export const NumaAppProvider = ({ children }) => {
         await updateQSessionData({
           qAppsClient,
           sessionId,
-          values: updateValues
+          values: updateValues,
         });
       }
 
       console.log('Starting Q-App polling with progress updates');
-      const updateProgress = createProgressUpdater(completedWeight, qappWeight, totalWeight);
+      const updateProgress = createProgressUpdater(
+        completedWeight,
+        qappWeight,
+        totalWeight,
+      );
       const sessionResponse = await pollQAppSession(sessionId, updateProgress);
       console.log('Q-App polling completed, result:', sessionResponse);
 
       // Process the output cards and map them to the correct output references
       if (sessionResponse?.cardStatus) {
-        for (const [cardId, cardData] of Object.entries(sessionResponse.cardStatus)) {
+        for (const [cardId, cardData] of Object.entries(
+          sessionResponse.cardStatus,
+        )) {
           // Match cardId to outputContentRef ID
           const matchingOutput = task.params.outputs.find(
-            (output) => output.qOutputCardId === cardId
+            (output) => output.qOutputCardId === cardId,
           );
 
           if (matchingOutput) {
@@ -433,7 +465,7 @@ export const NumaAppProvider = ({ children }) => {
             currentResults[outputId] = cardData.currentValue;
             console.log(
               `Updated currentResults[${outputId}] with value:`,
-              cardData.currentValue
+              cardData.currentValue,
             );
           }
         }
@@ -442,7 +474,7 @@ export const NumaAppProvider = ({ children }) => {
       // Add final Q-App contribution
       currentResults[task.id] = {
         status: sessionResponse?.status,
-        cardStatus: sessionResponse?.cardStatus
+        cardStatus: sessionResponse?.cardStatus,
       };
       console.log('Q-App task completed');
       return currentResults;
@@ -463,7 +495,9 @@ export const NumaAppProvider = ({ children }) => {
     let currentResults = {};
 
     try {
-      const orderedTasks = numaAppData.tasks.slice().sort((a, b) => a.order - b.order);
+      const orderedTasks = numaAppData.tasks
+        .slice()
+        .sort((a, b) => a.order - b.order);
       const totalWeight = calculateTotalWeight(orderedTasks);
       let completedWeight = 0;
       let qappWeight = 0;
@@ -494,7 +528,13 @@ export const NumaAppProvider = ({ children }) => {
 
           case 'q-app':
             qappWeight = taskWeight;
-            currentResults = await handleQAppTask(task, currentResults, completedWeight, qappWeight, totalWeight);
+            currentResults = await handleQAppTask(
+              task,
+              currentResults,
+              completedWeight,
+              qappWeight,
+              totalWeight,
+            );
             completedWeight += qappWeight;
             break;
 
@@ -521,7 +561,6 @@ export const NumaAppProvider = ({ children }) => {
       setProcessingProgress(100);
       setProcessingStatus('Complete!');
       console.log('All tasks completed successfully');
-
     } catch (error) {
       console.error('Error executing tasks:', error);
       setProcessingStatus('Error occurred');

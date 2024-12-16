@@ -15,8 +15,7 @@ const QAppDetailHeader = () => {
   const qAppId = qAppData.appId;
 
   const { qAppsClient, loading: authLoading } = useAuth();
-  // TODO: Make these values dynamic
-  const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
+  const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
 
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState(null);
@@ -28,7 +27,7 @@ const QAppDetailHeader = () => {
     console.log('debug - qAppId', qAppId);
     try {
       const payload = {
-        instanceId: APPLICATION_ID,
+        instanceId: Q_APPLICATION_ID,
         appId: qAppId,
         appVersion: qAppData.appVersion,
         initialValues: qAppData.appDefinition.cards
@@ -53,7 +52,6 @@ const QAppDetailHeader = () => {
       setError(error); // Set error state
     }
   };
-
 
   // DELETE
   const handleDeleteApp = async () => {

@@ -8,16 +8,14 @@ function TextOutputModule({ task }) {
   );
 
   if (!task) return;
-  console.log("task",task);
+  console.log('task', task);
 
   return (
     <div className="output-module">
       {task.title && <h4>{task.title}</h4>}
-      <div className="output-container">
+      <div className="output-text">
         {loading && <Preloader smallscreen={true} />}
-        <p className="output-text">
-          {taskResponse?.result || ''}
-        </p>
+        <p>{taskResponse?.result || ''}</p>
       </div>
     </div>
   );
