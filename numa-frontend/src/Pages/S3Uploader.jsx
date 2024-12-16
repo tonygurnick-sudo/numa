@@ -77,6 +77,9 @@ const S3Uploader = () => {
   });
 
   const { getAccessToken, qBusinessClient } = useAuth();
+  const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+  const Q_INDEX_ID = window.sessionStorage.getItem('Q_INDEX_ID');
+  const Q_DATASOURCE_ID = window.sessionStorage.getItem('Q_DATASOURCE_ID');
 
   const fetchFiles = async () => {
     console.log('Initiating file list fetch...');
@@ -126,9 +129,8 @@ const S3Uploader = () => {
       }
 
       const input = {
-        // TODO: Make these values dynamic
-        applicationId: '2594236d-712a-4355-8b0e-6a4cef023f75',
-        indexId: '0cbbe940-c7ce-4013-b4f8-ce4176fef1d8',
+        applicationId: Q_APPLICATION_ID,
+        indexId: Q_INDEX_ID,
       };
 
       const command = new ListDataSourcesCommand(input);
@@ -137,7 +139,7 @@ const S3Uploader = () => {
       console.log('List data sources response', response);
 
       const s3DataSource = response.dataSources?.find(
-        (ds) => ds.dataSourceId === 'b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0',
+        (ds) => ds.dataSourceId === Q_DATASOURCE_ID,
       );
 
       if (s3DataSource) {
@@ -163,10 +165,9 @@ const S3Uploader = () => {
     try {
       setIsSyncing(true);
       const input = {
-        // TODO: Make these values dynamic
-        applicationId: '2594236d-712a-4355-8b0e-6a4cef023f75',
-        indexId: '0cbbe940-c7ce-4013-b4f8-ce4176fef1d8',
-        dataSourceId: 'b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0',
+        applicationId: Q_APPLICATION_ID,
+        indexId: Q_INDEX_ID,
+        dataSourceId: Q_DATASOURCE_ID,
       };
 
       const command = new StartDataSourceSyncJobCommand(input);
@@ -185,10 +186,9 @@ const S3Uploader = () => {
     console.log('Checking sync job status...');
     try {
       const input = {
-        // TODO: Make these values dynamic
-        applicationId: '2594236d-712a-4355-8b0e-6a4cef023f75',
-        indexId: '0cbbe940-c7ce-4013-b4f8-ce4176fef1d8',
-        dataSourceId: 'b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0',
+        applicationId: Q_APPLICATION_ID,
+        indexId: Q_INDEX_ID,
+        dataSourceId: Q_DATASOURCE_ID,
         maxResults: 10,
       };
 

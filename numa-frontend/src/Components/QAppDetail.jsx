@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { React, useState, useEffect } from 'react';
 import { Alert } from 'react-bootstrap';
 
 import { QAppWizard } from './QAppWizard';
@@ -8,12 +8,16 @@ import { NumaChat } from '../Pages/NumaChat';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 
-import { GetQAppCommand, GetQAppSessionCommand, StartQAppSessionCommand } from '@aws-sdk/client-qapps';
+import {
+  GetQAppCommand,
+  GetQAppSessionCommand,
+  StartQAppSessionCommand,
+} from '@aws-sdk/client-qapps';
 
 const QAppDetail = () => {
   const { qAppsClient } = useAuth();
-  // TODO: Make these values dynamic
-  const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
+  const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+
   const {
     setRunActive,
     qSsessionId,
@@ -24,7 +28,7 @@ const QAppDetail = () => {
     qAppData,
     setQCardInputValues,
     qCardInputValues,
-    setQSessionId
+    setQSessionId,
   } = useNumaApp();
 
   const qAppId = numaAppData?.qAppId;
@@ -46,7 +50,7 @@ const QAppDetail = () => {
 
     try {
       const payload = {
-        instanceId: APPLICATION_ID,
+        instanceId: Q_APPLICATION_ID,
         appId: qAppId,
         appVersion: qAppData.appVersion,
         initialValues: qAppData.appDefinition.cards
@@ -92,7 +96,7 @@ const QAppDetail = () => {
     if (!qAppsClient || !qAppId) return;
 
     try {
-      const input = { instanceId: APPLICATION_ID, appId: qAppId };
+      const input = { instanceId: Q_APPLICATION_ID, appId: qAppId };
       const command = new GetQAppCommand(input);
       const response = await qAppsClient.send(command);
       setqAppData(response);
@@ -108,7 +112,7 @@ const QAppDetail = () => {
     const fetchSessionDetails = async () => {
       try {
         const input = {
-          instanceId: APPLICATION_ID,
+          instanceId: Q_APPLICATION_ID,
           sessionId: qSsessionId,
         };
         const command = new GetQAppSessionCommand(input);
@@ -145,7 +149,10 @@ const QAppDetail = () => {
   useEffect(() => {
     if (!qSessionDetails) return;
 
-    if (qSessionDetails.status === 'WAITING' || qSessionDetails.status === 'IN_PROGRESS') {
+    if (
+      qSessionDetails.status === 'WAITING' ||
+      qSessionDetails.status === 'IN_PROGRESS'
+    ) {
       setIsPolling(true);
       setRunActive('disabled');
     } else {
@@ -174,7 +181,9 @@ const QAppDetail = () => {
 
   return (
     <>
-      {error && <Alert variant="danger">{error.message || 'An error occurred'}</Alert>}
+      {error && (
+        <Alert variant="danger">{error.message || 'An error occurred'}</Alert>
+      )}
       {qAppData ? (
         <QAppWizard
           qAppData={qAppData}

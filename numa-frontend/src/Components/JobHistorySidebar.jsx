@@ -42,7 +42,9 @@ const JobHistorySidebar = () => {
                 >
                   <div className="d-flex justify-content-between align-items-start">
                     <div>
-                      <div className="fw-bold">Job {job.jobID.slice(0, 8)}...</div>
+                      <div className="fw-bold">
+                        Job {job.jobID.slice(0, 8)}...
+                      </div>
                       <small className="text-muted">
                         {formatDistanceToNow(new Date(job.dateTime), {
                           addSuffix: true,

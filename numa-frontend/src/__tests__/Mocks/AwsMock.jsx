@@ -1,5 +1,7 @@
 import { vi } from 'vitest';
 
+const Q_DATASOURCE_ID = window.sessionStorage.getItem('Q_DATASOURCE_ID');
+
 // Mock STS Client
 export const mockSTSClient = {
   STSClient: vi.fn().mockImplementation(() => ({
@@ -40,7 +42,7 @@ export const mockQBusinessClient = {
         return Promise.resolve({
           dataSources: [
             {
-              dataSourceId: 'b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0',
+              dataSourceId: Q_DATASOURCE_ID,
               status: 'ACTIVE',
               updatedAt: new Date(),
             },

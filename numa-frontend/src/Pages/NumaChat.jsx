@@ -25,8 +25,7 @@ const NumaChat = () => {
   const [showConversations, setShowConversations] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
-  // TODO: Make this dynamic
-  const APPLICATION_ID = '2594236d-712a-4355-8b0e-6a4cef023f75';
+  const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,7 +38,7 @@ const NumaChat = () => {
       setIsLoadingConversations(true);
       try {
         const input = {
-          applicationId: APPLICATION_ID,
+          applicationId: Q_APPLICATION_ID,
           maxResults: 10, // Adjust as needed
         };
 
@@ -86,7 +85,7 @@ const NumaChat = () => {
 
       // Prepare base input
       const input = {
-        applicationId: APPLICATION_ID,
+        applicationId: Q_APPLICATION_ID,
         userGroups: user.decoded_tokens.idToken['cognito:groups'] || [],
         userMessage: inputMessage,
         chatMode: 'RETRIEVAL_MODE',
@@ -173,7 +172,7 @@ const NumaChat = () => {
         <div className="chat-layout d-flex">
           <ChatHistorySidebar
             qBusinessClient={qBusinessClient}
-            APPLICATION_ID={APPLICATION_ID}
+            APPLICATION_ID={Q_APPLICATION_ID}
             onSelectConversation={(messages) => {
               setMessages(messages);
               if (messages.length > 0) {
