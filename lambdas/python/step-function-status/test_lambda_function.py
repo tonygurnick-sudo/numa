@@ -17,7 +17,9 @@ class TestLambdaFunction(unittest.TestCase):
         mock_object = b'{"status": "SUCCESS", "result": {"foo": "bar"}}'
         s3_mock.get_object.return_value = {"Body": MagicMock(read=lambda: mock_object)}
         event = {
-            "job_id": "test-job-id",
+            "queryStringParameters": {
+                "job_id": "test-job-id",
+            },
         }
 
         context = LambdaContext()
