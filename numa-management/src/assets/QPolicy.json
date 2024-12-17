@@ -1,0 +1,42 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "qbusiness:Chat*",
+        "qbusiness:List*",
+        "qbusiness:DeleteConversation",
+        "qbusiness:PutFeedback",
+        "qbusiness:StartDataSourceSyncJob",
+        "qapps:*",
+        "qbusiness:Get*",
+        "qbusiness:List*"
+      ],
+      "Resource": ["*"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["kms:Decrypt"],
+      "Resource": ["*"],
+      "Condition": {
+        "StringLike": {
+          "aws:InvokedBy": ["qbusiness.amazonaws.com", "qapps.amazonaws.com"]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["qapps:*"],
+      "Resource": ["*"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "user-subscriptions:CreateClaim",
+        "user-subscriptions:CreateUserClaim"
+      ],
+      "Resource": ["*"]
+    }
+  ]
+}

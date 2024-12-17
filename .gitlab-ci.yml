@@ -14,6 +14,7 @@ variables:
 .node-matrix:
   matrix:
     - BUILD_DIR:
+        - numa-management
         - tools
         - lambdas/node/srp-proxy
 

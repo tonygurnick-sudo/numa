@@ -118,3 +118,5 @@ lambda_function.zip
 tools/*.csv
 
 test.pdf
+
+**/.vite/deps
