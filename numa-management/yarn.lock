@@ -3169,17 +3169,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@smithy/shared-ini-file-loader@npm:^3.1.10, @smithy/shared-ini-file-loader@npm:^3.1.11":
-  version: 3.1.11
-  resolution: "@smithy/shared-ini-file-loader@npm:3.1.11"
-  dependencies:
-    "@smithy/types": "npm:^3.7.1"
-    tslib: "npm:^2.6.2"
-  checksum: 10c0/7479713932f00a6b85380fa8012ad893bb61e7ea614976e0ab2898767ff7dc91bb1dd813a4ec72e4850d6b10296f11032cd5dd916970042be376c19d0d3954b6
-  languageName: node
-  linkType: hard
-
-"@smithy/shared-ini-file-loader@npm:^3.1.12":
+"@smithy/shared-ini-file-loader@npm:^3.1.10, @smithy/shared-ini-file-loader@npm:^3.1.11, @smithy/shared-ini-file-loader@npm:^3.1.12":
   version: 3.1.12
   resolution: "@smithy/shared-ini-file-loader@npm:3.1.12"
   dependencies:
