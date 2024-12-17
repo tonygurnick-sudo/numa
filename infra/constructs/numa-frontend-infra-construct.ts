@@ -122,13 +122,16 @@ export class NumaFrontendInfra extends Construct {
       name: `${props.client.replaceAll('.', '-')}-api-cache-policy`,
       parametersInCacheKeyAndForwardedToOrigin: {
         cookiesConfig: {
-          cookieBehavior: 'none',
+          cookieBehavior: 'all',
         },
         headersConfig: {
-          headerBehavior: 'none',
+          headerBehavior: 'whitelist',
+          headers: {
+            items: ['authorization'],
+          },
         },
         queryStringsConfig: {
-          queryStringBehavior: 'none',
+          queryStringBehavior: 'all',
         },
       },
       minTtl: 0,
