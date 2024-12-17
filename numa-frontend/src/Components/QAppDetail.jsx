@@ -1,9 +1,8 @@
-import { React, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Alert } from 'react-bootstrap';
 
 import { QAppWizard } from './QAppWizard';
 import { Preloader } from './Preloader';
-import { NumaChat } from '../Pages/NumaChat';
 
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaApp } from '../Providers/NumaAppProvider';
@@ -19,6 +18,7 @@ const QAppDetail = () => {
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
 
   const {
+    setError,
     setRunActive,
     qSsessionId,
     isPolling,
@@ -34,7 +34,6 @@ const QAppDetail = () => {
   const qAppId = numaAppData?.qAppId;
 
   const [qSessionDetails, setQSessionDetails] = useState(null);
-  const [error, setError] = useState(null);
 
   // Update specific card's input value
   const handleInputChange = (cardId, value) => {
@@ -181,9 +180,6 @@ const QAppDetail = () => {
 
   return (
     <>
-      {error && (
-        <Alert variant="danger">{error.message || 'An error occurred'}</Alert>
-      )}
       {qAppData ? (
         <QAppWizard
           qAppData={qAppData}

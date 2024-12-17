@@ -22,6 +22,7 @@ const AppWizard = ({ manifest }) => {
     setAppRunning,
     taskInputValues,
     setTaskInputValues,
+    setError
   } = useNumaApp();
   const [activeStep, setActiveStep] = useState(0);
   const [hasRun, setHasRun] = useState(false);
@@ -102,6 +103,7 @@ const AppWizard = ({ manifest }) => {
       await handleRunButtonClick(numaAppData);
     } catch (error) {
       console.error('Error running app:', error);
+      setError(error);
     } finally {
       // Reset appRunning state after completion
       setAppRunning(false);
@@ -127,7 +129,6 @@ const AppWizard = ({ manifest }) => {
   );
 
   const handleTaskCompletion = (taskId, success = true) => {
-    console.log('Task completion called', { taskId, success });
     updateTaskCompletionStatus(taskId, success);
   };
 

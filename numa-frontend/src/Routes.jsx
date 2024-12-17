@@ -11,7 +11,6 @@ import AppDetail from './Pages/AppDetail';
 
 import { AuthProvider, useAuth } from './Providers/AuthProvider';
 import { NumaAppProvider } from './Providers/NumaAppProvider';
-
 import { NumaChat } from './Pages/NumaChat';
 import { S3Uploader } from './Pages/S3Uploader';
 

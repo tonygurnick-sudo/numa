@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Container, Row, Col, Card, Button } from 'react-bootstrap';
+import { Container, Row, Col, Button } from 'react-bootstrap';
 import { AppCard } from './AppCard';
 import { WizardNavigation } from './WizardNavigation';
 import { useNumaApp } from '../Providers/NumaAppProvider';
@@ -125,11 +125,10 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
 
   const handleRunApp = useCallback(async (e) => {
     e.preventDefault();
-    console.log('Starting app execution');
+
     try {
       setAppRunning(true);
       setProcessingProgress(0);
-      console.log('Set initial states - running: true, progress: 0');
 
       // Mark all input steps as complete
       const newCompletedSteps = { ...completedSteps };
@@ -138,16 +137,14 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
         newCompletedSteps[cardData.id] = true;
       });
       setCompletedSteps(newCompletedSteps);
-      console.log('Marked input steps as complete');
 
       // Move to first output step
       if (outputCards.length > 0) {
         const targetStep = inputCards.length;
         setActiveStep(targetStep);
-        console.log('Moved to first output step:', targetStep);
       }
 
-      console.log('Calling onRunApp');
+
       await onRunApp();
     } catch (error) {
       console.error('Error running app:', error);
@@ -158,7 +155,6 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
 
   // Effect to track session results and update progress
   useEffect(() => {
-    console.log('Processing session results:', sessionResults);
     if (sessionResults?.status) {
       // Calculate progress based on card statuses
       if (sessionResults.cardStatus) {
@@ -169,13 +165,6 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
 
         // Calculate progress percentage
         const progress = Math.round(((completedCards + (runningCards * 0.5)) / totalCards) * 100);
-        console.log('Progress calculation:', {
-          totalCards,
-          completedCards,
-          runningCards,
-          progress,
-          isRunning: appRunning || isPolling
-        });
 
         if (appRunning || isPolling) {
           setProcessingProgress(progress);
@@ -185,7 +174,6 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
 
       // Update app running state
       if (!['WAITING', 'IN_PROGRESS'].includes(sessionResults.status)) {
-        console.log('Session completed, updating states');
         setProcessingProgress(100);
         setProcessingStatus('Analysis complete');
         setAppRunning(false);

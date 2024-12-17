@@ -463,10 +463,6 @@ export const NumaAppProvider = ({ children }) => {
           if (matchingOutput) {
             const outputId = matchingOutput.outputContentRef.replace('@', '');
             currentResults[outputId] = cardData.currentValue;
-            console.log(
-              `Updated currentResults[${outputId}] with value:`,
-              cardData.currentValue,
-            );
           }
         }
       }
@@ -476,7 +472,6 @@ export const NumaAppProvider = ({ children }) => {
         status: sessionResponse?.status,
         cardStatus: sessionResponse?.cardStatus,
       };
-      console.log('Q-App task completed');
       return currentResults;
     } catch (error) {
       console.error('Error in Q-App task execution:', error);
@@ -501,11 +496,9 @@ export const NumaAppProvider = ({ children }) => {
       const totalWeight = calculateTotalWeight(orderedTasks);
       let completedWeight = 0;
       let qappWeight = 0;
-      console.log(`Total task weight: ${totalWeight}`);
 
       for (const task of orderedTasks) {
         const taskWeight = calculateTaskWeight(task);
-        console.log(`Processing task: ${task.type} (weight: ${taskWeight})`);
 
         switch (task.type) {
           case 'text-input':

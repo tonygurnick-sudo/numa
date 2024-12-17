@@ -2,6 +2,7 @@ import {
   createContext,
   useState,
   useContext,
+  useRef,
   useEffect,
   useCallback,
 } from 'react';
@@ -31,19 +32,55 @@ const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
 
 export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const [user, setUser] = useState(null);
+  const tokensRef = useRef(initialTokens || {
+    accessToken: localStorage.getItem('accessToken'),
+    idToken: localStorage.getItem('idToken'),
+    refreshToken: localStorage.getItem('refreshToken'),
+  });
+
+  // Separate ref for decoded tokens to avoid re-renders
+  const decodedTokensRef = useRef({
+    accessToken: null,
+    idToken: null
+  });
+
+  // Decode tokens without triggering re-renders
+  const decodeTokens = () => {
+    try {
+      if (tokensRef.current.accessToken) {
+        decodedTokensRef.current.accessToken = jwtDecode(tokensRef.current.accessToken);
+      }
+      if (tokensRef.current.idToken) {
+        decodedTokensRef.current.idToken = jwtDecode(tokensRef.current.idToken);
+      }
+    } catch (error) {
+      console.error('Error decoding tokens:', error);
+      decodedTokensRef.current = { accessToken: null, idToken: null };
+    }
+  };
+
+  // Update tokens without triggering re-renders
+  const updateTokens = (newTokens) => {
+    if (newTokens.accessToken) {
+      tokensRef.current.accessToken = newTokens.accessToken;
+      localStorage.setItem('accessToken', newTokens.accessToken);
+    }
+    if (newTokens.idToken) {
+      tokensRef.current.idToken = newTokens.idToken;
+      localStorage.setItem('idToken', newTokens.idToken);
+    }
+    if (newTokens.refreshToken) {
+      tokensRef.current.refreshToken = newTokens.refreshToken;
+      localStorage.setItem('refreshToken', newTokens.refreshToken);
+    }
+    // Update decoded tokens after updating the tokens
+    decodeTokens();
+  };
+
   const [loading, setLoading] = useState(true);
   const [qBusinessClient, setQBusinessClient] = useState(null);
   const [qAppsClient, setQAppsClient] = useState(null);
   const [tokenValidationComplete, setTokenValidationComplete] = useState(false);
-
-  const decodeToken = (token) => {
-    try {
-      return jwtDecode(token);
-    } catch (error) {
-      console.error('Error decoding token:', error);
-      return null;
-    }
-  };
 
   const isTokenExpired = (decodedToken) => {
     if (!decodedToken?.exp) return true;
@@ -54,15 +91,13 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const refreshTokens = async () => {
     try {
       console.log('🔄 Attempting to refresh tokens...');
-      const refreshToken =
-        initialTokens?.refreshToken || localStorage.getItem('refreshToken');
+      const refreshToken = tokensRef.current.refreshToken;
       const tokens = initialTokens || getUserInfo();
 
-      console.log('tokens', tokens);
-
-      if (!refreshToken || !tokens?.decoded_tokens?.idToken) {
-        console.log('❌ No refresh token or ID token available');
-        throw new Error('No refresh token or ID token available');
+      if (!refreshToken) {
+        console.error('No refresh token available');
+        logout();
+        return false;
       }
 
       let result;
@@ -83,34 +118,21 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         result = await response.json();
       }
 
-      if (!result.AuthenticationResult) {
-        console.log('❌ Failed to refresh tokens - No authentication result');
-        throw new Error(result.error || 'Failed to refresh tokens');
-      }
+      if (!result.AuthenticationResult) throw new Error('Token refresh failed');
 
       const { AccessToken, IdToken } = result.AuthenticationResult;
 
-      // Update localStorage
+      // Update localStorage and tokensRef
       localStorage.setItem('accessToken', AccessToken);
       localStorage.setItem('idToken', IdToken);
 
-      // Update user state
-      const decodedAccessToken = decodeToken(AccessToken);
-      const decodedIdToken = decodeToken(IdToken);
-
-      setUser({
-        tokens: {
-          accessToken: AccessToken,
-          idToken: IdToken,
-          refreshToken: refreshToken,
-        },
-        decoded_tokens: {
-          accessToken: decodedAccessToken,
-          idToken: decodedIdToken,
-        },
+      updateTokens({
+        accessToken: AccessToken,
+        idToken: IdToken,
+        refreshToken,
       });
 
-      console.log('✅ Successfully refreshed tokens');
+      console.log('✅ Tokens refreshed successfully');
       return true;
     } catch (error) {
       console.error('❌ Error refreshing tokens:', error);
@@ -123,7 +145,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     if (!user) return null;
 
     // Check if token is expired or about to expire
-    if (isTokenExpired(user.decoded_tokens.accessToken)) {
+    if (isTokenExpired(decodedTokensRef.current.accessToken)) {
       const refreshed = await refreshTokens();
       if (!refreshed) return null;
     }
@@ -168,10 +190,10 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       const idToken = user.tokens.idToken;
       const credentials = fromWebToken({
         client: cognitoIdentity,
-        identityPoolId: IDENTITY_POOL_ID, // Assuming the same identity pool for both clients
-        roleSessionName: 'numa-frontend-qapps', // Optional, you can use a different role name for QAppsClient
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: 'numa-frontend-qapps',
         roleArn: ROLE_ARN,
-        policy: JSON.stringify(QPolicy), // Assuming the policy allows access to Q Apps API
+        policy: JSON.stringify(QPolicy),
         durationSeconds: 3600,
         webIdentityToken: idToken,
       });
@@ -197,62 +219,16 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     }
   }, [user, initializeQBusinessClient, initializeQAppsClient]);
 
-  useEffect(() => {
-    const loadUserFromTokens = async () => {
-      console.log('🔍 Checking token status...');
-      const accessToken = localStorage.getItem('accessToken');
-      const idToken = localStorage.getItem('idToken');
-      const refreshToken = localStorage.getItem('refreshToken');
-
-      if (refreshToken) {
-        if (
-          !accessToken ||
-          !idToken ||
-          isTokenExpired(decodeToken(accessToken)) ||
-          isTokenExpired(decodeToken(idToken))
-        ) {
-          console.log('⚠️ Tokens expired or missing, attempting refresh...');
-          const refreshed = await refreshTokens();
-          if (!refreshed) {
-            console.log('❌ Token refresh failed, logging out');
-            setUser(null);
-          }
-        } else {
-          console.log('✅ Tokens are valid');
-          const decodedAccessToken = decodeToken(accessToken);
-          const decodedIdToken = decodeToken(idToken);
-
-          setUser({
-            tokens: {
-              accessToken,
-              idToken,
-              refreshToken,
-            },
-            decoded_tokens: {
-              accessToken: decodedAccessToken,
-              idToken: decodedIdToken,
-            },
-          });
-        }
-      } else {
-        console.log('❌ No refresh token found');
-        setUser(null);
-      }
-      setLoading(false);
-      setTokenValidationComplete(true);
-    };
-
-    loadUserFromTokens();
-  }, []);
-
   const checkAndRefreshTokens = async () => {
-    if (!user || !user.decoded_tokens) {
-      console.log('No user or decoded tokens available');
+    // Ensure tokens are decoded
+    decodeTokens();
+
+    if (!decodedTokensRef.current.accessToken) {
+      console.log('No decoded tokens available');
       return false;
     }
 
-    const decodedAccessToken = user.decoded_tokens.accessToken;
-    if (isTokenExpired(decodedAccessToken)) {
+    if (isTokenExpired(decodedTokensRef.current.accessToken)) {
       console.log('🕒 Token check: Token expired, attempting refresh...');
       const refreshed = await refreshTokens();
       if (!refreshed) {
@@ -266,7 +242,6 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     return true;
   };
 
-  // Modify the token refresh interval to be more proactive
   useEffect(() => {
     // Skip refresh interval in test mode
     if (!user || initialTokens) return;
@@ -279,6 +254,55 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
     return () => clearInterval(intervalId);
   }, [user]);
+
+  const loadUserFromTokens = async () => {
+    console.log('🔍 Checking token status...');
+    const accessToken = localStorage.getItem('accessToken');
+    const idToken = localStorage.getItem('idToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+
+    if (refreshToken) {
+      if (
+        !accessToken ||
+        !idToken ||
+        isTokenExpired(decodedTokensRef.current.accessToken) ||
+        isTokenExpired(decodedTokensRef.current.idToken)
+      ) {
+        console.log('⚠️ Tokens expired or missing, attempting refresh...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          console.log('❌ Token refresh failed, logging out');
+          setUser(null);
+        }
+      } else {
+        console.log('✅ Tokens are valid');
+        const decodedAccessToken = decodedTokensRef.current.accessToken;
+        const decodedIdToken = decodedTokensRef.current.idToken;
+
+        setUser({
+          tokens: {
+            accessToken,
+            idToken,
+            refreshToken,
+          },
+          decoded_tokens: {
+            accessToken: decodedAccessToken,
+            idToken: decodedIdToken,
+          },
+        });
+      }
+    } else {
+      console.log('❌ No refresh token found');
+      setUser(null);
+    }
+    setLoading(false);
+    setTokenValidationComplete(true);
+  };
+
+  useEffect(() => {
+    decodeTokens();
+    loadUserFromTokens();
+  }, []);
 
   const getUserInfo = () => {
     if (!user) return null;
