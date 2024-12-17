@@ -10,7 +10,7 @@ import { useNumaApp } from '../Providers/NumaAppProvider';
 
 const QAppDetailHeader = () => {
   const navigate = useNavigate();
-  const { runActive, setQSessionId, setIsPolling, qAppData, qCardInputValues } =
+  const { runActive, setQSessionId, setIsPolling, qAppData, qCardInputValues, setError } =
     useNumaApp();
   const qAppId = qAppData.appId;
 
@@ -19,12 +19,10 @@ const QAppDetailHeader = () => {
 
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState(null);
-  const [error, setError] = useState(null);
 
   const handleRunApp = async () => {
     if (!qAppsClient || authLoading) return;
 
-    console.log('debug - qAppId', qAppId);
     try {
       const payload = {
         instanceId: Q_APPLICATION_ID,

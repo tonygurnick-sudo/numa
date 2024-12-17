@@ -5,14 +5,10 @@ import { useParams } from 'react-router-dom';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { Preloader } from '../Components/Preloader';
-import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { JobHistorySidebar } from '../Components/JobHistorySidebar';
 
 import { QAppDetail } from '../Components/QAppDetail';
-import { QAppDetailHeader } from '../Components/QAppDetailHeader';
-
 import { useNumaApp } from '../Providers/NumaAppProvider';
-import { NumaAppItemHeader } from '../Components/NumaAppItemHeader';
 import AppWizard from '../Components/AppWizard';
 
 const AppDetail = () => {
@@ -73,14 +69,15 @@ const AppDetail = () => {
       <main className="flex-grow-1">
         <Container fluid>
           {error && <Alert variant="danger">{error}</Alert>}
-          <div className={`transition-opacity duration-150 ${isLoading ? 'opacity-0' : 'opacity-100'}`}>
-            {numaAppData && (
-              numaAppData.type === 'numa-app' ? (
+          <div
+            className={`transition-opacity duration-150 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+          >
+            {numaAppData &&
+              (numaAppData.type === 'numa-app' ? (
                 <AppWizard manifest={numaAppData} />
               ) : numaAppData.type === 'q-app' ? (
                 <QAppDetail />
-              ) : null
-            )}
+              ) : null)}
           </div>
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center">

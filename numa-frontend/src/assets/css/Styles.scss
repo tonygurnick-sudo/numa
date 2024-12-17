@@ -233,11 +233,11 @@ nav {
   margin-left: 59px;
   width: 100%;
   max-width: 1250px;
+  padding: 0 15px;
   background: #fafafa;
 
   @media (max-width: 768px) {
     margin-left: 0;
-    padding: 0 10px;
     margin-top: 60px;
   }
 }
@@ -1582,6 +1582,10 @@ label {
     position: relative;
     margin: 0.5rem 0;
 
+    @media (max-width: 992px) {
+      display: block;
+    }
+
     &.pre-run,
     &.post-run {
       flex: 1;
@@ -1600,6 +1604,11 @@ label {
     .step-container {
       display: flex;
       align-items: center;
+
+      @media (max-width: 992px) {
+        display: block;
+        margin: 14px;
+      }
 
       .step-indicator {
         display: flex;
