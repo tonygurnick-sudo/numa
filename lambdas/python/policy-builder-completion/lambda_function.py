@@ -1,5 +1,5 @@
-import io
 import os
+import typing
 import uuid
 
 import boto3
@@ -36,12 +36,15 @@ def __read_string_from_s3(key) -> str:
     return response["Body"].read().decode("utf-8")
 
 
-def __write_pdf_to_s3(markdown: str, file_name: str):
+def __write_string_to_s3(string: str, key: str):
     bucket = os.environ.get("BUCKET")
-    buffer = io.BytesIO()
-    markdown_to_pdf.convert(markdown, buffer)
-    buffer.seek(0)
-    s3_client.upload_fileobj(buffer, bucket, file_name)
+    s3_client.put_object(Body=string.encode("utf-8"), Bucket=bucket, Key=key)
+
+
+def __write_file_object_to_s3(fileobj: typing.BinaryIO, file_name: str):
+    bucket = os.environ.get("BUCKET")
+    fileobj.seek(0)
+    s3_client.upload_fileobj(fileobj, bucket, file_name)
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
@@ -118,8 +121,17 @@ def handler(event: dict, context: LambdaContext) -> dict:
         ]
     )
 
-    final_policy_key = __key(app_name, job_id, "final_policy.pdf")
-    __write_pdf_to_s3(final_policy, final_policy_key)
+    final_policy_markdown_key = __key(app_name, job_id, "final_policy.md")
+    __write_string_to_s3(final_policy, final_policy_markdown_key)
+
+    final_policy_html = markdown_to_pdf.markdown_to_html(final_policy)
+    final_policy_html_key = __key(app_name, job_id, "final_policy.html")
+    __write_string_to_s3(final_policy_html, final_policy_html_key)
+
+    final_policy_pdf = markdown_to_pdf.html_to_pdf(final_policy_html)
+    final_policy_pdf_key = __key(app_name, job_id, "final_policy.pdf")
+    __write_file_object_to_s3(final_policy_pdf, final_policy_pdf_key)
+
     return {
-        "final_policy_key": final_policy_key,
+        "final_policy_pdf_key": final_policy_pdf_key,
     }

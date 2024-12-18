@@ -86,7 +86,7 @@ class TestExplainability(unittest.TestCase):
         run_mock.assert_called_once()
         self.assertDictEqual(
             result,
-            {"explainability_key": "test_app/test_job/explainability.pdf"},
+            {"explainability_pdf_key": "test_app/test_job/explainability.pdf"},
         )
 
         self.assertEqual(s3_mock.upload_fileobj.call_count, 1)

@@ -92,7 +92,7 @@ class TestCompletePolicy(unittest.TestCase):
         run_mock.assert_called_once()
         self.assertDictEqual(
             result,
-            {"final_policy_key": "test_app/test_job/final_policy.pdf"},
+            {"final_policy_pdf_key": "test_app/test_job/final_policy.pdf"},
         )
 
         self.assertEqual(s3_mock.upload_fileobj.call_count, 1)

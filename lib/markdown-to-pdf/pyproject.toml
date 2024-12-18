@@ -11,13 +11,13 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.12"
 
-fpdf2 = "2.8.1"
+markdown-it-py = "3.0.0"
+xhtml2pdf = "0.2.16"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.13.0"
 pylint = "3.3.2"
 pyright = "1.1.390"
-types-fpdf2 = "2.8.1.20241204"
 
 [build-system]
 requires = ["poetry-core"]
