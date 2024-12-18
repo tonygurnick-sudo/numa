@@ -20,7 +20,7 @@ then
     done;
     for directory in "${SCRIPT_DIRECTORY}"/python/*/; do
         pushd "${directory}";
-            poetry build-lambda;
+            poetry build-lambda zip-compression=ZIP_DEFLATED;
         popd;
     done;
 fi
