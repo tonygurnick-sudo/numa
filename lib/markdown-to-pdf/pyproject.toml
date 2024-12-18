@@ -17,7 +17,7 @@ xhtml2pdf = "0.2.16"
 [tool.poetry.group.dev.dependencies]
 mypy = "1.13.0"
 pylint = "3.3.2"
-pyright = "1.1.390"
+pyright = "1.1.391"
 
 [build-system]
 requires = ["poetry-core"]

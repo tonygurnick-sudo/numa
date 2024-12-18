@@ -22,7 +22,7 @@ structlog = "24.4.0"
 boto3-stubs = "1.35.79"
 mypy = "1.13.0"
 pylint = "3.3.2"
-pyright = "1.1.390"
+pyright = "1.1.391"
 
 [tool.poetry-plugin-lambda-build]
 package-artifact-path = "lambda_function.zip"
