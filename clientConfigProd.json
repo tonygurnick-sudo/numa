@@ -325,7 +325,11 @@
         "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29",
         "domain": "nzsta.sharepoint.com",
         "siteUrls": ["https://nzsta.sharepoint.com/sites/Company"],
-        "configuration": {}
+        "configuration": {
+          "linkTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"],
+          "pageTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"],
+          "inclusionFilePath": ["^.*(?:PLD ?2021).*$"]
+        }
       }
     ]
   },

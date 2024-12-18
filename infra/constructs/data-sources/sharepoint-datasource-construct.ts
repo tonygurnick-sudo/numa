@@ -21,6 +21,10 @@ export interface SharePointConfiguration {
   exclusionFileNamePatterns?: string[];
   inclusionFilePath?: string[];
   exclusionFilePath?: string[];
+  linkTitleFilterRegEx?: string[];
+  pageTitleFilterRegEx?: string[];
+  eventTitleFilterRegEx?: string[];
+  crawlAcl?: boolean;
   schedule?: Schedule;
 }
 
@@ -208,35 +212,35 @@ export class SharePointDataSource extends DataSource {
 
     const defaultAdditionalProperties = {
       aclConfiguration: 'ACLWithLDAPEmailFmt',
-      proxyPort: '',
-      includeSupportedFileType: false,
-      isCrawlAdGroupMapping: false,
-      fieldForUserId: 'uuid',
-      inclusionOneNoteSectionNamePatterns: [],
-      linkTitleFilterRegEx: [],
-      exclusionOneNoteSectionNamePatterns: [],
-      inclusionOneNotePageNamePatterns: [],
-      isCrawlLocalGroupMapping: true,
-      pageTitleFilterRegEx: [],
-      exclusionOneNotePageNamePatterns: [],
-      eventTitleFilterRegEx: [],
       crawlAcl: true,
-      inclusionFileTypePatterns: [],
+      crawlAttachment: true,
+      crawlComments: true,
+      crawlEvents: true,
+      crawlFiles: true,
+      crawlLinks: true,
+      crawlListData: true,
       crawlPages: true,
       deletionProtectionThreshold: '100',
-      crawlListData: true,
-      crawlComments: true,
       enableDeletionProtection: false,
-      crawlFiles: true,
+      eventTitleFilterRegEx: [],
+      exclusionFileNamePatterns: [],
       exclusionFilePath: [],
       exclusionFileTypePatterns: [],
-      maxFileSizeInMegaBytes: '50',
-      crawlEvents: true,
-      crawlLinks: true,
-      crawlAttachment: true,
-      exclusionFileNamePatterns: [],
+      exclusionOneNotePageNamePatterns: [],
+      exclusionOneNoteSectionNamePatterns: [],
+      fieldForUserId: 'uuid',
       inclusionFileNamePatterns: [],
       inclusionFilePath: [],
+      inclusionFileTypePatterns: [],
+      inclusionOneNotePageNamePatterns: [],
+      inclusionOneNoteSectionNamePatterns: [],
+      includeSupportedFileType: false,
+      isCrawlAdGroupMapping: false,
+      isCrawlLocalGroupMapping: true,
+      linkTitleFilterRegEx: [],
+      maxFileSizeInMegaBytes: '50',
+      pageTitleFilterRegEx: [],
+      proxyPort: '',
     };
 
     super(scope, name, {
