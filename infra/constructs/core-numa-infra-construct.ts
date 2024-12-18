@@ -103,7 +103,7 @@ export class CoreNumaInfra extends Construct {
       });
 
       new RandomProvider(this, 'random-provider', {});
-      const systemUserPassword = new password.Password(this, 'oassword', {
+      const systemUserPassword = new password.Password(this, 'password', {
         length: 64,
         minLower: 5,
         minNumeric: 5,
@@ -199,6 +199,11 @@ export class CoreNumaInfra extends Construct {
             effect: 'Allow',
             actions: ['cognito-identity:GetCredentialsForIdentity'],
             resources: ['*'],
+          },
+          {
+            effect: 'Allow',
+            actions: ['s3:GetObject', 's3:GetObjectVersion'],
+            resources: [`arn:aws:s3:::${numaClient}-outputs/*`],
           },
         ],
       });
