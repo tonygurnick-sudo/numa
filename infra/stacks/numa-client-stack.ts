@@ -9,6 +9,7 @@ import { BaseNumaApp, BaseNumaAppProps } from '../constructs/apps/base-numa-app-
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
+import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -52,6 +53,23 @@ export class NumaClientStack extends ArcanumStack {
       certificateProvider,
       webExUrl: core.webExUrl,
     });
+
+    new S3Object(this, 'config-item', {
+      bucket: fe.frontendBucket.bucket,
+      key: 'config.json',
+      content: JSON.stringify({
+        cognito: {
+          userPoolId: core.userPoolId,
+          userPoolWebClientId: core.userPoolClient?.id,
+          identityPoolId: core.identityPoolId,
+          region: 'us-east-1', // TODO: Dynamic.
+        },
+        roleArn: core.webExperienceRoleArn,
+        apiEndpoint: '/api',
+      }),
+      contentType: 'application/json',
+    });
+    // TODO: Invalidation cloudfront.
 
     const outputsBucket = new PrivateBucket(this, 'outputs-bucket', {
       bucket: `numa-${props.client}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}` + '-outputs',
