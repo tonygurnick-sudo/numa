@@ -32,7 +32,10 @@ import {
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
+  readonly userPoolId?: string;
   readonly userPoolClient?: CognitoUserPoolClient;
+  readonly identityPoolId?: string;
+  readonly webExperienceRoleArn: string;
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
 
@@ -88,6 +91,7 @@ export class CoreNumaInfra extends Construct {
         },
         ...mfa,
       });
+      this.userPoolId = pool.id;
 
       new TerraformOutput(this, 'user-pool-id', {
         value: pool.id,
@@ -160,6 +164,7 @@ export class CoreNumaInfra extends Construct {
           },
         ],
       });
+      this.identityPoolId = identityPool.id;
 
       const identityPoolRoleTrustPolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-trust-policy', {
         statement: [
@@ -382,6 +387,7 @@ export class CoreNumaInfra extends Construct {
       name: `web-experience-role-${numaClient}`,
       assumeRolePolicy: webExperienceTrustDocument.json,
     });
+    this.webExperienceRoleArn = role.arn;
 
     new IamRolePolicy(this, 'web-experience-policy', {
       name: 'policy',
