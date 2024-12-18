@@ -29,6 +29,9 @@
   "arcanum-demo-nick": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
+    "apps": {
+      "nzsba-policy-builder": {}
+    },
     "boxConfigs": [
       {
         "enterpriseId": "1235149944"

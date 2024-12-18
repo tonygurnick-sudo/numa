@@ -82,6 +82,7 @@ const policy_structure_list = [
 
 export class NZSBAPolicyBuilder extends BaseNumaApp {
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
+    props.enableJobs = true;
     props.pathPrefix ??= 'policy-builder';
     super(scope, name, props);
 
