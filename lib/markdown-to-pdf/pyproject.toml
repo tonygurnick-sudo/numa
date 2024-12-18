@@ -9,7 +9,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "~3.13.0"
 
 markdown-it-py = "3.0.0"
 xhtml2pdf = "0.2.16"

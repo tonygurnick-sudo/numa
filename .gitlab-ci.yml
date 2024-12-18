@@ -9,7 +9,7 @@ include:
     file: pipelines/python.yml
 
 variables:
-  PYTHON_VER: "3.12"
+  PYTHON_VER: "3.13"
 
 .node-matrix:
   matrix:
