@@ -4,6 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
+from aws_lambda_powertools.utilities.data_classes import APIGatewayProxyEvent
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import lambda_function
@@ -14,9 +15,11 @@ import lambda_function
 class TestLambdaFunction(unittest.TestCase):
     @patch.dict(os.environ, {"STEP_FUNCTION_ARN": "step-function-arn-success"})
     def test_success(self, step_function_mock):
-        event = {
-            "foo": "bar",
-        }
+        event = APIGatewayProxyEvent(
+            {
+                "body": json.dumps({"foo": "bar"}),
+            }
+        )
 
         context = LambdaContext()
         context._function_name = "test_function"
@@ -36,9 +39,11 @@ class TestLambdaFunction(unittest.TestCase):
 
     @patch.dict(os.environ, {"STEP_FUNCTION_ARN": "step-function-arn-failure"})
     def test_failure(self, step_function_mock):
-        event = {
-            "job_id": "test-job-id",
-        }
+        event = APIGatewayProxyEvent(
+            {
+                "body": json.dumps({"job_id": "test-job-id"}),
+            }
+        )
 
         context = LambdaContext()
         context._function_name = "test_function"
