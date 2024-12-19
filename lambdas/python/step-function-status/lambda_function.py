@@ -3,6 +3,10 @@ import os
 
 import boto3
 import structlog
+from aws_lambda_powertools.utilities.data_classes import (
+    APIGatewayProxyEvent,
+    event_source,
+)
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import helpers
@@ -11,12 +15,13 @@ s3_client = boto3.client("s3")
 logger = structlog.get_logger()
 
 
+@event_source(data_class=APIGatewayProxyEvent)
 def handler(
-    event: dict,
+    event: APIGatewayProxyEvent,
     context: LambdaContext,
 ) -> helpers.ApiGatewayProxyIntegrationResponse:
     helpers.setup_logging()
-    job_id = event.get("queryStringParameters", {}).get("job_id")
+    job_id = event.query_string_parameters.get("job_id")
     structlog.contextvars.bind_contextvars(
         job_id=job_id,
         function_name=context.function_name,

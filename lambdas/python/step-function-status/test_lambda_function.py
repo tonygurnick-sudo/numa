@@ -25,7 +25,7 @@ class TestLambdaFunction(unittest.TestCase):
         context = LambdaContext()
         context._function_name = "test_function"
 
-        response = lambda_function.handler(event, context)
+        response = lambda_function.handler(event, context)  # type: ignore # pyright gets this wrong
         self.assertEqual(response["statusCode"], 200)
         status_response = json.loads(response["body"])
         self.assertEqual(status_response["status"], "SUCCESS")
@@ -46,7 +46,7 @@ class TestLambdaFunction(unittest.TestCase):
         context._function_name = "test_function"
 
         s3_mock.get_object.side_effect = Exception("Some error")
-        response = lambda_function.handler(event, context)
+        response = lambda_function.handler(event, context)  # type: ignore # pyright gets this wrong
         self.assertEqual(response["statusCode"], 503)
         status_response = json.loads(response["body"])
         self.assertEqual(status_response["status"], "UNKNOWN")

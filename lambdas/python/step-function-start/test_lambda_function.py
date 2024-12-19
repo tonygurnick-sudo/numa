@@ -4,7 +4,6 @@ import os
 import unittest
 from unittest.mock import patch
 
-from aws_lambda_powertools.utilities.data_classes import APIGatewayProxyEvent
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import lambda_function
@@ -15,16 +14,14 @@ import lambda_function
 class TestLambdaFunction(unittest.TestCase):
     @patch.dict(os.environ, {"STEP_FUNCTION_ARN": "step-function-arn-success"})
     def test_success(self, step_function_mock):
-        event = APIGatewayProxyEvent(
-            {
-                "body": json.dumps({"foo": "bar"}),
-            }
-        )
+        event = {
+            "body": json.dumps({"foo": "bar"}),
+        }
 
         context = LambdaContext()
         context._function_name = "test_function"
 
-        response = lambda_function.handler(event, context)
+        response = lambda_function.handler(event, context)  # type: ignore # pyright gets this wrong
         self.assertEqual(response["statusCode"], 200)
         job_id = json.loads(response["body"])["job_id"]
 
@@ -39,17 +36,15 @@ class TestLambdaFunction(unittest.TestCase):
 
     @patch.dict(os.environ, {"STEP_FUNCTION_ARN": "step-function-arn-failure"})
     def test_failure(self, step_function_mock):
-        event = APIGatewayProxyEvent(
-            {
-                "body": json.dumps({"job_id": "test-job-id"}),
-            }
-        )
+        event = {
+            "body": json.dumps({"job_id": "test-job-id"}),
+        }
 
         context = LambdaContext()
         context._function_name = "test_function"
 
         step_function_mock.start_execution.side_effect = Exception("Some error")
-        response = lambda_function.handler(event, context)
+        response = lambda_function.handler(event, context)  # type: ignore # pyright gets this wrong
         self.assertEqual(response["statusCode"], 503)
         exception = json.loads(response["body"])["exception"]
         self.assertEqual(exception, "Some error")
