@@ -39,7 +39,7 @@ then
 
     rm -rf "${BUILD_DIR}"
     rm -rf "${WHEEL_DIR}"
-    python3.12 -m venv "${BUILD_DIR}"
+    python3.13 -m venv "${BUILD_DIR}"
 
     # shellcheck source=/dev/null
     source "${BUILD_DIR}"/bin/activate
