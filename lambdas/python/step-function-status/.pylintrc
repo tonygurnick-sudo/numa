@@ -15,3 +15,6 @@ disable=
 
 [REPORTS]
 msg-template={path}:{line}:{column} [{symbol}] {msg}
+
+[TYPECHECK]
+signature-mutators=aws_lambda_powertools.middleware_factory.factory.lambda_handler_decorator
