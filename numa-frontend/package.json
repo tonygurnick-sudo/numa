@@ -14,7 +14,7 @@
     "@aws-sdk/client-cognito-identity": "^3.668.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.670.0",
     "@aws-sdk/client-qapps": "^3.682.0",
-    "@aws-sdk/client-qbusiness": "^3.672.0",
+    "@aws-sdk/client-qbusiness": "^3.714.0",
     "@aws-sdk/credential-providers": "^3.670.0",
     "@mdxeditor/editor": "^3.19.3",
     "@popperjs/core": "^2.11.8",

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from 'react-bootstrap';
-import { ListConversationsCommand } from '@aws-sdk/client-qbusiness';
+import { ListConversationsCommand, ListMessagesCommand } from '@aws-sdk/client-qbusiness';
 
 export const ChatHistorySidebar = ({
   qBusinessClient,
@@ -20,28 +20,27 @@ export const ChatHistorySidebar = ({
       const input = {
         applicationId: APPLICATION_ID,
         conversationId: conversationId,
-        maxResults: 50,
+        maxResults: 50
       };
 
-      const command = new ListConversationsCommand(input);
+      const command = new ListMessagesCommand(input);
       const response = await qBusinessClient.send(command);
 
-      // Transform the messages into the format your chat expects
-      const formattedMessages =
-        response.messages?.map((message) => ({
-          role: message.role === 'USER' ? 'user' : 'assistant',
-          content: message.content,
-          id: message.messageId,
-          sources: message.sourceAttributions,
-        })) || [];
-
-      onSelectConversation(formattedMessages);
-
-      // Return the last message ID for the parent component
-      if (formattedMessages.length > 0) {
-        const lastMessage = formattedMessages[formattedMessages.length - 1];
-        return lastMessage.id;
+      if (!response.messages || response.messages.length === 0) {
+        setError('No messages found in this conversation');
+        return;
       }
+
+      const sortedMessages = [...response.messages].sort((a, b) => new Date(a.time) - new Date(b.time));
+      const formattedMessages = sortedMessages.map((message) => ({
+        role: message.type === 'USER' ? 'user' : 'assistant',
+        content: message.body,
+        id: message.messageId,
+        sources: message.sourceAttributions || [],
+      }));
+
+      onSelectConversation(formattedMessages, conversationId);
+      setShow(false);
     } catch (error) {
       console.error('Error fetching conversation history:', error);
       setError('Failed to load conversation history');
@@ -82,63 +81,53 @@ export const ChatHistorySidebar = ({
         className="chat-history-toggle"
         variant="primary"
         size="sm"
-        style={{
-          position: 'fixed',
-          right: '0',
-          top: '50%',
-          transform: 'translateY(-50%) rotate(-90deg)',
-          transformOrigin: 'right bottom',
-          borderRadius: '4px 4px 0 0',
-          zIndex: 1000,
-        }}
       >
         Chat History
       </Button>
 
-      <div
-        className={`chat-history-sidebar ${show ? 'show' : ''}`}
-        style={{
-          position: 'fixed',
-          right: show ? '0' : '-300px',
-          top: '0',
-          width: '300px',
-          height: '100vh',
-          backgroundColor: 'white',
-          boxShadow: '-2px 0 5px rgba(0,0,0,0.1)',
-          transition: 'right 0.3s ease',
-          zIndex: 999,
-          padding: '1rem',
-          overflowY: 'auto',
-        }}
-      >
-        <h5 className="mb-3">Chat History</h5>
-        {isLoading ? (
-          <div>Loading conversations...</div>
-        ) : (
-          <div className="d-flex flex-column gap-2">
-            {conversations.map((conv) => (
-              <Button
-                key={conv.conversationId}
-                variant="outline-primary"
-                onClick={() => fetchConversationHistory(conv.conversationId)}
-                className="text-start"
-              >
-                <div className="text-truncate">
-                  {conv.title || 'Untitled Chat'}
+      <div className={`chat-history-sidebar ${show ? 'show' : ''}`}>
+        <div className="sidebar-header d-flex justify-content-between align-items-center">
+          <h6 className="mb-0">Chat History</h6>
+          <Button
+            variant="link"
+            className="close-button p-0 text-muted"
+            onClick={handleShow}
+          >
+            <i className="bi bi-x-lg"></i>
+          </Button>
+        </div>
+
+        <div className="chat-history-list">
+          {isLoading ? (
+            <div className="text-muted small">Loading conversations...</div>
+          ) : conversations.length === 0 ? (
+            <p className="small text-muted">No conversations available</p>
+          ) : (
+            <div className="conversations-container small">
+              {conversations.map((conversation) => (
+                <div
+                  key={conversation.conversationId}
+                  className="conversation-item mb-2 p-2 rounded"
+                  onClick={() => fetchConversationHistory(conversation.conversationId)}
+                  role="button"
+                >
+                  <div className="conversation-title fw-bold">
+                    {conversation.title || 'Untitled Chat'}
+                  </div>
+                  <div className="conversation-time text-muted mt-1" style={{ fontSize: '0.75rem' }}>
+                    {new Date(conversation.startTime || conversation.creationTime).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </div>
                 </div>
-                <small className="text-muted d-block">
-                  {new Date(conv.startTime).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </small>
-              </Button>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
