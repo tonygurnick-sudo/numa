@@ -14,9 +14,10 @@ variables:
 .node-matrix:
   matrix:
     - BUILD_DIR:
+        - lambdas/node/q-business-chat-control-configurer
+        - lambdas/node/srp-proxy
         - numa-management
         - tools
-        - lambdas/node/srp-proxy
 
 .python-matrix:
   matrix:

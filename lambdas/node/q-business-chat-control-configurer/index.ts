@@ -1,5 +1,4 @@
 import { QBusinessClient, UpdateChatControlsConfigurationCommand } from '@aws-sdk/client-qbusiness';
-import { env } from 'node:process';
 import { Handler } from 'aws-lambda';
 
 interface ChatControlConfiguration {
