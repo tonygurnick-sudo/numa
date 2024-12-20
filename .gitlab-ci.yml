@@ -14,6 +14,7 @@ variables:
 .node-matrix:
   matrix:
     - BUILD_DIR:
+        - lambdas/node/api-gateway-authorizer
         - lambdas/node/q-business-chat-control-configurer
         - lambdas/node/srp-proxy
         - numa-management
