@@ -5,7 +5,7 @@ __metadata:
   version: 8
   cacheKey: 10c0
 
-"@arcanumai/cdktf-util@npm:^1.14.0":
+"@arcanumai/cdktf-util@npm:^1.14.0, @arcanumai/cdktf-util@npm:^1.14.1":
   version: 1.14.1
   resolution: "@arcanumai/cdktf-util@npm:1.14.1::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Fcdktf-util%2F-%2F%40arcanumai%2Fcdktf-util-1.14.1.tgz"
   checksum: 10c0/2d4c6ae52279ae4be3c49dc6fc22f17d8d8a9963428911efdf62315adafc8b16c38cb93700d02c64c191255402b52709a70464b3b608375064a8623fa6d69f06
@@ -22,11 +22,11 @@ __metadata:
   linkType: hard
 
 "@arcanumai/private-bucket-construct@npm:^1.2.1":
-  version: 1.3.2
-  resolution: "@arcanumai/private-bucket-construct@npm:1.3.2::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Fprivate-bucket-construct%2F-%2F%40arcanumai%2Fprivate-bucket-construct-1.3.2.tgz"
+  version: 1.3.3
+  resolution: "@arcanumai/private-bucket-construct@npm:1.3.3::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Fprivate-bucket-construct%2F-%2F%40arcanumai%2Fprivate-bucket-construct-1.3.3.tgz"
   dependencies:
-    "@arcanumai/cdktf-util": "npm:^1.14.0"
-  checksum: 10c0/c136f5547af90c4da21cf76e6f6344e24d00ac2c4642f22817dc6f8e5a71622fafa02c0973a6110720e5479e477e40ca20224027b9453f25a3dea4ba6b14148b
+    "@arcanumai/cdktf-util": "npm:^1.14.1"
+  checksum: 10c0/ac1d7371bc726c5f1900d386dc2b65ebcf18ebc6c5d72584f6ec4649bc29e80e152219af07ef4c684a4a0bdcfb3d95b98a08678c6314edd7dd75f4b49ac846db
   languageName: node
   linkType: hard
 
