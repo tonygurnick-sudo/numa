@@ -1,15 +1,15 @@
 import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdktf-util';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
+import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { Construct } from 'constructs';
 import _clientConfigDev from '../../clientConfigDev.json';
 import _clientConfigProd from '../../clientConfigProd.json';
 import { CoreNumaApp, ExampleNumaApp } from '../constructs/apps';
 import { BaseNumaApp, BaseNumaAppProps } from '../constructs/apps/base-numa-app-construct';
+import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
-import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
-import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -52,6 +52,8 @@ export class NumaClientStack extends ArcanumStack {
       hostedZoneProvider,
       certificateProvider,
       webExUrl: core.webExUrl,
+      userPoolId: core.userPoolId,
+      userPoolClientId: core.userPoolClient.id,
     });
 
     new S3Object(this, 'config-item', {
@@ -78,6 +80,7 @@ export class NumaClientStack extends ArcanumStack {
     // Resources can't start with a number, so prefix with an underscore if required.
     const coreAppId = props.client.replace(/^(?=[0-9])/, '_') + '-core';
     new CoreNumaApp(this, coreAppId, {
+      apiGatewayAuthorizerId: fe.authorizer.id,
       apiGatewayId: fe.apiGateway.id,
       outputsBucket: outputsBucket.bucket,
       clientId: core.userPoolClient?.id ?? '',
@@ -88,6 +91,7 @@ export class NumaClientStack extends ArcanumStack {
       const app = lookupAppFromId(appId);
       new app(this, `${props.client}-${appId}`, {
         ...appConfig,
+        apiGatewayAuthorizerId: fe.authorizer.id,
         apiGatewayId: fe.apiGateway.id,
         outputsBucket: outputsBucket.bucket,
       });
@@ -97,7 +101,7 @@ export class NumaClientStack extends ArcanumStack {
 
 interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
   customDomain?: string;
-  apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId' | 'outputsBucket'>>;
+  apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId' | 'apiGatewayAuthorizerId' | 'outputsBucket'>>;
 }
 type InputConfig = Omit<ClientConfig, 'client' | 'domainName'>;
 const clientConfigDev = _clientConfigDev as Record<string, InputConfig>;

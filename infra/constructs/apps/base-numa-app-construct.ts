@@ -23,6 +23,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export class BaseNumaApp extends Construct {
+  private apiGatewayAuthorizerId: string;
   private apiGatewayId: string;
   private prefix: string;
   private logGroup: CloudwatchLogGroup;
@@ -30,6 +31,7 @@ export class BaseNumaApp extends Construct {
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     super(scope, name);
+    this.apiGatewayAuthorizerId = props.apiGatewayAuthorizerId;
     this.apiGatewayId = props.apiGatewayId;
     this.prefix = '/api' + this.prepPathPart(props.pathPrefix ?? '');
     this.logGroup = new CloudwatchLogGroup(this, 'log-group', {
@@ -88,7 +90,17 @@ export class BaseNumaApp extends Construct {
         payloadFormatVersion: '2.0',
       });
 
+      let additionalRouteParameters = {};
+
+      if (props.addAuthorizer ?? true) {
+        additionalRouteParameters = {
+          authorizationType: 'CUSTOM',
+          authorizerId: this.apiGatewayAuthorizerId,
+        };
+      }
+
       new Apigatewayv2Route(this, name + '_route', {
+        ...additionalRouteParameters,
         apiId: this.apiGatewayId,
         routeKey: `${props.route.verb} ${this.prefix}${this.prepPathPart(props.route.path)}`,
         target: `integrations/${integration.id}`,
@@ -287,6 +299,7 @@ export interface RouteDefinition {
 }
 
 export interface AddLambdaFunctionProps {
+  addAuthorizer?: boolean;
   additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
   environment?: {
     variables: Record<string, string>;
@@ -307,6 +320,7 @@ export interface AddStepFunctionProps {
 
 export interface BaseNumaAppProps {
   apiGatewayId: string;
+  apiGatewayAuthorizerId: string;
   enableJobs?: boolean; // Optional flag to enable jobs functionality
   pathPrefix?: string;
   outputsBucket: S3Bucket;

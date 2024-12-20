@@ -1,26 +1,39 @@
+import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
-import { Apigatewayv2Api } from '@cdktf/provider-aws/lib/apigatewayv2-api';
-import { Apigatewayv2Stage } from '@cdktf/provider-aws/lib/apigatewayv2-stage';
-import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
-import { CloudfrontDistribution } from '@cdktf/provider-aws/lib/cloudfront-distribution';
-import { CloudfrontCachePolicy } from '@cdktf/provider-aws/lib/cloudfront-cache-policy';
-import { CloudfrontOriginAccessIdentity } from '@cdktf/provider-aws/lib/cloudfront-origin-access-identity';
-import { Route53Record } from '@cdktf/provider-aws/lib/route53-record';
-import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
-import { Construct } from 'constructs';
-import { TerraformOutput } from 'cdktf';
-import { DataAwsRoute53Zone } from '@cdktf/provider-aws/lib/data-aws-route53-zone';
-import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { AcmCertificate } from '@cdktf/provider-aws/lib/acm-certificate';
 import { AcmCertificateValidation } from '@cdktf/provider-aws/lib/acm-certificate-validation';
+import { Apigatewayv2Api } from '@cdktf/provider-aws/lib/apigatewayv2-api';
+import { Apigatewayv2Authorizer } from '@cdktf/provider-aws/lib/apigatewayv2-authorizer';
+import { Apigatewayv2Stage } from '@cdktf/provider-aws/lib/apigatewayv2-stage';
+import { CloudfrontCachePolicy } from '@cdktf/provider-aws/lib/cloudfront-cache-policy';
+import { CloudfrontDistribution } from '@cdktf/provider-aws/lib/cloudfront-distribution';
+import { CloudfrontOriginAccessIdentity } from '@cdktf/provider-aws/lib/cloudfront-origin-access-identity';
+import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import { DataAwsRoute53Zone } from '@cdktf/provider-aws/lib/data-aws-route53-zone';
+import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
+import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
+import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
+import { Route53Record } from '@cdktf/provider-aws/lib/route53-record';
+import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
 import { S3BucketPolicy } from '@cdktf/provider-aws/lib/s3-bucket-policy';
-import { Fn } from 'cdktf';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
+import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
+import { Fn, TerraformOutput } from 'cdktf';
+import { Construct } from 'constructs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { v4 as uuidv4 } from 'uuid';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export class NumaFrontendInfra extends Construct {
-  readonly frontendBucket: S3Bucket;
   readonly apiGateway: Apigatewayv2Api;
+  readonly authorizer: Apigatewayv2Authorizer;
+  readonly frontendBucket: S3Bucket;
+
   constructor(scope: Construct, name: string, props: NumaFrontendInfraProps) {
     super(scope, name);
 
@@ -74,6 +87,67 @@ export class NumaFrontendInfra extends Construct {
 
     const apiGatewayLogGroup = new CloudwatchLogGroup(this, 'api-gateway-log-group', {
       name: this.apiGateway.name + '-access',
+    });
+
+    const authorizerRole = new IamRole(this, 'authorizer-lambda-role', {
+      name: name + '_' + scope.node.id + '_' + 'authorizer-lambda-role',
+      assumeRolePolicy: createAssumptionPolicy({
+        Service: 'lambda.amazonaws.com',
+      }),
+    });
+
+    const cloudfrontSecretParameter = new SsmParameter(this, 'cloudfront-secret', {
+      name: name + '_' + scope.node.id + '_cloudfront-secret',
+      type: 'String',
+      value: uuidv4(),
+      lifecycle: {
+        ignoreChanges: ['value'],
+      },
+    });
+
+    new IamRolePolicyAttachmentsExclusive(this, 'authorizer-role', {
+      policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'],
+      roleName: authorizerRole.name,
+    });
+
+    const authorizerLambdaFilename = path.resolve(
+      __dirname,
+      '..',
+      '..',
+      'lambdas',
+      'node',
+      'api-gateway-authorizer',
+      'lambda_function.zip',
+    );
+    const authorizerLambda = new LambdaFunction(this, 'authorizer-lambda', {
+      functionName: name + '_' + scope.node.id + '_authorizer-lambda',
+      role: authorizerRole.arn,
+      filename: authorizerLambdaFilename,
+      sourceCodeHash: Fn.filebase64sha256(authorizerLambdaFilename),
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      loggingConfig: {
+        logFormat: 'JSON',
+        logGroup: apiGatewayLogGroup.name,
+        systemLogLevel: 'INFO',
+      },
+      environment: {
+        variables: {
+          CLOUDFRONT_SECRET: cloudfrontSecretParameter.value,
+
+          USER_POOL_CLIENT_ID: props.userPoolClientId,
+          USER_POOL_ID: props.userPoolId,
+        },
+      },
+    });
+
+    this.authorizer = new Apigatewayv2Authorizer(this, 'authorizer', {
+      apiId: this.apiGateway.id,
+      authorizerType: 'REQUEST',
+      authorizerUri: authorizerLambda.invokeArn,
+      authorizerPayloadFormatVersion: '2.0',
+      name: 'cognito-authorizer',
+      identitySources: ['$request.header.Authorization', '$request.header.x-arcanum-cloudfront-secret'],
     });
 
     new Apigatewayv2Stage(this, 'api-stage', {
@@ -160,8 +234,7 @@ export class NumaFrontendInfra extends Construct {
           },
         },
         {
-          domainName: Fn.replace(this.apiGateway.apiEndpoint, '/^(http|ws)s:\/\//', ''),
-          originId: 'api-gateway',
+          customHeader: [{ name: 'x-arcanum-cloudfront-secret', value: cloudfrontSecretParameter.value }],
           customOriginConfig: {
             httpPort: 80,
             httpsPort: 443,
@@ -169,6 +242,8 @@ export class NumaFrontendInfra extends Construct {
             originSslProtocols: ['TLSv1.2'],
             originReadTimeout: 30,
           },
+          domainName: Fn.replace(this.apiGateway.apiEndpoint, '/^(http|ws)s:///', ''),
+          originId: 'api-gateway',
         },
       ],
       defaultRootObject: 'index.html',
@@ -251,11 +326,13 @@ export class NumaFrontendInfra extends Construct {
 }
 
 export interface NumaFrontendInfraProps {
-  client: string;
-  environmentName: string;
-  zoneId: string;
-  domainName: string;
-  hostedZoneProvider: AwsProvider;
   certificateProvider: AwsProvider;
+  client: string;
+  domainName: string;
+  environmentName: string;
+  hostedZoneProvider: AwsProvider;
+  userPoolClientId: string;
+  userPoolId: string;
   webExUrl: string;
+  zoneId: string;
 }
