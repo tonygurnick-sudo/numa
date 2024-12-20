@@ -6,9 +6,9 @@ __metadata:
   cacheKey: 10c0
 
 "@arcanumai/cdktf-util@npm:^1.14.0":
-  version: 1.14.0
-  resolution: "@arcanumai/cdktf-util@npm:1.14.0::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Fcdktf-util%2F-%2F%40arcanumai%2Fcdktf-util-1.14.0.tgz"
-  checksum: 10c0/a3b572acf8cee4cc49f553bcff74365de35ca5813e8c3c9e109d8a8cb51985915bdaf117ec06e317c4412c2051bf05dd47ec30bd5fa6e8d42eeaef8d1a8b0fda
+  version: 1.14.1
+  resolution: "@arcanumai/cdktf-util@npm:1.14.1::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Fcdktf-util%2F-%2F%40arcanumai%2Fcdktf-util-1.14.1.tgz"
+  checksum: 10c0/2d4c6ae52279ae4be3c49dc6fc22f17d8d8a9963428911efdf62315adafc8b16c38cb93700d02c64c191255402b52709a70464b3b608375064a8623fa6d69f06
   languageName: node
   linkType: hard
 
