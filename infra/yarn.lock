@@ -12,12 +12,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@arcanumai/lambda-construct@npm:^1.1.6":
-  version: 1.1.6
-  resolution: "@arcanumai/lambda-construct@npm:1.1.6::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Flambda-construct%2F-%2F%40arcanumai%2Flambda-construct-1.1.6.tgz"
+"@arcanumai/lambda-construct@npm:^1.1.7":
+  version: 1.1.7
+  resolution: "@arcanumai/lambda-construct@npm:1.1.7::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Flambda-construct%2F-%2F%40arcanumai%2Flambda-construct-1.1.7.tgz"
   dependencies:
-    "@arcanumai/cdktf-util": "npm:^1.14.0"
-  checksum: 10c0/adc5864cb90400128ee7e3e4d58c3cfd45926b4312c03d0a1473fd2919b97f56b9eacb5595170688b6da11903bce9a8727a6683ea74a2c8777484e74447a4943
+    "@arcanumai/cdktf-util": "npm:^1.14.1"
+  checksum: 10c0/187a3b4743af3547a5a0d0ac22e8edd16a7ec5d156c2123a97b86d74a0d1d8eec07f1cd211e65e6925fdd925dbcb1b666fd9e84462bebee3c38ddbb1fb5a2809
   languageName: node
   linkType: hard
 
@@ -59,12 +59,12 @@ __metadata:
   linkType: soft
 
 "@arcanumai/typescript-lambda-construct@npm:^1.2.4":
-  version: 1.2.7
-  resolution: "@arcanumai/typescript-lambda-construct@npm:1.2.7::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Ftypescript-lambda-construct%2F-%2F%40arcanumai%2Ftypescript-lambda-construct-1.2.7.tgz"
+  version: 1.2.8
+  resolution: "@arcanumai/typescript-lambda-construct@npm:1.2.8::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Ftypescript-lambda-construct%2F-%2F%40arcanumai%2Ftypescript-lambda-construct-1.2.8.tgz"
   dependencies:
-    "@arcanumai/cdktf-util": "npm:^1.14.0"
-    "@arcanumai/lambda-construct": "npm:^1.1.6"
-  checksum: 10c0/b2e611e6f73cf5cd722404aeb0351fb292f1975590eff650e7063d878800869ced92c130ec67ede8649560244f94ee9ab368cbf1368e695894be53dc1bf92fff
+    "@arcanumai/cdktf-util": "npm:^1.14.1"
+    "@arcanumai/lambda-construct": "npm:^1.1.7"
+  checksum: 10c0/4a513b80a13acaeb71793bd5f091c63b3fd6eb66b506afb80a3badfde2d8dc7df99be74941820a8d7d19d08a66f32d97dab43b284df027e0a4a528c595e8dff5
   languageName: node
   linkType: hard
 
