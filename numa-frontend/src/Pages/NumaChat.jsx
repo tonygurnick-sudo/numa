@@ -295,6 +295,10 @@ const NumaChat = () => {
           <div className="flex-grow-1 d-flex">
             <DataSourcesList />
             <div className="chat-content flex-grow-1 d-flex flex-column">
+            <p className="mb-1 small text-muted">
+                  Chat with your documents using Amazon Q Business. Ask anything!
+                </p>
+
               <div className="chat-header d-flex align-items-center">
                 <Button
                   className="btn btn-primary mb-3"
@@ -316,14 +320,13 @@ const NumaChat = () => {
                     ))}
                   </Form.Select>
                 </div>
+
               </div>
 
 
 
               <div className="chat-container flex-grow-1 d-flex flex-column">
-                <p className="mb-1 small text-muted">
-                  Chat with your documents using Amazon Q Business. Ask anything!
-                </p>
+
 
                 <div
                   className="chat-messages bg-light mb-3 flex-grow-1"
@@ -406,6 +409,17 @@ const NumaChat = () => {
                       placeholder="Type your message here..."
                       disabled={isLoading || !qBusinessClient}
                     />
+                  </Form.Group>
+
+                  <div className="d-flex justify-content-between">
+                    <Button
+                      variant="link"
+                      className="attachment-icon"
+                      onClick={() => setShowUploadModal(true)}
+                      aria-label="Upload Files"
+                    >
+                      <i className="bi bi-paperclip"></i>
+                    </Button>
 
                     <Button
                       variant="primary"
@@ -423,7 +437,7 @@ const NumaChat = () => {
                         'Send Message'
                       )}
                     </Button>
-                  </Form.Group>
+                  </div>
                 </Form>
             </div>
           </div>

@@ -2354,3 +2354,21 @@ label {
   border-radius: 4px 4px 0 0;
   z-index: 1000;
 }
+
+.button-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.attachment-icon {
+  font-size: 1.5rem;
+  color: var(--color-primary);
+  margin-right: 0.5rem;
+}
+
+#send-message-button {
+  position: absolute;
+  right: 0;
+}
