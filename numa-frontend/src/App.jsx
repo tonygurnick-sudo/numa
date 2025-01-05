@@ -1,7 +1,9 @@
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import 'bootstrap-icons/font/bootstrap-icons.css';
-import './assets/css/Styles.scss';
+//import './assets/css/Styles.scss';
+import './assets/css/Main.scss';
+
 import { NumaRoutes } from './Routes';
 import { fetchConfigAddtoSession } from './Components/ConfigSetup';
 fetchConfigAddtoSession();
