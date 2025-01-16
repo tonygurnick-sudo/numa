@@ -1,46 +1,45 @@
-import { Construct } from 'constructs';
+import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
+import { CognitoIdentityPool } from '@cdktf/provider-aws/lib/cognito-identity-pool';
+import { CognitoIdentityPoolRolesAttachment } from '@cdktf/provider-aws/lib/cognito-identity-pool-roles-attachment';
+import { CognitoUser } from '@cdktf/provider-aws/lib/cognito-user';
 import { CognitoUserPool } from '@cdktf/provider-aws/lib/cognito-user-pool';
-import { CognitoUserPoolDomain } from '@cdktf/provider-aws/lib/cognito-user-pool-domain';
 import { CognitoUserPoolClient } from '@cdktf/provider-aws/lib/cognito-user-pool-client';
-import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
-import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
-import { SecretsmanagerSecretVersion } from '@cdktf/provider-aws/lib/secretsmanager-secret-version';
-import { TerraformOutput, Fn } from 'cdktf';
-import { SetCallbackUrl } from './set-callback-url-construct';
-import { AdjustToken } from './adjust-token-construct';
+import { CognitoUserPoolDomain } from '@cdktf/provider-aws/lib/cognito-user-pool-domain';
 import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
-import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
-import { CognitoIdentityPool } from '@cdktf/provider-aws/lib/cognito-identity-pool';
-import { PrivateBucket } from '@arcanumai/private-bucket-construct';
-import { CognitoIdentityPoolRolesAttachment } from '@cdktf/provider-aws/lib/cognito-identity-pool-roles-attachment';
+import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
+import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
-import * as path from 'node:path';
-import { WebDataSourceConstruct } from './data-sources/web-datasource-construct';
-import { SharePointDataSource, SharePointConfiguration } from './data-sources/sharepoint-datasource-construct';
-import { CognitoUser } from '@cdktf/provider-aws/lib/cognito-user';
+import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
+import { SecretsmanagerSecretVersion } from '@cdktf/provider-aws/lib/secretsmanager-secret-version';
 import { password } from '@cdktf/provider-random';
 import { RandomProvider } from '@cdktf/provider-random/lib/provider';
+import { Fn, TerraformOutput } from 'cdktf';
+import { Construct } from 'constructs';
+import * as path from 'node:path';
+import { AdjustToken } from './adjust-token-construct';
 import { BoxConfiguration, BoxDataSource } from './data-sources/box-datasource-construct';
+import { SharePointConfiguration, SharePointDataSource } from './data-sources/sharepoint-datasource-construct';
+import { WebDataSourceConstruct } from './data-sources/web-datasource-construct';
 import {
   QBusinessChatControlConfigurer,
   QBusinessChatControlConfigurerProps,
 } from './q-business-chat-control-configurer-construct';
+import { SetCallbackUrl } from './set-callback-url-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
-  readonly userPoolId?: string;
-  readonly userPoolClient?: CognitoUserPoolClient;
-  readonly identityPoolId?: string;
+  readonly userPoolId: string;
+  readonly userPoolClient: CognitoUserPoolClient;
+  readonly identityPoolId: string;
   readonly webExperienceRoleArn: string;
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
 
     props.indexType ??= 'STARTER';
-    props.identityProvider ??= 'oidc';
     const region = props.region ?? 'us-east-1';
     props.loadSampleFile ??= true;
     props.createServiceLinkedRole ??= true;
@@ -56,286 +55,259 @@ export class CoreNumaInfra extends Construct {
     let webexIdentityConfig;
     let pool = { id: '', name: '', endpoint: '' };
 
-    if (props.identityProvider == 'oidc') {
-      const at = new AdjustToken(this, 'token-adjuster', {
-        nameSuffix: numaClient,
-      });
-      const cognitoDomain = numaClient;
+    const at = new AdjustToken(this, 'token-adjuster', {
+      nameSuffix: numaClient,
+    });
+    const cognitoDomain = numaClient;
 
-      const mfa =
-        (props.mfa ?? false)
-          ? {
-              mfaConfiguration: 'ON',
-              softwareTokenMfaConfiguration: {
-                enabled: true,
-              },
-            }
-          : {
-              mfaConfiguration: 'OFF',
-            };
-      pool = new CognitoUserPool(this, 'user-pool', {
-        name: numaClient,
-        usernameAttributes: ['email'],
-        lambdaConfig: {
-          preTokenGenerationConfig: {
-            lambdaArn: at.function.lambdaFunction.arn,
-            lambdaVersion: 'V2_0',
-          },
+    const mfa =
+      (props.mfa ?? false)
+        ? {
+            mfaConfiguration: 'ON',
+            softwareTokenMfaConfiguration: {
+              enabled: true,
+            },
+          }
+        : {
+            mfaConfiguration: 'OFF',
+          };
+    pool = new CognitoUserPool(this, 'user-pool', {
+      name: numaClient,
+      usernameAttributes: ['email'],
+      lambdaConfig: {
+        preTokenGenerationConfig: {
+          lambdaArn: at.function.lambdaFunction.arn,
+          lambdaVersion: 'V2_0',
         },
-        userPoolAddOns: {
-          advancedSecurityMode: 'AUDIT',
-        },
-        passwordPolicy: {
-          minimumLength: props.passwordLength ?? 8,
-          temporaryPasswordValidityDays: props.temporaryPasswordValidityDays,
-        },
-        ...mfa,
-      });
-      this.userPoolId = pool.id;
+      },
+      userPoolAddOns: {
+        advancedSecurityMode: 'AUDIT',
+      },
+      passwordPolicy: {
+        minimumLength: props.passwordLength ?? 8,
+        temporaryPasswordValidityDays: props.temporaryPasswordValidityDays,
+      },
+      ...mfa,
+    });
+    this.userPoolId = pool.id;
 
-      new TerraformOutput(this, 'user-pool-id', {
-        value: pool.id,
-      });
+    new TerraformOutput(this, 'user-pool-id', {
+      value: pool.id,
+    });
 
-      new CognitoUserPoolDomain(this, 'domain', {
-        userPoolId: pool.id,
-        domain: cognitoDomain,
-      });
+    new CognitoUserPoolDomain(this, 'domain', {
+      userPoolId: pool.id,
+      domain: cognitoDomain,
+    });
 
-      new RandomProvider(this, 'random-provider', {});
-      const systemUserPassword = new password.Password(this, 'password', {
-        length: 64,
-        minLower: 5,
-        minNumeric: 5,
-        minSpecial: 5,
-        minUpper: 5,
-      }).result;
-      const systemUserEmail = 'numa-system-user@arcanum.ai';
-      new CognitoUser(this, 'system-user', {
-        enabled: true,
+    new RandomProvider(this, 'random-provider', {});
+    const systemUserPassword = new password.Password(this, 'password', {
+      length: 64,
+      minLower: 5,
+      minNumeric: 5,
+      minSpecial: 5,
+      minUpper: 5,
+    }).result;
+    const systemUserEmail = 'numa-system-user@arcanum.ai';
+    new CognitoUser(this, 'system-user', {
+      enabled: true,
+      username: systemUserEmail,
+      attributes: {
+        email: systemUserEmail,
+      },
+      password: systemUserPassword,
+      userPoolId: pool.id,
+    });
+    const systemUserSecret = new SecretsmanagerSecret(this, 'system-user-secret-manager-secret', {
+      name: `${props.client}-system-user-password`,
+    });
+    new SecretsmanagerSecretVersion(this, 'system-user-secret-version', {
+      secretId: systemUserSecret.arn,
+      secretString: JSON.stringify({
         username: systemUserEmail,
-        attributes: {
-          email: systemUserEmail,
-        },
         password: systemUserPassword,
-        userPoolId: pool.id,
-      });
-      const systemUserSecret = new SecretsmanagerSecret(this, 'system-user-secret-manager-secret', {
-        name: `${props.client}-system-user-password`,
-      });
-      new SecretsmanagerSecretVersion(this, 'system-user-secret-version', {
-        secretId: systemUserSecret.arn,
-        secretString: JSON.stringify({
-          username: systemUserEmail,
-          password: systemUserPassword,
-        }),
-      });
+      }),
+    });
 
-      new TerraformOutput(this, 'system-user-secret', {
-        value: systemUserSecret.arn,
-      });
+    new TerraformOutput(this, 'system-user-secret', {
+      value: systemUserSecret.arn,
+    });
 
-      this.userPoolClient = new CognitoUserPoolClient(this, 'client', {
-        userPoolId: pool.id,
-        name: numaClient,
-        generateSecret: true,
-        callbackUrls: ['https://localhost'], // Placeholder, must be provided, but is replaced later.
-        allowedOauthFlowsUserPoolClient: true,
-        allowedOauthFlows: ['code'],
-        allowedOauthScopes: ['openid', 'email', 'profile'],
-        accessTokenValidity: 60,
-        refreshTokenValidity: 60,
-        idTokenValidity: 60,
-        tokenValidityUnits: [{ accessToken: 'minutes', refreshToken: 'days', idToken: 'minutes' }],
-        supportedIdentityProviders: ['COGNITO'],
-        lifecycle: {
-          ignoreChanges: ['callback_urls'],
+    this.userPoolClient = new CognitoUserPoolClient(this, 'client', {
+      userPoolId: pool.id,
+      name: numaClient,
+      generateSecret: true,
+      callbackUrls: ['https://localhost'], // Placeholder, must be provided, but is replaced later.
+      allowedOauthFlowsUserPoolClient: true,
+      allowedOauthFlows: ['code'],
+      allowedOauthScopes: ['openid', 'email', 'profile'],
+      accessTokenValidity: 60,
+      refreshTokenValidity: 60,
+      idTokenValidity: 60,
+      tokenValidityUnits: [{ accessToken: 'minutes', refreshToken: 'days', idToken: 'minutes' }],
+      supportedIdentityProviders: ['COGNITO'],
+      lifecycle: {
+        ignoreChanges: ['callback_urls'],
+      },
+    });
+
+    const identityPool = new CognitoIdentityPool(this, 'identity-pool', {
+      identityPoolName: numaClient,
+      allowUnauthenticatedIdentities: false,
+      allowClassicFlow: true,
+      cognitoIdentityProviders: [
+        {
+          clientId: this.userPoolClient.id,
+          providerName: pool.endpoint,
         },
-      });
+      ],
+    });
+    this.identityPoolId = identityPool.id;
 
-      const identityPool = new CognitoIdentityPool(this, 'identity-pool', {
-        identityPoolName: numaClient,
-        allowUnauthenticatedIdentities: false,
-        allowClassicFlow: true,
-        cognitoIdentityProviders: [
-          {
-            clientId: this.userPoolClient.id,
-            providerName: pool.endpoint,
-          },
-        ],
-      });
-      this.identityPoolId = identityPool.id;
-
-      const identityPoolRoleTrustPolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-trust-policy', {
-        statement: [
-          {
-            effect: 'Allow',
-            principals: [
-              {
-                type: 'Federated',
-                identifiers: ['cognito-identity.amazonaws.com'],
-              },
-            ],
-            actions: ['sts:AssumeRoleWithWebIdentity'],
-            condition: [
-              {
-                test: 'StringEquals',
-                values: [identityPool.id],
-                variable: 'cognito-identity.amazonaws.com:aud',
-              },
-              {
-                test: 'ForAnyValue:StringLike',
-                values: ['authenticated'],
-                variable: 'cognito-identity.amazonaws.com:amr',
-              },
-            ],
-          },
-        ],
-      });
-
-      const identityPoolRolePolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-policy', {
-        statement: [
-          {
-            effect: 'Allow',
-            actions: ['cognito-identity:GetCredentialsForIdentity'],
-            resources: ['*'],
-          },
-          {
-            effect: 'Allow',
-            actions: ['s3:GetObject', 's3:GetObjectVersion'],
-            resources: [`arn:aws:s3:::${numaClient}-outputs/*`],
-          },
-        ],
-      });
-
-      const identityPoolRole = new IamRole(this, 'identity-pool-role', {
-        name: `${numaClient}-identity-role`,
-        assumeRolePolicy: identityPoolRoleTrustPolicy.json,
-      });
-
-      new IamRolePolicy(this, 'identity-role-policy', {
-        name: 'policy',
-        role: identityPoolRole.name,
-        policy: identityPoolRolePolicy.json,
-      });
-
-      new CognitoIdentityPoolRolesAttachment(this, 'identity-pool-role-attachment', {
-        identityPoolId: identityPool.id,
-        roles: {
-          authenticated: identityPoolRole.arn,
+    const identityPoolRoleTrustPolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-trust-policy', {
+      statement: [
+        {
+          effect: 'Allow',
+          principals: [
+            {
+              type: 'Federated',
+              identifiers: ['cognito-identity.amazonaws.com'],
+            },
+          ],
+          actions: ['sts:AssumeRoleWithWebIdentity'],
+          condition: [
+            {
+              test: 'StringEquals',
+              values: [identityPool.id],
+              variable: 'cognito-identity.amazonaws.com:aud',
+            },
+            {
+              test: 'ForAnyValue:StringLike',
+              values: ['authenticated'],
+              variable: 'cognito-identity.amazonaws.com:amr',
+            },
+          ],
         },
-      });
+      ],
+    });
 
-      new LambdaPermission(this, 'permission', {
-        statementId: 'cognito',
-
-        functionName: at.function.lambdaFunction.functionName,
-        action: 'lambda:InvokeFunction',
-        principal: 'cognito-idp.amazonaws.com',
-        // TODO: Add suitable condition.
-      });
-
-      const oidc = new CloudcontrolapiResource(this, 'idp', {
-        typeName: 'AWS::IAM::OIDCProvider',
-        desiredState: Fn.jsonencode({
-          Url: `https://cognito-idp.${region}.amazonaws.com/${pool.id}`,
-          ClientIdList: [this.userPoolClient.id],
-        }),
-      });
-      const oidcArn = Fn.lookup(Fn.jsondecode(oidc.properties), 'Arn');
-
-      const secret = new SecretsmanagerSecret(this, 'secret', {
-        namePrefix: `QBusiness-oidc-client-secret-${numaClient}-`,
-      });
-
-      const secretsPolicyDocument = new DataAwsIamPolicyDocument(this, 'secrets-policy-doc', {
-        statement: [
-          {
-            effect: 'Allow',
-            actions: ['secretsmanager:GetSecretValue'],
-            resources: [secret.arn],
-          },
-        ],
-      });
-
-      const secretsTrustPolicyDocument = new DataAwsIamPolicyDocument(this, 'secrets-policy-trust-doc', {
-        statement: [
-          {
-            effect: 'Allow',
-            actions: ['sts:AssumeRole', 'sts:SetContext'],
-            principals: [
-              {
-                identifiers: ['application.qbusiness.amazonaws.com'],
-                type: 'Service',
-              },
-            ],
-          },
-        ],
-      });
-
-      const secretsRole = new IamRole(this, 'secrets-role', {
-        name: `numa-secrets-role-${numaClient}`,
-        assumeRolePolicy: secretsTrustPolicyDocument.json,
-      });
-
-      new IamRolePolicy(this, 'secrets-role-policy', {
-        name: 'policy',
-        role: secretsRole.name,
-        policy: secretsPolicyDocument.json,
-      });
-
-      if (props.createServiceLinkedRole) {
-        new IamServiceLinkedRole(this, 'q-service-role', {
-          awsServiceName: 'qbusiness.amazonaws.com',
-        });
-      }
-
-      new SecretsmanagerSecretVersion(this, 'secret-version', {
-        secretId: secret.id,
-        secretString: `{"client_secret": "${this.userPoolClient.clientSecret}"}`,
-      });
-
-      appIdentityConfig = {
-        IdentityType: 'AWS_IAM_IDP_OIDC',
-        ClientIdsForOIDC: [this.userPoolClient.id],
-        IamIdentityProviderArn: oidcArn,
-        RoleArn: `arn:aws:iam::${callerId.accountId}:role/aws-service-role/qbusiness.amazonaws.com/AWSServiceRoleForQBusiness`, // TODO: Dynamic.
-      };
-
-      webexIdentityConfig = {
-        IdentityProviderConfiguration: {
-          OpenIDConnectConfiguration: {
-            SecretsArn: secret.arn,
-            SecretsRole: secretsRole.arn,
-          },
+    const identityPoolRolePolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-policy', {
+      statement: [
+        {
+          effect: 'Allow',
+          actions: ['cognito-identity:GetCredentialsForIdentity'],
+          resources: ['*'],
         },
-      };
-    } else if (props.identityProvider == 'idc') {
-      const idc = new CloudcontrolapiResource(this, 'idc', {
-        typeName: 'AWS::Iam::SsoInstance',
-        desiredState: Fn.jsonencode({
-          Name: numaClient,
-        }),
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject', 's3:GetObjectVersion'],
+          resources: [`arn:aws:s3:::${numaClient}-outputs/*`],
+        },
+      ],
+    });
+
+    const identityPoolRole = new IamRole(this, 'identity-pool-role', {
+      name: `${numaClient}-identity-role`,
+      assumeRolePolicy: identityPoolRoleTrustPolicy.json,
+    });
+
+    new IamRolePolicy(this, 'identity-role-policy', {
+      name: 'policy',
+      role: identityPoolRole.name,
+      policy: identityPoolRolePolicy.json,
+    });
+
+    new CognitoIdentityPoolRolesAttachment(this, 'identity-pool-role-attachment', {
+      identityPoolId: identityPool.id,
+      roles: {
+        authenticated: identityPoolRole.arn,
+      },
+    });
+
+    new LambdaPermission(this, 'permission', {
+      statementId: 'cognito',
+
+      functionName: at.function.lambdaFunction.functionName,
+      action: 'lambda:InvokeFunction',
+      principal: 'cognito-idp.amazonaws.com',
+      // TODO: Add suitable condition.
+    });
+
+    const oidc = new CloudcontrolapiResource(this, 'idp', {
+      typeName: 'AWS::IAM::OIDCProvider',
+      desiredState: Fn.jsonencode({
+        Url: `https://cognito-idp.${region}.amazonaws.com/${pool.id}`,
+        ClientIdList: [this.userPoolClient.id],
+      }),
+    });
+    const oidcArn = Fn.lookup(Fn.jsondecode(oidc.properties), 'Arn');
+
+    const secret = new SecretsmanagerSecret(this, 'secret', {
+      namePrefix: `QBusiness-oidc-client-secret-${numaClient}-`,
+    });
+
+    const secretsPolicyDocument = new DataAwsIamPolicyDocument(this, 'secrets-policy-doc', {
+      statement: [
+        {
+          effect: 'Allow',
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [secret.arn],
+        },
+      ],
+    });
+
+    const secretsTrustPolicyDocument = new DataAwsIamPolicyDocument(this, 'secrets-policy-trust-doc', {
+      statement: [
+        {
+          effect: 'Allow',
+          actions: ['sts:AssumeRole', 'sts:SetContext'],
+          principals: [
+            {
+              identifiers: ['application.qbusiness.amazonaws.com'],
+              type: 'Service',
+            },
+          ],
+        },
+      ],
+    });
+
+    const secretsRole = new IamRole(this, 'secrets-role', {
+      name: `numa-secrets-role-${numaClient}`,
+      assumeRolePolicy: secretsTrustPolicyDocument.json,
+    });
+
+    new IamRolePolicy(this, 'secrets-role-policy', {
+      name: 'policy',
+      role: secretsRole.name,
+      policy: secretsPolicyDocument.json,
+    });
+
+    if (props.createServiceLinkedRole) {
+      new IamServiceLinkedRole(this, 'q-service-role', {
+        awsServiceName: 'qbusiness.amazonaws.com',
       });
-      const idcProps = Fn.jsondecode(idc.properties);
-
-      // TODO: MFA settings.
-
-      appIdentityConfig = {
-        identityType: 'AWS_IAM_IDC',
-        identityCenterInstanceArn: Fn.lookup(idcProps, 'InstanceArn'),
-      };
-
-      webexIdentityConfig = {
-        IdentityProviderConfiguration: {},
-      };
-      new TerraformOutput(this, 'idc-arn', {
-        value: Fn.lookup(idcProps, 'IdentityStoreId'),
-      });
-    } else {
-      // TODO: Rethink this.
-      throw new Error('Bad identity provider.');
     }
+
+    new SecretsmanagerSecretVersion(this, 'secret-version', {
+      secretId: secret.id,
+      secretString: `{"client_secret": "${this.userPoolClient.clientSecret}"}`,
+    });
+
+    appIdentityConfig = {
+      IdentityType: 'AWS_IAM_IDP_OIDC',
+      ClientIdsForOIDC: [this.userPoolClient.id],
+      IamIdentityProviderArn: oidcArn,
+      RoleArn: `arn:aws:iam::${callerId.accountId}:role/aws-service-role/qbusiness.amazonaws.com/AWSServiceRoleForQBusiness`, // TODO: Dynamic.
+    };
+
+    webexIdentityConfig = {
+      IdentityProviderConfiguration: {
+        OpenIDConnectConfiguration: {
+          SecretsArn: secret.arn,
+          SecretsRole: secretsRole.arn,
+        },
+      },
+    };
 
     // TODO: Set this up as per https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/making-sigv4-authenticated-api-calls-iam.html#control-plane-setup-iam
     const rolePolicyDocument = new DataAwsIamPolicyDocument(this, 'role-policy-doc', {
@@ -439,14 +411,11 @@ export class CoreNumaInfra extends Construct {
 
     this.webExUrl = Fn.lookup(Fn.jsondecode(webexperience.properties), 'DefaultEndpoint');
 
-    // TODO: Workout how this will work for IdC and how to incorporate it.
-    if (this.userPoolClient) {
-      new SetCallbackUrl(this, 'callback', {
-        callbackAddress: this.webExUrl + 'authorization-code/callback',
-        userPoolClientId: this.userPoolClient.id,
-        userPoolId: pool.id,
-      });
-    }
+    new SetCallbackUrl(this, 'callback', {
+      callbackAddress: this.webExUrl + 'authorization-code/callback',
+      userPoolClientId: this.userPoolClient.id,
+      userPoolId: pool.id,
+    });
 
     if (props.indexUnits) {
       if (props.indexType === 'ENTERPRISE' && (props.indexUnits < 1 || props.indexUnits > 50)) {
@@ -668,7 +637,6 @@ interface _CoreNumaInfraProps {
    * @default false
    */
   enableIFrame?: boolean;
-  identityProvider?: 'oidc' | 'idc';
   indexType?: 'ENTERPRISE' | 'STARTER';
   indexUnits?: number;
   region?: string;
