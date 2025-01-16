@@ -68,26 +68,36 @@ const Nav = () => {
             <Dropdown.Item onClick={() => navigate('/dash')}>
               <i
                 className="bi bi-grid-1x2-fill me-2"
-                style={{ color: '#666' }}
+                style={{ color: 'var(--color-icon)' }}
               ></i>
               Dashboard
+            </Dropdown.Item>
+            <Dropdown.Item onClick={() => navigate('/favourite-apps')}>
+              <i
+                className="bi bi-star-fill me-2"
+                style={{ color: 'var(--color-icon)' }}
+              ></i>
+              Favorites
             </Dropdown.Item>
             <Dropdown.Item onClick={() => navigate('/chat')}>
               <i
                 className="bi bi-chat-dots-fill me-2"
-                style={{ color: '#666' }}
+                style={{ color: 'var(--color-icon)' }}
               ></i>
               Chat
             </Dropdown.Item>
             <Dropdown.Item onClick={() => navigate('/upload')}>
               <i
                 className="bi bi-cloud-upload-fill me-2"
-                style={{ color: '#666' }}
+                style={{ color: 'var(--color-icon)' }}
               ></i>
               Upload Files
             </Dropdown.Item>
             <Dropdown.Item onClick={() => navigate('/my-account')}>
-              <i className="bi bi-gear-fill me-2" style={{ color: '#666' }}></i>
+              <i
+                className="bi bi-gear-fill me-2"
+                style={{ color: 'var(--color-icon)' }}
+              ></i>
               Settings
             </Dropdown.Item>
             <Dropdown.Divider />
@@ -124,8 +134,25 @@ const Nav = () => {
               title="Dashboard"
               role="button"
             >
-              <i className="bi bi-grid-1x2-fill icon"></i>
+              <i
+                className="bi bi-grid-1x2-fill icon"
+                style={{ color: 'var(--color-icon)' }}
+              ></i>
               <span className="icon-label">Dash</span>
+            </div>
+          </li>
+          <li>
+            <div
+              className="nav-link nav-item"
+              onClick={() => navigate('/favourite-apps')}
+              title="Favorite Apps"
+              role="button"
+            >
+              <i
+                className="bi bi-star-fill icon"
+                style={{ color: 'var(--color-icon)' }}
+              ></i>
+              <span className="icon-label">Favs</span>
             </div>
           </li>
           <li>
@@ -135,7 +162,10 @@ const Nav = () => {
               title="Chat"
               role="button"
             >
-              <i className="bi bi-chat-dots-fill icon"></i>
+              <i
+                className="bi bi-chat-dots-fill icon"
+                style={{ color: 'var(--color-icon)' }}
+              ></i>
               <span className="icon-label">Chat</span>
             </div>
           </li>
@@ -146,7 +176,10 @@ const Nav = () => {
               title="Upload"
               role="button"
             >
-              <i className="bi bi-cloud-upload-fill icon"></i>
+              <i
+                className="bi bi-cloud-upload-fill icon"
+                style={{ color: 'var(--color-icon)' }}
+              ></i>
               <span className="icon-label">Files</span>
             </div>
           </li>
@@ -159,7 +192,10 @@ const Nav = () => {
             title="Settings"
             role="button"
           >
-            <i className="bi bi-gear-fill icon"></i>
+            <i
+              className="bi bi-gear-fill icon"
+              style={{ color: 'var(--color-icon)' }}
+            ></i>
           </div>
           <button
             onClick={logout}

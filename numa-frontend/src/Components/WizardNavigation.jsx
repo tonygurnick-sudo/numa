@@ -5,6 +5,10 @@ const WizardNavigation = ({
   preRunSteps,
   postRunSteps,
   activeStep,
+  handlePrevStep,
+  handleNextStep,
+  visibleTasks,
+  taskCompletionStatus,
   onStepClick,
   isStepComplete,
   isStepDisabled,
@@ -47,7 +51,37 @@ const WizardNavigation = ({
           </div>
         </div>
 
-        <div className="run-button-container">
+
+      </div>
+
+      <div className="task-navigation">
+          {activeStep < preRunSteps.length && (
+            <>
+              <Button
+                variant="primary"
+                onClick={handlePrevStep}
+                disabled={activeStep === 0}
+              >
+                <i className="bi bi-arrow-left me-2"></i>
+                Previous Input
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleNextStep}
+                disabled={
+                  activeStep === preRunSteps.length - 1 ||
+                  !taskCompletionStatus[visibleTasks[activeStep].id]
+                }
+              >
+                Next Input
+                <i className="bi bi-arrow-right ms-2"></i>
+              </Button>
+            </>
+          )}
+        </div>
+
+
+
           <div className="run-button-wrapper">
             <Button
               type="submit"
@@ -80,15 +114,15 @@ const WizardNavigation = ({
             </Button>
             <div className="run-status-text">
               {!isRunning && disabled && (
-                <>Complete the required items to run</>
+                <>Complete the required inputs to run</>
               )}
             </div>
           </div>
-        </div>
-      </div>
+
+
 
       <div className="step-section">
-        <div className="section-label">Results</div>
+
         {isRunning && (
           <div className="processing-container">
             <ProgressBar
@@ -104,7 +138,11 @@ const WizardNavigation = ({
             <div className="processing-status">{processingStatus}</div>
           </div>
         )}
+
+        <div className={`section-label step-group post-run ${hasBeenRun ? 'show' : ''}`}>Results</div>
         <div className={`step-group post-run ${hasBeenRun ? 'show' : ''}`}>
+
+
           {postRunSteps.map((step, index) => (
             <div key={step.id} className="step-container">
               <div

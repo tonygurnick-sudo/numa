@@ -5,6 +5,8 @@
       "id": "policy-builder-app",
       "type": "policy-builder",
       "status": "Active",
+      "category": "compliance",
+      "tags": ["NZSBA"],
       "createdDate": "2024-03-20T10:00:00Z",
       "appDescription": "Create and manage organizational policies with AI assistance. This tool helps draft, review, and format policies while ensuring compliance with industry standards and regulations.",
       "tasks": [
@@ -233,7 +235,7 @@
     },
     {
       "appName": "Meeting Tools App Native Q App",
-      "id": "meeting-tools-app",
+      "id": "meeting-tools-app-native-test",
       "type": "q-app",
       "appVersion": 1,
       "qAppId": "d152ee6f-a1e8-40ea-810e-aa006790a897",
@@ -248,7 +250,7 @@
       "id": "loan-financing-calculator",
       "type": "q-app",
       "qAppId": "dc1427b5-7673-4c26-9add-5bda95c00b30",
-      "status": "Coming Soon",
+      "status": "Deploy",
       "category": "finance",
       "tags": ["templates", "documentation", "workflow", "automation"],
       "createdDate": "2023-11-06T10:38:12Z",

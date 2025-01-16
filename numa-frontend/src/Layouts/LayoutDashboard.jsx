@@ -5,7 +5,7 @@ const LayoutDashboard = ({ children }) => {
     <>
       <Container fluid>
         <Row>
-          <Col xs={12} className="p-2 p-md-5">
+          <Col xs={12} className="">
             <div className="wrapper">{children}</div>
           </Col>
         </Row>

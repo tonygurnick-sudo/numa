@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button, Form, Container, Row, Col, Spinner } from 'react-bootstrap';
-import {
-  ChatSyncCommand,
-} from '@aws-sdk/client-qbusiness';
+import { ChatSyncCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
@@ -10,6 +8,7 @@ import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
 import { DataSourcesList } from '../Components/DataSourcesList';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
+import { MarkdownContent } from '../Components/MarkdownContent';
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
@@ -270,12 +269,12 @@ const NumaChat = () => {
   };
 
   return (
-    <div className="dashboard d-flex flex-column vh-100">
+    <div className="dashboard ">
       <Nav />
       <header className="mb-1">
         <Container fluid>
           <Row>
-            <Col lg={12} className="px-3 px-lg-5">
+            <Col lg={12} className="">
               <Breadcrumbs label={'Chat'} clearStack={true} />
               <h1 className="mb-0 fs-3">Numa Chat</h1>
             </Col>
@@ -295,23 +294,22 @@ const NumaChat = () => {
           <div className="flex-grow-1 d-flex">
             <DataSourcesList />
             <div className="chat-content flex-grow-1 d-flex flex-column">
-            <p className="mb-1 small text-muted">
-                  Chat with your documents using Amazon Q Business. Ask anything!
-                </p>
+              <p className="mb-1 small text-muted">
+                Chat with your documents using Amazon Q Business. Ask anything!
+              </p>
 
-              <div className="chat-header d-flex align-items-center">
+              <div className="chat-header d-flex align-items-center mb-3">
                 <Button
-                  className="btn btn-primary mb-3"
+                  className="btn btn-primary"
                   onClick={handleNewChat}
                 >
                   New Chat
                 </Button>
 
-                <div className="chat-mode-selector ms-auto" >
+                <div className="chat-mode-selector ms-auto">
                   <Form.Select
                     value={chatMode}
                     onChange={(e) => setChatMode(e.target.value)}
-                    className="mb-3"
                   >
                     {chatModes.map((mode) => (
                       <option key={mode.value} value={mode.value}>
@@ -320,17 +318,10 @@ const NumaChat = () => {
                     ))}
                   </Form.Select>
                 </div>
-
               </div>
 
-
-
-              <div className="chat-container flex-grow-1 d-flex flex-column">
-
-
-                <div
-                  className="chat-messages bg-light mb-3 flex-grow-1"
-                >
+              <div className="chat-container">
+                <div className="chat-messages">
                   {isLoading && messages.length === 0 ? (
                     <div className="text-center">
                       <Spinner animation="border" size="sm" className="me-2" />
@@ -345,17 +336,8 @@ const NumaChat = () => {
                         {message.role === 'system' ? (
                           <div className="system-message">
                             <i className="bi bi-info-circle me-2"></i>
-                            <div className="message-content">
-                              {message.content.split('\n').map((line, i) => (
-                                <div key={i}>
-                                  {line.startsWith('- ') ? (
-                                    <div className="message-bullet">{line}</div>
-                                  ) : (
-                                    line
-                                  )}
-                                  {i < message.content.split('\n').length - 1 && <br />}
-                                </div>
-                              ))}
+                            <div className="message-content markdown-content">
+                              <MarkdownContent content={message.content} />
                             </div>
                           </div>
                         ) : (
@@ -363,13 +345,8 @@ const NumaChat = () => {
                             <strong className="message-role">
                               {message.role === 'user' ? 'You:' : 'Numa:'}
                             </strong>
-                            <div className="message-content">
-                              {message.content.split('\n').map((line, i) => (
-                                <div key={i}>
-                                  {line}
-                                  {i < message.content.split('\n').length - 1 && <br />}
-                                </div>
-                              ))}
+                            <div className="message-content markdown-content">
+                              <MarkdownContent content={message.content} />
                             </div>
                           </>
                         )}
@@ -392,53 +369,52 @@ const NumaChat = () => {
                   <div ref={messageEndRef} />
                 </div>
 
+                <div className="chat-input-container">
+                  <Form
+                    onSubmit={handleSubmit}
+                    data-testid="chat-form"
+                  >
+                    <Form.Group className="mb-2 position-relative">
+                      <Form.Control
+                        as="textarea"
+                        rows={isMobile ? 3 : 5}
+                        value={inputMessage}
+                        onChange={(e) => setInputMessage(e.target.value)}
+                        placeholder="Type your message here..."
+                        disabled={isLoading || !qBusinessClient}
+                      />
+                    </Form.Group>
 
+                    <div className="d-flex justify-content-between">
+                      <Button
+                        variant="link"
+                        className="attachment-icon"
+                        onClick={() => setShowUploadModal(true)}
+                        aria-label="Upload Files"
+                      >
+                        <i className="bi bi-paperclip"></i>
+                      </Button>
+
+                      <Button
+                        variant="primary"
+                        type="submit"
+                        id="send-message-button"
+                        disabled={isLoading || !qBusinessClient}
+                        className={isMobile ? 'w-100' : 'send-message'}
+                      >
+                        {isLoading ? (
+                          <>
+                            <span className="spinner-border spinner-border-sm me-2" />
+                            Sending...
+                          </>
+                        ) : (
+                          'Send Message'
+                        )}
+                      </Button>
+                    </div>
+                  </Form>
+                </div>
               </div>
-
-              <Form
-                  onSubmit={handleSubmit}
-                  className="mt-auto"
-                  data-testid="chat-form"
-                >
-                  <Form.Group className="mb-2 position-relative">
-                    <Form.Control
-                      as="textarea"
-                      rows={isMobile ? 3 : 5}
-                      value={inputMessage}
-                      onChange={(e) => setInputMessage(e.target.value)}
-                      placeholder="Type your message here..."
-                      disabled={isLoading || !qBusinessClient}
-                    />
-                  </Form.Group>
-
-                  <div className="d-flex justify-content-between">
-                    <Button
-                      variant="link"
-                      className="attachment-icon"
-                      onClick={() => setShowUploadModal(true)}
-                      aria-label="Upload Files"
-                    >
-                      <i className="bi bi-paperclip"></i>
-                    </Button>
-
-                    <Button
-                      variant="primary"
-                      type="submit"
-                      id="send-message-button"
-                      disabled={isLoading || !qBusinessClient}
-                      className={isMobile ? 'w-100' : 'send-message'}
-                    >
-                      {isLoading ? (
-                        <>
-                          <span className="spinner-border spinner-border-sm me-2" />
-                          Sending...
-                        </>
-                      ) : (
-                        'Send Message'
-                      )}
-                    </Button>
-                  </div>
-                </Form>
             </div>
           </div>
         </div>

@@ -185,6 +185,7 @@ const AppWizard = ({ manifest }) => {
     }
   };
 
+
   if (!numaAppData) {
     return (
       <div>
@@ -201,6 +202,10 @@ const AppWizard = ({ manifest }) => {
             preRunSteps={preRunTasks}
             postRunSteps={postRunTasks}
             activeStep={activeStep}
+            handlePrevStep={handlePrevStep}
+            handleNextStep={handleNextStep}
+            visibleTasks={visibleTasks}
+            taskCompletionStatus={taskCompletionStatus}
             onStepClick={handleStepClick}
             isStepComplete={isStepComplete}
             isStepDisabled={isStepDisabled}
@@ -219,26 +224,9 @@ const AppWizard = ({ manifest }) => {
         <Col xs={12} className="px-2 px-md-4">
           {activeStep < visibleTasks.length && (
             <div className="mb-4">
+
               {renderTask(visibleTasks[activeStep])}
-              <div className="task-navigation">
-                <Button
-                  variant="primary"
-                  onClick={handlePrevStep}
-                  disabled={activeStep === 0}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={handleNextStep}
-                  disabled={
-                    activeStep === visibleTasks.length - 1 ||
-                    !taskCompletionStatus[visibleTasks[activeStep].id]
-                  }
-                >
-                  Next
-                </Button>
-              </div>
+
             </div>
           )}
         </Col>

@@ -271,10 +271,23 @@ export const NumaAppProvider = ({ children }) => {
     const outputResult = resolveReference(outputRef, currentResults);
 
     if (outputResult) {
-      const resultToDisplay =
-        typeof outputResult === 'object'
-          ? JSON.stringify(outputResult)
-          : outputResult;
+      let resultToDisplay = outputResult;
+
+      if (typeof outputResult === 'object') {
+        // If it's an array of objects, convert to markdown table
+        if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
+          const headers = Object.keys(outputResult[0]);
+          const headerRow = `| ${headers.join(' | ')} |`;
+          const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
+          const dataRows = outputResult.map(item =>
+            `| ${headers.map(header => item[header] || '').join(' | ')} |`
+          );
+          resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
+        } else {
+          // For other objects, format as code block
+          resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
+        }
+      }
 
       setNumaTaskResponses((prevResponses) => [
         ...prevResponses.filter((response) => response.taskId !== task.id),
