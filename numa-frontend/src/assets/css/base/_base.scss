@@ -1,3 +1,5 @@
+@use '../abstracts/mixins' as *;
+@use '../abstracts/variables' as *;
 
 body {
     background-color: var(--color-lt-gray);
@@ -30,10 +32,10 @@ body {
     color: var(--color-primary) !important;
   }
   .extra_light_grey_bg {
-    background: #fcfcfc;
+    background: var(--color-bg-lighter);
   }
   .extra_light2_grey_bg {
-    background: #f9f9f9;
+    background: var(--color-bg-lightest);
   }
 
   .light_grey_bg {
@@ -62,10 +64,10 @@ body {
     color: inherit !important;
   }
   .text-success {
-    color: green;
+    color: var(--color-success-text);
   }
   .success-shadow {
-    box-shadow: 1px 1px 8px #b1d4b1;
+    box-shadow: 1px 1px 8px var(--color-success-bg);
   }
 
   .text-mid {
@@ -131,7 +133,7 @@ body {
   }
 
   @mixin gradient-bg {
-    background-image: linear-gradient(#824c93, #d0a5c3);
+    background-image: linear-gradient(var(--color-primary), var(--color-magenta-700));
   }
 
 

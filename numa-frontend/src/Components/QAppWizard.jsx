@@ -98,6 +98,13 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
     [cards, getCardData]
   );
 
+  // Move to first output step when app starts running
+  useEffect(() => {
+    if (appRunning && outputCards.length > 0) {
+      setActiveStep(inputCards.length); // First output step is after all input steps
+    }
+  }, [appRunning, inputCards.length, outputCards.length]);
+
   // Memoize step completion check
   const isStepComplete = useCallback((index) => {
     const allCards = [...inputCards, ...outputCards];
@@ -138,20 +145,13 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
       });
       setCompletedSteps(newCompletedSteps);
 
-      // Move to first output step
-      if (outputCards.length > 0) {
-        const targetStep = inputCards.length;
-        setActiveStep(targetStep);
-      }
-
-
       await onRunApp();
     } catch (error) {
       console.error('Error running app:', error);
       setAppRunning(false);
       setProcessingProgress(0);
     }
-  }, [completedSteps, inputCards, outputCards, onRunApp, setAppRunning, getCardData, setProcessingProgress]);
+  }, [completedSteps, inputCards, onRunApp, setAppRunning, getCardData, setProcessingProgress]);
 
   // Effect to track session results and update progress
   useEffect(() => {
@@ -239,7 +239,7 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
   };
 
   const handleNextStep = () => {
-    if (activeStep < preRunSteps.length - 1) {
+    if (activeStep < inputCards.length - 1) {
       const newStep = activeStep + 1;
       setActiveStep(newStep);
     }
@@ -263,6 +263,10 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
                 preRunSteps={preRunSteps}
                 postRunSteps={postRunSteps}
                 activeStep={activeStep}
+                handlePrevStep={handlePrevStep}
+                handleNextStep={handleNextStep}
+                visibleTasks={preRunSteps}
+                taskCompletionStatus={completedSteps}
                 onStepClick={handleStepClick}
                 isStepComplete={isStepComplete}
                 isStepDisabled={isStepDisabled}
@@ -308,22 +312,6 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
                       inputValue={qCardInputValues[getCardData(currentCard).id]}
                       sessionResults={sessionResults}
                     />
-                    <div className="task-navigation">
-                      <Button
-                        variant="primary"
-                        onClick={handlePrevStep}
-                        disabled={activeStep === 0}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        variant="primary"
-                        onClick={handleNextStep}
-                        disabled={activeStep === preRunSteps.length - 1}
-                      >
-                        Next
-                      </Button>
-                    </div>
                   </>
                 )
               )}

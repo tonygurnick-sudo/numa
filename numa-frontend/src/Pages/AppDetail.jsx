@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Alert, Container, Row, Col } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
+import { StarFill, Star } from 'react-bootstrap-icons';
 
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
@@ -9,15 +10,24 @@ import { JobHistorySidebar } from '../Components/JobHistorySidebar';
 
 import { QAppDetail } from '../Components/QAppDetail';
 import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useFavorites } from '../hooks/useFavorites';
 import AppWizard from '../Components/AppWizard';
+import { formatCategory } from '../utils/textUtils';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
   const { error, isLoading, setNumaAppId, numaAppData } = useNumaApp();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const favorite = isFavorite(appId);
 
   useEffect(() => {
     setNumaAppId(appId);
   }, [appId]);
+
+  const handleFavoriteClick = (e) => {
+    e.preventDefault();
+    toggleFavorite(appId);
+  };
 
   return (
     <div className="dashboard">
@@ -27,7 +37,20 @@ const AppDetail = () => {
           {!isLoading && <Breadcrumbs label={numaAppData?.appName} />}
           <Row>
             <Col lg={8} className="">
-              <h1 className="mb-3">{numaAppData?.appName}</h1>
+              <div className="d-flex align-items-center gap-3">
+                <h1 className="mb-3">{numaAppData?.appName}</h1>
+                <div
+                  className={`favorite-button ${favorite ? 'fav-active' : ''}`}
+                  onClick={handleFavoriteClick}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {favorite ? (
+                    <StarFill className="text-warning" size={24} />
+                  ) : (
+                    <Star className="text-muted" size={24} />
+                  )}
+                </div>
+              </div>
               <p>{numaAppData?.appDescription}</p>
             </Col>
             <Col lg={4} sm={12} className="pe-4 app-details-meta">
@@ -38,7 +61,7 @@ const AppDetail = () => {
                     <span
                       className={`category-tag ${numaAppData.category.toLowerCase()}`}
                     >
-                      {numaAppData.category}
+                      {formatCategory(numaAppData.category)}
                     </span>
                   </span>
                 )}

@@ -104,27 +104,38 @@ export const ChatHistorySidebar = ({
             <p className="small text-muted">No conversations available</p>
           ) : (
             <div className="conversations-container small">
-              {conversations.map((conversation) => (
-                <div
-                  key={conversation.conversationId}
-                  className="conversation-item mb-2 p-2 rounded"
-                  onClick={() => fetchConversationHistory(conversation.conversationId)}
-                  role="button"
-                >
-                  <div className="conversation-title fw-bold">
-                    {conversation.title || 'Untitled Chat'}
+              {conversations.map((conversation) => {
+                // Extract a concise title from the conversation
+                let title = conversation.title || 'Untitled Chat';
+                if (title.length > 60) {
+                  // If it's a long message, try to get the first meaningful line
+                  const firstLine = title.split('\n')[0].trim();
+                  // If the first line is still too long, truncate it
+                  title = firstLine.length > 60 ? firstLine.substring(0, 57) + '...' : firstLine;
+                }
+
+                return (
+                  <div
+                    key={conversation.conversationId}
+                    className="conversation-item mb-2 p-2 rounded"
+                    onClick={() => fetchConversationHistory(conversation.conversationId)}
+                    role="button"
+                  >
+                    <div className="conversation-title fw-bold">
+                      {title}
+                    </div>
+                    <div className="conversation-time text-muted mt-1" style={{ fontSize: '0.75rem' }}>
+                      {new Date(conversation.startTime || conversation.creationTime).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </div>
                   </div>
-                  <div className="conversation-time text-muted mt-1" style={{ fontSize: '0.75rem' }}>
-                    {new Date(conversation.startTime || conversation.creationTime).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

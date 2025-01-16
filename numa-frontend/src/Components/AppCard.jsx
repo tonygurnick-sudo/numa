@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Row, Col } from 'react-bootstrap';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { useNumaApp } from '../Providers/NumaAppProvider';
+import { MarkdownContent } from './MarkdownContent';
+import { ResultActions } from './ResultActions';
 
 const replaceReferences = (prompt, dependencies = [], appsCards = []) => {
   let updatedPrompt = prompt || '';
@@ -137,11 +139,19 @@ const AppCard = ({
       case 'q-query':
       case 'text-output':
         return (
-        <p className="output-text">
-        {outputValue || (isGenerating ? 'Generating output...' : 'Waiting for input...')}
-        </p>
-
-
+          <div className="output-text markdown-content">
+            {outputValue ? (
+              <>
+                <MarkdownContent content={outputValue} />
+                <ResultActions
+                  content={outputValue}
+                  title={this_card.title || 'Result'}
+                />
+              </>
+            ) : (
+              <p>{isGenerating ? 'Generating output...' : 'Waiting for input...'}</p>
+            )}
+          </div>
         );
       default:
         return <div className="card-body">Unsupported card type</div>;

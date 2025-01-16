@@ -66,6 +66,15 @@ const AppRoutes = () => {
         }
       />
 
+      <Route
+        path="/favourite-apps"
+        element={
+          <ProtectedRoute>
+            <Dash showFavorites={true} />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Route for app details */}
       <Route
         path="/app/:appId"
