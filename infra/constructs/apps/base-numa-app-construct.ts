@@ -189,6 +189,11 @@ export class BaseNumaApp extends Construct {
       },
       additionalPolicyStatements: [
         {
+          actions: ['s3:ListBucket'], // this is required to get a 404 instead of a 403 if object not found
+          effect: 'Allow',
+          resources: [props.outputsBucket.arn],
+        },
+        {
           actions: ['s3:GetObject'],
           effect: 'Allow',
           resources: [`${props.outputsBucket.arn}/${props.appName}/*`],
