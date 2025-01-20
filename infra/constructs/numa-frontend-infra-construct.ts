@@ -23,11 +23,7 @@ import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import { Fn, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export class NumaFrontendInfra extends Construct {
   readonly apiGateway: Apigatewayv2Api;
@@ -111,7 +107,7 @@ export class NumaFrontendInfra extends Construct {
     });
 
     const authorizerLambdaFilename = path.resolve(
-      __dirname,
+      import.meta.dirname,
       '..',
       '..',
       'lambdas',

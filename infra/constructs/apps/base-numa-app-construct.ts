@@ -12,15 +12,11 @@ import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
 import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
 import path from 'node:path';
-import { fileURLToPath } from 'url';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import {
   DataAwsIamPolicyDocument,
   DataAwsIamPolicyDocumentStatement,
 } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export class BaseNumaApp extends Construct {
   private apiGatewayAuthorizerId: string;
@@ -64,7 +60,15 @@ export class BaseNumaApp extends Construct {
       roleName: role.name,
     });
 
-    const filename = path.resolve(__dirname, '..', '..', '..', 'lambdas', props.lambdaDirectory, 'lambda_function.zip');
+    const filename = path.resolve(
+      import.meta.dirname,
+      '..',
+      '..',
+      '..',
+      'lambdas',
+      props.lambdaDirectory,
+      'lambda_function.zip',
+    );
 
     const lf = new LambdaFunction(this, name + '_lambda', {
       functionName: scope.node.id + '_' + name,
