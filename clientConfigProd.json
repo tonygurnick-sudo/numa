@@ -222,6 +222,26 @@
       }
     ]
   },
+  "macedon-ranges": {
+    "clientAccountId": "575108922680",
+    "webCrawlerConfigs": [
+      {
+        "url": "https://data.gov.au/home"
+      },
+      {
+        "url": "https://www.mrsc.vic.gov.au/Home"
+      },
+      {
+        "url": "https://www.planning.vic.gov.au/planning-schemes"
+      },
+      {
+        "url": "https://www.localgovernment.vic.gov.au/"
+      },
+      {
+        "url": "https://www.vic.gov.au/know-your-council"
+      }
+    ]
+  },
   "mornington-peninsula-council": {
     "clientAccountId": "672071675188",
     "webCrawlerConfigs": [
