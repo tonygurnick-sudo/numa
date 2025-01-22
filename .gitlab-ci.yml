@@ -24,6 +24,7 @@ variables:
   matrix:
     - PYTHON_WORKING_DIRECTORY:
         - deployer
+        - lambdas/python/candidate-screening
         - lambdas/python/example-1
         - lambdas/python/example-2
         - lambdas/python/example-3
