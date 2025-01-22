@@ -22,6 +22,7 @@ pylint = "3.3.2"
 pyright = "1.1.391"
 pre-commit = "^4.1.0"
 poetry-plugin-lambda-build = "^1.0.7"
+pytest = "^8.3.4"
 
 [tool.poetry-plugin-lambda-build]
 package-artifact-path = "lambda_function.zip"

@@ -1,5 +1,3 @@
-# tools.py
-
 CANDIDATE_SCREENING_TOOL = [
     {
         "name": "analyze_candidate",
