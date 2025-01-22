@@ -202,6 +202,9 @@
       }
     ]
   },
+  "kapiti-coast": {
+    "clientAccountId": "557690588447"
+  },
   "lg-pro": {
     "clientAccountId": "539247480075",
     "webCrawlerConfigs": [
