@@ -18,15 +18,22 @@ The function expects a JSON event with the following structure:
   "company_profile": {
     "company_name": "Arcanum AI",
     "industry": "Artificial Intelligence",
-    "description": "AI solutions provider..."
+    "description": "AI solutions provider...",
+    "company_values": "Innovative, Inclusive..."
   },
+
   "job_requirements": {
     "title": "Senior Software Engineer",
+    "location": "Melbourne",
+    "employment_type": "Full time",
+    "job_description": "Must be named John Doe",
     "requirements": [
-      "5+ years Python experience",
-      "AWS cloud expertise"
-    ]
+      "5+ years as John Doe experience",
+      "John Doe cloud expertise",
+    ],
+    "additional_notes": "Open to remote APAC, JS experience not required" #optional
   },
+
   "output_bucket": "your-bucket-name",
   "output_key": "output/screening-results.json"
 }
