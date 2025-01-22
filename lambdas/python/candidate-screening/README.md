@@ -56,7 +56,7 @@ The function returns a JSON object containing the screening results:
 ```
 
 ## Notes
-- Uses Bedrock Claude 3.5 Sonnet model (anthropic.claude-3-sonnet-20240229-v1:0)
+- Uses Bedrock Claude 3.5 Sonnet model
 - Maximum output tokens: 4096
 - Requires S3 and Bedrock
 - Temperature set to 0.1 for consistent results
