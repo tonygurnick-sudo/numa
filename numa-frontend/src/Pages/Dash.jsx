@@ -58,10 +58,7 @@ export const Dash = ({ showFavorites }) => {
         // }
 
         // If no valid cached data, fetch from manifest
-
-
-
-        const response = await fetch('../src/Data/example-manifest.json', {
+        const response = await fetch('../manifest.json', {
           headers: {
             'Content-Type': 'application/json',
           },

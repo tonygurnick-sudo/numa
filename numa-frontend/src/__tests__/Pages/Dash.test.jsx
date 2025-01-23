@@ -142,7 +142,7 @@ describe('Dash Component', () => {
 
     // Verify fetch was called with the correct URL
     expect(global.fetch).toHaveBeenCalledWith(
-      '../src/Data/example-manifest.json',
+      '../manifest.json',
       {
         headers: {
           'Content-Type': 'application/json',
