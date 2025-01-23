@@ -29,6 +29,8 @@ variables:
         - lambdas/python/example-2
         - lambdas/python/example-3
         - lambdas/python/extract-content-from-file
+        - lambdas/python/financial-analysis-analysis
+        - lambdas/python/financial-analysis-data-extraction
         - lambdas/python/numa-recent-jobs
         - lambdas/python/policy-builder-completion
         - lambdas/python/policy-builder-expert-review
