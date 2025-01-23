@@ -18,6 +18,10 @@ mypy = "1.13.0"
 pylint = "3.3.2"
 pyright = "1.1.391"
 
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.9.0"
+poetry-plugin-lambda-build = ">=1.0.7"
+
 [tool.poetry-plugin-lambda-build]
 package-artifact-path = "lambda_function.zip"
 without = "dev"
