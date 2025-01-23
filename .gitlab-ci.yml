@@ -48,7 +48,7 @@ python-lint:
   needs: []
   parallel: !reference [.python-matrix]
   script:
-    - poetry run pylint . --verbose --recursive yes --ignore .venv
+    - poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
     - poetry run mypy .
     - poetry run pyright .
 
