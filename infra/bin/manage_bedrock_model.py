@@ -79,7 +79,7 @@ def signed_request(
         data=data,
         params=params,
         headers=dict(request.headers),
-        timeout=5,
+        timeout=60,
     )
 
 
