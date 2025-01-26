@@ -3,7 +3,7 @@ import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
-import { BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
+import { AppStatus, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
 
 const additional_comments = `
 When customizing these policies for specific school contexts, boards should consider:
@@ -81,10 +81,72 @@ const policy_structure_list = [
 ];
 
 export class NZSBAPolicyBuilder extends BaseNumaApp {
+  readonly manifest;
+
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     props.enableJobs = true;
     props.pathPrefix ??= 'policy-builder';
     super(scope, name, props);
+
+    this.manifest = {
+      appName: 'Policy Designer',
+      id: 'policy-builder-app',
+      type: 'policy-builder',
+      status: AppStatus.ACTIVE,
+      createdDate: '2024-03-20T10:00:00Z',
+      appDescription:
+        'Create and manage organizational policies with AI assistance. This tool helps draft, review, and format policies while ensuring compliance with industry standards and regulations.',
+      tasks: [
+        {
+          id: 'policy-type-selection',
+          title: 'Select Policy Type',
+          type: 'dropdown' as const,
+          required: true,
+          params: {
+            options: ['IT Security Policy', 'HR Policy', 'Compliance Policy', 'Operations Policy', 'Custom Policy'],
+          },
+          order: 1,
+        },
+        {
+          id: 'policy-requirements',
+          title: 'Policy Requirements',
+          type: 'text-input' as const,
+          description: 'Describe the key requirements and objectives for this policy',
+          required: true,
+          order: 2,
+        },
+        {
+          id: 'generate-policy',
+          title: 'Generate Policy Draft',
+          type: 'q-app' as const,
+          appVersion: '1',
+          params: {
+            qAppId: 'policy-generator-q-app',
+            inputs: [
+              {
+                inputContentRef: '@policy-type-selection',
+                qInputCardId: 'policy-type',
+              },
+              {
+                inputContentRef: '@policy-requirements',
+                qInputCardId: 'requirements',
+              },
+            ],
+            qOutputCardId: 'policy-draft',
+          },
+          order: 3,
+        },
+        {
+          id: 'display-policy',
+          title: 'Review Policy',
+          type: 'text-output' as const,
+          params: {
+            dataRef: '@generate-policy',
+          },
+          order: 4,
+        },
+      ],
+    };
 
     const policyStatements = [
       {

@@ -344,6 +344,7 @@
   "nzsba": {
     "clientAccountId": "307946678276",
     "loadSampleFile": false,
+    "uploadFrontend": false,
     "webCrawlerConfigs": [
       {
         "url": "https://www.nzstaresourcecentre.org.nz/"

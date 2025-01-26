@@ -1,12 +1,24 @@
 import * as asl from 'asl-types';
 import { Construct } from 'constructs';
-import { BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
+import { AppStatus, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
 
 export class ExampleNumaApp extends BaseNumaApp {
+  readonly manifest;
+
   constructor(scope: Construct, name: string, props: ExampleNumaAppProps) {
     props.pathPrefix ??= 'example';
     props.enableJobs = true;
     super(scope, name, props);
+
+    this.manifest = {
+      appName: 'Example',
+      appDescription: 'Example app',
+      id: props.pathPrefix,
+      status: AppStatus.ACTIVE,
+      type: '',
+      createdDate: '',
+      tasks: [],
+    };
 
     // Add a lambda that responds to a POST at ${prefix}/a
     this.addLambdaFunction(this, 'post-lambda-example', {

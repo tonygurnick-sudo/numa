@@ -22,14 +22,15 @@ import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import { Fn, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
-import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import * as path from 'node:path';
 
 export class NumaFrontendInfra extends Construct {
   readonly apiGateway: Apigatewayv2Api;
   readonly authorizer: Apigatewayv2Authorizer;
   readonly frontendBucket: S3Bucket;
 
+  readonly distribution: CloudfrontDistribution;
   constructor(scope: Construct, name: string, props: NumaFrontendInfraProps) {
     super(scope, name);
 
@@ -211,7 +212,7 @@ export class NumaFrontendInfra extends Construct {
 
     const accessIdentity = new CloudfrontOriginAccessIdentity(this, 'identity', {});
 
-    const distribution = new CloudfrontDistribution(this, 'cloudfront', {
+    this.distribution = new CloudfrontDistribution(this, 'cloudfront', {
       aliases: [props.domainName],
       enabled: true,
       defaultCacheBehavior: {
@@ -309,8 +310,8 @@ export class NumaFrontendInfra extends Construct {
       name: certificate.domainName,
       type: 'A',
       alias: {
-        name: distribution.domainName,
-        zoneId: distribution.hostedZoneId,
+        name: this.distribution.domainName,
+        zoneId: this.distribution.hostedZoneId,
         evaluateTargetHealth: true,
       },
     });
