@@ -42,40 +42,40 @@ def handler(event, context):
     )
 
     # Run template output
-    template_output = model.run_prompt(
-        prompt=TEMPLATE_OUTPUT_PROMPT.format(
+    template_output = model.run(
+        query=TEMPLATE_OUTPUT_PROMPT.format(
             meeting_notes_transcript=meeting_notes_transcript,
             template=template,
         ),
     ).response[0]["text"]
 
     # Run meeting summary and analysis
-    meeting_summary_and_analysis = model.run_prompt(
-        prompt=MEETING_SUMMARY_AND_ANALYSIS_PROMPT.format(
+    meeting_summary_and_analysis = model.run(
+        query=MEETING_SUMMARY_AND_ANALYSIS_PROMPT.format(
             meeting_notes_transcript=meeting_notes_transcript,
             other_notes=other_notes,
         ),
     ).response[0]["text"]
 
     # Run topic analysis
-    topic_analysis = model.run_prompt(
-        prompt=TOPIC_ANALYSIS_PROMPT.format(
+    topic_analysis = model.run(
+        query=TOPIC_ANALYSIS_PROMPT.format(
             meeting_notes_transcript=meeting_notes_transcript,
             other_notes=other_notes,
         ),
     ).response[0]["text"]
 
     # Run action items
-    action_items = model.run_prompt(
-        prompt=ACTION_ITEMS_PROMPT.format(
+    action_items = model.run(
+        query=ACTION_ITEMS_PROMPT.format(
             meeting_notes_transcript=meeting_notes_transcript,
             other_notes=other_notes,
         ),
     ).response[0]["text"]
 
     # Run follow-up emails
-    follow_up_emails = model.run_prompt(
-        prompt=FOLLOW_UP_EMAILS_PROMPT.format(
+    follow_up_emails = model.run(
+        query=FOLLOW_UP_EMAILS_PROMPT.format(
             action_items=action_items,
             meeting_summary_and_analysis=meeting_summary_and_analysis,
             other_notes=other_notes,
@@ -83,8 +83,8 @@ def handler(event, context):
     ).response[0]["text"]
 
     # Run participant insights
-    participant_insights = model.run_prompt(
-        prompt=PARTICIPANT_INSIGHTS_PROMPTS.format(
+    participant_insights = model.run(
+        query=PARTICIPANT_INSIGHTS_PROMPTS.format(
             meeting_notes_transcript=meeting_notes_transcript,
             other_notes=other_notes,
         ),
