@@ -2,7 +2,7 @@
 name = "example-1"
 version = "0.1.0"
 description = ""
-authors = ["ArcanumAI"]
+authors = ["Sam Bentley <sam@arcanum.ai>"]
 readme = "README.md"
 packages = [
     { include = "**/*.py" },
