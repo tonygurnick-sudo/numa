@@ -1,7 +1,7 @@
 # pylint: disable=protected-access
 import unittest
 
-import lambda_function
+# import lambda_function
 
 
 class TestLambdaFunction(unittest.TestCase):

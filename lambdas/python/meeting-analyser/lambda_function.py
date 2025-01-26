@@ -16,7 +16,7 @@ MAX_TOKENS = 4096
 s3_client = boto3.client("s3")
 
 
-def handler(event, context):
+def handler(event, _context):
     meeting_notes_transcript_bucket = event["meeting_notes_transcript_bucket"]
     meeting_notes_transcript_key = event["meeting_notes_transcript_key"]
     other_notes = event["other_notes"]
