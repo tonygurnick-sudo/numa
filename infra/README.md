@@ -26,6 +26,13 @@ yarn install
 
 If you receive error messages about dependencies not being found, see [the setup instructions for yarn >= 2](https://gitlab.com/arcanumai/cdktf-resources/-/blob/main/README.md#accessing-the-packages).
 
+There are also some Python dependencies that need to be installed:
+
+```bash
+# run this in infra/bin
+poetry install
+```
+
 ### AWS Profiles
 
 The deploy script for this project requires you to have access to the arcanum-q-deployer accounts and expects their profiles in your .aws/config file to be named `arcanum-q-deployer-dev` and `arcanum-q-deployer-prod`.

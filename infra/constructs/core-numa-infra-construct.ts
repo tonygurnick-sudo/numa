@@ -17,7 +17,7 @@ import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-sec
 import { SecretsmanagerSecretVersion } from '@cdktf/provider-aws/lib/secretsmanager-secret-version';
 import { password } from '@cdktf/provider-random';
 import { RandomProvider } from '@cdktf/provider-random/lib/provider';
-import { Fn, TerraformOutput } from 'cdktf';
+import { DataResource, Fn, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import { AdjustToken } from './adjust-token-construct';
@@ -604,6 +604,32 @@ export class CoreNumaInfra extends Construct {
     new TerraformOutput(this, 'application-id', { value: applicationId });
     new TerraformOutput(this, 'data-source-id', { value: dataSourceId });
     new TerraformOutput(this, 'index-id', { value: indexId });
+
+    const models = [
+      {
+        model_id: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
+        regions: [process.env['AWS_REGION']],
+      },
+    ];
+    for (const model of models) {
+      for (const region of model.regions) {
+        new DataResource(this, `bedrock-model_${model.model_id.replace(/[.:]/g, '-')}_${region}`, {
+          provisioners: [
+            {
+              type: 'local-exec',
+              command:
+                'poetry run python manage_bedrock_model.py enable --account-id $${ACCOUNT_ID} --region $${REGION} --model-id $${MODEL}',
+              workingDir: path.join(import.meta.dirname, '..', 'bin'),
+              environment: {
+                ACCOUNT_ID: props.clientAccountId,
+                MODEL: model.model_id,
+                REGION: region!,
+              },
+            },
+          ],
+        });
+      }
+    }
   }
 }
 
@@ -641,7 +667,7 @@ interface _CoreNumaInfraProps {
   indexUnits?: number;
   region?: string;
   domainName: string;
-  clientAccountId?: string;
+  clientAccountId: string;
   loadSampleFile?: boolean;
   createServiceLinkedRole?: boolean;
   webCrawlerConfigs?: WebCrawlerConfig[];
