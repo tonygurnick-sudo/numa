@@ -18,12 +18,13 @@ import {
   DataAwsIamPolicyDocumentStatement,
 } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 
-export class BaseNumaApp extends Construct {
+export abstract class BaseNumaApp extends Construct {
   private apiGatewayAuthorizerId: string;
   private apiGatewayId: string;
   private prefix: string;
   private logGroup: CloudwatchLogGroup;
   protected jobsTable?: DynamodbTable;
+  abstract readonly manifest: NumaAppManifest;
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     super(scope, name);
@@ -295,6 +296,66 @@ export class BaseNumaApp extends Construct {
       .replace(/\/$/, '')
       .trim();
   }
+}
+
+export enum AppStatus {
+  ACTIVE = 'Active',
+  INTERNAL = 'Internal',
+  COMING_SOON = 'Coming Soon',
+}
+
+export interface NumaAppManifestBaseTask {
+  id: string;
+  title: string;
+  order: number;
+}
+
+export interface NumaAppManifestDropdownTask extends NumaAppManifestBaseTask {
+  type: 'dropdown';
+  required: boolean;
+  params: {
+    options: string[];
+  };
+}
+
+export interface NumaAppManifestTextInputTask extends NumaAppManifestBaseTask {
+  type: 'text-input';
+}
+
+export interface NumaAppManifestQAppTask extends NumaAppManifestBaseTask {
+  type: 'q-app';
+  appVersion: string;
+  params: {
+    qAppId: string;
+    inputs: {
+      inputContentRef: string;
+      qInputCardId: string;
+    }[];
+    qOutputCardId: string;
+  };
+}
+
+export interface NumaAppManifestTextOutputTask extends NumaAppManifestBaseTask {
+  type: 'text-output';
+  params: {
+    dataRef: string;
+  };
+}
+
+export type NumaAppManifestTask =
+  | NumaAppManifestDropdownTask
+  | NumaAppManifestTextInputTask
+  | NumaAppManifestQAppTask
+  | NumaAppManifestTextOutputTask;
+
+export interface NumaAppManifest {
+  appName: string;
+  id: string;
+  type: string;
+  status: AppStatus;
+  createdDate: string;
+  appDescription: string;
+  tasks: NumaAppManifestTask[];
 }
 
 export interface RouteDefinition {

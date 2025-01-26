@@ -1,9 +1,22 @@
 import { Construct } from 'constructs';
-import { BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
+import { AppStatus, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
 
+// TODO: This isn't really an app, but wants addLambdaFunction. We should refactor that out so this doesn't need a manifest.
 export class CoreNumaApp extends BaseNumaApp {
+  readonly manifest;
+
   constructor(scope: Construct, name: string, props: CoreNumaAppProps) {
     super(scope, name, props);
+
+    this.manifest = {
+      appName: 'Core',
+      id: 'core-app',
+      type: 'core',
+      status: AppStatus.INTERNAL,
+      createdDate: '2025-01-01',
+      appDescription: 'Core Numa App',
+      tasks: [],
+    };
 
     // SRP Proxy
     const environment = {

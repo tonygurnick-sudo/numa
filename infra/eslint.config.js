@@ -4,6 +4,7 @@ import tsPlugin from '@typescript-eslint/eslint-plugin';
 export default [
   {
     files: ['**/*.ts', '**/*.tsx'],
+    ignores: ['build/**', 'dist/**', '**/*.d.ts'],
     languageOptions: {
       parser: tsParser,
     },
