@@ -86,10 +86,12 @@ export class NumaClientStack extends ArcanumStack {
 
     if (props.config.uploadFrontend ?? true) {
       const folderPath = path.join(import.meta.dirname, '..', 'build', 'numa-frontend');
+      const denyListedFiles = ['config.json', 'manifest.json'];
       try {
         const objects = fs
           .readdirSync(folderPath, { recursive: true, withFileTypes: true })
           .filter((f) => f.isFile())
+          .filter((f) => !denyListedFiles.includes(f.name))
           .map((f) => path.join(f.parentPath, f.name))
           .map((source) => {
             const contentType = {
