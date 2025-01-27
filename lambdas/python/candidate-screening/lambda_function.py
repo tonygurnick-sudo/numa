@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 
 import boto3
 
@@ -17,14 +18,18 @@ logger.setLevel(logging.INFO)
 def handler(event: dict, _context) -> dict:
     """Main handler function for the lambda."""
     try:
-        resume_key = event["resume_text_s3_key"]
+        resume_key = event["resume_key"]
+        resume_text_key = event["resume_text_s3_key"]
         cover_letter_key = event["cover_letter_text_s3_key"]
         company_profile = event["company_profile"]
         job_requirements = event["job_requirements"]
         output_bucket = event["output_bucket"]
-        output_key = event["output_key"]
+        execution_id = event["execution_id"]
 
-        resume_text = read_file_from_s3(output_bucket, resume_key)
+        resume_filename = Path(resume_key).stem
+        output_key = f"candidate_screening_and_matching/{execution_id}/results/{resume_filename}.json"
+
+        resume_text = read_file_from_s3(output_bucket, resume_text_key)
 
         cover_letter_text = None
         if cover_letter_key:
@@ -54,6 +59,7 @@ def handler(event: dict, _context) -> dict:
             "screening_results": screening_results,
             "resume_key": resume_key,
             "cover_letter_key": cover_letter_key,
+            "execution_id": execution_id,
         }
 
         save_results_to_s3(output_bucket, output_key, final_results)

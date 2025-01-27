@@ -5,55 +5,108 @@ CANDIDATE_SCREENING_TOOL = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "score": {
-                    "type": "integer",
-                    "description": "Overall candidate evaluation score (0-100)",
-                    "minimum": 0,
-                    "maximum": 100,
+                "full_name": {"type": "string", "description": "Candidate's full name"},
+                "skills_match": {
+                    "type": "object",
+                    "properties": {
+                        "required_skills_present": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Required skills found in candidate's profile",
+                        },
+                        "required_skills_missing": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Required skills not found in candidate's profile",
+                        },
+                        "additional_relevant_skills": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Additional relevant skills beyond requirements",
+                        },
+                        "skills_score": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "description": "Score for skills match out of 100",
+                        },
+                    },
                 },
-                "matching_requirements": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Job requirements that the candidate demonstrably meets",
+                "experience_match": {
+                    "type": "object",
+                    "properties": {
+                        "years_of_experience": {
+                            "type": "integer",
+                            "description": "Total years of relevant experience",
+                        },
+                        "relevant_experience_summary": {
+                            "type": "string",
+                            "description": "Summary of relevant experience",
+                        },
+                        "experience_score": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "description": "Score for experience match out of 100",
+                        },
+                    },
                 },
-                "key_qualifications": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Most relevant qualifications across experience, expertise, and professional development",
+                "education_match": {
+                    "type": "object",
+                    "properties": {
+                        "education_requirements_met": {
+                            "type": "boolean",
+                            "description": "Whether candidate meets education requirements",
+                        },
+                        "education_details": {
+                            "type": "string",
+                            "description": "Details of candidate's education",
+                        },
+                        "education_score": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "description": "Score for education match out of 100",
+                        },
+                    },
                 },
-                "strengths": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Notable strengths across technical skills, leadership, and problem-solving",
-                },
-                "gaps": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Identified gaps, risks, and areas needing further assessment",
-                },
-                "cultural_fit_analysis": {
-                    "type": "string",
-                    "description": "Assessment of cultural alignment including communication style, work preferences, and values",
-                },
-                "recommendation": {
-                    "type": "string",
-                    "enum": ["hire", "reject", "further_review"],
-                    "description": "Final recommendation based on comprehensive evaluation",
-                },
-                "detailed_feedback": {
-                    "type": "string",
-                    "description": "Comprehensive analysis including experience assessment, professional development, leadership capabilities, and specific examples",
+                "overall_evaluation": {
+                    "type": "object",
+                    "properties": {
+                        "strengths": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Key strengths identified",
+                        },
+                        "gaps": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Areas for improvement or concern",
+                        },
+                        "overall_score": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "description": "Overall candidate score out of 100",
+                        },
+                        "recommendation": {
+                            "type": "string",
+                            "enum": ["Strong Yes", "Yes", "Maybe", "No"],
+                            "description": "Final hiring recommendation",
+                        },
+                        "detailed_feedback": {
+                            "type": "string",
+                            "description": "Comprehensive yet consise analysis of the candidate",
+                        },
+                    },
                 },
             },
             "required": [
-                "score",
-                "matching_requirements",
-                "key_qualifications",
-                "strengths",
-                "gaps",
-                "cultural_fit_analysis",
-                "recommendation",
-                "detailed_feedback",
+                "full_name",
+                "skills_match",
+                "experience_match",
+                "education_match",
+                "overall_evaluation",
             ],
         },
     }
