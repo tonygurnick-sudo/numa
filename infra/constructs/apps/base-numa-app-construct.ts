@@ -298,6 +298,11 @@ export abstract class BaseNumaApp extends Construct {
   }
 }
 
+export enum AppType {
+  NUMA = 'numa-app',
+  Q = 'q-app',
+}
+
 export enum AppStatus {
   ACTIVE = 'Active',
   INTERNAL = 'Internal',
@@ -351,7 +356,7 @@ export type NumaAppManifestTask =
 export interface NumaAppManifest {
   appName: string;
   id: string;
-  type: string;
+  type: AppType;
   status: AppStatus;
   createdDate: string;
   appDescription: string;
