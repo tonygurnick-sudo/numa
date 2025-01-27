@@ -129,7 +129,7 @@ export class NumaClientStack extends ArcanumStack {
         const manifest = new S3Object(this, 'manifest-item', {
           bucket: fe.frontendBucket.bucket,
           key: 'manifest.json',
-          content: JSON.stringify({ apps }),
+          content: JSON.stringify({ apps: apps.map((app) => app.manifest) }),
           contentType: 'application/json',
         });
 
