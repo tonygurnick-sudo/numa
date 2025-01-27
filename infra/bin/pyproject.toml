@@ -1,29 +1,29 @@
 [tool.poetry]
-name = "aggregate-candidate-results"
+name = "Infrastructure scripts"
 version = "0.1.0"
-description = "Lambda to aggregate json results from candidate-screening lambda"
+description = ""
+<<<<<<< HEAD:infra/bin/pyproject.toml
+authors = ["Arcanum AI"]
+=======
 authors = ["Sam Bentley <sam@arcanum.ai>"]
+>>>>>>> ff8af95 (fix: owners):lambdas/python/aggregate-candidate-results/pyproject.toml
 readme = "README.md"
 packages = [
-    { include = "**/*.py" },
+    { include = "*.py" },
 ]
 
 [tool.poetry.dependencies]
 python = "~3.13.0"
-boto3 = "^1.36.5"
+
+boto3 = "1.35.79"
+requests = "2.32.3"
 
 [tool.poetry.group.dev.dependencies]
+boto3-stubs = "1.35.79"
 mypy = "1.13.0"
 pylint = "3.3.2"
 pyright = "1.1.391"
-pre-commit = "^4.1.0"
-poetry-plugin-lambda-build = "^1.0.7"
-pytest = "^8.3.4"
-boto3-stubs = "^1.36.3"
-
-[tool.poetry-plugin-lambda-build]
-package-artifact-path = "lambda_function.zip"
-without = "dev"
+types-requests = "2.32.0.20241016"
 
 [build-system]
 requires = ["poetry-core"]
