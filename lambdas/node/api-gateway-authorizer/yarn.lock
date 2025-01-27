@@ -6,12 +6,12 @@ __metadata:
   cacheKey: 10c0
 
 "@aws-sdk/types@npm:^3.696.0":
-  version: 3.731.0
-  resolution: "@aws-sdk/types@npm:3.731.0"
+  version: 3.734.0
+  resolution: "@aws-sdk/types@npm:3.734.0"
   dependencies:
-    "@smithy/types": "npm:^4.0.0"
+    "@smithy/types": "npm:^4.1.0"
     tslib: "npm:^2.6.2"
-  checksum: 10c0/f93d8d0ab574367f2c40f148d986c36b6fe66b854afba52198f1d1bf5b67e23673c3a507c07f9cf58cd3de00e76d241218abf989efc74b9a90213f5951ac7d43
+  checksum: 10c0/74313849619b8bce9e6a52c70fcdaa212574a443503c78bccdba77cdc7bc66b8cecefe461852e0bab7376cc2ec3e1891730b1a027be63efb47394115c8ddb856
   languageName: node
   linkType: hard
 
@@ -554,7 +554,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@smithy/types@npm:^4.0.0":
+"@smithy/types@npm:^4.1.0":
   version: 4.1.0
   resolution: "@smithy/types@npm:4.1.0"
   dependencies:
