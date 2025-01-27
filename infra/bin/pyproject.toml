@@ -2,11 +2,7 @@
 name = "Infrastructure scripts"
 version = "0.1.0"
 description = ""
-<<<<<<< HEAD:infra/bin/pyproject.toml
 authors = ["Arcanum AI"]
-=======
-authors = ["Sam Bentley <sam@arcanum.ai>"]
->>>>>>> ff8af95 (fix: owners):lambdas/python/aggregate-candidate-results/pyproject.toml
 readme = "README.md"
 packages = [
     { include = "*.py" },
