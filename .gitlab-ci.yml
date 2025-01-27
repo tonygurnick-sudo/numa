@@ -26,8 +26,6 @@ variables:
         - deployer
         - infra/bin
         - lambdas/python/aggregate-candidate-results
-        - infra/bin
-        - lambdas/python/aggregate-candidate-results
         - lambdas/python/candidate-screening
         - lambdas/python/example-1
         - lambdas/python/example-2
