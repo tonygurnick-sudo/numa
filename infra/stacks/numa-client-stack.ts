@@ -116,14 +116,12 @@ export class NumaClientStack extends ArcanumStack {
           bucket: fe.frontendBucket.bucket,
           key: 'config.json',
           content: JSON.stringify({
-            cognito: {
-              userPoolId: core.userPoolId,
-              userPoolWebClientId: core.userPoolClient?.id,
-              identityPoolId: core.identityPoolId,
-              region: 'us-east-1', // TODO: Dynamic.
-            },
-            roleArn: core.webExperienceRoleArn,
-            apiEndpoint: '/api',
+            USER_POOL_ID: core.userPoolId,
+            CLIENT_ID: core.userPoolClient?.id,
+            IDENTITY_POOL_ID: core.identityPoolId,
+            REGION: 'us-east-1', // TODO: Dynamic.
+            ROLE_ARN: core.webExperienceRoleArn,
+            API_ENDPOINT: '/api',
           }),
           contentType: 'application/json',
         });
