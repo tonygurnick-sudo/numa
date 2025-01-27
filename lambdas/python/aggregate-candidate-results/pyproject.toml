@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "example-1"
+name = "aggregate-candidate-results"
 version = "0.1.0"
-description = ""
+description = "Lambda to aggregate json results from candidate-screening lambda"
 authors = ["Sam Bentley <sam@arcanum.ai>"]
 readme = "README.md"
 packages = [
