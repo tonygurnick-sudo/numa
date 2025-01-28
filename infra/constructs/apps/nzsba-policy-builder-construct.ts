@@ -118,7 +118,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
         {
           id: 'generate-policy',
           title: 'Generate Policy Draft',
-          type: 'http-request' as const,
+          type: 'q-app' as const,
           appVersion: '1',
           params: {
             qAppId: 'policy-generator-q-app',
