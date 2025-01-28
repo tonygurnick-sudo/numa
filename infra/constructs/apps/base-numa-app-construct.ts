@@ -327,6 +327,14 @@ export interface NumaAppManifestTextInputTask extends NumaAppManifestBaseTask {
   type: 'text-input';
 }
 
+export interface NumaAppManifestHttpRequestTask extends NumaAppManifestBaseTask {
+  type: 'http-request';
+  endpoint: string;
+  params: {
+    payload?: Record<string, unknown>;
+  };
+}
+
 export interface NumaAppManifestQAppTask extends NumaAppManifestBaseTask {
   type: 'q-app';
   appVersion: string;
@@ -351,6 +359,7 @@ export type NumaAppManifestTask =
   | NumaAppManifestDropdownTask
   | NumaAppManifestTextInputTask
   | NumaAppManifestQAppTask
+  | NumaAppManifestHttpRequestTask
   | NumaAppManifestTextOutputTask;
 
 export interface NumaAppManifest {
