@@ -788,7 +788,7 @@ __metadata:
     "@types/node": "npm:^22.10.1"
     "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
     "@typescript-eslint/parser": "npm:^8.17.0"
-    aws-jwt-verify: "npm:^4.0.1"
+    aws-jwt-verify: "npm:^5.0.0"
     esbuild: "npm:^0.24.0"
     eslint: "npm:^9.16.0"
     eslint-config-prettier: "npm:^10.0.0"
@@ -807,10 +807,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"aws-jwt-verify@npm:^4.0.1":
-  version: 4.0.1
-  resolution: "aws-jwt-verify@npm:4.0.1"
-  checksum: 10c0/9ab117a9ef0bf062c75090270b786f02d4e95581f21370428da1f5800536a03f3ee1143895eecfb712ea04f37efa4826d8902f6e0caa853174e5ea2fcfdd6a54
+"aws-jwt-verify@npm:^5.0.0":
+  version: 5.0.0
+  resolution: "aws-jwt-verify@npm:5.0.0"
+  checksum: 10c0/39f82be5d1397d8ad4a6835a18448f0782e7a2adbbe4e03103a81de2777776c9a2c1eb921e2276fd75e92e239242ae667409671420a306959f7844004cd262d4
   languageName: node
   linkType: hard
 
