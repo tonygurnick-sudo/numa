@@ -1,4 +1,12 @@
 {
+  "2gen": {
+    "clientAccountId": "709771312005",
+    "webCrawlerConfigs": [
+      {
+        "url": "https://2gen.com.au"
+      }
+    ]
+  },
   "30-seconds": {
     "clientAccountId": "593793032721"
   },
