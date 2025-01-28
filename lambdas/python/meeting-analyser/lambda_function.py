@@ -1,110 +1,102 @@
 import json
+import os
+import uuid
 
 import boto3
+import structlog
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import bedrock
-from prompts import (
-    ACTION_ITEMS_PROMPT,
-    FOLLOW_UP_EMAILS_PROMPT,
-    MEETING_SUMMARY_AND_ANALYSIS_PROMPT,
-    PARTICIPANT_INSIGHTS_PROMPTS,
-    TEMPLATE_OUTPUT_PROMPT,
-    TOPIC_ANALYSIS_PROMPT,
-)
+import helpers
+import prompts
 
 MAX_TOKENS = 4096
+
+logger = structlog.get_logger()
+
 s3_client = boto3.client("s3")
 
 
-def handler(event, _context):
-    meeting_notes_transcript_bucket = event["meeting_notes_transcript_bucket"]
-    meeting_notes_transcript_key = event["meeting_notes_transcript_key"]
+def __get_job_id(event: dict):
+    return event.get("job_id", str(uuid.uuid4()))
+
+
+def __run_model(prompt: str) -> str:
+    model = bedrock.BedrockClaude3Model(model_args={"max_tokens": MAX_TOKENS})
+    model_result = model.run(query=prompt)
+    return model_result.response[0]["text"]
+
+
+def handler(event: dict, context: LambdaContext) -> dict:
+    app_name = event["app_name"]
+    job_id = __get_job_id(event)
+    helpers.setup_logging()
+    structlog.contextvars.bind_contextvars(
+        function_name=context.function_name,
+        app_name=app_name,
+        job_id=job_id,
+    )
+    logger.info("Execute lambda", lambda_event=event)
+
+    meeting_notes_and_or_transcript = event["meeting_notes_and_or_transcript"]
     other_notes = event["other_notes"]
     template = event["template"]
-    output_bucket = event["output_bucket"]
+
+    output_bucket = os.environ.get("BUCKET")
     output_key = event["output_key"]
 
-    # Load text file from s3
-    meeting_notes_transcript = (
-        s3_client.get_object(
-            Bucket=meeting_notes_transcript_bucket,
-            Key=meeting_notes_transcript_key,
-        )["Body"]
-        .read()
-        .decode("utf-8")
+    template_prompt = prompts.TEMPLATE_OUTPUT_PROMPT.format(
+        meeting_notes_and_or_transcript=meeting_notes_and_or_transcript,
+        template=template,
     )
+    template_output = __run_model(template_prompt)
 
-    # Initialize model
-    model = bedrock.BedrockClaude3Model(
-        model_args={
-            "max_tokens": MAX_TOKENS,
-        },
+    summary_prompt = prompts.MEETING_SUMMARY_PROMPT.format(
+        meeting_notes_and_or_transcript=meeting_notes_and_or_transcript,
+        other_notes=other_notes,
     )
+    summary = __run_model(summary_prompt)
 
-    # Run template output
-    template_output = model.run(
-        query=TEMPLATE_OUTPUT_PROMPT.format(
-            meeting_notes_transcript=meeting_notes_transcript,
-            template=template,
-        ),
-    ).response[0]["text"]
+    topic_analysis_prompt = prompts.TOPIC_ANALYSIS_PROMPT.format(
+        meeting_notes_and_or_transcript=meeting_notes_and_or_transcript,
+        other_notes=other_notes,
+    )
+    topic_analysis = __run_model(topic_analysis_prompt)
 
-    # Run meeting summary and analysis
-    meeting_summary_and_analysis = model.run(
-        query=MEETING_SUMMARY_AND_ANALYSIS_PROMPT.format(
-            meeting_notes_transcript=meeting_notes_transcript,
-            other_notes=other_notes,
-        ),
-    ).response[0]["text"]
+    action_items_prompt = prompts.ACTION_ITEMS_PROMPT.format(
+        meeting_notes_and_or_transcript=meeting_notes_and_or_transcript,
+        other_notes=other_notes,
+    )
+    action_items = __run_model(action_items_prompt)
 
-    # Run topic analysis
-    topic_analysis = model.run(
-        query=TOPIC_ANALYSIS_PROMPT.format(
-            meeting_notes_transcript=meeting_notes_transcript,
-            other_notes=other_notes,
-        ),
-    ).response[0]["text"]
+    follow_up_emails_prompt = prompts.FOLLOW_UP_EMAILS_PROMPT.format(
+        action_items=action_items,
+        other_notes=other_notes,
+        summary=summary,
+    )
+    follow_up_emails = __run_model(follow_up_emails_prompt)
 
-    # Run action items
-    action_items = model.run(
-        query=ACTION_ITEMS_PROMPT.format(
-            meeting_notes_transcript=meeting_notes_transcript,
-            other_notes=other_notes,
-        ),
-    ).response[0]["text"]
+    participant_insights_prompts = prompts.PARTICIPANT_INSIGHTS_PROMPTS.format(
+        meeting_notes_and_or_transcript=meeting_notes_and_or_transcript,
+        other_notes=other_notes,
+    )
+    participant_insights = __run_model(participant_insights_prompts)
 
-    # Run follow-up emails
-    follow_up_emails = model.run(
-        query=FOLLOW_UP_EMAILS_PROMPT.format(
-            action_items=action_items,
-            meeting_summary_and_analysis=meeting_summary_and_analysis,
-            other_notes=other_notes,
-        ),
-    ).response[0]["text"]
-
-    # Run participant insights
-    participant_insights = model.run(
-        query=PARTICIPANT_INSIGHTS_PROMPTS.format(
-            meeting_notes_transcript=meeting_notes_transcript,
-            other_notes=other_notes,
-        ),
-    ).response[0]["text"]
-
-    results = {
-        "template_output": template_output,
-        "meeting_summary_and_analysis": meeting_summary_and_analysis,
-        "topic_analysis": topic_analysis,
+    result = {
         "action_items": action_items,
         "follow_up_emails": follow_up_emails,
         "participant_insights": participant_insights,
+        "summary": summary,
+        "template_output": template_output,
+        "topic_analysis": topic_analysis,
     }
 
-    # Save the extracted data to S3
     s3_client.put_object(
-        Bucket=output_bucket, Key=output_key, Body=json.dumps(results).encode("utf-8")
+        Bucket=output_bucket,
+        Key=output_key,
+        Body=json.dumps(result).encode("utf-8"),
     )
 
-    # Return the path to the output file
     return {
         "output_bucket": output_bucket,
         "output_key": output_key,

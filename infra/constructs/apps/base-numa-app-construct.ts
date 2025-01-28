@@ -309,6 +309,13 @@ export enum AppStatus {
   COMING_SOON = 'Coming Soon',
 }
 
+export const DROPDOWN_TASK = 'dropdown' as const;
+export const HTTP_REQUEST_TASK = 'http-request' as const;
+export const Q_APP_TASK = 'q-app' as const;
+export const S3_UPLOAD_TASK = 's3-upload' as const;
+export const TEXT_INPUT_TASK = 'text-input' as const;
+export const TEXT_OUTPUT_TASK = 'text-output' as const;
+
 export interface NumaAppManifestBaseTask {
   id: string;
   title: string;
@@ -316,19 +323,15 @@ export interface NumaAppManifestBaseTask {
 }
 
 export interface NumaAppManifestDropdownTask extends NumaAppManifestBaseTask {
-  type: 'dropdown';
+  type: typeof DROPDOWN_TASK;
   required: boolean;
   params: {
     options: string[];
   };
 }
 
-export interface NumaAppManifestTextInputTask extends NumaAppManifestBaseTask {
-  type: 'text-input';
-}
-
 export interface NumaAppManifestHttpRequestTask extends NumaAppManifestBaseTask {
-  type: 'http-request';
+  type: typeof HTTP_REQUEST_TASK;
   endpoint: string;
   params: {
     payload?: Record<string, unknown>;
@@ -336,7 +339,7 @@ export interface NumaAppManifestHttpRequestTask extends NumaAppManifestBaseTask 
 }
 
 export interface NumaAppManifestQAppTask extends NumaAppManifestBaseTask {
-  type: 'q-app';
+  type: typeof Q_APP_TASK;
   appVersion: string;
   params: {
     qAppId: string;
@@ -348,8 +351,16 @@ export interface NumaAppManifestQAppTask extends NumaAppManifestBaseTask {
   };
 }
 
+export interface NumaAppManifestTextInputTask extends NumaAppManifestBaseTask {
+  type: typeof TEXT_INPUT_TASK;
+}
+
+export interface NumaAppManifestS3UploadTask extends NumaAppManifestBaseTask {
+  type: typeof S3_UPLOAD_TASK;
+}
+
 export interface NumaAppManifestTextOutputTask extends NumaAppManifestBaseTask {
-  type: 'text-output';
+  type: typeof TEXT_OUTPUT_TASK;
   params: {
     dataRef: string;
   };
@@ -357,9 +368,10 @@ export interface NumaAppManifestTextOutputTask extends NumaAppManifestBaseTask {
 
 export type NumaAppManifestTask =
   | NumaAppManifestDropdownTask
-  | NumaAppManifestTextInputTask
-  | NumaAppManifestQAppTask
   | NumaAppManifestHttpRequestTask
+  | NumaAppManifestQAppTask
+  | NumaAppManifestS3UploadTask
+  | NumaAppManifestTextInputTask
   | NumaAppManifestTextOutputTask;
 
 export interface NumaAppManifest {
