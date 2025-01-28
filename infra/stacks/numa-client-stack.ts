@@ -112,7 +112,7 @@ export class NumaClientStack extends ArcanumStack {
               etag: Fn.filemd5(source),
             });
           });
-      } catch (e) {
+      } catch {
         console.warn('No frontend code found at: ' + folderPath);
       }
 
