@@ -22,13 +22,13 @@ export interface QInstanceDetails {
   qDataSourceId: string,
   qUserPool: string,
 }
-export async function getQInstanceDetails(credentials): Promise<QInstanceDetails> {
-  const applicationId = await getQApplicationId(credentials);
+export async function getQInstanceDetails(credentials, customerName?: string): Promise<QInstanceDetails> {
+  const applicationId = await getQApplicationId(credentials, customerName);
   const indexId = await getQIndexId(credentials, applicationId);
   const dataSourceId = await getQDataSourceId(credentials, applicationId, indexId);
-  const qUserPool = await getQUserPool(credentials);
+  const qUserPool = await getQUserPool(credentials, customerName);
   return {
-    qDataBucket: await getQDataBucket(credentials),
+    qDataBucket: await getQDataBucket(credentials, customerName),
     qApplicationId: applicationId,
     qIndexId: indexId,
     qDataSourceId: dataSourceId,
@@ -36,12 +36,10 @@ export async function getQInstanceDetails(credentials): Promise<QInstanceDetails
   }
 }
 
-export async function getQApplicationId(credentials): Promise<string> {
+export async function getQApplicationId(credentials, customerName?: string): Promise<string> {
   const qBusiness = new QBusinessClient({ region, credentials });
   const applications = (await qBusiness.send(new ListApplicationsCommand())).applications;
-  if (hasExactlyOne(applications, 'application')) {
-    return applications[0].applicationId;
-  }
+  return (await customerNameFilter(applications, customerName, 'application', 'displayName')).applicationId;
 }
 
 export async function getQIndexId(credentials, applicationId: string): Promise<string> {
@@ -67,21 +65,29 @@ export async function getQDataSourceId(credentials, applicationId: string, index
   }
 }
 
-export async function getQDataBucket(credentials): Promise<string> {
+export async function getQDataBucket(credentials, customerName?: string): Promise<string> {
   const s3 = new S3Client({ region, credentials });
   const buckets = (await s3.send(new ListBucketsCommand())).Buckets.filter((bucket) => bucket.Name.match(/^numa-.*-data$/));
-  if (hasExactlyOne(buckets, 'bucket')) {
-    return buckets[0].Name;
-  }
+  return  (await customerNameFilter(buckets, customerName + '-data', 'bucket', 'Name')).Name;
 }
 
-export async function getQUserPool(credentials): Promise<string> {
+export async function getQUserPool(credentials, customerName?: string): Promise<string> {
   const client = new CognitoIdentityProviderClient({ region, credentials });
   const userPools = (await client.send(new ListUserPoolsCommand({
     MaxResults: 60,
   }))).UserPools;
-  if (hasExactlyOne(userPools, 'user pool')) {
-    return userPools[0].Id;
+  return (await customerNameFilter(userPools, customerName, 'user pool', 'Name')).Id;
+}
+
+async function customerNameFilter<T>(collection: Array<T>, customerName: string, resource: string, nameName: string): Promise<T> {
+  if(customerName) {
+    const filteredCollection = await collection.filter((collectionObject) => collectionObject[nameName].match(`^numa-${customerName}$`));
+    if(hasExactlyOne(filteredCollection, resource)) {
+      return filteredCollection[0];
+    }
+  }
+  if (hasExactlyOne(collection, resource)) {
+    return collection[0];
   }
 }
 

@@ -102,23 +102,50 @@ Options:
 --start-sync: Start a sync
 --start-sync --all: Start sync for all data sources
 --start-sync --data-source-id <id>: Start sync for specific data source
+```
 
 Examples:
 
 1. Default: Check S3 data source status
+
+```bash
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name>
+```
 
-# 2. List all available data sources
+2. List all available data sources
+
+```bash
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --list
+```
 
-# 3. Start sync for specific data source
+3. Start sync for specific data source
+
+```bash
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --start-sync --data-source-id 70ba69cb-eddd-44b8-89e4-cf888c6343e3
+```
 
-# 4. Check sync status for all data sources
+4. Check sync status for all data sources
+
+```bash
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --sync-status
+```
 
-# 5. Check sync status for specific data source
+5. Check sync status for specific data source
+
+```bash
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --sync-status --data-source-id 70ba69cb-eddd-44b8-89e4-cf888c6343e3
+```
 
-# 6. Start sync for all data sources
+6. Start sync for all data sources
+
+```bash
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --start-sync --all
+```
+
+### downgrade-licences
+
+Downgrades all licences for a particular customer to lite. Also deletes licences without a matching Cognito user.
+
+```bash
+AWS_PROFILE=arcanum-q-deployer-prod yarn downgrade-licences <client-name>
+```
