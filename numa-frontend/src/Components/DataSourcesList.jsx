@@ -1,0 +1,149 @@
+import { useState, useEffect } from 'react';
+import { Alert, Button } from 'react-bootstrap';
+import { ListDataSourcesCommand } from "@aws-sdk/client-qbusiness";
+import { useAuth } from '../Providers/AuthProvider';
+
+const formatDate = (dateString) => {
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
+
+export const DataSourcesList = () => {
+    const [dataSources, setDataSources] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [show, setShow] = useState(false);
+    const [uploadedFiles, setUploadedFiles] = useState([]);
+    const [showUploadModal, setShowUploadModal] = useState(false);
+    const { qBusinessClient } = useAuth();
+
+    const handleShow = () => setShow(!show);
+
+    const fetchSources = async () => {
+        if (!qBusinessClient) return;
+
+        setLoading(true);
+        try {
+            const qIndexId = sessionStorage.getItem('Q_INDEX_ID');
+            const qApplicationId = sessionStorage.getItem('Q_APPLICATION_ID');
+
+            const input = {
+                applicationId: qApplicationId,
+                indexId: qIndexId,
+            };
+
+            const command = new ListDataSourcesCommand(input);
+            const response = await qBusinessClient.send(command);
+            console.log('List data sources response', response);
+
+            setDataSources(response.dataSources || []);
+        } catch (err) {
+            console.error("Error fetching data sources:", err);
+            setError("Failed to fetch data sources");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchSources();
+    }, [qBusinessClient]);
+
+    const removeFile = (index) => {
+        setUploadedFiles(uploadedFiles.filter((file, i) => i !== index));
+    };
+
+    if (loading) return <div className="text-muted small">Loading sources...</div>;
+    if (error) return <Alert variant="danger" className="py-1 mb-1">{error}</Alert>;
+
+    return (
+        <>
+            <div className={`sources-sidebar ${show ? 'show' : ''}`}>
+                <div className="sidebar-header d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="mb-0">Available Data Sources</h6>
+                    <Button
+                        variant="link"
+                        className="close-button p-0 text-muted"
+                        onClick={handleShow}
+                    >
+                        <i className="bi bi-x-lg"></i>
+                    </Button>
+                </div>
+                <div className="data-sources-list">
+                    {dataSources.length === 0 ? (
+                        <p className="small text-muted">No data sources available</p>
+                    ) : (
+                        <div className="sources-container small">
+                            {dataSources.map((source) => (
+                                <div
+                                    key={source.dataSourceId}
+                                    className="source-item mb-2 p-2 rounded"
+                                    style={{
+                                        background: '#f8f9fa',
+                                        border: '1px solid #dee2e6'
+                                    }}>
+                                    <div className="source-name fw-bold">{source.displayName}</div>
+                                    <div className="d-flex justify-content-between align-items-center mt-1">
+                                        {source.type && (
+                                            <span className="source-type text-muted small">({source.type})</span>
+                                        )}
+                                        <span className={`source-status badge tag-pill ${source.status === 'ACTIVE' ? 'tag-green' : 'tag-blue'}`}>
+                                            {source.status}
+                                        </span>
+                                    </div>
+                                    <div className="source-update text-muted mt-1" style={{ fontSize: '0.75rem' }}>
+                                        Last updated: {formatDate(source.updatedAt)}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <hr />
+                <Button
+                    variant="outline-primary"
+                    onClick={() => setShowUploadModal(true)}
+                    className="upload-button"
+                >
+                    Upload Files
+                </Button>
+
+                {uploadedFiles.length > 0 && (
+                    <div className="uploaded-files-section">
+                        <h6>Uploaded Files:</h6>
+                        <div className="uploaded-files-list">
+                            {uploadedFiles.map((file, index) => (
+                                <div key={index} className="uploaded-file">
+                                    <i className="bi bi-file-text"></i>
+                                    <span className="file-name">{file.name}</span>
+                                    <span className="file-size">({(file.size / 1024).toFixed(1)} KB)</span>
+                                    <button
+                                        onClick={() => removeFile(index)}
+                                        className="remove-file btn btn-link p-0 ms-2"
+                                        title="Remove file"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+            <div className="sidebar-buttons">
+                <Button onClick={handleShow} title={show ? 'Hide Sources' : 'Show Sources'}>
+                    <i className="bi bi-file-text"></i>
+                </Button>
+            </div>
+        </>
+    );
+};
+
+export default DataSourcesList;

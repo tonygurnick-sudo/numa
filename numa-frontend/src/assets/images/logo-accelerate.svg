@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="72" height="80" viewBox="0 0 72 80">
+  <defs>
+    <clipPath id="clip-Artboard_1">
+      <rect width="72" height="80"/>
+    </clipPath>
+  </defs>
+  <g id="Artboard_1" data-name="Artboard – 1" clip-path="url(#clip-Artboard_1)">
+    <path id="Combined-Shapeicon-accelerate" d="M12.207,29.594,8.325,37,0,37l3.882-7.406Zm16.609,0V37l-8.343,0v-7.4Zm0-14.77V22.23H7.719L11.6,14.824ZM21.41,0A7.406,7.406,0,0,1,28.8,6.9l.017.507H15.405L19.287,0Z" transform="translate(19.592 21.5)" fill="#fff" fill-rule="evenodd"/>
+  </g>
+</svg>

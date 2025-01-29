@@ -1,0 +1,120 @@
+{
+  "title": "Numa - Meeting Tools App",
+  "description": "Meeting tools Q app to assist processing within the Numa meeting tools app.",
+  "appVersion": 27,
+  "appDefinition": {
+    "appDefinitionVersion": "1",
+    "cards": [
+      {
+        "qQuery": {
+          "dependencies": [
+            "049d6293-781a-4f81-bb1e-2c325c854af6",
+            "a588c763-c6c5-4a0d-a157-cf5f27face3c"
+          ],
+          "id": "c5149259-23b0-45d4-88a8-f79b29bbb9c9",
+          "outputSource": "approved-sources",
+          "prompt": "Analyze the meeting notes and/or transcript to provide:\n- Key Contributions of each attendee\n- Engagement Level\n- Improvement Suggestions for future meetings\n\nUse concise bullet points in markdown format.\n\n<Meeting Notes and/or Transcript>\n @049d6293-781a-4f81-bb1e-2c325c854af6 \n<Meeting Notes and/or Transcript>\n\nPlease also take into consideration meeting context or other notes if applicable.\n\n<Other Notes>\n@a588c763-c6c5-4a0d-a157-cf5f27face3c \n<Other Notes>\nReturn just the participant insights in markdown format and nothing else.",
+          "title": "Participant Insights",
+          "type": "q-query"
+        }
+      },
+      {
+        "qQuery": {
+          "dependencies": [
+            "049d6293-781a-4f81-bb1e-2c325c854af6",
+            "a588c763-c6c5-4a0d-a157-cf5f27face3c"
+          ],
+          "id": "d8fb063f-3710-4087-b843-6add8e9a26fc",
+          "outputSource": "approved-sources",
+          "prompt": "Analyze the meeting notes and/or transcript to identify and summarize key topics discussed, structured in markdown format. Include:\n\nTopic Summary: List each primary topic with a brief description of the main points covered.\n\nTime Allocation: Estimate the time spent on each topic, if possible, based on cues in the transcript.\n\nRecurring Themes: Identify any themes or issues that recurred throughout the discussion and their impact or significance.\nPresent each topic and theme as a numbered or bulleted list in markdown, making it easy to review at a glance.\n\n<Meeting Notes and/or Transcript>\n@049d6293-781a-4f81-bb1e-2c325c854af6 \n<Meeting Notes and/or Transcript>\n\nPlease also take into consideration other notes if applicable.\n\n<Other Notes>\n @a588c763-c6c5-4a0d-a157-cf5f27face3c \n<Other Notes?\nReturn just the topic analysis in markdown format and nothing else.",
+          "title": "Topic Analysis",
+          "type": "q-query"
+        }
+      },
+      {
+        "qQuery": {
+          "dependencies": [
+            "049d6293-781a-4f81-bb1e-2c325c854af6",
+            "a588c763-c6c5-4a0d-a157-cf5f27face3c"
+          ],
+          "id": "9d9933d2-21cd-4acd-9190-e3064240a91d",
+          "outputSource": "approved-sources",
+          "prompt": "Analyze the meeting notes and/or transcript and extract a concise, bulleted list of key action items. If no specific action items, tasks, or deadlines are directly mentioned, generate a list of potential next steps or action items based on the discussion topics, but make sure they are explicitly stated as potential action items. Structure the output in markdown format, detailing:\n\n- Action Description: Briefly describe each task or action item discussed or assigned.\n- Assigned To: Indicate the individual(s) responsible for each action, if specified. If unclear, say assignee not specified.\n- Deadline: Note any deadlines or timelines associated with each task, if mentioned. If unclear, say deadline not specified.\n\nEnsure each action item is clearly outlined, using bullet points and markdown syntax to enhance readability. Keep the output short, concise and to relevant bullet points.\n\n<Meeting Notes and/or Transcript>\n@049d6293-781a-4f81-bb1e-2c325c854af6 \n<Meeting Notes and/or Transcript>\n\nPlease also take into consideration meeting context or other notes if applicable.\n\n<Other Notes>\n @a588c763-c6c5-4a0d-a157-cf5f27face3c \n<Other Notes>\nPlease output just the action items in markdown format and nothing else.\nAction Items:",
+          "title": "Action Items",
+          "type": "q-query"
+        }
+      },
+      {
+        "qQuery": {
+          "dependencies": [
+            "049d6293-781a-4f81-bb1e-2c325c854af6",
+            "205e13b4-1e56-4596-a5e1-68f0b11dae94"
+          ],
+          "id": "000f12a3-489b-4fc7-8f31-7d9a7c31a54f",
+          "outputSource": "approved-sources",
+          "prompt": "The following are some meeting notes and/or transcript from a meeting.\n<Meeting notes or transcript>\n@049d6293-781a-4f81-bb1e-2c325c854af6 \n<Meeting notes or transcript>\n\nUse the meeting notes or transcript to create a structured output that follows the following template.\n\n@205e13b4-1e56-4596-a5e1-68f0b11dae94 \n\nOutput just the populated template and nothing else. Use subheadings and dot points as applicable.",
+          "title": "Template Output",
+          "type": "q-query"
+        }
+      },
+      {
+        "qQuery": {
+          "dependencies": [
+            "9d9933d2-21cd-4acd-9190-e3064240a91d",
+            "cfab5818-6cbe-483b-8c46-c3e1a6288ea6",
+            "a588c763-c6c5-4a0d-a157-cf5f27face3c"
+          ],
+          "id": "fdfe3eb0-c744-478d-9225-d0e5ce812dd1",
+          "outputSource": "llm",
+          "prompt": "Using the meeting notes and/or transcript and identified action items, draft personalised follow-up emails for each attendee. Structure the output in markdown format, covering:\n- Email Greeting: A professional and courteous opening, addressing the attendee by name.\n- Meeting Summary: Brief recap of key discussion points and decisions relevant to the attendee.\n- Assigned Action Items: Bullet list of specific tasks assigned to the attendee, including deadlines and any collaborative requirements.\n- Next Steps: Outline upcoming actions, expectations, or follow-up meetings, if any.\n- Closing and Contact Information: Courteous closing statement with a contact for further questions or clarifications.\n\nEach email should be clearly structured, ensuring the attendee has a concise and actionable summary of their responsibilities. If the action items don't specify a specific attendee etc, write generic emails that can be filled in by the user.\n\n<Action Items>\n@9d9933d2-21cd-4acd-9190-e3064240a91d \n<Action Items>\n<Meeting Summary and Analysis>\n@cfab5818-6cbe-483b-8c46-c3e1a6288ea6 \n<Meeting Summary and Analysis>\n\nPlease also take into consideration meeting context or other notes if applicable.\n\n<Other Notes>\n@a588c763-c6c5-4a0d-a157-cf5f27face3c \n<Other Notes>\n\nPlease just return the follow up emails nothing else.\nEmails:",
+          "title": "Follow-Up Emails",
+          "type": "q-query"
+        }
+      },
+      {
+        "fileUpload": {
+          "id": "049d6293-781a-4f81-bb1e-2c325c854af6",
+          "title": "Meeting Notes / Transcript",
+          "dependencies": [],
+          "type": "file-upload",
+          "allowOverride": true
+        }
+      },
+      {
+        "textInput": {
+          "id": "a588c763-c6c5-4a0d-a157-cf5f27face3c",
+          "title": "Other Notes",
+          "dependencies": [],
+          "type": "text-input",
+          "placeholder": "e.g Meeting Context",
+          "defaultValue": ".",
+          "allowOverride": true
+        }
+      },
+      {
+        "textInput": {
+          "id": "205e13b4-1e56-4596-a5e1-68f0b11dae94",
+          "title": "Template Input (Optional)",
+          "dependencies": [],
+          "type": "text-input",
+          "placeholder": "Overview: Purpose, date, time, attendees. Key Points: Summarize main topics and decisions. Insights: Highlight key contributions per participant. Action Items: List tasks with assigned person(s) and deadlines. Next Steps: Follow-up actions or future meetings.",
+          "defaultValue": "- summarise the discussion\n- summarise the event\n- outline the requirements\n- actions and next steps",
+          "allowOverride": true
+        }
+      },
+      {
+        "qQuery": {
+          "dependencies": [
+            "049d6293-781a-4f81-bb1e-2c325c854af6",
+            "a588c763-c6c5-4a0d-a157-cf5f27face3c"
+          ],
+          "id": "cfab5818-6cbe-483b-8c46-c3e1a6288ea6",
+          "outputSource": "approved-sources",
+          "prompt": "Analyse the meeting transcript and/or meeting notes and provide an organised, multi-bullet pointed summary of key discussion points and decisions. Structure the output in markdown format, clearly presenting:\n\nOverview: A brief overview of the meeting’s purpose and key participants.\n\nKey Discussion Points: Bullet points summarizing main topics, issues raised, and insights shared.\n\nDecisions Made (if any): Numbered list of specific decisions agreed upon during the meeting.\n\nAction Items (if any): Bullet points of actionable tasks assigned, including responsible parties and deadlines if mentioned.\n\nAdditional Notes: Any other relevant information, such as follow-up requirements or items for future discussion.\n\nFormat each section with headings, using markdown syntax for clarity.\nAttendees: List all attendees to the meeting if names are present.\n\n<Meeting Transcript and/or Notes>\n@049d6293-781a-4f81-bb1e-2c325c854af6 \n<Meeting Transcript and/or Notes>\n\nPlease also take into consideration meeting context or other notes if applicable.\n<Other Notes>\n@a588c763-c6c5-4a0d-a157-cf5f27face3c \n<Other Notes>\nReturn just the meeting summary and nothing else.",
+          "title": "Meeting Summary & Analysis",
+          "type": "q-query"
+        }
+      }
+    ]
+  }
+}
