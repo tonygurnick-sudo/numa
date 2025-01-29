@@ -30,6 +30,7 @@ import {
   QBusinessChatControlConfigurerProps,
 } from './q-business-chat-control-configurer-construct';
 import { SetCallbackUrl } from './set-callback-url-construct';
+import { BedrockQuotaChecker } from './bedrock-quota-checker-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -618,6 +619,10 @@ export class CoreNumaInfra extends Construct {
     new TerraformOutput(this, 'data-source-id', { value: dataSourceId });
     new TerraformOutput(this, 'index-id', { value: indexId });
 
+    const quotaChecker = new BedrockQuotaChecker(this, 'bedrock-quota-checker', {
+      client: props.client,
+    });
+
     const models = [
       {
         model_id: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
@@ -627,6 +632,7 @@ export class CoreNumaInfra extends Construct {
     for (const model of models) {
       for (const region of model.regions) {
         new DataResource(this, `bedrock-model_${model.model_id.replace(/[.:]/g, '-')}_${region}`, {
+          dependsOn: [quotaChecker.result],
           provisioners: [
             {
               type: 'local-exec',
