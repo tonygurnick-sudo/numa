@@ -26,7 +26,11 @@ export class BedrockQuotaChecker extends Construct {
             effect: 'Allow',
             actions: [
               'servicequotas:GetServiceQuota',
-              'servicequotas:ListServiceQuotas'
+              'servicequotas:RequestServiceQuotaIncrease',
+              'servicequotas:GetRequestedServiceQuotaChange',
+              'support:CreateCase',
+              'support:AddAttachmentsToSet',
+              'support:DescribeCase'
             ],
             resources: ['*'],
           },
