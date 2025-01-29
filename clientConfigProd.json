@@ -67,25 +67,7 @@
     "clientAccountId": "060795909741"
   },
   "align-me": {
-    "clientAccountId": "1234",
-    "teamsConfigs": [
-      {
-        "tenantId": "1234",
-        "configuration": {
-          "isCrawlChatMessage": false,
-          "isCrawlChatAttachment": false,
-          "isCrawlChannelPost": true,
-          "isCrawlChannelAttachment": true,
-          "isCrawlChannelWiki": true,
-          "isCrawlCalendarMeeting": true,
-          "isCrawlMeetingChat": true,
-          "isCrawlMeetingFile": true,
-          "isCrawlMeetingNote": true,
-          "maxFileSizeInMegaBytes": "50",
-          "startCalendarDateTime": "2023-01-01T00:00:00Z"
-        }
-      }
-    ]
+    "clientAccountId": "048723025977"
   },
   "av-media": {
     "clientAccountId": "961341552812"
