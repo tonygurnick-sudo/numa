@@ -298,6 +298,11 @@ export abstract class BaseNumaApp extends Construct {
   }
 }
 
+export enum AppType {
+  NUMA = 'numa-app',
+  Q = 'q-app',
+}
+
 export enum AppStatus {
   ACTIVE = 'Active',
   INTERNAL = 'Internal',
@@ -320,6 +325,14 @@ export interface NumaAppManifestDropdownTask extends NumaAppManifestBaseTask {
 
 export interface NumaAppManifestTextInputTask extends NumaAppManifestBaseTask {
   type: 'text-input';
+}
+
+export interface NumaAppManifestHttpRequestTask extends NumaAppManifestBaseTask {
+  type: 'http-request';
+  endpoint: string;
+  params: {
+    payload?: Record<string, unknown>;
+  };
 }
 
 export interface NumaAppManifestQAppTask extends NumaAppManifestBaseTask {
@@ -346,12 +359,13 @@ export type NumaAppManifestTask =
   | NumaAppManifestDropdownTask
   | NumaAppManifestTextInputTask
   | NumaAppManifestQAppTask
+  | NumaAppManifestHttpRequestTask
   | NumaAppManifestTextOutputTask;
 
 export interface NumaAppManifest {
   appName: string;
   id: string;
-  type: string;
+  type: AppType;
   status: AppStatus;
   createdDate: string;
   appDescription: string;
