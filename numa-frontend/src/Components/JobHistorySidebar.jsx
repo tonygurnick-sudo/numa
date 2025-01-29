@@ -4,13 +4,22 @@ import { Button, ListGroup, Offcanvas } from 'react-bootstrap';
 import { formatDistanceToNow } from 'date-fns';
 
 const JobHistorySidebar = () => {
-  const { getAppJobs, numaAppData } = useNumaApp();
-  const [show, setShow] = useState(false);
+  const {
+    getAppJobs,
+    loadAppJobs,
+    loadJobResults,
+    numaAppData,
+    jobHistorySidebarOpen,
+    setJobHistorySidebarOpen
+  } = useNumaApp();
 
-  const handleClose = () => setShow(false);
-  const handleShow = () => setShow(true);
+  const handleClose = () => setJobHistorySidebarOpen(false);
+  const handleShow = async () => {
+    setJobHistorySidebarOpen(true);
+    await loadAppJobs();
+  };
 
-  const jobs = getAppJobs();
+  const jobs = getAppJobs() || [];
 
   return (
     <>
@@ -23,7 +32,7 @@ const JobHistorySidebar = () => {
         Recent Runs
       </Button>
 
-      <Offcanvas show={show} onHide={handleClose} placement="end">
+      <Offcanvas show={jobHistorySidebarOpen} onHide={handleClose} placement="end">
         <Offcanvas.Header closeButton>
           <Offcanvas.Title>
             Recent Jobs - {numaAppData?.appName || 'App'}
@@ -34,32 +43,66 @@ const JobHistorySidebar = () => {
             <p className="text-muted">No job history available</p>
           ) : (
             <ListGroup>
-              {jobs.map((job) => (
+              {jobs
+                .sort((a, b) => {
+                  const dateA = new Date(a.startedAt || a.dateTime);
+                  const dateB = new Date(b.startedAt || b.dateTime);
+                  return dateB - dateA;
+                })
+                .map((job) => (
                 <ListGroup.Item
                   key={job.jobID}
                   className="mb-2"
-                  style={{ cursor: 'pointer' }}
                 >
                   <div className="d-flex justify-content-between align-items-start">
                     <div>
                       <div className="fw-bold">
-                        Job {job.jobID.slice(0, 8)}...
+                        {(() => {
+                          try {
+                            const date = new Date(job.startedAt || job.dateTime);
+                            // Check if date is valid
+                            if (isNaN(date.getTime())) {
+                              return 'Unknown time';
+                            }
+                            return date.toLocaleString('en-NZ', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: 'numeric',
+                              hour12: true
+                            });
+                          } catch (error) {
+                            console.error('Error formatting date:', error);
+                            return 'Unknown time';
+                          }
+                        })()}
                       </div>
                       <small className="text-muted">
-                        {formatDistanceToNow(new Date(job.dateTime), {
-                          addSuffix: true,
-                        })}
+                        {(() => {
+                          try {
+                            const date = new Date(job.startedAt || job.dateTime);
+                            // Check if date is valid
+                            if (isNaN(date.getTime())) {
+                              return 'Unknown time';
+                            }
+                            return formatDistanceToNow(date, { addSuffix: true });
+                          } catch (error) {
+                            console.error('Error formatting date:', error);
+                            return 'Unknown time';
+                          }
+                        })()}
                       </small>
+                      <div className="text-muted small">
+                        Status: {job.status || 'completed'}
+                      </div>
                     </div>
                     <Button
                       variant="outline-secondary"
                       size="sm"
-                      onClick={() => {
-                        // TODO: Implement view job details
-                        console.log('View job details:', job);
-                      }}
+                      onClick={() => loadJobResults(job.jobID)}
+                      disabled={job.status === 'running'}
                     >
-                      View
+                      View Results
                     </Button>
                   </div>
                 </ListGroup.Item>

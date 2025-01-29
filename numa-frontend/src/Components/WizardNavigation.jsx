@@ -1,4 +1,3 @@
-import React from 'react';
 import { Button, ProgressBar } from 'react-bootstrap';
 
 const WizardNavigation = ({
@@ -143,27 +142,29 @@ const WizardNavigation = ({
         <div className={`step-group post-run ${hasBeenRun ? 'show' : ''}`}>
 
 
-          {postRunSteps.map((step, index) => (
-            <div key={step.id} className="step-container">
-              <div
-                className={`step-indicator ${
-                  activeStep === index + preRunSteps.length ? 'active' : ''
-                } ${isStepComplete?.(index + preRunSteps.length) ? 'completed' : ''} ${
-                  isStepDisabled?.(index + preRunSteps.length) ? 'disabled' : ''
-                }`}
-                onClick={() =>
-                  !isStepDisabled?.(index + preRunSteps.length) &&
-                  onStepClick(index + preRunSteps.length)
-                }
-              >
-
-                <div className="step-label-container">
-                  <span className="step-label">{step.title}</span>
+          {postRunSteps.map((step, index) => {
+            const stepIndex = index + preRunSteps.length;
+            return (
+              <div key={step.id} className="step-container">
+                <div
+                  className={`step-indicator ${
+                    activeStep === stepIndex ? 'active' : ''
+                  } ${isStepComplete?.(stepIndex) ? 'completed' : ''} ${
+                    isStepDisabled?.(stepIndex) ? 'disabled' : ''
+                  }`}
+                  onClick={() =>
+                    !isStepDisabled?.(stepIndex) &&
+                    onStepClick(stepIndex)
+                  }
+                >
+                  <div className="step-label-container">
+                    <span className="step-label">{step.title}</span>
+                  </div>
                 </div>
+                {index < postRunSteps.length - 1 && <div className="step-connector" />}
               </div>
-              {index < postRunSteps.length - 1 && <div className="step-connector" />}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

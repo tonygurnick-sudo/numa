@@ -5,7 +5,7 @@ import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
 import { TextOutputModule } from '../Modules/TextOutputModule';
 import { WizardNavigation } from './WizardNavigation';
-import { Preloader } from '../Components/Preloader'; // Assuming Preloader is imported from this location
+import { Preloader } from '../Components/Preloader';
 
 const AppWizard = ({ manifest }) => {
   const {
@@ -22,9 +22,12 @@ const AppWizard = ({ manifest }) => {
     setAppRunning,
     taskInputValues,
     setTaskInputValues,
-    setError
+    setError,
+    selectedTaskId,
+    setSelectedTaskId,
+    activeStep,
+    setActiveStep
   } = useNumaApp();
-  const [activeStep, setActiveStep] = useState(0);
   const [hasRun, setHasRun] = useState(false);
 
   // Filter out hidden tasks and system tasks (q-app and http-request)
@@ -64,12 +67,24 @@ const AppWizard = ({ manifest }) => {
 
   const handleStepClick = useCallback(
     (index) => {
-      const maxAllowedStep = visibleTasks.findIndex(
-        (task, i) => !taskCompletionStatus[task.id] && i !== activeStep,
-      );
-      if (maxAllowedStep === -1 || index <= maxAllowedStep) {
-        markDefaultContentComplete(activeStep); // Mark current task if it has default content
-        setActiveStep(index);
+      const task = visibleTasks[index];
+      if (task) {
+        // For output tasks, always allow clicking if there are results
+        if (task.type.includes('output')) {
+          setActiveStep(index);
+          setSelectedTaskId(task.id);
+          return;
+        }
+
+        // For input tasks, check if we can navigate there
+        const maxAllowedStep = visibleTasks.findIndex(
+          (task, i) => !taskCompletionStatus[task.id] && i !== activeStep,
+        );
+        if (maxAllowedStep === -1 || index <= maxAllowedStep) {
+          markDefaultContentComplete(activeStep); // Mark current task if it has default content
+          setActiveStep(index);
+          setSelectedTaskId(task.id);
+        }
       }
     },
     [
@@ -77,25 +92,27 @@ const AppWizard = ({ manifest }) => {
       taskCompletionStatus,
       activeStep,
       markDefaultContentComplete,
+      setSelectedTaskId
     ],
   );
 
-  const handleRunApp = async (e) => {
-    e.preventDefault();
+  const handleRunApp = async () => {
     try {
-      // Mark all tasks as complete immediately when running
-      const updatedStatus = { ...taskCompletionStatus };
+      // Reset task completion status
+      const updatedStatus = {};
       visibleTasks.forEach((task) => {
-        updatedStatus[task.id] = true;
+        updatedStatus[task.id] = false;
       });
       setTaskCompletionStatus(updatedStatus);
 
       // Find the first output task and set it as active
-      const firstOutputIndex = visibleTasks.findIndex((task) =>
+      const firstOutputTask = visibleTasks.find((task) =>
         task.type.includes('output'),
       );
-      if (firstOutputIndex !== -1) {
-        setActiveStep(firstOutputIndex);
+      if (firstOutputTask) {
+        const outputIndex = visibleTasks.indexOf(firstOutputTask);
+        setActiveStep(outputIndex);
+        setSelectedTaskId(firstOutputTask.id);
       }
 
       setHasRun(true);
@@ -105,7 +122,6 @@ const AppWizard = ({ manifest }) => {
       console.error('Error running app:', error);
       setError(error);
     } finally {
-      // Reset appRunning state after completion
       setAppRunning(false);
     }
   };
@@ -184,7 +200,6 @@ const AppWizard = ({ manifest }) => {
         return <p key={task.id}>Unknown task type</p>;
     }
   };
-
 
   if (!numaAppData) {
     return (
