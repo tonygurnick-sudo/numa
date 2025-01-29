@@ -28,7 +28,6 @@ export interface TeamsConfiguration {
   inclusionUserEmailFilter?: string[];
   startCalendarDateTime?: string;
   // endCalendarDateTime?: string;  NOTE: Wondering if it creates it up to the current date if we don't include this.
-  schedule?: Schedule;
 }
 
 const repositoryConfigurations: Record<string, RepositoryConfiguration> = {
