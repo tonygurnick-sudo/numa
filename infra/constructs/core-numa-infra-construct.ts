@@ -663,6 +663,11 @@ interface BoxConfig {
   configuration?: BoxConfiguration;
 }
 
+interface TeamsConfig {
+  tenantId: string;
+  configuration?: TeamsConfiguration;
+}
+
 export interface CoreNumaInfraProps
   extends _CoreNumaInfraProps,
     Omit<QBusinessChatControlConfigurerProps, 'applicationId' | 'region' | 'accountId'> {}
@@ -689,5 +694,5 @@ interface _CoreNumaInfraProps {
   mfa?: boolean;
   sharePointConfigs?: SharePointConfig[];
   boxConfigs?: BoxConfig[];
-  teamsConfigs?: TeamsConfiguration[];
+  teamsConfigs?: TeamsConfig[];
 }
