@@ -13,18 +13,6 @@ const Nav = () => {
   const { logout: authLogout } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
-  const { progress, runActive, handleRunButtonClick, numaAppData } =
-    useNumaApp();
-
-  const handleRunApp = async () => {
-    try {
-      // Using context's startApp function
-      await handleRunButtonClick(numaAppData);
-    } catch (error) {
-      // No need to set the error here as `startApp` in the context already handles it
-      console.error('Error starting app session:', error);
-    }
-  };
 
   useEffect(() => {
     const handleResize = () => {

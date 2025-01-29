@@ -16,7 +16,7 @@ import { formatCategory } from '../utils/textUtils';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, isLoading, setNumaAppId, numaAppData } = useNumaApp();
+  const { error, loading, setNumaAppId, numaAppData } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
 
@@ -29,12 +29,24 @@ const AppDetail = () => {
     toggleFavorite(appId);
   };
 
+  if (error) {
+    return (
+      <div className="dashboard">
+        <Container fluid>
+          <Alert variant="danger">
+            {typeof error === 'string' ? error : 'An error occurred while loading the app'}
+          </Alert>
+        </Container>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard">
       <JobHistorySidebar />
       <header>
         <Container fluid>
-          {!isLoading && <Breadcrumbs label={numaAppData?.appName} />}
+          <Breadcrumbs label={numaAppData?.appName} />
           <Row>
             <Col lg={8} className="">
               <div className="d-flex align-items-center gap-3">
@@ -91,22 +103,14 @@ const AppDetail = () => {
 
       <main className="flex-grow-1">
         <Container fluid>
-          {error && <Alert variant="danger">{error}</Alert>}
-          <div
-            className={`transition-opacity duration-150 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
-          >
-            {numaAppData &&
-              (numaAppData.type === 'numa-app' ? (
-                <AppWizard manifest={numaAppData} />
-              ) : numaAppData.type === 'q-app' ? (
-                <QAppDetail />
-              ) : null)}
-          </div>
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Preloader />
-            </div>
-          )}
+          {loading && !numaAppData ? (
+            <Preloader smallscreen={true} overlayParent={true} />
+          ) : numaAppData &&
+            (numaAppData.type === 'numa-app' ? (
+              <AppWizard manifest={numaAppData} />
+            ) : numaAppData.type === 'q-app' ? (
+              <QAppDetail />
+            ) : null)}
         </Container>
       </main>
 
