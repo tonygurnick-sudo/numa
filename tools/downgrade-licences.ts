@@ -32,6 +32,7 @@ async function sign(
       host: url.host,
       "Content-Type": "application/x-amz-json-1.1",
     },
+    query: Object.fromEntries(url.searchParams),
     body,
   });
 
@@ -60,12 +61,20 @@ async function listSubscriptions(
   credentials,
   applicationId: string,
 ): Promise<Array<Subscription>> {
-  const url = new URL(
-    `https://qbusiness.us-east-1.api.aws/applications/${applicationId}/subscriptions`,
-  );
-  return (
-    await (await fetch(await sign(credentials, "GET", url, "qbusiness"))).json()
-  )["subscriptions"];
+  const baseUrl = `https://qbusiness.us-east-1.api.aws/applications/${applicationId}/subscriptions?maxResults=100`;
+  const subs: Subscription[] = [];
+  let nextToken: string = undefined;
+  do {
+    const url = nextToken
+      ? new URL(baseUrl + "&nextToken=" + nextToken)
+      : new URL(baseUrl);
+    const response = await (
+      await fetch(await sign(credentials, "GET", url, "qbusiness"))
+    ).json();
+    subs.push(...response.subscriptions);
+    nextToken = response.nextToken;
+  } while (nextToken);
+  return subs;
 }
 
 async function setSubscription(
