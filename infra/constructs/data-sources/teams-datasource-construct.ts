@@ -1,7 +1,7 @@
 import { Construct } from 'constructs';
 import { TerraformOutput } from 'cdktf';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
-import { DataSourceProps, DataSource, RepositoryConfiguration, Schedule } from './base-datasource-construct';
+import { DataSourceProps, DataSource, RepositoryConfiguration } from './base-datasource-construct';
 
 export interface TeamsConfiguration {
   enableDeletionProtection?: boolean;
