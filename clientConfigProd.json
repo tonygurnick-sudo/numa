@@ -287,7 +287,8 @@
     "clientAccountId": "228743762183"
   },
   "momentum": {
-    "clientAccountId": "746669231307"
+    "clientAccountId": "746669231307",
+    "createServiceLinkedRole": false
   },
   "mosaic": {
     "clientAccountId": "471112582627",
