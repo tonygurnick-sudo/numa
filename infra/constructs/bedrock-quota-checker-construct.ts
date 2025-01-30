@@ -21,30 +21,27 @@ export class BedrockQuotaChecker extends Construct {
     });
 
     const policyDoc = new DataAwsIamPolicyDocument(this, 'policy-doc', {
-        statement: [
-          {
-            effect: 'Allow',
-            actions: [
-              'servicequotas:GetServiceQuota',
-              'servicequotas:RequestServiceQuotaIncrease',
-              'servicequotas:GetRequestedServiceQuotaChange',
-              'support:CreateCase',
-              'support:AddAttachmentsToSet',
-              'support:DescribeCase'
-            ],
-            resources: ['*'],
-          },
-          {
-            effect: 'Allow',
-            actions: [
-              'logs:CreateLogGroup',
-              'logs:CreateLogStream',
-              'logs:PutLogEvents'
-            ],
-            resources: ['*'],
-          }
-        ],
-      });
+      statement: [
+        {
+          effect: 'Allow',
+          actions: [
+            'servicequotas:GetServiceQuota',
+            'support:CreateCase',
+            'support:DescribeCases'
+          ],
+          resources: ['*'],
+        },
+        {
+          effect: 'Allow',
+          actions: [
+            'logs:CreateLogGroup',
+            'logs:CreateLogStream',
+            'logs:PutLogEvents'
+          ],
+          resources: ['*'],
+        }
+      ],
+    });
 
     new IamRolePolicy(this, 'policy', {
       role: role.name,
@@ -61,13 +58,16 @@ export class BedrockQuotaChecker extends Construct {
         path: path.join('constructs', 'bedrock-quota-checker'),
       });
 
-    // Invoke the Lambda and store result
-    this.result = new LambdaInvocation(this, 'check', {
-      functionName: func.lambdaFunction.functionName,
-      input: JSON.stringify({
-        client: props.client,
-      }),
-    });
+      this.result = new LambdaInvocation(this, 'check', {
+        functionName: func.lambdaFunction.functionName,
+        input: JSON.stringify({
+          client: props.client,
+          timestamp: new Date().toISOString()
+        }),
+        triggers: {
+          timestamp: new Date().toISOString()
+        }
+      });
 
     new TerraformOutput(this, 'quota-check-result', {
         value: this.result.result
