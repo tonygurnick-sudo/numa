@@ -63,13 +63,13 @@ __metadata:
   linkType: hard
 
 "@aws-sdk/client-qbusiness@npm:^3.699.0":
-  version: 3.734.0
-  resolution: "@aws-sdk/client-qbusiness@npm:3.734.0"
+  version: 3.738.0
+  resolution: "@aws-sdk/client-qbusiness@npm:3.738.0"
   dependencies:
     "@aws-crypto/sha256-browser": "npm:5.2.0"
     "@aws-crypto/sha256-js": "npm:5.2.0"
     "@aws-sdk/core": "npm:3.734.0"
-    "@aws-sdk/credential-provider-node": "npm:3.734.0"
+    "@aws-sdk/credential-provider-node": "npm:3.738.0"
     "@aws-sdk/eventstream-handler-node": "npm:3.734.0"
     "@aws-sdk/middleware-eventstream": "npm:3.734.0"
     "@aws-sdk/middleware-host-header": "npm:3.734.0"
@@ -112,7 +112,7 @@ __metadata:
     "@types/uuid": "npm:^9.0.1"
     tslib: "npm:^2.6.2"
     uuid: "npm:^9.0.1"
-  checksum: 10c0/f82533a8ca95a3c4786647fe2f459f36bcbd85fd607122191a3f61b59b476a93a7efee335ff08ae8d67881efb9a03c7158b54c48707135f2b469eb8641f53458
+  checksum: 10c0/8c9443ee6edcde76993c66b5c1a8881b24c5999e85617ee1ae5736770946661bb877b97ff8bf1e70c038c5fd555192633e1cb22ba4f36d08ae968771445c40de
   languageName: node
   linkType: hard
 
@@ -233,9 +233,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aws-sdk/credential-provider-node@npm:3.734.0":
-  version: 3.734.0
-  resolution: "@aws-sdk/credential-provider-node@npm:3.734.0"
+"@aws-sdk/credential-provider-node@npm:3.738.0":
+  version: 3.738.0
+  resolution: "@aws-sdk/credential-provider-node@npm:3.738.0"
   dependencies:
     "@aws-sdk/credential-provider-env": "npm:3.734.0"
     "@aws-sdk/credential-provider-http": "npm:3.734.0"
@@ -249,7 +249,7 @@ __metadata:
     "@smithy/shared-ini-file-loader": "npm:^4.0.1"
     "@smithy/types": "npm:^4.1.0"
     tslib: "npm:^2.6.2"
-  checksum: 10c0/5ef9d24a473e73c831748bde93169ca4634d7f7e4ac1b5100d78f08c407b3bc0ffe7ff21b65c6a04b0e7c1fe9a4c484a1348b3e63cb6e394d72066940c5ea507
+  checksum: 10c0/c9ab6582ddc536113fe7e037179f3d145b7c42d661f5f118967227a519e7a51368307a2a5edb7d7768187ca5768d147bf0026be51c6bfff9c78ff6fba03b7407
   languageName: node
   linkType: hard
 
