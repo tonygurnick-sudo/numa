@@ -24,6 +24,6 @@
     "target": "ES2022",
     "incremental": true
   },
-  "include": ["**/*.ts", "constructs/bedrock-quota-checker/index.mjs"],
+  "include": ["**/*.ts", "**/*.mjs"],
   "exclude": ["node_modules", "cdktf.out", "dist"]
 }
