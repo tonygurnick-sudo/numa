@@ -3,7 +3,7 @@ import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
-import { AppStatus, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
+import { AppStatus, AppType, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
 
 const additional_comments = `
 When customizing these policies for specific school contexts, boards should consider:
@@ -91,7 +91,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
     this.manifest = {
       appName: 'Policy Designer',
       id: 'policy-builder-app',
-      type: 'policy-builder',
+      type: AppType.NUMA,
       status: AppStatus.ACTIVE,
       createdDate: '2024-03-20T10:00:00Z',
       appDescription:

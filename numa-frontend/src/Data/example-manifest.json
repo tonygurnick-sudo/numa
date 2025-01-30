@@ -1,0 +1,336 @@
+{
+  "apps": [
+    {
+      "appName": "Policy Designer",
+      "id": "policy-builder-app",
+      "type": "policy-builder",
+      "status": "Active",
+      "category": "compliance",
+      "tags": ["NZSBA"],
+      "createdDate": "2024-03-20T10:00:00Z",
+      "appDescription": "Create and manage organizational policies with AI assistance. This tool helps draft, review, and format policies while ensuring compliance with industry standards and regulations.",
+      "tasks": [
+        {
+          "id": "policy-type-selection",
+          "title": "Select Policy Type",
+          "type": "dropdown",
+          "required": true,
+          "params": {
+            "options": [
+              "IT Security Policy",
+              "HR Policy",
+              "Compliance Policy",
+              "Operations Policy",
+              "Custom Policy"
+            ]
+          },
+          "order": 1
+        },
+        {
+          "id": "policy-requirements",
+          "title": "Policy Requirements",
+          "type": "text-input",
+          "description": "Describe the key requirements and objectives for this policy",
+          "required": true,
+          "order": 2
+        },
+        {
+          "id": "generate-policy",
+          "title": "Generate Policy Draft",
+          "type": "q-app",
+          "appVersion": "1",
+          "params": {
+            "qAppId": "policy-generator-q-app",
+            "inputs": [
+              {
+                "inputContentRef": "@policy-type-selection",
+                "qInputCardId": "policy-type"
+              },
+              {
+                "inputContentRef": "@policy-requirements",
+                "qInputCardId": "requirements"
+              }
+            ],
+            "qOutputCardId": "policy-draft"
+          },
+          "order": 3
+        },
+        {
+          "id": "display-policy",
+          "title": "Review Policy",
+          "type": "text-output",
+          "params": {
+            "dataRef": "@generate-policy"
+          },
+          "order": 4
+        }
+      ]
+    },
+    {
+      "appName": "Meeting Tools App",
+      "id": "meeting-tools-app",
+      "type": "numa-app",
+      "status": "Active",
+      "appVersion": 0.02,
+      "category": "productivity",
+      "tags": ["meeting", "analysis", "productivity", "insights", "note-taking", "transcript", "meeting-minutes", "action-items", "follow-up", "summary", "reporting"],
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "The Meeting Insights and Analysis Tool is designed to transform raw meeting data into comprehensive summaries, insightful analyses, and actionable outputs. Whether your meetings are in person, virtual, or a blend of both, this app helps you make the most out of your meeting notes and transcripts by providing structured, automated reports and follow-up resources.",
+      "tasks": [
+        {
+          "id": "upload-files-to-s3",
+          "title": "Upload Files",
+          "description": "Upload your notes or transcript from your meeting",
+          "type": "s3-upload",
+          "required": true,
+          "params": {
+            "bucketName": "numa-meeting-notes"
+          },
+          "order": 1
+        },
+        {
+          "id": "template-task",
+          "title": "Template",
+          "type": "text-input",
+          "default": "- summarise the discussion\n- summarise the event\n- outline the requirements\n- actions and next steps",
+          "order": 1
+        },
+        {
+          "id": "other-notes",
+          "title": "Other Notes",
+          "required": false,
+          "description": "Include any other notes that might be useful.",
+          "type": "text-input",
+          "default": "other notes:",
+          "order": 1
+        },
+        {
+          "id": "call-step-function",
+          "title": "Process Meeting Notes",
+          "type": "http-request",
+          "requiredTasks": {
+            "any": ["@upload-files-to-s3"]
+          },
+          "endpoint": "meeting-tools",
+          "params": {
+            "payload": {
+              "uploadedFiles": [
+                {
+                  "bucket": "numa-q-dev",
+                  "key": "@upload-files-to-s3"
+                }
+              ]
+            }
+          },
+          "order": 2
+        },
+        {
+          "id": "process-with-q-app",
+          "title": "Process with Q App",
+          "type": "q-app",
+          "appVersion": "1",
+          "params": {
+            "qAppId": "d152ee6f-a1e8-40ea-810e-aa006790a897",
+            "inputs": [
+              {
+                "inputContentRef": "@call-step-function",
+                "base64encode": true,
+                "qInputCardId": "049d6293-781a-4f81-bb1e-2c325c854af6"
+              },
+              {
+                "inputContentRef": "@template-task",
+                "qInputCardId": "205e13b4-1e56-4596-a5e1-68f0b11dae94"
+              },
+              {
+                "inputContentRef": "@other-notes",
+                "qInputCardId": "a588c763-c6c5-4a0d-a157-cf5f27face3c"
+              }
+            ],
+            "outputs": [
+              {
+                "outputContentRef": "@show-meeting-summary",
+                "qOutputCardId": "cfab5818-6cbe-483b-8c46-c3e1a6288ea6"
+              },
+              {
+                "outputContentRef": "@show-template-results",
+                "qOutputCardId": "000f12a3-489b-4fc7-8f31-7d9a7c31a54f"
+              }
+            ]
+          },
+          "order": 3
+        },
+        {
+          "id": "meeting-summary-results",
+          "title": "Meeting Summary & Analysis",
+          "type": "text-output",
+          "params": {
+            "dataRef": "@show-meeting-summary"
+          },
+          "order": 4
+        },
+        {
+          "id": "template-results",
+          "title": "Template Results",
+          "type": "text-output",
+          "params": {
+            "dataRef": "@show-template-results"
+          },
+          "order": 4
+        }
+      ]
+    },
+    {
+      "appName": "Numa App Workflow",
+      "id": "numa-workflow-app-id",
+      "type": "numa-app",
+      "status": "Coming Soon",
+      "category": "hr",
+      "tags": ["risk-assessment", "governance", "audit", "regulatory"],
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "Processes a file through S3, Q App, and Lambda, then displays the output.",
+      "tasks": [
+        {
+          "id": "upload-file-to-s3-bucket",
+          "title": "Upload a file",
+          "type": "s3-upload",
+          "params": {
+            "bucketName": "my-bucket",
+            "fileKey": "uploads/input_file.txt"
+          },
+          "order": 1
+        },
+        {
+          "id": "process-with-q-app",
+          "title": "Process with Q App",
+          "type": "q-app",
+          "params": {
+            "qAppId": "q-app-123",
+            "inputContentRef": "upload-file-to-s3-bucket",
+            "outputKey": "q-app-output"
+          },
+          "order": 2
+        },
+        {
+          "id": "process-with-lambda",
+          "title": "Process with Lambda",
+          "type": "backend",
+          "params": {
+            "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:my-lambda-function",
+            "input": {
+              "inputContentRef": "process-with-q-app"
+            }
+          },
+          "order": 3
+        },
+        {
+          "id": "display-output",
+          "title": "Display Output",
+          "type": "text-output",
+          "params": {
+            "dataRef": "process-with-lambda"
+          },
+          "order": 4
+        }
+      ]
+    },
+    {
+      "appName": "Meeting Tools App Native Q App",
+      "id": "meeting-tools-app-native-test",
+      "type": "q-app",
+      "appVersion": 1,
+      "qAppId": "d152ee6f-a1e8-40ea-810e-aa006790a897",
+      "status": "Coming Soon",
+      "category": "productivity",
+      "tags": ["recruitment", "hiring", "talent", "screening"],
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "An app to calculate if refinancing a loan is worth it based on current and new loan details."
+    },
+    {
+      "appName": "Loan Refinancing Calculator",
+      "id": "loan-financing-calculator",
+      "type": "q-app",
+      "qAppId": "dc1427b5-7673-4c26-9add-5bda95c00b30",
+      "status": "Deploy",
+      "category": "finance",
+      "tags": ["templates", "documentation", "workflow", "automation"],
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "An app to calculate if refinancing a loan is worth it based on current and new loan details."
+    },
+    {
+      "appName": "Data Processing App",
+      "id": "data-processing-app-id",
+      "type": "numa-app",
+      "status": "Test",
+      "category": "general",
+      "tags": ["ai-analysis", "extraction", "insights", "documents"],
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "Processes raw data and generates insights.",
+      "tasks": [
+        {
+          "id": "upload-files-to-s3",
+          "title": "Upload a file",
+          "type": "s3-upload",
+          "params": {
+            "bucketName": "raw-data-bucket",
+            "fileKeyPrefix": "processed-files/"
+          },
+          "order": 1
+        },
+        {
+          "id": "data-analysis",
+          "title": "Data Analysis",
+          "type": "http-request",
+          "endpoint": "data-analys-etc",
+          "params": {
+            "payload": {
+              "content": {
+                "uploadedFiles": "@upload-files-to-s3"
+              }
+            }
+          },
+          "order": 2
+        },
+        {
+          "id": "display-insights",
+          "title": "Display Insights",
+          "type": "text-output",
+          "params": {
+            "dataRef": "data-analysis"
+          },
+          "order": 3
+        }
+      ]
+    },
+    {
+      "appName": "Machine Learning Model Deployment App",
+      "id": "ml-model-deployment-app-id",
+      "type": "numa-app",
+      "status": "",
+      "category": "compliance",
+      "tags": [],
+      "createdDate": "2023-11-06T10:38:12Z",
+      "appDescription": "Deploys a machine learning model to a cloud platform.",
+      "tasks": [
+        {
+          "id": "model-deployment",
+          "title": "Model Deployment",
+          "type": "backend",
+          "params": {
+            "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:model-deployment-step-function"
+          },
+          "order": 1
+        },
+
+        {
+          "id": "display-model-metrics",
+          "title": "Display Model Metrics",
+          "type": "text-output",
+          "params": {
+            "dataRef": "model-monitoring"
+          },
+          "order": 2
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import * as asl from 'asl-types';
 import { Construct } from 'constructs';
-import { AppStatus, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
+import { AppStatus, AppType, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
 
 export class ExampleNumaApp extends BaseNumaApp {
   readonly manifest;
@@ -15,8 +15,8 @@ export class ExampleNumaApp extends BaseNumaApp {
       appDescription: 'Example app',
       id: props.pathPrefix,
       status: AppStatus.ACTIVE,
-      type: '',
-      createdDate: '',
+      type: AppType.NUMA,
+      createdDate: '2024-01-01',
       tasks: [],
     };
 

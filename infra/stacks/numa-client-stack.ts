@@ -86,10 +86,13 @@ export class NumaClientStack extends ArcanumStack {
 
     if (props.config.uploadFrontend ?? true) {
       const folderPath = path.join(import.meta.dirname, '..', 'build', 'numa-frontend');
+      const excludedFiles = ['config.json', 'manifest.json'];
+      let objects: S3Object[] = [];
       try {
-        const objects = fs
+        objects = fs
           .readdirSync(folderPath, { recursive: true, withFileTypes: true })
           .filter((f) => f.isFile())
+          .filter((f) => !excludedFiles.includes(f.name))
           .map((f) => path.join(f.parentPath, f.name))
           .map((source) => {
             const contentType = {
@@ -109,37 +112,35 @@ export class NumaClientStack extends ArcanumStack {
               etag: Fn.filemd5(source),
             });
           });
-
-        const config = new S3Object(this, 'config-item', {
-          bucket: fe.frontendBucket.bucket,
-          key: 'config.json',
-          content: JSON.stringify({
-            cognito: {
-              userPoolId: core.userPoolId,
-              userPoolWebClientId: core.userPoolClient?.id,
-              identityPoolId: core.identityPoolId,
-              region: 'us-east-1', // TODO: Dynamic.
-            },
-            roleArn: core.webExperienceRoleArn,
-            apiEndpoint: '/api',
-          }),
-          contentType: 'application/json',
-        });
-
-        const manifest = new S3Object(this, 'manifest-item', {
-          bucket: fe.frontendBucket.bucket,
-          key: 'manifest.json',
-          content: JSON.stringify({ apps }),
-          contentType: 'application/json',
-        });
-
-        new InvalidateCloudfront(this, 'invalidate', {
-          cloudfrontDistribution: fe.distribution,
-          dependsOn: [manifest, config, ...objects],
-        });
       } catch {
         console.warn('No frontend code found at: ' + folderPath);
       }
+
+      const config = new S3Object(this, 'config-item', {
+        bucket: fe.frontendBucket.bucket,
+        key: 'config.json',
+        content: JSON.stringify({
+          USER_POOL_ID: core.userPoolId,
+          CLIENT_ID: core.userPoolClient?.id,
+          IDENTITY_POOL_ID: core.identityPoolId,
+          REGION: 'us-east-1', // TODO: Dynamic.
+          ROLE_ARN: core.webExperienceRoleArn,
+          API_ENDPOINT: '/api',
+        }),
+        contentType: 'application/json',
+      });
+
+      const manifest = new S3Object(this, 'manifest-item', {
+        bucket: fe.frontendBucket.bucket,
+        key: 'manifest.json',
+        content: JSON.stringify({ apps: apps.map((app) => app.manifest) }),
+        contentType: 'application/json',
+      });
+
+      new InvalidateCloudfront(this, 'invalidate', {
+        cloudfrontDistribution: fe.distribution,
+        dependsOn: [manifest, config, ...objects],
+      });
     }
   }
 }

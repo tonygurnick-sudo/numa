@@ -122,3 +122,5 @@ test.pdf
 **/.vite/deps
 
 accounts.html
+numa-frontend/coverage
+**/install-state.gz

@@ -1,0 +1,230 @@
+export const dashboardFixtures = {
+  validApps: {
+    apps: [
+      {
+        appName: 'Meeting Tools App',
+        id: 'meeting-tools-app',
+        type: 'numa-app',
+        status: 'Active',
+        createdDate: '2023-11-06T10:38:12Z',
+        appDescription: 'Processes meeting notes.',
+        tasks: [
+          {
+            id: 'upload-files-to-s3',
+            title: 'Upload Files (Optional)',
+            type: 's3-upload',
+            params: {
+              bucketName: 'meeting-notes-bucket',
+              fileKeyPrefix: 'meetings/{meetingId}',
+            },
+            order: 1,
+            nextTask: 'call-step-function',
+          },
+          {
+            id: 'meeting-context',
+            title: 'Your Meeting Context (Optional)',
+            type: 'text-input',
+            order: 1,
+            nextTask: 'call-step-function',
+          },
+          {
+            id: 'template',
+            title: 'Use a Template (Optional)',
+            type: 'text-input',
+            order: 1,
+            nextTask: 'call-step-function',
+          },
+          {
+            id: 'call-step-function',
+            title: 'Process Meeting Notes',
+            type: 'http-request',
+            requiredTasks: {
+              any: ['upload-files-to-s3', 'meeting-context', 'template'],
+            },
+            endpoint: 'meeting-tools',
+            params: {
+              payload: {
+                content: {
+                  uploadedFiles: 'meeting-notes-bucket/meetings/1234567890',
+                },
+                meetingContext: 'Discussed project milestones.',
+                otherNotes: 'Follow up with the client.',
+                template: 'Meeting Summary Template',
+              },
+            },
+            order: 2,
+            nextTask: 'call-q-app',
+          },
+          {
+            id: 'call-q-app',
+            title: 'Process with Q App',
+            type: 'q-app',
+            params: {
+              qAppId: 'q-app-for-meeting-notes',
+              inputContentRef: 'call-step-function',
+              outputKey: 'q-app-output',
+            },
+            order: 3,
+            nextTask: 'display-results',
+          },
+          {
+            id: 'display-results',
+            title: 'Display Results',
+            type: 'text-output',
+            params: {
+              dataRef: 'call-q-app',
+            },
+            order: 4,
+          },
+        ],
+      },
+      {
+        appName: 'Numa App Workflow',
+        id: 'numa-workflow-app-id',
+        type: 'numa-app',
+        status: 'Coming Soon',
+        createdDate: '2023-11-06T10:38:12Z',
+        appDescription:
+          'Processes a file through S3, Q App, and Lambda, then displays the output.',
+        tasks: [
+          {
+            id: 'upload-file-to-s3-bucket',
+            title: 'Upload a file',
+            type: 's3-upload',
+            params: {
+              bucketName: 'my-bucket',
+              fileKey: 'uploads/input_file.txt',
+            },
+            order: 1,
+            nextTask: 'process-with-q-app',
+          },
+          {
+            id: 'process-with-q-app',
+            title: 'Process with Q App',
+            type: 'q-app',
+            params: {
+              qAppId: 'q-app-123',
+              inputContentRef: 'upload-file-to-s3-bucket',
+              outputKey: 'q-app-output',
+            },
+            order: 2,
+            nextTask: 'process-with-lambda',
+          },
+          {
+            id: 'process-with-lambda',
+            title: 'Process with Lambda',
+            type: 'backend',
+            params: {
+              lambdaArn:
+                'arn:aws:lambda:us-east-1:123456789012:function:my-lambda-function',
+              input: {
+                inputContentRef: 'process-with-q-app',
+              },
+            },
+            order: 3,
+            nextTask: 'display-output',
+          },
+          {
+            id: 'display-output',
+            title: 'Display Output',
+            type: 'text-output',
+            params: {
+              dataRef: 'process-with-lambda',
+            },
+            order: 4,
+          },
+        ],
+      },
+      {
+        appName: 'Loan Refinancing Calculator',
+        id: 'loan-financing-calculator',
+        type: 'q-app',
+        qAppId: 'dc1427b5-7673-4c26-9add-5bda95c00b30',
+        status: 'Coming Soon',
+        createdDate: '2023-11-06T10:38:12Z',
+        appDescription:
+          'An app to calculate if refinancing a loan is worth it based on current and new loan details.',
+      },
+      {
+        appName: 'Data Processing App',
+        id: 'data-processing-app-id',
+        type: 'numa-app',
+        status: 'Test',
+        createdDate: '2023-11-06T10:38:12Z',
+        appDescription: 'Processes raw data and generates insights.',
+        tasks: [
+          {
+            id: 'data-ingestion',
+            title: 'Upload a file',
+            type: 's3-upload',
+            params: {
+              bucketName: 'raw-data-bucket',
+              fileKey: 'raw_data.csv',
+            },
+            order: 1,
+            nextTask: 'data-analysis',
+          },
+          {
+            id: 'data-analysis',
+            title: 'Data Analysis',
+            type: 'backend',
+            params: {
+              lambdaArn:
+                'arn:aws:lambda:us-east-1:123456789012:function:data-analysis-step-function',
+            },
+            order: 2,
+            nextTask: 'display-insights',
+          },
+          {
+            id: 'display-insights',
+            title: 'Display Insights',
+            type: 'text-output',
+            params: {
+              dataRef: 'data-analysis',
+            },
+            order: 3,
+          },
+        ],
+      },
+      {
+        appName: 'Machine Learning Model Deployment App',
+        id: 'ml-model-deployment-app-id',
+        type: 'numa-app',
+        status: '',
+        createdDate: '2023-11-06T10:38:12Z',
+        appDescription: 'Deploys a machine learning model to a cloud platform.',
+        tasks: [
+          {
+            id: 'model-deployment',
+            title: 'Model Deployment',
+            type: 'backend',
+            params: {
+              lambdaArn:
+                'arn:aws:lambda:us-east-1:123456789012:function:model-deployment-step-function',
+            },
+            order: 1,
+            nextTask: 'display-model-metrics',
+          },
+
+          {
+            id: 'display-model-metrics',
+            title: 'Display Model Metrics',
+            type: 'text-output',
+            params: {
+              dataRef: 'model-monitoring',
+            },
+            order: 2,
+          },
+        ],
+      },
+    ],
+  },
+  invalidArrayApps: {
+    apps: 'this is not an array',
+  },
+  invalidObjectApps: {
+    apps: {
+      this: 'is not an array',
+    },
+  },
+};

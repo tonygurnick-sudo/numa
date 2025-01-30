@@ -33,6 +33,7 @@ variables:
         - lambdas/python/extract-content-from-file
         - lambdas/python/financial-analysis-analysis
         - lambdas/python/financial-analysis-data-extraction
+        - lambdas/python/meeting-analyser
         - lambdas/python/numa-recent-jobs
         - lambdas/python/policy-builder-completion
         - lambdas/python/policy-builder-expert-review

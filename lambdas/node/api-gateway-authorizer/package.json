@@ -27,6 +27,6 @@
     "test": "echo NYI"
   },
   "dependencies": {
-    "aws-jwt-verify": "^4.0.1"
+    "aws-jwt-verify": "^5.0.0"
   }
 }

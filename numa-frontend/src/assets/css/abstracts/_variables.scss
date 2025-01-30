@@ -1,0 +1,117 @@
+/* Variables */
+:root {
+    /* Existing color variables */
+    --color-primary: #8e50a7;
+    --color-primary-hover: #744188;
+    --color-secondary: #8e50a7;
+    --color-lt-gray: #f6f6f6;
+    --color-mid-gray: #dfdfdf;
+    --color-gray: #6d6d6d;
+    --color-dk-gray: #101828;
+    --color-blue: #56bcf2;
+    --color-eggplant-100: #f4eff5;
+    --color-eggplant-200: #ddd0e1;
+    --color-eggplant-600: #9873a6;
+    --color-eggplant-700: #63466d;
+    --color-eggplant-900: #46324e;
+    --color-magenta-900: #8e50a7;
+    --color-magenta-700: #b386c5;
+    --color-peach-600: #fbf1e9;
+    --color-royal-900: #026aa2;
+    --color-royal-100: #eef5ff;
+    --color-yellow: #f0dfbe;
+    --color-green-700: #28a07c;
+
+    /* Additional commonly used colors */
+    --color-text-muted: #666666;
+    --color-text-dark: #333333;
+    --color-text-body: #495057;
+    --color-text-danger: #dc3545;
+    --color-text-secondary: #6c757d;
+    --color-icon: #9d64b5;  /* Added for nav icons */
+    --color-border-light: #dee2e6;
+    --color-border-muted: #cccccc;
+    --color-bg-light: #f8f9fa;
+    --color-bg-lighter: #fcfcfc;
+    --color-bg-lightest: #faf8fb;
+    --color-bg-muted: #e9ecef;
+    --color-bg-disabled: #eeeeee;
+    --color-text-disabled: #c4a4d1;
+    --color-border-disabled: #8e50a787;
+    --color-bg-dark: #2a2a2a;
+    --color-bg-tooltip: #555555;
+    --color-success-bg: #e8f5e9;
+    --color-success-text: #28a745;
+    --color-error-bg: #ffebee;
+    --color-error-text: #c62828;
+
+    /* Common background colors */
+    --bg-message-user: var(--color-eggplant-200);
+    --bg-message-assistant: white;
+
+    /* Common spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+
+    /* Common transitions */
+    --transition-default: all 0.2s ease-in-out;
+    --transition-slow: all 0.3s ease-in-out;
+  }
+
+
+@keyframes flipX {
+    0% {
+      transform: rotateX(0deg);
+    }
+    100% {
+      transform: rotateX(360deg);
+    }
+  }
+
+  @keyframes bounce-horizontal {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(5px);
+    }
+  }
+
+  .bounce-icon {
+    display: inline-block;
+    animation: bounce-horizontal 1s infinite;
+  }
+
+  @keyframes dashedBorder {
+    0% {
+      background-position:
+        0 0,
+        0 100%,
+        0 0,
+        100% 0;
+    }
+    100% {
+      background-position:
+        100% 0,
+        -100% 100%,
+        0 100%,
+        100% -100%;
+    }
+  }
+
+
+@keyframes flipAndSlide {
+    0% {
+      transform: perspective(400px) rotateX(0deg);
+    }
+    50% {
+      transform: perspective(400px) rotateX(180deg) translateX(5px);
+    }
+    100% {
+      transform: perspective(400px) rotateX(360deg) translateX(10px);
+    }
+  }
