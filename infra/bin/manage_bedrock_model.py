@@ -4,6 +4,7 @@ import json
 import logging
 import sys
 import urllib.parse
+from base64 import b64encode
 from collections.abc import Callable
 
 import boto3
@@ -25,6 +26,19 @@ DEPLOYER_ACCOUNT_ID = "207567759910"
 DEPLOYER_ACCOUNT_ROLE_NAME = "admin-delegated-access"
 
 TARGET_ACCOUNT_ROLE_NAME = "ArcanumAIAccess"
+
+USE_CASE_FORM_DATA = b64encode(
+    json.dumps(
+        {
+            "companyName": "Arcanum AI",
+            "companyWebsite": "https://arcanum.ai",
+            "intendedUsers": "1",
+            "industryOption": "Software as a Service",
+            "otherIndustryOption": "",
+            "useCases": ". Providing intelligent AI services to customers to improve their workflows.",
+        }
+    ).encode()
+).decode()
 
 
 def get_arguments():
@@ -165,6 +179,19 @@ def enable(model_id: str, request_function: Callable):
         case 400, _:
             logger.error("Could not find model, is it available in the region?")
             sys.exit(1)
+        case bad_status_code, bad_status_json:
+            logger.error(f"{bad_status_code}: {bad_status_json}")
+            sys.exit(1)
+
+    provide_usecase_response = request_function(
+        "POST",
+        "use-case-for-model-access",
+        json.dumps({"formData": USE_CASE_FORM_DATA}),
+        headers={"content-type": "application/json"},
+    )
+    match provide_usecase_response.status_code, provide_usecase_response.json():
+        case 201, _:
+            logger.info("Use case created")
         case bad_status_code, bad_status_json:
             logger.error(f"{bad_status_code}: {bad_status_json}")
             sys.exit(1)
