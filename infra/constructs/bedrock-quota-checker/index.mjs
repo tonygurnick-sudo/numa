@@ -99,7 +99,7 @@ Model name: Amazon Bedrock Claude 3.5 Sonnet
 Current quota: ${currentQuota} requests per minute
 Requested quota: ${REQUIRED_QUOTA} requests per minute
 
-Steady State RPM: ${REQUIRED_QUOTA}
+Steady State RPM: 25
 Peak State RPM: ${REQUIRED_QUOTA}
 Average Input Tokens: 4000
 No. of requests greater than 25K input tokens: 0

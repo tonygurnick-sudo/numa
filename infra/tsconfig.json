@@ -24,6 +24,6 @@
     "target": "ES2022",
     "incremental": true
   },
-  "include": ["**/*.ts", "**/*.mjs"],
+  "include": ["**/*.ts"],
   "exclude": ["node_modules", "cdktf.out", "dist"]
 }
