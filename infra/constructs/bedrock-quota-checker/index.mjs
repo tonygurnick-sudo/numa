@@ -109,7 +109,9 @@ We are Arcanum AI, an AWS consulting partner specializing in Amazon Q Business a
 
 We appreciate your prompt attention to this request as it is blocking our client's implementation timeline.
 
-For any questions or additional information, please contact us at our email: aws-prod+quotaincrease@arcanum.ai
+For any questions or additional information, please contact us at our email:
+
+aws-prod+quotaincrease@arcanum.ai
 
         `
       })
