@@ -574,26 +574,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aws-sdk/credential-provider-node@npm:3.738.0":
-  version: 3.738.0
-  resolution: "@aws-sdk/credential-provider-node@npm:3.738.0"
-  dependencies:
-    "@aws-sdk/credential-provider-env": "npm:3.734.0"
-    "@aws-sdk/credential-provider-http": "npm:3.734.0"
-    "@aws-sdk/credential-provider-ini": "npm:3.734.0"
-    "@aws-sdk/credential-provider-process": "npm:3.734.0"
-    "@aws-sdk/credential-provider-sso": "npm:3.734.0"
-    "@aws-sdk/credential-provider-web-identity": "npm:3.734.0"
-    "@aws-sdk/types": "npm:3.734.0"
-    "@smithy/credential-provider-imds": "npm:^4.0.1"
-    "@smithy/property-provider": "npm:^4.0.1"
-    "@smithy/shared-ini-file-loader": "npm:^4.0.1"
-    "@smithy/types": "npm:^4.1.0"
-    tslib: "npm:^2.6.2"
-  checksum: 10c0/c9ab6582ddc536113fe7e037179f3d145b7c42d661f5f118967227a519e7a51368307a2a5edb7d7768187ca5768d147bf0026be51c6bfff9c78ff6fba03b7407
-  languageName: node
-  linkType: hard
-
 "@aws-sdk/credential-provider-process@npm:3.734.0":
   version: 3.734.0
   resolution: "@aws-sdk/credential-provider-process@npm:3.734.0"
