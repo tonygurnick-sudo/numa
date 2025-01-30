@@ -1,5 +1,4 @@
 import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdktf-util';
-import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { Construct } from 'constructs';
 import _clientConfigDev from '../../clientConfigDev.json';
@@ -14,6 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { Fn } from 'cdktf';
+import { NumaCorsEnabledBucket } from '../constructs/cors-enabled-bucket';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -49,6 +49,12 @@ export class NumaClientStack extends ArcanumStack {
       environmentName: props.environmentName,
     });
 
+    const outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
+      ...props.config,
+      environmentName: props.environmentName,
+      bucketName: 'outputs',
+    });
+
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
       ...props.config,
       environmentName: props.environmentName,
@@ -58,10 +64,7 @@ export class NumaClientStack extends ArcanumStack {
       webExUrl: core.webExUrl,
       userPoolId: core.userPoolId,
       userPoolClientId: core.userPoolClient.id,
-    });
-
-    const outputsBucket = new PrivateBucket(this, 'outputs-bucket', {
-      bucket: `numa-${props.client}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}` + '-outputs',
+      outputsBucket: outputsBucket,
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
@@ -126,6 +129,7 @@ export class NumaClientStack extends ArcanumStack {
           REGION: 'us-east-1', // TODO: Dynamic.
           ROLE_ARN: core.webExperienceRoleArn,
           API_ENDPOINT: '/api',
+          CLIENT_NAME: props.client,
         }),
         contentType: 'application/json',
       });

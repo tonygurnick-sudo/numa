@@ -34,6 +34,13 @@
       }
     ]
   },
+  "nzsba-nick": {
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "apps": {
+      "nzsba-policy-builder": {}
+    }
+  },
   "arcanum-demo-nick": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,

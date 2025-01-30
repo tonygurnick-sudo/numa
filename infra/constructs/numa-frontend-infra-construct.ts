@@ -24,13 +24,14 @@ import { Fn, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'node:path';
+import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 
 export class NumaFrontendInfra extends Construct {
   readonly apiGateway: Apigatewayv2Api;
   readonly authorizer: Apigatewayv2Authorizer;
   readonly frontendBucket: S3Bucket;
-
   readonly distribution: CloudfrontDistribution;
+
   constructor(scope: Construct, name: string, props: NumaFrontendInfraProps) {
     super(scope, name);
 
@@ -184,7 +185,16 @@ export class NumaFrontendInfra extends Construct {
           headerBehavior: 'none',
         },
         queryStringsConfig: {
-          queryStringBehavior: 'none',
+          queryStringBehavior: 'whitelist',
+          // Allows the values on the Presigned URLs to be passed through to the origin.
+          queryStrings: {
+            items: [
+              'Key-Pair-Id',
+              'Signature',
+              'Expires',
+              'Policy'
+            ]
+          }
         },
       },
     });
@@ -332,4 +342,5 @@ export interface NumaFrontendInfraProps {
   userPoolId: string;
   webExUrl: string;
   zoneId: string;
+  outputsBucket: NumaCorsEnabledBucket;
 }
