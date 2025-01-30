@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '^/../manifest.json': {
+      '/manifest.json': {
         target: 'http://localhost:5173',
         rewrite: () => '/src/Data/example-manifest.json'
       }
