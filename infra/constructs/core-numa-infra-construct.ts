@@ -23,6 +23,7 @@ import * as path from 'node:path';
 import { AdjustToken } from './adjust-token-construct';
 import { BoxConfiguration, BoxDataSource } from './data-sources/box-datasource-construct';
 import { SharePointConfiguration, SharePointDataSource } from './data-sources/sharepoint-datasource-construct';
+import { TeamsConfiguration, TeamsDataSource } from './data-sources/teams-datasource-construct';
 import { WebDataSourceConstruct } from './data-sources/web-datasource-construct';
 import {
   QBusinessChatControlConfigurer,
@@ -596,6 +597,18 @@ export class CoreNumaInfra extends Construct {
       });
     }
 
+    for (const teamsDataSource of props.teamsConfigs ?? []) {
+      new TeamsDataSource(this, `data-source-teams-${teamsDataSource.tenantId}`, {
+        displayName: `${numaClient}-teams-${teamsDataSource.tenantId}`,
+        tenantId: teamsDataSource.tenantId,
+        applicationId: applicationId,
+        indexId: indexId,
+        region: props.region ?? 'us-east-1',
+        configuration: teamsDataSource.configuration,
+        dataSourceRoleArn: dataRole.arn,
+      });
+    }
+
     new TerraformOutput(this, 'webex-url', {
       value: this.webExUrl,
     });
@@ -650,6 +663,11 @@ interface BoxConfig {
   configuration?: BoxConfiguration;
 }
 
+interface TeamsConfig {
+  tenantId: string;
+  configuration?: TeamsConfiguration;
+}
+
 export interface CoreNumaInfraProps
   extends _CoreNumaInfraProps,
     Omit<QBusinessChatControlConfigurerProps, 'applicationId' | 'region' | 'accountId'> {}
@@ -676,4 +694,5 @@ interface _CoreNumaInfraProps {
   mfa?: boolean;
   sharePointConfigs?: SharePointConfig[];
   boxConfigs?: BoxConfig[];
+  teamsConfigs?: TeamsConfig[];
 }
