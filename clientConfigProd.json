@@ -57,6 +57,7 @@
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "apps": {
+      "meeting-analyser": {},
       "nzsba-policy-builder": {}
     }
   },
@@ -376,11 +377,19 @@
       {
         "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29",
         "domain": "nzsta.sharepoint.com",
-        "siteUrls": ["https://nzsta.sharepoint.com/sites/Company"],
+        "siteUrls": [
+          "https://nzsta.sharepoint.com/sites/Company"
+        ],
         "configuration": {
-          "linkTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"],
-          "pageTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"],
-          "inclusionFilePath": ["^.*(?:PLD ?2021).*$"]
+          "linkTitleFilterRegEx": [
+            "^.*(?:PLD ?2021).*$"
+          ],
+          "pageTitleFilterRegEx": [
+            "^.*(?:PLD ?2021).*$"
+          ],
+          "inclusionFilePath": [
+            "^.*(?:PLD ?2021).*$"
+          ]
         }
       }
     ]

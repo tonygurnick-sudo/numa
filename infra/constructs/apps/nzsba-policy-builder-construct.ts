@@ -3,7 +3,16 @@ import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
-import { AppStatus, AppType, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
+import {
+  AppStatus,
+  AppType,
+  BaseNumaApp,
+  BaseNumaAppProps,
+  DROPDOWN_TASK,
+  Q_APP_TASK,
+  TEXT_INPUT_TASK,
+  TEXT_OUTPUT_TASK,
+} from './base-numa-app-construct';
 
 const additional_comments = `
 When customizing these policies for specific school contexts, boards should consider:
@@ -100,7 +109,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
         {
           id: 'policy-type-selection',
           title: 'Select Policy Type',
-          type: 'dropdown' as const,
+          type: DROPDOWN_TASK,
           required: true,
           params: {
             options: ['IT Security Policy', 'HR Policy', 'Compliance Policy', 'Operations Policy', 'Custom Policy'],
@@ -110,7 +119,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
         {
           id: 'policy-requirements',
           title: 'Policy Requirements',
-          type: 'text-input' as const,
+          type: TEXT_INPUT_TASK,
           description: 'Describe the key requirements and objectives for this policy',
           required: true,
           order: 2,
@@ -118,7 +127,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
         {
           id: 'generate-policy',
           title: 'Generate Policy Draft',
-          type: 'q-app' as const,
+          type: Q_APP_TASK,
           appVersion: '1',
           params: {
             qAppId: 'policy-generator-q-app',
@@ -139,7 +148,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
         {
           id: 'display-policy',
           title: 'Review Policy',
-          type: 'text-output' as const,
+          type: TEXT_OUTPUT_TASK,
           params: {
             dataRef: '@generate-policy',
           },
@@ -248,6 +257,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
         },
         GenerateAreas: {
           Type: 'Map',
+          ItemsPath: '$.policy_structure_list',
           ItemSelector: {
             'data_single_area.$': '$$.Map.Item.Value',
           },
@@ -360,7 +370,6 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
               },
             },
           },
-          ItemsPath: '$.policy_structure_list',
           ResultPath: '$.data_all_areas',
           Catch: [
             {

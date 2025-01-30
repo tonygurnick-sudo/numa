@@ -5,6 +5,7 @@ import _clientConfigDev from '../../clientConfigDev.json';
 import _clientConfigProd from '../../clientConfigProd.json';
 import { CoreNumaApp, ExampleNumaApp } from '../constructs/apps';
 import { BaseNumaApp, BaseNumaAppProps } from '../constructs/apps/base-numa-app-construct';
+import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
@@ -189,6 +190,7 @@ export interface NumaClientStackProps extends ArcanumStackProps {
 
 const apps: Record<string, new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp> = {
   'example-app': ExampleNumaApp,
+  'meeting-analyser': MeetingAnalyser,
   'nzsba-policy-builder': NZSBAPolicyBuilder,
 };
 

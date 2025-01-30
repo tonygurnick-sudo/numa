@@ -1,6 +1,6 @@
 TEMPLATE_OUTPUT_PROMPT = """The following are some meeting notes and/or transcript from a meeting.
 <Meeting notes or transcript>
-{meeting_notes_transcript}
+{meeting_notes_and_or_transcript}
 <Meeting notes or transcript>
 
 Use the meeting notes or transcript to create a structured output that follows the following template.
@@ -11,7 +11,7 @@ Use the meeting notes or transcript to create a structured output that follows t
 
 Output just the populated template and nothing else. Use subheadings and dot points as applicable."""
 
-MEETING_SUMMARY_AND_ANALYSIS_PROMPT = """Analyse the meeting transcript and/or meeting notes and provide an organised, multi-bullet pointed summary of key discussion points and decisions. Structure the output in markdown format, clearly presenting:
+MEETING_SUMMARY_PROMPT = """Analyse the meeting transcript and/or meeting notes and provide an organised, multi-bullet pointed summary of key discussion points and decisions. Structure the output in markdown format, clearly presenting:
 
 Overview: A brief overview of the meeting’s purpose and key participants.
 
@@ -27,7 +27,7 @@ Format each section with headings, using markdown syntax for clarity.
 Attendees: List all attendees to the meeting if names are present.
 
 <Meeting Transcript and/or Notes>
-{meeting_notes_transcript}
+{meeting_notes_and_or_transcript}
 <Meeting Transcript and/or Notes>
 
 Please also take into consideration meeting context or other notes if applicable.
@@ -46,7 +46,7 @@ Recurring Themes: Identify any themes or issues that recurred throughout the dis
 Present each topic and theme as a numbered or bulleted list in markdown, making it easy to review at a glance.
 
 <Meeting Notes and/or Transcript>
-{meeting_notes_transcript}
+{meeting_notes_and_or_transcript}
 <Meeting Notes and/or Transcript>
 
 Please also take into consideration other notes if applicable.
@@ -65,7 +65,7 @@ ACTION_ITEMS_PROMPT = """Analyze the meeting notes and/or transcript and extract
 Ensure each action item is clearly outlined, using bullet points and markdown syntax to enhance readability. Keep the output short, concise and to relevant bullet points.
 
 <Meeting Notes and/or Transcript>
-{meeting_notes_transcript}
+{meeting_notes_and_or_transcript}
 <Meeting Notes and/or Transcript>
 
 Please also take into consideration meeting context or other notes if applicable.
@@ -88,9 +88,9 @@ Each email should be clearly structured, ensuring the attendee has a concise and
 <Action Items>
 {action_items}
 <Action Items>
-<Meeting Summary and Analysis>
-{meeting_summary_and_analysis}
-<Meeting Summary and Analysis>
+<Meeting Summary>
+{summary}
+<Meeting Summary>
 
 Please also take into consideration meeting context or other notes if applicable.
 
@@ -109,7 +109,7 @@ PARTICIPANT_INSIGHTS_PROMPTS = """Analyze the meeting notes and/or transcript to
 Use concise bullet points in markdown format.
 
 <Meeting Notes and/or Transcript>
-{meeting_notes_transcript}
+{meeting_notes_and_or_transcript}
 <Meeting Notes and/or Transcript>
 
 Please also take into consideration meeting context or other notes if applicable.
