@@ -37,6 +37,7 @@ export class CoreNumaInfra extends Construct {
   readonly userPoolId: string;
   readonly userPoolClient: CognitoUserPoolClient;
   readonly identityPoolId: string;
+  readonly identityPoolArn: string;
   readonly webExperienceRoleArn: string;
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -165,7 +166,7 @@ export class CoreNumaInfra extends Construct {
       ],
     });
     this.identityPoolId = identityPool.id;
-
+    this.identityPoolArn = identityPool.arn;
     const identityPoolRoleTrustPolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-trust-policy', {
       statement: [
         {

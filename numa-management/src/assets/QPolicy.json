@@ -37,6 +37,11 @@
         "user-subscriptions:CreateUserClaim"
       ],
       "Resource": ["*"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": ["*"]
     }
   ]
 }
