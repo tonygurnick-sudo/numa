@@ -13,6 +13,7 @@ import { useNumaApp } from '../Providers/NumaAppProvider';
 import { useFavorites } from '../hooks/useFavorites';
 import AppWizard from '../Components/AppWizard';
 import { formatCategory } from '../utils/textUtils';
+import { PolicyBuilderDetail } from '../Components/PolicyBuilderDetail';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
@@ -110,6 +111,8 @@ const AppDetail = () => {
               <AppWizard manifest={numaAppData} />
             ) : numaAppData.type === 'q-app' ? (
               <QAppDetail />
+            ) : numaAppData.type === 'policy-builder' ? (
+              <PolicyBuilderDetail id={numaAppData.id} />
             ) : null)}
         </Container>
       </main>

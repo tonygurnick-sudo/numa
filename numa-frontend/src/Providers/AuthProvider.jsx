@@ -24,6 +24,7 @@ import {
 const AuthContext = createContext(null);
 
 const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+const IDENTITY_POOL_ROLE_ARN = window.sessionStorage.getItem('IDENTITY_POOL_ROLE_ARN');
 const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
 const REGION = window.sessionStorage.getItem('REGION');
 const API_ENDPOINT = window.sessionStorage.getItem('API_ENDPOINT');
@@ -139,6 +140,24 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       logout();
       return false;
     }
+  };
+
+  const getIdentityPoolCredentials = async () => {
+    if (!user) return null;
+
+    const cognitoIdentity = new CognitoIdentityClient({
+      region: REGION,
+    });
+
+    return fromWebToken({
+      client: cognitoIdentity,
+      identityPoolId: IDENTITY_POOL_ID,
+      roleSessionName: 'numa-frontend-qapps',
+      roleArn: IDENTITY_POOL_ROLE_ARN,
+      policy: JSON.stringify(QPolicy),
+      durationSeconds: 3600,
+      webIdentityToken: user.tokens.idToken,
+    });
   };
 
   const getAccessToken = async () => {
@@ -488,6 +507,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     qAppsClient,
     requestPasswordReset,
     confirmPasswordReset,
+    getIdentityPoolCredentials
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

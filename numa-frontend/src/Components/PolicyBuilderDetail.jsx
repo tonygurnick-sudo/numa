@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Container,
   Table,
@@ -8,7 +8,9 @@ import {
   Tab,
   Dropdown,
   Modal,
-  Form,
+  OverlayTrigger,
+  Tooltip,
+  Toast,
 } from 'react-bootstrap';
 import {
   Download as DownloadIcon,
@@ -17,9 +19,16 @@ import {
   Clock as ClockIcon,
   Plus as PlusIcon,
   Trash as TrashIcon,
+  PencilFill,
+  PencilSquare,
 } from 'react-bootstrap-icons';
 import pdfPolicy from '../assets/policies.pdf';
 import PolicyEditor from './PolicyEditor';
+import { CreatePolicyModal } from './PolicyBuilderModal';
+import axios from 'axios';
+import { useAuth } from '../Providers/AuthProvider';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export const PolicyBuilderDetail = () => {
   const [activeTab, setActiveTab] = useState('policies');
@@ -31,7 +40,6 @@ export const PolicyBuilderDetail = () => {
     schoolName: '',
     schoolContext: '',
     customInstructions: '',
-    characterUrls: [],
   });
   const [showCustomScenarioModal, setShowCustomScenarioModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -40,6 +48,16 @@ export const PolicyBuilderDetail = () => {
   const [newMessage, setNewMessage] = useState('');
   const [value, setValue] = useState('Loading policy content...');
   const [isLoading, setIsLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [policies, setPolicies] = useState([]);
+  const [isLoadingPolicies, setIsLoadingPolicies] = useState(true);
+  const pollingIntervalsRef = useRef({});
+  const [pollingPolicies, setPollingPolicies] = useState(new Set());
+  const [config, setConfig] = useState(null);
+  const [isDownloading, setIsDownloading] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
+
+  const { getIdToken, getAccessToken, getIdentityPoolCredentials } = useAuth();
 
   const policyTemplates = [
     {
@@ -113,58 +131,6 @@ export const PolicyBuilderDetail = () => {
     },
   ];
 
-  // Updated sample data with more school-focused titles
-  const samplePolicies = [
-    {
-      id: 1,
-      name: "St Theresa's School (Plimmerton) Governance Policy Document",
-      lastModified: '2024-03-15',
-      status: 'active',
-    },
-    {
-      id: 2,
-      name: 'Student Support & Wellbeing Guidelines - Wellington Girls College',
-      lastModified: '2024-03-10',
-      status: 'active',
-    },
-    {
-      id: 3,
-      name: 'Cultural Inclusivity Framework - Wellington High School',
-      lastModified: '2024-03-01',
-      status: 'out_of_date',
-    },
-    {
-      id: 4,
-      name: 'NCEA Assessment Procedures - Rongotai College',
-      lastModified: '2024-03-14',
-      status: 'processing',
-    },
-    {
-      id: 5,
-      name: 'Health and Safety Guidelines - St Patricks College',
-      lastModified: '2024-03-13',
-      status: 'processing',
-    },
-    {
-      id: 6,
-      name: 'Uniform Requirements - Queen Margaret College',
-      lastModified: '2024-02-28',
-      status: 'out_of_date',
-    },
-    {
-      id: 7,
-      name: 'Environmental Sustainability Plan - Wellington East Girls',
-      lastModified: '2024-03-12',
-      status: 'completed',
-    },
-    {
-      id: 8,
-      name: 'Sports Code of Conduct - Scots College',
-      lastModified: '2024-03-08',
-      status: 'processing',
-    },
-  ];
-
   // Update sample history data to include all policies
   const samplePolicyHistory = [
     {
@@ -209,24 +175,17 @@ export const PolicyBuilderDetail = () => {
         },
       ],
     },
-    // ... add entries for policies 4-8 ...
   ];
 
   // Updated status mappings
   const getBadgeColor = (status) => {
     switch (status) {
-      case 'active':
+      case 'SUCCESS':
         return 'success';
-      case 'draft':
-        return 'warning';
-      case 'needs_review':
+      case 'FAILED':
         return 'danger';
-      case 'out_of_date':
-        return 'danger';
-      case 'processing':
+      case 'PROCESSING':
         return 'info';
-      case 'completed':
-        return 'success';
       default:
         return 'secondary';
     }
@@ -236,10 +195,81 @@ export const PolicyBuilderDetail = () => {
     return status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
-  const handleDownload = (policyId) => {
-    // Implement download logic here
-    console.log(`Downloading policy ${policyId}`);
-  };
+const handleDownload = async (policyId) => {
+  setIsDownloading(policyId);
+  try {
+    // Find the policy to get the school name
+    const policy = policies.find(
+      (p) => p.jobDetails.stepFunctionJobId === policyId,
+    );
+    const schoolName = policy?.name || 'policy';
+    // Create a sanitized filename
+    const sanitizedFileName = schoolName
+      .replace(/[^a-z0-9]/gi, '_')
+      .toLowerCase();
+
+
+    const credentials = await getIdentityPoolCredentials();
+
+    // Create S3 client
+    const s3Client = new S3Client({
+      region: 'us-east-1', // replace with your region
+      credentials,
+    });
+
+    // Construct the file path and key
+    let bucketName = `numa-${config.CLIENT_NAME}-outputs`; // replace with your bucket name
+    let key;
+    if (policyId === 'test.txt') {
+      key = 'test.txt';
+    } else {
+      key = `${config.CLIENT_NAME}-nzsba-policy-builder/${policyId}/final_policy.pdf`;
+    }
+
+    // Create the command to get a signed URL
+    const command = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    });
+
+    // Generate signed URL (expires in 1 hour)
+    const signedUrl = await getSignedUrl(s3Client, command, {
+      expiresIn: 3600,
+    });
+
+    console.log('Signed URL:', signedUrl);
+
+    // Use axios to download the file
+    const fileResponse = await axios.get(signedUrl, {
+      responseType: 'blob',
+    });
+
+    if (fileResponse.status !== 200) {
+      throw new Error(
+        `File not accessible: ${fileResponse.status} ${fileResponse.statusText}`,
+      );
+    }
+
+    const blob = fileResponse.data;
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    // Create link with blob URL and custom filename
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = `${sanitizedFileName}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+
+    // Cleanup
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error('Download failed:', error);
+    setErrorMessage(error.message || 'Failed to download file');
+  } finally {
+    setIsDownloading(null);
+  }
+};
 
   const handleShare = (policyId, method) => {
     // Implement share logic here
@@ -247,13 +277,25 @@ export const PolicyBuilderDetail = () => {
   };
 
   const formatDate = (dateString, includeDay = false) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-NZ', {
-      weekday: includeDay ? 'short' : undefined,
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    }).format(date);
+    if (!dateString) return 'N/A';
+
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+
+      return new Intl.DateTimeFormat('en-NZ', {
+        weekday: includeDay ? 'short' : undefined,
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }).format(date);
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid Date';
+    }
   };
 
   const handleViewPolicy = () => {
@@ -276,6 +318,12 @@ export const PolicyBuilderDetail = () => {
     setPolicyInputs({
       ...policyInputs,
       customInstructions: template.defaultInstructions || '',
+      templateId: template.id,
+      templateName: template.name,
+      templateCategory: template.category,
+      schoolName: '',
+      schoolContext: '',
+      characterUrls: []
     });
     setShowNewPolicyModal(true);
   };
@@ -355,200 +403,435 @@ export const PolicyBuilderDetail = () => {
     }, 1000);
   };
 
+  const handleBlankScenario = () => {
+    setSelectedTemplate(null);
+    setPolicyInputs({
+      schoolName: '',
+      schoolContext: '',
+      customInstructions: '',
+      characterUrls: [],
+    });
+    setShowNewPolicyModal(true);
+  };
+
+  const handleGeneratePolicy = async () => {
+    setIsGenerating(true);
+    try {
+      // Create a job in the job manager
+      const jobData = {
+        type: 'POLICY_GENERATION',
+        status: 'PENDING',
+        inputs: policyInputs,
+      };
+
+      const token = await getAccessToken();
+
+      const response = await axios.post(
+        `${config.API_ENDPOINT}/policy-builder/jobs`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify(jobData),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const job = await response.json();
+      console.log('Job created:', job);
+
+      // Start the step function
+      const stepFunctionResponse = await fetch(
+        `${config.API_ENDPOINT}/policy-builder/main`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          method: 'POST',
+          body: JSON.stringify({
+            original_job_id: job.jobID,
+            organisation_name: policyInputs.schoolName,
+            organisation_context: policyInputs.schoolContext,
+            // custom_instructions: policyInputs.customInstructions,
+          }),
+        },
+      );
+
+      if (!stepFunctionResponse.ok) {
+        throw new Error(
+          `Step Function HTTP error! status: ${stepFunctionResponse.status}`,
+        );
+      }
+
+      const stepFunction = await stepFunctionResponse.json();
+      console.log('Step Function started:', stepFunction);
+
+      // Update the job with the step function details
+      const updateResponse = await fetch(
+        `${config.API_ENDPOINT}/policy-builder/jobs/${job.jobID}`,
+        {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            status: 'PROCESSING',
+            stepFunctionJobId: stepFunction.job_id,
+          }),
+        },
+      );
+
+      if (!updateResponse.ok) {
+        throw new Error(
+          `Job update HTTP error! status: ${updateResponse.status}`,
+        );
+      }
+
+      const updatedJob = await updateResponse.json();
+      console.log('Job updated:', updatedJob);
+
+      // Start polling in a separate function
+      startPollingForJob(updatedJob);
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setIsGenerating(false);
+      setShowNewPolicyModal(false); // Close the modal after generation starts
+
+      // Switch to policies tab
+      setActiveTab('policies');
+
+      // Force refresh the policies list
+      await fetchPolicies();
+    }
+  };
+
+  useEffect(() => {
+    if (config) {
+      fetchPolicies();
+    }
+  }, [config]);
+
+  useEffect(() => {
+    // Cleanup function to clear all intervals when component unmounts
+    return () => {
+      Object.values(pollingIntervalsRef.current).forEach((interval) => {
+        clearInterval(interval);
+      });
+      pollingIntervalsRef.current = {};
+      setPollingPolicies(new Set()); // Clear polling set
+    };
+  }, []);
+
+  useEffect(() => {
+    fetch('/config.json')
+      .then((response) => response.json())
+      .then((data) => setConfig(data))
+      .catch((error) => console.error('Error loading config:', error));
+  }, []);
+
+  const pollProcessingPolicy = async (job) => {
+    console.log(`Polling status for job ${job.jobID}`);
+
+    try {
+      const token = await getAccessToken();
+      const stepFunctionResponse = await fetch(
+        `${config.API_ENDPOINT}/policy-builder/main?job_id=${job.stepFunctionJobId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (!stepFunctionResponse.ok) {
+        console.error(
+          `Step Function request failed with status: ${stepFunctionResponse.status}`,
+        );
+        clearPollingForJob(job.jobID);
+        return true;
+      }
+
+      const stepFunctionStatus = await stepFunctionResponse.json();
+      console.log('Step Function Status:', stepFunctionStatus);
+
+      // Stop polling if the status is not PROCESSING
+      if (stepFunctionStatus.status !== 'PROCESSING') {
+        console.log(
+          `Job ${job.jobID} status changed from PROCESSING to ${stepFunctionStatus.status}`,
+        );
+
+        // Update job manager with new status
+        const updateResponse = await fetch(
+          `${config.API_ENDPOINT}/policy-builder/jobs/${job.jobID}`,
+          {
+            method: 'PUT',
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              ...job,
+              status: stepFunctionStatus.status,
+            }),
+          },
+        );
+
+        if (!updateResponse.ok) {
+          console.error(
+            `Failed to update job status in job manager: ${updateResponse.status}`,
+          );
+          clearPollingForJob(job.jobID);
+          return true;
+        }
+
+        console.log(`Successfully updated job ${job.jobID} in job manager`);
+        clearPollingForJob(job.jobID);
+
+        // Only trigger a fetch if the status has actually changed
+        if (job.status !== stepFunctionStatus.status) {
+          fetchPolicies();
+        }
+        return true;
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Fetch aborted');
+        return false;
+      }
+      console.error(`Error polling job ${job.jobID}:`, error);
+      clearPollingForJob(job.jobID);
+      return true;
+    }
+
+    return false;
+  };
+
+  const startPollingForJob = (job) => {
+    // Check if we're already polling this job
+    if (pollingPolicies.has(job.jobID)) {
+      console.log(`Already polling job ${job.jobID}, skipping`);
+      return;
+    }
+
+    console.log(`Starting polling for job ${job.jobID}`);
+
+    // Add this job to the set of polling jobs
+    setPollingPolicies((prev) => new Set(prev).add(job.jobID));
+
+    // Clear any existing interval for this job
+    if (pollingIntervalsRef.current[job.jobID]) {
+      clearInterval(pollingIntervalsRef.current[job.jobID]);
+    }
+
+    const poll = async () => {
+      const statusChanged = await pollProcessingPolicy(job);
+      if (!statusChanged && pollingIntervalsRef.current[job.jobID]) {
+        setTimeout(() => {
+          requestAnimationFrame(poll);
+        }, 10000);
+      } else {
+        // Remove from polling set when complete
+        setPollingPolicies((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(job.jobID);
+          return newSet;
+        });
+      }
+    };
+
+    pollingIntervalsRef.current[job.jobID] = true;
+    requestAnimationFrame(poll);
+  };
+
+  const fetchPolicies = async () => {
+    setIsLoadingPolicies(true);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `${config.API_ENDPOINT}/policy-builder/jobs`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      const transformedPolicies = data
+        .filter((job) => job.type === 'POLICY_GENERATION')
+        .map((job) => {
+          // Only start polling if job is processing and not already being polled
+          if (
+            job.status === 'PROCESSING' &&
+            job.jobID &&
+            !pollingPolicies.has(job.jobID)
+          ) {
+            console.log('Starting polling for job:', job);
+            startPollingForJob(job);
+          }
+
+          return {
+            id: job.jobID,
+            name: job.inputs?.schoolName || 'Unnamed Policy',
+            lastModified: job.datetime || job.createdAt,
+            status: job.status,
+            jobDetails: job,
+          };
+        });
+
+      // Sort by date
+      transformedPolicies.sort(
+        (a, b) => new Date(b.lastModified) - new Date(a.lastModified),
+      );
+
+      setPolicies(transformedPolicies);
+    } catch (error) {
+      console.error('Error fetching policies:', error);
+    } finally {
+      setIsLoadingPolicies(false);
+    }
+  };
+
+  // Helper function to map job statuses to policy statuses
+  const mapJobStatusToPolicy = (jobStatus) => {
+    switch (jobStatus) {
+      case 'SUCCESS':
+        return 'SUCCESS';
+      case 'FAILED':
+        return 'FAILED';
+      case 'PROCESSING':
+        return 'PROCESSING';
+      case 'PENDING':
+        return 'PROCESSING';
+      default:
+        return 'PROCESSING';
+    }
+  };
+
+  // Add a helper function to clear polling
+  const clearPollingForJob = (jobId) => {
+    if (pollingIntervalsRef.current[jobId]) {
+      clearInterval(pollingIntervalsRef.current[jobId]);
+      delete pollingIntervalsRef.current[jobId];
+    }
+    setPollingPolicies((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(jobId);
+      return newSet;
+    });
+  };
+
   const renderPoliciesTab = () => (
     <div className="table-responsive">
-      <Table responsive striped bordered hover>
-        <thead>
-          <tr className="table-light">
-            <th className="align-middle">Policy Name</th>
-            <th className="align-middle d-none d-md-table-cell">
-              Last Modified
-            </th>
-            <th className="align-middle">Status</th>
-            <th className="align-middle">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {samplePolicies.map((policy) => (
-            <tr key={policy.id}>
-              <td className="text-break">{policy.name}</td>
-              <td className="d-none d-md-table-cell">
-                {formatDate(policy.lastModified)}
-              </td>
+      {isLoadingPolicies && !policies.length ? (
+        <div className="text-center py-4">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+        </div>
+      ) :
+      // policies.length === 0 ? (
+      //   <div className="text-center py-4">
+      //     <p className="text-muted">
+      //       No policies found. Create a new policy to get started.
+      //     </p>
+      //   </div>
+      // ) :
+      (
+        <Table responsive striped bordered hover>
+          <thead>
+            <tr className="table-light">
+              <th className="align-middle">Policy Name</th>
+              <th className="align-middle d-none d-md-table-cell">Last Modified</th>
+              <th className="align-middle">Status</th>
+              <th className="align-middle">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="text-break">NZSBA Exemplar Policy</td>
+              <td className="d-none d-md-table-cell">Always Available</td>
               <td>
-                <Badge bg={getBadgeColor(policy.status)}>
-                  {formatStatus(policy.status)}
+                <Badge bg="success">
+                  Available
                 </Badge>
               </td>
               <td>
                 <div className="d-flex flex-wrap gap-2">
-                  <div className="d-none d-md-flex gap-2">
-                    <Button
-                      variant="outline-primary"
-                      size="sm"
-                      onClick={() => handleEditPolicy(policy)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      onClick={() => handleViewPolicy(policy.id)}
-                    >
-                      View
-                    </Button>
-                    <Button
-                      variant="outline-success"
-                      size="sm"
-                      onClick={() => handleDownload(policy.id)}
-                    >
+                  <Button
+                    variant="outline-success"
+                    size="sm"
+                    onClick={() => handleDownload('test.txt')}
+                    disabled={isDownloading === 'test.txt'}
+                  >
+                    {isDownloading === 'test.txt' ? (
+                      <span
+                        className="spinner-border spinner-border-sm me-1"
+                        role="status"
+                      />
+                    ) : (
                       <DownloadIcon className="me-1" />
-                      <span className="d-none d-lg-inline">Download</span>
-                    </Button>
-                    <Dropdown>
-                      <Dropdown.Toggle variant="outline-info" size="sm">
-                        <ShareIcon className="me-1" />
-                        <span className="d-none d-lg-inline">Share</span>
-                      </Dropdown.Toggle>
-                      <Dropdown.Menu>
-                        <Dropdown.Item
-                          onClick={() => handleShare(policy.id, 'email')}
-                        >
-                          Email
-                        </Dropdown.Item>
-                        <Dropdown.Item
-                          disabled
-                          onClick={() => handleShare(policy.id, 'link')}
-                        >
-                          Copy Link
-                        </Dropdown.Item>
-                      </Dropdown.Menu>
-                    </Dropdown>
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      onClick={() => handleShowHistory(policy.id)}
-                    >
-                      <ClockIcon className="me-1" />
-                      <span className="d-none d-lg-inline">History</span>
-                    </Button>
-                  </div>
-
-                  {/* Mobile view actions */}
-                  <div className="d-md-none">
-                    <Dropdown>
-                      <Dropdown.Toggle variant="outline-secondary" size="sm">
-                        <ThreeDotsIcon />
-                      </Dropdown.Toggle>
-                      <Dropdown.Menu>
-                        <Dropdown.Item>Edit</Dropdown.Item>
-                        <Dropdown.Item
-                          onClick={() => handleViewPolicy(policy.id)}
-                        >
-                          View
-                        </Dropdown.Item>
-                        <Dropdown.Item
-                          onClick={() => handleDownload(policy.id)}
-                        >
-                          <DownloadIcon className="me-2" />
-                          Download
-                        </Dropdown.Item>
-                        <Dropdown.Divider />
-                        <Dropdown.Header>Share via</Dropdown.Header>
-                        <Dropdown.Item
-                          onClick={() => handleShare(policy.id, 'email')}
-                        >
-                          Email
-                        </Dropdown.Item>
-                        <Dropdown.Item
-                          onClick={() => handleShare(policy.id, 'link')}
-                        >
-                          Copy Link
-                        </Dropdown.Item>
-                        <Dropdown.Divider />
-                        <Dropdown.Item
-                          onClick={() => handleShowHistory(policy.id)}
-                        >
-                          <ClockIcon className="me-2" />
-                          View History
-                        </Dropdown.Item>
-                      </Dropdown.Menu>
-                    </Dropdown>
-                  </div>
+                    )}
+                    <span className="d-none d-lg-inline">
+                      {isDownloading === 'test.txt'
+                        ? 'Downloading...'
+                        : 'Download'}
+                    </span>
+                  </Button>
                 </div>
               </td>
             </tr>
-          ))}
-        </tbody>
-      </Table>
-
-      <Modal
-        show={showHistoryModal}
-        onHide={() => setShowHistoryModal(false)}
-        size="lg"
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>
-            Policy History
-            {selectedPolicyHistory && (
-              <div className="fs-6 fw-normal text-muted">
-                {selectedPolicyHistory.name}
-              </div>
-            )}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedPolicyHistory && (
-            <Table responsive hover>
-              <thead>
-                <tr>
-                  <th>Version</th>
-                  <th>Generated Date</th>
-                  <th>Changes</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedPolicyHistory.versions.map((version) => (
-                  <tr key={version.version}>
-                    <td>v{version.version}</td>
-                    <td>{formatDate(version.generatedDate)}</td>
-                    <td>{version.changes}</td>
-                    <td>
-                      <Badge bg={getBadgeColor(version.status)}>
-                        {formatStatus(version.status)}
-                      </Badge>
-                    </td>
-                    <td>
-                      <div className="d-flex gap-2">
-                        <Button
-                          variant="outline-secondary"
-                          size="sm"
-                          onClick={() =>
-                            handleViewPolicy(selectedPolicyHistory.id)
-                          }
-                        >
-                          View
-                        </Button>
-                        <Button
-                          variant="outline-success"
-                          size="sm"
-                          onClick={() =>
-                            handleDownload(selectedPolicyHistory.id)
-                          }
-                        >
-                          <DownloadIcon />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
-        </Modal.Body>
-      </Modal>
+            {policies.map((policy) => (
+              <tr key={policy.id}>
+                <td className="text-break">{policy.name}</td>
+                <td className="d-none d-md-table-cell">
+                  {formatDate(policy.jobDetails.dateTime)}
+                </td>
+                <td>
+                  <Badge bg={getBadgeColor(policy.status)}>
+                    {policy.status === 'processing' && (
+                      <span
+                        className="spinner-border spinner-border-sm me-1"
+                        style={{ width: '0.8rem', height: '0.8rem' }}
+                        role="status"
+                      >
+                        <span className="visually-hidden">Processing...</span>
+                      </span>
+                    )}
+                    {formatStatus(policy.status)}
+                  </Badge>
+                </td>
+                <td>
+                  <div className="d-flex flex-wrap gap-2">
+                    <Button
+                      variant="outline-success"
+                      size="sm"
+                      onClick={() =>
+                        handleDownload(policy.jobDetails.stepFunctionJobId)
+                      }
+                      disabled={
+                        policy.status !== 'SUCCESS' ||
+                        isDownloading === policy.jobDetails.stepFunctionJobId
+                      }
+                    >
+                      {isDownloading === policy.jobDetails.stepFunctionJobId ? (
+                        <span
+                          className="spinner-border spinner-border-sm me-1"
+                          role="status"
+                        />
+                      ) : (
+                        <DownloadIcon className="me-1" />
+                      )}
+                      <span className="d-none d-lg-inline">
+                        {isDownloading === policy.jobDetails.stepFunctionJobId
+                          ? 'Downloading...'
+                          : 'Download'}
+                      </span>
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
     </div>
   );
 
@@ -557,14 +840,33 @@ export const PolicyBuilderDetail = () => {
       <div className="p-2 p-sm-4">
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h5 className="mb-0">Create New School Policy</h5>
-          <Button
-            variant="outline-primary"
-            onClick={() => setShowCustomScenarioModal(true)}
-            className="btn-numa-outline d-flex align-items-center gap-2"
-          >
-            <PlusIcon />
-            Create New Scenario
-          </Button>
+
+          <div className="d-flex gap-2">
+            <OverlayTrigger
+              placement="top"
+              overlay={<Tooltip>Coming Soon</Tooltip>}
+            >
+              <span>
+                <Button
+                  variant="outline-primary"
+                  onClick={() => setShowCustomScenarioModal(true)}
+                  className="btn-numa-outline d-flex align-items-center gap-2"
+                  disabled
+                >
+                  <PlusIcon />
+                  Create New Scenario
+                </Button>
+              </span>
+            </OverlayTrigger>
+            <Button
+              variant="outline-primary"
+              className="btn-numa-outline d-flex align-items-center gap-2"
+              onClick={handleBlankScenario}
+            >
+              <PencilSquare />
+              Blank Scenario
+            </Button>
+          </div>
         </div>
         <div className="d-flex flex-wrap gap-3 justify-content-start">
           {policyTemplates.map((template) => (
@@ -610,199 +912,20 @@ export const PolicyBuilderDetail = () => {
         </div>
       </div>
 
-      <Modal
-        show={showNewPolicyModal}
-        onHide={() => setShowNewPolicyModal(false)}
-        size="lg"
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>
-            Create New Policy
-            {selectedTemplate && (
-              <div className="fs-6 fw-normal text-muted">
-                Using {selectedTemplate.name} Scenario
-              </div>
-            )}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <form className="d-flex flex-column gap-3">
-            <div>
-              <label className="form-label">School Name</label>
-              <input
-                type="text"
-                className="form-control"
-                value={policyInputs.schoolName}
-                onChange={(e) =>
-                  setPolicyInputs({
-                    ...policyInputs,
-                    schoolName: e.target.value,
-                  })
-                }
-                placeholder="e.g., St Theresa's School (Plimmerton)"
-              />
-            </div>
-
-            <div>
-              <label className="form-label">Special Character URLs</label>
-              {policyInputs.characterUrls.map((urlObj, index) => (
-                <div key={index} className="mb-2">
-                  <div className="input-group">
-                    <input
-                      type="url"
-                      className="form-control"
-                      value={urlObj.url}
-                      onChange={(e) =>
-                        handleUrlChange(index, 'url', e.target.value)
-                      }
-                      placeholder="https://school.edu/special-character"
-                    />
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={urlObj.description}
-                      onChange={(e) =>
-                        handleUrlChange(index, 'description', e.target.value)
-                      }
-                      placeholder="Description (e.g., Mission Statement)"
-                    />
-                    <Button
-                      variant="outline-danger"
-                      onClick={() => handleRemoveUrl(index)}
-                      className="btn-numa-outline"
-                    >
-                      <TrashIcon />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              <Button
-                variant="outline-secondary"
-                onClick={handleAddUrl}
-                className="btn-numa-outline d-flex align-items-center gap-2"
-                size="sm"
-              >
-                <PlusIcon />
-                Add URL
-              </Button>
-              <small className="text-muted">
-                Add links to your school&apos;s special character, values, or
-                other relevant pages
-              </small>
-            </div>
-
-            <div>
-              <label className="form-label">School Context</label>
-              <textarea
-                className="form-control"
-                rows={4}
-                value={policyInputs.schoolContext}
-                onChange={(e) =>
-                  setPolicyInputs({
-                    ...policyInputs,
-                    schoolContext: e.target.value,
-                  })
-                }
-                placeholder="Describe your school's characteristics, values, and community..."
-              />
-            </div>
-
-            <div>
-              <label className="form-label">
-                Additional Instructions (Optional)
-              </label>
-              <textarea
-                className="form-control"
-                rows={3}
-                value={policyInputs.customInstructions}
-                onChange={(e) =>
-                  setPolicyInputs({
-                    ...policyInputs,
-                    customInstructions: e.target.value,
-                  })
-                }
-                placeholder="Any specific requirements or preferences for this policy..."
-              />
-            </div>
-          </form>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            variant="secondary"
-            onClick={() => setShowNewPolicyModal(false)}
-          >
-            Cancel
-          </Button>
-          <Button variant="primary">Generate Policy</Button>
-        </Modal.Footer>
-      </Modal>
-
-      <Modal
-        show={showCustomScenarioModal}
-        onHide={() => setShowCustomScenarioModal(false)}
-        size="lg"
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>Create New Policy Scenario</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <form className="d-flex flex-column gap-3">
-            <div>
-              <label className="form-label">Scenario Name</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="e.g., Steiner School Policies"
-              />
-            </div>
-
-            <div>
-              <label className="form-label">Category</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="e.g., Alternative Education"
-              />
-            </div>
-
-            <div>
-              <label className="form-label">Description</label>
-              <textarea
-                className="form-control"
-                rows={2}
-                placeholder="Brief description of the policy framework..."
-              />
-            </div>
-
-            <div>
-              <label className="form-label">Default Instructions</label>
-              <textarea
-                className="form-control"
-                rows={4}
-                placeholder="Generate policies covering: [key areas], aligned with [specific requirements]..."
-              />
-            </div>
-          </form>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            variant="secondary"
-            onClick={() => setShowCustomScenarioModal(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            className="btn-numa"
-            onClick={() => {
-              // TODO: Implement scenario creation logic
-              setShowCustomScenarioModal(false);
-            }}
-          >
-            Create Scenario
-          </Button>
-        </Modal.Footer>
-      </Modal>
+      <CreatePolicyModal
+        visible={showNewPolicyModal}
+        onClose={() => {
+          // Only allow closing if not generating
+          if (!isGenerating) {
+            setShowNewPolicyModal(false);
+          }
+        }}
+        selectedTemplate={selectedTemplate}
+        policyInputs={policyInputs}
+        setPolicyInputs={setPolicyInputs}
+        handleGeneratePolicy={handleGeneratePolicy}
+        isGenerating={isGenerating}
+      />
     </>
   );
 
@@ -838,6 +961,25 @@ export const PolicyBuilderDetail = () => {
           onNewMessageChange={setNewMessage}
         />
       )}
+      <Toast
+        show={!!errorMessage}
+        onClose={() => setErrorMessage(null)}
+        style={{
+          position: 'fixed',
+          bottom: 20,
+          right: 20,
+          zIndex: 1000,
+        }}
+        bg="danger"
+        text="white"
+        delay={3000}
+        autohide
+      >
+        <Toast.Header closeButton>
+          <strong className="me-auto">Error</strong>
+        </Toast.Header>
+        <Toast.Body>{errorMessage}</Toast.Body>
+      </Toast>
     </Container>
   );
 };

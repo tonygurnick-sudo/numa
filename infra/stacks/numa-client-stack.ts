@@ -127,6 +127,7 @@ export class NumaClientStack extends ArcanumStack {
           USER_POOL_ID: core.userPoolId,
           CLIENT_ID: core.userPoolClient?.id,
           IDENTITY_POOL_ID: core.identityPoolId,
+          IDENTITY_POOL_ROLE_ARN: core.identityPoolArn,
           REGION: 'us-east-1', // TODO: Dynamic.
           ROLE_ARN: core.webExperienceRoleArn,
           API_ENDPOINT: '/api',
