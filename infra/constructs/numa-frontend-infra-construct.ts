@@ -133,9 +133,8 @@ export class NumaFrontendInfra extends Construct {
       environment: {
         variables: {
           CLOUDFRONT_SECRET: cloudfrontSecretParameter.value,
-
-          USER_POOL_CLIENT_ID: props.userPoolClientId,
-          USER_POOL_ID: props.userPoolId,
+          COGNITO_USER_POOL_CLIENT_ID: props.userPoolClientId,
+          COGNITO_USER_POOL_ID: props.userPoolId,
         },
       },
     });
