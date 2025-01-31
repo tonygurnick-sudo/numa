@@ -12,9 +12,9 @@ packages = [
 python = "~3.13.0"
 
 [tool.poetry.group.dev.dependencies]
-mypy = "1.13.0"
-pylint = "3.3.2"
-pyright = "1.1.391"
+mypy = "1.14.1"
+pylint = "3.3.4"
+pyright = "1.1.393"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.9.0"

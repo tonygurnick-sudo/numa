@@ -17,9 +17,9 @@ structlog = "25.1.0"
 
 
 [tool.poetry.group.dev.dependencies]
-mypy = "1.13.0"
-pylint = "3.3.2"
-pyright = "1.1.391"
+mypy = "1.14.1"
+pylint = "3.3.4"
+pyright = "1.1.393"
 pre-commit = "^4.1.0"
 poetry-plugin-lambda-build = "^1.0.7"
 pytest = "^8.3.4"
