@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Container, Row, Col, Card, Button } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
@@ -26,7 +26,8 @@ const AppWizard = ({ manifest }) => {
     selectedTaskId,
     setSelectedTaskId,
     activeStep,
-    setActiveStep
+    setActiveStep,
+    error,
   } = useNumaApp();
   const [hasRun, setHasRun] = useState(false);
 
@@ -92,7 +93,7 @@ const AppWizard = ({ manifest }) => {
       taskCompletionStatus,
       activeStep,
       markDefaultContentComplete,
-      setSelectedTaskId
+      setSelectedTaskId,
     ],
   );
 
@@ -211,6 +212,29 @@ const AppWizard = ({ manifest }) => {
 
   return (
     <Container fluid className="app-wizard">
+      {/* Error Alert */}
+      {error && (
+        <Alert
+          variant="danger"
+          onClose={() => setError(null)}
+          dismissible
+          className="mb-3"
+        >
+          {error.message || error}
+        </Alert>
+      )}
+      
+      {/* Processing Status */}
+      {appRunning && (
+        <div className="text-center mb-3">
+          <Preloader smallscreen={true} />
+          <div className="mt-2">
+            {processingStatus}
+            {processingProgress > 0 && ` (${processingProgress}%)`}
+          </div>
+        </div>
+      )}
+
       <Row>
         <Col xs={12} className="px-2 px-md-4">
           <WizardNavigation
@@ -239,9 +263,7 @@ const AppWizard = ({ manifest }) => {
         <Col xs={12} className="px-2 px-md-4">
           {activeStep < visibleTasks.length && (
             <div className="mb-4">
-
               {renderTask(visibleTasks[activeStep])}
-
             </div>
           )}
         </Col>

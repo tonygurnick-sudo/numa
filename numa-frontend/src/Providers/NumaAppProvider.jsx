@@ -214,34 +214,43 @@ export const NumaAppProvider = ({ children }) => {
     console.log('Generated Payload for http-request:', requestPayload);
 
     // Initial request should return success status
-    const response = await fakeHttpRequestFunction(requestPayload);
-    console.log('HTTP Request response:', response);
+    try {
+      const response = await fakeHttpRequestFunction(requestPayload);
+      console.log('HTTP Request response:', response);
 
-    if (!response?.success) {
-      throw new Error('HTTP request failed');
-    }
-
-    // Start polling for status
-    const maxAttempts = 30;
-    const pollInterval = 2000;
-    let attempts = 0;
-
-    while (attempts < maxAttempts) {
-      const status = await NumaPollStatus(jobID);
-      console.log('Poll status response:', status);
-
-      if (status.status === 'SUCCESS') {
-        currentResults[task.id] = status.result;
-        return currentResults;
-      } else if (status.status === 'FAILURE' || status.status === 'UNKNOWN') {
-        throw new Error(`Job failed with status: ${status.status}`);
+      if (!response?.success) {
+        throw new Error('Unable to process your request. Please try again.');
       }
 
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-      attempts++;
-    }
+      // Start polling for status
+      const maxAttempts = 30;
+      const pollInterval = 2000;
+      let attempts = 0;
 
-    throw new Error('Polling timed out');
+      while (attempts < maxAttempts) {
+        const status = await NumaPollStatus(jobID);
+        console.log('Poll status response:', status);
+
+        if (status.status === 'SUCCESS') {
+          currentResults[task.id] = status.result;
+          return currentResults;
+        } else if (status.status === 'FAILURE') {
+          throw new Error(status.error || 'The process encountered an error. Please try again.');
+        } else if (status.status === 'UNKNOWN') {
+          throw new Error('Unable to determine the status of your request. Please try again.');
+        }
+
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        attempts++;
+      }
+
+      throw new Error('The process is taking longer than expected. Please try again.');
+    } catch (error) {
+      // Log the technical error for debugging
+      console.error('HTTP Request task error:', error);
+      // Return a user-friendly error message
+      throw new Error('We encountered an issue processing your request. Please try again.');
+    }
   };
 
   const processTextOutputTask = (task, currentResults) => {
@@ -752,7 +761,18 @@ export const NumaAppProvider = ({ children }) => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get job status');
+        // Convert technical HTTP errors to user-friendly messages
+        switch (response.status) {
+          case 404:
+            throw new Error('The requested process could not be found.');
+          case 401:
+          case 403:
+            throw new Error('You do not have permission to access this process.');
+          case 500:
+            throw new Error('The system encountered an issue. Please try again.');
+          default:
+            throw new Error('Unable to check the status of your request.');
+        }
       }
 
       const statusData = await response.json();
@@ -763,10 +783,12 @@ export const NumaAppProvider = ({ children }) => {
       };
     } catch (error) {
       console.error('Error polling job status:', error);
-      return {
-        status: 'UNKNOWN',
-        error: error.message
-      };
+      // If it's already our user-friendly error, pass it through
+      if (error.message.includes('process') || error.message.includes('system')) {
+        throw error;
+      }
+      // Otherwise, provide a generic user-friendly message
+      throw new Error('Unable to check the status of your request. Please try again.');
     }
   };
 
