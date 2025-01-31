@@ -14,6 +14,7 @@ import { DataAwsRoute53Zone } from '@cdktf/provider-aws/lib/data-aws-route53-zon
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
 import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
+import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { Route53Record } from '@cdktf/provider-aws/lib/route53-record';
 import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
@@ -22,8 +23,8 @@ import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import { Fn, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
-import { v4 as uuidv4 } from 'uuid';
 import * as path from 'node:path';
+import { v4 as uuidv4 } from 'uuid';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 
 export class NumaFrontendInfra extends Construct {
@@ -146,6 +147,12 @@ export class NumaFrontendInfra extends Construct {
       authorizerPayloadFormatVersion: '2.0',
       name: 'cognito-authorizer',
       identitySources: ['$request.header.Authorization', '$request.header.x-arcanum-cloudfront-secret'],
+    });
+
+    new LambdaPermission(this, 'authorizer-lambda-permission', {
+      functionName: authorizerLambda.functionName,
+      action: 'lambda:InvokeFunction',
+      principal: 'apigateway.amazonaws.com',
     });
 
     new Apigatewayv2Stage(this, 'api-stage', {
