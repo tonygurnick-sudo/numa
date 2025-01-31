@@ -21,7 +21,15 @@ export const jobsApi = {
   // Create a new job
   createJob: async (numaAppData, taskInputs) => {
     try {
+      // leave until API proxy is in place, return mock data instead of making API call
+      // const mockJobId = 'mock-job-' + Math.random().toString(36).substring(7);
+      // const jobData = createJobData(numaAppData, taskInputs, mockJobId);
+      
+      // console.log('Mock job created:', jobData);
+      // return jobData;
+
       const jobData = createJobData(numaAppData, taskInputs);
+
       const response = await fetch(`/api/${numaAppData.id}/jobs`, {
         method: 'POST',
         headers: {
@@ -43,16 +51,28 @@ export const jobsApi = {
 
   // Update an existing job
   updateJob: async (jobId, results) => {
-    const { displayDate, isoDate } = createFormattedDate();
-
-    const updateData = {
-      results,
-      status: 'completed',
-      lastUpdated: isoDate,
-      name: `Run ${displayDate}`,
-    };
-
     try {
+      // leave until API proxy is in place, return mock success response instead of making API call
+      // const { isoDate } = createFormattedDate();
+      // const mockResponse = {
+      //   jobId,
+      //   results,
+      //   status: 'completed',
+      //   lastUpdated: isoDate,
+      //   success: true
+      // };
+      
+      // console.log('Mock job updated:', mockResponse);
+      // return mockResponse;
+
+      const { displayDate, isoDate } = createFormattedDate();
+      const updateData = {
+        results,
+        status: 'completed',
+        lastUpdated: isoDate,
+        name: `Run ${displayDate}`,
+      };
+
       const response = await fetch(`/api/jobs/${jobId}`, {
         method: 'PUT',
         headers: {

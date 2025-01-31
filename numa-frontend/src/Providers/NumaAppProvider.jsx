@@ -198,23 +198,80 @@ export const NumaAppProvider = ({ children }) => {
     return currentResults;
   };
 
-  const processHttpRequestTask = async (task, currentResults) => {
+  const processHttpRequestTask = async (jobID, task, currentResults) => {
     const templatePayload = task.params?.payload;
     const payload = createPayloadFromTemplate(
       templatePayload,
       taskInputValues,
       currentResults,
     );
-    console.log('Generated Payload for http-request:', payload);
+    
+    // Include the parent job ID in the payload
+    const requestPayload = {
+      ...payload,
+      jobId: jobID
+    };
+    console.log('Generated Payload for http-request:', requestPayload);
 
-    const response = await fakeHttpRequestFunction(payload);
+    // Initial request should return success status
+    const response = await fakeHttpRequestFunction(requestPayload);
     console.log('HTTP Request response:', response);
 
-    if (!response) {
+    if (!response?.success) {
       throw new Error('HTTP request failed');
     }
 
-    currentResults[task.id] = response?.data;
+    // Start polling for status
+    const maxAttempts = 30;
+    const pollInterval = 2000;
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      const status = await NumaPollStatus(jobID);
+      console.log('Poll status response:', status);
+
+      if (status.status === 'SUCCESS') {
+        currentResults[task.id] = status.result;
+        return currentResults;
+      } else if (status.status === 'FAILURE' || status.status === 'UNKNOWN') {
+        throw new Error(`Job failed with status: ${status.status}`);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      attempts++;
+    }
+
+    throw new Error('Polling timed out');
+  };
+
+  const processTextOutputTask = (task, currentResults) => {
+    const outputRef = task.params?.dataRef;
+    const outputResult = resolveReference(outputRef, currentResults);
+
+    if (outputResult) {
+      let resultToDisplay = outputResult;
+
+      if (typeof outputResult === 'object') {
+        // If it's an array of objects, convert to markdown table
+        if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
+          const headers = Object.keys(outputResult[0]);
+          const headerRow = `| ${headers.join(' | ')} |`;
+          const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
+          const dataRows = outputResult.map(item =>
+            `| ${headers.map(header => item[header] || '').join(' | ')} |`
+          );
+          resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
+        } else {
+          // For other objects, format as code block
+          resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
+        }
+      }
+
+      setNumaTaskResponses((prevResponses) => [
+        ...prevResponses.filter((response) => response.taskId !== task.id),
+        { taskId: task.id, result: resultToDisplay },
+      ]);
+    }
     return currentResults;
   };
 
@@ -279,37 +336,6 @@ export const NumaAppProvider = ({ children }) => {
     }
 
     return sessionResponse;
-  };
-
-  const processTextOutputTask = (task, currentResults) => {
-    const outputRef = task.params?.dataRef;
-    const outputResult = resolveReference(outputRef, currentResults);
-
-    if (outputResult) {
-      let resultToDisplay = outputResult;
-
-      if (typeof outputResult === 'object') {
-        // If it's an array of objects, convert to markdown table
-        if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
-          const headers = Object.keys(outputResult[0]);
-          const headerRow = `| ${headers.join(' | ')} |`;
-          const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
-          const dataRows = outputResult.map(item =>
-            `| ${headers.map(header => item[header] || '').join(' | ')} |`
-          );
-          resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
-        } else {
-          // For other objects, format as code block
-          resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
-        }
-      }
-
-      setNumaTaskResponses((prevResponses) => [
-        ...prevResponses.filter((response) => response.taskId !== task.id),
-        { taskId: task.id, result: resultToDisplay },
-      ]);
-    }
-    return currentResults;
   };
 
   const initializeJob = async () => {
@@ -529,7 +555,7 @@ export const NumaAppProvider = ({ children }) => {
 
           case 'http-request':
             setProcessingStatus('Gathering data...');
-            currentResults = await processHttpRequestTask(task, currentResults);
+            currentResults = await processHttpRequestTask(jobID, task, currentResults);
             completedWeight += taskWeight;
             break;
 
@@ -688,27 +714,72 @@ export const NumaAppProvider = ({ children }) => {
       setTimeout(() => {
         resolve({
           success: true,
-          data: 'http://localhost:5173/example-meeting-transcript.txt',
+          status: 'PROCESSING'
         });
       }, 1000);
     });
   };
 
-  // Function to update a specific task input value
-  const updateTaskInputValue = (taskId, value) => {
-    setTaskInputValues((prev) => {
-      const newValues = {
-        ...prev,
-        [taskId]: value,
+
+  const NumaPollStatus = async (jobId) => {
+    // Mock implementation - keep until api proxy in place
+    // return new Promise((resolve) => {
+    //   setTimeout(() => {
+    //     // Simulate success after 2 calls
+    //     const mockData = 'http://localhost:5173/example-meeting-transcript.txt';
+    //     const pollCount = window.pollCount = (window.pollCount || 0) + 1;
+        
+    //     if (pollCount >= 2) {
+    //       resolve({
+    //         status: 'SUCCESS',
+    //         result: mockData
+    //       });
+    //     } else {
+    //       resolve({
+    //         status: 'PROCESSING'
+    //       });
+    //     }
+    //   }, 500);
+    // });
+
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get job status');
+      }
+
+      const statusData = await response.json();
+      return {
+        status: statusData.status,
+        result: statusData.result,
+        error: statusData.error
       };
-      return newValues;
-    });
-    checkRunActive();
+    } catch (error) {
+      console.error('Error polling job status:', error);
+      return {
+        status: 'UNKNOWN',
+        error: error.message
+      };
+    }
+  };
+
+  const updateTaskInputValue = (taskId, value) => {
+    setTaskInputValues((prev) => ({
+      ...prev,
+      [taskId]: value,
+    }));
   };
 
   function updateTaskCompletionStatus(taskId, isComplete = true) {
-    setTaskCompletionStatus((prevStatus) => ({
-      ...prevStatus,
+    setTaskCompletionStatus((prev) => ({
+      ...prev,
       [taskId]: isComplete,
     }));
   }
