@@ -637,7 +637,7 @@ export const NumaAppProvider = ({ children }) => {
       // Mark all input tasks as complete
       const updatedStatus = {};
       numaAppData.tasks.forEach((task) => {
-        // Mark input tasks as complete since this is a finished job
+        //  this is a finished job
         if (!task.type.includes('output')) {
           updatedStatus[task.id] = true;
         }
@@ -763,18 +763,7 @@ export const NumaAppProvider = ({ children }) => {
       });
 
       if (!response.ok) {
-        // Convert technical HTTP errors to user-friendly messages
-        switch (response.status) {
-          case 404:
-            throw new Error('The requested process could not be found.');
-          case 401:
-          case 403:
-            throw new Error('You do not have permission to access this process.');
-          case 500:
-            throw new Error('The system encountered an issue. Please try again.');
-          default:
-            throw new Error('Unable to check the status of your request.');
-        }
+        throw new Error('Unable to check the status of your request.');
       }
 
       const statusData = await response.json();
@@ -785,12 +774,7 @@ export const NumaAppProvider = ({ children }) => {
       };
     } catch (error) {
       console.error('Error polling job status:', error);
-      // If it's already our user-friendly error, pass it through
-      if (error.message.includes('process') || error.message.includes('system')) {
-        throw error;
-      }
-      // Otherwise, provide a generic user-friendly message
-      throw new Error('Unable to check the status of your request. Please try again.');
+      throw error;
     }
   };
 
