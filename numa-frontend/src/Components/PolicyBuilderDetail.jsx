@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from "react";
 import {
   Container,
   Table,
@@ -11,7 +11,7 @@ import {
   OverlayTrigger,
   Tooltip,
   Toast,
-} from 'react-bootstrap';
+} from "react-bootstrap";
 import {
   Download as DownloadIcon,
   Share as ShareIcon,
@@ -21,32 +21,32 @@ import {
   Trash as TrashIcon,
   PencilFill,
   PencilSquare,
-} from 'react-bootstrap-icons';
-import pdfPolicy from '../assets/policies.pdf';
-import PolicyEditor from './PolicyEditor';
-import { CreatePolicyModal } from './PolicyBuilderModal';
-import axios from 'axios';
-import { useAuth } from '../Providers/AuthProvider';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+} from "react-bootstrap-icons";
+import pdfPolicy from "../assets/policies.pdf";
+import PolicyEditor from "./PolicyEditor";
+import { CreatePolicyModal } from "./PolicyBuilderModal";
+import axios from "axios";
+import { useAuth } from "../Providers/AuthProvider";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export const PolicyBuilderDetail = () => {
-  const [activeTab, setActiveTab] = useState('policies');
+  const [activeTab, setActiveTab] = useState("policies");
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedPolicyHistory, setSelectedPolicyHistory] = useState(null);
   const [showNewPolicyModal, setShowNewPolicyModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [policyInputs, setPolicyInputs] = useState({
-    schoolName: '',
-    schoolContext: '',
-    customInstructions: '',
+    schoolName: "",
+    schoolContext: "",
+    customInstructions: "",
   });
   const [showCustomScenarioModal, setShowCustomScenarioModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [value, setValue] = useState('Loading policy content...');
+  const [newMessage, setNewMessage] = useState("");
+  const [value, setValue] = useState("Loading policy content...");
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [policies, setPolicies] = useState([]);
@@ -62,72 +62,72 @@ export const PolicyBuilderDetail = () => {
   const policyTemplates = [
     {
       id: 1,
-      name: 'Catholic School Policies',
+      name: "Catholic School Policies",
       description:
-        'Complete policy framework aligned with Catholic Special Character and values.',
-      category: 'Catholic Education',
+        "Complete policy framework aligned with Catholic Special Character and values.",
+      category: "Catholic Education",
       defaultInstructions:
-        'Generate policies covering: Catholic Character integration, academic excellence, faith formation, community engagement, student achievement, operational expectations, and governance aligned with Catholic education principles.',
+        "Generate policies covering: Catholic Character integration, academic excellence, faith formation, community engagement, student achievement, operational expectations, and governance aligned with Catholic education principles.",
     },
     {
       id: 2,
-      name: 'Green School Policies',
+      name: "Green School Policies",
       description:
-        'Policy framework centered on environmental sustainability and ecological awareness.',
-      category: 'Environmental Education',
+        "Policy framework centered on environmental sustainability and ecological awareness.",
+      category: "Environmental Education",
       defaultInstructions:
-        'Generate policies covering: environmental leadership, sustainability practices, nature-based learning, community impact, student achievement, operational expectations, and governance through an environmental lens.',
+        "Generate policies covering: environmental leadership, sustainability practices, nature-based learning, community impact, student achievement, operational expectations, and governance through an environmental lens.",
     },
     {
       id: 3,
-      name: 'Public School Policies',
-      description: 'Standard policy framework for state education.',
-      category: 'Public Education',
+      name: "Public School Policies",
+      description: "Standard policy framework for state education.",
+      category: "Public Education",
       defaultInstructions:
-        'Generate policies covering: educational achievement, cultural responsiveness, community engagement, student support, operational expectations, and governance aligned with state education requirements.',
+        "Generate policies covering: educational achievement, cultural responsiveness, community engagement, student support, operational expectations, and governance aligned with state education requirements.",
     },
     {
       id: 4,
-      name: 'Kura Kaupapa Māori Policies',
-      description: 'Policy framework based on Te Aho Matua principles.',
-      category: 'Māori Education',
+      name: "Kura Kaupapa Māori Policies",
+      description: "Policy framework based on Te Aho Matua principles.",
+      category: "Māori Education",
       defaultInstructions:
-        'Generate policies covering: Te Reo Māori, tikanga Māori, Te Aho Matua principles, whānau engagement, student achievement, operational expectations, and governance aligned with Kura Kaupapa values.',
+        "Generate policies covering: Te Reo Māori, tikanga Māori, Te Aho Matua principles, whānau engagement, student achievement, operational expectations, and governance aligned with Kura Kaupapa values.",
     },
     {
       id: 5,
-      name: 'Anglican School Policies',
+      name: "Anglican School Policies",
       description:
-        'Policy framework aligned with Anglican Special Character and values.',
-      category: 'Anglican Education',
+        "Policy framework aligned with Anglican Special Character and values.",
+      category: "Anglican Education",
       defaultInstructions:
-        'Generate policies covering: Anglican Character integration, academic excellence, spiritual formation, community engagement, student achievement, operational expectations, and governance aligned with Anglican education principles.',
+        "Generate policies covering: Anglican Character integration, academic excellence, spiritual formation, community engagement, student achievement, operational expectations, and governance aligned with Anglican education principles.",
     },
     {
       id: 6,
-      name: 'Presbyterian School Policies',
+      name: "Presbyterian School Policies",
       description:
-        'Policy framework aligned with Presbyterian Special Character and values.',
-      category: 'Presbyterian Education',
+        "Policy framework aligned with Presbyterian Special Character and values.",
+      category: "Presbyterian Education",
       defaultInstructions:
-        'Generate policies covering: Presbyterian Character integration, academic excellence, faith development, community engagement, student achievement, operational expectations, and governance aligned with Presbyterian education principles.',
+        "Generate policies covering: Presbyterian Character integration, academic excellence, faith development, community engagement, student achievement, operational expectations, and governance aligned with Presbyterian education principles.",
     },
     {
       id: 7,
-      name: 'State Integrated School Policies',
+      name: "State Integrated School Policies",
       description:
-        'Policy framework for schools with special character integration agreements.',
-      category: 'Integrated Education',
+        "Policy framework for schools with special character integration agreements.",
+      category: "Integrated Education",
       defaultInstructions:
-        'Generate policies covering: special character preservation, integration requirements, community engagement, student achievement, operational expectations, and governance aligned with integration agreement obligations.',
+        "Generate policies covering: special character preservation, integration requirements, community engagement, student achievement, operational expectations, and governance aligned with integration agreement obligations.",
     },
     {
       id: 8,
-      name: 'Independent School Policies',
-      description: 'Policy framework for private independent schools.',
-      category: 'Independent Education',
+      name: "Independent School Policies",
+      description: "Policy framework for private independent schools.",
+      category: "Independent Education",
       defaultInstructions:
-        'Generate policies covering: school-specific values, academic excellence, character development, community engagement, student achievement, operational expectations, and governance aligned with independent school requirements.',
+        "Generate policies covering: school-specific values, academic excellence, character development, community engagement, student achievement, operational expectations, and governance aligned with independent school requirements.",
     },
   ];
 
@@ -135,43 +135,43 @@ export const PolicyBuilderDetail = () => {
   const samplePolicyHistory = [
     {
       id: 1,
-      name: 'Digital Technology and Device Usage - Wellington College',
+      name: "Digital Technology and Device Usage - Wellington College",
       versions: [
         {
           version: 1,
-          generatedDate: '2024-03-15',
-          status: 'active',
-          changes: 'Initial policy generation',
+          generatedDate: "2024-03-15",
+          status: "active",
+          changes: "Initial policy generation",
         },
       ],
     },
     {
       id: 2,
-      name: 'Student Support & Wellbeing Guidelines - Wellington Girls College',
+      name: "Student Support & Wellbeing Guidelines - Wellington Girls College",
       versions: [
         {
           version: 1,
-          generatedDate: '2024-03-10',
-          status: 'active',
-          changes: 'Initial policy generation',
+          generatedDate: "2024-03-10",
+          status: "active",
+          changes: "Initial policy generation",
         },
       ],
     },
     {
       id: 3,
-      name: 'Cultural Inclusivity Framework - Wellington High School',
+      name: "Cultural Inclusivity Framework - Wellington High School",
       versions: [
         {
           version: 2,
-          generatedDate: '2024-03-01',
-          status: 'out_of_date',
-          changes: 'Updated to include new Ministry guidelines',
+          generatedDate: "2024-03-01",
+          status: "out_of_date",
+          changes: "Updated to include new Ministry guidelines",
         },
         {
           version: 1,
-          generatedDate: '2023-09-15',
-          status: 'archived',
-          changes: 'Initial policy generation',
+          generatedDate: "2023-09-15",
+          status: "archived",
+          changes: "Initial policy generation",
         },
       ],
     },
@@ -180,96 +180,84 @@ export const PolicyBuilderDetail = () => {
   // Updated status mappings
   const getBadgeColor = (status) => {
     switch (status) {
-      case 'SUCCESS':
-        return 'success';
-      case 'FAILED':
-        return 'danger';
-      case 'PROCESSING':
-        return 'info';
+      case "SUCCESS":
+        return "success";
+      case "FAILED":
+        return "danger";
+      case "PROCESSING":
+        return "info";
       default:
-        return 'secondary';
+        return "secondary";
     }
   };
 
   const formatStatus = (status) => {
-    return status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+    return status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
-const handleDownload = async (policyId) => {
-  setIsDownloading(policyId);
-  try {
-    // Find the policy to get the school name
-    const policy = policies.find(
-      (p) => p.jobDetails.stepFunctionJobId === policyId,
-    );
-    const schoolName = policy?.name || 'policy';
-    // Create a sanitized filename
-    const sanitizedFileName = schoolName
-      .replace(/[^a-z0-9]/gi, '_')
-      .toLowerCase();
-
-
-    const credentials = await getIdentityPoolCredentials();
-
-    // Create S3 client
-    const s3Client = new S3Client({
-      region: 'us-east-1', // replace with your region
-      credentials,
-    });
-
-    // Construct the file path and key
-    let bucketName = `numa-${config.CLIENT_NAME}-outputs`; // replace with your bucket name
-    let key;
-    if (policyId === 'test.txt') {
-      key = 'test.txt';
-    } else {
-      key = `${config.CLIENT_NAME}-nzsba-policy-builder/${policyId}/final_policy.pdf`;
-    }
-
-    // Create the command to get a signed URL
-    const command = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: key,
-    });
-
-    // Generate signed URL (expires in 1 hour)
-    const signedUrl = await getSignedUrl(s3Client, command, {
-      expiresIn: 3600,
-    });
-
-    console.log('Signed URL:', signedUrl);
-
-    // Use axios to download the file
-    const fileResponse = await axios.get(signedUrl, {
-      responseType: 'blob',
-    });
-
-    if (fileResponse.status !== 200) {
-      throw new Error(
-        `File not accessible: ${fileResponse.status} ${fileResponse.statusText}`,
+  const handleDownload = async (policyId) => {
+    setIsDownloading(policyId);
+    try {
+      // Find the policy to get the school name
+      const policy = policies.find(
+        (p) => p.jobDetails.stepFunctionJobId === policyId
       );
+      const schoolName = policy?.name || "policy";
+      // Create a sanitized filename
+      const sanitizedFileName = schoolName
+        .replace(/[^a-z0-9]/gi, "_")
+        .toLowerCase();
+
+      const credentials = await getIdentityPoolCredentials();
+
+      // Create S3 client
+      const s3Client = new S3Client({
+        region: "us-east-1", // replace with your region
+        credentials,
+      });
+
+      // Construct the file path and key
+      let bucketName = `numa-${config.CLIENT_NAME}-outputs`;
+      let key;
+      if (policyId === "test.txt") {
+        key = "test.txt";
+      } else {
+        key = `${config.CLIENT_NAME}-nzsba-policy-builder/${policyId}/final_policy.pdf`;
+      }
+
+      // Create the command to get a signed URL with specific parameters
+      const fileName =
+        policyId === "test.txt" ? "test.txt" : `${sanitizedFileName}.pdf`;
+      const contentType =
+        policyId === "test.txt" ? "text/plain" : "application/pdf";
+
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        ResponseContentDisposition: `attachment; filename="${fileName}"`,
+        ResponseContentType: contentType,
+      });
+
+      let signedUrl;
+      try {
+        signedUrl = await getSignedUrl(s3Client, command, {
+          expiresIn: 3600,
+        });
+      } catch (error) {
+        console.error("Error fetching signed URL:", error);
+        setErrorMessage(error.message || "Failed to download file");
+        return;
+      }
+
+      // Direct browser download using the signed URL
+      window.location.href = signedUrl;
+    } catch (error) {
+      console.error("Download failed:", error);
+      setErrorMessage(error.message || "Failed to download file");
+    } finally {
+      setIsDownloading(null);
     }
-
-    const blob = fileResponse.data;
-    const blobUrl = window.URL.createObjectURL(blob);
-
-    // Create link with blob URL and custom filename
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = `${sanitizedFileName}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-
-    // Cleanup
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(blobUrl);
-  } catch (error) {
-    console.error('Download failed:', error);
-    setErrorMessage(error.message || 'Failed to download file');
-  } finally {
-    setIsDownloading(null);
-  }
-};
+  };
 
   const handleShare = (policyId, method) => {
     // Implement share logic here
@@ -277,30 +265,30 @@ const handleDownload = async (policyId) => {
   };
 
   const formatDate = (dateString, includeDay = false) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return "N/A";
 
     try {
       const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Invalid Date';
+      if (isNaN(date.getTime())) return "Invalid Date";
 
-      return new Intl.DateTimeFormat('en-NZ', {
-        weekday: includeDay ? 'short' : undefined,
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
+      return new Intl.DateTimeFormat("en-NZ", {
+        weekday: includeDay ? "short" : undefined,
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
         hour12: true,
       }).format(date);
     } catch (error) {
-      console.error('Error formatting date:', error);
-      return 'Invalid Date';
+      console.error("Error formatting date:", error);
+      return "Invalid Date";
     }
   };
 
   const handleViewPolicy = () => {
     // Open PDF in new tab
-    window.open(pdfPolicy, '_blank');
+    window.open(pdfPolicy, "_blank");
   };
 
   const getPolicyHistory = (policyId) => {
@@ -317,13 +305,13 @@ const handleDownload = async (policyId) => {
     setSelectedTemplate(template);
     setPolicyInputs({
       ...policyInputs,
-      customInstructions: template.defaultInstructions || '',
+      customInstructions: template.defaultInstructions || "",
       templateId: template.id,
       templateName: template.name,
       templateCategory: template.category,
-      schoolName: '',
-      schoolContext: '',
-      characterUrls: []
+      schoolName: "",
+      schoolContext: "",
+      characterUrls: [],
     });
     setShowNewPolicyModal(true);
   };
@@ -333,7 +321,7 @@ const handleDownload = async (policyId) => {
       ...policyInputs,
       characterUrls: [
         ...policyInputs.characterUrls,
-        { url: '', description: '' },
+        { url: "", description: "" },
       ],
     });
   };
@@ -360,20 +348,20 @@ const handleDownload = async (policyId) => {
     // Initialize chat with a welcome message
     setChatMessages([
       {
-        role: 'assistant',
+        role: "assistant",
         content: `I'm here to help you improve the "${policy.name}" policy. What would you like to change?`,
       },
     ]);
     // Load the policy content
     setIsLoading(true);
-    fetch('/src/assets/final_policy.md')
+    fetch("/src/assets/final_policy.md")
       .then((response) => response.text())
       .then((content) => {
         setValue(content);
         setIsLoading(false);
       })
       .catch((error) => {
-        console.error('Error loading markdown:', error);
+        console.error("Error loading markdown:", error);
         setIsLoading(false);
       });
   };
@@ -383,21 +371,21 @@ const handleDownload = async (policyId) => {
     if (!newMessage.trim()) return;
 
     const userMessage = {
-      role: 'user',
+      role: "user",
       content: newMessage,
     };
 
     setChatMessages([...chatMessages, userMessage]);
-    setNewMessage('');
+    setNewMessage("");
 
     // TODO: Implement actual LLM integration
     setTimeout(() => {
       setChatMessages((prev) => [
         ...prev,
         {
-          role: 'assistant',
+          role: "assistant",
           content:
-            'I understand your request. How would you like to proceed with these changes?',
+            "I understand your request. How would you like to proceed with these changes?",
         },
       ]);
     }, 1000);
@@ -406,9 +394,9 @@ const handleDownload = async (policyId) => {
   const handleBlankScenario = () => {
     setSelectedTemplate(null);
     setPolicyInputs({
-      schoolName: '',
-      schoolContext: '',
-      customInstructions: '',
+      schoolName: "",
+      schoolContext: "",
+      customInstructions: "",
       characterUrls: [],
     });
     setShowNewPolicyModal(true);
@@ -419,8 +407,8 @@ const handleDownload = async (policyId) => {
     try {
       // Create a job in the job manager
       const jobData = {
-        type: 'POLICY_GENERATION',
-        status: 'PENDING',
+        type: "POLICY_GENERATION",
+        status: "PENDING",
         inputs: policyInputs,
       };
 
@@ -431,7 +419,7 @@ const handleDownload = async (policyId) => {
         {
           headers: { Authorization: `Bearer ${token}` },
           body: JSON.stringify(jobData),
-        },
+        }
       );
 
       if (!response.ok) {
@@ -439,64 +427,64 @@ const handleDownload = async (policyId) => {
       }
 
       const job = await response.json();
-      console.log('Job created:', job);
+      console.log("Job created:", job);
 
       // Start the step function
       const stepFunctionResponse = await fetch(
         `${config.API_ENDPOINT}/policy-builder/main`,
         {
           headers: { Authorization: `Bearer ${token}` },
-          method: 'POST',
+          method: "POST",
           body: JSON.stringify({
             original_job_id: job.jobID,
             organisation_name: policyInputs.schoolName,
             organisation_context: policyInputs.schoolContext,
             // custom_instructions: policyInputs.customInstructions,
           }),
-        },
+        }
       );
 
       if (!stepFunctionResponse.ok) {
         throw new Error(
-          `Step Function HTTP error! status: ${stepFunctionResponse.status}`,
+          `Step Function HTTP error! status: ${stepFunctionResponse.status}`
         );
       }
 
       const stepFunction = await stepFunctionResponse.json();
-      console.log('Step Function started:', stepFunction);
+      console.log("Step Function started:", stepFunction);
 
       // Update the job with the step function details
       const updateResponse = await fetch(
         `${config.API_ENDPOINT}/policy-builder/jobs/${job.jobID}`,
         {
-          method: 'PUT',
+          method: "PUT",
           headers: { Authorization: `Bearer ${token}` },
           body: JSON.stringify({
-            status: 'PROCESSING',
+            status: "PROCESSING",
             stepFunctionJobId: stepFunction.job_id,
           }),
-        },
+        }
       );
 
       if (!updateResponse.ok) {
         throw new Error(
-          `Job update HTTP error! status: ${updateResponse.status}`,
+          `Job update HTTP error! status: ${updateResponse.status}`
         );
       }
 
       const updatedJob = await updateResponse.json();
-      console.log('Job updated:', updatedJob);
+      console.log("Job updated:", updatedJob);
 
       // Start polling in a separate function
       startPollingForJob(updatedJob);
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Error:", error);
     } finally {
       setIsGenerating(false);
       setShowNewPolicyModal(false); // Close the modal after generation starts
 
       // Switch to policies tab
-      setActiveTab('policies');
+      setActiveTab("policies");
 
       // Force refresh the policies list
       await fetchPolicies();
@@ -521,10 +509,10 @@ const handleDownload = async (policyId) => {
   }, []);
 
   useEffect(() => {
-    fetch('/config.json')
+    fetch("/config.json")
       .then((response) => response.json())
       .then((data) => setConfig(data))
-      .catch((error) => console.error('Error loading config:', error));
+      .catch((error) => console.error("Error loading config:", error));
   }, []);
 
   const pollProcessingPolicy = async (job) => {
@@ -536,42 +524,42 @@ const handleDownload = async (policyId) => {
         `${config.API_ENDPOINT}/policy-builder/main?job_id=${job.stepFunctionJobId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
-        },
+        }
       );
 
       if (!stepFunctionResponse.ok) {
         console.error(
-          `Step Function request failed with status: ${stepFunctionResponse.status}`,
+          `Step Function request failed with status: ${stepFunctionResponse.status}`
         );
         clearPollingForJob(job.jobID);
         return true;
       }
 
       const stepFunctionStatus = await stepFunctionResponse.json();
-      console.log('Step Function Status:', stepFunctionStatus);
+      console.log("Step Function Status:", stepFunctionStatus);
 
       // Stop polling if the status is not PROCESSING
-      if (stepFunctionStatus.status !== 'PROCESSING') {
+      if (stepFunctionStatus.status !== "PROCESSING") {
         console.log(
-          `Job ${job.jobID} status changed from PROCESSING to ${stepFunctionStatus.status}`,
+          `Job ${job.jobID} status changed from PROCESSING to ${stepFunctionStatus.status}`
         );
 
         // Update job manager with new status
         const updateResponse = await fetch(
           `${config.API_ENDPOINT}/policy-builder/jobs/${job.jobID}`,
           {
-            method: 'PUT',
+            method: "PUT",
             headers: { Authorization: `Bearer ${token}` },
             body: JSON.stringify({
               ...job,
               status: stepFunctionStatus.status,
             }),
-          },
+          }
         );
 
         if (!updateResponse.ok) {
           console.error(
-            `Failed to update job status in job manager: ${updateResponse.status}`,
+            `Failed to update job status in job manager: ${updateResponse.status}`
           );
           clearPollingForJob(job.jobID);
           return true;
@@ -587,8 +575,8 @@ const handleDownload = async (policyId) => {
         return true;
       }
     } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log('Fetch aborted');
+      if (error.name === "AbortError") {
+        console.log("Fetch aborted");
         return false;
       }
       console.error(`Error polling job ${job.jobID}:`, error);
@@ -643,9 +631,9 @@ const handleDownload = async (policyId) => {
       const response = await fetch(
         `${config.API_ENDPOINT}/policy-builder/jobs`,
         {
-          method: 'GET',
+          method: "GET",
           headers: { Authorization: `Bearer ${token}` },
-        },
+        }
       );
 
       if (!response.ok) {
@@ -655,21 +643,21 @@ const handleDownload = async (policyId) => {
       const data = await response.json();
 
       const transformedPolicies = data
-        .filter((job) => job.type === 'POLICY_GENERATION')
+        .filter((job) => job.type === "POLICY_GENERATION")
         .map((job) => {
           // Only start polling if job is processing and not already being polled
           if (
-            job.status === 'PROCESSING' &&
+            job.status === "PROCESSING" &&
             job.jobID &&
             !pollingPolicies.has(job.jobID)
           ) {
-            console.log('Starting polling for job:', job);
+            console.log("Starting polling for job:", job);
             startPollingForJob(job);
           }
 
           return {
             id: job.jobID,
-            name: job.inputs?.schoolName || 'Unnamed Policy',
+            name: job.inputs?.schoolName || "Unnamed Policy",
             lastModified: job.datetime || job.createdAt,
             status: job.status,
             jobDetails: job,
@@ -678,12 +666,12 @@ const handleDownload = async (policyId) => {
 
       // Sort by date
       transformedPolicies.sort(
-        (a, b) => new Date(b.lastModified) - new Date(a.lastModified),
+        (a, b) => new Date(b.lastModified) - new Date(a.lastModified)
       );
 
       setPolicies(transformedPolicies);
     } catch (error) {
-      console.error('Error fetching policies:', error);
+      console.error("Error fetching policies:", error);
     } finally {
       setIsLoadingPolicies(false);
     }
@@ -692,16 +680,16 @@ const handleDownload = async (policyId) => {
   // Helper function to map job statuses to policy statuses
   const mapJobStatusToPolicy = (jobStatus) => {
     switch (jobStatus) {
-      case 'SUCCESS':
-        return 'SUCCESS';
-      case 'FAILED':
-        return 'FAILED';
-      case 'PROCESSING':
-        return 'PROCESSING';
-      case 'PENDING':
-        return 'PROCESSING';
+      case "SUCCESS":
+        return "SUCCESS";
+      case "FAILED":
+        return "FAILED";
+      case "PROCESSING":
+        return "PROCESSING";
+      case "PENDING":
+        return "PROCESSING";
       default:
-        return 'PROCESSING';
+        return "PROCESSING";
     }
   };
 
@@ -726,20 +714,21 @@ const handleDownload = async (policyId) => {
             <span className="visually-hidden">Loading...</span>
           </div>
         </div>
-      ) :
-      // policies.length === 0 ? (
-      //   <div className="text-center py-4">
-      //     <p className="text-muted">
-      //       No policies found. Create a new policy to get started.
-      //     </p>
-      //   </div>
-      // ) :
-      (
+      ) : (
+        // policies.length === 0 ? (
+        //   <div className="text-center py-4">
+        //     <p className="text-muted">
+        //       No policies found. Create a new policy to get started.
+        //     </p>
+        //   </div>
+        // ) :
         <Table responsive striped bordered hover>
           <thead>
             <tr className="table-light">
               <th className="align-middle">Policy Name</th>
-              <th className="align-middle d-none d-md-table-cell">Last Modified</th>
+              <th className="align-middle d-none d-md-table-cell">
+                Last Modified
+              </th>
               <th className="align-middle">Status</th>
               <th className="align-middle">Actions</th>
             </tr>
@@ -749,19 +738,17 @@ const handleDownload = async (policyId) => {
               <td className="text-break">NZSBA Exemplar Policy</td>
               <td className="d-none d-md-table-cell">Always Available</td>
               <td>
-                <Badge bg="success">
-                  Available
-                </Badge>
+                <Badge bg="success">Available</Badge>
               </td>
               <td>
                 <div className="d-flex flex-wrap gap-2">
                   <Button
                     variant="outline-success"
                     size="sm"
-                    onClick={() => handleDownload('test.txt')}
-                    disabled={isDownloading === 'test.txt'}
+                    onClick={() => handleDownload("test.txt")}
+                    disabled={isDownloading === "test.txt"}
                   >
-                    {isDownloading === 'test.txt' ? (
+                    {isDownloading === "test.txt" ? (
                       <span
                         className="spinner-border spinner-border-sm me-1"
                         role="status"
@@ -770,9 +757,9 @@ const handleDownload = async (policyId) => {
                       <DownloadIcon className="me-1" />
                     )}
                     <span className="d-none d-lg-inline">
-                      {isDownloading === 'test.txt'
-                        ? 'Downloading...'
-                        : 'Download'}
+                      {isDownloading === "test.txt"
+                        ? "Downloading..."
+                        : "Download"}
                     </span>
                   </Button>
                 </div>
@@ -786,10 +773,10 @@ const handleDownload = async (policyId) => {
                 </td>
                 <td>
                   <Badge bg={getBadgeColor(policy.status)}>
-                    {policy.status === 'processing' && (
+                    {policy.status === "processing" && (
                       <span
                         className="spinner-border spinner-border-sm me-1"
-                        style={{ width: '0.8rem', height: '0.8rem' }}
+                        style={{ width: "0.8rem", height: "0.8rem" }}
                         role="status"
                       >
                         <span className="visually-hidden">Processing...</span>
@@ -807,7 +794,7 @@ const handleDownload = async (policyId) => {
                         handleDownload(policy.jobDetails.stepFunctionJobId)
                       }
                       disabled={
-                        policy.status !== 'SUCCESS' ||
+                        policy.status !== "SUCCESS" ||
                         isDownloading === policy.jobDetails.stepFunctionJobId
                       }
                     >
@@ -821,8 +808,8 @@ const handleDownload = async (policyId) => {
                       )}
                       <span className="d-none d-lg-inline">
                         {isDownloading === policy.jobDetails.stepFunctionJobId
-                          ? 'Downloading...'
-                          : 'Download'}
+                          ? "Downloading..."
+                          : "Download"}
                       </span>
                     </Button>
                   </div>
@@ -874,10 +861,10 @@ const handleDownload = async (policyId) => {
               key={template.id}
               className="card policy-template-card"
               style={{
-                width: '300px', // Fixed width instead of flexible
-                height: '250px',
-                cursor: 'pointer',
-                flex: '0 0 300px', // Prevent flex growing/shrinking
+                width: "300px", // Fixed width instead of flexible
+                height: "250px",
+                cursor: "pointer",
+                flex: "0 0 300px", // Prevent flex growing/shrinking
               }}
               onClick={() => handleTemplateSelect(template)}
             >
@@ -887,12 +874,12 @@ const handleDownload = async (policyId) => {
                   <p
                     className="card-text text-muted small mb-3"
                     style={{
-                      display: '-webkit-box',
-                      WebkitLineClamp: '3',
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      lineHeight: '1.4',
+                      display: "-webkit-box",
+                      WebkitLineClamp: "3",
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      lineHeight: "1.4",
                     }}
                   >
                     {template.description}
@@ -931,7 +918,7 @@ const handleDownload = async (policyId) => {
 
   return (
     <Container fluid className="px-0">
-      <div style={{ backgroundColor: '#f8f7fa' }} className="border-bottom">
+      <div style={{ backgroundColor: "#f8f7fa" }} className="border-bottom">
         <Tabs
           activeKey={activeTab}
           onSelect={(k) => setActiveTab(k)}
@@ -965,7 +952,7 @@ const handleDownload = async (policyId) => {
         show={!!errorMessage}
         onClose={() => setErrorMessage(null)}
         style={{
-          position: 'fixed',
+          position: "fixed",
           bottom: 20,
           right: 20,
           zIndex: 1000,

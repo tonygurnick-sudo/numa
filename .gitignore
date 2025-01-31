@@ -124,3 +124,7 @@ test.pdf
 accounts.html
 numa-frontend/coverage
 **/install-state.gz
+
+# Frontend
+numa-frontend/public/config.json
+numa-frontend/public/manifest.json

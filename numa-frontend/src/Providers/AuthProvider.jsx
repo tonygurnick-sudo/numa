@@ -9,7 +9,7 @@ import {
 import { jwtDecode } from 'jwt-decode';
 import { QBusinessClient } from '@aws-sdk/client-qbusiness';
 import { QAppsClient } from '@aws-sdk/client-qapps';
-import { fromWebToken } from '@aws-sdk/credential-providers';
+import { fromWebToken, fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
 import QPolicy from '../Data/QPolicy.json';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
@@ -145,19 +145,24 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const getIdentityPoolCredentials = async () => {
     if (!user) return null;
 
-    const cognitoIdentity = new CognitoIdentityClient({
-      region: REGION,
-    });
+    try {
+      const cognitoIdentity = new CognitoIdentityClient({
+        region: REGION
+      });
 
-    return fromWebToken({
-      client: cognitoIdentity,
-      identityPoolId: IDENTITY_POOL_ID,
-      roleSessionName: 'numa-frontend-qapps',
-      roleArn: IDENTITY_POOL_ROLE_ARN,
-      policy: JSON.stringify(QPolicy),
-      durationSeconds: 3600,
-      webIdentityToken: user.tokens.idToken,
-    });
+      const credentials = await fromCognitoIdentityPool({
+        client: cognitoIdentity,
+        identityPoolId: IDENTITY_POOL_ID,
+        logins: {
+          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: user.tokens.idToken
+        }
+      })();
+
+      return credentials;
+    } catch (error) {
+      console.error('Error getting credentials:', error);
+      throw error;
+    }
   };
 
   const getAccessToken = async () => {
@@ -183,7 +188,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
         roleSessionName: 'numa-frontend-chat',
-        roleArn: ROLE_ARN,
+        roleArn: IDENTITY_POOL_ROLE_ARN,
         policy: JSON.stringify(QPolicy),
         durationSeconds: 3600,
         webIdentityToken: idToken,
@@ -211,7 +216,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
         roleSessionName: 'numa-frontend-qapps',
-        roleArn: ROLE_ARN,
+        roleArn: IDENTITY_POOL_ROLE_ARN,
         policy: JSON.stringify(QPolicy),
         durationSeconds: 3600,
         webIdentityToken: idToken,

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import config from './public/config.json';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -9,7 +10,15 @@ export default defineConfig({
       '/manifest.json': {
         target: 'http://localhost:5173',
         rewrite: () => '/src/Data/example-manifest.json'
-      }
+      },
+      '/api': {
+        target: `https://${config.CLIENT_NAME}.numa.arcanum.ai`,
+        changeOrigin: true,
+        secure: false,
+        headers: {
+          'Origin': `https://${config.CLIENT_NAME}.numa.arcanum.ai`
+        },
+      },
     }
   },
   resolve: {
