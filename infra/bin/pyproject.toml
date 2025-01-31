@@ -16,9 +16,9 @@ requests = "2.32.3"
 
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.35.79"
-mypy = "1.13.0"
-pylint = "3.3.2"
-pyright = "1.1.391"
+mypy = "1.14.1"
+pylint = "3.3.4"
+pyright = "1.1.393"
 types-requests = "2.32.0.20241016"
 
 [build-system]

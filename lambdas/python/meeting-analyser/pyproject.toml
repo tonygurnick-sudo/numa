@@ -17,9 +17,9 @@ boto3 = "1.35.79"
 helpers = {path = "../../../lib/helpers", develop = true}
 
 [tool.poetry.group.dev.dependencies]
-mypy = "1.13.0"
-pylint = "3.3.2"
-pyright = "1.1.391"
+mypy = "1.14.1"
+pylint = "3.3.4"
+pyright = "1.1.393"
 boto3-stubs = "^1.35.96"
 
 [tool.poetry.requires-plugins]
