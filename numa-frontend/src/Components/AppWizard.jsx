@@ -34,11 +34,11 @@ const AppWizard = ({ manifest }) => {
   // Filter out hidden tasks and system tasks (q-app and http-request)
   const visibleTasks = useMemo(
     () =>
-      manifest.tasks.filter(
+      manifest?.tasks?.filter(
         (task) =>
           !task.hidden && task.type !== 'q-app' && task.type !== 'http-request',
-      ),
-    [manifest.tasks],
+      ) || [],
+    [manifest?.tasks],
   );
 
   // Split tasks into pre-run and post-run groups
@@ -106,6 +106,10 @@ const AppWizard = ({ manifest }) => {
       });
       setTaskCompletionStatus(updatedStatus);
 
+      setHasRun(true);
+      setAppRunning(true);
+      await handleRunButtonClick(numaAppData);
+
       // Find the first output task and set it as active
       const firstOutputTask = visibleTasks.find((task) =>
         task.type.includes('output'),
@@ -115,13 +119,9 @@ const AppWizard = ({ manifest }) => {
         setActiveStep(outputIndex);
         setSelectedTaskId(firstOutputTask.id);
       }
-
-      setHasRun(true);
-      setAppRunning(true);
-      await handleRunButtonClick(numaAppData);
     } catch (error) {
       console.error('Error running app:', error);
-      setError(error);
+      setError(error); // Set the error state directly
     } finally {
       setAppRunning(false);
     }
@@ -212,29 +212,6 @@ const AppWizard = ({ manifest }) => {
 
   return (
     <Container fluid className="app-wizard">
-      {/* Error Alert */}
-      {error && (
-        <Alert
-          variant="danger"
-          onClose={() => setError(null)}
-          dismissible
-          className="mb-3"
-        >
-          {error.message || error}
-        </Alert>
-      )}
-      
-      {/* Processing Status */}
-      {appRunning && (
-        <div className="text-center mb-3">
-          <Preloader smallscreen={true} />
-          <div className="mt-2">
-            {processingStatus}
-            {processingProgress > 0 && ` (${processingProgress}%)`}
-          </div>
-        </div>
-      )}
-
       <Row>
         <Col xs={12} className="px-2 px-md-4">
           <WizardNavigation
@@ -256,6 +233,30 @@ const AppWizard = ({ manifest }) => {
             processingProgress={processingProgress}
             processingStatus={processingStatus}
           />
+
+          {/* Error and Processing Status */}
+          <div className="mt-2" style={{ maxWidth: '600px', margin: '0 auto' }}>
+            {error && (
+              <Alert 
+                variant="danger" 
+                onClose={() => setError(null)} 
+                dismissible
+                className="py-2"
+              >
+                {error.message || error}
+              </Alert>
+            )}
+            
+            {appRunning && (
+              <div className="text-center py-2">
+                <Preloader smallscreen={true} />
+                <div className="mt-1 text-muted">
+                  {processingStatus}
+                  {processingProgress > 0 && ` (${processingProgress}%)`}
+                </div>
+              </div>
+            )}
+          </div>
         </Col>
       </Row>
 

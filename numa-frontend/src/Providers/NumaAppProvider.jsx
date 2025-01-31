@@ -352,21 +352,16 @@ export const NumaAppProvider = ({ children }) => {
     setLoading(true);
 
     try {
-      // Create job in API
-      const jobResponse = await jobsApi.createJob(
-        numaAppData,
-        taskInputValues
-      );
-
+      const jobResponse = await jobsApi.createJob(numaAppData, taskInputValues);
       return {
         jobID: jobResponse.jobID,
         dateTime: jobResponse.startedAt
       };
     } catch (error) {
       console.error('Failed to create job:', error);
-      setAppRunning(false);
-      setLoading(false);
-      throw error;
+      setProcessingStatus('Error');
+      setProcessingProgress(0);
+      throw new Error('Unable to start the process. Please try again.');
     }
   };
 
@@ -535,35 +530,38 @@ export const NumaAppProvider = ({ children }) => {
   const handleRunButtonClick = async () => {
     if (!numaAppData || !numaAppData.tasks) return;
 
-    const { jobID, dateTime } = await initializeJob();
-    let currentResults = {};
+    setProcessingStatus('Starting process...');
+    setProcessingProgress(0);
+    setError(null); // Clear any previous errors
 
     try {
+      const { jobID, dateTime } = await initializeJob();
+      let currentResults = {};
+
       const orderedTasks = numaAppData.tasks
         .slice()
         .sort((a, b) => a.order - b.order);
-      const totalWeight = calculateTotalWeight(orderedTasks);
+
       let completedWeight = 0;
       let qappWeight = 0;
+      const totalWeight = calculateTotalWeight(orderedTasks);
 
       for (const task of orderedTasks) {
+        setProcessingStatus(`Processing ${task.name}...`);
         const taskWeight = calculateTaskWeight(task);
 
         switch (task.type) {
           case 'text-input':
-            setProcessingStatus('Processing input data...');
             currentResults = processTextInputTask(task, currentResults);
             completedWeight += taskWeight;
             break;
 
           case 's3-upload':
-            setProcessingStatus('Uploading files...');
             currentResults = processS3UploadTask(task, currentResults);
             completedWeight += taskWeight;
             break;
 
           case 'http-request':
-            setProcessingStatus('Gathering data...');
             currentResults = await processHttpRequestTask(jobID, task, currentResults);
             completedWeight += taskWeight;
             break;
@@ -575,13 +573,12 @@ export const NumaAppProvider = ({ children }) => {
               currentResults,
               completedWeight,
               qappWeight,
-              totalWeight,
+              totalWeight
             );
-            completedWeight += qappWeight;
+            completedWeight += taskWeight;
             break;
 
           case 'text-output':
-            setProcessingStatus('Generating output...');
             currentResults = processTextOutputTask(task, currentResults);
             completedWeight += taskWeight;
             break;
@@ -590,6 +587,9 @@ export const NumaAppProvider = ({ children }) => {
             console.warn(`Unknown task type: ${task.type}`);
             break;
         }
+
+        const progress = Math.min(Math.round((completedWeight / totalWeight) * 100), 100);
+        setProcessingProgress(progress);
 
         // Update task completion status
         setTaskCompletionStatus((prev) => ({
@@ -602,10 +602,12 @@ export const NumaAppProvider = ({ children }) => {
       await saveJobResults(jobID, dateTime, currentResults);
       setProcessingProgress(100);
       setProcessingStatus('Complete!');
+      return currentResults;
     } catch (error) {
-      console.error('Error executing tasks:', error);
-      setProcessingStatus('Error occurred');
-      setError(error.message || 'An error occurred while running the tasks');
+      console.error('Error running app:', error);
+      setProcessingStatus('Error');
+      setProcessingProgress(0);
+      throw error; // Re-throw to be handled by AppWizard
     } finally {
       setLoading(false);
       setAppRunning(false);
@@ -712,7 +714,7 @@ export const NumaAppProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Error loading job results:', error);
-      setError(error);
+      throw error;
     }
   };
 
