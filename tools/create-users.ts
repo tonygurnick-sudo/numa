@@ -1,11 +1,16 @@
-import { webkit } from "playwright";
-import { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, UsernameExistsException } from "@aws-sdk/client-cognito-identity-provider";
+import {
+  CognitoIdentityProviderClient,
+  AdminCreateUserCommand,
+  AdminSetUserPasswordCommand,
+  UsernameExistsException,
+} from '@aws-sdk/client-cognito-identity-provider';
 import { parse } from 'csv-parse';
-import { stringify } from "csv-stringify";
+import { stringify } from 'csv-stringify';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { finished } from 'node:stream/promises';
 import { generate } from 'generate-password';
 import { argv, exit } from 'node:process';
+import { webkit } from 'playwright';
 import chalk from 'chalk';
 import { getQUserPool, temporaryCredentials, AwsCredentialIdentityProvider } from "./utils";
 import clientConfigProd from '../clientConfigProd.json';
@@ -19,34 +24,42 @@ const passwordConfig = {
   symbols: true,
   exclude: ',"\'(){}[]<>',
   strict: true,
-}
+};
 const inputFile = 'input.csv';
 const outputFile = 'user-details.csv';
 
 
-export async function createQUsers(credentials: AwsCredentialIdentityProvider, userPool: string, qUrl: string, dryRun: boolean): Promise<void> {
-
+export async function createQUsers(
+  credentials: AwsCredentialIdentityProvider,
+  userPool: string,
+  qUrl: string,
+  dryRun: boolean,
+): Promise<void> {
   const client = new CognitoIdentityProviderClient({ region, credentials });
 
   if (dryRun) {
     console.log(chalk.green('Dry run is true, so not really doing anything. Give parameter "live" to disable.'));
   } else {
     console.log(chalk.red('Dry run is disabled, applying changes.'));
-  };
-  console.log(chalk.yellow("Userpool: " + userPool));
-  console.log(chalk.yellow("Q URL: " + qUrl));
+  }
+  console.log(chalk.yellow('Userpool: ' + userPool));
+  console.log(chalk.yellow('Q URL: ' + qUrl));
   if (!userPool || !qUrl) {
     console.log(chalk.red('One or more arguments is missing!'));
     exit(1);
   }
-  console.log(chalk.yellow("Region: " + region));
+  console.log(chalk.yellow('Region: ' + region));
   const result: User[] = [];
-  const readStream = createReadStream(inputFile).pipe(parse({ from_line: 2 })).on("data", (row) => result.push({
-    givenName: row[0].trim(),
-    familyName: row[1].trim(),
-    email: row[2].trim(),
-    password: generate(passwordConfig),
-  }));
+  const readStream = createReadStream(inputFile)
+    .pipe(parse({ from_line: 2 }))
+    .on('data', (row) =>
+      result.push({
+        givenName: row[0].trim(),
+        familyName: row[1].trim(),
+        email: row[2].trim(),
+        password: generate(passwordConfig),
+      }),
+    );
   result.push({
     givenName: 'Test',
     familyName: 'User',
@@ -54,80 +67,85 @@ export async function createQUsers(credentials: AwsCredentialIdentityProvider, u
     password: generate(passwordConfig),
   });
   await finished(readStream);
-  console.log(`Creating ${result.length} users.`)
+  console.log(`Creating ${result.length} users.`);
   for (const userDetails of result) {
-    console.log(`Creating user: ${userDetails.email}`)
+    console.log(`Creating user: ${userDetails.email}`);
     if (!dryRun) await createQUser(client, qUrl, userDetails, userPool);
   }
   const writeStream = createWriteStream(outputFile);
-  const stringifier = stringify({ header: true, columns: Object.keys(result[0]) });
+  const stringifier = stringify({
+    header: true,
+    columns: Object.keys(result[0]),
+  });
   result.forEach((row) => stringifier.write(row));
   stringifier.pipe(writeStream);
-  console.log(chalk.green("Done."));
-};
+  console.log(chalk.green('Done.'));
+}
 
 type User = {
-  givenName: string,
-  familyName: string,
-  email: string,
-  password: string,
+  givenName: string;
+  familyName: string;
+  email: string;
+  password: string;
 };
 
-async function createQUser(client: CognitoIdentityProviderClient, qUrl: string, userDetails: User, userPool: string): Promise<void> {
+async function createQUser(
+  client: CognitoIdentityProviderClient,
+  qUrl: string,
+  userDetails: User,
+  userPool: string,
+): Promise<void> {
   try {
-    await client.send(new AdminCreateUserCommand({
-      UserPoolId: userPool,
-      MessageAction: 'SUPPRESS',
-      Username: userDetails.email,
-      UserAttributes: [
-        {
-          Name: 'email',
-          Value: userDetails.email,
-        },
-        {
-          Name: 'given_name',
-          Value: userDetails.givenName,
-        },
-        {
-          Name: 'family_name',
-          Value: userDetails.familyName,
-        },
-        {
-          Name: 'email_verified',
-          Value: 'true',
-        }
-      ],
-    }));
+    await client.send(
+      new AdminCreateUserCommand({
+        UserPoolId: userPool,
+        MessageAction: 'SUPPRESS',
+        Username: userDetails.email,
+        UserAttributes: [
+          {
+            Name: 'email',
+            Value: userDetails.email,
+          },
+          {
+            Name: 'given_name',
+            Value: userDetails.givenName,
+          },
+          {
+            Name: 'family_name',
+            Value: userDetails.familyName,
+          },
+          {
+            Name: 'email_verified',
+            Value: 'true',
+          },
+        ],
+      }),
+    );
   } catch (e) {
     if (e instanceof UsernameExistsException) {
-      console.log('Username already exists: ' + userDetails.email)
+      console.log('Username already exists: ' + userDetails.email);
     } else {
       throw e;
     }
   }
-  await client.send(new AdminSetUserPasswordCommand({
-    UserPoolId: userPool,
-    Username: userDetails.email,
-    Password: userDetails.password,
-    Permanent: true,
-  }));
-  try {
-    await activateQLicence(qUrl, userDetails.email, userDetails.password);
-  } catch {
-    console.log("Activation failed for: " + userDetails.email);
-    try {
-      await activateQLicence(qUrl, userDetails.email, userDetails.password);
-    } catch (e) {
-      console.log("Activation failed again, forget it...");
-      console.log(e);
+  await client.send(
+    new AdminSetUserPasswordCommand({
+      UserPoolId: userPool,
+      Username: userDetails.email,
+      Password: userDetails.password,
+      Permanent: true,
+    }),
+  );
     }
   }
-  await client.send(new AdminSetUserPasswordCommand({
-    UserPoolId: userPool,
-    Username: userDetails.email,
-    Password: userDetails.password,
-    Permanent: false,
-  }));
+  await client.send(
+    new AdminSetUserPasswordCommand({
+      UserPoolId: userPool,
+      Username: userDetails.email,
+      Password: userDetails.password,
+      Permanent: false,
+    }),
+  );
 }
 
 async function activateQLicence(qUrl, username: string, password: string): Promise<void> {
@@ -142,7 +160,7 @@ async function activateQLicence(qUrl, username: string, password: string): Promi
   await page.getByTestId('prompt-textarea-field').waitFor();
   await page.screenshot({ path: 'screenshot-loaded.png' });
   await page.goto('./#/chat');
-  await page.getByTestId('prompt-textarea-field').fill("Hello Q!");
+  await page.getByTestId('prompt-textarea-field').fill('Hello Q!');
   await page.getByTestId('submit-prompt-button').click();
   await page.getByTestId('copy-response-button').click();
 
@@ -156,7 +174,7 @@ async function activateQLicence(qUrl, username: string, password: string): Promi
   const credentials = temporaryCredentials(accountId);
   const userPool = await getQUserPool(credentials);
   const qUrl = args[1];
-  const dryRun = (args[2] != 'live');
+  const dryRun = args[2] != 'live';
 
   await createQUsers(credentials, userPool, qUrl, dryRun);
 })();
