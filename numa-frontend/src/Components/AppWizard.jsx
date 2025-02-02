@@ -237,16 +237,16 @@ const AppWizard = ({ manifest }) => {
           {/* Error and Processing Status */}
           <div className="mt-2" style={{ maxWidth: '600px', margin: '0 auto' }}>
             {error && (
-              <Alert 
-                variant="danger" 
-                onClose={() => setError(null)} 
+              <Alert
+                variant="danger"
+                onClose={() => setError(null)}
                 dismissible
                 className="py-2"
               >
                 {error.message || error}
               </Alert>
             )}
-            
+
             {appRunning && (
               <div className="text-center py-2">
                 <Preloader smallscreen={true} />

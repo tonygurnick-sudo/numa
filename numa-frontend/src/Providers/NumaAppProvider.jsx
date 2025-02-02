@@ -205,7 +205,7 @@ export const NumaAppProvider = ({ children }) => {
       taskInputValues,
       currentResults,
     );
-    
+
     // Include the parent job ID in the payload
     const requestPayload = {
       ...payload,
@@ -739,7 +739,7 @@ export const NumaAppProvider = ({ children }) => {
     //     // Simulate success after 2 calls
     //     const mockData = 'http://localhost:5173/example-meeting-transcript.txt';
     //     const pollCount = window.pollCount = (window.pollCount || 0) + 1;
-        
+
     //     if (pollCount >= 2) {
     //       resolve({
     //         status: 'SUCCESS',

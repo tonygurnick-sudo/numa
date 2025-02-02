@@ -24,7 +24,7 @@ export const jobsApi = {
       // leave until API proxy is in place, return mock data instead of making API call
       // const mockJobId = 'mock-job-' + Math.random().toString(36).substring(7);
       // const jobData = createJobData(numaAppData, taskInputs, mockJobId);
-      
+
       // console.log('Mock job created:', jobData);
       // return jobData;
 
@@ -61,7 +61,7 @@ export const jobsApi = {
       //   lastUpdated: isoDate,
       //   success: true
       // };
-      
+
       // console.log('Mock job updated:', mockResponse);
       // return mockResponse;
 
