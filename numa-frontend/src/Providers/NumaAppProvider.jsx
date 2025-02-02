@@ -198,23 +198,89 @@ export const NumaAppProvider = ({ children }) => {
     return currentResults;
   };
 
-  const processHttpRequestTask = async (task, currentResults) => {
+  const processHttpRequestTask = async (jobID, task, currentResults) => {
     const templatePayload = task.params?.payload;
     const payload = createPayloadFromTemplate(
       templatePayload,
       taskInputValues,
       currentResults,
     );
-    console.log('Generated Payload for http-request:', payload);
 
-    const response = await fakeHttpRequestFunction(payload);
-    console.log('HTTP Request response:', response);
+    // Include the parent job ID in the payload
+    const requestPayload = {
+      ...payload,
+      jobId: jobID
+    };
+    console.log('Generated Payload for http-request:', requestPayload);
 
-    if (!response) {
-      throw new Error('HTTP request failed');
+    // Initial request should return success status
+    try {
+      const response = await fakeHttpRequestFunction(requestPayload);
+      console.log('HTTP Request response:', response);
+
+      if (!response?.success) {
+        throw new Error('Unable to process your request. Please try again.');
+      }
+
+      // Start polling for status
+      const maxAttempts = 30;
+      const pollInterval = 2000;
+      let attempts = 0;
+
+      while (attempts < maxAttempts) {
+        const status = await NumaPollStatus(jobID);
+        console.log('Poll status response:', status);
+
+        if (status.status === 'SUCCESS') {
+          currentResults[task.id] = status.result;
+          return currentResults;
+        } else if (status.status === 'FAILURE') {
+          throw new Error(status.error || 'The process encountered an error. Please try again.');
+        } else if (status.status === 'UNKNOWN') {
+          throw new Error('Unable to determine the status of your request. Please try again.');
+        }
+
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        attempts++;
+      }
+
+      throw new Error('The process is taking longer than expected. Please try again.');
+    } catch (error) {
+      // Log the technical error for debugging
+      console.error('HTTP Request task error:', error);
+      // Return a user-friendly error message
+      throw new Error('We encountered an issue processing your request. Please try again.');
     }
+  };
 
-    currentResults[task.id] = response?.data;
+  const processTextOutputTask = (task, currentResults) => {
+    const outputRef = task.params?.dataRef;
+    const outputResult = resolveReference(outputRef, currentResults);
+
+    if (outputResult) {
+      let resultToDisplay = outputResult;
+
+      if (typeof outputResult === 'object') {
+        // If it's an array of objects, convert to markdown table
+        if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
+          const headers = Object.keys(outputResult[0]);
+          const headerRow = `| ${headers.join(' | ')} |`;
+          const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
+          const dataRows = outputResult.map(item =>
+            `| ${headers.map(header => item[header] || '').join(' | ')} |`
+          );
+          resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
+        } else {
+          // For other objects, format as code block
+          resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
+        }
+      }
+
+      setNumaTaskResponses((prevResponses) => [
+        ...prevResponses.filter((response) => response.taskId !== task.id),
+        { taskId: task.id, result: resultToDisplay },
+      ]);
+    }
     return currentResults;
   };
 
@@ -281,57 +347,21 @@ export const NumaAppProvider = ({ children }) => {
     return sessionResponse;
   };
 
-  const processTextOutputTask = (task, currentResults) => {
-    const outputRef = task.params?.dataRef;
-    const outputResult = resolveReference(outputRef, currentResults);
-
-    if (outputResult) {
-      let resultToDisplay = outputResult;
-
-      if (typeof outputResult === 'object') {
-        // If it's an array of objects, convert to markdown table
-        if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
-          const headers = Object.keys(outputResult[0]);
-          const headerRow = `| ${headers.join(' | ')} |`;
-          const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
-          const dataRows = outputResult.map(item =>
-            `| ${headers.map(header => item[header] || '').join(' | ')} |`
-          );
-          resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
-        } else {
-          // For other objects, format as code block
-          resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
-        }
-      }
-
-      setNumaTaskResponses((prevResponses) => [
-        ...prevResponses.filter((response) => response.taskId !== task.id),
-        { taskId: task.id, result: resultToDisplay },
-      ]);
-    }
-    return currentResults;
-  };
-
   const initializeJob = async () => {
     setAppRunning(true);
     setLoading(true);
 
     try {
-      // Create job in API
-      const jobResponse = await jobsApi.createJob(
-        numaAppData,
-        taskInputValues
-      );
-
+      const jobResponse = await jobsApi.createJob(numaAppData, taskInputValues);
       return {
         jobID: jobResponse.jobID,
         dateTime: jobResponse.startedAt
       };
     } catch (error) {
       console.error('Failed to create job:', error);
-      setAppRunning(false);
-      setLoading(false);
-      throw error;
+      setProcessingStatus('Error');
+      setProcessingProgress(0);
+      throw new Error('Unable to start the process. Please try again.');
     }
   };
 
@@ -500,36 +530,39 @@ export const NumaAppProvider = ({ children }) => {
   const handleRunButtonClick = async () => {
     if (!numaAppData || !numaAppData.tasks) return;
 
-    const { jobID, dateTime } = await initializeJob();
-    let currentResults = {};
+    setProcessingStatus('Starting process...');
+    setProcessingProgress(0);
+    setError(null); // Clear any previous errors
 
     try {
+      const { jobID, dateTime } = await initializeJob();
+      let currentResults = {};
+
       const orderedTasks = numaAppData.tasks
         .slice()
         .sort((a, b) => a.order - b.order);
-      const totalWeight = calculateTotalWeight(orderedTasks);
+
       let completedWeight = 0;
       let qappWeight = 0;
+      const totalWeight = calculateTotalWeight(orderedTasks);
 
       for (const task of orderedTasks) {
+        setProcessingStatus(`Processing ${task.name}...`);
         const taskWeight = calculateTaskWeight(task);
 
         switch (task.type) {
           case 'text-input':
-            setProcessingStatus('Processing input data...');
             currentResults = processTextInputTask(task, currentResults);
             completedWeight += taskWeight;
             break;
 
           case 's3-upload':
-            setProcessingStatus('Uploading files...');
             currentResults = processS3UploadTask(task, currentResults);
             completedWeight += taskWeight;
             break;
 
           case 'http-request':
-            setProcessingStatus('Gathering data...');
-            currentResults = await processHttpRequestTask(task, currentResults);
+            currentResults = await processHttpRequestTask(jobID, task, currentResults);
             completedWeight += taskWeight;
             break;
 
@@ -540,13 +573,12 @@ export const NumaAppProvider = ({ children }) => {
               currentResults,
               completedWeight,
               qappWeight,
-              totalWeight,
+              totalWeight
             );
-            completedWeight += qappWeight;
+            completedWeight += taskWeight;
             break;
 
           case 'text-output':
-            setProcessingStatus('Generating output...');
             currentResults = processTextOutputTask(task, currentResults);
             completedWeight += taskWeight;
             break;
@@ -555,6 +587,9 @@ export const NumaAppProvider = ({ children }) => {
             console.warn(`Unknown task type: ${task.type}`);
             break;
         }
+
+        const progress = Math.min(Math.round((completedWeight / totalWeight) * 100), 100);
+        setProcessingProgress(progress);
 
         // Update task completion status
         setTaskCompletionStatus((prev) => ({
@@ -567,10 +602,12 @@ export const NumaAppProvider = ({ children }) => {
       await saveJobResults(jobID, dateTime, currentResults);
       setProcessingProgress(100);
       setProcessingStatus('Complete!');
+      return currentResults;
     } catch (error) {
-      console.error('Error executing tasks:', error);
-      setProcessingStatus('Error occurred');
-      setError(error.message || 'An error occurred while running the tasks');
+      console.error('Error running app:', error);
+      setProcessingStatus('Error');
+      setProcessingProgress(0);
+      throw error; // Re-throw to be handled by AppWizard
     } finally {
       setLoading(false);
       setAppRunning(false);
@@ -600,7 +637,7 @@ export const NumaAppProvider = ({ children }) => {
       // Mark all input tasks as complete
       const updatedStatus = {};
       numaAppData.tasks.forEach((task) => {
-        // Mark input tasks as complete since this is a finished job
+        //  this is a finished job
         if (!task.type.includes('output')) {
           updatedStatus[task.id] = true;
         }
@@ -677,7 +714,7 @@ export const NumaAppProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Error loading job results:', error);
-      setError(error);
+      throw error;
     }
   };
 
@@ -688,27 +725,69 @@ export const NumaAppProvider = ({ children }) => {
       setTimeout(() => {
         resolve({
           success: true,
-          data: 'http://localhost:5173/example-meeting-transcript.txt',
+          status: 'PROCESSING'
         });
       }, 1000);
     });
   };
 
-  // Function to update a specific task input value
-  const updateTaskInputValue = (taskId, value) => {
-    setTaskInputValues((prev) => {
-      const newValues = {
-        ...prev,
-        [taskId]: value,
+
+  const NumaPollStatus = async (jobId) => {
+    // Mock implementation - keep until api proxy in place
+    // return new Promise((resolve) => {
+    //   setTimeout(() => {
+    //     // Simulate success after 2 calls
+    //     const mockData = 'http://localhost:5173/example-meeting-transcript.txt';
+    //     const pollCount = window.pollCount = (window.pollCount || 0) + 1;
+
+    //     if (pollCount >= 2) {
+    //       resolve({
+    //         status: 'SUCCESS',
+    //         result: mockData
+    //       });
+    //     } else {
+    //       resolve({
+    //         status: 'PROCESSING'
+    //       });
+    //     }
+    //   }, 500);
+    // });
+
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to check the status of your request.');
+      }
+
+      const statusData = await response.json();
+      return {
+        status: statusData.status,
+        result: statusData.result,
+        error: statusData.error
       };
-      return newValues;
-    });
-    checkRunActive();
+    } catch (error) {
+      console.error('Error polling job status:', error);
+      throw error;
+    }
+  };
+
+  const updateTaskInputValue = (taskId, value) => {
+    setTaskInputValues((prev) => ({
+      ...prev,
+      [taskId]: value,
+    }));
   };
 
   function updateTaskCompletionStatus(taskId, isComplete = true) {
-    setTaskCompletionStatus((prevStatus) => ({
-      ...prevStatus,
+    setTaskCompletionStatus((prev) => ({
+      ...prev,
       [taskId]: isComplete,
     }));
   }

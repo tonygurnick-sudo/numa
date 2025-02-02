@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Container, Row, Col, Card, Button } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
@@ -26,18 +26,19 @@ const AppWizard = ({ manifest }) => {
     selectedTaskId,
     setSelectedTaskId,
     activeStep,
-    setActiveStep
+    setActiveStep,
+    error,
   } = useNumaApp();
   const [hasRun, setHasRun] = useState(false);
 
   // Filter out hidden tasks and system tasks (q-app and http-request)
   const visibleTasks = useMemo(
     () =>
-      manifest.tasks.filter(
+      manifest?.tasks?.filter(
         (task) =>
           !task.hidden && task.type !== 'q-app' && task.type !== 'http-request',
-      ),
-    [manifest.tasks],
+      ) || [],
+    [manifest?.tasks],
   );
 
   // Split tasks into pre-run and post-run groups
@@ -92,7 +93,7 @@ const AppWizard = ({ manifest }) => {
       taskCompletionStatus,
       activeStep,
       markDefaultContentComplete,
-      setSelectedTaskId
+      setSelectedTaskId,
     ],
   );
 
@@ -105,6 +106,10 @@ const AppWizard = ({ manifest }) => {
       });
       setTaskCompletionStatus(updatedStatus);
 
+      setHasRun(true);
+      setAppRunning(true);
+      await handleRunButtonClick(numaAppData);
+
       // Find the first output task and set it as active
       const firstOutputTask = visibleTasks.find((task) =>
         task.type.includes('output'),
@@ -114,13 +119,9 @@ const AppWizard = ({ manifest }) => {
         setActiveStep(outputIndex);
         setSelectedTaskId(firstOutputTask.id);
       }
-
-      setHasRun(true);
-      setAppRunning(true);
-      await handleRunButtonClick(numaAppData);
     } catch (error) {
       console.error('Error running app:', error);
-      setError(error);
+      setError(error); // Set the error state directly
     } finally {
       setAppRunning(false);
     }
@@ -232,6 +233,30 @@ const AppWizard = ({ manifest }) => {
             processingProgress={processingProgress}
             processingStatus={processingStatus}
           />
+
+          {/* Error and Processing Status */}
+          <div className="mt-2" style={{ maxWidth: '600px', margin: '0 auto' }}>
+            {error && (
+              <Alert
+                variant="danger"
+                onClose={() => setError(null)}
+                dismissible
+                className="py-2"
+              >
+                {error.message || error}
+              </Alert>
+            )}
+
+            {appRunning && (
+              <div className="text-center py-2">
+                <Preloader smallscreen={true} />
+                <div className="mt-1 text-muted">
+                  {processingStatus}
+                  {processingProgress > 0 && ` (${processingProgress}%)`}
+                </div>
+              </div>
+            )}
+          </div>
         </Col>
       </Row>
 
@@ -239,9 +264,7 @@ const AppWizard = ({ manifest }) => {
         <Col xs={12} className="px-2 px-md-4">
           {activeStep < visibleTasks.length && (
             <div className="mb-4">
-
               {renderTask(visibleTasks[activeStep])}
-
             </div>
           )}
         </Col>
