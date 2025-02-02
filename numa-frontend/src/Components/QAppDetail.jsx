@@ -1,21 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Alert } from 'react-bootstrap';
+import { useState, useEffect } from "react";
+import { Alert } from "react-bootstrap";
 
-import { QAppWizard } from './QAppWizard';
-import { Preloader } from './Preloader';
+import { QAppWizard } from "./QAppWizard";
+import { Preloader } from "./Preloader";
 
-import { useAuth } from '../Providers/AuthProvider';
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useAuth } from "../Providers/AuthProvider";
+import { useNumaApp } from "../Providers/NumaAppProvider";
 
 import {
   GetQAppCommand,
   GetQAppSessionCommand,
   StartQAppSessionCommand,
-} from '@aws-sdk/client-qapps';
+} from "@aws-sdk/client-qapps";
 
 const QAppDetail = () => {
   const { qAppsClient } = useAuth();
-  const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+  const Q_APPLICATION_ID = window.sessionStorage.getItem("Q_APPLICATION_ID");
 
   const {
     setError,
@@ -29,6 +29,7 @@ const QAppDetail = () => {
     setQCardInputValues,
     qCardInputValues,
     setQSessionId,
+    numaAppId,
   } = useNumaApp();
 
   const qAppId = numaAppData?.qAppId;
@@ -57,7 +58,7 @@ const QAppDetail = () => {
             const cardData = card[Object.keys(card)[0]];
             const cardId = cardData.id;
             const defaultValue = cardData.defaultValue;
-            const value = qCardInputValues[cardId] || defaultValue || '';
+            const value = qCardInputValues[cardId] || defaultValue || "";
             return value ? { cardId, value } : null;
           })
           .filter(Boolean),
@@ -71,7 +72,7 @@ const QAppDetail = () => {
         setQSessionId(start_response.sessionId);
       }
     } catch (error) {
-      console.error('Error starting app session:', error);
+      console.error("Error starting app session:", error);
       setError(error);
     }
   };
@@ -82,7 +83,7 @@ const QAppDetail = () => {
     const incompleteCards = qAppData.appDefinition.cards.some((card) => {
       const cardData = card[Object.keys(card)[0]];
       const cardId = cardData.id;
-      const isTextInput = cardData.type === 'text-input';
+      const isTextInput = cardData.type === "text-input";
       const defaultValue = cardData.defaultValue;
       const userInput = qCardInputValues[cardId];
 
@@ -96,11 +97,16 @@ const QAppDetail = () => {
 
     try {
       const input = { instanceId: Q_APPLICATION_ID, appId: qAppId };
+      console.log("Q App input:", input);
+
       const command = new GetQAppCommand(input);
+
       const response = await qAppsClient.send(command);
+      console.log("Q App fetched:", response);
+
       setqAppData(response);
     } catch (error) {
-      console.error('Error fetching Q Apps:', error);
+      console.error("Error fetching Q Apps:", error);
       setError(error);
     }
   };
@@ -116,11 +122,11 @@ const QAppDetail = () => {
         };
         const command = new GetQAppSessionCommand(input);
         const response = await qAppsClient.send(command);
-        console.log('Session details fetched:', response);
+        console.log("Session details fetched:", response);
         setQSessionDetails(response);
       } catch (err) {
         setError(err);
-        console.error('Error fetching session details:', err);
+        console.error("Error fetching session details:", err);
       }
     };
 
@@ -149,14 +155,14 @@ const QAppDetail = () => {
     if (!qSessionDetails) return;
 
     if (
-      qSessionDetails.status === 'WAITING' ||
-      qSessionDetails.status === 'IN_PROGRESS'
+      qSessionDetails.status === "WAITING" ||
+      qSessionDetails.status === "IN_PROGRESS"
     ) {
       setIsPolling(true);
-      setRunActive('disabled');
+      setRunActive("disabled");
     } else {
       setIsPolling(false);
-      setRunActive('enabled');
+      setRunActive("enabled");
     }
   }, [qSessionDetails, setIsPolling, setRunActive]);
 
@@ -180,7 +186,7 @@ const QAppDetail = () => {
 
   return (
     <>
-      {qAppData ? (
+      {qAppData && qCardInputValues ? (
         <QAppWizard
           qAppData={qAppData}
           onInputChange={handleInputChange}

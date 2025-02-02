@@ -5,57 +5,65 @@ import {
   useRef,
   useEffect,
   useCallback,
-} from 'react';
-import { jwtDecode } from 'jwt-decode';
-import { QBusinessClient } from '@aws-sdk/client-qbusiness';
-import { QAppsClient } from '@aws-sdk/client-qapps';
-import { fromWebToken, fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
-import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
-import QPolicy from '../Data/QPolicy.json';
-import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
+} from "react";
+import { jwtDecode } from "jwt-decode";
+import { QBusinessClient } from "@aws-sdk/client-qbusiness";
+import { QAppsClient } from "@aws-sdk/client-qapps";
+import {
+  fromWebToken,
+  fromCognitoIdentityPool,
+} from "@aws-sdk/credential-providers";
+import { CognitoIdentityClient } from "@aws-sdk/client-cognito-identity";
+import QPolicy from "../Data/QPolicy.json";
+import { createSrpSession, signSrpSession } from "cognito-srp-helper";
 import {
   CognitoIdentityProviderClient,
   RespondToAuthChallengeCommand,
   InitiateAuthCommand,
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
-} from '@aws-sdk/client-cognito-identity-provider';
+} from "@aws-sdk/client-cognito-identity-provider";
 
 const AuthContext = createContext(null);
 
-const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
-const IDENTITY_POOL_ROLE_ARN = window.sessionStorage.getItem('IDENTITY_POOL_ROLE_ARN');
-const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
-const REGION = window.sessionStorage.getItem('REGION');
-const API_ENDPOINT = window.sessionStorage.getItem('API_ENDPOINT');
-const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
+const IDENTITY_POOL_ID = window.sessionStorage.getItem("IDENTITY_POOL_ID");
+const IDENTITY_POOL_ROLE_ARN = window.sessionStorage.getItem(
+  "IDENTITY_POOL_ROLE_ARN"
+);
+const REGION = window.sessionStorage.getItem("REGION");
+const API_ENDPOINT = window.sessionStorage.getItem("API_ENDPOINT");
+const USER_POOL_ID = window.sessionStorage.getItem("USER_POOL_ID");
+const CLIENT_ID = window.sessionStorage.getItem("CLIENT_ID");
 
 export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const [user, setUser] = useState(null);
-  const tokensRef = useRef(initialTokens || {
-    accessToken: localStorage.getItem('accessToken'),
-    idToken: localStorage.getItem('idToken'),
-    refreshToken: localStorage.getItem('refreshToken'),
-  });
+  const tokensRef = useRef(
+    initialTokens || {
+      accessToken: localStorage.getItem("accessToken"),
+      idToken: localStorage.getItem("idToken"),
+      refreshToken: localStorage.getItem("refreshToken"),
+    }
+  );
 
   // Separate ref for decoded tokens to avoid re-renders
   const decodedTokensRef = useRef({
     accessToken: null,
-    idToken: null
+    idToken: null,
   });
 
   // Decode tokens without triggering re-renders
   const decodeTokens = () => {
     try {
       if (tokensRef.current.accessToken) {
-        decodedTokensRef.current.accessToken = jwtDecode(tokensRef.current.accessToken);
+        decodedTokensRef.current.accessToken = jwtDecode(
+          tokensRef.current.accessToken
+        );
       }
       if (tokensRef.current.idToken) {
         decodedTokensRef.current.idToken = jwtDecode(tokensRef.current.idToken);
       }
     } catch (error) {
-      console.error('Error decoding tokens:', error);
+      console.error("Error decoding tokens:", error);
       decodedTokensRef.current = { accessToken: null, idToken: null };
     }
   };
@@ -64,15 +72,15 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const updateTokens = (newTokens) => {
     if (newTokens.accessToken) {
       tokensRef.current.accessToken = newTokens.accessToken;
-      localStorage.setItem('accessToken', newTokens.accessToken);
+      localStorage.setItem("accessToken", newTokens.accessToken);
     }
     if (newTokens.idToken) {
       tokensRef.current.idToken = newTokens.idToken;
-      localStorage.setItem('idToken', newTokens.idToken);
+      localStorage.setItem("idToken", newTokens.idToken);
     }
     if (newTokens.refreshToken) {
       tokensRef.current.refreshToken = newTokens.refreshToken;
-      localStorage.setItem('refreshToken', newTokens.refreshToken);
+      localStorage.setItem("refreshToken", newTokens.refreshToken);
     }
     // Update decoded tokens after updating the tokens
     decodeTokens();
@@ -91,12 +99,12 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
   const refreshTokens = async () => {
     try {
-      console.log('🔄 Attempting to refresh tokens...');
+      console.log("🔄 Attempting to refresh tokens...");
       const refreshToken = tokensRef.current.refreshToken;
       const tokens = initialTokens || getUserInfo();
 
       if (!refreshToken) {
-        console.error('No refresh token available');
+        console.error("No refresh token available");
         logout();
         return false;
       }
@@ -109,8 +117,8 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         });
       } else {
         const response = await fetch(`${API_ENDPOINT}/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             refreshToken: refreshToken,
             username: tokens.decoded_tokens.idToken.sub,
@@ -119,13 +127,13 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         result = await response.json();
       }
 
-      if (!result.AuthenticationResult) throw new Error('Token refresh failed');
+      if (!result.AuthenticationResult) throw new Error("Token refresh failed");
 
       const { AccessToken, IdToken } = result.AuthenticationResult;
 
       // Update localStorage and tokensRef
-      localStorage.setItem('accessToken', AccessToken);
-      localStorage.setItem('idToken', IdToken);
+      localStorage.setItem("accessToken", AccessToken);
+      localStorage.setItem("idToken", IdToken);
 
       updateTokens({
         accessToken: AccessToken,
@@ -133,10 +141,10 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         refreshToken,
       });
 
-      console.log('✅ Tokens refreshed successfully');
+      console.log("✅ Tokens refreshed successfully");
       return true;
     } catch (error) {
-      console.error('❌ Error refreshing tokens:', error);
+      console.error("❌ Error refreshing tokens:", error);
       logout();
       return false;
     }
@@ -147,20 +155,21 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
     try {
       const cognitoIdentity = new CognitoIdentityClient({
-        region: REGION
+        region: REGION,
       });
 
       const credentials = await fromCognitoIdentityPool({
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
         logins: {
-          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: user.tokens.idToken
-        }
+          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]:
+            user.tokens.idToken,
+        },
       })();
 
       return credentials;
     } catch (error) {
-      console.error('Error getting credentials:', error);
+      console.error("Error getting credentials:", error);
       throw error;
     }
   };
@@ -187,7 +196,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       const credentials = fromWebToken({
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: 'numa-frontend-chat',
+        roleSessionName: "numa-frontend-chat",
         roleArn: IDENTITY_POOL_ROLE_ARN,
         policy: JSON.stringify(QPolicy),
         durationSeconds: 3600,
@@ -201,7 +210,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
       setQBusinessClient(newClient);
     } catch (error) {
-      console.error('Error in QBusinessClient initialization:', error);
+      console.error("Error in QBusinessClient initialization:", error);
     }
   }, [user]);
 
@@ -215,7 +224,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       const credentials = fromWebToken({
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: 'numa-frontend-qapps',
+        roleSessionName: "numa-frontend-qapps",
         roleArn: IDENTITY_POOL_ROLE_ARN,
         policy: JSON.stringify(QPolicy),
         durationSeconds: 3600,
@@ -229,7 +238,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
       setQAppsClient(newQAppsClient);
     } catch (error) {
-      console.error('Error in QAppsClient initialization:', error);
+      console.error("Error in QAppsClient initialization:", error);
     }
   }, [user]);
 
@@ -248,12 +257,12 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     decodeTokens();
 
     if (!decodedTokensRef.current.accessToken) {
-      console.log('No decoded tokens available');
+      console.log("No decoded tokens available");
       return false;
     }
 
     if (isTokenExpired(decodedTokensRef.current.accessToken)) {
-      console.log('🕒 Token check: Token expired, attempting refresh...');
+      console.log("🕒 Token check: Token expired, attempting refresh...");
       const refreshed = await refreshTokens();
       if (!refreshed) {
         logout();
@@ -262,7 +271,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       return true;
     }
 
-    console.log('🕒 Token check: Token still valid');
+    console.log("🕒 Token check: Token still valid");
     return true;
   };
 
@@ -280,10 +289,10 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   }, [user]);
 
   const loadUserFromTokens = async () => {
-    console.log('🔍 Checking token status...');
-    const accessToken = localStorage.getItem('accessToken');
-    const idToken = localStorage.getItem('idToken');
-    const refreshToken = localStorage.getItem('refreshToken');
+    console.log("🔍 Checking token status...");
+    const accessToken = localStorage.getItem("accessToken");
+    const idToken = localStorage.getItem("idToken");
+    const refreshToken = localStorage.getItem("refreshToken");
 
     if (refreshToken) {
       if (
@@ -292,14 +301,14 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         isTokenExpired(decodedTokensRef.current.accessToken) ||
         isTokenExpired(decodedTokensRef.current.idToken)
       ) {
-        console.log('⚠️ Tokens expired or missing, attempting refresh...');
+        console.log("⚠️ Tokens expired or missing, attempting refresh...");
         const refreshed = await refreshTokens();
         if (!refreshed) {
-          console.log('❌ Token refresh failed, logging out');
+          console.log("❌ Token refresh failed, logging out");
           setUser(null);
         }
       } else {
-        console.log('✅ Tokens are valid');
+        console.log("✅ Tokens are valid");
         const decodedAccessToken = decodedTokensRef.current.accessToken;
         const decodedIdToken = decodedTokensRef.current.idToken;
 
@@ -316,7 +325,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         });
       }
     } else {
-      console.log('❌ No refresh token found');
+      console.log("❌ No refresh token found");
       setUser(null);
     }
     setLoading(false);
@@ -337,9 +346,9 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('idToken');
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("idToken");
     setUser(null);
   };
 
@@ -349,13 +358,13 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       username,
       password,
       USER_POOL_ID,
-      false,
+      false
     );
 
     // Step 2: Send SRP-A to initiate SRP flow
     const initiateAuthRes = await fetch(`${API_ENDPOINT}/initiate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username: username,
         srpA: srpSession.largeA,
@@ -372,8 +381,8 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
     // Step 4: Respond to challenge
     const respondToAuthChallengeRes = await fetch(`${API_ENDPOINT}/respond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username: initiateData.ChallengeParameters.USERNAME,
         challengeResponses: {
@@ -389,7 +398,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       throw new Error(finalResponse.error);
     }
 
-    if (finalResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+    if (finalResponse.ChallengeName === "NEW_PASSWORD_REQUIRED") {
       return { requiresNewPassword: true, session: finalResponse.Session };
     }
 
@@ -403,7 +412,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     });
 
     const initiateAuthCommand = new InitiateAuthCommand({
-      AuthFlow: 'USER_PASSWORD_AUTH',
+      AuthFlow: "USER_PASSWORD_AUTH",
       ClientId: CLIENT_ID,
       AuthParameters: {
         USERNAME: username,
@@ -412,13 +421,13 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     });
 
     const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
-    if (initiateAuthResponse.ChallengeName !== 'NEW_PASSWORD_REQUIRED') {
-      throw new Error('Unexpected authentication response');
+    if (initiateAuthResponse.ChallengeName !== "NEW_PASSWORD_REQUIRED") {
+      throw new Error("Unexpected authentication response");
     }
 
     const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand({
       ClientId: CLIENT_ID,
-      ChallengeName: 'NEW_PASSWORD_REQUIRED',
+      ChallengeName: "NEW_PASSWORD_REQUIRED",
       Session: initiateAuthResponse.Session,
       ChallengeResponses: {
         USERNAME: username,
@@ -433,9 +442,9 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   };
 
   const handleLoginSuccess = async (tokens) => {
-    localStorage.setItem('accessToken', tokens.AccessToken);
-    localStorage.setItem('refreshToken', tokens.RefreshToken);
-    localStorage.setItem('idToken', tokens.IdToken);
+    localStorage.setItem("accessToken", tokens.AccessToken);
+    localStorage.setItem("refreshToken", tokens.RefreshToken);
+    localStorage.setItem("idToken", tokens.IdToken);
 
     const decodedAccessToken = jwtDecode(tokens.AccessToken);
     const decodedIdToken = jwtDecode(tokens.IdToken);
@@ -512,7 +521,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     qAppsClient,
     requestPasswordReset,
     confirmPasswordReset,
-    getIdentityPoolCredentials
+    getIdentityPoolCredentials,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -522,7 +531,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
