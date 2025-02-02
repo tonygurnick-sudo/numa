@@ -12,7 +12,7 @@ import { generate } from 'generate-password';
 import { argv, exit } from 'node:process';
 import { webkit } from 'playwright';
 import chalk from 'chalk';
-import { getQUserPool, temporaryCredentials, AwsCredentialIdentityProvider } from "./utils";
+import { temporaryCredentials, AwsCredentialIdentityProvider, getQInstanceDetails } from './utils';
 import clientConfigProd from '../clientConfigProd.json';
 
 const region = 'us-east-1';
@@ -172,9 +172,9 @@ async function activateQLicence(qUrl, username: string, password: string): Promi
 
   const accountId = clientConfigProd[args[0]].clientAccountId;
   const credentials = temporaryCredentials(accountId);
-  const userPool = await getQUserPool(credentials);
+  const accountDetails = await getQInstanceDetails(credentials);
   const qUrl = args[1];
   const dryRun = args[2] != 'live';
 
-  await createQUsers(credentials, userPool, qUrl, dryRun);
+  await createQUsers(credentials, accountDetails.qUserPool, qUrl, dryRun);
 })();
