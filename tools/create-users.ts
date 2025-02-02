@@ -27,7 +27,7 @@ const passwordConfig = {
 };
 const inputFile = 'input.csv';
 const outputFile = 'user-details.csv';
-
+const activateLicences = false;
 
 export async function createQUsers(
   credentials: AwsCredentialIdentityProvider,
@@ -136,6 +136,17 @@ async function createQUser(
       Permanent: true,
     }),
   );
+  if (activateLicences) {
+    try {
+      await activateQLicence(qUrl, userDetails.email, userDetails.password);
+    } catch {
+      console.log('Activation failed for: ' + userDetails.email);
+      try {
+        await activateQLicence(qUrl, userDetails.email, userDetails.password);
+      } catch (e) {
+        console.log('Activation failed again, forget it...');
+        console.log(e);
+      }
     }
   }
   await client.send(
