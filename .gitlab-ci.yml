@@ -8,8 +8,14 @@ include:
   - project: arcanumai/ci
     file: pipelines/python.yml
 
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
 variables:
-  PYTHON_VER: "3.13"
+  PYTHON_VER: '3.13'
 
 .node-matrix:
   matrix:
