@@ -1,14 +1,14 @@
-import { createContext, useState, useContext, useEffect } from 'react';
-import { useAuth } from '../Providers/AuthProvider';
-import { v4 as uuidv4 } from 'uuid';
+import { createContext, useState, useContext, useEffect } from "react";
+import { useAuth } from "../Providers/AuthProvider";
+import { v4 as uuidv4 } from "uuid";
 import {
   startQappGetSession,
   getSessionQApp,
   updateQSessionData,
   fetchAndEncodeFile,
   importFileToQApp,
-} from '../qAppHelper';
-import { jobsApi } from '../Services/jobsApi';
+} from "../qAppHelper";
+import { jobsApi } from "../Services/jobsApi";
 
 // Create the context
 const NumaAppContext = createContext();
@@ -18,41 +18,41 @@ export const useNumaApp = () => useContext(NumaAppContext);
 
 // Global helper function to resolve references like @taskId
 const resolveReference = (key, taskResults) => {
-  if (key.startsWith('@')) {
+  if (key.startsWith("@")) {
     const taskId = key.slice(1); // Remove '@' to get the task ID
     // Check if the taskId exists in taskResults and return the corresponding value
-    return taskResults[taskId] !== undefined ? taskResults[taskId] : '';
+    return taskResults[taskId] !== undefined ? taskResults[taskId] : "";
   }
   return key; // If it's not a reference, just return the key (unchanged)
 };
 
 // Function to create a payload dynamically from a template
 function createPayloadFromTemplate(template, inputValues, taskResults) {
-  console.log('inputValues', inputValues);
-  console.log('taskResults', taskResults);
+  console.log("inputValues", inputValues);
+  console.log("taskResults", taskResults);
 
   // Main function to recursively handle template (string, array, or object)
-  if (typeof template === 'string') {
+  if (typeof template === "string") {
     // Replace all references of @taskId with the actual task result values
     return template.replace(/@[\w-]+/g, (match) =>
-      resolveReference(match, taskResults),
+      resolveReference(match, taskResults)
     );
   } else if (Array.isArray(template)) {
     // Handle case for arrays (recursively apply transformation)
     return template.map((item) =>
-      createPayloadFromTemplate(item, inputValues, taskResults),
+      createPayloadFromTemplate(item, inputValues, taskResults)
     );
-  } else if (typeof template === 'object' && template !== null) {
+  } else if (typeof template === "object" && template !== null) {
     // Handle case for objects (recursively apply transformation)
     return Object.entries(template).reduce((acc, [key, value]) => {
       const processedValue = createPayloadFromTemplate(
         value,
         inputValues,
-        taskResults,
+        taskResults
       );
 
       // Only include non-empty values
-      if (processedValue !== '') {
+      if (processedValue !== "") {
         acc[key] = processedValue;
       }
       return acc;
@@ -75,14 +75,14 @@ export const NumaAppProvider = ({ children }) => {
   const [numaTaskResponses, setNumaTaskResponses] = useState([]);
   const [taskInputValues, setTaskInputValues] = useState({});
   const [taskCompletionStatus, setTaskCompletionStatus] = useState({});
-  const [runActive, setRunActive] = useState('disabled');
+  const [runActive, setRunActive] = useState("disabled");
   const [progress, setProgress] = useState(0);
   const [isPolling, setIsPolling] = useState(false);
   const [appRunning, setAppRunning] = useState(false);
 
   // New states for processing progress
   const [processingProgress, setProcessingProgress] = useState(0);
-  const [processingStatus, setProcessingStatus] = useState('');
+  const [processingStatus, setProcessingStatus] = useState("");
 
   // Q native related
   const [qAppData, setqAppData] = useState([]);
@@ -102,7 +102,7 @@ export const NumaAppProvider = ({ children }) => {
       const appJobs = await jobsApi.getJobsByAppId(numaAppId);
       setJobs(appJobs);
     } catch (error) {
-      console.error('Failed to load jobs:', error);
+      console.error("Failed to load jobs:", error);
     }
   };
 
@@ -121,7 +121,7 @@ export const NumaAppProvider = ({ children }) => {
 
   const checkRunActive = () => {
     if (!numaAppData || !numaAppData.tasks) {
-      setRunActive('disabled');
+      setRunActive("disabled");
       return;
     }
 
@@ -138,7 +138,7 @@ export const NumaAppProvider = ({ children }) => {
 
         // Check if any required task is completed
         const isTaskCompleted = any.some((requiredTaskId) => {
-          const lookupId = requiredTaskId.startsWith('@')
+          const lookupId = requiredTaskId.startsWith("@")
             ? requiredTaskId.slice(1)
             : requiredTaskId;
           const isCompleted = taskCompletionStatus[lookupId];
@@ -152,7 +152,7 @@ export const NumaAppProvider = ({ children }) => {
     });
 
     // Enable the 'Run' button only if all required tasks are completed
-    setRunActive(allTasksCompleted ? '' : 'disabled');
+    setRunActive(allTasksCompleted ? "" : "disabled");
 
     // Calculate and set the progress bar (based on required tasks only)
     const progress =
@@ -170,12 +170,12 @@ export const NumaAppProvider = ({ children }) => {
 
     const fetchData = async () => {
       try {
-        const appsData = JSON.parse(sessionStorage.getItem('appsData'));
+        const appsData = JSON.parse(sessionStorage.getItem("appsData"));
         const app = appsData.find((app) => app.id === numaAppId);
         setNumaAppData(app);
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching app data:', error);
+        console.error("Error fetching app data:", error);
         setError(error);
         setLoading(false);
       }
@@ -186,7 +186,7 @@ export const NumaAppProvider = ({ children }) => {
 
   // Task Processing Functions
   const processTextInputTask = (task, currentResults) => {
-    currentResults[task.id] = taskInputValues[task.id] || '';
+    currentResults[task.id] = taskInputValues[task.id] || "";
     console.log(`Input task result: ${currentResults[task.id]}`);
     return currentResults;
   };
@@ -203,23 +203,23 @@ export const NumaAppProvider = ({ children }) => {
     const payload = createPayloadFromTemplate(
       templatePayload,
       taskInputValues,
-      currentResults,
+      currentResults
     );
 
     // Include the parent job ID in the payload
     const requestPayload = {
       ...payload,
-      jobId: jobID
+      jobId: jobID,
     };
-    console.log('Generated Payload for http-request:', requestPayload);
+    console.log("Generated Payload for http-request:", requestPayload);
 
     // Initial request should return success status
     try {
       const response = await fakeHttpRequestFunction(requestPayload);
-      console.log('HTTP Request response:', response);
+      console.log("HTTP Request response:", response);
 
       if (!response?.success) {
-        throw new Error('Unable to process your request. Please try again.');
+        throw new Error("Unable to process your request. Please try again.");
       }
 
       // Start polling for status
@@ -229,27 +229,36 @@ export const NumaAppProvider = ({ children }) => {
 
       while (attempts < maxAttempts) {
         const status = await NumaPollStatus(jobID);
-        console.log('Poll status response:', status);
+        console.log("Poll status response:", status);
 
-        if (status.status === 'SUCCESS') {
+        if (status.status === "SUCCESS") {
           currentResults[task.id] = status.result;
           return currentResults;
-        } else if (status.status === 'FAILURE') {
-          throw new Error(status.error || 'The process encountered an error. Please try again.');
-        } else if (status.status === 'UNKNOWN') {
-          throw new Error('Unable to determine the status of your request. Please try again.');
+        } else if (status.status === "FAILURE") {
+          throw new Error(
+            status.error ||
+              "The process encountered an error. Please try again."
+          );
+        } else if (status.status === "UNKNOWN") {
+          throw new Error(
+            "Unable to determine the status of your request. Please try again."
+          );
         }
 
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
         attempts++;
       }
 
-      throw new Error('The process is taking longer than expected. Please try again.');
+      throw new Error(
+        "The process is taking longer than expected. Please try again."
+      );
     } catch (error) {
       // Log the technical error for debugging
-      console.error('HTTP Request task error:', error);
+      console.error("HTTP Request task error:", error);
       // Return a user-friendly error message
-      throw new Error('We encountered an issue processing your request. Please try again.');
+      throw new Error(
+        "We encountered an issue processing your request. Please try again."
+      );
     }
   };
 
@@ -260,19 +269,25 @@ export const NumaAppProvider = ({ children }) => {
     if (outputResult) {
       let resultToDisplay = outputResult;
 
-      if (typeof outputResult === 'object') {
+      if (typeof outputResult === "object") {
         // If it's an array of objects, convert to markdown table
-        if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
+        if (
+          Array.isArray(outputResult) &&
+          outputResult.length > 0 &&
+          typeof outputResult[0] === "object"
+        ) {
           const headers = Object.keys(outputResult[0]);
-          const headerRow = `| ${headers.join(' | ')} |`;
-          const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
-          const dataRows = outputResult.map(item =>
-            `| ${headers.map(header => item[header] || '').join(' | ')} |`
+          const headerRow = `| ${headers.join(" | ")} |`;
+          const separatorRow = `| ${headers.map(() => "---").join(" | ")} |`;
+          const dataRows = outputResult.map(
+            (item) =>
+              `| ${headers.map((header) => item[header] || "").join(" | ")} |`
           );
-          resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
+          resultToDisplay = [headerRow, separatorRow, ...dataRows].join("\n");
         } else {
           // For other objects, format as code block
-          resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
+          resultToDisplay =
+            "```json\n" + JSON.stringify(outputResult, null, 2) + "\n```";
         }
       }
 
@@ -285,25 +300,25 @@ export const NumaAppProvider = ({ children }) => {
   };
 
   const pollQAppSession = async (sessionId, updateProgress) => {
-    console.log('Starting to poll Q-App session:', sessionId);
+    console.log("Starting to poll Q-App session:", sessionId);
     let polling = true;
     let sessionResponse = null;
 
     while (polling) {
       try {
-        console.log('Polling Q-App session...');
+        console.log("Polling Q-App session...");
         sessionResponse = await getSessionQApp({
           qAppsClient,
           sessionId,
         });
 
-        if (sessionResponse?.status === 'COMPLETED') {
+        if (sessionResponse?.status === "COMPLETED") {
           polling = false;
           return { ...sessionResponse, progress: 100 };
-        } else if (sessionResponse?.status === 'FAILED') {
-          console.log('Q-App session failed');
+        } else if (sessionResponse?.status === "FAILED") {
+          console.log("Q-App session failed");
           polling = false;
-          throw new Error('Q App session failed');
+          throw new Error("Q App session failed");
         }
 
         // Calculate progress from card statuses
@@ -312,33 +327,32 @@ export const NumaAppProvider = ({ children }) => {
           const cards = Object.values(sessionResponse.cardStatus);
           const totalCards = cards.length;
           const completedCards = cards.filter(
-            (card) => card.currentState === 'COMPLETED',
+            (card) => card.currentState === "COMPLETED"
           ).length;
           const runningCards = cards.filter(
-            (card) => card.currentState === 'RUNNING',
+            (card) => card.currentState === "RUNNING"
           ).length;
 
           // Count completed cards fully and running cards as half complete
           progress = Math.round(
-            ((completedCards + runningCards * 0.5) / totalCards) * 100,
+            ((completedCards + runningCards * 0.5) / totalCards) * 100
           );
           progress = Math.min(progress, 99); // Cap at 99% until fully complete
-
 
           // Call the progress update callback
           if (updateProgress) {
             updateProgress(progress);
           } else {
-            console.warn('No progress update callback provided');
+            console.warn("No progress update callback provided");
           }
         } else {
-          console.log('No card status in session response');
+          console.log("No card status in session response");
         }
 
         sessionResponse.progress = progress || 5; // Minimum 5% progress
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (error) {
-        console.error('Error polling Q App session:', error);
+        console.error("Error polling Q App session:", error);
         polling = false;
         throw error;
       }
@@ -355,20 +369,22 @@ export const NumaAppProvider = ({ children }) => {
       const jobResponse = await jobsApi.createJob(numaAppData, taskInputValues);
       return {
         jobID: jobResponse.jobID,
-        dateTime: jobResponse.startedAt
+        dateTime: jobResponse.startedAt,
       };
     } catch (error) {
-      console.error('Failed to create job:', error);
-      setProcessingStatus('Error');
+      console.error("Failed to create job:", error);
+      setProcessingStatus("Error");
       setProcessingProgress(0);
-      throw new Error('Unable to start the process. Please try again.');
+      throw new Error("Unable to start the process. Please try again.");
     }
   };
 
   const saveJobResults = async (jobID, dateTime, currentResults) => {
     try {
       // Get all text-output tasks
-      const textOutputTasks = numaAppData.tasks.filter(task => task.type === 'text-output');
+      const textOutputTasks = numaAppData.tasks.filter(
+        (task) => task.type === "text-output"
+      );
 
       // Build results object from text-output tasks
       const textOutputResults = textOutputTasks.reduce((acc, task) => {
@@ -386,13 +402,13 @@ export const NumaAppProvider = ({ children }) => {
       // Refresh the jobs list
       await loadAppJobs();
     } catch (error) {
-      console.error('Failed to update job:', error);
+      console.error("Failed to update job:", error);
       throw error;
     }
   };
 
   const calculateTaskWeight = (task) => {
-    if (task.type === 'q-app') {
+    if (task.type === "q-app") {
       // Count input and output cards for Q-Apps
       const cardCount =
         (task.params.inputs?.length || 0) + (task.params.outputs?.length || 0);
@@ -407,11 +423,10 @@ export const NumaAppProvider = ({ children }) => {
 
   const createProgressUpdater = (completedWeight, qappWeight, totalWeight) => {
     return (progress) => {
-
       const qappContribution = (progress / 100) * qappWeight;
       const currentProgress = Math.min(
         Math.round(((completedWeight + qappContribution) / totalWeight) * 100),
-        99,
+        99
       );
 
       setProcessingProgress(currentProgress);
@@ -423,9 +438,9 @@ export const NumaAppProvider = ({ children }) => {
     currentResults,
     completedWeight,
     qappWeight,
-    totalWeight,
+    totalWeight
   ) => {
-    setProcessingStatus('Running analysis...');
+    setProcessingStatus("Running analysis...");
     setIsPolling(true);
     setAppRunning(true);
 
@@ -461,19 +476,19 @@ export const NumaAppProvider = ({ children }) => {
             });
 
             if (!fileId) {
-              console.error('No fileId received from import');
+              console.error("No fileId received from import");
               return;
             }
 
             updateValues.push({ cardId: qInputCardId, value: fileId });
           } catch (error) {
-            console.error('Error importing file:', error);
+            console.error("Error importing file:", error);
             throw error;
           }
         } else if (
           inputValue !== undefined &&
           inputValue !== null &&
-          inputValue !== ''
+          inputValue !== ""
         ) {
           updateValues.push({ cardId: qInputCardId, value: inputValue });
         }
@@ -491,22 +506,22 @@ export const NumaAppProvider = ({ children }) => {
       const updateProgress = createProgressUpdater(
         completedWeight,
         qappWeight,
-        totalWeight,
+        totalWeight
       );
       const sessionResponse = await pollQAppSession(sessionId, updateProgress);
 
       // Process the output cards and map them to the correct output references
       if (sessionResponse?.cardStatus) {
         for (const [cardId, cardData] of Object.entries(
-          sessionResponse.cardStatus,
+          sessionResponse.cardStatus
         )) {
           // Match cardId to outputContentRef ID
           const matchingOutput = task.params.outputs.find(
-            (output) => output.qOutputCardId === cardId,
+            (output) => output.qOutputCardId === cardId
           );
 
           if (matchingOutput) {
-            const outputId = matchingOutput.outputContentRef.replace('@', '');
+            const outputId = matchingOutput.outputContentRef.replace("@", "");
             currentResults[outputId] = cardData.currentValue;
           }
         }
@@ -519,7 +534,7 @@ export const NumaAppProvider = ({ children }) => {
       };
       return currentResults;
     } catch (error) {
-      console.error('Error in Q-App task execution:', error);
+      console.error("Error in Q-App task execution:", error);
       throw error;
     } finally {
       setIsPolling(false);
@@ -530,7 +545,7 @@ export const NumaAppProvider = ({ children }) => {
   const handleRunButtonClick = async () => {
     if (!numaAppData || !numaAppData.tasks) return;
 
-    setProcessingStatus('Starting process...');
+    setProcessingStatus("Starting process...");
     setProcessingProgress(0);
     setError(null); // Clear any previous errors
 
@@ -551,22 +566,26 @@ export const NumaAppProvider = ({ children }) => {
         const taskWeight = calculateTaskWeight(task);
 
         switch (task.type) {
-          case 'text-input':
+          case "text-input":
             currentResults = processTextInputTask(task, currentResults);
             completedWeight += taskWeight;
             break;
 
-          case 's3-upload':
+          case "s3-upload":
             currentResults = processS3UploadTask(task, currentResults);
             completedWeight += taskWeight;
             break;
 
-          case 'http-request':
-            currentResults = await processHttpRequestTask(jobID, task, currentResults);
+          case "http-request":
+            currentResults = await processHttpRequestTask(
+              jobID,
+              task,
+              currentResults
+            );
             completedWeight += taskWeight;
             break;
 
-          case 'q-app':
+          case "q-app":
             qappWeight = taskWeight;
             currentResults = await handleQAppTask(
               task,
@@ -578,7 +597,7 @@ export const NumaAppProvider = ({ children }) => {
             completedWeight += taskWeight;
             break;
 
-          case 'text-output':
+          case "text-output":
             currentResults = processTextOutputTask(task, currentResults);
             completedWeight += taskWeight;
             break;
@@ -588,7 +607,10 @@ export const NumaAppProvider = ({ children }) => {
             break;
         }
 
-        const progress = Math.min(Math.round((completedWeight / totalWeight) * 100), 100);
+        const progress = Math.min(
+          Math.round((completedWeight / totalWeight) * 100),
+          100
+        );
         setProcessingProgress(progress);
 
         // Update task completion status
@@ -601,11 +623,11 @@ export const NumaAppProvider = ({ children }) => {
       // Save final results
       await saveJobResults(jobID, dateTime, currentResults);
       setProcessingProgress(100);
-      setProcessingStatus('Complete!');
+      setProcessingStatus("Complete!");
       return currentResults;
     } catch (error) {
-      console.error('Error running app:', error);
-      setProcessingStatus('Error');
+      console.error("Error running app:", error);
+      setProcessingStatus("Error");
       setProcessingProgress(0);
       throw error; // Re-throw to be handled by AppWizard
     } finally {
@@ -619,7 +641,7 @@ export const NumaAppProvider = ({ children }) => {
     try {
       const job = await jobsApi.getJobById(jobId);
       if (!job) {
-        throw new Error('Job not found');
+        throw new Error("Job not found");
       }
 
       // Reset states
@@ -638,7 +660,7 @@ export const NumaAppProvider = ({ children }) => {
       const updatedStatus = {};
       numaAppData.tasks.forEach((task) => {
         //  this is a finished job
-        if (!task.type.includes('output')) {
+        if (!task.type.includes("output")) {
           updatedStatus[task.id] = true;
         }
       });
@@ -646,34 +668,44 @@ export const NumaAppProvider = ({ children }) => {
 
       // Process results into task responses
       if (job.results) {
-        const outputTasks = numaAppData.tasks.filter(task => task.type === 'text-output');
+        const outputTasks = numaAppData.tasks.filter(
+          (task) => task.type === "text-output"
+        );
         const responses = [];
 
-        outputTasks.forEach(task => {
+        outputTasks.forEach((task) => {
           const result = job.results[task.id];
           if (result !== undefined) {
             let formattedResult = result;
 
             // Format result based on type (similar to processTaskResults)
-            if (typeof result === 'object') {
-              if (Array.isArray(result) && result.length > 0 && typeof result[0] === 'object') {
+            if (typeof result === "object") {
+              if (
+                Array.isArray(result) &&
+                result.length > 0 &&
+                typeof result[0] === "object"
+              ) {
                 // Table format for arrays of objects
                 const headers = Object.keys(result[0]);
-                const headerRow = `| ${headers.join(' | ')} |`;
-                const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
-                const dataRows = result.map(item =>
-                  `| ${headers.map(header => item[header] || '').join(' | ')} |`
+                const headerRow = `| ${headers.join(" | ")} |`;
+                const separatorRow = `| ${headers.map(() => "---").join(" | ")} |`;
+                const dataRows = result.map(
+                  (item) =>
+                    `| ${headers.map((header) => item[header] || "").join(" | ")} |`
                 );
-                formattedResult = [headerRow, separatorRow, ...dataRows].join('\n');
+                formattedResult = [headerRow, separatorRow, ...dataRows].join(
+                  "\n"
+                );
               } else {
                 // JSON format for other objects
-                formattedResult = '```json\n' + JSON.stringify(result, null, 2) + '\n```';
+                formattedResult =
+                  "```json\n" + JSON.stringify(result, null, 2) + "\n```";
               }
             }
 
             responses.push({
               taskId: task.id,
-              result: formattedResult
+              result: formattedResult,
             });
 
             // Mark output tasks with results as complete
@@ -690,9 +722,14 @@ export const NumaAppProvider = ({ children }) => {
           if (firstTaskWithResults) {
             // Find the task index in the filtered tasks list
             const visibleTasks = numaAppData.tasks.filter(
-              task => !task.hidden && task.type !== 'q-app' && task.type !== 'http-request'
+              (task) =>
+                !task.hidden &&
+                task.type !== "q-app" &&
+                task.type !== "http-request"
             );
-            const taskIndex = visibleTasks.findIndex(t => t.id === firstTaskWithResults.taskId);
+            const taskIndex = visibleTasks.findIndex(
+              (t) => t.id === firstTaskWithResults.taskId
+            );
             if (taskIndex !== -1) {
               // Set active step to first task with results
               setActiveStep(taskIndex);
@@ -710,10 +747,10 @@ export const NumaAppProvider = ({ children }) => {
 
         // Set final status
         setProcessingProgress(100);
-        setProcessingStatus('Complete!');
+        setProcessingStatus("Complete!");
       }
     } catch (error) {
-      console.error('Error loading job results:', error);
+      console.error("Error loading job results:", error);
       throw error;
     }
   };
@@ -725,12 +762,11 @@ export const NumaAppProvider = ({ children }) => {
       setTimeout(() => {
         resolve({
           success: true,
-          status: 'PROCESSING'
+          status: "PROCESSING",
         });
       }, 1000);
     });
   };
-
 
   const NumaPollStatus = async (jobId) => {
     // Mock implementation - keep until api proxy in place
@@ -753,27 +789,26 @@ export const NumaAppProvider = ({ children }) => {
     //   }, 500);
     // });
 
-
     try {
       const response = await fetch(`/api/jobs/${jobId}/status`, {
-        method: 'GET',
+        method: "GET",
         headers: {
-          'Content-Type': 'application/json',
-        }
+          "Content-Type": "application/json",
+        },
       });
 
       if (!response.ok) {
-        throw new Error('Unable to check the status of your request.');
+        throw new Error("Unable to check the status of your request.");
       }
 
       const statusData = await response.json();
       return {
         status: statusData.status,
         result: statusData.result,
-        error: statusData.error
+        error: statusData.error,
       };
     } catch (error) {
-      console.error('Error polling job status:', error);
+      console.error("Error polling job status:", error);
       throw error;
     }
   };
@@ -801,6 +836,8 @@ export const NumaAppProvider = ({ children }) => {
     setNumaApps,
     numaAppData,
     setNumaAppData,
+    qAppData,
+    setqAppData,
     numaAppId,
     setNumaAppId,
     taskInputValues,
@@ -809,6 +846,10 @@ export const NumaAppProvider = ({ children }) => {
     taskCompletionStatus,
     setTaskCompletionStatus,
     updateTaskCompletionStatus,
+    qCardInputValues,
+    setQCardInputValues,
+    qSsessionId,
+    setQSessionId,
     runActive,
     setRunActive,
     progress,
@@ -831,7 +872,7 @@ export const NumaAppProvider = ({ children }) => {
     jobHistorySidebarOpen,
     setJobHistorySidebarOpen,
     activeStep,
-    setActiveStep
+    setActiveStep,
   };
 
   return (

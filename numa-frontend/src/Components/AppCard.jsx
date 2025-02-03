@@ -1,26 +1,27 @@
-import { useEffect, useState } from 'react';
-import { Row, Col } from 'react-bootstrap';
-import { S3UploadModule } from '../Modules/S3UploadModule';
-import { useNumaApp } from '../Providers/NumaAppProvider';
-import { MarkdownContent } from './MarkdownContent';
-import { ResultActions } from './ResultActions';
+import { useEffect, useState } from "react";
+import { Row, Col } from "react-bootstrap";
+import { S3UploadModule } from "../Modules/S3UploadModule";
+import { useNumaApp } from "../Providers/NumaAppProvider";
+import { MarkdownContent } from "./MarkdownContent";
+import { ResultActions } from "./ResultActions";
+import { Preloader } from "../Components/Preloader";
 
 const replaceReferences = (prompt, dependencies = [], appsCards = []) => {
-  let updatedPrompt = prompt || '';
+  let updatedPrompt = prompt || "";
 
   if (!dependencies || !appsCards) return updatedPrompt;
 
   dependencies.forEach((dep) => {
-    let title = '';
+    let title = "";
     appsCards.forEach((card) => {
       const cardData = card[Object.keys(card)[0]];
       if (cardData && cardData.id === dep) {
-        title = '<strong>(' + cardData.title + ')</strong>' || '';
+        title = "<strong>(" + cardData.title + ")</strong>" || "";
       }
     });
 
     if (title) {
-      const regex = new RegExp(`@${dep}`, 'g');
+      const regex = new RegExp(`@${dep}`, "g");
       updatedPrompt = updatedPrompt.replace(regex, title);
     }
   });
@@ -48,14 +49,21 @@ const AppCard = ({
   // });
 
   // Initialize with inputValue if it exists, otherwise use defaultValue
-  const [localInputValue, setLocalInputValue] = useState(inputValue || this_card.defaultValue || '');
+  const [localInputValue, setLocalInputValue] = useState(
+    inputValue || this_card.defaultValue || ""
+  );
 
   // Update local state when inputValue prop changes or when session results arrive
   useEffect(() => {
     if (inputValue !== undefined && inputValue !== localInputValue) {
-      console.log('Updating input value:', { cardId: this_card.id, inputValue });
+      console.log("Updating input value:", {
+        cardId: this_card.id,
+        inputValue,
+      });
       setLocalInputValue(inputValue);
-    } else if (sessionResults?.cardStatus?.[this_card.id]?.currentValue !== undefined) {
+    } else if (
+      sessionResults?.cardStatus?.[this_card.id]?.currentValue !== undefined
+    ) {
       // console.log('Updating from session results:', {
       //   cardId: this_card.id,
       //   value: sessionResults.cardStatus[this_card.id].currentValue,
@@ -74,7 +82,7 @@ const AppCard = ({
   const description = replaceReferences(
     this_card.placeholder,
     dependencies,
-    appsCards,
+    appsCards
   );
 
   const handleChange = (e) => {
@@ -92,8 +100,10 @@ const AppCard = ({
   };
 
   const renderCardByType = () => {
-    const outputValue = sessionResults?.cardStatus?.[this_card.id]?.currentValue;
-    const isCompleted = sessionResults?.cardStatus?.[this_card.id]?.currentState === 'COMPLETED';
+    const outputValue =
+      sessionResults?.cardStatus?.[this_card.id]?.currentValue;
+    const isCompleted =
+      sessionResults?.cardStatus?.[this_card.id]?.currentState === "COMPLETED";
     const isGenerating = sessionResults && !isCompleted;
 
     // console.log('Rendering card:', {
@@ -105,27 +115,27 @@ const AppCard = ({
     // });
 
     switch (this_card.type) {
-      case 'text-input':
+      case "text-input":
         return (
           <div className="card-body p-0">
             <textarea
               rows="10"
               value={localInputValue}
-              placeholder={this_card.placeholder || ''}
+              placeholder={this_card.placeholder || ""}
               onChange={handleChange}
               className="form-control w-100"
               style={{
-                minHeight: '120px',
-                resize: 'vertical',
-                maxWidth: '100%',
-                overflowX: 'auto',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word'
+                minHeight: "120px",
+                resize: "vertical",
+                maxWidth: "100%",
+                overflowX: "auto",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
               }}
             />
           </div>
         );
-      case 'file-input':
+      case "file-input":
         return (
           <div className="card-body p-0">
             <S3UploadModule
@@ -136,8 +146,8 @@ const AppCard = ({
             />
           </div>
         );
-      case 'q-query':
-      case 'text-output':
+      case "q-query":
+      case "text-output":
         return (
           <div className="output-text markdown-content">
             {outputValue ? (
@@ -145,11 +155,18 @@ const AppCard = ({
                 <MarkdownContent content={outputValue} />
                 <ResultActions
                   content={outputValue}
-                  title={this_card.title || 'Result'}
+                  title={this_card.title || "Result"}
                 />
               </>
             ) : (
-              <p>{isGenerating ? 'Generating output...' : 'Waiting for input...'}</p>
+              <>
+                <p>
+                  {isGenerating
+                    ? "Generating output... "
+                    : "Waiting for input..."}
+                </p>
+                <Preloader smallscreen={true} />
+              </>
             )}
           </div>
         );
@@ -173,7 +190,9 @@ const AppCard = ({
           </Col>
           {this_card.description && (
             <Col xs={12} md={4} className="px-0 text-md-end">
-              <small className="text-muted d-block text-break">{this_card.description}</small>
+              <small className="text-muted d-block text-break">
+                {this_card.description}
+              </small>
             </Col>
           )}
         </Row>
