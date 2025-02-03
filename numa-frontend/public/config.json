@@ -10,7 +10,7 @@
   "IDENTITY_POOL_ID": "us-east-1:facf1439-ef67-48f9-ada4-debb294db187",
   "ROLE_ARN": "arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo",
   "REGION": "us-east-1",
-  "API_ENDPOINT": "https://g59jhyyob7.execute-api.us-east-1.amazonaws.com",
+  "API_ENDPOINT": "https://arcanum-demo.numa.arcanum.ai/api",
   "USER_POOL_ID": "us-east-1_kVPZjTM6a",
   "CLIENT_ID": "48ed21kkeqa0h4jtrs08kbvvvr"
 }
