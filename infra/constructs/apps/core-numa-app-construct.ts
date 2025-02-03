@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { AppStatus, AppType, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
+import { AppCategory, AppStatus, AppType, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
 
 // TODO: This isn't really an app, but wants addLambdaFunction. We should refactor that out so this doesn't need a manifest.
 export class CoreNumaApp extends BaseNumaApp {
@@ -13,6 +13,7 @@ export class CoreNumaApp extends BaseNumaApp {
       id: 'core-app',
       type: AppType.NUMA,
       status: AppStatus.INTERNAL,
+      category: AppCategory.GENERAL,
       createdDate: '2025-01-01',
       appDescription: 'Core Numa App',
       tasks: [],
