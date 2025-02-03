@@ -366,6 +366,14 @@ export interface NumaAppManifestTextOutputTask extends NumaAppManifestBaseTask {
   };
 }
 
+export enum AppCategory {
+  PRODUCTIVITY = 'productivity',
+  FINANCE = 'finance',
+  COMPLIANCE = 'compliance',
+  HR = 'hr',
+  GENERAL = 'general',
+}
+
 export type NumaAppManifestTask =
   | NumaAppManifestDropdownTask
   | NumaAppManifestHttpRequestTask
@@ -379,6 +387,7 @@ export interface NumaAppManifest {
   id: string;
   type: AppType;
   status: AppStatus;
+  category: AppCategory;
   createdDate: string;
   appDescription: string;
   tasks: NumaAppManifestTask[];

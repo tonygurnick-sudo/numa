@@ -4,6 +4,7 @@ import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import {
+  AppCategory,
   AppStatus,
   AppType,
   BaseNumaApp,
@@ -101,6 +102,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
       appName: 'Policy Designer',
       id: 'policy-builder-app',
       type: AppType.NUMA,
+      category: AppCategory.COMPLIANCE,
       status: AppStatus.ACTIVE,
       createdDate: '2024-03-20T10:00:00Z',
       appDescription:
