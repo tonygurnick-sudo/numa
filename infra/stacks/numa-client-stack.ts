@@ -130,6 +130,7 @@ export class NumaClientStack extends ArcanumStack {
           IDENTITY_POOL_ROLE_ARN: core.identityPoolArn,
           REGION: 'us-east-1', // TODO: Dynamic.
           ROLE_ARN: core.webExperienceRoleArn,
+          Q_APPLICATION_ID: core.qBusinessApplicationId,
           API_ENDPOINT: '/api',
           CLIENT_NAME: props.client,
         }),
