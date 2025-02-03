@@ -1,6 +1,7 @@
 import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import {
+  AppCategory,
   AppStatus,
   AppType,
   BaseNumaApp,
@@ -30,6 +31,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       id: 'meeting-analyser-app',
       type: AppType.NUMA,
       status: AppStatus.ACTIVE,
+      category: AppCategory.PRODUCTIVITY,
       createdDate: '2025-01-31',
       appDescription: description,
       tasks: [
