@@ -26,7 +26,8 @@
     "createServiceLinkedRole": false,
     "apps": {
       "example-app": {},
-      "nzsba-policy-builder": {}
+      "nzsba-policy-builder": {},
+      "meeting-analyser": {}
     },
     "webCrawlerConfigs": [
       {
@@ -45,7 +46,9 @@
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "apps": {
-      "nzsba-policy-builder": {}
+      "nzsba-policy-builder": {},
+      "example-app": {},
+      "meeting-analyser": {}
     },
     "boxConfigs": [
       {

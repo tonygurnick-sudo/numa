@@ -196,8 +196,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       const credentials = fromWebToken({
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: "numa-frontend-chat",
-        roleArn: IDENTITY_POOL_ROLE_ARN,
+        roleSessionName: 'numa-frontend-chat',
         policy: JSON.stringify(QPolicy),
         durationSeconds: 3600,
         webIdentityToken: idToken,
@@ -224,8 +223,8 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       const credentials = fromWebToken({
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: "numa-frontend-qapps",
-        roleArn: IDENTITY_POOL_ROLE_ARN,
+        roleSessionName: 'numa-frontend-qapps',
+        roleArn: ROLE_ARN,
         policy: JSON.stringify(QPolicy),
         durationSeconds: 3600,
         webIdentityToken: idToken,
