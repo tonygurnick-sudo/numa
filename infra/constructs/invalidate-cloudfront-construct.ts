@@ -30,7 +30,7 @@ export class InvalidateCloudfront extends Construct {
       }),
     });
 
-    new IamRolePolicyAttachmentsExclusive(this, 'attach-roles', {
+    const policyAttachment = new IamRolePolicyAttachmentsExclusive(this, 'attach-roles', {
       policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', invalidatePolicy.arn],
       roleName: role.name,
     });
@@ -55,7 +55,7 @@ export class InvalidateCloudfront extends Construct {
         // This causes the lambda to trigger on every source change.
         sourceHash: hash('sha256', props.dependsOn.map((dep) => dep.sourceHash).join('')),
       },
-      dependsOn: [...props.dependsOn, func.lambdaFunction],
+      dependsOn: [...props.dependsOn, func.lambdaFunction, policyAttachment],
     });
   }
 }
