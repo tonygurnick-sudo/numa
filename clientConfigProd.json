@@ -72,7 +72,12 @@
     }
   },
   "arcanum-prod-numa-demo": {
-    "clientAccountId": "619071323471"
+    "clientAccountId": "619071323471",
+    "apps": {
+      "example-app": {},
+      "meeting-analyser": {},
+      "nzsba-policy-builder": {}
+    }
   },
   "autoshoppe": {
     "clientAccountId": "060795909741"
