@@ -18,6 +18,7 @@ export default defineConfig({
         headers: {
           Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
         },
+        rewrite: (path) => path.replace(/^\/api/, '/api')
       },
     },
   },

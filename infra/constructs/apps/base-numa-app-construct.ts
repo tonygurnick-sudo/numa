@@ -300,6 +300,7 @@ export abstract class BaseNumaApp extends Construct {
 
 export enum AppType {
   NUMA = 'numa-app',
+  POLICY_BUILDER = 'policy-builder',
   Q = 'q-app',
 }
 
