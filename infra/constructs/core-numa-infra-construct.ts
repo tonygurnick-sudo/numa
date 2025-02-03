@@ -39,6 +39,8 @@ export class CoreNumaInfra extends Construct {
   readonly identityPoolId: string;
   readonly identityPoolArn: string;
   readonly webExperienceRoleArn: string;
+  readonly qBusinessApplicationId: string;
+
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
 
@@ -386,7 +388,7 @@ export class CoreNumaInfra extends Construct {
         ...appIdentityConfig,
       }),
     });
-    const applicationId = Fn.lookup(Fn.jsondecode(application.properties), 'ApplicationId');
+    this.qBusinessApplicationId = Fn.lookup(Fn.jsondecode(application.properties), 'ApplicationId');;
 
     const origins = props.enableIFrame
       ? {
@@ -395,7 +397,7 @@ export class CoreNumaInfra extends Construct {
       : {};
 
     new QBusinessChatControlConfigurer(this, 'chat-control', {
-      applicationId,
+      applicationId: this.qBusinessApplicationId,
       enableDirectLLMAccess: props.enableDirectLLMAccess,
       enableLLMKnowledgeFallback: props.enableLLMKnowledgeFallback,
       region,
@@ -405,7 +407,7 @@ export class CoreNumaInfra extends Construct {
     const webexperience = new CloudcontrolapiResource(this, 'web-experience', {
       typeName: 'AWS::QBusiness::WebExperience',
       desiredState: Fn.jsonencode({
-        ApplicationId: applicationId,
+        ApplicationId: this.qBusinessApplicationId,
         RoleArn: role.arn,
         ...webexIdentityConfig,
         ...origins,
@@ -432,7 +434,7 @@ export class CoreNumaInfra extends Construct {
     const index = new CloudcontrolapiResource(this, 'index', {
       typeName: 'AWS::QBusiness::Index',
       desiredState: Fn.jsonencode({
-        ApplicationId: applicationId,
+        ApplicationId: this.qBusinessApplicationId,
         DisplayName: numaClient,
         Type: props.indexType,
         CapacityConfiguration: {
@@ -445,7 +447,7 @@ export class CoreNumaInfra extends Construct {
     new CloudcontrolapiResource(this, 'retriever', {
       typeName: 'AWS::QBusiness::Retriever',
       desiredState: Fn.jsonencode({
-        ApplicationId: applicationId,
+        ApplicationId: this.qBusinessApplicationId,
         DisplayName: numaClient,
         Configuration: {
           NativeIndexConfiguration: {
@@ -577,7 +579,7 @@ export class CoreNumaInfra extends Construct {
       new SharePointDataSource(this, `data-source-sharepoint-${cleanedDomain}`, {
         displayName: `${numaClient}-share-point-${cleanedDomain}`,
         siteUrls: sharePointDataSource.siteUrls,
-        applicationId: applicationId,
+        applicationId: this.qBusinessApplicationId,
         indexId: indexId,
         domain: sharePointDataSource.domain,
         tenantId: sharePointDataSource.tenantId,
@@ -591,7 +593,7 @@ export class CoreNumaInfra extends Construct {
       new BoxDataSource(this, `data-source-box-${boxDataSource.enterpriseId}`, {
         displayName: `${numaClient}-box-${boxDataSource.enterpriseId}`,
         enterpriseId: boxDataSource.enterpriseId,
-        applicationId: applicationId,
+        applicationId: this.qBusinessApplicationId,
         indexId: indexId,
         region: props.region ?? 'us-east-1',
         configuration: boxDataSource.configuration,
@@ -603,7 +605,7 @@ export class CoreNumaInfra extends Construct {
       new TeamsDataSource(this, `data-source-teams-${teamsDataSource.tenantId}`, {
         displayName: `${numaClient}-teams-${teamsDataSource.tenantId}`,
         tenantId: teamsDataSource.tenantId,
-        applicationId: applicationId,
+        applicationId: this.qBusinessApplicationId,
         indexId: indexId,
         region: props.region ?? 'us-east-1',
         configuration: teamsDataSource.configuration,
@@ -616,7 +618,7 @@ export class CoreNumaInfra extends Construct {
     });
 
     new TerraformOutput(this, 'data-bucket', { value: dataBucket.bucket.bucket });
-    new TerraformOutput(this, 'application-id', { value: applicationId });
+    new TerraformOutput(this, 'application-id', { value: this.qBusinessApplicationId });
     new TerraformOutput(this, 'data-source-id', { value: dataSourceId });
     new TerraformOutput(this, 'index-id', { value: indexId });
 

@@ -39,7 +39,7 @@ const JobHistorySidebar = () => {
           </Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>
-          {jobs.length === 0 ? (
+          {jobs.length === 0 || typeof jobs === 'string' ? (
             <p className="text-muted">No job history available</p>
           ) : (
             <ListGroup>
