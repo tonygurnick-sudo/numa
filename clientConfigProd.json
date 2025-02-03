@@ -24,11 +24,7 @@
   "arcanum-demo": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "apps": {
-      "example-app": {},
-      "nzsba-policy-builder": {},
-      "meeting-analyser": {}
-    },
+    "allApps": true,
     "webCrawlerConfigs": [
       {
         "url": "https://arcanum.ai/"
@@ -73,11 +69,7 @@
   },
   "arcanum-prod-numa-demo": {
     "clientAccountId": "619071323471",
-    "apps": {
-      "example-app": {},
-      "meeting-analyser": {},
-      "nzsba-policy-builder": {}
-    }
+    "allApps": true
   },
   "autoshoppe": {
     "clientAccountId": "060795909741"

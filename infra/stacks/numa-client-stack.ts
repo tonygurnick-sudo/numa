@@ -78,6 +78,9 @@ export class NumaClientStack extends ArcanumStack {
       clientSecret: core.userPoolClient?.clientSecret ?? '',
     });
 
+    if (props.config.allApps) {
+      props.config.apps = Object.fromEntries(Object.keys(appLibrary).map((appId) => [appId, {}]));
+    }
     const apps = Object.entries(props.config.apps ?? {}).map(([appId, appConfig]) => {
       const app = lookupAppFromId(appId);
       return new app(this, `${props.client}-${appId}`, {
@@ -154,6 +157,19 @@ export class NumaClientStack extends ArcanumStack {
 
 interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
   customDomain?: string;
+  /**
+   * Whether to deploy all apps to to the environment.
+   * If true, apps will be deployed with default configs.
+   *
+   * @default false
+   */
+  allApps?: boolean;
+  /**
+   * Object of apps and configs to deploy to the environment.
+   * Ignored if allApps is true.
+   *
+   * @default {}
+   */
   apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId' | 'apiGatewayAuthorizerId' | 'outputsBucket'>>;
   /**
    * Whether to upload the Numa frontend. Used to disable frontend installation when using a custom frontend.
@@ -190,14 +206,14 @@ export interface NumaClientStackProps extends ArcanumStackProps {
   arcanumNumaAccount: string;
 }
 
-const apps: Record<string, new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp> = {
+const appLibrary: Record<string, new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp> = {
   'example-app': ExampleNumaApp,
   'meeting-analyser': MeetingAnalyser,
   'nzsba-policy-builder': NZSBAPolicyBuilder,
 };
 
 function lookupAppFromId(id: string): new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp {
-  const app = apps[id];
+  const app = appLibrary[id];
   if (!app) throw new Error('Unknown app: ' + id);
   return app;
 }
