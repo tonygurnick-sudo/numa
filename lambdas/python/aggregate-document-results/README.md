@@ -6,7 +6,7 @@ AWS Lambda function that processes documents using AWS Bedrock Claude 3 to gener
 ## Inputs
 ```json
 {
-  "output_bucket": "your-bucket-name",
+  "output_bucket": "bucket-name",
   "execution_id": "unique-execution-id"
 }
 ```
