@@ -200,6 +200,7 @@ export const NumaAppProvider = ({ children }) => {
 
   const processHttpRequestTask = async (jobID, task, currentResults) => {
     const templatePayload = task.params?.payload;
+    const request_endpoint = task.endpoint;
     const payload = createPayloadFromTemplate(
       templatePayload,
       taskInputValues,
@@ -215,7 +216,7 @@ export const NumaAppProvider = ({ children }) => {
 
     // Initial request should return success status
     try {
-      const response = await fakeHttpRequestFunction(requestPayload);
+      const response = await makeHttpRequest(requestPayload, request_endpoint);
       console.log("HTTP Request response:", response);
 
       if (!response?.success) {
@@ -575,7 +576,6 @@ export const NumaAppProvider = ({ children }) => {
             currentResults = processS3UploadTask(task, currentResults);
             completedWeight += taskWeight;
             break;
-
           case "http-request":
             currentResults = await processHttpRequestTask(
               jobID,
@@ -755,17 +755,31 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
-  // Mock HTTP request function (replace with real implementation)
-  const fakeHttpRequestFunction = async (payload) => {
-    // Simulate HTTP request delay
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          status: "PROCESSING",
-        });
-      }, 1000);
-    });
+  // HTTP request function
+  const makeHttpRequest = async (payload, endpoint) => {
+    try {
+      const response = await fetch(`/api/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return {
+        success: true,
+        status: data.status || 'PROCESSING',
+        ...data
+      };
+    } catch (error) {
+      console.error('HTTP request failed:', error);
+      throw error;
+    }
   };
 
   const NumaPollStatus = async (jobId) => {
