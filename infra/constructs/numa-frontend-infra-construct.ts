@@ -195,13 +195,8 @@ export class NumaFrontendInfra extends Construct {
           queryStringBehavior: 'whitelist',
           // Allows the values on the Presigned URLs to be passed through to the origin.
           queryStrings: {
-            items: [
-              'Key-Pair-Id',
-              'Signature',
-              'Expires',
-              'Policy'
-            ]
-          }
+            items: ['Key-Pair-Id', 'Signature', 'Expires', 'Policy'],
+          },
         },
       },
     });
@@ -291,15 +286,6 @@ export class NumaFrontendInfra extends Construct {
       dependsOn: [validation],
     });
 
-    const frontendS3Datasource = new NumaCorsEnabledBucket(this, 'frontend-s3-datasource', {
-      client: props.client,
-      clientAccountId: props.accountId,
-      environmentName: props.environmentName,
-      bucketName: 'outputs',
-      allowedMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-      addTestObject: true
-    })
-
     const policyDoc = new DataAwsIamPolicyDocument(this, 'bucketPolicyDoc', {
       statement: [
         {
@@ -322,22 +308,21 @@ export class NumaFrontendInfra extends Construct {
             },
           ],
         },
-        {
-          actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-          resources: [frontendS3Datasource.bucket.arn],
-          principals: [
-            {
-              type: 'AWS',
-              identifiers: [accessIdentity.iamArn],
-            },
-          ],
-        },
       ],
     });
 
     new S3BucketPolicy(this, 'bucketPolicy', {
       bucket: this.frontendBucket.bucket,
       policy: policyDoc.json,
+    });
+
+    new NumaCorsEnabledBucket(this, 'frontend-s3-datasource', {
+      client: props.client,
+      clientAccountId: props.accountId,
+      environmentName: props.environmentName,
+      bucketName: 'frontend-s3-datasource',
+      allowedMethods: ['GET', 'POST', 'PUT', 'DELETE'],
+      addTestObject: true,
     });
 
     new Route53Record(this, 'record', {

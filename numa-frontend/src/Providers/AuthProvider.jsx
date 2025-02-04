@@ -14,7 +14,7 @@ import {
   fromCognitoIdentityPool,
 } from "@aws-sdk/credential-providers";
 import { CognitoIdentityClient } from "@aws-sdk/client-cognito-identity";
-import QPolicy from "../Data/QPolicy.json";
+import { generatePolicy } from "../Modules/QPolicyGenerator";
 import { createSrpSession, signSrpSession } from "cognito-srp-helper";
 import {
   CognitoIdentityProviderClient,
@@ -32,6 +32,7 @@ const REGION = window.sessionStorage.getItem("REGION");
 const API_ENDPOINT = window.sessionStorage.getItem("API_ENDPOINT");
 const USER_POOL_ID = window.sessionStorage.getItem("USER_POOL_ID");
 const CLIENT_ID = window.sessionStorage.getItem("CLIENT_ID");
+const Q_APPLICATION_ID = window.sessionStorage.getItem("Q_APPLICATION_ID");
 
 export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const [user, setUser] = useState(null);
@@ -191,12 +192,20 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
     try {
       const idToken = user.tokens.idToken;
+
+      const accountId = ROLE_ARN.split(":")[4];
+      const policy = generatePolicy({
+        Region: REGION,
+        AccountId: accountId,
+        ApplicationId: Q_APPLICATION_ID,
+      });
+
       const credentials = fromWebToken({
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
         roleSessionName: "numa-frontend-chat",
         roleArn: ROLE_ARN,
-        policy: JSON.stringify(QPolicy),
+        policy: JSON.stringify(policy),
         durationSeconds: 3600,
         webIdentityToken: idToken,
       });
@@ -217,6 +226,13 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
 
+    const accountId = ROLE_ARN.split(":")[4];
+    const policy = generatePolicy({
+      Region: REGION,
+      AccountId: accountId,
+      ApplicationId: Q_APPLICATION_ID,
+    });
+
     try {
       const idToken = user.tokens.idToken;
       const credentials = fromWebToken({
@@ -224,7 +240,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         identityPoolId: IDENTITY_POOL_ID,
         roleSessionName: "numa-frontend-qapps",
         roleArn: ROLE_ARN,
-        policy: JSON.stringify(QPolicy),
+        policy: JSON.stringify(policy),
         durationSeconds: 3600,
         webIdentityToken: idToken,
       });
