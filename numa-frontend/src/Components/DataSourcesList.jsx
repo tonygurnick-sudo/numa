@@ -16,6 +16,9 @@ const formatDate = (dateString) => {
 };
 
 export const DataSourcesList = () => {
+    const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+    const Q_INDEX_ID = window.sessionStorage.getItem('Q_INDEX_ID');
+
     const [dataSources, setDataSources] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -31,12 +34,22 @@ export const DataSourcesList = () => {
 
         setLoading(true);
         try {
-            const qIndexId = sessionStorage.getItem('Q_INDEX_ID');
-            const qApplicationId = sessionStorage.getItem('Q_APPLICATION_ID');
+
+            if(!Q_APPLICATION_ID || Q_APPLICATION_ID === 'undefined') {
+                setError('No Q application ID found');
+                console.error('No Q application ID found');
+                return;
+            }
+
+            if(!Q_INDEX_ID || Q_INDEX_ID === 'undefined') {
+                setError('No Q index ID found');
+                console.error('No Q index ID found');
+                return;
+            }
 
             const input = {
-                applicationId: qApplicationId,
-                indexId: qIndexId,
+                applicationId: Q_APPLICATION_ID,
+                indexId: Q_INDEX_ID,
             };
 
             const command = new ListDataSourcesCommand(input);
