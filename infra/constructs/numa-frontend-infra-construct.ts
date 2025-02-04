@@ -291,6 +291,15 @@ export class NumaFrontendInfra extends Construct {
       dependsOn: [validation],
     });
 
+    const frontendS3Datasource = new NumaCorsEnabledBucket(this, 'frontend-s3-datasource', {
+      client: props.client,
+      clientAccountId: props.accountId,
+      environmentName: props.environmentName,
+      bucketName: 'outputs',
+      allowedMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      addTestObject: true
+    })
+
     const policyDoc = new DataAwsIamPolicyDocument(this, 'bucketPolicyDoc', {
       statement: [
         {
@@ -306,6 +315,16 @@ export class NumaFrontendInfra extends Construct {
         {
           actions: ['s3:ListBucket'],
           resources: [this.frontendBucket.arn],
+          principals: [
+            {
+              type: 'AWS',
+              identifiers: [accessIdentity.iamArn],
+            },
+          ],
+        },
+        {
+          actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+          resources: [frontendS3Datasource.bucket.arn],
           principals: [
             {
               type: 'AWS',
@@ -350,4 +369,5 @@ export interface NumaFrontendInfraProps {
   webExUrl: string;
   zoneId: string;
   outputsBucket: NumaCorsEnabledBucket;
+  accountId: string;
 }

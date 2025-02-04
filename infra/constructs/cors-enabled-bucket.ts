@@ -9,6 +9,7 @@ export interface NumaCorsEnabledBucketProps extends S3BucketConfig {
     bucketName: string;
     clientAccountId: string;
     addTestObject?: boolean;
+    allowedMethods?: string[]
 }
 
 export class NumaCorsEnabledBucket extends PrivateBucket {
@@ -22,7 +23,7 @@ export class NumaCorsEnabledBucket extends PrivateBucket {
             bucket: `numa-${client}${envSuffix}-${bucketName}`,
             corsRule: [{
                 allowedHeaders: ["*"],
-                allowedMethods: ["GET"],
+                allowedMethods: props.allowedMethods  ?? ["GET"],
                 allowedOrigins: [`https://${client}.numa.arcanum.ai`],
                 maxAgeSeconds: 3000
             }]
