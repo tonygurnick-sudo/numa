@@ -9656,7 +9656,7 @@ __metadata:
     remark-gfm: "npm:^4.0.0"
     sass-embedded: "npm:^1.79.4"
     slate-dom: "npm:^0.111.0"
-    slate-react: "npm:^0.111.0"
+    slate-react: "npm:^0.112.0"
     vite: "npm:^6.0.0"
     vite-plugin-mkcert: "npm:^1.17.6"
     vitest: "npm:^2.1.4"
@@ -11258,9 +11258,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"slate-react@npm:^0.111.0":
-  version: 0.111.0
-  resolution: "slate-react@npm:0.111.0"
+"slate-react@npm:^0.112.0":
+  version: 0.112.1
+  resolution: "slate-react@npm:0.112.1"
   dependencies:
     "@juggle/resize-observer": "npm:^3.4.0"
     direction: "npm:^1.0.4"
@@ -11274,7 +11274,7 @@ __metadata:
     react-dom: ">=18.2.0"
     slate: ">=0.99.0"
     slate-dom: ">=0.110.2"
-  checksum: 10c0/9228ece95538b9286709ed08fe8d6f5b4669daf83655ab3eca93953f4c2eb8109ff7ba1af74561f6bb800dacbc41514cfc034888df020ac906cd285164f6735e
+  checksum: 10c0/5d53f037d75323f21733ba8a6d2afa860ccb20bbc28591e30ca8a32e1080436ab6796bb667cdf2c7292ac52dedc8680e9977b913ebd9fef808cefdf5a94e0af1
   languageName: node
   linkType: hard
 
