@@ -144,6 +144,7 @@ export class NumaFrontendInfra extends Construct {
       authorizerType: 'REQUEST',
       authorizerUri: authorizerLambda.invokeArn,
       authorizerPayloadFormatVersion: '2.0',
+      enableSimpleResponses: true,
       name: 'cognito-authorizer',
       identitySources: ['$request.header.Authorization', '$request.header.x-arcanum-cloudfront-secret'],
     });
