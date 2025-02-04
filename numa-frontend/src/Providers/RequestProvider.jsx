@@ -22,11 +22,48 @@ export const NumaRequestProvider = ({ children }) => {
     }),
   };
 
+  const parseNestedJson = (data) => {
+    if (typeof data === 'string') {
+      try {
+        return JSON.parse(data);
+      } catch (error) {
+        return data;
+      }
+    }
+
+    if (Array.isArray(data)) {
+      return data.map(item => {
+        if (item.body && typeof item.body === 'string') {
+          try {
+            item.body = JSON.parse(item.body);
+          } catch (error) {
+            // Keep original string if parsing fails
+          }
+        }
+        return item;
+      });
+    }
+
+    return data;
+  };
+
+  const axiosConfig = {
+    transformResponse: [(data) => {
+      try {
+        const parsedData = JSON.parse(data);
+        return parseNestedJson(parsedData);
+      } catch (error) {
+        return data;
+      }
+    }],
+  };
+
   // Common request methods
   const numaGet = async (url, params, headers = {}) => {
     const response = await axios.get(url, {
+      ...axiosConfig,
       params,
-      headers: { ...defaultHeaders, ...headers }
+      headers: { ...defaultHeaders, ...headers },
     });
     return response.data;
   };

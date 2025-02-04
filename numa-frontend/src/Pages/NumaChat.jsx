@@ -56,6 +56,12 @@ const NumaChat = () => {
       setIsLoading(true);
       setError(null);
 
+      if(!Q_APPLICATION_ID) {
+        setError('No Q application ID found');
+        console.error('No Q application ID found');
+        return;
+      }
+
       // Only include attachments if there are files
       const input = {
         applicationId: Q_APPLICATION_ID,
