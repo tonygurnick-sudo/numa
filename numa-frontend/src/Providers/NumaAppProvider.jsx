@@ -7,8 +7,8 @@ import {
   updateQSessionData,
   fetchAndEncodeFile,
   importFileToQApp,
-} from "../qAppHelper";
-import { jobsApi } from "../Services/jobsApi";
+} from '../qAppHelper';
+import { useJobsApi } from '../Services/jobsApi';
 
 // Create the context
 const NumaAppContext = createContext();
@@ -65,6 +65,7 @@ function createPayloadFromTemplate(template, inputValues, taskResults) {
 // Provider component
 export const NumaAppProvider = ({ children }) => {
   const { qAppsClient } = useAuth();
+  const jobsApi = useJobsApi();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
