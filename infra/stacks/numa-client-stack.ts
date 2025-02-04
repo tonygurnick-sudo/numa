@@ -148,9 +148,26 @@ export class NumaClientStack extends ArcanumStack {
         contentType: 'application/json',
       });
 
+      const deployTime = new Date();
+      const version = new S3Object(this, 'version-file', {
+        bucket: fe.frontendBucket.bucket,
+        key: 'version.json',
+        content: JSON.stringify(
+          {
+            version: '0.0.0', // TODO: Make this more meaningful.
+            gitVersion: '', // TODO: Implement this.
+            deployTime: deployTime.getTime(),
+            deployTimeHuman: deployTime.toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' }),
+          },
+          undefined,
+          2,
+        ),
+        contentType: 'application/json',
+      });
+
       new InvalidateCloudfront(this, 'invalidate', {
         cloudfrontDistribution: fe.distribution,
-        dependsOn: [manifest, config, ...objects],
+        dependsOn: [manifest, config, version, ...objects],
       });
     }
   }
