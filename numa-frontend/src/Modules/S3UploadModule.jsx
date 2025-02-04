@@ -1,14 +1,12 @@
 import { useState, useRef } from "react";
 import { useNumaApp } from "../Providers/NumaAppProvider";
 import { Button } from "react-bootstrap";
-import { useAuth } from "../Providers/AuthProvider";
 import axios from "axios";
 import config from "../../public/config.json";
 import { useNumaRequest } from "../Providers/RequestProvider";
 
 function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   const { loading } = useNumaApp();
-  const { getAccessToken } = useAuth();
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -87,7 +85,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setUploadStatus("Uploading...");
       setError(null);
 
-      const token = await getAccessToken();
       const relativePath = selectedFile.name;
       const encodedPath = encodeURIComponent(relativePath);
 
