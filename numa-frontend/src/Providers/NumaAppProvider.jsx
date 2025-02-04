@@ -9,6 +9,7 @@ import {
   importFileToQApp,
 } from '../qAppHelper';
 import { useJobsApi } from '../Services/jobsApi';
+import { useNumaRequest } from "../Providers/RequestProvider";
 
 // Create the context
 const NumaAppContext = createContext();
@@ -95,7 +96,9 @@ export const NumaAppProvider = ({ children }) => {
   const [selectedTaskId, setSelectedTaskId] = useState(null);
 
   const [activeStep, setActiveStep] = useState(0);
+  const { numaPost, numaPut, numaGet } = useNumaRequest();
 
+  
   // Load jobs for the current app
   const loadAppJobs = async () => {
     if (!numaAppId) return;
@@ -759,23 +762,16 @@ export const NumaAppProvider = ({ children }) => {
   // HTTP request function
   const makeHttpRequest = async (payload, endpoint) => {
     try {
-      const response = await fetch(`/api/${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await numaPost(`/api/${endpoint}`, payload);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response) {
+        throw new Error(`HTTP request failed`);
       }
 
-      const data = await response.json();
       return {
         success: true,
-        status: data.status || 'PROCESSING',
-        ...data
+        status: response.status || 'PROCESSING',
+        ...response
       };
     } catch (error) {
       console.error('HTTP request failed:', error);
@@ -805,22 +801,16 @@ export const NumaAppProvider = ({ children }) => {
     // });
 
     try {
-      const response = await fetch(`/api/jobs/${jobId}/status`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await numaGet(`/api/jobs/${jobId}/status`);
 
-      if (!response.ok) {
+      if (!response) {
         throw new Error("Unable to check the status of your request.");
       }
 
-      const statusData = await response.json();
       return {
-        status: statusData.status,
-        result: statusData.result,
-        error: statusData.error,
+        status: response.status,
+        result: response.result,
+        error: response.error,
       };
     } catch (error) {
       console.error("Error polling job status:", error);
