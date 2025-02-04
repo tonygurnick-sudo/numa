@@ -25,10 +25,10 @@ import {
 import pdfPolicy from "../assets/policies.pdf";
 import PolicyEditor from "./PolicyEditor";
 import { CreatePolicyModal } from "./PolicyBuilderModal";
-import axios from "axios";
 import { useAuth } from "../Providers/AuthProvider";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { useNumaRequest } from "../Providers/RequestProvider";
 
 export const PolicyBuilderDetail = () => {
   const [activeTab, setActiveTab] = useState("policies");
@@ -57,7 +57,8 @@ export const PolicyBuilderDetail = () => {
   const [isDownloading, setIsDownloading] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  const { getIdToken, getAccessToken, getIdentityPoolCredentials } = useAuth();
+  const { loading, isAuthenticated, getAccessToken, getIdentityPoolCredentials } = useAuth();
+  const { numaPost, numaPut, numaGet } = useNumaRequest();
 
   const policyTemplates = [
     {
@@ -412,67 +413,27 @@ export const PolicyBuilderDetail = () => {
         inputs: policyInputs,
       };
 
-      const token = await getAccessToken();
+      // Use postRequest instead of fetch
+      const job = await numaPost("/policy-builder/jobs", jobData);
 
-      const response = await axios.post(
-        `${config.API_ENDPOINT}/policy-builder/jobs`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify(jobData),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const job = await response.json();
       console.log("Job created:", job);
 
-      // Start the step function
-      const stepFunctionResponse = await fetch(
-        `${config.API_ENDPOINT}/policy-builder/main`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          method: "POST",
-          body: JSON.stringify({
-            original_job_id: job.jobID,
-            organisation_name: policyInputs.schoolName,
-            organisation_context: policyInputs.schoolContext,
-            // custom_instructions: policyInputs.customInstructions,
-          }),
-        }
-      );
+      // Start the step function using postRequest
+      const stepFunction = await numaPost("/policy-builder/main", {
+        original_job_id: job.jobID,
+        organisation_name: policyInputs.schoolName,
+        organisation_context: policyInputs.schoolContext,
+        // custom_instructions: policyInputs.customInstructions,
+      });
 
-      if (!stepFunctionResponse.ok) {
-        throw new Error(
-          `Step Function HTTP error! status: ${stepFunctionResponse.status}`
-        );
-      }
-
-      const stepFunction = await stepFunctionResponse.json();
       console.log("Step Function started:", stepFunction);
 
       // Update the job with the step function details
-      const updateResponse = await fetch(
-        `${config.API_ENDPOINT}/policy-builder/jobs/${job.jobID}`,
-        {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            status: "PROCESSING",
-            stepFunctionJobId: stepFunction.job_id,
-          }),
-        }
-      );
+      const updatedJob = await numaPut(`/policy-builder/jobs/${job.jobID}`, {
+        status: "PROCESSING",
+        stepFunctionJobId: stepFunction.job_id,
+      });
 
-      if (!updateResponse.ok) {
-        throw new Error(
-          `Job update HTTP error! status: ${updateResponse.status}`
-        );
-      }
-
-      const updatedJob = await updateResponse.json();
       console.log("Job updated:", updatedJob);
 
       // Start polling in a separate function
@@ -492,10 +453,10 @@ export const PolicyBuilderDetail = () => {
   };
 
   useEffect(() => {
-    if (config) {
+    if (config && isAuthenticated && !loading && config.API_ENDPOINT) {
       fetchPolicies();
     }
-  }, [config]);
+  }, [config, isAuthenticated, loading]);
 
   useEffect(() => {
     // Cleanup function to clear all intervals when component unmounts
@@ -627,17 +588,14 @@ export const PolicyBuilderDetail = () => {
   const fetchPolicies = async () => {
     setIsLoadingPolicies(true);
     try {
-      const token = await getAccessToken();
-      const response = await fetch(
-        `${config.API_ENDPOINT}/policy-builder/jobs`,
-        {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        }
+      const response = await numaGet(
+        `${config.API_ENDPOINT}/policy-builder/jobs`
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      console.log("Response:", response);
+
+      if (response.error || typeof response === "string") {
+        throw new Error(`HTTP error! status: ${response.error}`);
       }
 
       const data = await response.json();

@@ -1,5 +1,6 @@
 // API service for job-related operations
 import { createFormattedDate } from '../utils/dateUtils';
+import { useNumaRequest } from '../Providers/RequestProvider';
 
 const createJobData = (numaAppData, taskInputs, jobID = null) => {
   const { displayDate, isoDate } = createFormattedDate();
@@ -17,26 +18,14 @@ const createJobData = (numaAppData, taskInputs, jobID = null) => {
   };
 };
 
-export const jobsApi = {
-  // Create a new job
-  createJob: async (numaAppData, taskInputs) => {
+export const useJobsApi = () => {
+  const { numaGet, numaPost, numaPut } = useNumaRequest();
+
+  const createJob = async (numaAppData, taskInputs) => {
     try {
-      // leave until API proxy is in place, return mock data instead of making API call
-      // const mockJobId = 'mock-job-' + Math.random().toString(36).substring(7);
-      // const jobData = createJobData(numaAppData, taskInputs, mockJobId);
-
-      // console.log('Mock job created:', jobData);
-      // return jobData;
-
       const jobData = createJobData(numaAppData, taskInputs);
 
-      const response = await fetch(`/api/${numaAppData.id}/jobs`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(jobData),
-      });
+      const response = await numaPost(`/${numaAppData.id}/jobs`, jobData);
 
       if (!response.ok) {
         throw new Error('Failed to create job');
@@ -47,24 +36,11 @@ export const jobsApi = {
       console.error('API Error creating job:', error);
       throw error;
     }
-  },
+  };
 
   // Update an existing job
-  updateJob: async (jobId, results) => {
+  const updateJob = async (jobId, results) => {
     try {
-      // leave until API proxy is in place, return mock success response instead of making API call
-      // const { isoDate } = createFormattedDate();
-      // const mockResponse = {
-      //   jobId,
-      //   results,
-      //   status: 'completed',
-      //   lastUpdated: isoDate,
-      //   success: true
-      // };
-
-      // console.log('Mock job updated:', mockResponse);
-      // return mockResponse;
-
       const { displayDate, isoDate } = createFormattedDate();
       const updateData = {
         results,
@@ -73,50 +49,37 @@ export const jobsApi = {
         name: `Run ${displayDate}`,
       };
 
-      const response = await fetch(`/api/jobs/${jobId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update job');
-      }
+      const response = await numaPut(`/jobs/${jobId}`, updateData);
 
       return await response.json();
     } catch (error) {
       console.error('API Error updating job:', error);
       throw error;
     }
-  },
+  };
 
-  // Get jobs for a specific app
-  getJobsByAppId: async (appId) => {
+  const getJobsByAppId = async (appId) => {
     try {
-      const response = await fetch(`/api/${appId}/jobs`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch jobs');
-      }
-      return await response.json();
+      return await numaGet(`/${appId}/jobs`);
     } catch (error) {
       console.error('API Error fetching jobs:', error);
       throw error;
     }
-  },
+  };
 
-  // Get a specific job by ID
-  getJobById: async (jobId) => {
+  const getJobById = async (jobId) => {
     try {
-      const response = await fetch(`/api/jobs/${jobId}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch job');
-      }
-      return await response.json();
+      return await numaGet(`/jobs/${jobId}`);
     } catch (error) {
       console.error('API Error fetching job:', error);
       throw error;
     }
-  }
+  };
+
+  return {
+    createJob,
+    updateJob,
+    getJobsByAppId,
+    getJobById,
+  };
 };

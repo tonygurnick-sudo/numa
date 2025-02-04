@@ -27,9 +27,7 @@ import {
 const AuthContext = createContext(null);
 
 const IDENTITY_POOL_ID = window.sessionStorage.getItem("IDENTITY_POOL_ID");
-const IDENTITY_POOL_ROLE_ARN = window.sessionStorage.getItem(
-  "IDENTITY_POOL_ROLE_ARN"
-);
+const ROLE_ARN = window.sessionStorage.getItem("ROLE_ARN");
 const REGION = window.sessionStorage.getItem("REGION");
 const API_ENDPOINT = window.sessionStorage.getItem("API_ENDPOINT");
 const USER_POOL_ID = window.sessionStorage.getItem("USER_POOL_ID");
@@ -196,7 +194,8 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       const credentials = fromWebToken({
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: 'numa-frontend-chat',
+        roleSessionName: "numa-frontend-chat",
+        roleArn: ROLE_ARN,
         policy: JSON.stringify(QPolicy),
         durationSeconds: 3600,
         webIdentityToken: idToken,
@@ -223,7 +222,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       const credentials = fromWebToken({
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: 'numa-frontend-qapps',
+        roleSessionName: "numa-frontend-qapps",
         roleArn: ROLE_ARN,
         policy: JSON.stringify(QPolicy),
         durationSeconds: 3600,
