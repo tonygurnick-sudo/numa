@@ -12,5 +12,6 @@
   "REGION": "us-east-1",
   "API_ENDPOINT": "https://arcanum-demo.numa.arcanum.ai/api",
   "USER_POOL_ID": "us-east-1_kVPZjTM6a",
-  "CLIENT_ID": "48ed21kkeqa0h4jtrs08kbvvvr"
+  "CLIENT_ID": "48ed21kkeqa0h4jtrs08kbvvvr",
+  "CLIENT_NAME": "arcanum-demo"
 }
