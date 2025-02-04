@@ -1,9 +1,4 @@
 {
-  "cognito": {
-    "userPoolId": "us-east-1_s4SubZS5l",
-    "userPoolWebClientId": "48ed21kkeqa0h4jtrs08kbvvvr",
-    "region": "us-east-1"
-  },
   "Q_APPLICATION_ID": "2594236d-712a-4355-8b0e-6a4cef023f75",
   "Q_INDEX_ID": "0cbbe940-c7ce-4013-b4f8-ce4176fef1d8",
   "Q_DATASOURCE_ID": "b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0",
