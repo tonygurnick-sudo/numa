@@ -1,24 +1,25 @@
 import { useState, useRef } from "react";
 import { useNumaApp } from "../Providers/NumaAppProvider";
-import { Preloader } from "../Components/Preloader";
 import { Button } from "react-bootstrap";
-import { useAuth } from "../Providers/AuthProvider";
 import axios from "axios";
+import config from "../../public/config.json";
+import { useNumaRequest } from "../Providers/RequestProvider";
 
 function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   const { loading } = useNumaApp();
-  const { getAccessToken } = useAuth();
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadedFilePath, setUploadedFilePath] = useState("");
-  const [uploadedFileName, setUploadedFileName] = useState("");
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
+  const { numaGet } = useNumaRequest();
+
 
   // Extracting task parameters
-  const bucketName = task?.params.bucketName;
+  const taskId = task?.id;
+  const taskTitle = task?.title;
+  const bucketName = `numa-${config.CLIENT_NAME}/${task?.params.bucketName}`;
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -27,7 +28,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setUploadStatus(null);
       setUploadProgress(0);
       setError(null);
-      setUploadedFileName("");
       onNotComplete();
     }
   };
@@ -60,7 +60,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setUploadStatus(null);
       setUploadProgress(0);
       setError(null);
-      setUploadedFileName("");
       onNotComplete();
     }
   };
@@ -82,7 +81,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setUploadStatus("Uploading...");
       setError(null);
 
-      const token = await getAccessToken();
       const relativePath = selectedFile.name;
       const encodedPath = encodeURIComponent(relativePath);
 
@@ -92,15 +90,13 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
         bucketName: bucketName,
       });
 
-      const response = await axios.get("/api/presigned-url-upload", {
-        params: {
-          fileName: encodedPath,
-          bucketName: bucketName,
-        },
-        headers: { Authorization: `Bearer ${token}` },
+      const response = await numaGet("/api/presigned-url-upload", {
+        fileName: encodedPath,
+        bucketName: bucketName
       });
 
-      const { uploadUrl } = response.data;
+      console.log("Presigned URL response:", response);
+      const { uploadUrl } = response;
       const s3ObjectUrl = uploadUrl.split("?")[0]; // Get the clean S3 URL without query parameters
 
       // Upload file to S3
@@ -117,8 +113,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       });
 
       setUploadStatus("Upload successful!");
-      setUploadedFilePath(s3ObjectUrl);
-      setUploadedFileName(relativePath);
 
       // Use the onChange prop to update the value
       onChange(s3ObjectUrl);
@@ -137,7 +131,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
 
   return (
     <div className="task-container">
-      {task.title && <h3>{task.title}</h3>}
+      {taskTitle && <h3>{taskTitle}</h3>}
 
       <div
         className={`upload-container bg-light p-4 rounded ${isDragging ? "dragging" : ""}`}
@@ -151,7 +145,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
           type="file"
           onChange={handleFileChange}
           ref={fileInputRef}
-          id={`file-upload-${task.id}`}
+          id={`file-upload-${taskId}`}
           style={{ display: "none" }}
         />
         <div className="text-center">
@@ -160,7 +154,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
           <Button
             variant="primary"
             as="label"
-            htmlFor={`file-upload-${task.id}`}
+            htmlFor={`file-upload-${taskId}`}
             style={{ cursor: "pointer", pointerEvents: "auto" }}
             onClick={(e) => e.stopPropagation()}
           >
