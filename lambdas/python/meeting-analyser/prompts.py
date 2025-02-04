@@ -1,15 +1,16 @@
 TEMPLATE_OUTPUT_PROMPT = """The following are some meeting notes and/or transcript from a meeting.
 <Meeting notes or transcript>
 {meeting_notes_and_or_transcript}
-<Meeting notes or transcript>
+</Meeting notes or transcript>
 
 Use the meeting notes or transcript to create a structured output that follows the following template.
 
-<template>
+<Template>
 {template}
-<template>
+</Template>:
 
-Output just the populated template and nothing else. Use subheadings and dot points as applicable."""
+Output just the populated template and nothing else. Use subheadings and dot points as applicable. Return your output in markdown format.
+Result:"""
 
 MEETING_SUMMARY_PROMPT = """Analyse the meeting transcript and/or meeting notes and provide an organised, multi-bullet pointed summary of key discussion points and decisions. Structure the output in markdown format, clearly presenting:
 
@@ -26,15 +27,16 @@ Additional Notes: Any other relevant information, such as follow-up requirements
 Format each section with headings, using markdown syntax for clarity.
 Attendees: List all attendees to the meeting if names are present.
 
-<Meeting Transcript and/or Notes>
+<Meeting notes or transcript>
 {meeting_notes_and_or_transcript}
-<Meeting Transcript and/or Notes>
+</Meeting notes or transcript>
 
 Please also take into consideration meeting context or other notes if applicable.
 <Other Notes>
 {other_notes}
-<Other Notes>
-Return just the meeting summary and nothing else."""
+</Other Notes>
+
+Return just the meeting summary and nothing else. Return your output in markdown format."""
 
 TOPIC_ANALYSIS_PROMPT = """Analyze the meeting notes and/or transcript to identify and summarize key topics discussed, structured in markdown format. Include:
 
@@ -45,16 +47,18 @@ Time Allocation: Estimate the time spent on each topic, if possible, based on cu
 Recurring Themes: Identify any themes or issues that recurred throughout the discussion and their impact or significance.
 Present each topic and theme as a numbered or bulleted list in markdown, making it easy to review at a glance.
 
-<Meeting Notes and/or Transcript>
+<Meeting notes or transcript>
 {meeting_notes_and_or_transcript}
-<Meeting Notes and/or Transcript>
+</Meeting notes or transcript>
 
 Please also take into consideration other notes if applicable.
 
 <Other Notes>
 {other_notes}
-<Other Notes>
-Return just the topic analysis in markdown format and nothing else."""
+</Other Notes>
+
+Return just the topic analysis and nothing else. Return your output in markdown format.
+Topic Analysis:"""
 
 ACTION_ITEMS_PROMPT = """Analyze the meeting notes and/or transcript and extract a concise, bulleted list of key action items. If no specific action items, tasks, or deadlines are directly mentioned, generate a list of potential next steps or action items based on the discussion topics, but make sure they are explicitly stated as potential action items. Structure the output in markdown format, detailing:
 
@@ -64,16 +68,17 @@ ACTION_ITEMS_PROMPT = """Analyze the meeting notes and/or transcript and extract
 
 Ensure each action item is clearly outlined, using bullet points and markdown syntax to enhance readability. Keep the output short, concise and to relevant bullet points.
 
-<Meeting Notes and/or Transcript>
+<Meeting notes or transcript>
 {meeting_notes_and_or_transcript}
-<Meeting Notes and/or Transcript>
+</Meeting notes or transcript>
 
 Please also take into consideration meeting context or other notes if applicable.
 
 <Other Notes>
 {other_notes}
-<Other Notes>
-Please output just the action items in markdown format and nothing else.
+</Other Notes>
+
+Please output just the action items and nothing else. Return your output in markdown format.
 Action Items:"""
 
 FOLLOW_UP_EMAILS_PROMPT = """Using the meeting notes and/or transcript and identified action items, draft personalised follow-up emails for each attendee. Structure the output in markdown format, covering:
@@ -87,18 +92,19 @@ Each email should be clearly structured, ensuring the attendee has a concise and
 
 <Action Items>
 {action_items}
-<Action Items>
+</Action Items>
+
 <Meeting Summary>
 {summary}
-<Meeting Summary>
+</Meeting Summary>
 
 Please also take into consideration meeting context or other notes if applicable.
 
 <Other Notes>
 {other_notes}
-<Other Notes>
+</Other Notes>
 
-Please just return the follow up emails nothing else.
+Please just return the follow up emails nothing else. Return your output in markdown format.
 Emails:"""
 
 PARTICIPANT_INSIGHTS_PROMPTS = """Analyze the meeting notes and/or transcript to provide:
@@ -108,13 +114,15 @@ PARTICIPANT_INSIGHTS_PROMPTS = """Analyze the meeting notes and/or transcript to
 
 Use concise bullet points in markdown format.
 
-<Meeting Notes and/or Transcript>
+<Meeting notes or transcript>
 {meeting_notes_and_or_transcript}
-<Meeting Notes and/or Transcript>
+</Meeting notes or transcript>
 
 Please also take into consideration meeting context or other notes if applicable.
 
 <Other Notes>
 {other_notes}
-<Other Notes>
-Return just the participant insights in markdown format and nothing else."""
+</Other Notes>
+
+Return just the participant insights and nothing else. Return your output in markdown format.
+Participant Insights:"""
