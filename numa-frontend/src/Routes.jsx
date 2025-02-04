@@ -3,25 +3,28 @@ import {
   Routes,
   Route,
   Navigate,
-} from 'react-router-dom';
-import { NumaLogin } from './Pages/Login';
-import { ResetPassword } from './Pages/ResetPassword';
-import { Dash } from './Pages/Dash';
-import AppDetail from './Pages/AppDetail';
+} from "react-router-dom";
+import { NumaLogin } from "./Pages/Login";
+import { ResetPassword } from "./Pages/ResetPassword";
+import { Dash } from "./Pages/Dash";
+import AppDetail from "./Pages/AppDetail";
 
-import { AuthProvider, useAuth } from './Providers/AuthProvider';
-import { NumaAppProvider } from './Providers/NumaAppProvider';
-import { NumaChat } from './Pages/NumaChat';
-import { S3Uploader } from './Pages/S3Uploader';
+import { AuthProvider, useAuth } from "./Providers/AuthProvider";
+import { NumaAppProvider } from "./Providers/NumaAppProvider";
+import { NumaChat } from "./Pages/NumaChat";
+import { S3Uploader } from "./Pages/S3Uploader";
+import { NumaRequestProvider } from "./Providers/RequestProvider";
 
 const NumaRoutes = () => {
   return (
     <AuthProvider>
-      <NumaAppProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
-      </NumaAppProvider>
+      <NumaRequestProvider>
+        <NumaAppProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </NumaAppProvider>
+      </NumaRequestProvider>
     </AuthProvider>
   );
 };
@@ -54,7 +57,7 @@ const AppRoutes = () => {
 
       <Route
         path="/"
-        element={<Navigate to={user ? '/dash' : '/login'} replace />}
+        element={<Navigate to={user ? "/dash" : "/login"} replace />}
       />
 
       <Route

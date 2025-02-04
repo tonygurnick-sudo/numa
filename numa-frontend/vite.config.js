@@ -1,10 +1,54 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { copyFileSync, mkdirSync, existsSync, readdirSync } from "fs";
+import { resolve } from "path";
 import config from "./public/config.json";
+// Custom plugin to copy build output to @numa-frontend
+const copyBuildPlugin = () => ({
+  name: "copy-build",
+  closeBundle: async () => {
+    const sourceDir = "dist";
+    const targetDir = "../infra/build/numa-frontend";
+
+    // Create target directory if it doesn't exist
+    if (!existsSync(targetDir)) {
+      mkdirSync(targetDir, { recursive: true });
+    }
+
+    // Function to copy directory recursively
+    const copyDir = (src, dest) => {
+      if (!existsSync(src)) return;
+
+      const entries = readdirSync(src, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const srcPath = resolve(src, entry.name);
+        const destPath = resolve(dest, entry.name);
+
+        if (entry.isDirectory()) {
+          mkdirSync(destPath, { recursive: true });
+          copyDir(srcPath, destPath);
+        } else {
+          copyFileSync(srcPath, destPath);
+        }
+      }
+    };
+
+    try {
+      // Copy the build output
+      copyDir(sourceDir, targetDir);
+      console.log(
+        "Successfully copied build files to /infra/build/numa-frontend"
+      );
+    } catch (error) {
+      console.error("Error copying build files:", error);
+    }
+  },
+});
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), copyBuildPlugin()],
   server: {
     proxy: {
       "/manifest.json": {
@@ -18,7 +62,7 @@ export default defineConfig({
         headers: {
           Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
         },
-        rewrite: (path) => path.replace(/^\/api/, '/api')
+        rewrite: (path) => path.replace(/^\/api/, '/api'),
       },
     },
   },
