@@ -10,8 +10,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadedFilePath, setUploadedFilePath] = useState("");
-  const [uploadedFileName, setUploadedFileName] = useState("");
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
@@ -30,7 +28,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setUploadStatus(null);
       setUploadProgress(0);
       setError(null);
-      setUploadedFileName("");
       onNotComplete();
     }
   };
@@ -63,7 +60,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setUploadStatus(null);
       setUploadProgress(0);
       setError(null);
-      setUploadedFileName("");
       onNotComplete();
     }
   };
@@ -116,8 +112,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       });
 
       setUploadStatus("Upload successful!");
-      setUploadedFilePath(s3ObjectUrl);
-      setUploadedFileName(relativePath);
 
       // Use the onChange prop to update the value
       onChange(s3ObjectUrl);
