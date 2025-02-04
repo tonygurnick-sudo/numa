@@ -40,7 +40,7 @@ export class CoreNumaInfra extends Construct {
   readonly identityPoolArn: string;
   readonly webExperienceRoleArn: string;
   readonly qBusinessApplicationId: string;
-
+  readonly qBusinessIndexId: string;
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
 
@@ -388,7 +388,7 @@ export class CoreNumaInfra extends Construct {
         ...appIdentityConfig,
       }),
     });
-    this.qBusinessApplicationId = Fn.lookup(Fn.jsondecode(application.properties), 'ApplicationId');;
+    this.qBusinessApplicationId = Fn.lookup(Fn.jsondecode(application.properties), 'ApplicationId');
 
     const origins = props.enableIFrame
       ? {
@@ -442,7 +442,7 @@ export class CoreNumaInfra extends Construct {
         },
       }),
     });
-    const indexId = Fn.lookup(Fn.jsondecode(index.properties), 'IndexId');
+    this.qBusinessIndexId = Fn.lookup(Fn.jsondecode(index.properties), 'IndexId');
 
     new CloudcontrolapiResource(this, 'retriever', {
       typeName: 'AWS::QBusiness::Retriever',
@@ -451,7 +451,7 @@ export class CoreNumaInfra extends Construct {
         DisplayName: numaClient,
         Configuration: {
           NativeIndexConfiguration: {
-            IndexId: indexId,
+            IndexId: this.qBusinessIndexId,
           },
         },
         Type: 'NATIVE_INDEX',
@@ -540,7 +540,7 @@ export class CoreNumaInfra extends Construct {
           },
         },
         DisplayName: numaClient,
-        IndexId: indexId,
+        IndexId: this.qBusinessIndexId,
         RoleArn: dataRole.arn,
         SyncSchedule: 'cron(0 * ? * * *)',
       }),
@@ -565,7 +565,7 @@ export class CoreNumaInfra extends Construct {
         url: crawlerDataSource?.url,
         siteMapFiles,
         applicationId: application.id,
-        indexId: indexId,
+        indexId: this.qBusinessIndexId,
         region: props.region ?? 'us-east-1',
         dataSourceRoleArn: dataRole.arn,
         siteMapBucket: siteMapBucket.bucket,
@@ -580,7 +580,7 @@ export class CoreNumaInfra extends Construct {
         displayName: `${numaClient}-share-point-${cleanedDomain}`,
         siteUrls: sharePointDataSource.siteUrls,
         applicationId: this.qBusinessApplicationId,
-        indexId: indexId,
+        indexId: this.qBusinessIndexId,
         domain: sharePointDataSource.domain,
         tenantId: sharePointDataSource.tenantId,
         region: props.region ?? 'us-east-1',
@@ -594,7 +594,7 @@ export class CoreNumaInfra extends Construct {
         displayName: `${numaClient}-box-${boxDataSource.enterpriseId}`,
         enterpriseId: boxDataSource.enterpriseId,
         applicationId: this.qBusinessApplicationId,
-        indexId: indexId,
+        indexId: this.qBusinessIndexId,
         region: props.region ?? 'us-east-1',
         configuration: boxDataSource.configuration,
         dataSourceRoleArn: dataRole.arn,
@@ -606,7 +606,7 @@ export class CoreNumaInfra extends Construct {
         displayName: `${numaClient}-teams-${teamsDataSource.tenantId}`,
         tenantId: teamsDataSource.tenantId,
         applicationId: this.qBusinessApplicationId,
-        indexId: indexId,
+        indexId: this.qBusinessIndexId,
         region: props.region ?? 'us-east-1',
         configuration: teamsDataSource.configuration,
         dataSourceRoleArn: dataRole.arn,
@@ -620,7 +620,7 @@ export class CoreNumaInfra extends Construct {
     new TerraformOutput(this, 'data-bucket', { value: dataBucket.bucket.bucket });
     new TerraformOutput(this, 'application-id', { value: this.qBusinessApplicationId });
     new TerraformOutput(this, 'data-source-id', { value: dataSourceId });
-    new TerraformOutput(this, 'index-id', { value: indexId });
+    new TerraformOutput(this, 'index-id', { value: this.qBusinessIndexId });
 
     const quotaChecker = new BedrockQuotaChecker(this, 'bedrock-quota-checker', {
       client: props.client,

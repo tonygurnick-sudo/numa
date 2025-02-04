@@ -594,13 +594,11 @@ export const PolicyBuilderDetail = () => {
 
       console.log("Response:", response);
 
-      if (response.error || typeof response === "string") {
+      if (response.error) {
         throw new Error(`HTTP error! status: ${response.error}`);
       }
 
-      const data = await response.json();
-
-      const transformedPolicies = data
+      const transformedPolicies = response
         .filter((job) => job.type === "POLICY_GENERATION")
         .map((job) => {
           // Only start polling if job is processing and not already being polled
@@ -626,6 +624,8 @@ export const PolicyBuilderDetail = () => {
       transformedPolicies.sort(
         (a, b) => new Date(b.lastModified) - new Date(a.lastModified)
       );
+
+      console.log('Transformed policies:', transformedPolicies);
 
       setPolicies(transformedPolicies);
     } catch (error) {
@@ -673,13 +673,13 @@ export const PolicyBuilderDetail = () => {
           </div>
         </div>
       ) : (
-        // policies.length === 0 ? (
-        //   <div className="text-center py-4">
-        //     <p className="text-muted">
-        //       No policies found. Create a new policy to get started.
-        //     </p>
-        //   </div>
-        // ) :
+        policies.length === 0 ? (
+          <div className="text-center py-4">
+            <p className="text-muted">
+              No policies found. Create a new policy to get started.
+            </p>
+          </div>
+        ) :
         <Table responsive striped bordered hover>
           <thead>
             <tr className="table-light">
