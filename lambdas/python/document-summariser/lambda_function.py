@@ -29,6 +29,9 @@ def handler(event: dict, _context) -> dict:
         output_bucket = event["output_bucket"]
         execution_id = event["execution_id"]
 
+        focus_area = event.get("focus_area", "General summary")
+        summary_level = event.get("summary_level", "detailed")
+
         document_stem = Path(document_key).stem
         unique_code = generate_unique_code()
 
@@ -39,8 +42,8 @@ def handler(event: dict, _context) -> dict:
 
         input_data = {
             "document_content": document_content,
-            "focus_area": "General summary",
-            "summary_level": "detailed",
+            "focus_area": focus_area,
+            "summary_level": summary_level,
         }
 
         model = bedrock.BedrockClaude3Model(
