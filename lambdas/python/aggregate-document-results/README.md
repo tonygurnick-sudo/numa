@@ -14,7 +14,7 @@ AWS Lambda function that processes documents using AWS Bedrock Claude 3 to gener
 ## Outputs
 ```json
 {
-  "results_location": "document_processing/execution-id/aggregated/all_summaries.json",
+  "results_location": "document_processing/execution-id/final/result.json",
   "documents_processed": 2,
   "execution_id": "execution-id"
 }
