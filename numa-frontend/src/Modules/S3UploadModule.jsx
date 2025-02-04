@@ -95,6 +95,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
         bucketName: bucketName
       });
 
+      console.log("Presigned URL response:", response);
       const { uploadUrl } = response;
       const s3ObjectUrl = uploadUrl.split("?")[0]; // Get the clean S3 URL without query parameters
 

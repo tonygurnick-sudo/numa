@@ -98,7 +98,7 @@ export const NumaAppProvider = ({ children }) => {
   const [activeStep, setActiveStep] = useState(0);
   const { numaPost, numaPut, numaGet } = useNumaRequest();
 
-  
+
   // Load jobs for the current app
   const loadAppJobs = async () => {
     if (!numaAppId) return;
