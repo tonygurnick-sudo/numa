@@ -9,6 +9,7 @@ import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-p
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { CloudfrontDistribution } from '@cdktf/provider-aws/lib/cloudfront-distribution';
 import { hash } from 'node:crypto';
+import { Fn } from 'cdktf';
 
 export class InvalidateCloudfront extends Construct {
   constructor(scope: Construct, name: string, props: InvalidateCloudfrontProps) {
@@ -53,7 +54,10 @@ export class InvalidateCloudfront extends Construct {
       input,
       triggers: {
         // This causes the lambda to trigger on every source change.
-        sourceHash: hash('sha256', props.dependsOn.map((dep) => dep.sourceHash).join('')),
+        sourceHash: hash(
+          'sha256',
+          props.dependsOn.map((dep) => Fn.coalesce([dep.sourceHash, Fn.sha256(dep.content)])).join(''),
+        ),
       },
       dependsOn: [...props.dependsOn, func.lambdaFunction, policyAttachment],
     });
