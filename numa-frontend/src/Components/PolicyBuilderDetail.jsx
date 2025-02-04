@@ -57,7 +57,12 @@ export const PolicyBuilderDetail = () => {
   const [isDownloading, setIsDownloading] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  const { loading, isAuthenticated, getAccessToken, getIdentityPoolCredentials } = useAuth();
+  const {
+    loading,
+    isAuthenticated,
+    getAccessToken,
+    getIdentityPoolCredentials,
+  } = useAuth();
   const { numaPost, numaPut, numaGet } = useNumaRequest();
 
   const policyTemplates = [
@@ -414,25 +419,34 @@ export const PolicyBuilderDetail = () => {
       };
 
       // Use postRequest instead of fetch
-      const job = await numaPost("/policy-builder/jobs", jobData);
+      const job = await numaPost(
+        `${config.API_ENDPOINT}/policy-builder/jobs`,
+        jobData
+      );
 
       console.log("Job created:", job);
 
       // Start the step function using postRequest
-      const stepFunction = await numaPost("/policy-builder/main", {
-        original_job_id: job.jobID,
-        organisation_name: policyInputs.schoolName,
-        organisation_context: policyInputs.schoolContext,
-        // custom_instructions: policyInputs.customInstructions,
-      });
+      const stepFunction = await numaPost(
+        `${config.API_ENDPOINT}/policy-builder/main`,
+        {
+          original_job_id: job.jobID,
+          organisation_name: policyInputs.schoolName,
+          organisation_context: policyInputs.schoolContext,
+          // custom_instructions: policyInputs.customInstructions,
+        }
+      );
 
       console.log("Step Function started:", stepFunction);
 
       // Update the job with the step function details
-      const updatedJob = await numaPut(`/policy-builder/jobs/${job.jobID}`, {
-        status: "PROCESSING",
-        stepFunctionJobId: stepFunction.job_id,
-      });
+      const updatedJob = await numaPut(
+        `${config.API_ENDPOINT}/policy-builder/jobs/${job.jobID}`,
+        {
+          status: "PROCESSING",
+          stepFunctionJobId: stepFunction.job_id,
+        }
+      );
 
       console.log("Job updated:", updatedJob);
 
@@ -480,15 +494,13 @@ export const PolicyBuilderDetail = () => {
     console.log(`Polling status for job ${job.jobID}`);
 
     try {
-      const token = await getAccessToken();
-      const stepFunctionResponse = await fetch(
-        `${config.API_ENDPOINT}/policy-builder/main?job_id=${job.stepFunctionJobId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+      const stepFunctionResponse = await numaGet(
+        `${config.API_ENDPOINT}/policy-builder/main?job_id=${job.stepFunctionJobId}`
       );
 
-      if (!stepFunctionResponse.ok) {
+      console.log("Step Function Response:", stepFunctionResponse);
+
+      if (stepFunctionResponse.status !== 'SUCCESS') {
         console.error(
           `Step Function request failed with status: ${stepFunctionResponse.status}`
         );
@@ -496,31 +508,29 @@ export const PolicyBuilderDetail = () => {
         return true;
       }
 
-      const stepFunctionStatus = await stepFunctionResponse.json();
+      const stepFunctionStatus = stepFunctionResponse.status;
       console.log("Step Function Status:", stepFunctionStatus);
 
       // Stop polling if the status is not PROCESSING
-      if (stepFunctionStatus.status !== "PROCESSING") {
+      if (stepFunctionStatus !== "PROCESSING") {
         console.log(
-          `Job ${job.jobID} status changed from PROCESSING to ${stepFunctionStatus.status}`
+          `Job ${job.jobID} status changed from PROCESSING to ${stepFunctionStatus}`
         );
 
         // Update job manager with new status
-        const updateResponse = await fetch(
+        const updateResponse = await numaPut(
           `${config.API_ENDPOINT}/policy-builder/jobs/${job.jobID}`,
           {
-            method: "PUT",
-            headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              ...job,
-              status: stepFunctionStatus.status,
-            }),
+            ...job,
+            status: stepFunctionStatus,
           }
         );
 
-        if (!updateResponse.ok) {
+        console.log("Update Response:", updateResponse);
+
+        if (updateResponse.error) {
           console.error(
-            `Failed to update job status in job manager: ${updateResponse.status}`
+            `Failed to update job status in job manager: ${updateResponse.error}`
           );
           clearPollingForJob(job.jobID);
           return true;
@@ -530,7 +540,7 @@ export const PolicyBuilderDetail = () => {
         clearPollingForJob(job.jobID);
 
         // Only trigger a fetch if the status has actually changed
-        if (job.status !== stepFunctionStatus.status) {
+        if (job.status !== stepFunctionStatus) {
           fetchPolicies();
         }
         return true;
@@ -614,7 +624,7 @@ export const PolicyBuilderDetail = () => {
           return {
             id: job.jobID,
             name: job.inputs?.schoolName || "Unnamed Policy",
-            lastModified: job.datetime || job.createdAt,
+            lastModified: job.dateTime,
             status: job.status,
             jobDetails: job,
           };
@@ -625,7 +635,7 @@ export const PolicyBuilderDetail = () => {
         (a, b) => new Date(b.lastModified) - new Date(a.lastModified)
       );
 
-      console.log('Transformed policies:', transformedPolicies);
+      console.log("Transformed policies:", transformedPolicies);
 
       setPolicies(transformedPolicies);
     } catch (error) {
@@ -672,14 +682,13 @@ export const PolicyBuilderDetail = () => {
             <span className="visually-hidden">Loading...</span>
           </div>
         </div>
+      ) : policies.length === 0 ? (
+        <div className="text-center py-4">
+          <p className="text-muted">
+            No policies found. Create a new policy to get started.
+          </p>
+        </div>
       ) : (
-        policies.length === 0 ? (
-          <div className="text-center py-4">
-            <p className="text-muted">
-              No policies found. Create a new policy to get started.
-            </p>
-          </div>
-        ) :
         <Table responsive striped bordered hover>
           <thead>
             <tr className="table-light">
