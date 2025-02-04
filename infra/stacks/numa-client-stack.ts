@@ -150,8 +150,8 @@ export class NumaClientStack extends ArcanumStack {
         contentType: 'application/json',
       });
 
-      const gitHash = execSync('git rev-parse --short HEAD').toString();
-      const gitBranch = execSync('git rev-parse --abbrev-ref HEAD').toString();
+      const gitHash = execSync('git rev-parse --short HEAD').toString().trim();
+      const gitBranch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
       const deployTime = new Date();
       const version = new S3Object(this, 'version-file', {
         bucket: fe.frontendBucket.bucket,
