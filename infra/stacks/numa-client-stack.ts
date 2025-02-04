@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { Fn } from 'cdktf';
 import { NumaCorsEnabledBucket } from '../constructs/cors-enabled-bucket';
+import { execSync } from 'node:child_process';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -148,6 +149,8 @@ export class NumaClientStack extends ArcanumStack {
         contentType: 'application/json',
       });
 
+      const gitHash = execSync('git rev-parse --short HEAD').toString();
+      const gitBranch = execSync('git rev-parse --abbrev-ref HEAD').toString();
       const deployTime = new Date();
       const version = new S3Object(this, 'version-file', {
         bucket: fe.frontendBucket.bucket,
@@ -155,7 +158,8 @@ export class NumaClientStack extends ArcanumStack {
         content: JSON.stringify(
           {
             version: '0.0.0', // TODO: Make this more meaningful.
-            gitVersion: '', // TODO: Implement this.
+            gitHash,
+            gitBranch,
             deployTime: deployTime.getTime(),
             deployTimeHuman: deployTime.toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' }),
           },
