@@ -25,7 +25,7 @@ const resolveReference = (key, taskResults) => {
 
   // Split the reference into taskId and subPath
   const [fullTaskId, ...subPaths] = key.slice(1).split("/");
-  
+
   // Get the base result
   const baseResult = taskResults[fullTaskId];
   if (baseResult === undefined) {
