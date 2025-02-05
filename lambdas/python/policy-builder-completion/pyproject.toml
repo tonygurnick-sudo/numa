@@ -20,7 +20,7 @@ structlog = "25.1.0"
 
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.36.13"
-mypy = "1.14.1"
+mypy = "1.15.0"
 pylint = "3.3.4"
 pyright = "1.1.393"
 

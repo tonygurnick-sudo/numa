@@ -13,7 +13,7 @@ python = "~3.13.0"
 boto3 = "^1.36.5"
 
 [tool.poetry.group.dev.dependencies]
-mypy = "1.14.1"
+mypy = "1.15.0"
 pylint = "3.3.4"
 pyright = "1.1.393"
 pre-commit = "^4.1.0"
