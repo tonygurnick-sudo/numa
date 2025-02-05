@@ -17,14 +17,34 @@ const NumaAppContext = createContext();
 // Custom hook for using context
 export const useNumaApp = () => useContext(NumaAppContext);
 
-// Global helper function to resolve references like @taskId
+// Global helper function to resolve references like @taskId or @taskId/subPath
 const resolveReference = (key, taskResults) => {
-  if (key.startsWith("@")) {
-    const taskId = key.slice(1); // Remove '@' to get the task ID
-    // Check if the taskId exists in taskResults and return the corresponding value
-    return taskResults[taskId] !== undefined ? taskResults[taskId] : "";
+  if (!key?.startsWith("@")) {
+    return key; // If it's not a reference, just return the key (unchanged)
   }
-  return key; // If it's not a reference, just return the key (unchanged)
+
+  // Split the reference into taskId and subPath
+  const [fullTaskId, ...subPaths] = key.slice(1).split("/");
+
+  // Get the base result
+  const baseResult = taskResults[fullTaskId];
+  if (baseResult === undefined) {
+    return "";
+  }
+
+  // If there's no subPath or the result isn't an object, return the base result
+  if (subPaths.length === 0 || typeof baseResult !== "object") {
+    return baseResult;
+  }
+
+  // Navigate through the subPath
+  try {
+    const result = subPaths.reduce((obj, path) => obj[path], baseResult);
+    return result !== undefined ? result : "";
+  } catch (error) {
+    console.warn(`Failed to resolve sub-reference ${key}:`, error);
+    return "";
+  }
 };
 
 // Function to create a payload dynamically from a template
