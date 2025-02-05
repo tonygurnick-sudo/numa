@@ -13,7 +13,7 @@ python = "~3.13.0"
 
 aws-lambda-powertools = "3.5.0"
 bedrock = {path = "../../../lib/bedrock", develop = true}
-boto3 = "1.36.12"
+boto3 = "1.36.13"
 helpers = {path = "../../../lib/helpers", develop = true}
 
 [tool.poetry.group.dev.dependencies]
