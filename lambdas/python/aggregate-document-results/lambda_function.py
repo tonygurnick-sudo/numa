@@ -17,29 +17,44 @@ def handler(event: dict, _context) -> dict:
         execution_id = event["execution_id"]
 
         summaries_prefix = f"document_processing/{execution_id}/summaries/"
-        aggregated_output_key = f"document_processing/{execution_id}/final/result.json"
+        aggregated_output_key = f"document_processing/{execution_id}/final/result.txt"
 
         summary_results = get_all_summary_results(output_bucket, summaries_prefix)
 
-        transformed_summaries = []
-        for result in summary_results:
-            transformed_summary = {
-                "document_key": result["document_key"],
-                "markdown_summary": result["summary_results"]["markdown_summary"],
-            }
-            transformed_summaries.append(transformed_summary)
+        formatted_content = format_summaries(summary_results)
 
-        save_results_to_s3(output_bucket, aggregated_output_key, transformed_summaries)
+        save_results_to_s3(output_bucket, aggregated_output_key, formatted_content)
 
         return {
             "results_location": aggregated_output_key,
-            "documents_processed": len(transformed_summaries),
+            "documents_processed": len(summary_results),
             "execution_id": execution_id,
         }
 
     except Exception as e:
         logger.error(f"Error in lambda execution: {str(e)}")
         raise
+
+
+def format_summaries(summary_results: List[Dict]) -> str:
+    """Format all summaries into a single text document."""
+    sorted_results = sorted(summary_results, key=lambda x: x["document_key"])
+
+    formatted_parts = []
+
+    formatted_parts.append("# Document Summaries\n")
+
+    for i, result in enumerate(sorted_results, 1):
+        doc_name = result["document_key"].split("/")[-1]
+
+        formatted_parts.extend(
+            [
+                f"\n## Document {i}: {doc_name}\n",
+                f"{result['summary_results']['markdown_summary']}\n",
+            ]
+        )
+
+    return "\n".join(formatted_parts)
 
 
 def get_all_summary_results(bucket: str, prefix: str) -> List[Dict]:
@@ -63,14 +78,11 @@ def get_all_summary_results(bucket: str, prefix: str) -> List[Dict]:
         raise
 
 
-def save_results_to_s3(bucket: str, key: str, results: List[Dict]) -> None:
+def save_results_to_s3(bucket: str, key: str, content: str) -> None:
     """Save results to S3."""
     try:
         s3_client.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=json.dumps(results, indent=2),
-            ContentType="application/json",
+            Bucket=bucket, Key=key, Body=content, ContentType="text/plain"
         )
     except Exception as e:
         logger.error(f"Error writing to S3: {str(e)}")
