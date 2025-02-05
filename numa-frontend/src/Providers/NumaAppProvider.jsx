@@ -40,10 +40,10 @@ const resolveReference = (key, taskResults) => {
   // Navigate through the subPath
   try {
     const result = subPaths.reduce((obj, path) => obj[path], baseResult);
-    return result !== undefined ? result : ""; 
+    return result !== undefined ? result : "";
   } catch (error) {
     console.warn(`Failed to resolve sub-reference ${key}:`, error);
-    return ""; 
+    return "";
   }
 };
 
