@@ -48,7 +48,7 @@ class BedrockClaude3Model:
         self.bedrock_client = boto3.client(
             service_name="bedrock-runtime",
             region_name=bedrock_region_name
-            or os.getenv("AWS_BEDROCK_REGION", "us-west-2"),
+            or os.getenv("AWS_BEDROCK_REGION", "us-east-1"),
             config=Config(read_timeout=1000),
         )
 
