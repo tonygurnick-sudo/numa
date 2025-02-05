@@ -701,37 +701,6 @@ export const PolicyBuilderDetail = () => {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td className="text-break">NZSBA Exemplar Policy</td>
-              <td className="d-none d-md-table-cell">Always Available</td>
-              <td>
-                <Badge bg="success">Available</Badge>
-              </td>
-              <td>
-                <div className="d-flex flex-wrap gap-2">
-                  <Button
-                    variant="outline-success"
-                    size="sm"
-                    onClick={() => handleDownload("test.txt")}
-                    disabled={isDownloading === "test.txt"}
-                  >
-                    {isDownloading === "test.txt" ? (
-                      <span
-                        className="spinner-border spinner-border-sm me-1"
-                        role="status"
-                      />
-                    ) : (
-                      <DownloadIcon className="me-1" />
-                    )}
-                    <span className="d-none d-lg-inline">
-                      {isDownloading === "test.txt"
-                        ? "Downloading..."
-                        : "Download"}
-                    </span>
-                  </Button>
-                </div>
-              </td>
-            </tr>
             {policies.map((policy) => (
               <tr key={policy.id}>
                 <td className="text-break">{policy.name}</td>
@@ -828,10 +797,10 @@ export const PolicyBuilderDetail = () => {
               key={template.id}
               className="card policy-template-card"
               style={{
-                width: "300px", // Fixed width instead of flexible
+                flex: "1 1 300px", // Allow flex grow/shrink with a base width
                 height: "250px",
                 cursor: "pointer",
-                flex: "0 0 300px", // Prevent flex growing/shrinking
+                margin: "10px", // Add some margin for spacing
               }}
               onClick={() => handleTemplateSelect(template)}
             >
