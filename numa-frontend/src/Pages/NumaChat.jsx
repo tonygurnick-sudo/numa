@@ -274,6 +274,13 @@ const NumaChat = () => {
     }
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  };
+
   return (
     <div className="dashboard ">
       <Nav />
@@ -386,6 +393,7 @@ const NumaChat = () => {
                         rows={isMobile ? 3 : 5}
                         value={inputMessage}
                         onChange={(e) => setInputMessage(e.target.value)}
+                        onKeyDown={handleKeyDown}
                         placeholder="Type your message here..."
                         disabled={isLoading || !qBusinessClient}
                       />
