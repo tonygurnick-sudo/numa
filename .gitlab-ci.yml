@@ -32,7 +32,9 @@ variables:
         - deployer
         - infra/bin
         - lambdas/python/aggregate-candidate-results
+        - lambdas/python/aggregate-document-results
         - lambdas/python/candidate-screening
+        - lambdas/python/document-summariser
         - lambdas/python/example-1
         - lambdas/python/example-2
         - lambdas/python/example-3
