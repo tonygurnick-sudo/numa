@@ -39,10 +39,11 @@ const resolveReference = (key, taskResults) => {
 
   // Navigate through the subPath
   try {
-    return subPaths.reduce((obj, path) => obj[path], baseResult);
+    const result = subPaths.reduce((obj, path) => obj[path], baseResult);
+    return result !== undefined ? result : ""; 
   } catch (error) {
     console.warn(`Failed to resolve sub-reference ${key}:`, error);
-    return baseResult; // Fall back to base result if sub-reference fails
+    return ""; 
   }
 };
 
