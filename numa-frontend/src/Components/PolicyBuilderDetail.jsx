@@ -650,7 +650,7 @@ export const PolicyBuilderDetail = () => {
     switch (jobStatus) {
       case "SUCCESS":
         return "SUCCESS";
-      case "FAILED":
+      case "FAILURE":
         return "FAILED";
       case "PROCESSING":
         return "PROCESSING";
