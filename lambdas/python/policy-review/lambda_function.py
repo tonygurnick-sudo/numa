@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -28,13 +29,11 @@ def handler(event: dict, _context) -> dict:
         execution_id = event["execution_id"]
         policy_context = event.get(
             "policy_context",
-            "Provide a brief description of your policy's purpose, scope, and any relevant background information. Include details such as the industry or organization it applies to, key stakeholders, and specific goals or concerns. This context will help tailor the review to your needs.",
+            "Provide a brief description of your policy’s purpose, scope, and any relevant background information. Include details such as the industry or organization it applies to, key stakeholders, and specific goals or concerns. This context will help tailor the review to your needs.",
         )
         legislation_content = event.get("legislation_content", "")
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         document_stem = Path(document_key).stem
-
         policy_content = read_file_from_s3(output_bucket, content_s3_key)
 
         initial_analysis = get_model_response(
@@ -70,24 +69,29 @@ def handler(event: dict, _context) -> dict:
             },
         )
 
-        formatted_content = format_results(
-            document_stem,
-            initial_analysis,
-            policy_review,
-            recommended_updates,
-            updated_policy,
-        )
+        results = {
+            "initial_analysis": initial_analysis,
+            "policy_review": policy_review,
+            "recommended_updates": recommended_updates,
+            "updated_policy": updated_policy,
+            "metadata": {
+                "document_key": document_key,
+                "execution_id": execution_id,
+                "timestamp": datetime.now().isoformat(),
+            },
+        }
 
-        output_key = f"policy_reviews/{execution_id}/review_{document_stem}.txt"
-        save_results_to_s3(
-            output_bucket, output_key, formatted_content, content_type="text/plain"
+        output_key = f"policy_reviews/{execution_id}/review_{document_stem}.json"
+        s3_client.put_object(
+            Bucket=output_bucket,
+            Key=output_key,
+            Body=json.dumps(results, indent=2).encode("utf-8"),
+            ContentType="application/json",
         )
 
         return {
-            "output_path": output_key,
-            "document_key": document_key,
-            "execution_id": execution_id,
-            "timestamp": timestamp,
+            "output_bucket": output_bucket,
+            "output_key": output_key,
         }
 
     except Exception as e:
@@ -113,34 +117,6 @@ def get_model_response(prompt: str, input_data: dict) -> str:
     return str(response.response)
 
 
-def format_results(
-    document_name: str,
-    initial_analysis: str,
-    policy_review: str,
-    recommended_updates: str,
-    updated_policy: str,
-) -> str:
-    """Format all results into a single text document."""
-    sections = [
-        f"# Policy Review: {document_name}\n",
-        "---\n\n",
-        "## Initial Analysis\n\n",
-        f"{str(initial_analysis)}\n\n",
-        "---\n\n",
-        "## Policy Review and Analysis\n\n",
-        f"{str(policy_review)}\n\n",
-        "---\n\n",
-        "## Recommended Updates\n\n",
-        f"{str(recommended_updates)}\n\n",
-        "---\n\n",
-        "## Updated Policy\n\n",
-        f"{str(updated_policy)}\n\n",
-        "---\n",
-    ]
-
-    return "\n".join(sections)
-
-
 def read_file_from_s3(bucket: str, key: str) -> str:
     """Read a file from S3 and return its contents."""
     try:
@@ -149,19 +125,4 @@ def read_file_from_s3(bucket: str, key: str) -> str:
         return content
     except Exception as e:
         logger.error(f"Error reading from S3: {str(e)}")
-        raise
-
-
-def save_results_to_s3(
-    bucket: str, key: str, content: str, content_type: str = "text/plain"
-) -> None:
-    """Save results to S3."""
-    try:
-        logger.info(f"Saving to S3: bucket={bucket}, key={key}")
-        s3_client.put_object(
-            Bucket=bucket, Key=key, Body=content, ContentType=content_type
-        )
-        logger.info("Successfully saved to S3")
-    except Exception as e:
-        logger.error(f"Error writing to S3: {str(e)}")
         raise
