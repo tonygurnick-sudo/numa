@@ -78,7 +78,6 @@ def handler(event: dict, _context) -> dict:
             updated_policy,
         )
 
-        # Save formatted results
         output_key = f"policy_reviews/{execution_id}/review_{document_stem}.txt"
         save_results_to_s3(
             output_bucket, output_key, formatted_content, content_type="text/plain"
@@ -96,29 +95,6 @@ def handler(event: dict, _context) -> dict:
         raise
 
 
-def format_results(
-    document_name: str,
-    initial_analysis: str,
-    policy_review: str,
-    recommended_updates: str,
-    updated_policy: str,
-) -> str:
-    """Format all results into a single text document."""
-    sections = [
-        f"# Policy Review: {document_name}\n",
-        "## Initial Analysis\n",
-        f"{initial_analysis}\n",
-        "## Policy Review and Analysis\n",
-        f"{policy_review}\n",
-        "## Recommended Updates\n",
-        f"{recommended_updates}\n",
-        "## Updated Policy\n",
-        updated_policy,
-    ]
-
-    return "\n".join(sections)
-
-
 def get_model_response(prompt: str, input_data: dict) -> str:
     """Get response from the model."""
     model = bedrock.BedrockClaude3Model(
@@ -129,12 +105,40 @@ def get_model_response(prompt: str, input_data: dict) -> str:
     )
 
     formatted_prompt = prompt.format(**input_data)
-
     response = model.run(query=formatted_prompt, name_for_logging="policy_review")
 
-    if isinstance(response.response, list):
-        return "\n".join(response.response)
-    return response.response
+    if isinstance(response.response, list) and response.response:
+        if isinstance(response.response[0], dict):
+            return response.response[0].get("text", "")
+    return str(response.response)
+
+
+def format_results(
+    document_name: str,
+    initial_analysis: str,
+    policy_review: str,
+    recommended_updates: str,
+    updated_policy: str,
+) -> str:
+    """Format all results into a single text document."""
+    sections = [
+        f"# Policy Review: {document_name}\n",
+        "---\n\n",
+        "## Initial Analysis\n\n",
+        f"{str(initial_analysis)}\n\n",
+        "---\n\n",
+        "## Policy Review and Analysis\n\n",
+        f"{str(policy_review)}\n\n",
+        "---\n\n",
+        "## Recommended Updates\n\n",
+        f"{str(recommended_updates)}\n\n",
+        "---\n\n",
+        "## Updated Policy\n\n",
+        f"{str(updated_policy)}\n\n",
+        "---\n",
+    ]
+
+    return "\n".join(sections)
 
 
 def read_file_from_s3(bucket: str, key: str) -> str:
