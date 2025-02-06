@@ -1,20 +1,21 @@
 import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdktf-util';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
+import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
+import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
+import { execSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import _clientConfigDev from '../../clientConfigDev.json';
 import _clientConfigProd from '../../clientConfigProd.json';
 import { CoreNumaApp, ExampleNumaApp } from '../constructs/apps';
 import { BaseNumaApp, BaseNumaAppProps } from '../constructs/apps/base-numa-app-construct';
+import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
 import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
-import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
-import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
-import { Fn } from 'cdktf';
-import { execSync } from 'node:child_process';
+import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -223,6 +224,7 @@ export interface NumaClientStackProps extends ArcanumStackProps {
 }
 
 const appLibrary: Record<string, new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp> = {
+  'document-summariser': DocumentSummariser,
   'example-app': ExampleNumaApp,
   'meeting-analyser': MeetingAnalyser,
   'nzsba-policy-builder': NZSBAPolicyBuilder,

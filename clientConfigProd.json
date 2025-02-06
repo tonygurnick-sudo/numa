@@ -62,6 +62,7 @@
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "apps": {
+      "document-summariser": {},
       "meeting-analyser": {},
       "nzsba-policy-builder": {}
     },

@@ -8,27 +8,22 @@ import {
   BaseNumaAppProps,
   HTTP_REQUEST_TASK,
   S3_UPLOAD_TASK,
-  TEXT_INPUT_TASK,
   TEXT_OUTPUT_TASK,
 } from './base-numa-app-construct';
 
-const description = `Transform raw meeting data into comprehensive summaries,
-insightful analyses, and actionable outputs. Whether your meetings are in
-person, virtual, or a blend of both, this app helps you make the most out of
-your meeting notes and transcripts by providing structured, automated reports
-and follow-up resources.`.replace('\n', ' ');
+const description = `Summarise one or multiple documents`;
 
-export class MeetingAnalyser extends BaseNumaApp {
+export class DocumentSummariser extends BaseNumaApp {
   readonly manifest;
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
-    const appId = 'meeting-analyser';
+    const appId = 'document-summariser';
     props.enableJobs = true;
     props.pathPrefix ??= appId;
     super(scope, name, props);
 
     this.manifest = {
-      appName: 'Meeting Analyser',
+      appName: 'Document Summariser',
       id: props.pathPrefix,
       type: AppType.NUMA,
       status: AppStatus.ACTIVE,
@@ -38,38 +33,17 @@ export class MeetingAnalyser extends BaseNumaApp {
       tasks: [
         {
           id: 'upload-files-to-s3',
-          title: 'Upload Files',
-          description: 'Upload your notes or transcripts from your meeting',
+          title: 'Upload documents',
+          description: 'Upload the documents you would like summarised',
           type: S3_UPLOAD_TASK,
           required: true,
           order: 1,
         },
         {
-          id: 'template-task',
-          description: 'The structure you would like your meeting summary to follow',
-          title: 'Template',
-          type: TEXT_INPUT_TASK,
-          default: `
-              - summarise the discussion
-              - summarise the event
-              - outline the requirements
-              - actions and next steps
-          `,
-          order: 2,
-        },
-        {
-          id: 'other-notes',
-          title: 'Other Notes',
-          description:
-            'Any other notes that might be useful such as participants (if not in transcript), prior meeting context, etc',
-          type: TEXT_INPUT_TASK,
-          order: 3,
-        },
-        {
           id: 'call-step-function',
-          title: 'Process Meeting Notes',
+          title: 'Process Documents',
           type: HTTP_REQUEST_TASK,
-          endpoint: 'meeting-analyser',
+          endpoint: 'document-summariser',
           params: {
             payload: {
               uploaded_files: '@upload-files-to-s3',
@@ -77,61 +51,16 @@ export class MeetingAnalyser extends BaseNumaApp {
               other_notes: '@other-notes',
             },
           },
-          order: 4,
+          order: 2,
         },
         {
-          id: 'analysis-templated',
-          title: 'Analysis based on template',
+          id: 'summaries',
+          title: 'Summaries',
           type: TEXT_OUTPUT_TASK,
           params: {
-            dataRef: '@call-step-function/template_output',
+            dataRef: '@call-step-function/output_key',
           },
-          order: 5,
-        },
-        {
-          id: 'summary',
-          title: 'Summary',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/summary',
-          },
-          order: 6,
-        },
-        {
-          id: 'topic-analysis',
-          title: 'Topic Analysis',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/topic_analysis',
-          },
-          order: 7,
-        },
-        {
-          id: 'participant-insights',
-          title: 'Participant Insights',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/participant_insights',
-          },
-          order: 8,
-        },
-        {
-          id: 'action-items',
-          title: 'Action Items',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/action_items',
-          },
-          order: 9,
-        },
-        {
-          id: 'follow-up-emails',
-          title: 'Follow Up Emails',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/follow_up_emails',
-          },
-          order: 10,
+          order: 3,
         },
       ],
     };
@@ -150,11 +79,6 @@ export class MeetingAnalyser extends BaseNumaApp {
         actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
         resources: ['*'],
       },
-      {
-        actions: ['transcribe:StartTranscriptionJob', 'transcribe:GetTranscriptionJob'],
-        effect: 'Allow',
-        resources: ['*'],
-      },
     ];
     const extractContentLambda = this.addLambdaFunction(this, 'extract', {
       additionalPolicyStatements: extractContentLambdaPolicyStatements,
@@ -162,9 +86,9 @@ export class MeetingAnalyser extends BaseNumaApp {
       timeout: 900,
     });
 
-    const analyserLambdaPolicyStatements = [
+    const summariseDocumentLambdaPolicyStatements = [
       {
-        actions: ['s3:PutObject'],
+        actions: ['s3:GetObject', 's3:PutObject'],
         effect: 'Allow',
         resources: [`${props.outputsBucket.arn}/${appId}/*`],
       },
@@ -173,14 +97,32 @@ export class MeetingAnalyser extends BaseNumaApp {
         resources: ['arn:aws:bedrock:*::foundation-model/*'],
       },
     ];
-    const analyserLambda = this.addLambdaFunction(this, 'analyse', {
-      additionalPolicyStatements: analyserLambdaPolicyStatements,
+    const summariseDocumentLambda = this.addLambdaFunction(this, 'summarise', {
+      additionalPolicyStatements: summariseDocumentLambdaPolicyStatements,
       environment: {
         variables: {
           BUCKET: props.outputsBucket.bucket,
         },
       },
-      lambdaDirectory: 'python/meeting-analyser',
+      lambdaDirectory: 'python/document-summariser',
+      timeout: 900,
+    });
+
+    const aggregatorLambdaPolicyStatements = [
+      {
+        actions: ['s3:GetObject', 's3:PutObject'],
+        effect: 'Allow',
+        resources: [`${props.outputsBucket.arn}/${appId}/*`],
+      },
+    ];
+    const aggregatorLambda = this.addLambdaFunction(this, 'aggregate', {
+      additionalPolicyStatements: aggregatorLambdaPolicyStatements,
+      environment: {
+        variables: {
+          BUCKET: props.outputsBucket.bucket,
+        },
+      },
+      lambdaDirectory: 'python/aggregate-document-results',
       timeout: 900,
     });
 
@@ -198,6 +140,8 @@ export class MeetingAnalyser extends BaseNumaApp {
       };
     }
 
+    const extractedSuffix = '.extracted.json';
+    const summarisedSuffix = '.summarised.txt';
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
       States: {
@@ -209,11 +153,16 @@ export class MeetingAnalyser extends BaseNumaApp {
             'job_id.$': '$$.Execution.Input.job_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
           },
-          Next: 'ExtractContentMap',
+          Next: 'ExtractAndSummariseMap',
         },
-        ExtractContentMap: {
+        ExtractAndSummariseMap: {
           Type: 'Map',
           ItemsPath: '$.uploaded_files',
+          Parameters: {
+            'app_name.$': '$.app_name',
+            'job_id.$': '$.job_id',
+            'key.$': '$$.Map.Item.Value',
+          },
           ItemProcessor: {
             ProcessorConfig: {
               Mode: 'INLINE',
@@ -226,9 +175,9 @@ export class MeetingAnalyser extends BaseNumaApp {
                 Parameters: {
                   FunctionName: extractContentLambda.arn,
                   Payload: {
+                    'input_key.$': '$.key',
+                    'output_key.$': `States.Format('{}${extractedSuffix}', $.key)`,
                     input_bucket: props.outputsBucket.bucket,
-                    'input_key.$': '$',
-                    return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
                   },
                 },
                 Retry: [
@@ -245,11 +194,47 @@ export class MeetingAnalyser extends BaseNumaApp {
                     MaxAttempts: 3,
                   },
                 ],
+                ResultSelector: {
+                  'output_key.$': '$.Payload.output_key',
+                },
+                ResultPath: '$.extracted',
+                Next: 'SummariseDocument',
+              },
+              SummariseDocument: {
+                Type: 'Task',
+                Resource: 'arn:aws:states:::lambda:invoke',
+                Parameters: {
+                  FunctionName: summariseDocumentLambda.arn,
+                  Payload: {
+                    'app_name.$': '$.app_name',
+                    'job_id.$': '$.job_id',
+                    'input_key.$': '$.extracted.output_key',
+                    'output_key.$': `States.Format('{}${summarisedSuffix}', $.key)`,
+                  },
+                },
+                Retry: [
+                  {
+                    BackoffRate: 2,
+                    ErrorEquals: [
+                      'Lambda.ServiceException',
+                      'Lambda.AWSLambdaException',
+                      'Lambda.SdkClientException',
+                      'Lambda.TooManyRequestsException',
+                    ],
+                    IntervalSeconds: 1,
+                    JitterStrategy: 'FULL',
+                    MaxAttempts: 3,
+                  },
+                ],
+                ResultSelector: {
+                  'output_key.$': '$.Payload.output_key',
+                },
+                ResultPath: '$.summarised',
                 End: true,
               },
             },
           },
-          ResultPath: '$.extracted',
+          ResultPath: '$.mapped',
           Catch: [
             {
               ErrorEquals: ['States.ALL'],
@@ -257,39 +242,19 @@ export class MeetingAnalyser extends BaseNumaApp {
               ResultPath: '$.CatcherOutput',
             },
           ],
-          Next: 'MergeAndStore',
+          Next: 'AggregateResults',
         },
-        MergeAndStore: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
-          Parameters: {
-            Bucket: props.outputsBucket.bucket,
-            'Key.$': `States.Format('${appId}/{}/extracted_content.json', $$.Execution.Input.job_id)`,
-            'Body.$': '$.extracted[*].Payload.content',
-            ContentType: 'text/json',
-          },
-          ResultPath: '$.s3UploadResult',
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              Next: 'WriteFailureStatus',
-              ResultPath: '$.CatcherOutput',
-            },
-          ],
-          Next: 'Analyse',
-        },
-        Analyse: {
+        AggregateResults: {
           Type: 'Task',
           Resource: 'arn:aws:states:::lambda:invoke',
           Parameters: {
-            FunctionName: analyserLambda.arn,
+            FunctionName: aggregatorLambda.arn,
             Payload: {
               'app_name.$': '$.app_name',
               'job_id.$': '$.job_id',
-              'meeting_notes_and_or_transcript.$': '$.extracted[*].Payload.content',
-              'other_notes.$': '$$.Execution.Input.other_notes',
-              'output_key.$': `States.Format('${appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
-              'template.$': '$$.Execution.Input.template',
+              'input_keys.$': '$.mapped[*].summarised.output_key',
+              key_suffix: summarisedSuffix,
+              'output_key.$': `States.Format('${appId}/{}/aggregated.md', $$.Execution.Input.job_id)`,
             },
           },
           Retry: [
@@ -306,6 +271,10 @@ export class MeetingAnalyser extends BaseNumaApp {
               MaxAttempts: 3,
             },
           ],
+          ResultSelector: {
+            'output_key.$': '$.Payload.output_key',
+          },
+          ResultPath: '$.aggregated',
           Catch: [
             {
               ErrorEquals: ['States.ALL'],
@@ -325,7 +294,7 @@ export class MeetingAnalyser extends BaseNumaApp {
         WriteSuccessStatus: writeStatus(
           {
             status: 'SUCCESS',
-            'result.$': '$.Payload',
+            'result.$': '$.aggregated',
           },
           'Success',
         ),
@@ -344,11 +313,11 @@ export class MeetingAnalyser extends BaseNumaApp {
       additionalPolicyStatements: [
         {
           actions: ['lambda:InvokeFunction'],
-          resources: [extractContentLambda.arn, analyserLambda.arn],
+          resources: [extractContentLambda.arn, summariseDocumentLambda.arn, aggregatorLambda.arn],
         },
         {
           actions: ['iam:PassRole'],
-          resources: [extractContentLambda.role, analyserLambda.role],
+          resources: [extractContentLambda.role, summariseDocumentLambda.role, aggregatorLambda.role],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
