@@ -6,20 +6,23 @@ import config from "../../public/config.json";
 import { useNumaRequest } from "../Providers/RequestProvider";
 
 function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
-  const { loading } = useNumaApp();
+  const { loading, numaAppId } = useNumaApp();
+  const { numaGet } = useNumaRequest();
+
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+
   const fileInputRef = useRef(null);
-  const { numaGet } = useNumaRequest();
+
 
 
   // Extracting task parameters
   const taskId = task?.id;
   const taskTitle = task?.title;
-  const bucketName = `numa-${config.CLIENT_NAME}/${task?.params?.bucketName}`;
+  const bucketName = `numa-${config.CLIENT_NAME}/${numaAppId}`;
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -96,7 +99,27 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       });
 
       console.log("Presigned URL response:", response);
+
+      // Validate response structure
+      if (!response || typeof response !== 'object') {
+        throw new Error("Invalid response received from server");
+      }
+
+      if (!response.uploadUrl) {
+        // Check if we received HTML instead of JSON (indicates auth/routing issue)
+        if (typeof response === 'string' && response.includes('<!doctype html>')) {
+          throw new Error("Authentication error - please try logging in again");
+        }
+        throw new Error("No upload URL received from server");
+      }
+
       const { uploadUrl } = response;
+
+      // Validate uploadUrl format
+      if (typeof uploadUrl !== 'string' || !uploadUrl.includes('amazonaws.com')) {
+        throw new Error("Invalid upload URL format received");
+      }
+
       const s3ObjectUrl = uploadUrl.split("?")[0]; // Get the clean S3 URL without query parameters
 
       // Upload file to S3
@@ -119,13 +142,29 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       onComplete();
     } catch (error) {
       console.error("Error during file upload:", error);
-      const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.message ||
-        error.message ||
-        "Error uploading file";
+
+      // Determine user-friendly error message
+      let errorMessage;
+      if (error.response?.status === 403) {
+        errorMessage = "Permission denied - please check your access rights";
+      } else if (error.response?.status === 401) {
+        errorMessage = "Session expired - please log in again";
+      } else if (error.message.includes("Authentication error")) {
+        errorMessage = error.message;
+      } else if (error.message.includes("upload URL")) {
+        errorMessage = "Server configuration error - please contact support";
+      } else if (error.code === "ERR_NETWORK") {
+        errorMessage = "Network error - please check your internet connection";
+      } else {
+        errorMessage = error.response?.data?.error ||
+                      error.response?.data?.message ||
+                      error.message ||
+                      "Error uploading file";
+      }
+
       setError(errorMessage);
       setUploadStatus("Upload failed");
+      onNotComplete?.();
     }
   };
 
