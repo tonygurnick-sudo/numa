@@ -107,11 +107,11 @@ def format_results(
     sections = [
         f"# Policy Review: {document_name}\n",
         "## Initial Analysis\n",
-        initial_analysis + "\n",
+        f"{initial_analysis}\n",
         "## Policy Review and Analysis\n",
-        policy_review + "\n",
+        f"{policy_review}\n",
         "## Recommended Updates\n",
-        recommended_updates + "\n",
+        f"{recommended_updates}\n",
         "## Updated Policy\n",
         updated_policy,
     ]
@@ -132,6 +132,8 @@ def get_model_response(prompt: str, input_data: dict) -> str:
 
     response = model.run(query=formatted_prompt, name_for_logging="policy_review")
 
+    if isinstance(response.response, list):
+        return "\n".join(response.response)
     return response.response
 
 
