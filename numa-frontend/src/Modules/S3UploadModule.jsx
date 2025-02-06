@@ -99,7 +99,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       });
 
       console.log("Presigned URL response:", response);
-      
+
       // Validate response structure
       if (!response || typeof response !== 'object') {
         throw new Error("Invalid response received from server");
@@ -114,7 +114,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       }
 
       const { uploadUrl } = response;
-      
+
       // Validate uploadUrl format
       if (typeof uploadUrl !== 'string' || !uploadUrl.includes('amazonaws.com')) {
         throw new Error("Invalid upload URL format received");
@@ -142,7 +142,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       onComplete();
     } catch (error) {
       console.error("Error during file upload:", error);
-      
+
       // Determine user-friendly error message
       let errorMessage;
       if (error.response?.status === 403) {
@@ -156,12 +156,12 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       } else if (error.code === "ERR_NETWORK") {
         errorMessage = "Network error - please check your internet connection";
       } else {
-        errorMessage = error.response?.data?.error || 
-                      error.response?.data?.message || 
-                      error.message || 
+        errorMessage = error.response?.data?.error ||
+                      error.response?.data?.message ||
+                      error.message ||
                       "Error uploading file";
       }
-      
+
       setError(errorMessage);
       setUploadStatus("Upload failed");
       onNotComplete?.();
