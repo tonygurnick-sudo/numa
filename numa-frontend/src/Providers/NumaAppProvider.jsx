@@ -256,7 +256,7 @@ export const NumaAppProvider = ({ children }) => {
       console.log("Starting polling with endpoint:", polling_endpoint);
 
       while (attempts < maxAttempts) {
-        const pollResponse = await NumaPollStatus(polling_endpoint);
+        const pollResponse = await numaPollStatus(polling_endpoint);
         console.log("Poll status response:", pollResponse);
         console.log("attempts:", attempts);
 
@@ -802,7 +802,7 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
-  const NumaPollStatus = async (polling_endpoint) => {
+  const numaPollStatus = async (polling_endpoint) => {
     // Mock implementation - keep until api proxy in place
     // return new Promise((resolve) => {
     //   setTimeout(() => {
