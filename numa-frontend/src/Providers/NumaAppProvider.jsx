@@ -54,7 +54,11 @@ function createPayloadFromTemplate(template, inputValues, taskResults) {
 
   // Main function to recursively handle template (string, array, or object)
   if (typeof template === "string") {
-    // Replace all references of @taskId with the actual task result values
+    // If the string is a direct reference (e.g. "@upload-files-to-s3"), return the resolved value directly
+    if (template.match(/^@[\w-]+$/)) {
+      return resolveReference(template, taskResults);
+    }
+    // Otherwise, it's a string with potential embedded references, so replace them
     return template.replace(/@[\w-]+/g, (match) =>
       resolveReference(match, taskResults)
     );
@@ -217,61 +221,65 @@ export const NumaAppProvider = ({ children }) => {
 
   const processS3UploadTask = (task, currentResults) => {
     const uploadedFilePath = taskInputValues[task.id];
-    currentResults[task.id] = uploadedFilePath;
+    // Preserve array structure from taskInputValues
+    currentResults[task.id] = uploadedFilePath;  // uploadedFilePath is already an array from S3UploadModule
     console.log(`S3 upload result: ${currentResults[task.id]}`);
     return currentResults;
   };
 
   const processHttpRequestTask = async (jobID, task, currentResults) => {
     const templatePayload = task.params?.payload;
-    const request_endpoint = task.endpoint;
+    const request_endpoint = `/api/${numaAppData.id}/main`;
+
     const payload = createPayloadFromTemplate(
       templatePayload,
       taskInputValues,
       currentResults
     );
 
-    // Include the parent job ID in the payload
     const requestPayload = {
       ...payload,
       jobId: jobID,
     };
     console.log("Generated Payload for http-request:", requestPayload);
+    console.log("Endpoint for http-request:", request_endpoint);
 
     // Initial request should return success status
     try {
       const response = await makeHttpRequest(requestPayload, request_endpoint);
-      console.log("HTTP Request response:", response);
+      console.log("Initial http-request response:", response);
 
-      if (!response?.success) {
-        throw new Error("Unable to process your request. Please try again.");
+      if (!response || !response.job_id) {
+        throw new Error("No job ID received from initial request");
       }
 
-      // Start polling for status
-      const maxAttempts = 30;
-      const pollInterval = 2000;
+      // Poll for results
+      const maxAttempts = 24;
+      const pollInterval = 10000;
       let attempts = 0;
+      const polling_endpoint = `/api/${numaAppData.id}/main?job_id=${response.job_id}`;
+      console.log("Starting polling with endpoint:", polling_endpoint);
 
       while (attempts < maxAttempts) {
-        const status = await NumaPollStatus(jobID);
-        console.log("Poll status response:", status);
+        const pollResponse = await numaPollStatus(polling_endpoint);
+        console.log("Poll status response:", pollResponse);
+        console.log("attempts:", attempts);
 
-        if (status.status === "SUCCESS") {
-          currentResults[task.id] = status.result;
-          return currentResults;
-        } else if (status.status === "FAILURE") {
-          throw new Error(
-            status.error ||
-              "The process encountered an error. Please try again."
-          );
-        } else if (status.status === "UNKNOWN") {
-          throw new Error(
-            "Unable to determine the status of your request. Please try again."
-          );
+        if (pollResponse.status === "SUCCESS") {
+          console.log("Task completed successfully");
+          if (pollResponse.result) {
+            console.log("Task result:", pollResponse.result);
+            currentResults[task.id] = pollResponse.result;
+            return currentResults;
+          }
+          throw new Error("No result data in successful response");
+        } else if (pollResponse.status === "FAILURE") {
+          throw new Error(pollResponse.message || "Task failed");
         }
 
         await new Promise((resolve) => setTimeout(resolve, pollInterval));
         attempts++;
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
       }
 
       throw new Error(
@@ -422,7 +430,7 @@ export const NumaAppProvider = ({ children }) => {
       }, {});
 
       // Update the job using jobsApi
-      await jobsApi.updateJob(jobID, textOutputResults);
+      await jobsApi.updateJob(numaAppData, jobID, textOutputResults);
 
       // Refresh the jobs list
       await loadAppJobs();
@@ -782,7 +790,7 @@ export const NumaAppProvider = ({ children }) => {
   // HTTP request function
   const makeHttpRequest = async (payload, endpoint) => {
     try {
-      const response = await numaPost(`/api/${endpoint}`, payload);
+      const response = await numaPost(endpoint, payload);
 
       if (!response) {
         throw new Error(`HTTP request failed`);
@@ -799,7 +807,7 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
-  const NumaPollStatus = async (jobId) => {
+  const numaPollStatus = async (polling_endpoint) => {
     // Mock implementation - keep until api proxy in place
     // return new Promise((resolve) => {
     //   setTimeout(() => {
@@ -821,12 +829,14 @@ export const NumaAppProvider = ({ children }) => {
     // });
 
     try {
-      const response = await numaGet(`/api/jobs/${jobId}/status`);
+      const response = await numaGet(polling_endpoint);
+      console.log("Poll response:", response);
 
       if (!response) {
         throw new Error("Unable to check the status of your request.");
       }
 
+      // Return both status and result if available
       return {
         status: response.status,
         result: response.result,

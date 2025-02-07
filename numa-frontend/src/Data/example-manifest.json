@@ -68,7 +68,7 @@
     },
     {
       "appName": "Meeting Analyser",
-      "id": "meeting-analyser-app",
+      "id": "meeting-analyser",
       "type": "numa-app",
       "status": "Active",
       "category": "productivity",
