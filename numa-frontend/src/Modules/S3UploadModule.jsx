@@ -1,13 +1,17 @@
 import { useState, useRef } from "react";
-import { useNumaApp } from "../Providers/NumaAppProvider";
 import { Button } from "react-bootstrap";
-import axios from "axios";
 import config from "../../public/config.json";
+import { useNumaApp } from "../Providers/NumaAppProvider";
 import { useNumaRequest } from "../Providers/RequestProvider";
+import { useAuth } from "../Providers/AuthProvider";
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import axios from "axios";
 
 function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   const { loading, numaAppId } = useNumaApp();
   const { numaGet } = useNumaRequest();
+  const { getIdentityPoolCredentials } = useAuth();
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState(null);
@@ -18,11 +22,10 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   const fileInputRef = useRef(null);
 
 
-
   // Extracting task parameters
   const taskId = task?.id;
   const taskTitle = task?.title;
-  const bucketName = `numa-${config.CLIENT_NAME}/${numaAppId}`;
+  const bucketName = `numa-${config.CLIENT_NAME}-data`;
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -85,45 +88,43 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setError(null);
 
       const relativePath = selectedFile.name;
-      const encodedPath = encodeURIComponent(relativePath);
+      const encodedPath = relativePath
+        .split('/')
+        .map((segment) => encodeURIComponent(segment))
+        .join('/');
 
-      // Get presigned URL with bucket name
       console.log("Requesting presigned URL for:", {
         fileName: relativePath,
         bucketName: bucketName,
       });
 
-      const response = await numaGet("/api/presigned-url-upload", {
-        fileName: encodedPath,
-        bucketName: bucketName
+      // User generates a presigned URL
+      const s3Client = new S3Client({
+        region: config.REGION,
+        credentials: await getIdentityPoolCredentials()
       });
 
-      console.log("Presigned URL response:", response);
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: `${numaAppId}/${encodedPath}`,  // Put files under the numaAppId folder
+      });
 
-      // Validate response structure
-      if (!response || typeof response !== 'object') {
-        throw new Error("Invalid response received from server");
-      }
+      const presignedUrl = await getSignedUrl(s3Client, command, {
+        expiresIn: 3600, // URL expiration time in seconds
+      });
 
-      if (!response.uploadUrl) {
-        // Check if we received HTML instead of JSON (indicates auth/routing issue)
-        if (typeof response === 'string' && response.includes('<!doctype html>')) {
-          throw new Error("Authentication error - please try logging in again");
-        }
-        throw new Error("No upload URL received from server");
-      }
+      console.log('Presigned URL:', presignedUrl);
 
-      const { uploadUrl } = response;
+      // Construct the S3 object URL (without query parameters)
+      const s3ObjectUrl = `https://${command.input.Bucket}.s3.${s3Client.config.region}.amazonaws.com/${command.input.Key}`;
 
-      // Validate uploadUrl format
-      if (typeof uploadUrl !== 'string' || !uploadUrl.includes('amazonaws.com')) {
-        throw new Error("Invalid upload URL format received");
-      }
-
-      const s3ObjectUrl = uploadUrl.split("?")[0]; // Get the clean S3 URL without query parameters
+      console.log('S3 Upload Details:', {
+        destinationPath: relativePath,
+        uploadUrl: s3ObjectUrl,
+      });
 
       // Upload file to S3
-      await axios.put(uploadUrl, selectedFile, {
+      await axios.put(presignedUrl, selectedFile, {
         headers: {
           "Content-Type": selectedFile.type || "application/octet-stream",
         },
