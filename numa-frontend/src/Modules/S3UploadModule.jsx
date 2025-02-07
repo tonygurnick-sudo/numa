@@ -25,7 +25,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   // Extracting task parameters
   const taskId = task?.id;
   const taskTitle = task?.title;
-  const bucketName = `numa-${config.CLIENT_NAME}-data`;
+  const bucketName = `numa-${config.CLIENT_NAME}-outputs`;
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
