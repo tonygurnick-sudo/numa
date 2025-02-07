@@ -479,6 +479,7 @@ export class CoreNumaInfra extends Construct {
       clientAccountId: props.clientAccountId,
       environmentName: props.environmentName,
       bucketName: 'outputs',
+      allowedMethods: ["GET", "PUT"],
     });
 
     if (props.loadSampleFile) {
