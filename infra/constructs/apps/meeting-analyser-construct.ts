@@ -28,7 +28,7 @@ export class MeetingAnalyser extends BaseNumaApp {
 
     this.manifest = {
       appName: 'Meeting Analyser',
-      id: 'meeting-analyser-app',
+      id: props.pathPrefix,
       type: AppType.NUMA,
       status: AppStatus.ACTIVE,
       category: AppCategory.PRODUCTIVITY,
