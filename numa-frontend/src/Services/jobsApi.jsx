@@ -24,22 +24,30 @@ export const useJobsApi = () => {
   const createJob = async (numaAppData, taskInputs) => {
     try {
       const jobData = createJobData(numaAppData, taskInputs);
+      console.log('Creating job with data:', jobData);
+      console.log('Using app ID:', numaAppData.id);
+      const endpoint_call = `/api/${numaAppData.id}/jobs`;
+      console.log('Endpoint call:', endpoint_call);
+      const response = await numaPost(endpoint_call, jobData);
 
-      const response = await numaPost(`/${numaAppData.id}/jobs`, jobData);
+      console.log('Job creation response:', response);
 
-      if (!response.ok) {
-        throw new Error('Failed to create job');
+      if (!response.status === '"running"') {
+        const errorMessage = response.error || 'Failed to create job';
+        console.error('Job creation failed:', errorMessage);
+        throw new Error(errorMessage);
       }
 
-      return await response.json();
+      return response;
     } catch (error) {
       console.error('API Error creating job:', error);
-      throw error;
+      console.error('Error details:', error.response?.data);
+      throw new Error(`Failed to create job: ${error.message}`);
     }
   };
 
   // Update an existing job
-  const updateJob = async (jobId, results) => {
+  const updateJob = async (numaAppData, jobId, results) => {
     try {
       const { displayDate, isoDate } = createFormattedDate();
       const updateData = {
@@ -48,13 +56,27 @@ export const useJobsApi = () => {
         lastUpdated: isoDate,
         name: `Run ${displayDate}`,
       };
+      console.log('Updating job with data:', updateData);
+      console.log('Using app ID:', numaAppData.id);
+      console.log('Job ID:', jobId);
 
-      const response = await numaPut(`/jobs/${jobId}`, updateData);
+      const endpoint = `/api/${numaAppData.id}/jobs/${jobId}`;
+      console.log('Using endpoint:', endpoint);
 
-      return await response.json();
+      const response = await numaPut(endpoint, updateData);
+      console.log('Job update response:', response);
+
+      if (!response.ok) {
+        const errorMessage = response.error || 'Failed to update job';
+        console.error('Job update failed:', errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      return response;
     } catch (error) {
       console.error('API Error updating job:', error);
-      throw error;
+      console.error('Error details:', error.response?.data);
+      throw new Error(`Failed to update job: ${error.message}`);
     }
   };
 
