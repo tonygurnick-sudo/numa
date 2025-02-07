@@ -14,7 +14,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { Fn } from 'cdktf';
-import { NumaCorsEnabledBucket } from '../constructs/cors-enabled-bucket';
 import { execSync } from 'node:child_process';
 
 export class NumaClientStack extends ArcanumStack {
@@ -51,12 +50,6 @@ export class NumaClientStack extends ArcanumStack {
       environmentName: props.environmentName,
     });
 
-    const outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
-      ...props.config,
-      environmentName: props.environmentName,
-      bucketName: 'outputs',
-    });
-
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
       ...props.config,
       environmentName: props.environmentName,
@@ -66,7 +59,7 @@ export class NumaClientStack extends ArcanumStack {
       webExUrl: core.webExUrl,
       userPoolId: core.userPoolId,
       userPoolClientId: core.userPoolClient.id,
-      outputsBucket: outputsBucket,
+      outputsBucket: core.outputsBucket,
       accountId: props.config.clientAccountId
     });
 
@@ -75,7 +68,7 @@ export class NumaClientStack extends ArcanumStack {
     new CoreNumaApp(this, coreAppId, {
       apiGatewayAuthorizerId: fe.authorizer.id,
       apiGatewayId: fe.apiGateway.id,
-      outputsBucket: outputsBucket.bucket,
+      outputsBucket: core.outputsBucket.bucket,
       clientId: core.userPoolClient?.id ?? '',
       clientSecret: core.userPoolClient?.clientSecret ?? '',
     });
@@ -89,7 +82,7 @@ export class NumaClientStack extends ArcanumStack {
         ...appConfig,
         apiGatewayAuthorizerId: fe.authorizer.id,
         apiGatewayId: fe.apiGateway.id,
-        outputsBucket: outputsBucket.bucket,
+        outputsBucket: core.outputsBucket.bucket,
       });
     });
 

@@ -500,7 +500,7 @@ export const PolicyBuilderDetail = () => {
 
       console.log("Step Function Response:", stepFunctionResponse);
 
-      if (stepFunctionResponse.status !== 'SUCCESS') {
+      if (stepFunctionResponse.status === 'FAILURE') {
         console.error(
           `Step Function request failed with status: ${stepFunctionResponse.status}`
         );

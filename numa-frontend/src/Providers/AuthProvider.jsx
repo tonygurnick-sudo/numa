@@ -149,30 +149,6 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     }
   };
 
-  const getIdentityPoolCredentials = async () => {
-    if (!user) return null;
-
-    try {
-      const cognitoIdentity = new CognitoIdentityClient({
-        region: REGION,
-      });
-
-      const credentials = await fromCognitoIdentityPool({
-        client: cognitoIdentity,
-        identityPoolId: IDENTITY_POOL_ID,
-        logins: {
-          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]:
-            user.tokens.idToken,
-        },
-      })();
-
-      return credentials;
-    } catch (error) {
-      console.error("Error getting credentials:", error);
-      throw error;
-    }
-  };
-
   const getAccessToken = async () => {
     if (!user) return null;
 
@@ -519,6 +495,57 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     }
   };
 
+  const getWebTokenCredentials = async () => {
+    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+
+    const accountId = ROLE_ARN.split(":")[4];
+
+    const idToken = user.tokens.idToken;
+
+    const policy = generatePolicy({
+      Region: REGION,
+      AccountId: accountId,
+      ApplicationId: Q_APPLICATION_ID,
+    });
+
+    const credentials = await fromWebToken({
+      client: cognitoIdentity,
+      identityPoolId: IDENTITY_POOL_ID,
+      roleSessionName: "numa-frontend-chat",
+      roleArn: ROLE_ARN,
+      policy: JSON.stringify(policy),
+      durationSeconds: 3600,
+      webIdentityToken: idToken,
+    });
+
+    return credentials;
+  };
+
+  const getIdentityPoolCredentials = async () => {
+    if (!user) return null;
+
+    try {
+      const cognitoIdentity = new CognitoIdentityClient({
+        region: REGION,
+      });
+
+      const credentials = await fromCognitoIdentityPool({
+        client: cognitoIdentity,
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: "numa-frontend-file-uploader",
+        logins: {
+          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]:
+            user.tokens.idToken,
+        },
+      })();
+
+      return credentials;
+    } catch (error) {
+      console.error("Error getting credentials:", error);
+      throw error;
+    }
+  };
+
   const value = {
     isAuthenticated: !!user,
     user,
@@ -536,6 +563,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     requestPasswordReset,
     confirmPasswordReset,
     getIdentityPoolCredentials,
+    getWebTokenCredentials,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
