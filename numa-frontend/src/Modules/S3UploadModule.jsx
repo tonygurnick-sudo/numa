@@ -139,7 +139,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setUploadStatus("Upload successful!");
 
       // Use the onChange prop to update the value
-      onChange(filePath);
+      onChange([filePath]);
       onComplete();
     } catch (error) {
       console.error("Error during file upload:", error);

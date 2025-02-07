@@ -54,7 +54,11 @@ function createPayloadFromTemplate(template, inputValues, taskResults) {
 
   // Main function to recursively handle template (string, array, or object)
   if (typeof template === "string") {
-    // Replace all references of @taskId with the actual task result values
+    // If the string is a direct reference (e.g. "@upload-files-to-s3"), return the resolved value directly
+    if (template.match(/^@[\w-]+$/)) {
+      return resolveReference(template, taskResults);
+    }
+    // Otherwise, it's a string with potential embedded references, so replace them
     return template.replace(/@[\w-]+/g, (match) =>
       resolveReference(match, taskResults)
     );
@@ -217,7 +221,8 @@ export const NumaAppProvider = ({ children }) => {
 
   const processS3UploadTask = (task, currentResults) => {
     const uploadedFilePath = taskInputValues[task.id];
-    currentResults[task.id] = uploadedFilePath;
+    // Preserve array structure from taskInputValues
+    currentResults[task.id] = uploadedFilePath;  // uploadedFilePath is already an array from S3UploadModule
     console.log(`S3 upload result: ${currentResults[task.id]}`);
     return currentResults;
   };
