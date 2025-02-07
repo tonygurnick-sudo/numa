@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button, Alert, ProgressBar } from 'react-bootstrap';
 import axios from 'axios';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-   import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { useAuth } from '../Providers/AuthProvider';
 
 
