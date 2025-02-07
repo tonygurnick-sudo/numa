@@ -163,13 +163,13 @@ const S3Uploader = () => {
         return;
       }
 
+      // Log the data source ID
+      console.log("Setting data source ID to:", s3DataSource.dataSourceId);
       setDataSourceId(s3DataSource.dataSourceId);
 
-      if (s3DataSource) {
-        setSyncStatus(s3DataSource.status);
-      } else {
-        console.warn("S3 data source not found");
-      }
+      // Ensure sync status is set
+      setSyncStatus(s3DataSource.status);
+
     } catch (err) {
       console.error("Failed to check data source status", {
         error: err.message,
@@ -182,6 +182,8 @@ const S3Uploader = () => {
   const startSync = async () => {
     try {
       setIsSyncing(true);
+      setSyncJobStatus("SYNCING");
+
       const input = {
         applicationId: Q_APPLICATION_ID,
         indexId: Q_INDEX_ID,
@@ -223,6 +225,11 @@ const S3Uploader = () => {
         return;
       }
 
+      if (!dataSourceId) {
+        console.warn("DataSource ID is not set");
+        return;
+      }
+
       const input = {
         applicationId: Q_APPLICATION_ID,
         indexId: Q_INDEX_ID,
@@ -231,11 +238,6 @@ const S3Uploader = () => {
       };
 
       console.log("Input:", input);
-
-      if (!dataSourceId) {
-        console.warn("DataSource ID is not set");
-        return;
-      }
 
       const command = new ListDataSourceSyncJobsCommand(input);
       const response = await qBusinessClient.send(command);
@@ -268,36 +270,14 @@ const S3Uploader = () => {
       initialFetchDone.current = true;
       fetchFiles();
       checkDataSourceSync();
-      checkSyncStatus();
-
-      const checkStatus = () => {
-        checkDataSourceSync();
-        checkSyncStatus();
-      };
-
-      const createInterval = () => {
-        return setInterval(
-          () => {
-            checkStatus();
-            if (syncJobStatus !== "SYNCING") {
-              clearInterval(interval);
-              interval = setInterval(checkStatus, 30 * 1000);
-            }
-          },
-          syncJobStatus === "SYNCING" ? 10 * 1000 : 30 * 1000
-        );
-      };
-
-      let interval = createInterval();
-
-      if (syncJobStatus === "SYNCING") {
-        clearInterval(interval);
-        interval = createInterval();
-      }
-
-      return () => clearInterval(interval);
     }
-  }, [qBusinessClient, syncJobStatus]);
+  }, [qBusinessClient]);
+
+  useEffect(() => {
+    if (dataSourceId) {
+      checkSyncStatus();
+    }
+  }, [dataSourceId, syncJobStatus]);
 
   const renderFile = (file, depth = 0) => {
     const isFileSynced =
