@@ -24,7 +24,7 @@ export const fetchConfigAddtoSession = async () => {
     'REGION',
     'API_ENDPOINT',
     'USER_POOL_ID',
-    'CLIENT_ID',
+    'CLIENT_NAME',
   ];
   propertiesToAdd.forEach((property) => {
     const existing = sessionStorage.getItem(property);

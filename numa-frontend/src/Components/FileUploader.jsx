@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Button, Alert, ProgressBar } from 'react-bootstrap';
 import axios from 'axios';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+   import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { useAuth } from '../Providers/AuthProvider';
+
 
 const dashedBorderKeyframes = `
   @keyframes dashedBorder {
@@ -30,6 +34,15 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
     files: [],
     folders: new Set(),
   });
+  const [config, setConfig] = useState(null);
+  const { getIdentityPoolCredentials } = useAuth();
+
+  useEffect(() => {
+    fetch("/config.json")
+      .then((response) => response.json())
+      .then((data) => setConfig(data))
+      .catch((error) => console.error("Error loading config:", error));
+  }, []);
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -85,7 +98,6 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
         });
 
         try {
-          const token = await getAccessToken();
           console.log('Requesting presigned URL for:', relativePath);
 
           const encodedPath = relativePath
@@ -93,21 +105,26 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
             .map((segment) => encodeURIComponent(segment))
             .join('/');
 
-          const response = await axios.get(
-            'https://ajbiwao41h.execute-api.us-east-1.amazonaws.com/presigned-url-upload',
-            {
-              params: { fileName: encodedPath },
-              headers: { Authorization: `Bearer ${token}` },
-            },
-          );
+          // User generates a presigned URL
+          const s3Client = new S3Client({ region: 'us-east-1', credentials: await getIdentityPoolCredentials() });
 
-          const { uploadUrl } = response.data;
-          console.log('S3 Upload Details:', {
-            destinationPath: relativePath,
-            uploadUrl: uploadUrl.split('?')[0], // Show URL without query parameters
+          const command = new PutObjectCommand({
+            Bucket: `numa-${config.CLIENT_NAME}-data`,
+            Key: encodedPath,
           });
 
-          await axios.put(uploadUrl, file, {
+          const presignedUrl = await getSignedUrl(s3Client, command, {
+            expiresIn: 3600, // URL expiration time in seconds
+          });
+
+          console.log('Presigned URL:', presignedUrl);
+
+          console.log('S3 Upload Details:', {
+            destinationPath: relativePath,
+            uploadUrl: presignedUrl.split('?')[0], // Show URL without query parameters
+          });
+
+          await axios.put(presignedUrl, file, {
             headers: {
               'Content-Type': file.type || 'application/octet-stream',
             },

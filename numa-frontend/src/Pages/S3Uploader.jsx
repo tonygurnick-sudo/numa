@@ -1,16 +1,16 @@
-import { useState, useRef, useEffect, createRef } from 'react';
-import { Button, Alert, Container, Row, Col, Modal } from 'react-bootstrap';
-import { useAuth } from '../Providers/AuthProvider';
-import axios from 'axios';
-import { LayoutDashboard } from '../Layouts/LayoutDashboard';
-import { Breadcrumbs } from '../Components/Breadcrumbs';
-import { Nav } from '../Components/Nav';
+import { useState, useRef, useEffect, createRef } from "react";
+import { Button, Alert, Container, Row, Col, Modal } from "react-bootstrap";
+import { useAuth } from "../Providers/AuthProvider";
+import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { LayoutDashboard } from "../Layouts/LayoutDashboard";
+import { Breadcrumbs } from "../Components/Breadcrumbs";
+import { Nav } from "../Components/Nav";
 import {
   ListDataSourcesCommand,
   StartDataSourceSyncJobCommand,
   ListDataSourceSyncJobsCommand,
-} from '@aws-sdk/client-qbusiness';
-import { FileUploader } from '../Components/FileUploader';
+} from "@aws-sdk/client-qbusiness";
+import { FileUploader } from "../Components/FileUploader";
 
 // TODO: Make one API Gateway, since currently we have two.
 // TODO: Add in allowing of any Origin in S3, since currently we allow none.
@@ -61,13 +61,14 @@ const S3Uploader = () => {
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState(null);
   const initialFetchDone = useRef(false);
   const [collapsedFolders, setCollapsedFolders] = useState(new Set());
+  const [dataSourceId, setDataSourceId] = useState(null);
   const [folderRefs] = useState(() => {
     const refs = new Map();
     // Pre-populate with refs for all possible folder paths from files
     files.forEach((file) => {
-      const parts = file.key.split('/');
+      const parts = file.key.split("/");
       for (let i = 0; i < parts.length - 1; i++) {
-        const folderPath = parts.slice(0, i + 1).join('/');
+        const folderPath = parts.slice(0, i + 1).join("/");
         if (!refs.has(folderPath)) {
           refs.set(folderPath, createRef());
         }
@@ -76,41 +77,56 @@ const S3Uploader = () => {
     return refs;
   });
 
-  const { getAccessToken, qBusinessClient } = useAuth();
-  const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
-  const Q_INDEX_ID = window.sessionStorage.getItem('Q_INDEX_ID');
-  const Q_DATASOURCE_ID = window.sessionStorage.getItem('Q_DATASOURCE_ID');
+  const { getAccessToken, qBusinessClient, getIdentityPoolCredentials } =
+    useAuth();
+  const Q_APPLICATION_ID = window.sessionStorage.getItem("Q_APPLICATION_ID");
+  const Q_INDEX_ID = window.sessionStorage.getItem("Q_INDEX_ID");
+  const CLIENT_NAME = window.sessionStorage.getItem("CLIENT_NAME");
 
   const fetchFiles = async () => {
-    console.log('Initiating file list fetch...');
+    console.log("Initiating file list fetch...");
     try {
+      if (!CLIENT_NAME) {
+        console.error("CLIENT_NAME is not set");
+        return;
+      }
+
       setIsLoadingFiles(true);
-      const token = await getAccessToken();
-      const response = await axios.get(
-        'https://ajbiwao41h.execute-api.us-east-1.amazonaws.com/presigned-url-upload',
-        {
-          params: { operation: 'list' },
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      console.log('Files fetched successfully', {
-        fileCount: response.data.files.length,
-        files: response.data.files.map((f) => f.key),
+
+      // Initialize S3 client
+      const s3Client = new S3Client({
+        region: "us-east-1",
+        credentials: await getIdentityPoolCredentials(),
+      });
+
+      // Create the command
+      const command = new ListObjectsV2Command({
+        Bucket: `numa-${CLIENT_NAME}-data`,
+      });
+
+      // Send the command
+      const response = await s3Client.send(command);
+
+      console.log("Files fetched successfully", {
+        fileCount: response.Contents.length,
+        files: response.Contents.map((f) => f.Key),
       });
 
       // Initialize collapsed folders when files are loaded
       const folderPaths = new Set();
-      response.data.files.forEach((file) => {
-        const parts = file.key.split('/');
-        for (let i = 0; i < parts.length - 1; i++) {
-          folderPaths.add(parts.slice(0, i + 1).join('/'));
+      response.Contents.forEach((file) => {
+        const parts = file.Key.split("/");
+        if (parts.length > 1) {
+          for (let i = 0; i < parts.length - 1; i++) {
+            folderPaths.add(parts?.slice(0, i + 1)?.join("/"));
+          }
         }
       });
       setCollapsedFolders(folderPaths);
 
-      setFiles(response.data.files);
+      setFiles(response.Contents);
     } catch (err) {
-      console.error('File fetch failed', {
+      console.error("File fetch failed", {
         error: err.message,
         response: err.response?.data,
         status: err.response?.status,
@@ -121,10 +137,10 @@ const S3Uploader = () => {
   };
 
   const checkDataSourceSync = async () => {
-    console.log('Checking data source sync status...');
+    console.log("Checking data source sync status...");
     try {
       if (!qBusinessClient) {
-        console.warn('QBusiness client not initialized');
+        console.warn("QBusiness client not initialized");
         return;
       }
 
@@ -136,24 +152,26 @@ const S3Uploader = () => {
       const command = new ListDataSourcesCommand(input);
       const response = await qBusinessClient.send(command);
 
-      console.log('List data sources response', response);
+      console.log("List data sources response", response);
 
       const s3DataSource = response.dataSources?.find(
-        (ds) => ds.dataSourceId === Q_DATASOURCE_ID,
+        (ds) => ds.displayName === `numa-${CLIENT_NAME}`
       );
 
+      if (!s3DataSource) {
+        console.warn("S3 data source not found");
+        return;
+      }
+
+      setDataSourceId(s3DataSource.dataSourceId);
+
       if (s3DataSource) {
-        console.log('S3 data source status retrieved', {
-          status: s3DataSource.status,
-          lastUpdate: s3DataSource.updatedAt,
-          id: s3DataSource.dataSourceId,
-        });
         setSyncStatus(s3DataSource.status);
       } else {
-        console.warn('S3 data source not found');
+        console.warn("S3 data source not found");
       }
     } catch (err) {
-      console.error('Failed to check data source status', {
+      console.error("Failed to check data source status", {
         error: err.message,
         name: err.name,
         stack: err.stack,
@@ -167,7 +185,7 @@ const S3Uploader = () => {
       const input = {
         applicationId: Q_APPLICATION_ID,
         indexId: Q_INDEX_ID,
-        dataSourceId: Q_DATASOURCE_ID,
+        dataSourceId: dataSourceId,
       };
 
       const command = new StartDataSourceSyncJobCommand(input);
@@ -176,28 +194,57 @@ const S3Uploader = () => {
       setShowSyncModal(false);
       await checkDataSourceSync();
     } catch (err) {
-      console.error('Failed to start sync', err);
+      console.error("Failed to start sync", err);
     } finally {
       setIsSyncing(false);
     }
   };
 
   const checkSyncStatus = async () => {
-    console.log('Checking sync job status...');
+    console.log("Checking sync job status...");
     try {
+      if (!qBusinessClient) {
+        console.warn("QBusiness client not initialized");
+        return;
+      }
+
+      if (!Q_APPLICATION_ID) {
+        console.error("Q_APPLICATION_ID is not set");
+        return;
+      }
+
+      if (!Q_INDEX_ID) {
+        console.error("Q_INDEX_ID is not set");
+        return;
+      }
+
+      if (!CLIENT_NAME) {
+        console.error("CLIENT_NAME is not set");
+        return;
+      }
+
       const input = {
         applicationId: Q_APPLICATION_ID,
         indexId: Q_INDEX_ID,
-        dataSourceId: Q_DATASOURCE_ID,
+        dataSourceId: dataSourceId,
         maxResults: 10,
       };
+
+      console.log("Input:", input);
+
+      if (!dataSourceId) {
+        console.warn("DataSource ID is not set");
+        return;
+      }
 
       const command = new ListDataSourceSyncJobsCommand(input);
       const response = await qBusinessClient.send(command);
 
+      console.log("Response:", response);
+
       const latestJob = response.history?.[0];
       if (latestJob) {
-        console.log('Latest sync job status:', {
+        console.log("Latest sync job status:", {
           status: latestJob.status,
           metrics: latestJob.metrics,
           startTime: latestJob.startTime,
@@ -206,13 +253,13 @@ const S3Uploader = () => {
       }
 
       const lastSuccessful = response.history?.find(
-        (job) => job.status === 'SUCCEEDED',
+        (job) => job.status === "SUCCEEDED"
       );
       if (lastSuccessful) {
         setLastSuccessfulSync(lastSuccessful.endTime);
       }
     } catch (err) {
-      console.error('Failed to check sync job status', err);
+      console.error("Failed to check sync job status", err);
     }
   };
 
@@ -232,18 +279,18 @@ const S3Uploader = () => {
         return setInterval(
           () => {
             checkStatus();
-            if (syncJobStatus !== 'SYNCING') {
+            if (syncJobStatus !== "SYNCING") {
               clearInterval(interval);
               interval = setInterval(checkStatus, 30 * 1000);
             }
           },
-          syncJobStatus === 'SYNCING' ? 10 * 1000 : 30 * 1000,
+          syncJobStatus === "SYNCING" ? 10 * 1000 : 30 * 1000
         );
       };
 
       let interval = createInterval();
 
-      if (syncJobStatus === 'SYNCING') {
+      if (syncJobStatus === "SYNCING") {
         clearInterval(interval);
         interval = createInterval();
       }
@@ -255,33 +302,34 @@ const S3Uploader = () => {
   const renderFile = (file, depth = 0) => {
     const isFileSynced =
       lastSuccessfulSync &&
-      new Date(file.lastModified) <= new Date(lastSuccessfulSync);
+      new Date(file.LastModified) <= new Date(lastSuccessfulSync);
 
-    const fileName = file.key.split('/').pop();
+    // Decode the file name
+    const fileName = decodeURIComponent(file?.Key?.split("/")?.pop());
     const indentLevel = Math.max(0, depth - 1);
 
     return (
       <div
-        key={file.key}
+        key={file?.Key}
         data-testid="file-item"
         className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
       >
-        <div className="text-truncate" style={{ maxWidth: '70%' }}>
+        <div className="text-truncate" style={{ maxWidth: "70%" }}>
           <span style={{ marginLeft: `${indentLevel * 2}rem` }}>
             <i className="bi bi-file-earmark me-2"></i>
             {fileName}
             {lastSuccessfulSync && (
               <span
-                className={`ms-2 text-${isFileSynced ? 'success' : 'danger'}`}
+                className={`ms-2 text-${isFileSynced ? "success" : "danger"}`}
                 title={
                   isFileSynced
-                    ? 'File is synced to knowledge base'
-                    : 'File pending sync to knowledge base'
+                    ? "File is synced to knowledge base"
+                    : "File pending sync to knowledge base"
                 }
               >
                 <i
                   className={`bi bi-${
-                    isFileSynced ? 'check-circle-fill' : 'x-circle-fill'
+                    isFileSynced ? "check-circle-fill" : "x-circle-fill"
                   }`}
                 ></i>
               </span>
@@ -289,8 +337,8 @@ const S3Uploader = () => {
           </span>
         </div>
         <div className="text-muted small text-end">
-          <div>{new Date(file.lastModified).toLocaleDateString('en-NZ')}</div>
-          <div>{(file.size / 1024).toFixed(2)} KB</div>
+          <div>{new Date(file.LastModified).toLocaleDateString("en-NZ")}</div>
+          <div>{(file.Size / 1024).toFixed(2)} KB</div>
         </div>
       </div>
     );
@@ -334,22 +382,30 @@ const S3Uploader = () => {
 
     // Group files by their folder path
     const groupedFiles = files.reduce((acc, file) => {
-      const parts = file.key.split('/');
+      const parts = file.Key.split("/");
 
-      // Create entries for each folder level
-      for (let i = 0; i < parts.length - 1; i++) {
-        const folderPath = parts.slice(0, i + 1).join('/');
-        if (!acc[folderPath]) {
-          acc[folderPath] = [];
+      // Handle root-level files
+      if (parts.length === 1) {
+        if (!acc[""]) {
+          acc[""] = [];
         }
-      }
+        acc[""].push(file);
+      } else {
+        // Create entries for each folder level
+        for (let i = 0; i < parts.length - 1; i++) {
+          const folderPath = parts.slice(0, i + 1).join("/");
+          if (!acc[folderPath]) {
+            acc[folderPath] = [];
+          }
+        }
 
-      // Add the file to its immediate parent folder
-      const parentPath = parts.slice(0, -1).join('/');
-      if (!acc[parentPath]) {
-        acc[parentPath] = [];
+        // Add the file to its immediate parent folder
+        const parentPath = parts.slice(0, -1).join("/");
+        if (!acc[parentPath]) {
+          acc[parentPath] = [];
+        }
+        acc[parentPath].push(file);
       }
-      acc[parentPath].push(file);
 
       return acc;
     }, {});
@@ -357,27 +413,29 @@ const S3Uploader = () => {
     return (
       <div className="list-group">
         {/* Root files first */}
-        {groupedFiles['']?.map((file) => renderFile(file, 0))}
+        {groupedFiles[""]?.map((file) => renderFile(file, 0))}
+
+        {console.log("Grouped files:", groupedFiles)}
 
         {/* Then folders with their files */}
         {Object.entries(groupedFiles)
-          .filter(([folder]) => folder !== '')
+          .filter(([folder]) => folder !== "")
           .sort(([pathA], [pathB]) => {
-            const depthA = pathA.split('/').length;
-            const depthB = pathB.split('/').length;
+            const depthA = pathA.split("/").length;
+            const depthB = pathB.split("/").length;
             return depthA - depthB || pathA.localeCompare(pathB);
           })
           .map(([folder, files]) => {
             const nodeRef = folderRefs.get(folder);
-            const depth = folder.split('/').length;
-            const folderName = folder.split('/').pop();
+            const depth = folder.split("/").length;
+            const folderName = folder.split("/").pop();
             const indentLevel = Math.max(0, depth - 1);
             const isCollapsed = collapsedFolders.has(folder);
 
             // Check if any parent folder is collapsed
-            const parentFolders = folder.split('/').slice(0, -1);
+            const parentFolders = folder.split("/").slice(0, -1);
             const isParentCollapsed = parentFolders.some((_, index) => {
-              const parentPath = parentFolders.slice(0, index + 1).join('/');
+              const parentPath = parentFolders.slice(0, index + 1).join("/");
               return collapsedFolders.has(parentPath);
             });
 
@@ -389,14 +447,14 @@ const S3Uploader = () => {
               <div key={folder}>
                 <div
                   className="list-group-item bg-light d-flex justify-content-between align-items-center"
-                  style={{ cursor: 'pointer' }}
+                  style={{ cursor: "pointer" }}
                   onClick={() => toggleFolder(folder)}
                 >
                   <div>
                     <span style={{ marginLeft: `${indentLevel * 2}rem` }}>
                       <i
-                        className={`bi bi-chevron-${isCollapsed ? 'right' : 'down'} me-2`}
-                        style={{ transition: 'transform 300ms ease' }}
+                        className={`bi bi-chevron-${isCollapsed ? "right" : "down"} me-2`}
+                        style={{ transition: "transform 300ms ease" }}
                       ></i>
                       <i className="bi bi-folder me-2 text-warning"></i>
                       <strong>{folderName}</strong>
@@ -409,8 +467,8 @@ const S3Uploader = () => {
                 <div
                   className={`folder-content ${
                     isCollapsed
-                      ? 'folder-content-collapsed'
-                      : 'folder-content-expanded'
+                      ? "folder-content-collapsed"
+                      : "folder-content-expanded"
                   }`}
                 >
                   {files.map((file) => renderFile(file, depth + 1))}
@@ -429,7 +487,7 @@ const S3Uploader = () => {
         <Container fluid>
           <Row>
             <Col className="px-3 px-lg-5">
-              <Breadcrumbs label={'Upload'} clearStack={true} />
+              <Breadcrumbs label={"Upload"} clearStack={true} />
               <h1>File Upload</h1>
             </Col>
           </Row>
@@ -456,13 +514,13 @@ const S3Uploader = () => {
                 <div className="d-flex justify-content-between align-items-center">
                   <div>
                     <p className="mb-1">
-                      <strong>Status:</strong>{' '}
+                      <strong>Status:</strong>{" "}
                       <span
-                        className={`badge bg-${syncStatus === 'ACTIVE' ? 'success' : 'warning'}`}
+                        className={`badge bg-${syncStatus === "ACTIVE" ? "success" : "warning"}`}
                       >
-                        {syncStatus || 'Unknown'}
+                        {syncStatus || "Unknown"}
                       </span>
-                      {syncJobStatus === 'SYNCING' && (
+                      {syncJobStatus === "SYNCING" && (
                         <span className="badge bg-info ms-2">
                           Sync in Progress
                         </span>
@@ -470,19 +528,19 @@ const S3Uploader = () => {
                     </p>
                     {lastSuccessfulSync && (
                       <p className="mb-0 text-muted small">
-                        Last successful sync:{' '}
-                        {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
+                        Last successful sync:{" "}
+                        {new Date(lastSuccessfulSync).toLocaleString("en-NZ")}
                       </p>
                     )}
                   </div>
                   <Button
                     variant="outline-primary"
                     onClick={() => setShowSyncModal(true)}
-                    disabled={syncJobStatus === 'SYNCING'}
+                    disabled={syncJobStatus === "SYNCING"}
                     title={
-                      syncJobStatus === 'SYNCING'
-                        ? 'Sync in progress'
-                        : 'Start new sync'
+                      syncJobStatus === "SYNCING"
+                        ? "Sync in progress"
+                        : "Start new sync"
                     }
                     className="d-flex align-items-center gap-2 px-3 py-2"
                     data-testid="sync-button"
@@ -525,7 +583,7 @@ const S3Uploader = () => {
                 Starting Sync...
               </>
             ) : (
-              'Start Sync'
+              "Start Sync"
             )}
           </Button>
         </Modal.Footer>
