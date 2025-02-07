@@ -79,13 +79,58 @@ export class MeetingAnalyser extends BaseNumaApp {
           order: 4,
         },
         {
-          id: 'meeting-summary-results',
-          title: 'Meeting Summary & Analysis',
+          id: 'analysis-templated',
+          title: 'Analysis based on template',
           type: TEXT_OUTPUT_TASK,
           params: {
-            dataRef: '@call-step-function',
+            dataRef: '@call-step-function/template_output',
           },
           order: 5,
+        },
+        {
+          id: 'summary',
+          title: 'Summary',
+          type: TEXT_OUTPUT_TASK,
+          params: {
+            dataRef: '@call-step-function/summary',
+          },
+          order: 6,
+        },
+        {
+          id: 'topic-analysis',
+          title: 'Topic Analysis',
+          type: TEXT_OUTPUT_TASK,
+          params: {
+            dataRef: '@call-step-function/topic_analysis',
+          },
+          order: 7,
+        },
+        {
+          id: 'participant-insights',
+          title: 'Participant Insights',
+          type: TEXT_OUTPUT_TASK,
+          params: {
+            dataRef: '@call-step-function/participant_insights',
+          },
+          order: 8,
+        },
+        {
+          id: 'action-items',
+          title: 'Action Items',
+          type: TEXT_OUTPUT_TASK,
+          params: {
+            dataRef: '@call-step-function/action_items',
+          },
+          order: 9,
+        },
+        {
+          id: 'follow-up-emails',
+          title: 'Follow Up Emails',
+          type: TEXT_OUTPUT_TASK,
+          params: {
+            dataRef: '@call-step-function/follow_up_emails',
+          },
+          order: 10,
         },
       ],
     };

@@ -97,7 +97,4 @@ def handler(event: dict, context: LambdaContext) -> dict:
         Body=json.dumps(result).encode("utf-8"),
     )
 
-    return {
-        "output_bucket": output_bucket,
-        "output_key": output_key,
-    }
+    return result

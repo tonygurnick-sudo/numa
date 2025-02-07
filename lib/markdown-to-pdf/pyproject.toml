@@ -15,7 +15,7 @@ markdown-it-py = "3.0.0"
 xhtml2pdf = "0.2.16"
 
 [tool.poetry.group.dev.dependencies]
-mypy = "1.14.1"
+mypy = "1.15.0"
 pylint = "3.3.4"
 pyright = "1.1.393"
 

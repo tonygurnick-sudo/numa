@@ -101,7 +101,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
     this.manifest = {
       appName: 'Policy Designer',
       id: 'policy-builder-app',
-      type: AppType.NUMA,
+      type: AppType.NZSBA_POLICY_DESIGNER,
       category: AppCategory.COMPLIANCE,
       status: AppStatus.ACTIVE,
       createdDate: '2024-03-20T10:00:00Z',

@@ -31,6 +31,7 @@ import {
 } from './q-business-chat-control-configurer-construct';
 import { SetCallbackUrl } from './set-callback-url-construct';
 import { BedrockQuotaChecker } from './bedrock-quota-checker-construct';
+import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -41,6 +42,8 @@ export class CoreNumaInfra extends Construct {
   readonly webExperienceRoleArn: string;
   readonly qBusinessApplicationId: string;
   readonly qBusinessIndexId: string;
+  readonly outputsBucket: NumaCorsEnabledBucket;
+
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
 
@@ -205,8 +208,13 @@ export class CoreNumaInfra extends Construct {
         },
         {
           effect: 'Allow',
-          actions: ['s3:GetObject', 's3:GetObjectVersion'],
-          resources: [`arn:aws:s3:::${numaClient}-outputs/*`],
+          actions: ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject'],
+          resources: [`arn:aws:s3:::${numaClient}-outputs/*`, `arn:aws:s3:::${numaClient}-outputs`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject'],
+          resources: [`arn:aws:s3:::${numaClient}-data/*`, `arn:aws:s3:::${numaClient}-data`],
         },
       ],
     });
@@ -458,8 +466,19 @@ export class CoreNumaInfra extends Construct {
       }),
     });
 
-    const dataBucket = new PrivateBucket(this, 'data-source-bucket', {
-      bucket: numaClient + '-data',
+    const dataBucket = new NumaCorsEnabledBucket(this, 'data-source-bucket', {
+      bucketName: 'data',
+      client: props.client,
+      environmentName: props.environmentName,
+      clientAccountId: props.clientAccountId,
+      allowedMethods: ['GET', 'PUT', 'DELETE'],
+    });
+
+    this.outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
+      client: props.client,
+      clientAccountId: props.clientAccountId,
+      environmentName: props.environmentName,
+      bucketName: 'outputs',
     });
 
     if (props.loadSampleFile) {
