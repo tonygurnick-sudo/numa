@@ -415,7 +415,11 @@ export const PolicyBuilderDetail = () => {
       const jobData = {
         type: "POLICY_GENERATION",
         status: "PENDING",
-        inputs: policyInputs,
+        inputs: {
+          schoolName: policyInputs.schoolName,
+          schoolContext: policyInputs.schoolContext,
+          characterUrls: policyInputs.characterUrls,
+        },
       };
 
       // Use postRequest instead of fetch
@@ -433,7 +437,6 @@ export const PolicyBuilderDetail = () => {
           original_job_id: job.jobID,
           organisation_name: policyInputs.schoolName,
           organisation_context: policyInputs.schoolContext,
-          // custom_instructions: policyInputs.customInstructions,
         }
       );
 
