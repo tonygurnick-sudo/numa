@@ -115,12 +115,12 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
 
       console.log('Presigned URL:', presignedUrl);
 
-      // Construct the S3 object URL (without query parameters)
-      const s3ObjectUrl = `https://${command.input.Bucket}.s3.${s3Client.config.region}.amazonaws.com/${command.input.Key}`;
+      // Construct the file path (without S3 URL components)
+      const filePath = command.input.Key;
 
       console.log('S3 Upload Details:', {
         destinationPath: relativePath,
-        uploadUrl: s3ObjectUrl,
+        uploadUrl: presignedUrl.split('?')[0], // Show URL without query parameters
       });
 
       // Upload file to S3
@@ -139,7 +139,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setUploadStatus("Upload successful!");
 
       // Use the onChange prop to update the value
-      onChange(s3ObjectUrl);
+      onChange(filePath);
       onComplete();
     } catch (error) {
       console.error("Error during file upload:", error);
