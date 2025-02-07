@@ -413,12 +413,10 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
 
       <div className="text-center">
         <input
-          accept="*/*"
           style={{ display: 'none' }}
           id="file-upload"
           type="file"
           onChange={handleFileSelect}
-          webkitdirectory=""
           multiple
         />
 
