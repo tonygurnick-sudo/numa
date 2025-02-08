@@ -23,7 +23,7 @@ files = []
 develop = true
 
 [package.dependencies]
-boto3 = "1.36.12"
+boto3 = "1.36.13"
 filetype = "1.2.0"
 structlog = "25.1.0"
 
@@ -33,18 +33,18 @@ url = "../../../lib/bedrock"
 
 [[package]]
 name = "boto3"
-version = "1.36.12"
+version = "1.36.13"
 description = "The AWS SDK for Python"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "boto3-1.36.12-py3-none-any.whl", hash = "sha256:32cdf0967287f3ec25a9dc09df0d29cb86b8900c3e0546a63d672775d8127abf"},
-    {file = "boto3-1.36.12.tar.gz", hash = "sha256:287d84f49bba3255a17b374578127d42b6251e72f55914a62e0ad9ca78c0954b"},
+    {file = "boto3-1.36.13-py3-none-any.whl", hash = "sha256:20d97739cea1b0f549e9096c453ac727a350da28bd0451098714260b655a85ea"},
+    {file = "boto3-1.36.13.tar.gz", hash = "sha256:c8031aa1c4a7c331081b2d86c49a362654b86e0b89d0a41fa166a68b226f4aba"},
 ]
 
 [package.dependencies]
-botocore = ">=1.36.12,<1.37.0"
+botocore = ">=1.36.13,<1.37.0"
 jmespath = ">=0.7.1,<2.0.0"
 s3transfer = ">=0.11.0,<0.12.0"
 
@@ -1304,4 +1304,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.13.0"
-content-hash = "25e8702ef7f21f2efd7d17cacfff9284b04390f0ac9802d4a8e4e97e9608807c"
+content-hash = "0d359ee8b86431c723a4cb69497087682b03482851d983d8fe886588f23584bd"
