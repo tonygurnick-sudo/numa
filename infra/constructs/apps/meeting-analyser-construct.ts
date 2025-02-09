@@ -24,7 +24,7 @@ export class MeetingAnalyser extends BaseNumaApp {
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     props.enableJobs = true;
-    props.pathPrefix ??= this.appId;
+    props.pathPrefix ??= appId;
     super(scope, name, props);
 
     this.manifest = {
