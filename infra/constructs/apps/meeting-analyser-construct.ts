@@ -220,7 +220,7 @@ export class MeetingAnalyser extends BaseNumaApp {
                 Parameters: {
                   FunctionName: extractContentLambda.arn,
                   Payload: {
-                    'input_bucket.$': '$.bucket',
+                    input_bucket: props.outputsBucket.bucket,
                     'input_key.$': '$.key',
                     return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
                   },
