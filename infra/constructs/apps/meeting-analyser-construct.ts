@@ -22,7 +22,7 @@ export class MeetingAnalyser extends BaseNumaApp {
   readonly manifest;
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
-    const appId = 'meeting-analyzer';
+    const appId = 'meeting-analyser';
     props.enableJobs = true;
     props.pathPrefix ??= appId;
     super(scope, name, props);
