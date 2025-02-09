@@ -139,7 +139,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       {
         actions: ['s3:GetObject', 's3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${name}/*`],
+        resources: [`${props.outputsBucket.arn}/${props.pathPrefix}/*`],
       },
       {
         actions: ['bedrock:InvokeModel'],
