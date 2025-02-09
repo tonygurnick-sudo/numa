@@ -20,10 +20,11 @@ and follow-up resources.`.replace('\n', ' ');
 
 export class MeetingAnalyser extends BaseNumaApp {
   readonly manifest;
+  readonly appId = 'meeting-analyzer';
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     props.enableJobs = true;
-    props.pathPrefix ??= 'meeting-analyser';
+    props.pathPrefix ??= this.appId;
     super(scope, name, props);
 
     this.manifest = {
@@ -139,7 +140,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       {
         actions: ['s3:GetObject', 's3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${props.pathPrefix}/*`],
+        resources: [`${props.outputsBucket.arn}/${this.appId}/*`],
       },
       {
         actions: ['bedrock:InvokeModel'],
@@ -160,7 +161,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       {
         actions: ['s3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${name}/*`],
+        resources: [`${props.outputsBucket.arn}/${this.appId}/*`],
       },
       {
         actions: ['bedrock:InvokeModel'],
@@ -339,7 +340,7 @@ export class MeetingAnalyser extends BaseNumaApp {
     };
 
     this.addStepFunction(this, 'main', {
-      appName: name,
+      appName: this.appId,
       outputsBucket: props.outputsBucket,
       additionalPolicyStatements: [
         {
