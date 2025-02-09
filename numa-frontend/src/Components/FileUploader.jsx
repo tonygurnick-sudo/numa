@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { Button, Alert, ProgressBar } from 'react-bootstrap';
 import axios from 'axios';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useAuth } from '../Providers/AuthProvider';
-
+import { loadConfig } from '../../src/ConfigLoader';
 
 const dashedBorderKeyframes = `
   @keyframes dashedBorder {
@@ -34,15 +34,9 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
     files: [],
     folders: new Set(),
   });
-  const [config, setConfig] = useState(null);
-  const { getIdentityPoolCredentials } = useAuth();
 
-  useEffect(() => {
-    fetch("/config.json")
-      .then((response) => response.json())
-      .then((data) => setConfig(data))
-      .catch((error) => console.error("Error loading config:", error));
-  }, []);
+  const { getIdentityPoolCredentials } = useAuth();
+  const config = loadConfig();
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -86,8 +80,7 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
       for (let i = 0; i < files.length; i++) {
         setUploadingFileIndex(i);
         const file = files[i];
-        const relativePath =
-          file.customRelativePath || file.webkitRelativePath || file.name;
+        const relativePath = file.customRelativePath || file.webkitRelativePath || file.name;
         setCurrentFileName(relativePath);
 
         console.log('File details:', {
@@ -129,16 +122,10 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
               'Content-Type': file.type || 'application/octet-stream',
             },
             onUploadProgress: (progressEvent) => {
-              const fileProgress = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total,
-              );
-              const overallProgress = Math.round(
-                (i * 100 + fileProgress) / files.length,
-              );
+              const fileProgress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              const overallProgress = Math.round((i * 100 + fileProgress) / files.length);
               setUploadProgress(overallProgress);
-              console.log(
-                `File progress: ${fileProgress}%, Overall: ${overallProgress}%`,
-              );
+              console.log(`File progress: ${fileProgress}%, Overall: ${overallProgress}%`);
             },
           });
 
@@ -149,9 +136,7 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
             error: fileError.message,
             response: fileError.response?.data,
           });
-          throw new Error(
-            `Failed to upload ${relativePath}: ${fileError.message}`,
-          );
+          throw new Error(`Failed to upload ${relativePath}: ${fileError.message}`);
         }
       }
 
@@ -162,15 +147,10 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
     } catch (err) {
       console.error('Upload error:', err);
       const errorMessage =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        err.message ||
-        'Error uploading files';
+        err.response?.data?.error || err.response?.data?.message || err.message || 'Error uploading files';
 
       setError(errorMessage);
-      setDetailedError(
-        `Detailed error: ${JSON.stringify(err.response?.data || err.message, null, 2)}`,
-      );
+      setDetailedError(`Detailed error: ${JSON.stringify(err.response?.data || err.message, null, 2)}`);
     } finally {
       setIsUploading(false);
       setUploadingFileIndex(0);
@@ -234,8 +214,7 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
       // Create a set of unique folder paths
       const folders = new Set();
       files.forEach((file) => {
-        const path =
-          file.customRelativePath || file.webkitRelativePath || file.name;
+        const path = file.customRelativePath || file.webkitRelativePath || file.name;
         const parts = path.split('/');
         // Add all parent folders
         for (let i = 0; i < parts.length - 1; i++) {
@@ -295,8 +274,7 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
 
     // Group files by their folder path
     const groupedFiles = fileStructure.files.reduce((acc, file) => {
-      const path =
-        file.customRelativePath || file.webkitRelativePath || file.name;
+      const path = file.customRelativePath || file.webkitRelativePath || file.name;
       const parts = path.split('/');
 
       // Create entries for each folder level
@@ -329,9 +307,7 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
               <i className="bi bi-file-earmark me-2"></i>
               {file.name}
             </div>
-            <div className="text-muted small">
-              {(file.size / 1024).toFixed(2)} KB
-            </div>
+            <div className="text-muted small">{(file.size / 1024).toFixed(2)} KB</div>
           </div>
         ))}
 
@@ -355,9 +331,7 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
                     <span style={{ marginLeft: `${indentLevel * 2}rem` }}>
                       <i className="bi bi-folder me-2 text-warning"></i>
                       <strong>{folderName}</strong>
-                      <span className="ms-2 text-muted small">
-                        ({files.length} files)
-                      </span>
+                      <span className="ms-2 text-muted small">({files.length} files)</span>
                     </span>
                   </div>
                 </div>
@@ -369,16 +343,12 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
                       className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
                     >
                       <div>
-                        <span
-                          style={{ marginLeft: `${(indentLevel + 1) * 2}rem` }}
-                        >
+                        <span style={{ marginLeft: `${(indentLevel + 1) * 2}rem` }}>
                           <i className="bi bi-file-earmark me-2"></i>
                           {fileName}
                         </span>
                       </div>
-                      <div className="text-muted small">
-                        {(file.size / 1024).toFixed(2)} KB
-                      </div>
+                      <div className="text-muted small">{(file.size / 1024).toFixed(2)} KB</div>
                     </div>
                   );
                 })}
@@ -401,10 +371,7 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
         <Alert variant="danger">
           <div>{error}</div>
           {detailedError && (
-            <pre
-              className="mt-2 p-2 bg-light"
-              style={{ whiteSpace: 'pre-wrap' }}
-            >
+            <pre className="mt-2 p-2 bg-light" style={{ whiteSpace: 'pre-wrap' }}>
               {detailedError}
             </pre>
           )}
@@ -412,23 +379,12 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
       )}
 
       <div className="text-center">
-        <input
-          style={{ display: 'none' }}
-          id="file-upload"
-          type="file"
-          onChange={handleFileSelect}
-          multiple
-        />
+        <input style={{ display: 'none' }} id="file-upload" type="file" onChange={handleFileSelect} multiple />
 
         <div className="mb-3">
           <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
           <p className="mt-2">Drag and drop your files here, or</p>
-          <Button
-            variant="primary"
-            as="label"
-            htmlFor="file-upload"
-            style={{ cursor: 'pointer' }}
-          >
+          <Button variant="primary" as="label" htmlFor="file-upload" style={{ cursor: 'pointer' }}>
             Select Files
           </Button>
         </div>
@@ -443,28 +399,16 @@ const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
                   <p className="mb-2">
                     Uploading file {uploadingFileIndex + 1} of {totalFiles}
                   </p>
-                  {currentFileName && (
-                    <p className="mb-2 text-muted small">
-                      Current file: {currentFileName}
-                    </p>
-                  )}
+                  {currentFileName && <p className="mb-2 text-muted small">Current file: {currentFileName}</p>}
                   <div className="progress">
-                    <div
-                      className="progress-bar"
-                      style={{ width: `${uploadProgress}%` }}
-                      role="progressbar"
-                    >
+                    <div className="progress-bar" style={{ width: `${uploadProgress}%` }} role="progressbar">
                       {uploadProgress}%
                     </div>
                   </div>
                 </div>
               )}
 
-              <Button
-                variant="primary"
-                onClick={handleUpload}
-                disabled={!fileStructure.files.length || isUploading}
-              >
+              <Button variant="primary" onClick={handleUpload} disabled={!fileStructure.files.length || isUploading}>
                 {isUploading ? (
                   <>
                     <span className="spinner-border spinner-border-sm me-2" />
