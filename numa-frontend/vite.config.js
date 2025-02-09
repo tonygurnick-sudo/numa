@@ -1,14 +1,30 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { copyFileSync, mkdirSync, existsSync, readdirSync } from "fs";
-import { resolve } from "path";
-import config from "./public/config.json";
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync } from 'fs';
+import { resolve } from 'path';
+
+// Load the appropriate config file
+const loadConfig = () => {
+  const localConfigPath = './public/config.local.json';
+  const defaultConfigPath = './public/config.json';
+
+  if (existsSync(localConfigPath)) {
+    console.log('Using local config file');
+    return JSON.parse(readFileSync(localConfigPath, 'utf-8'));
+  } else {
+    console.log('Using default config file');
+    return JSON.parse(readFileSync(defaultConfigPath, 'utf-8'));
+  }
+};
+
+const config = loadConfig();
+
 // Custom plugin to copy build output to @numa-frontend
 const copyBuildPlugin = () => ({
-  name: "copy-build",
+  name: 'copy-build',
   closeBundle: async () => {
-    const sourceDir = "dist";
-    const targetDir = "../infra/build/numa-frontend";
+    const sourceDir = 'dist';
+    const targetDir = '../infra/build/numa-frontend';
 
     // Create target directory if it doesn't exist
     if (!existsSync(targetDir)) {
@@ -37,11 +53,9 @@ const copyBuildPlugin = () => ({
     try {
       // Copy the build output
       copyDir(sourceDir, targetDir);
-      console.log(
-        "Successfully copied build files to /infra/build/numa-frontend"
-      );
+      console.log('Successfully copied build files to /infra/build/numa-frontend');
     } catch (error) {
-      console.error("Error copying build files:", error);
+      console.error('Error copying build files:', error);
     }
   },
 });
@@ -54,11 +68,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/manifest.json": {
-        target: "http://localhost:5173",
-        rewrite: () => "/src/Data/example-manifest.json",
+      '/manifest.json': {
+        target: 'http://localhost:5173',
+        rewrite: () => '/src/Data/example-manifest.json',
       },
-      "/api": {
+      '/api': {
         target: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
         changeOrigin: true,
         secure: false,
@@ -71,36 +85,36 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "node_modules/@popperjs/core": "@popperjs/core/dist/umd/popper.min.js",
+      'node_modules/@popperjs/core': '@popperjs/core/dist/umd/popper.min.js',
     },
-    extensions: [".js", ".jsx"],
+    extensions: ['.js', '.jsx'],
   },
-  assetsInclude: ["**/*.md"],
+  assetsInclude: ['**/*.md'],
   test: {
-    environment: "jsdom",
+    environment: 'jsdom',
     globals: true,
     exclude: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/.{idea,git,cache,output,temp}/**",
-      "**/Fixtures/**",
-      "**/*.config.{js,ts}",
-      "**/eslint.config.js",
-      "**/vite.config.js",
-      "**/*TestProvider.{jsx,js}",
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      '**/Fixtures/**',
+      '**/*.config.{js,ts}',
+      '**/eslint.config.js',
+      '**/vite.config.js',
+      '**/*TestProvider.{jsx,js}',
     ],
     coverage: {
       exclude: [
-        "**/node_modules/**",
-        "**/dist/**",
-        "**/.{idea,git,cache,output,temp}/**",
-        "**/Fixtures/**",
-        "**/__tests__/**",
-        "**/*.config.{js,ts}",
-        "**/eslint.config.js",
-        "**/vite.config.js",
-        "**/index.{js,jsx}",
-        "**/*TestProvider.{jsx,js}",
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/.{idea,git,cache,output,temp}/**',
+        '**/Fixtures/**',
+        '**/__tests__/**',
+        '**/*.config.{js,ts}',
+        '**/eslint.config.js',
+        '**/vite.config.js',
+        '**/index.{js,jsx}',
+        '**/*TestProvider.{jsx,js}',
       ],
     },
   },
