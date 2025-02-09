@@ -1,21 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync } from 'fs';
+import { copyFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { resolve } from 'path';
-
-// Load the appropriate config file
-const loadConfig = () => {
-  const localConfigPath = './public/config.local.json';
-  const defaultConfigPath = './public/config.json';
-
-  if (existsSync(localConfigPath)) {
-    console.log('Using local config file');
-    return JSON.parse(readFileSync(localConfigPath, 'utf-8'));
-  } else {
-    console.log('Using default config file');
-    return JSON.parse(readFileSync(defaultConfigPath, 'utf-8'));
-  }
-};
+import { loadConfig } from './src/ConfigLoader';
 
 const config = loadConfig();
 
