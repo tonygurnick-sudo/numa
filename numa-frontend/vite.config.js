@@ -49,6 +49,9 @@ const copyBuildPlugin = () => ({
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), copyBuildPlugin()],
+  build: {
+    sourcemap: 'hidden',
+  },
   server: {
     proxy: {
       "/manifest.json": {
