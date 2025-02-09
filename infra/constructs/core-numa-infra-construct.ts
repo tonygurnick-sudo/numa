@@ -53,6 +53,7 @@ export class CoreNumaInfra extends Construct {
     props.createServiceLinkedRole ??= true;
     props.webCrawlerConfigs ??= [];
     props.temporaryPasswordValidityDays ??= 30;
+    props.devInstance ??= false;
 
     const callerId = new DataAwsCallerIdentity(this, 'caller-id', {});
 
@@ -479,7 +480,8 @@ export class CoreNumaInfra extends Construct {
       clientAccountId: props.clientAccountId,
       environmentName: props.environmentName,
       bucketName: 'outputs',
-      allowedMethods: ["GET", "PUT"],
+      allowedMethods: ['GET', 'PUT'],
+      allowLocalhostOrigin: props.devInstance,
     });
 
     if (props.loadSampleFile) {
@@ -724,4 +726,12 @@ interface _CoreNumaInfraProps {
   sharePointConfigs?: SharePointConfig[];
   boxConfigs?: BoxConfig[];
   teamsConfigs?: TeamsConfig[];
+  /**
+   * Various settings to make development easier:
+   *
+   * - add localhost CORS value to outputs bucket.
+   *
+   * @default false
+   */
+  devInstance?: boolean;
 }
