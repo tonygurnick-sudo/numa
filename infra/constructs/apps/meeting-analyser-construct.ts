@@ -200,7 +200,7 @@ export class MeetingAnalyser extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'app_name.$': appId,
+            app_name: appId,
             'job_id.$': '$$.Execution.Input.job_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
           },
