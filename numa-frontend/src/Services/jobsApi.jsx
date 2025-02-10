@@ -66,12 +66,6 @@ export const useJobsApi = () => {
       const response = await numaPut(endpoint, updateData);
       console.log('Job update response:', response);
 
-      if (!response.ok) {
-        const errorMessage = response.error || 'Failed to update job';
-        console.error('Job update failed:', errorMessage);
-        throw new Error(errorMessage);
-      }
-
       return response;
     } catch (error) {
       console.error('API Error updating job:', error);
