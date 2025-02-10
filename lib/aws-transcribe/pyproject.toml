@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "aws-transcribe"
+version = "0.1.0"
+description = "AWS Transcribe service wrapper"
+authors = ["Sam Bentley <sam@arcanum.ai>"]
+packages = [
+    { include = "aws_transcribe" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+
+boto3 = "1.36.13"
+filetype = "1.2.0"
+structlog = "25.1.0"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = "1.36.13"
+mypy = "1.15.0"
+pylint = "3.3.4"
+pyright = "1.1.393"
+pytest = "8.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

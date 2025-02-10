@@ -56,6 +56,7 @@ variables:
         - lambdas/python/step-function-start
         - lambdas/python/step-function-status
         - lambdas/python/structured-data-extraction
+        - lib/aws-transcribe
         - lib/bedrock
         - lib/helpers
         - lib/markdown-to-pdf
