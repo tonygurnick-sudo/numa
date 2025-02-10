@@ -26,7 +26,7 @@ class AWSTranscribe:
     def __init__(self):
         self.transcribe_client = boto3.client("transcribe")
 
-    def _start_transcription_job(
+    def __start_transcription_job(
         self,
         job_name: str,
         media_uri: str,
@@ -50,7 +50,7 @@ class AWSTranscribe:
             logger.exception("Failed to start transcription job")
             raise TranscriptionError("Failed to start transcription") from e
 
-    def _wait_for_completion(self, job_name: str, timeout: int = 900) -> dict:
+    def __wait_for_completion(self, job_name: str, timeout: int = 900) -> dict:
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
@@ -76,7 +76,7 @@ class AWSTranscribe:
 
         raise TranscriptionError("Transcription timed out")
 
-    def _get_transcript(self, job_info: dict) -> str:
+    def __get_transcript(self, job_info: dict) -> str:
         """
         Gets the transcript from S3 using the job info.
         """
@@ -119,7 +119,7 @@ class AWSTranscribe:
         output_bucket = output_bucket or bucket
         output_key = output_key or f"transcripts/{job_name}.json"
 
-        self._start_transcription_job(
+        self.__start_transcription_job(
             job_name=job_name,
             media_uri=media_uri,
             language_code=language_code,
@@ -127,13 +127,13 @@ class AWSTranscribe:
             output_key=output_key,
         )
 
-        job_info = self._wait_for_completion(job_name)
+        job_info = self.__wait_for_completion(job_name)
         logger.info("Job completed, getting transcript")
 
         job_info["OutputBucketName"] = output_bucket
         job_info["OutputKey"] = output_key
 
-        transcript_data = self._get_transcript(job_info)
+        transcript_data = self.__get_transcript(job_info)
 
         metadata = {
             "job_name": job_name,
