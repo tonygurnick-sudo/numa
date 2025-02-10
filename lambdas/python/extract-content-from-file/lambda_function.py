@@ -64,8 +64,8 @@ def handler(event: dict, _context) -> dict:
             bucket=input_bucket,
             key=input_key,
             job_name=f"transcribe-{int(time.time())}",
-            output_bucket=input_bucket,
-            output_key=f"transcripts/{os.path.basename(input_key)}.json",
+            output_bucket=output_bucket,
+            output_key=output_key,
             name_for_logging=f"transcribe-{input_key}",
         )
         document = __text_to_document(response.text, input_key)
