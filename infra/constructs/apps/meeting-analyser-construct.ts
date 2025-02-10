@@ -22,8 +22,9 @@ export class MeetingAnalyser extends BaseNumaApp {
   readonly manifest;
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
+    const appId = 'meeting-analyser';
     props.enableJobs = true;
-    props.pathPrefix ??= 'meeting-analyser';
+    props.pathPrefix ??= appId;
     super(scope, name, props);
 
     this.manifest = {
@@ -139,7 +140,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       {
         actions: ['s3:GetObject', 's3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${name}/*`],
+        resources: [`${props.outputsBucket.arn}/${appId}/*`],
       },
       {
         actions: ['bedrock:InvokeModel'],
@@ -160,7 +161,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       {
         actions: ['s3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${name}/*`],
+        resources: [`${props.outputsBucket.arn}/${appId}/*`],
       },
       {
         actions: ['bedrock:InvokeModel'],
@@ -185,7 +186,7 @@ export class MeetingAnalyser extends BaseNumaApp {
         Parameters: {
           Body: body,
           Bucket: props.outputsBucket.bucket,
-          'Key.$': "States.Format('{}/{}/status.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)",
+          'Key.$': `States.Format('${appId}/{}/status.json', $$.Execution.Input.job_id)`,
         },
         ResultPath: null,
         Next: next,
@@ -199,7 +200,7 @@ export class MeetingAnalyser extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'app_name.$': '$$.Execution.Input.app_name',
+            'app_name.$': appId,
             'job_id.$': '$$.Execution.Input.job_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
           },
@@ -220,8 +221,8 @@ export class MeetingAnalyser extends BaseNumaApp {
                 Parameters: {
                   FunctionName: extractContentLambda.arn,
                   Payload: {
-                    'input_bucket.$': '$.bucket',
-                    'input_key.$': '$.key',
+                    input_bucket: props.outputsBucket.bucket,
+                    'input_key.$': '$',
                     return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
                   },
                 },
@@ -258,8 +259,7 @@ export class MeetingAnalyser extends BaseNumaApp {
           Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
           Parameters: {
             Bucket: props.outputsBucket.bucket,
-            'Key.$':
-              "States.Format('{}/{}/extracted_content.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)",
+            'Key.$': `States.Format('${appId}/{}/extracted_content.json', $$.Execution.Input.job_id)`,
             'Body.$': '$.extracted[*].Payload.content',
             ContentType: 'text/json',
           },
@@ -283,8 +283,7 @@ export class MeetingAnalyser extends BaseNumaApp {
               'job_id.$': '$.job_id',
               'meeting_notes_and_or_transcript.$': '$.extracted[*].Payload.content',
               'other_notes.$': '$$.Execution.Input.other_notes',
-              'output_key.$':
-                "States.Format('{}/{}/analysis.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)",
+              'output_key.$': `States.Format('${appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
               'template.$': '$$.Execution.Input.template',
             },
           },
@@ -323,8 +322,7 @@ export class MeetingAnalyser extends BaseNumaApp {
             status: 'SUCCESS',
             result: {
               output_bucket: props.outputsBucket.bucket,
-              'output_key.$':
-                "States.Format('{}/{}/analysis.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)",
+              'output_key.$': `States.Format('${appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
             },
           },
           'Success',
@@ -339,7 +337,7 @@ export class MeetingAnalyser extends BaseNumaApp {
     };
 
     this.addStepFunction(this, 'main', {
-      appName: name,
+      appName: appId,
       outputsBucket: props.outputsBucket,
       additionalPolicyStatements: [
         {
