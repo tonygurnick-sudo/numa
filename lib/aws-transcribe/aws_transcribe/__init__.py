@@ -55,10 +55,10 @@ class AWSTranscribe:
 
             self.transcribe_client.start_transcription_job(**params)
         except ClientError as e:
-            logger.error("Failed to start transcription job", error=str(e))
-            raise TranscriptionError(f"Failed to start transcription: {str(e)}")
+            logger.exception("Failed to start transcription job")
+            raise TranscriptionError("Failed to start transcription") from e
 
-    def _wait_for_completion(self, job_name: str, timeout: int = 3600) -> dict:
+    def _wait_for_completion(self, job_name: str, timeout: int = 900) -> dict:
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
@@ -79,8 +79,8 @@ class AWSTranscribe:
 
                 time.sleep(30)
             except ClientError as e:
-                logger.error("Failed to get transcription job status", error=str(e))
-                raise TranscriptionError(f"Failed to get job status: {str(e)}")
+                logger.exception("Failed to get transcription job status")
+                raise TranscriptionError("Failed to get job status") from e
 
         raise TranscriptionError("Transcription timed out")
 
@@ -88,24 +88,22 @@ class AWSTranscribe:
         """
         Gets the transcript from S3 using the job info.
         """
-        try:
-            bucket = job_info["OutputBucketName"]
-            key = job_info["OutputKey"]
+        bucket = job_info["OutputBucketName"]
+        key = job_info["OutputKey"]
 
+        try:
             logger.info(f"Getting transcript from bucket: {bucket}, key: {key}")
 
             response = s3_client.get_object(Bucket=bucket, Key=key)
             transcript_json = json.loads(response["Body"].read().decode("utf-8"))
             return transcript_json["results"]["transcripts"][0]["transcript"]
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Failed to get transcript",
-                error=str(e),
-                error_type=type(e).__name__,
                 bucket=bucket,
                 key=key,
             )
-            raise TranscriptionError(f"Failed to get transcript: {str(e)}")
+            raise TranscriptionError("Failed to get transcript") from e
 
     def transcribe(
         self,
