@@ -6,7 +6,6 @@ from typing import Optional
 
 import boto3
 import structlog
-from botocore.config import Config
 from botocore.exceptions import ClientError
 
 logger = structlog.get_logger(__name__)
@@ -24,15 +23,8 @@ class TranscriptionResponse:
 
 
 class AWSTranscribe:
-    def __init__(
-        self,
-        region_name: str | None = None,
-    ):
-        self.transcribe_client = boto3.client(
-            service_name="transcribe",
-            region_name=region_name or os.getenv("AWS_REGION", "us-east-1"),
-            config=Config(read_timeout=1000),
-        )
+    def __init__(self):
+        self.transcribe_client = boto3.client("transcribe")
 
     def _start_transcription_job(
         self,
