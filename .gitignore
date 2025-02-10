@@ -128,4 +128,3 @@ numa-frontend/coverage
 # Frontend
 numa-frontend/public/config.json
 numa-frontend/public/manifest.json
-numa-frontend/public/config.local.json
