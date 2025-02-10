@@ -473,6 +473,7 @@ export class CoreNumaInfra extends Construct {
       environmentName: props.environmentName,
       clientAccountId: props.clientAccountId,
       allowedMethods: ['GET', 'PUT', 'DELETE'],
+      allowLocalhostOrigin: props.devInstance,
     });
 
     this.outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
@@ -730,6 +731,7 @@ interface _CoreNumaInfraProps {
    * Various settings to make development easier:
    *
    * - add localhost CORS value to outputs bucket.
+   * - add localhost CORS value to data bucket.
    *
    * @default false
    */
