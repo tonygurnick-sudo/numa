@@ -13,12 +13,16 @@ const AppItem = ({ app }) => {
   const handleFavoriteClick = (e) => {
     e.preventDefault(); // Prevent card click from triggering
     toggleFavorite(app.id);
+    if (favorite) {
+      // navigate('/favourite-apps');
+      window.location.reload();
+    }
   };
 
   return (
     <div className="card card-apps w-100" data-testid={`app-card-${app.id}`}>
       <div className={`card-category ${app?.category?.toLowerCase()}`}>
-        {app?.category?.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) || '\u00A0'}
+        {app?.category?.toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase()) || '\u00A0'}
       </div>
       <div className="card-header">
         <div className="header-top">
@@ -28,16 +32,11 @@ const AppItem = ({ app }) => {
               {app?.appName}
             </a>
           </div>
-          <div className="header-right">
-
-          </div>
+          <div className="header-right"></div>
         </div>
         <div className="app-tags">
           {displayTags.map((tag, index) => (
-            <span
-              key={index}
-              className={`tag-pill tag-${['green', 'purple', 'blue'][index % 3]}`}
-            >
+            <span key={index} className={`tag-pill tag-${['green', 'purple', 'blue'][index % 3]}`}>
               {tag}
             </span>
           ))}
@@ -47,11 +46,13 @@ const AppItem = ({ app }) => {
       <div className="card-body">
         <hr />
         <div className="app-info">
-          <div className="app-description">{app.appDescription === 'Loading...' ? (
-            <Preloader smallscreen={true} />
-          ) : (
-            <div className="description-text">{app.appDescription}</div>
-          )}</div>
+          <div className="app-description">
+            {app.appDescription === 'Loading...' ? (
+              <Preloader smallscreen={true} />
+            ) : (
+              <div className="description-text">{app.appDescription}</div>
+            )}
+          </div>
         </div>
       </div>
       <div className="card-footer">
@@ -68,28 +69,15 @@ const AppItem = ({ app }) => {
               </div>
             </div>
             <div className="d-flex align-items-center gap-3">
-            <div
-              className={`favorite-button ${favorite ? 'fav-active' : ''}`}
-              onClick={handleFavoriteClick}
-            >
-              {favorite ? (
-                <StarFill className="text-warning" size={24} />
-              ) : (
-                <Star className="text-muted" size={24} />
-              )}
-            </div>
+              <div className={`favorite-button ${favorite ? 'fav-active' : ''}`} onClick={handleFavoriteClick}>
+                {favorite ? <StarFill className="text-warning" size={24} /> : <Star className="text-muted" size={24} />}
+              </div>
               <div className="app-status">
-                <span className={`status ${app.status.toLowerCase()}`}>
-                  {app.status}
-                </span>
+                <span className={`status ${app.status.toLowerCase()}`}>{app.status}</span>
               </div>
               <div className="badge-status">
                 <span className="badge rounded-pill">
-                  {app.appVersion && (
-                    <label data-testid="app-version">
-                      v{app.appVersion}
-                    </label>
-                  )}
+                  {app.appVersion && <label data-testid="app-version">v{app.appVersion}</label>}
                 </span>
               </div>
             </div>
