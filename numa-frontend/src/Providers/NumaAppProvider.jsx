@@ -395,7 +395,7 @@ export const NumaAppProvider = ({ children }) => {
 
       // Update the job using jobsApi
       // TODO put back in after demo
-      //await jobsApi.updateJob(numaAppData, jobID, textOutputResults);
+      await jobsApi.updateJob(numaAppData, jobID, textOutputResults);
 
       // Refresh the jobs list
       await loadAppJobs();
