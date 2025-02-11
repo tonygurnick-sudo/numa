@@ -43,9 +43,7 @@ const NumaLogin = () => {
         setIsSettingNewPassword(true);
         setUsername(enteredUsername);
         setPassword(enteredPassword);
-        setSuccess(
-          'You need to set a new password. Please enter a new password below.',
-        );
+        setSuccess('You need to set a new password. Please enter a new password below.');
         clearInputs();
       } else {
         setSuccess('Login successful.');
@@ -77,17 +75,13 @@ const NumaLogin = () => {
 
     try {
       await setNewPassword(username, password, newPassword);
-      setSuccess(
-        'Password successfully updated. Logging in with new password...',
-      );
+      setSuccess('Password successfully updated. Logging in with new password...');
       setIsSettingNewPassword(false);
       clearInputs();
       navigate('/dash');
     } catch (error) {
       console.error('Error setting new password:', error);
-      setError(
-        error.message || 'An error occurred while setting the new password',
-      );
+      setError(error.message || 'An error occurred while setting the new password');
     } finally {
       setLoading(false);
     }
@@ -104,21 +98,12 @@ const NumaLogin = () => {
         <Form onSubmit={(e) => handleSubmit(e)}>
           <Form.Group controlId="username">
             <Form.Label>Username</Form.Label>
-            <Form.Control
-              type="text"
-              ref={usernameRef}
-              placeholder="Enter username"
-            />
+            <Form.Control type="text" ref={usernameRef} placeholder="Enter username" />
           </Form.Group>
 
           <Form.Group className="mb-3">
             <Form.Label htmlFor="password">Password</Form.Label>
-            <Form.Control
-              id="password"
-              name="password"
-              type="password"
-              ref={passwordRef}
-            />
+            <Form.Control id="password" name="password" type="password" ref={passwordRef} />
             <p className="mt-1">
               <a href="/reset-password">Forgot password</a>
             </p>
@@ -132,32 +117,15 @@ const NumaLogin = () => {
         <Form onSubmit={handleNewPasswordSubmit}>
           <Form.Group className="mb-3">
             <Form.Label htmlFor="newPassword">New Password</Form.Label>
-            <Form.Control
-              id="newPassword"
-              name="newPassword"
-              type="password"
-              ref={newPasswordRef}
-            />
+            <Form.Control id="newPassword" name="newPassword" type="password" ref={newPasswordRef} />
           </Form.Group>
 
           <Form.Group className="mb-3">
-            <Form.Label htmlFor="confirmPassword">
-              Confirm New Password
-            </Form.Label>
-            <Form.Control
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              ref={confirmPasswordRef}
-            />
+            <Form.Label htmlFor="confirmPassword">Confirm New Password</Form.Label>
+            <Form.Control id="confirmPassword" name="confirmPassword" type="password" ref={confirmPasswordRef} />
           </Form.Group>
 
-          <Button
-            variant="primary"
-            type="submit"
-            className="mb-3"
-            disabled={loading}
-          >
+          <Button variant="primary" type="submit" className="mb-3" disabled={loading}>
             {loading ? 'Setting New Password...' : 'Set New Password'}
           </Button>
         </Form>

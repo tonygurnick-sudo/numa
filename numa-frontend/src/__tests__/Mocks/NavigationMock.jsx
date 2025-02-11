@@ -11,9 +11,7 @@ const RouterContext = React.createContext(null);
 
 // Create a mock MemoryRouter component that provides navigation context
 export const MockMemoryRouter = ({ children }) => (
-  <RouterContext.Provider
-    value={{ navigator: { push: navigationHandlers.mockNavigate } }}
-  >
+  <RouterContext.Provider value={{ navigator: { push: navigationHandlers.mockNavigate } }}>
     <div data-testid="mock-memory-router">{children}</div>
   </RouterContext.Provider>
 );

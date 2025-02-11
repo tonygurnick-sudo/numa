@@ -18,7 +18,7 @@ export const NumaRequestProvider = ({ children }) => {
   const defaultHeaders = {
     'Content-Type': 'application/json',
     ...(user?.tokens?.accessToken && {
-      'authorization': user.tokens.accessToken
+      authorization: user.tokens.accessToken,
     }),
   };
 
@@ -32,7 +32,7 @@ export const NumaRequestProvider = ({ children }) => {
     }
 
     if (Array.isArray(data)) {
-      return data.map(item => {
+      return data.map((item) => {
         if (item.body && typeof item.body === 'string') {
           try {
             item.body = JSON.parse(item.body);
@@ -48,14 +48,16 @@ export const NumaRequestProvider = ({ children }) => {
   };
 
   const axiosConfig = {
-    transformResponse: [(data) => {
-      try {
-        const parsedData = JSON.parse(data);
-        return parseNestedJson(parsedData);
-      } catch (error) {
-        return data;
-      }
-    }],
+    transformResponse: [
+      (data) => {
+        try {
+          const parsedData = JSON.parse(data);
+          return parseNestedJson(parsedData);
+        } catch (error) {
+          return data;
+        }
+      },
+    ],
   };
 
   // Common request methods
@@ -96,9 +98,5 @@ export const NumaRequestProvider = ({ children }) => {
     numaDelete,
   };
 
-  return (
-    <NumaRequestContext.Provider value={value}>
-      {children}
-    </NumaRequestContext.Provider>
-  );
+  return <NumaRequestContext.Provider value={value}>{children}</NumaRequestContext.Provider>;
 };

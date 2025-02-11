@@ -38,8 +38,6 @@ This document serves as a guide for board members, staff, and the wider school c
 
 ## Table of Contents
 
-
-
 1. **Impact Policies**
 
    - Global Impact Policy
@@ -49,8 +47,6 @@ This document serves as a guide for board members, staff, and the wider school c
    - Experience of being in a Learning Community
 
    - Respect for Te Tiriti o Waitangi
-
-
 
 2. **Board-Management Relationship Policies**
 
@@ -69,8 +65,6 @@ This document serves as a guide for board members, staff, and the wider school c
    - Financial Responsibility
 
    - Inclusive Education
-
-
 
 3. **Operational Expectation Policies**
 
@@ -93,8 +87,6 @@ This document serves as a guide for board members, staff, and the wider school c
    - Concerns and Complaints
 
    - Community Engagement
-
-
 
 4. **Governance Culture Policies**
 
@@ -133,10 +125,10 @@ b) Good social skills and the ability to form good relationships, embodying our 
 c) Participation in community life and fulfilment of civic and social responsibilities, as active members of our local Plimmerton community and the wider Porirua area.
 d) Preparedness for future learning and challenges, developing as autonomous learners within our holistic educational framework.
 e) Appreciation of the importance of:
-   i. The inclusion of different groups and persons with different personal characteristics, reflecting our diverse student body (16% Māori, 8% Samoan, and others).
-   ii. Diversity, cultural knowledge, identity, and the different official languages of New Zealand.
-   iii. Te Tiriti o Waitangi and te reo Māori, honouring our commitment to biculturalism and the unique place of Māori in our school and society.
-   iv. Addressing the needs of students with differing abilities, including those with disabilities, ensuring all students have the opportunity to achieve educational success.[3]
+i. The inclusion of different groups and persons with different personal characteristics, reflecting our diverse student body (16% Māori, 8% Samoan, and others).
+ii. Diversity, cultural knowledge, identity, and the different official languages of New Zealand.
+iii. Te Tiriti o Waitangi and te reo Māori, honouring our commitment to biculturalism and the unique place of Māori in our school and society.
+iv. Addressing the needs of students with differing abilities, including those with disabilities, ensuring all students have the opportunity to achieve educational success.[3]
 
 ## 1.2 Experience of being in a Learning Community
 
@@ -247,17 +239,17 @@ The standard of compliance shall be any reasonable principal interpretation of t
 
 All policies that instruct the principal will be monitored at a frequency and by a method chosen by the board. The board can monitor any policy at any time by any method, but will ordinarily depend on a routine schedule:
 
-| Policy | Method | Frequency |
-|--------|--------|-----------|
-| Treatment of Learners | Internal | Annually |
-| Treatment of Staff | Internal | Annually |
-| Financial Planning and Budgeting | Internal | Quarterly |
-| Financial Condition and Activities | Internal | Quarterly |
-| | External | Annually |
-| Emergency principal Succession | Internal | Annually |
-| Compensation and Benefits | Internal | Annually |
-| | External | Every two years |
-| Communication and Support | Direct Inspection | Annually |
+| Policy                             | Method            | Frequency       |
+| ---------------------------------- | ----------------- | --------------- |
+| Treatment of Learners              | Internal          | Annually        |
+| Treatment of Staff                 | Internal          | Annually        |
+| Financial Planning and Budgeting   | Internal          | Quarterly       |
+| Financial Condition and Activities | Internal          | Quarterly       |
+|                                    | External          | Annually        |
+| Emergency principal Succession     | Internal          | Annually        |
+| Compensation and Benefits          | Internal          | Annually        |
+|                                    | External          | Every two years |
+| Communication and Support          | Direct Inspection | Annually        |
 
 ## 2.5 Compliance with Statement of National Education and Learning Priorities (NELP)
 
@@ -313,6 +305,7 @@ In relation to staff, the principal will not fail to observe current employment 
 ### 3.2.1 Good Faith
 
 The principal will maintain a position of good faith in all interactions with staff. The principal shall not fail to:
+
 - Ensure that employees are not discriminated against on other than clearly job-related, individual performance or qualifications.
 - Ensure all employees their rights to personal dignity, safety and access to an approved and fair internal grievance process and
 - Ensure that staff are aware of their responsibilities as employees of the school to their colleagues and to their employer.
@@ -341,6 +334,7 @@ In relation to the actual, ongoing financial conditions and activities, the prin
 ### 3.3.1 Financial Planning/Budgeting
 
 Budgeting shall not fail to reflect the board's Impact policies, risk financial jeopardy nor fail to show a generally acceptable level of foresight. Thus, the budget should not neglect to:
+
 - Reflect the impacts sought by the board.
 - Reflect the priorities as established by the board.
 - Comply with the board's requirement of a balanced budget.
@@ -361,8 +355,9 @@ h. Spend on single items beyond a board-established limit.
 i. Fail to ensure that all relevant government returns are completed on time.
 j. Fail to ensure that no one person has complete authority over the school's financial transactions.
 k. Make any purchase:
-   1. Of over $5,000 without having obtained comparative prices and quality.
-   2. Of over $10,000 without an adequate review on ongoing costs, value and reliability.
+
+1.  Of over $5,000 without having obtained comparative prices and quality.
+2.  Of over $10,000 without an adequate review on ongoing costs, value and reliability.
 
 ### 3.3.3 Impact Focus of Grants or Contracts
 
@@ -565,6 +560,7 @@ Principal monitoring will be on the agenda if reports have been received since t
 Board meetings will follow the requirements of the Education (School Boards) Regulations 2020 and part 7 of the Local Government Official Information and Meetings Act 1987. The board may use formal meeting procedures or consensus decision-making as appropriate, ensuring fair participation and clear documentation of decisions.
 
 Specific procedures include:
+
 1. Taking minutes of all board meetings and making them available to the public
 2. Ensuring that meetings are open to the public, except when the board has grounds to exclude the public under the Local Government Official Information and Meetings Act 1987
 3. Providing public notice of meetings

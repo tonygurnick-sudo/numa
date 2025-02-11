@@ -55,15 +55,9 @@ describe('Dash Component', () => {
     dashboardFixtures.validApps.apps.forEach((app) => {
       const appCard = screen.getByTestId(`app-card-${app.id}`);
       expect(appCard).toBeInTheDocument();
-      expect(within(appCard).getByTestId('app-name')).toHaveTextContent(
-        app.appName,
-      );
-      expect(within(appCard).getByTestId('app-description')).toHaveTextContent(
-        app.appDescription,
-      );
-      expect(within(appCard).getByTestId('app-status')).toHaveTextContent(
-        app.status,
-      );
+      expect(within(appCard).getByTestId('app-name')).toHaveTextContent(app.appName);
+      expect(within(appCard).getByTestId('app-description')).toHaveTextContent(app.appDescription);
+      expect(within(appCard).getByTestId('app-status')).toHaveTextContent(app.status);
     });
   });
 
@@ -109,12 +103,8 @@ describe('Dash Component', () => {
 
     // Check for main structural components
     expect(screen.getByTestId('mock-breadcrumbs')).toBeInTheDocument();
-    expect(
-      screen.getByTestId('mock-layout-dashboard-outer'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByTestId('mock-layout-dashboard-inner'),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('mock-layout-dashboard-outer')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-layout-dashboard-inner')).toBeInTheDocument();
   });
 
   it('should handle manifest parsing error', async () => {
@@ -136,19 +126,14 @@ describe('Dash Component', () => {
       expect(screen.getByTestId('error-message')).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('error-message')).toHaveTextContent(
-      'Failed to load apps: Data must be an array',
-    );
+    expect(screen.getByTestId('error-message')).toHaveTextContent('Failed to load apps: Data must be an array');
 
     // Verify fetch was called with the correct URL
-    expect(global.fetch).toHaveBeenCalledWith(
-      '../manifest.json',
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+    expect(global.fetch).toHaveBeenCalledWith('../manifest.json', {
+      headers: {
+        'Content-Type': 'application/json',
       },
-    );
+    });
 
     // Verify error was logged
     expect(consoleSpy).toHaveBeenCalled();

@@ -6,15 +6,7 @@ import { navigationHandlers } from '../Mocks/NavigationMock';
 import { authHandlers } from '../Mocks/AuthMock';
 
 import { waitFor, screen, fireEvent } from '@testing-library/react/pure';
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  beforeAll,
-  afterAll,
-} from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import '@testing-library/jest-dom';
 import { NumaLogin } from '../../Pages/Login';
 import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
@@ -119,9 +111,7 @@ describe('NumaLogin Component', () => {
 
     // Verify error message
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Invalid credentials',
-      );
+      expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials');
     });
   });
 
@@ -159,20 +149,14 @@ describe('NumaLogin Component', () => {
 
     // Verify new password was set
     await waitFor(() => {
-      expect(mockSetNewPassword).toHaveBeenCalledWith(
-        'testuser',
-        'password123',
-        'newpassword123',
-      );
+      expect(mockSetNewPassword).toHaveBeenCalledWith('testuser', 'password123', 'newpassword123');
     });
   });
 
   it('should handle new password update failure', async () => {
     // Setup mocks
     mockLogin.mockResolvedValueOnce({ requiresNewPassword: true });
-    mockSetNewPassword.mockRejectedValueOnce(
-      new Error('Password update failed'),
-    );
+    mockSetNewPassword.mockRejectedValueOnce(new Error('Password update failed'));
 
     renderWithProviders(<NumaLogin />);
 
@@ -203,9 +187,7 @@ describe('NumaLogin Component', () => {
 
     // Verify error message appears
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Password update failed',
-      );
+      expect(screen.getByRole('alert')).toHaveTextContent('Password update failed');
     });
   });
 
@@ -242,9 +224,7 @@ describe('NumaLogin Component', () => {
 
     // Verify error message appears
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        "Passwords don't match",
-      );
+      expect(screen.getByRole('alert')).toHaveTextContent("Passwords don't match");
       expect(mockSetNewPassword).not.toHaveBeenCalled();
     });
   });

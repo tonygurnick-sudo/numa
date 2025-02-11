@@ -1,21 +1,14 @@
 /**
  * @vitest-environment jsdom
  */
-import {
-  setupAwsMocks,
-  mockCognitoIdentityProviderClient,
-} from '../Mocks/AwsMock';
+import { setupAwsMocks, mockCognitoIdentityProviderClient } from '../Mocks/AwsMock';
 
 import React from 'react';
 import { render, act } from '@testing-library/react';
 import { waitFor } from '@testing-library/react/pure';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
-import {
-  AuthProvider,
-  useAuth,
-  TestAuthProvider,
-} from '../../Providers/AuthProvider';
+import { AuthProvider, useAuth, TestAuthProvider } from '../../Providers/AuthProvider';
 import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
 import { authTestTokens } from '../Fixtures/AuthTestTokens';
 import { fromWebToken } from '@aws-sdk/credential-providers';
@@ -143,10 +136,8 @@ describe('AuthProvider', () => {
     // Mock refresh handler
     const mockRefreshHandler = vi.fn().mockResolvedValue({
       AuthenticationResult: {
-        AccessToken:
-          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTYyMzkwMjJ9.new-signature',
-        IdToken:
-          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIifQ.new-signature',
+        AccessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTYyMzkwMjJ9.new-signature',
+        IdToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIifQ.new-signature',
       },
     });
 
@@ -166,10 +157,7 @@ describe('AuthProvider', () => {
 
     const onAuth = vi.fn();
     render(
-      <TestAuthProvider
-        refreshHandler={mockRefreshHandler}
-        initialTokens={mockUser}
-      >
+      <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={mockUser}>
         <TestComponent onAuth={onAuth} />
       </TestAuthProvider>,
     );
@@ -204,14 +192,10 @@ describe('AuthProvider', () => {
 
   describe('Token Management', () => {
     it('should get access token and refresh if expired', async () => {
-      const mockRefreshHandler = vi
-        .fn()
-        .mockResolvedValue(authTestTokens.refreshResponses.success);
+      const mockRefreshHandler = vi.fn().mockResolvedValue(authTestTokens.refreshResponses.success);
 
       // Mock localStorage getItem to return the expired tokens consistently
-      window.localStorage.getItem.mockImplementation(
-        (key) => authTestTokens.expired.tokens[key],
-      );
+      window.localStorage.getItem.mockImplementation((key) => authTestTokens.expired.tokens[key]);
 
       const onAuth = vi.fn();
 
@@ -229,10 +213,7 @@ describe('AuthProvider', () => {
 
       await act(async () => {
         render(
-          <TestAuthProvider
-            refreshHandler={mockRefreshHandler}
-            initialTokens={expiredTokens}
-          >
+          <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={expiredTokens}>
             <TestComponent onAuth={onAuth} />
           </TestAuthProvider>,
         );
@@ -258,10 +239,7 @@ describe('AuthProvider', () => {
       });
 
       // Verify the token matches the refreshed token
-      expect(token).toBe(
-        authTestTokens.refreshResponses.success.AuthenticationResult
-          .AccessToken,
-      );
+      expect(token).toBe(authTestTokens.refreshResponses.success.AuthenticationResult.AccessToken);
     });
 
     it('should handle logout correctly', async () => {
@@ -289,13 +267,9 @@ describe('AuthProvider', () => {
         auth.logout();
       });
 
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith(
-        'accessToken',
-      );
+      expect(window.localStorage.removeItem).toHaveBeenCalledWith('accessToken');
       expect(window.localStorage.removeItem).toHaveBeenCalledWith('idToken');
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith(
-        'refreshToken',
-      );
+      expect(window.localStorage.removeItem).toHaveBeenCalledWith('refreshToken');
       expect(auth.getUserInfo()).toBeNull();
     });
 
@@ -305,11 +279,9 @@ describe('AuthProvider', () => {
         Session: 'test-session',
       };
 
-      mockCognitoIdentityProviderClient.CognitoIdentityProviderClient.mockImplementationOnce(
-        () => ({
-          send: vi.fn().mockResolvedValueOnce(mockCognitoResponse),
-        }),
-      );
+      mockCognitoIdentityProviderClient.CognitoIdentityProviderClient.mockImplementationOnce(() => ({
+        send: vi.fn().mockResolvedValueOnce(mockCognitoResponse),
+      }));
 
       const onAuth = vi.fn();
       render(
@@ -321,9 +293,7 @@ describe('AuthProvider', () => {
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
 
       await expect(auth.setNewPassword('user', 'old', 'new')).rejects.toThrow();
-      expect(
-        mockCognitoIdentityProviderClient.CognitoIdentityProviderClient,
-      ).toHaveBeenCalled();
+      expect(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).toHaveBeenCalled();
     });
 
     it('should handle loadUserFromTokens with various token states', async () => {
@@ -344,9 +314,7 @@ describe('AuthProvider', () => {
 
       const onAuth = vi.fn();
       render(
-        <TestAuthProvider
-          initialTokens={{ tokens: validTokens, decoded_tokens: decodedTokens }}
-        >
+        <TestAuthProvider initialTokens={{ tokens: validTokens, decoded_tokens: decodedTokens }}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -379,9 +347,7 @@ describe('AuthProvider', () => {
       });
 
       // Mock localStorage getItem for expired tokens
-      window.localStorage.getItem.mockImplementation(
-        (key) => expiredTokens[key],
-      );
+      window.localStorage.getItem.mockImplementation((key) => expiredTokens[key]);
 
       render(
         <TestAuthProvider
@@ -421,10 +387,7 @@ describe('AuthProvider', () => {
       const onAuth = vi.fn();
 
       render(
-        <TestAuthProvider
-          refreshHandler={mockRefreshHandler}
-          initialTokens={authTestTokens.valid}
-        >
+        <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={authTestTokens.valid}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -454,15 +417,10 @@ describe('AuthProvider', () => {
         return authTestTokens.expired.tokens[key];
       });
 
-      const mockSuccessRefreshHandler = vi
-        .fn()
-        .mockResolvedValue(authTestTokens.refreshResponses.success);
+      const mockSuccessRefreshHandler = vi.fn().mockResolvedValue(authTestTokens.refreshResponses.success);
 
       render(
-        <TestAuthProvider
-          refreshHandler={mockSuccessRefreshHandler}
-          initialTokens={authTestTokens.expired}
-        >
+        <TestAuthProvider refreshHandler={mockSuccessRefreshHandler} initialTokens={authTestTokens.expired}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -487,9 +445,7 @@ describe('AuthProvider', () => {
 
       // Test Case 3: Expired token - failed refresh
       vi.clearAllMocks();
-      const mockFailedRefreshHandler = vi
-        .fn()
-        .mockResolvedValue(authTestTokens.refreshResponses.failure);
+      const mockFailedRefreshHandler = vi.fn().mockResolvedValue(authTestTokens.refreshResponses.failure);
 
       // Mock localStorage for the expired tokens case
       window.localStorage.getItem.mockImplementation((key) => {
@@ -497,10 +453,7 @@ describe('AuthProvider', () => {
       });
 
       render(
-        <TestAuthProvider
-          refreshHandler={mockFailedRefreshHandler}
-          initialTokens={authTestTokens.expired}
-        >
+        <TestAuthProvider refreshHandler={mockFailedRefreshHandler} initialTokens={authTestTokens.expired}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -517,20 +470,13 @@ describe('AuthProvider', () => {
       });
 
       // Verify localStorage was cleared
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith(
-        'accessToken',
-      );
+      expect(window.localStorage.removeItem).toHaveBeenCalledWith('accessToken');
       expect(window.localStorage.removeItem).toHaveBeenCalledWith('idToken');
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith(
-        'refreshToken',
-      );
+      expect(window.localStorage.removeItem).toHaveBeenCalledWith('refreshToken');
 
       // Force a re-render to ensure state is updated
       render(
-        <TestAuthProvider
-          refreshHandler={mockFailedRefreshHandler}
-          initialTokens={null}
-        >
+        <TestAuthProvider refreshHandler={mockFailedRefreshHandler} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -581,10 +527,7 @@ describe('AuthProvider', () => {
       const onAuth = vi.fn();
 
       render(
-        <TestAuthProvider
-          refreshHandler={mockRefreshHandler}
-          initialTokens={validTokens}
-        >
+        <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={validTokens}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -615,10 +558,7 @@ describe('AuthProvider', () => {
 
       // Render with no initial tokens/user
       render(
-        <TestAuthProvider
-          refreshHandler={mockRefreshHandler}
-          initialTokens={null}
-        >
+        <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -652,10 +592,7 @@ describe('AuthProvider', () => {
 
       const onAuth = vi.fn();
       const { rerender } = render(
-        <TestAuthProvider
-          refreshHandler={mockRefreshHandler}
-          initialTokens={authTestTokens.expired}
-        >
+        <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={authTestTokens.expired}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -673,20 +610,13 @@ describe('AuthProvider', () => {
       });
 
       // Verify localStorage was cleared
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith(
-        'accessToken',
-      );
+      expect(window.localStorage.removeItem).toHaveBeenCalledWith('accessToken');
       expect(window.localStorage.removeItem).toHaveBeenCalledWith('idToken');
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith(
-        'refreshToken',
-      );
+      expect(window.localStorage.removeItem).toHaveBeenCalledWith('refreshToken');
 
       // Force a re-render
       rerender(
-        <TestAuthProvider
-          refreshHandler={mockRefreshHandler}
-          initialTokens={null}
-        >
+        <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -701,9 +631,7 @@ describe('AuthProvider', () => {
 
   describe('AWS Client Initialization', () => {
     it('should handle QBusinessClient initialization failure', async () => {
-      const consoleSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       // Mock the credential provider to throw an error
       vi.mocked(fromWebToken).mockImplementationOnce(() => {
@@ -730,19 +658,14 @@ describe('AuthProvider', () => {
       );
 
       await waitFor(() => {
-        expect(consoleSpy).toHaveBeenCalledWith(
-          'Error in QBusinessClient initialization:',
-          expect.any(Error),
-        );
+        expect(consoleSpy).toHaveBeenCalledWith('Error in QBusinessClient initialization:', expect.any(Error));
       });
 
       consoleSpy.mockRestore();
     });
 
     it('should handle QAppsClient initialization failure', async () => {
-      const consoleSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       // First call succeeds (QBusinessClient), second call fails (QAppsClient)
       vi.mocked(fromWebToken)
@@ -775,10 +698,7 @@ describe('AuthProvider', () => {
       );
 
       await waitFor(() => {
-        expect(consoleSpy).toHaveBeenCalledWith(
-          'Error in QAppsClient initialization:',
-          expect.any(Error),
-        );
+        expect(consoleSpy).toHaveBeenCalledWith('Error in QAppsClient initialization:', expect.any(Error));
       });
 
       consoleSpy.mockRestore();
@@ -856,9 +776,7 @@ describe('AuthProvider', () => {
 
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
 
-      await expect(
-        auth.requestPasswordReset('test@example.com'),
-      ).rejects.toThrow(
+      await expect(auth.requestPasswordReset('test@example.com')).rejects.toThrow(
         'Error requesting password reset: Password reset failed',
       );
     });
@@ -873,11 +791,7 @@ describe('AuthProvider', () => {
 
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
 
-      const result = await auth.confirmPasswordReset(
-        'test@example.com',
-        '123456',
-        'newPassword123',
-      );
+      const result = await auth.confirmPasswordReset('test@example.com', '123456', 'newPassword123');
       expect(result).toEqual({ success: true });
       expect(CognitoIdentityProviderClient).toHaveBeenCalled();
     });
@@ -897,13 +811,9 @@ describe('AuthProvider', () => {
 
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
 
-      await expect(
-        auth.confirmPasswordReset(
-          'test@example.com',
-          '123456',
-          'newPassword123',
-        ),
-      ).rejects.toThrow('Error resetting password: Invalid confirmation code');
+      await expect(auth.confirmPasswordReset('test@example.com', '123456', 'newPassword123')).rejects.toThrow(
+        'Error resetting password: Invalid confirmation code',
+      );
     });
   });
 });

@@ -49,79 +49,52 @@ const WizardNavigation = ({
             ))}
           </div>
         </div>
-
-
       </div>
 
       <div className="task-navigation">
-          {activeStep < preRunSteps.length && (
+        {activeStep < preRunSteps.length && (
+          <>
+            <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
+              <i className="bi bi-arrow-left me-2"></i>
+              Previous Input
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleNextStep}
+              disabled={activeStep === preRunSteps.length - 1 || !taskCompletionStatus[visibleTasks[activeStep].id]}
+            >
+              Next Input
+              <i className="bi bi-arrow-right ms-2"></i>
+            </Button>
+          </>
+        )}
+      </div>
+
+      <div className="run-button-wrapper">
+        <Button
+          type="submit"
+          id="submit"
+          className="run-app-button"
+          disabled={disabled}
+          onClick={onClick}
+          {...otherRunButtonProps}
+        >
+          {isRunning ? (
             <>
-              <Button
-                variant="primary"
-                onClick={handlePrevStep}
-                disabled={activeStep === 0}
-              >
-                <i className="bi bi-arrow-left me-2"></i>
-                Previous Input
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleNextStep}
-                disabled={
-                  activeStep === preRunSteps.length - 1 ||
-                  !taskCompletionStatus[visibleTasks[activeStep].id]
-                }
-              >
-                Next Input
-                <i className="bi bi-arrow-right ms-2"></i>
-              </Button>
+              <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              <span className="ms-2">Running...</span>
+            </>
+          ) : (
+            <>
+              Run App{' '}
+              <i style={{ lineHeight: '1px' }} className={`bi bi-arrow-right ${!disabled ? 'bounce-icon' : ''}`}></i>
             </>
           )}
-        </div>
-
-
-
-          <div className="run-button-wrapper">
-            <Button
-              type="submit"
-              id="submit"
-              className="run-app-button"
-              disabled={disabled}
-              onClick={onClick}
-              {...otherRunButtonProps}
-            >
-              {isRunning ? (
-                <>
-                  <span
-                    className="spinner-border spinner-border-sm"
-                    role="status"
-                    aria-hidden="true"
-                  ></span>
-                  <span className="ms-2">Running...</span>
-                </>
-              ) : (
-                <>
-                  Run App{' '}
-                  <i
-                    style={{ lineHeight: '1px' }}
-                    className={`bi bi-arrow-right ${
-                      !disabled ? 'bounce-icon' : ''
-                    }`}
-                  ></i>
-                </>
-              )}
-            </Button>
-            <div className="run-status-text">
-              {!isRunning && disabled && (
-                <>Complete the required inputs to run</>
-              )}
-            </div>
-          </div>
-
-
+        </Button>
+        <div className="run-status-text">{!isRunning && disabled && <>Complete the required inputs to run</>}</div>
+      </div>
 
       <div className="step-section">
-
         {isRunning && (
           <div className="processing-container">
             <ProgressBar
@@ -140,8 +113,6 @@ const WizardNavigation = ({
 
         <div className={`section-label step-group post-run ${hasBeenRun ? 'show' : ''}`}>Results</div>
         <div className={`step-group post-run ${hasBeenRun ? 'show' : ''}`}>
-
-
           {postRunSteps.map((step, index) => {
             const stepIndex = index + preRunSteps.length;
             return (
@@ -149,13 +120,8 @@ const WizardNavigation = ({
                 <div
                   className={`step-indicator ${
                     activeStep === stepIndex ? 'active' : ''
-                  } ${isStepComplete?.(stepIndex) ? 'completed' : ''} ${
-                    isStepDisabled?.(stepIndex) ? 'disabled' : ''
-                  }`}
-                  onClick={() =>
-                    !isStepDisabled?.(stepIndex) &&
-                    onStepClick(stepIndex)
-                  }
+                  } ${isStepComplete?.(stepIndex) ? 'completed' : ''} ${isStepDisabled?.(stepIndex) ? 'disabled' : ''}`}
+                  onClick={() => !isStepDisabled?.(stepIndex) && onStepClick(stepIndex)}
                 >
                   <div className="step-label-container">
                     <span className="step-label">{step.title}</span>

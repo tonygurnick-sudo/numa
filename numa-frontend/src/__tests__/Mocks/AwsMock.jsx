@@ -106,8 +106,5 @@ export const setupAwsMocks = () => {
   vi.mock('@aws-sdk/client-qbusiness', () => mockQBusinessClient);
   vi.mock('@aws-sdk/client-qapps', () => mockQAppsClient);
   vi.mock('@aws-sdk/credential-providers', () => mockCredentialProviders);
-  vi.mock(
-    '@aws-sdk/client-cognito-identity-provider',
-    () => mockCognitoIdentityProviderClient,
-  );
+  vi.mock('@aws-sdk/client-cognito-identity-provider', () => mockCognitoIdentityProviderClient);
 };

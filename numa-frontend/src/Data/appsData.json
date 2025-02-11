@@ -41,10 +41,7 @@
           "qQuery": {
             "id": "fbdf0e18-28e2-47df-a185-d43a2c7b117d",
             "title": "Tax Saving Advice",
-            "dependencies": [
-              "d803f677-40fe-4aa5-9697-864a9c396797",
-              "ee0f322f-c5b8-463b-8b6f-278d884b5985"
-            ],
+            "dependencies": ["d803f677-40fe-4aa5-9697-864a9c396797", "ee0f322f-c5b8-463b-8b6f-278d884b5985"],
             "type": "q-query",
             "prompt": "Considering the extracted financial data @d803f677-40fe-4aa5-9697-864a9c396797 and the calculated tax liability @ee0f322f-c5b8-463b-8b6f-278d884b5985, provide detailed tax-saving advice. Identify potential deductions the user may be eligible for, and recommend specific strategies to maximize deductions and reduce taxable income. The advice should be tailored to the user's financial situation and aim to help them make informed decisions to optimize their tax savings.",
             "outputSource": "approved-sources"

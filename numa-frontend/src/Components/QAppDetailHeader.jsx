@@ -10,8 +10,7 @@ import { useNumaApp } from '../Providers/NumaAppProvider';
 
 const QAppDetailHeader = () => {
   const navigate = useNavigate();
-  const { runActive, setQSessionId, setIsPolling, qAppData, qCardInputValues, setError } =
-    useNumaApp();
+  const { runActive, setQSessionId, setIsPolling, qAppData, qCardInputValues, setError } = useNumaApp();
   const qAppId = qAppData.appId;
 
   const { qAppsClient, loading: authLoading } = useAuth();
@@ -79,11 +78,7 @@ const QAppDetailHeader = () => {
   return (
     <>
       <div className="d-flex gap-2">
-        <Button
-          variant="secondary"
-          className="w-auto"
-          onClick={handleAddAppToLib}
-        >
+        <Button variant="secondary" className="w-auto" onClick={handleAddAppToLib}>
           <i className="bi bi-plus-circle me-2"></i> Add to Library
         </Button>
 

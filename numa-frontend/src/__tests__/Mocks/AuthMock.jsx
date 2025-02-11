@@ -1,9 +1,6 @@
 import { vi } from 'vitest';
 import React from 'react';
-import {
-  ListDataSourcesCommand,
-  ListDataSourceSyncJobsCommand,
-} from '@aws-sdk/client-qbusiness';
+import { ListDataSourcesCommand, ListDataSourceSyncJobsCommand } from '@aws-sdk/client-qbusiness';
 
 const Q_DATASOURCE_ID = window.sessionStorage.getItem('Q_DATASOURCE_ID');
 

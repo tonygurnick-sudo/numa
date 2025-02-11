@@ -13,7 +13,6 @@ const Nav = () => {
   const { logout: authLogout } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
-
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
@@ -30,62 +29,36 @@ const Nav = () => {
   };
 
   const MobileNav = () => (
-    <Navbar
-      fixed="top"
-      className="container-fluid mobile-nav"
-    >
+    <Navbar fixed="top" className="container-fluid mobile-nav">
       <div className="d-flex justify-content-between align-items-center w-100">
-        <Navbar.Brand onClick={() => navigate('/dash')} role="button" className="btn-home-logo-mobile" >
-          <img
-            src={Logo}
-            alt="Arcanum"
-          /> &nbsp;Numa
+        <Navbar.Brand onClick={() => navigate('/dash')} role="button" className="btn-home-logo-mobile">
+          <img src={Logo} alt="Arcanum" /> &nbsp;Numa
         </Navbar.Brand>
 
-
         <Dropdown align="end" style={{ display: 'flex', alignItems: 'center' }}>
-          <Dropdown.Toggle
-            variant="link"
-            id="nav-dropdown"
-            data-testid="mobile-menu-button"
-          >
+          <Dropdown.Toggle variant="link" id="nav-dropdown" data-testid="mobile-menu-button">
             <i className="bi bi-list" style={{ fontSize: '1.8rem' }}></i>
           </Dropdown.Toggle>
 
           <Dropdown.Menu>
             <Dropdown.Item onClick={() => navigate('/dash')}>
-              <i
-                className="bi bi-grid-1x2-fill me-2"
-                style={{ color: 'var(--color-icon)' }}
-              ></i>
+              <i className="bi bi-grid-1x2-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Dashboard
             </Dropdown.Item>
             <Dropdown.Item onClick={() => navigate('/favourite-apps')}>
-              <i
-                className="bi bi-star-fill me-2"
-                style={{ color: 'var(--color-icon)' }}
-              ></i>
+              <i className="bi bi-star-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Favorites
             </Dropdown.Item>
             <Dropdown.Item onClick={() => navigate('/chat')}>
-              <i
-                className="bi bi-chat-dots-fill me-2"
-                style={{ color: 'var(--color-icon)' }}
-              ></i>
+              <i className="bi bi-chat-dots-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Chat
             </Dropdown.Item>
             <Dropdown.Item onClick={() => navigate('/upload')}>
-              <i
-                className="bi bi-cloud-upload-fill me-2"
-                style={{ color: 'var(--color-icon)' }}
-              ></i>
+              <i className="bi bi-cloud-upload-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Upload Files
             </Dropdown.Item>
             <Dropdown.Item onClick={() => navigate('/my-account')}>
-              <i
-                className="bi bi-gear-fill me-2"
-                style={{ color: 'var(--color-icon)' }}
-              ></i>
+              <i className="bi bi-gear-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Settings
             </Dropdown.Item>
             <Dropdown.Divider />
@@ -105,27 +78,15 @@ const Nav = () => {
   ) : (
     <>
       <nav className="nav-component">
-        <div
-          className="btn-home-logo"
-          onClick={() => navigate('/dash')}
-          role="button"
-        >
+        <div className="btn-home-logo" onClick={() => navigate('/dash')} role="button">
           <img src={Logo} className="logo-bk" alt="Arcanum" />
         </div>
         <div className="divider"></div>
 
         <ul className="nav-links">
           <li>
-            <div
-              className="nav-link nav-item"
-              onClick={() => navigate('/dash')}
-              title="Dashboard"
-              role="button"
-            >
-              <i
-                className="bi bi-grid-1x2-fill icon"
-                style={{ color: 'var(--color-icon)' }}
-              ></i>
+            <div className="nav-link nav-item" onClick={() => navigate('/dash')} title="Dashboard" role="button">
+              <i className="bi bi-grid-1x2-fill icon" style={{ color: 'var(--color-icon)' }}></i>
               <span className="icon-label">Dash</span>
             </div>
           </li>
@@ -136,60 +97,29 @@ const Nav = () => {
               title="Favorite Apps"
               role="button"
             >
-              <i
-                className="bi bi-star-fill icon"
-                style={{ color: 'var(--color-icon)' }}
-              ></i>
+              <i className="bi bi-star-fill icon" style={{ color: 'var(--color-icon)' }}></i>
               <span className="icon-label">Favs</span>
             </div>
           </li>
           <li>
-            <div
-              className="nav-link nav-item"
-              onClick={() => navigate('/chat')}
-              title="Chat"
-              role="button"
-            >
-              <i
-                className="bi bi-chat-dots-fill icon"
-                style={{ color: 'var(--color-icon)' }}
-              ></i>
+            <div className="nav-link nav-item" onClick={() => navigate('/chat')} title="Chat" role="button">
+              <i className="bi bi-chat-dots-fill icon" style={{ color: 'var(--color-icon)' }}></i>
               <span className="icon-label">Chat</span>
             </div>
           </li>
           <li>
-            <div
-              className="nav-link nav-item"
-              onClick={() => navigate('/upload')}
-              title="Upload"
-              role="button"
-            >
-              <i
-                className="bi bi-cloud-upload-fill icon"
-                style={{ color: 'var(--color-icon)' }}
-              ></i>
+            <div className="nav-link nav-item" onClick={() => navigate('/upload')} title="Upload" role="button">
+              <i className="bi bi-cloud-upload-fill icon" style={{ color: 'var(--color-icon)' }}></i>
               <span className="icon-label">Files</span>
             </div>
           </li>
         </ul>
 
         <footer className="footer">
-          <div
-            className="nav-link nav-item"
-            onClick={() => navigate('/my-account')}
-            title="Settings"
-            role="button"
-          >
-            <i
-              className="bi bi-gear-fill icon"
-              style={{ color: 'var(--color-icon)' }}
-            ></i>
+          <div className="nav-link nav-item" onClick={() => navigate('/my-account')} title="Settings" role="button">
+            <i className="bi bi-gear-fill icon" style={{ color: 'var(--color-icon)' }}></i>
           </div>
-          <button
-            onClick={logout}
-            className="btn-logout"
-            title="Logout"
-          >
+          <button onClick={logout} className="btn-logout" title="Logout">
             <div className="icon-with-text">
               <i className="bi bi-box-arrow-right"></i>
               <span>Log out</span>

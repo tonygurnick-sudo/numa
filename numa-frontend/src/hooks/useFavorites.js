@@ -21,9 +21,7 @@ export const useFavorites = () => {
     const exists = currentFavorites.includes(appId);
 
     // Update favorites list
-    const newFavorites = exists
-      ? currentFavorites.filter(id => id !== appId)
-      : [...currentFavorites, appId];
+    const newFavorites = exists ? currentFavorites.filter((id) => id !== appId) : [...currentFavorites, appId];
 
     // Update both localStorage and state
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newFavorites));

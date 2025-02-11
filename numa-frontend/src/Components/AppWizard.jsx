@@ -34,32 +34,20 @@ const AppWizard = ({ manifest }) => {
   // Filter out hidden tasks and system tasks (q-app and http-request)
   const visibleTasks = useMemo(
     () =>
-      manifest?.tasks?.filter(
-        (task) =>
-          !task.hidden && task.type !== 'q-app' && task.type !== 'http-request',
-      ) || [],
+      manifest?.tasks?.filter((task) => !task.hidden && task.type !== 'q-app' && task.type !== 'http-request') || [],
     [manifest?.tasks],
   );
 
   // Split tasks into pre-run and post-run groups
-  const preRunTasks = useMemo(
-    () => visibleTasks.filter((task) => !task.type.includes('output')),
-    [visibleTasks],
-  );
+  const preRunTasks = useMemo(() => visibleTasks.filter((task) => !task.type.includes('output')), [visibleTasks]);
 
-  const postRunTasks = useMemo(
-    () => visibleTasks.filter((task) => task.type.includes('output')),
-    [visibleTasks],
-  );
+  const postRunTasks = useMemo(() => visibleTasks.filter((task) => task.type.includes('output')), [visibleTasks]);
 
   // Mark tasks with default content as complete when navigating
   const markDefaultContentComplete = useCallback(
     (taskIndex) => {
       const currentTask = visibleTasks[taskIndex];
-      if (
-        currentTask?.defaultContent &&
-        !taskCompletionStatus[currentTask.id]
-      ) {
+      if (currentTask?.defaultContent && !taskCompletionStatus[currentTask.id]) {
         updateTaskCompletionStatus(currentTask.id, true);
       }
     },
@@ -78,9 +66,7 @@ const AppWizard = ({ manifest }) => {
         }
 
         // For input tasks, check if we can navigate there
-        const maxAllowedStep = visibleTasks.findIndex(
-          (task, i) => !taskCompletionStatus[task.id] && i !== activeStep,
-        );
+        const maxAllowedStep = visibleTasks.findIndex((task, i) => !taskCompletionStatus[task.id] && i !== activeStep);
         if (maxAllowedStep === -1 || index <= maxAllowedStep) {
           markDefaultContentComplete(activeStep); // Mark current task if it has default content
           setActiveStep(index);
@@ -88,13 +74,7 @@ const AppWizard = ({ manifest }) => {
         }
       }
     },
-    [
-      visibleTasks,
-      taskCompletionStatus,
-      activeStep,
-      markDefaultContentComplete,
-      setSelectedTaskId,
-    ],
+    [visibleTasks, taskCompletionStatus, activeStep, markDefaultContentComplete, setSelectedTaskId],
   );
 
   const handleRunApp = async () => {
@@ -111,9 +91,7 @@ const AppWizard = ({ manifest }) => {
       await handleRunButtonClick(numaAppData);
 
       // Find the first output task and set it as active
-      const firstOutputTask = visibleTasks.find((task) =>
-        task.type.includes('output'),
-      );
+      const firstOutputTask = visibleTasks.find((task) => task.type.includes('output'));
       if (firstOutputTask) {
         const outputIndex = visibleTasks.indexOf(firstOutputTask);
         setActiveStep(outputIndex);
@@ -137,9 +115,7 @@ const AppWizard = ({ manifest }) => {
 
   const isStepDisabled = useCallback(
     (index) => {
-      const maxAllowedStep = visibleTasks.findIndex(
-        (task, i) => !taskCompletionStatus[task.id] && i !== activeStep,
-      );
+      const maxAllowedStep = visibleTasks.findIndex((task, i) => !taskCompletionStatus[task.id] && i !== activeStep);
       return maxAllowedStep !== -1 && index > maxAllowedStep;
     },
     [visibleTasks, taskCompletionStatus, activeStep],
@@ -237,12 +213,7 @@ const AppWizard = ({ manifest }) => {
           {/* Error and Processing Status */}
           <div className="mt-2" style={{ maxWidth: '600px', margin: '0 auto' }}>
             {error && (
-              <Alert
-                variant="danger"
-                onClose={() => setError(null)}
-                dismissible
-                className="py-2"
-              >
+              <Alert variant="danger" onClose={() => setError(null)} dismissible className="py-2">
                 {error.message || error}
               </Alert>
             )}
@@ -262,11 +233,7 @@ const AppWizard = ({ manifest }) => {
 
       <Row>
         <Col xs={12} className="px-2 px-md-4">
-          {activeStep < visibleTasks.length && (
-            <div className="mb-4">
-              {renderTask(visibleTasks[activeStep])}
-            </div>
-          )}
+          {activeStep < visibleTasks.length && <div className="mb-4">{renderTask(visibleTasks[activeStep])}</div>}
         </Col>
       </Row>
     </Container>

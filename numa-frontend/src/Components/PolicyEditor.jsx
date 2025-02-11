@@ -130,20 +130,13 @@ const PolicyEditor = ({
           {selectedPolicy?.name}
           {isLoading && <span className="ms-2 text-muted">(Loading...)</span>}
         </h5>
-        <Button
-          variant="link"
-          className="p-0 text-dark"
-          onClick={() => setShowEditModal(false)}
-        >
+        <Button variant="link" className="p-0 text-dark" onClick={() => setShowEditModal(false)}>
           ×
         </Button>
       </div>
       <div className="policy-editor-body d-flex h-100">
         <div className="w-50 h-100 border-end">
-          <div
-            className="editor-container"
-            style={{ height: 'calc(100vh - 60px)', overflowY: 'auto' }}
-          >
+          <div className="editor-container" style={{ height: 'calc(100vh - 60px)', overflowY: 'auto' }}>
             <CustomToolbar />
             <div className="p-4">
               <MDXEditor
@@ -165,15 +158,10 @@ const PolicyEditor = ({
         <div className="w-50 h-100 d-flex flex-column">
           <div className="flex-grow-1 p-4" style={{ overflowY: 'auto' }}>
             {chatMessages.map((message, index) => (
-              <div
-                key={index}
-                className={`mb-3 ${message.role === 'user' ? 'text-end' : ''}`}
-              >
+              <div key={index} className={`mb-3 ${message.role === 'user' ? 'text-end' : ''}`}>
                 <div
                   className={`d-inline-block p-3 rounded ${
-                    message.role === 'user'
-                      ? 'bg-primary text-white'
-                      : 'bg-light'
+                    message.role === 'user' ? 'bg-primary text-white' : 'bg-light'
                   }`}
                 >
                   {message.content}

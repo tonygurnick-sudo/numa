@@ -11,9 +11,7 @@ function Breadcrumbs({ label, clearStack }) {
     const stack = JSON.parse(sessionStorage.getItem('navigation_stack')) || [];
 
     // Check if the current page is already in the navigation stack
-    const currentPageIndex = stack.findIndex(
-      (entry) => entry.path === location.pathname,
-    );
+    const currentPageIndex = stack.findIndex((entry) => entry.path === location.pathname);
     if (currentPageIndex !== -1) {
       // Remove all entries after the current page in the stack
       stack.splice(currentPageIndex + 1);
@@ -45,10 +43,7 @@ function Breadcrumbs({ label, clearStack }) {
           path: location.pathname,
         });
       }
-      sessionStorage.setItem(
-        'navigation_stack',
-        JSON.stringify(updatedBreadcrumbs),
-      );
+      sessionStorage.setItem('navigation_stack', JSON.stringify(updatedBreadcrumbs));
     } else {
       stack.forEach((entry) => {
         const path = entry.path;
@@ -66,9 +61,7 @@ function Breadcrumbs({ label, clearStack }) {
   const handleBreadcrumbClick = (e, path) => {
     e.preventDefault();
     // Find the index of the clicked breadcrumb
-    let clickedIndex = breadcrumbs.findIndex(
-      (breadcrumb) => breadcrumb.path === path,
-    );
+    let clickedIndex = breadcrumbs.findIndex((breadcrumb) => breadcrumb.path === path);
     // Check if the clicked index is greater than or equal to the length of the stack
     const stack = JSON.parse(sessionStorage.getItem('navigation_stack')) || [];
     if (clickedIndex >= stack.length) {
@@ -94,10 +87,7 @@ function Breadcrumbs({ label, clearStack }) {
         <li key={index}>
           {breadcrumbs.length > 0 && index < breadcrumbs.length - 1 ? (
             <>
-              <a
-                href={breadcrumb.path}
-                onClick={(e) => handleBreadcrumbClick(e, breadcrumb.path)}
-              >
+              <a href={breadcrumb.path} onClick={(e) => handleBreadcrumbClick(e, breadcrumb.path)}>
                 {breadcrumb.label}
               </a>{' '}
               &#62; &nbsp;
