@@ -17,7 +17,7 @@ import { PolicyBuilderDetail } from '../Components/PolicyBuilderDetail';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, loading, setNumaAppId, numaAppData } = useNumaApp();
+  const { error, setNumaAppId, numaAppData } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
 
@@ -70,9 +70,7 @@ const AppDetail = () => {
       <Container fluid className="mt-4">
         <Row>
           <Col>
-            {loading ? (
-              <Preloader />
-            ) : numaAppData?.type === 'q-app' ? (
+            {numaAppData?.type === "q-app" ? (
               <QAppDetail manifest={numaAppData} />
             ) : numaAppData?.type === 'policy-builder' ? (
               <PolicyBuilderDetail id={numaAppData.id} />

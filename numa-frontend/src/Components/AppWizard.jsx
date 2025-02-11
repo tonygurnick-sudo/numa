@@ -217,16 +217,6 @@ const AppWizard = ({ manifest }) => {
                 {error.message || error}
               </Alert>
             )}
-
-            {appRunning && (
-              <div className="text-center py-2">
-                <Preloader smallscreen={true} />
-                <div className="mt-1 text-muted">
-                  {processingStatus}
-                  {processingProgress > 0 && ` (${processingProgress}%)`}
-                </div>
-              </div>
-            )}
           </div>
         </Col>
       </Row>
