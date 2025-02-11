@@ -5,7 +5,6 @@ import { WizardNavigation } from './WizardNavigation';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { Preloader } from '../Components/Preloader';
 
-
 const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessionResults }) => {
   const {
     runActive,
@@ -32,7 +31,7 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
   useEffect(() => {
     if (qAppData?.appDefinition?.cards) {
       const newCompletedSteps = { ...completedSteps };
-      qAppData.appDefinition.cards.forEach(card => {
+      qAppData.appDefinition.cards.forEach((card) => {
         const cardData = getCardData(card);
         if (cardData.defaultValue) {
           newCompletedSteps[cardData.id] = true;
@@ -62,40 +61,42 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
     if (!qAppData?.appDefinition?.cards) return new Set();
 
     const deps = new Set();
-    qAppData.appDefinition.cards.forEach(card => {
+    qAppData.appDefinition.cards.forEach((card) => {
       const cardData = getCardData(card);
       if (cardData.dependencies && Array.isArray(cardData.dependencies)) {
-        cardData.dependencies.forEach(dep => deps.add(dep));
+        cardData.dependencies.forEach((dep) => deps.add(dep));
       }
     });
     return deps;
   }, [qAppData, getCardData]);
 
   // Check if a card is required (is a dependency for another card)
-  const isCardRequired = useCallback((cardId) => {
-    return cardDependencies.has(cardId);
-  }, [cardDependencies]);
+  const isCardRequired = useCallback(
+    (cardId) => {
+      return cardDependencies.has(cardId);
+    },
+    [cardDependencies],
+  );
 
   // Organize cards by type
-  const cards = useMemo(() =>
-    qAppData?.appDefinition?.cards || [],
-    [qAppData]
+  const cards = useMemo(() => qAppData?.appDefinition?.cards || [], [qAppData]);
+
+  const inputCards = useMemo(
+    () =>
+      cards.filter((card) => {
+        const cardData = getCardData(card);
+        return cardData.type === 'text-input' || cardData.type === 'file-input';
+      }),
+    [cards, getCardData],
   );
 
-  const inputCards = useMemo(() =>
-    cards.filter(card => {
-      const cardData = getCardData(card);
-      return cardData.type === 'text-input' || cardData.type === 'file-input';
-    }),
-    [cards, getCardData]
-  );
-
-  const outputCards = useMemo(() =>
-    cards.filter(card => {
-      const cardData = getCardData(card);
-      return cardData.type === 'q-query' || cardData.type === 'text-output';
-    }),
-    [cards, getCardData]
+  const outputCards = useMemo(
+    () =>
+      cards.filter((card) => {
+        const cardData = getCardData(card);
+        return cardData.type === 'q-query' || cardData.type === 'text-output';
+      }),
+    [cards, getCardData],
   );
 
   // Move to first output step when app starts running
@@ -106,52 +107,63 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
   }, [appRunning, inputCards.length, outputCards.length]);
 
   // Memoize step completion check
-  const isStepComplete = useCallback((index) => {
-    const allCards = [...inputCards, ...outputCards];
-    const card = allCards[index];
-    if (!card) return false;
+  const isStepComplete = useCallback(
+    (index) => {
+      const allCards = [...inputCards, ...outputCards];
+      const card = allCards[index];
+      if (!card) return false;
 
-    const cardData = getCardData(card);
-    const cardId = cardData.id;
+      const cardData = getCardData(card);
+      const cardId = cardData.id;
 
-    // For input cards, check if they have a value
-    if (index < inputCards.length) {
-      return Boolean(qCardInputValues[cardId] || cardData.defaultValue || completedSteps[cardId]);
-    }
+      // For input cards, check if they have a value
+      if (index < inputCards.length) {
+        return Boolean(qCardInputValues[cardId] || cardData.defaultValue || completedSteps[cardId]);
+      }
 
-    // For output cards, they're complete if their status is COMPLETED
-    return sessionResults?.cardStatus?.[cardId]?.currentState === 'COMPLETED';
-  }, [inputCards, outputCards, qCardInputValues, completedSteps, sessionResults, getCardData]);
+      // For output cards, they're complete if their status is COMPLETED
+      return sessionResults?.cardStatus?.[cardId]?.currentState === 'COMPLETED';
+    },
+    [inputCards, outputCards, qCardInputValues, completedSteps, sessionResults, getCardData],
+  );
 
-  const handleStepClick = useCallback((index) => {
-    const maxAllowedStep = [...inputCards, ...outputCards].findIndex((card, i) => !isStepComplete(i) && i !== activeStep);
-    if (maxAllowedStep === -1 || index <= maxAllowedStep) {
-      setActiveStep(index);
-    }
-  }, [inputCards, outputCards, isStepComplete, activeStep]);
+  const handleStepClick = useCallback(
+    (index) => {
+      const maxAllowedStep = [...inputCards, ...outputCards].findIndex(
+        (card, i) => !isStepComplete(i) && i !== activeStep,
+      );
+      if (maxAllowedStep === -1 || index <= maxAllowedStep) {
+        setActiveStep(index);
+      }
+    },
+    [inputCards, outputCards, isStepComplete, activeStep],
+  );
 
-  const handleRunApp = useCallback(async (e) => {
-    e.preventDefault();
+  const handleRunApp = useCallback(
+    async (e) => {
+      e.preventDefault();
 
-    try {
-      setAppRunning(true);
-      setProcessingProgress(0);
+      try {
+        setAppRunning(true);
+        setProcessingProgress(0);
 
-      // Mark all input steps as complete
-      const newCompletedSteps = { ...completedSteps };
-      inputCards.forEach(card => {
-        const cardData = getCardData(card);
-        newCompletedSteps[cardData.id] = true;
-      });
-      setCompletedSteps(newCompletedSteps);
+        // Mark all input steps as complete
+        const newCompletedSteps = { ...completedSteps };
+        inputCards.forEach((card) => {
+          const cardData = getCardData(card);
+          newCompletedSteps[cardData.id] = true;
+        });
+        setCompletedSteps(newCompletedSteps);
 
-      await onRunApp();
-    } catch (error) {
-      console.error('Error running app:', error);
-      setAppRunning(false);
-      setProcessingProgress(0);
-    }
-  }, [completedSteps, inputCards, onRunApp, setAppRunning, getCardData, setProcessingProgress]);
+        await onRunApp();
+      } catch (error) {
+        console.error('Error running app:', error);
+        setAppRunning(false);
+        setProcessingProgress(0);
+      }
+    },
+    [completedSteps, inputCards, onRunApp, setAppRunning, getCardData, setProcessingProgress],
+  );
 
   // Effect to track session results and update progress
   useEffect(() => {
@@ -160,11 +172,11 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
       if (sessionResults.cardStatus) {
         const cards = Object.values(sessionResults.cardStatus);
         const totalCards = cards.length;
-        const completedCards = cards.filter(card => card.currentState === 'COMPLETED').length;
-        const runningCards = cards.filter(card => card.currentState === 'RUNNING').length;
+        const completedCards = cards.filter((card) => card.currentState === 'COMPLETED').length;
+        const runningCards = cards.filter((card) => card.currentState === 'RUNNING').length;
 
         // Calculate progress percentage
-        const progress = Math.round(((completedCards + (runningCards * 0.5)) / totalCards) * 100);
+        const progress = Math.round(((completedCards + runningCards * 0.5) / totalCards) * 100);
 
         if (appRunning || isPolling) {
           setProcessingProgress(progress);
@@ -183,7 +195,7 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
 
   // Check if all required tasks are complete
   const areRequiredTasksComplete = useCallback(() => {
-    return inputCards.every(card => {
+    return inputCards.every((card) => {
       const cardData = getCardData(card);
       if (isCardRequired(cardData.id)) {
         return Boolean(qCardInputValues[cardData.id] || cardData.defaultValue);
@@ -193,43 +205,44 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
   }, [inputCards, getCardData, isCardRequired, qCardInputValues]);
 
   // Format cards for the wizard navigation
-  const preRunSteps = useMemo(() =>
-    inputCards.map(card => {
-      const cardData = getCardData(card);
-      return {
-        id: cardData.id,
-        title: cardData.title || 'Untitled',
-        required: isCardRequired(cardData.id),
-      };
-    }),
-    [inputCards, getCardData, isCardRequired]
+  const preRunSteps = useMemo(
+    () =>
+      inputCards.map((card) => {
+        const cardData = getCardData(card);
+        return {
+          id: cardData.id,
+          title: cardData.title || 'Untitled',
+          required: isCardRequired(cardData.id),
+        };
+      }),
+    [inputCards, getCardData, isCardRequired],
   );
 
-  const postRunSteps = useMemo(() =>
-    outputCards.map(card => {
-      const cardData = getCardData(card);
-      return {
-        id: cardData.id,
-        title: cardData.title || 'Untitled',
-      };
-    }),
-    [outputCards, getCardData]
+  const postRunSteps = useMemo(
+    () =>
+      outputCards.map((card) => {
+        const cardData = getCardData(card);
+        return {
+          id: cardData.id,
+          title: cardData.title || 'Untitled',
+        };
+      }),
+    [outputCards, getCardData],
   );
 
-  const isStepDisabled = useCallback((index) => {
-    const maxAllowedStep = [...inputCards, ...outputCards].findIndex((card, i) => !isStepComplete(i) && i !== activeStep);
-    return maxAllowedStep !== -1 && index > maxAllowedStep;
-  }, [inputCards, outputCards, isStepComplete, activeStep]);
-
-  const allCards = useMemo(() =>
-    [...inputCards, ...outputCards],
-    [inputCards, outputCards]
+  const isStepDisabled = useCallback(
+    (index) => {
+      const maxAllowedStep = [...inputCards, ...outputCards].findIndex(
+        (card, i) => !isStepComplete(i) && i !== activeStep,
+      );
+      return maxAllowedStep !== -1 && index > maxAllowedStep;
+    },
+    [inputCards, outputCards, isStepComplete, activeStep],
   );
 
-  const currentCard = useMemo(() =>
-    allCards[activeStep],
-    [allCards, activeStep]
-  );
+  const allCards = useMemo(() => [...inputCards, ...outputCards], [inputCards, outputCards]);
+
+  const currentCard = useMemo(() => allCards[activeStep], [allCards, activeStep]);
 
   const handlePrevStep = () => {
     if (activeStep > 0) {
@@ -246,8 +259,7 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
   };
 
   if (!qAppData?.appDefinition?.cards) {
-    return <div>
-              { <Preloader smallscreen={true} overlayParent={true} />}</div>;
+    return <div>{<Preloader smallscreen={true} overlayParent={true} />}</div>;
   }
 
   // Show results section after clicking Run

@@ -36,16 +36,10 @@ describe('NumaChat Component', () => {
     // Verify all mock components are rendered
     expect(screen.getByTestId('mock-nav')).toBeInTheDocument();
     expect(screen.getByTestId('mock-breadcrumbs')).toBeInTheDocument();
-    expect(
-      screen.getByTestId('mock-layout-dashboard-outer'),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('mock-layout-dashboard-outer')).toBeInTheDocument();
 
     // Verify welcome message is displayed
-    expect(
-      screen.getByText(
-        'Chat with your documents using Amazon Q Business. Ask anything!',
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Chat with your documents using Amazon Q Business. Ask anything!')).toBeInTheDocument();
   });
 
   /**
@@ -148,9 +142,7 @@ describe('NumaChat Component', () => {
 
     // Wait for and verify error message is displayed
     await waitFor(() => {
-      expect(
-        screen.getByText('Failed to send message. Please try again.'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Failed to send message. Please try again.')).toBeInTheDocument();
     });
   });
 

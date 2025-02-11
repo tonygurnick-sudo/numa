@@ -3,16 +3,8 @@
  */
 
 // Import mocks first
-import {
-  setupNavigationMocks,
-  clearNavigationMocks,
-  MockMemoryRouter,
-} from '../Mocks/NavigationMock';
-import {
-  setupAuthMocks,
-  clearAuthMocks,
-  MockAuthProvider,
-} from '../Mocks/AuthMock';
+import { setupNavigationMocks, clearNavigationMocks, MockMemoryRouter } from '../Mocks/NavigationMock';
+import { setupAuthMocks, clearAuthMocks, MockAuthProvider } from '../Mocks/AuthMock';
 import { renderWithProviders } from '../Mocks/ProviderWrapper';
 
 // Regular imports

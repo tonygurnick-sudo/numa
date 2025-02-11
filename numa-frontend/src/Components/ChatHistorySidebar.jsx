@@ -2,12 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from 'react-bootstrap';
 import { ListConversationsCommand, ListMessagesCommand } from '@aws-sdk/client-qbusiness';
 
-export const ChatHistorySidebar = ({
-  qBusinessClient,
-  APPLICATION_ID,
-  onSelectConversation,
-  setError,
-}) => {
+export const ChatHistorySidebar = ({ qBusinessClient, APPLICATION_ID, onSelectConversation, setError }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [show, setShow] = useState(false);
   const [conversations, setConversations] = useState([]);
@@ -20,7 +15,7 @@ export const ChatHistorySidebar = ({
       const input = {
         applicationId: APPLICATION_ID,
         conversationId: conversationId,
-        maxResults: 50
+        maxResults: 50,
       };
 
       const command = new ListMessagesCommand(input);
@@ -76,23 +71,14 @@ export const ChatHistorySidebar = ({
 
   return (
     <>
-      <Button
-        onClick={handleShow}
-        className="chat-history-toggle"
-        variant="primary"
-        size="sm"
-      >
+      <Button onClick={handleShow} className="chat-history-toggle" variant="primary" size="sm">
         Chat History
       </Button>
 
       <div className={`chat-history-sidebar ${show ? 'show' : ''}`}>
         <div className="sidebar-header d-flex justify-content-between align-items-center">
           <h6 className="mb-0">Chat History</h6>
-          <Button
-            variant="link"
-            className="close-button p-0 text-muted"
-            onClick={handleShow}
-          >
+          <Button variant="link" className="close-button p-0 text-muted" onClick={handleShow}>
             <i className="bi bi-x-lg"></i>
           </Button>
         </div>
@@ -121,16 +107,14 @@ export const ChatHistorySidebar = ({
                     onClick={() => fetchConversationHistory(conversation.conversationId)}
                     role="button"
                   >
-                    <div className="conversation-title fw-bold">
-                      {title}
-                    </div>
+                    <div className="conversation-title fw-bold">{title}</div>
                     <div className="conversation-time text-muted mt-1" style={{ fontSize: '0.75rem' }}>
                       {new Date(conversation.startTime || conversation.creationTime).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
-                        minute: '2-digit'
+                        minute: '2-digit',
                       })}
                     </div>
                   </div>

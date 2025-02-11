@@ -16,13 +16,7 @@
           "type": "dropdown",
           "required": true,
           "params": {
-            "options": [
-              "IT Security Policy",
-              "HR Policy",
-              "Compliance Policy",
-              "Operations Policy",
-              "Custom Policy"
-            ]
+            "options": ["IT Security Policy", "HR Policy", "Compliance Policy", "Operations Policy", "Custom Policy"]
           },
           "order": 1
         },

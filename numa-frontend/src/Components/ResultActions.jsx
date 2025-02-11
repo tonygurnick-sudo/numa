@@ -11,9 +11,7 @@ const ResultActions = ({ content, title = 'Result' }) => {
     const element = document.createElement('div');
 
     // Render the markdown content using our MarkdownContent component
-    const markdownHtml = ReactDOMServer.renderToString(
-      <MarkdownContent content={content} />
-    );
+    const markdownHtml = ReactDOMServer.renderToString(<MarkdownContent content={content} />);
 
     // Add the HTML content with proper styling
     element.innerHTML = `
@@ -37,14 +35,14 @@ const ResultActions = ({ content, title = 'Result' }) => {
       html2canvas: {
         scale: 2,
         useCORS: true,
-        logging: false
+        logging: false,
       },
       jsPDF: {
         unit: 'mm',
         format: 'a4',
-        orientation: 'portrait'
+        orientation: 'portrait',
       },
-      pagebreak: { mode: 'avoid-all' }
+      pagebreak: { mode: 'avoid-all' },
     };
 
     try {
@@ -57,7 +55,10 @@ const ResultActions = ({ content, title = 'Result' }) => {
   const handleDownloadCSV = () => {
     // Convert content to CSV format
     const plainText = content.replace(/<[^>]+>/g, '');
-    const csv = plainText.split('\n').map(line => line.trim()).join('\n');
+    const csv = plainText
+      .split('\n')
+      .map((line) => line.trim())
+      .join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     saveAs(blob, `${title}.csv`);
   };
@@ -66,7 +67,7 @@ const ResultActions = ({ content, title = 'Result' }) => {
     const data = {
       title,
       content: content.replace(/<[^>]+>/g, ''),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     saveAs(blob, `${title}.json`);
@@ -96,9 +97,7 @@ const ResultActions = ({ content, title = 'Result' }) => {
     const printWindow = window.open('', '_blank');
 
     // Render the markdown content using our MarkdownContent component
-    const markdownHtml = ReactDOMServer.renderToString(
-      <MarkdownContent content={content} />
-    );
+    const markdownHtml = ReactDOMServer.renderToString(<MarkdownContent content={content} />);
 
     printWindow.document.write(`
       <html>

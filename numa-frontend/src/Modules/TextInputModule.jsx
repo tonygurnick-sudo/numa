@@ -47,21 +47,21 @@ function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
 
   return (
     <>
-          {task.title && <h3>{task.title}</h3>}
-        {loading && <Preloader smallscreen={true} overlayParent={true} />}
-        <Form.Group controlId={`text-input-${task.id}`}>
-          <Form.Label>{task?.title}</Form.Label>
-          <Form.Control
-            as="textarea"
-            rows={7}
-            placeholder="Enter text here..."
-            value={inputValue}
-            onChange={handleInputChange}
-            onBlur={handleCommit}
-            onKeyPress={handleKeyPress}
-          />
-        </Form.Group>
-</>
+      {task.title && <h3>{task.title}</h3>}
+      {loading && <Preloader smallscreen={true} overlayParent={true} />}
+      <Form.Group controlId={`text-input-${task.id}`}>
+        <Form.Label>{task?.title}</Form.Label>
+        <Form.Control
+          as="textarea"
+          rows={7}
+          placeholder="Enter text here..."
+          value={inputValue}
+          onChange={handleInputChange}
+          onBlur={handleCommit}
+          onKeyPress={handleKeyPress}
+        />
+      </Form.Group>
+    </>
   );
 }
 

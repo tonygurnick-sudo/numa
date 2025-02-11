@@ -4,14 +4,8 @@ import { Button, ListGroup, Offcanvas } from 'react-bootstrap';
 import { formatDistanceToNow } from 'date-fns';
 
 const JobHistorySidebar = () => {
-  const {
-    getAppJobs,
-    loadAppJobs,
-    loadJobResults,
-    numaAppData,
-    jobHistorySidebarOpen,
-    setJobHistorySidebarOpen
-  } = useNumaApp();
+  const { getAppJobs, loadAppJobs, loadJobResults, numaAppData, jobHistorySidebarOpen, setJobHistorySidebarOpen } =
+    useNumaApp();
 
   const handleClose = () => setJobHistorySidebarOpen(false);
   const handleShow = async () => {
@@ -23,20 +17,13 @@ const JobHistorySidebar = () => {
 
   return (
     <>
-      <Button
-        onClick={handleShow}
-        className="job-history-toggle"
-        variant="primary"
-        size="sm"
-      >
+      <Button onClick={handleShow} className="job-history-toggle" variant="primary" size="sm">
         Recent Runs
       </Button>
 
       <Offcanvas show={jobHistorySidebarOpen} onHide={handleClose} placement="end">
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title>
-            Recent Jobs - {numaAppData?.appName || 'App'}
-          </Offcanvas.Title>
+          <Offcanvas.Title>Recent Jobs - {numaAppData?.appName || 'App'}</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>
           {jobs.length === 0 || typeof jobs === 'string' ? (
@@ -50,63 +37,58 @@ const JobHistorySidebar = () => {
                   return dateB - dateA;
                 })
                 .map((job) => (
-                <ListGroup.Item
-                  key={job.jobID}
-                  className="mb-2"
-                >
-                  <div className="d-flex justify-content-between align-items-start">
-                    <div>
-                      <div className="fw-bold">
-                        {(() => {
-                          try {
-                            const date = new Date(job.startedAt || job.dateTime);
-                            // Check if date is valid
-                            if (isNaN(date.getTime())) {
+                  <ListGroup.Item key={job.jobID} className="mb-2">
+                    <div className="d-flex justify-content-between align-items-start">
+                      <div>
+                        <div className="fw-bold">
+                          {(() => {
+                            try {
+                              const date = new Date(job.startedAt || job.dateTime);
+                              // Check if date is valid
+                              if (isNaN(date.getTime())) {
+                                return 'Unknown time';
+                              }
+                              return date.toLocaleString('en-NZ', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: 'numeric',
+                                hour12: true,
+                              });
+                            } catch (error) {
+                              console.error('Error formatting date:', error);
                               return 'Unknown time';
                             }
-                            return date.toLocaleString('en-NZ', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: 'numeric',
-                              minute: 'numeric',
-                              hour12: true
-                            });
-                          } catch (error) {
-                            console.error('Error formatting date:', error);
-                            return 'Unknown time';
-                          }
-                        })()}
-                      </div>
-                      <small className="text-muted">
-                        {(() => {
-                          try {
-                            const date = new Date(job.startedAt || job.dateTime);
-                            // Check if date is valid
-                            if (isNaN(date.getTime())) {
+                          })()}
+                        </div>
+                        <small className="text-muted">
+                          {(() => {
+                            try {
+                              const date = new Date(job.startedAt || job.dateTime);
+                              // Check if date is valid
+                              if (isNaN(date.getTime())) {
+                                return 'Unknown time';
+                              }
+                              return formatDistanceToNow(date, { addSuffix: true });
+                            } catch (error) {
+                              console.error('Error formatting date:', error);
                               return 'Unknown time';
                             }
-                            return formatDistanceToNow(date, { addSuffix: true });
-                          } catch (error) {
-                            console.error('Error formatting date:', error);
-                            return 'Unknown time';
-                          }
-                        })()}
-                      </small>
-                      <div className="text-muted small">
-                        Status: {job.status || 'completed'}
+                          })()}
+                        </small>
+                        <div className="text-muted small">Status: {job.status || 'completed'}</div>
                       </div>
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => loadJobResults(job.jobID)}
+                        disabled={job.status === 'running'}
+                      >
+                        View Results
+                      </Button>
                     </div>
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      onClick={() => loadJobResults(job.jobID)}
-                      disabled={job.status === 'running'}
-                    >
-                      View Results
-                    </Button>
-                  </div>
-                </ListGroup.Item>
-              ))}
+                  </ListGroup.Item>
+                ))}
             </ListGroup>
           )}
         </Offcanvas.Body>

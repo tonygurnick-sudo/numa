@@ -2,7 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Row, Col, Dropdown } from 'react-bootstrap';
 import { formatCategory } from '../utils/textUtils';
 
-export const AppSearch = ({ onSearch, categories = [], onCategoryFilter, onSort, initialCategories = [], initialSortOrder = 'asc' }) => {
+export const AppSearch = ({
+  onSearch,
+  categories = [],
+  onCategoryFilter,
+  onSort,
+  initialCategories = [],
+  initialSortOrder = 'asc',
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategories, setSelectedCategories] = useState(initialCategories);
   const [sortOrder, setSortOrder] = useState(initialSortOrder);

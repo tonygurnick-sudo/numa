@@ -12,11 +12,11 @@ export const createFormattedDate = () => {
     day: 'numeric',
     hour: 'numeric',
     minute: 'numeric',
-    hour12: true
+    hour12: true,
   });
 
   return {
     displayDate,
-    isoDate: now.toISOString()
+    isoDate: now.toISOString(),
   };
 };
