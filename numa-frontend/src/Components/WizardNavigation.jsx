@@ -14,11 +14,12 @@ const WizardNavigation = ({
   runButtonProps,
   processingProgress,
   processingStatus,
+  hasRun,
 }) => {
   const { isRunning, disabled, onClick, ...otherRunButtonProps } = runButtonProps;
 
   // Show post-run steps if app is running or has been run (has results)
-  const hasBeenRun = isRunning || postRunSteps.some((_, index) => isStepComplete?.(index + preRunSteps.length));
+  const hasBeenRun = isRunning || hasRun;
 
   return (
     <div className="wizard-navigation">

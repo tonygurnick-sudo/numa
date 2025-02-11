@@ -283,26 +283,25 @@ export const NumaAppProvider = ({ children }) => {
       const outputRef = task.params?.dataRef;
       console.log('Output reference:', outputRef);
 
-      // First, find the task that has our S3 information
-      const taskId = outputRef.split('/')[0].replace('@', '');
-      console.log('Looking for S3 info in task:', taskId);
-      const s3Info = currentResults[taskId];
-      console.log('Found S3 info:', s3Info);
+      // First get the initial result
+      let outputResult = resolveReference(outputRef, currentResults);
+      console.log('Initial resolved reference result:', outputResult);
 
-      // If we have S3 information, fetch the content first
-      if (s3Info?.output_bucket && s3Info?.output_key) {
+      // If the result contains S3 information, fetch and replace the content
+      if (outputResult?.output_bucket && outputResult?.output_key) {
         console.log('Found S3 information, fetching content...');
         const credentials = await getIdentityPoolCredentials();
-        const s3Content = await fetchS3Content(s3Info.output_bucket, s3Info.output_key, credentials);
+        const s3Content = await fetchS3Content(outputResult.output_bucket, outputResult.output_key, credentials);
         console.log('Retrieved S3 content:', s3Content);
 
-        // Store the S3 content in the results so resolveReference can use it
+        // Replace the S3 info with the actual content in currentResults
+        const taskId = outputRef.split('/')[0].replace('@', '');
         currentResults[taskId] = s3Content;
-      }
 
-      // Now use resolveReference to get the specific data we want
-      let outputResult = resolveReference(outputRef, currentResults);
-      console.log('Resolved reference result:', outputResult);
+        // Re-resolve to get the specific path from the content
+        outputResult = resolveReference(outputRef, currentResults);
+        console.log('Re-resolved reference after S3 fetch:', outputResult);
+      }
 
       if (outputResult) {
         let resultToDisplay = outputResult;
