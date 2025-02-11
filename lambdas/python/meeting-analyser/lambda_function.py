@@ -17,6 +17,11 @@ logger = structlog.get_logger()
 s3_client = boto3.client("s3")
 
 
+def remove_backticks(text: str) -> str:
+    """Remove all backticks from a string."""
+    return text.replace("`", "") if isinstance(text, str) else text
+
+
 def __get_job_id(event: dict):
     return event.get("job_id", str(uuid.uuid4()))
 
@@ -24,7 +29,7 @@ def __get_job_id(event: dict):
 def __run_model(prompt: str) -> str:
     model = bedrock.BedrockClaude3Model(model_args={"max_tokens": MAX_TOKENS})
     model_result = model.run(query=prompt)
-    return model_result.response[0]["text"]
+    return remove_backticks(model_result.response[0]["text"])
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
