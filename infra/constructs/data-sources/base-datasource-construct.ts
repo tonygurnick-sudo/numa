@@ -49,8 +49,10 @@ interface BaseDataSourceProps {
   syncMode?: 'FULL_CRAWL' | 'FORCED_FULL_CRAWL' | string;
 }
 
-export type DataSourceProps = Omit<BaseDataSourceProps, 'dataSourceType' | 'dataSourceConfiguration' | 'repositoryConfigurations'>;
-
+export type DataSourceProps = Omit<
+  BaseDataSourceProps,
+  'dataSourceType' | 'dataSourceConfiguration' | 'repositoryConfigurations'
+>;
 
 export interface RepositoryConfiguration {
   fieldMappings: FieldMapping[];
@@ -59,7 +61,7 @@ export interface RepositoryConfiguration {
 type FieldMapping = (DateFieldMapping | OtherFieldMapping) & {
   indexFieldName: string;
   dataSourceFieldName: string;
-}
+};
 
 interface DateFieldMapping {
   dateFieldFormat: string;

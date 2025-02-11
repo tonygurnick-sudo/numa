@@ -1,12 +1,5 @@
-import {
-  ServiceQuotas,
-  GetServiceQuotaCommand
-} from '@aws-sdk/client-service-quotas';
-import {
-  Support,
-  CreateCaseCommand,
-  DescribeCasesCommand
-} from '@aws-sdk/client-support';
+import { ServiceQuotas, GetServiceQuotaCommand } from '@aws-sdk/client-service-quotas';
+import { Support, CreateCaseCommand, DescribeCasesCommand } from '@aws-sdk/client-support';
 
 const CLAUDE_QUOTA_CODE = 'L-254CACF4';
 const SERVICE_CODE = 'bedrock';
@@ -19,14 +12,11 @@ async function findExistingCase(supportClient, clientName) {
       new DescribeCasesCommand({
         includeResolvedCases: false,
         serviceCode: 'bedrock',
-        language: 'en'
-      })
+        language: 'en',
+      }),
     );
 
-    return response.cases?.find(c =>
-      c.subject === CASE_SUBJECT(clientName) &&
-      c.status !== 'resolved'
-    );
+    return response.cases?.find((c) => c.subject === CASE_SUBJECT(clientName) && c.status !== 'resolved');
   } catch (error) {
     console.error('Error checking for existing cases:', error);
     throw error;
@@ -43,7 +33,7 @@ export const handler = async (event) => {
       new GetServiceQuotaCommand({
         ServiceCode: SERVICE_CODE,
         QuotaCode: CLAUDE_QUOTA_CODE,
-      })
+      }),
     );
 
     if (!response.Quota) {
@@ -59,7 +49,7 @@ export const handler = async (event) => {
         currentQuota,
         requiredQuota: REQUIRED_QUOTA,
         quotaName: response.Quota.QuotaName,
-        supportCaseCreated: false
+        supportCaseCreated: false,
       };
     }
 
@@ -76,7 +66,7 @@ export const handler = async (event) => {
         caseId: existingCase.caseId,
         caseStatus: existingCase.status,
         timeCreated: existingCase.timeCreated,
-        displayId: existingCase.displayId
+        displayId: existingCase.displayId,
       };
     }
 
@@ -84,10 +74,10 @@ export const handler = async (event) => {
     const createCaseResponse = await supportClient.send(
       new CreateCaseCommand({
         subject: CASE_SUBJECT(event.client),
-        serviceCode: "service-bedrock",
-        severityCode: "high",
-        categoryCode: "general-guidance",
-        issueType: "service-limit-increase",
+        serviceCode: 'service-bedrock',
+        severityCode: 'high',
+        categoryCode: 'general-guidance',
+        issueType: 'service-limit-increase',
         communicationBody: `
 We are requesting a quota increase for Amazon Bedrock Claude 3.5 Sonnet (anthropic.claude-3-5-sonnet) for client ${event.client}.
 
@@ -113,8 +103,8 @@ For any questions or additional information, please contact us at our email:
 
 aws-prod+quotaincrease@arcanum.ai
 
-        `
-      })
+        `,
+      }),
     );
 
     return {
@@ -124,9 +114,8 @@ aws-prod+quotaincrease@arcanum.ai
       quotaName: response.Quota.QuotaName,
       supportCaseCreated: true,
       newCase: true,
-      caseId: createCaseResponse.caseId
+      caseId: createCaseResponse.caseId,
     };
-
   } catch (error) {
     if (error.name === 'SubscriptionRequiredException') {
       return {
@@ -135,7 +124,7 @@ aws-prod+quotaincrease@arcanum.ai
         requiredQuota: REQUIRED_QUOTA,
         quotaName: response.Quota.QuotaName,
         error: 'Account requires Business Support plan to create support cases',
-        supportPlanRequired: true
+        supportPlanRequired: true,
       };
     }
     console.error('Error checking Bedrock quota:', error);
