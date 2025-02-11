@@ -26,48 +26,47 @@ const repositoryConfigurations: Record<string, RepositoryConfiguration> = {
   attachment: {
     fieldMappings: [
       {
-        dataSourceFieldName: "category",
-        indexFieldName: "_category",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'category',
+        indexFieldName: '_category',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "sourceUrl",
-        indexFieldName: "_source_uri",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'sourceUrl',
+        indexFieldName: '_source_uri',
+        indexFieldType: 'STRING',
       },
-    ]
+    ],
   },
   webPage: {
     fieldMappings: [
       {
-        dataSourceFieldName: "category",
-        indexFieldName: "_category",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'category',
+        indexFieldName: '_category',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "sourceUrl",
-        indexFieldName: "_source_uri",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'sourceUrl',
+        indexFieldName: '_source_uri',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "fileName",
-        indexFieldName: "wc_file_name",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'fileName',
+        indexFieldName: 'wc_file_name',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "fileType",
-        indexFieldName: "wc_file_type",
-        indexFieldType: "STRING"
+        dataSourceFieldName: 'fileType',
+        indexFieldName: 'wc_file_type',
+        indexFieldType: 'STRING',
       },
       {
-        dataSourceFieldName: "fileSize",
-        indexFieldName: "wc_file_size",
-        indexFieldType: "LONG"
-      }
-    ]
+        dataSourceFieldName: 'fileSize',
+        indexFieldName: 'wc_file_size',
+        indexFieldType: 'LONG',
+      },
+    ],
   },
 };
-
 
 export class WebDataSourceConstruct extends DataSource {
   constructor(scope: Construct, name: string, props: WebDataSourceConstructProps) {
@@ -103,7 +102,7 @@ export class WebDataSourceConstruct extends DataSource {
 
       // Extract all URLs from sitemap
       const urlMatches = siteMapContent.match(/<loc>(.*?)<\/loc>/g) || [];
-      const urls = urlMatches.map(match => match.replace(/<\/?loc>/g, ''));
+      const urls = urlMatches.map((match) => match.replace(/<\/?loc>/g, ''));
 
       // Extract base URL from first URL
       if (urls[0]) {
@@ -117,12 +116,12 @@ export class WebDataSourceConstruct extends DataSource {
         bucket: props.siteMapBucket.bucket,
         key: `sitemaps/${xmlFileName}`,
         source: siteMapFile,
-        contentType: 'application/xml'
+        contentType: 'application/xml',
       });
 
       repositoryEndpointMetadata = {
         s3SiteMapUrl: `s3://${props.siteMapBucket.bucket}/sitemaps/${xmlFileName}`,
-        seedUrlConnections: [{ seedUrl: baseUrl }]
+        seedUrlConnections: [{ seedUrl: baseUrl }],
       };
     }
 
@@ -137,7 +136,7 @@ export class WebDataSourceConstruct extends DataSource {
       crawlAttachments: true,
       maxFileSizeInMegaBytes: '50',
       inclusionURLCrawlPatterns: [`${baseUrl}/`],
-      exclusionURLCrawlPatterns: []
+      exclusionURLCrawlPatterns: [],
     };
 
     super(scope, name, {
@@ -154,7 +153,7 @@ export class WebDataSourceConstruct extends DataSource {
         },
         additionalProperties: {
           ...defaultAdditionalProperties,
-          ...props.configuration
+          ...props.configuration,
         },
       },
       repositoryConfigurations,

@@ -60,7 +60,7 @@ export class NumaClientStack extends ArcanumStack {
       userPoolId: core.userPoolId,
       userPoolClientId: core.userPoolClient.id,
       outputsBucket: core.outputsBucket,
-      accountId: props.config.clientAccountId
+      accountId: props.config.clientAccountId,
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
