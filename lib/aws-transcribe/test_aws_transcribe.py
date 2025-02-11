@@ -1,14 +1,12 @@
 import unittest
 
-from aws_transcribe import AWSTranscribe
+import aws_transcribe
 
 
 class TestAWSTranscribe(unittest.TestCase):
-    def test_init(self):
-        transcribe = AWSTranscribe()
-
-        self.assertTrue(hasattr(transcribe, "transcribe"))
-        self.assertTrue(callable(transcribe.transcribe))
+    def test_module_has_transcribe_function(self):
+        self.assertTrue(hasattr(aws_transcribe, "transcribe"))
+        self.assertTrue(callable(aws_transcribe.transcribe))
 
 
 if __name__ == "__main__":
