@@ -150,6 +150,11 @@ export class MeetingAnalyser extends BaseNumaApp {
         actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
         resources: ['*'],
       },
+      {
+        actions: ['transcribe:StartTranscriptionJob','transcribe:GetTranscriptionJob'],
+        effect: 'Allow',
+        resources: ['*'],
+      }
     ];
     const extractContentLambda = this.addLambdaFunction(this, 'extract', {
       additionalPolicyStatements: extractContentLambdaPolicyStatements,
