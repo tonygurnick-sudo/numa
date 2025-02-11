@@ -59,8 +59,7 @@ def handler(event: dict, _context) -> dict:
     elif input_key.lower().endswith(
         (".mp3", ".mp4", ".wav", ".flac", ".ogg", ".amr", ".webm", ".m4a")
     ):
-        transcribe = aws_transcribe.AWSTranscribe()
-        response = transcribe.transcribe(
+        response = aws_transcribe.transcribe(
             bucket=input_bucket,
             key=input_key,
             job_name=f"transcribe-{int(time.time())}",
