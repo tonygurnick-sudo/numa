@@ -320,10 +320,7 @@ export class MeetingAnalyser extends BaseNumaApp {
         WriteSuccessStatus: writeStatus(
           {
             status: 'SUCCESS',
-            result: {
-              output_bucket: props.outputsBucket.bucket,
-              'output_key.$': `States.Format('${appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
-            },
+            'result.$': '$.Payload',
           },
           'Success',
         ),
