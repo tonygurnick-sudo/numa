@@ -9,6 +9,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import prompts
+from tools import MEETING_ANALYSIS_TOOL
 
 MAX_TOKENS = 4096
 
@@ -19,7 +20,7 @@ s3_client = boto3.client("s3")
 
 def remove_backticks(text: str) -> str:
     """Remove all backticks from a string."""
-    return text.replace("`", "") if isinstance(text, str) else text
+    return text.replace("`", "")
 
 
 def __get_job_id(event: dict):
@@ -27,9 +28,17 @@ def __get_job_id(event: dict):
 
 
 def __run_model(prompt: str) -> str:
-    model = bedrock.BedrockClaude3Model(model_args={"max_tokens": MAX_TOKENS})
+    model = bedrock.BedrockClaude3Model(
+        model_args={
+            "max_tokens": MAX_TOKENS,
+            "temperature": 0.1,
+            "tools": MEETING_ANALYSIS_TOOL,
+            "tool_choice": {"type": "tool", "name": "meeting_content"},
+        }
+    )
     model_result = model.run(query=prompt)
-    return remove_backticks(model_result.response[0]["text"])
+    content = model_result.response[0]["input"]["content"]
+    return remove_backticks(content)
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
@@ -53,6 +62,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
     template_prompt = prompts.TEMPLATE_OUTPUT_PROMPT.format(
         meeting_notes_and_or_transcript=meeting_notes_and_or_transcript,
         template=template,
+        other_notes=other_notes,
     )
     template_output = __run_model(template_prompt)
 
