@@ -3,9 +3,7 @@
     "module": "ES2022",
     "target": "ES2023",
     "moduleResolution": "bundler",
-    "esModuleInterop": true,
+    "esModuleInterop": true
   },
-  "include": [
-    "**/*.ts"
-  ]
+  "include": ["**/*.ts"]
 }
