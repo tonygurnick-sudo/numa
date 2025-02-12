@@ -64,8 +64,8 @@ export class NumaClientStack extends ArcanumStack {
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
-    const coreAppId = props.client.replace(/^(?=[0-9])/, '_') + '-core';
-    new CoreNumaApp(this, coreAppId, {
+    const safeConstructId = props.client.replace(/^(?=[^a-zA-Z_])/, '_');
+    new CoreNumaApp(this, safeConstructId + '-core', {
       apiGatewayAuthorizerId: fe.authorizer.id,
       apiGatewayId: fe.apiGateway.id,
       outputsBucket: core.outputsBucket.bucket,
@@ -78,7 +78,7 @@ export class NumaClientStack extends ArcanumStack {
     }
     const apps = Object.entries(props.config.apps ?? {}).map(([appId, appConfig]) => {
       const app = lookupAppFromId(appId);
-      return new app(this, `${props.client}-${appId}`, {
+      return new app(this, `${safeConstructId}-${appId}`, {
         ...appConfig,
         apiGatewayAuthorizerId: fe.authorizer.id,
         apiGatewayId: fe.apiGateway.id,
