@@ -43,7 +43,7 @@ Return your response in markdown format using:
 """
 
 LEGISLATIVE_REVIEW_PROMPT = """You are an expert in reviewing the legislative aspects of policy documents created by our team, and you have over 30 years experience providing legal advice.
-One of our team has create a draft policy for {policy_area}.
+One of our team has created a draft policy for {policy_area}.
 
 We need your legal expertise to review the document against legislative requirements to ensure that the policy is legally compliant and meets all relevant legal obligations.
 
