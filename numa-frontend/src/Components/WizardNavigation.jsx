@@ -52,28 +52,7 @@ const WizardNavigation = ({
         </div>
       </div>
 
-<<<<<<< HEAD
-      <div className="task-navigation">
-        {activeStep < preRunSteps.length && (
-          <>
-            <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
-              <i className="bi bi-arrow-left me-2"></i>
-              Previous Input
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleNextStep}
-              disabled={activeStep === preRunSteps.length - 1 || !taskCompletionStatus[visibleTasks[activeStep].id]}
-            >
-              Next Input
-              <i className="bi bi-arrow-right ms-2"></i>
-            </Button>
-          </>
-        )}
-      </div>
 
-=======
->>>>>>> fa4cca1 (fix: moved prevv next btns)
       <div className="run-button-wrapper">
         <Button
           type="submit"
@@ -85,42 +64,17 @@ const WizardNavigation = ({
         >
           {isRunning ? (
             <>
-<<<<<<< HEAD
               <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-=======
-              <span
-                className="spinner-border spinner-border-sm"
-                role="status"
-                aria-hidden="true"
-              ></span>
->>>>>>> fa4cca1 (fix: moved prevv next btns)
               <span className="ms-2">Running...</span>
             </>
           ) : (
             <>
               Run App{' '}
-<<<<<<< HEAD
               <i style={{ lineHeight: '1px' }} className={`bi bi-arrow-right ${!disabled ? 'bounce-icon' : ''}`}></i>
             </>
           )}
         </Button>
         <div className="run-status-text">{!isRunning && disabled && <>Complete the required inputs to run</>}</div>
-=======
-              <i
-                style={{ lineHeight: '1px' }}
-                className={`bi bi-arrow-right ${
-                  !disabled ? 'bounce-icon' : ''
-                }`}
-              ></i>
-            </>
-          )}
-        </Button>
-        <div className="run-status-text">
-          {!isRunning && disabled && (
-            <>Complete the required inputs to run</>
-          )}
-        </div>
->>>>>>> fa4cca1 (fix: moved prevv next btns)
       </div>
 
       <div className="step-section">
@@ -142,10 +96,6 @@ const WizardNavigation = ({
 
         <div className={`section-label step-group post-run ${hasBeenRun ? 'show' : ''}`}>Results</div>
         <div className={`step-group post-run ${hasBeenRun ? 'show' : ''}`}>
-<<<<<<< HEAD
-=======
-
->>>>>>> fa4cca1 (fix: moved prevv next btns)
           {postRunSteps.map((step, index) => {
             const stepIndex = index + preRunSteps.length;
             return (

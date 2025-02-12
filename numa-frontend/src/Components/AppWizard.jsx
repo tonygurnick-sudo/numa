@@ -86,27 +86,17 @@ const AppWizard = ({ manifest }) => {
       });
       setTaskCompletionStatus(updatedStatus);
 
-<<<<<<< HEAD
-      setHasRun(true);
-      setAppRunning(true);
-      await handleRunButtonClick(numaAppData);
-
-      // Find the first output task and set it as active
-      const firstOutputTask = visibleTasks.find((task) => task.type.includes('output'));
-=======
       // Find and set the first output task as active immediately
       const firstOutputTask = visibleTasks.find((task) =>
-        task.type.includes('output'),
+        task.type.includes('output')
       );
 
->>>>>>> 6933da7 (fix: auto active first result was broken, attemtp to add support for either result has object or file json)
       if (firstOutputTask) {
         const outputIndex = visibleTasks.indexOf(firstOutputTask);
         setActiveStep(outputIndex);
         setSelectedTaskId(firstOutputTask.id);
       }
 
-      // Then start the app running process
       setHasRun(true);
       setAppRunning(true);
       await handleRunButtonClick(numaAppData);
@@ -236,10 +226,6 @@ const AppWizard = ({ manifest }) => {
       </Row>
 
       <Row>
-<<<<<<< HEAD
-        <Col xs={12} className="px-2 px-md-4">
-          {activeStep < visibleTasks.length && <div className="mb-4">{renderTask(visibleTasks[activeStep])}</div>}
-=======
         <Col xs={12} className="px-2 px-md-4 position-relative">
           {activeStep < visibleTasks.length && (
             <div className="mb-4 position-relative">
@@ -271,7 +257,6 @@ const AppWizard = ({ manifest }) => {
               </div>
             </div>
           )}
->>>>>>> fa4cca1 (fix: moved prevv next btns)
         </Col>
       </Row>
     </Container>
