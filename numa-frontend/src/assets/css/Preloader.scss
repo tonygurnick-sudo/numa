@@ -66,6 +66,10 @@
   display: flex;
   justify-content: center; /* Center horizontally */
   align-items: center; /* Center vertically */
+
+  .wrap {
+    margin-top: inherit;
+  }
 }
 
 @keyframes fadeInTop {

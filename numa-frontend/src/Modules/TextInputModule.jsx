@@ -4,11 +4,10 @@ import { useNumaApp } from '../Providers/NumaAppProvider';
 import { Preloader } from '../Components/Preloader';
 
 function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
-  const { loading, taskInputValues } = useNumaApp();
+  const { numaTaskResponses, appRunning, taskInputValues } = useNumaApp();
   const [inputValue, setInputValue] = useState('');
 
-  // const [isTaskComplete, setIsTaskComplete] = useState(false);
-  // const inputRef = useRef();
+  const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
 
   // Set the input value on the first render based on taskInputValues or task.default
   useEffect(() => {
@@ -50,6 +49,7 @@ function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
           {task.title && <h3>{task.title}</h3>}
         <Form.Group controlId={`text-input-${task.id}`}>
           <Form.Label>{task?.title}</Form.Label>
+          {appRunning && !taskResponse?.result && <Preloader overlayParent={true} />}
           <Form.Control
             as="textarea"
             rows={7}
