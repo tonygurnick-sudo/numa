@@ -10,6 +10,8 @@ import {
 } from '../qAppHelper';
 import { useJobsApi } from '../Services/jobsApi';
 import { useNumaRequest } from '../Providers/RequestProvider';
+import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Create the context
 const NumaAppContext = createContext();
@@ -26,9 +28,17 @@ const resolveReference = (key, taskResults) => {
   // Split the reference into taskId and subPath
   const [fullTaskId, ...subPaths] = key.slice(1).split('/');
 
-  // Get the base result
-  const baseResult = taskResults[fullTaskId];
+  // Try both hyphen and underscore versions of the task ID
+  const hyphenTaskId = fullTaskId.replace(/_/g, '-');
+  const underscoreTaskId = fullTaskId.replace(/-/g, '_');
+
+  // Get the base result, trying both versions of the task ID
+  let baseResult = taskResults[hyphenTaskId];
   if (baseResult === undefined) {
+    baseResult = taskResults[underscoreTaskId];
+  }
+  if (baseResult === undefined) {
+    console.warn(`Could not find task result for either ${hyphenTaskId} or ${underscoreTaskId}`);
     return '';
   }
 
@@ -81,7 +91,7 @@ function createPayloadFromTemplate(template, inputValues, taskResults) {
 
 // Provider component
 export const NumaAppProvider = ({ children }) => {
-  const { qAppsClient } = useAuth();
+  const { qAppsClient, getIdentityPoolCredentials } = useAuth();
   const jobsApi = useJobsApi();
 
   const [loading, setLoading] = useState(false);
@@ -275,33 +285,160 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
-  const processTextOutputTask = (task, currentResults) => {
-    const outputRef = task.params?.dataRef;
-    const outputResult = resolveReference(outputRef, currentResults);
+  const processTextOutputTask = async (task, currentResults) => {
+    try {
+      console.log('Processing text output task:', task);
+      const outputRef = task.params?.dataRef;
+      console.log('Output reference:', outputRef);
 
-    if (outputResult) {
-      let resultToDisplay = outputResult;
+      // First get the initial result
+      let outputResult = resolveReference(outputRef, currentResults);
+      console.log('Initial resolved reference result:', outputResult);
 
-      if (typeof outputResult === 'object') {
-        // If it's an array of objects, convert to markdown table
-        if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
-          const headers = Object.keys(outputResult[0]);
-          const headerRow = `| ${headers.join(' | ')} |`;
-          const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
-          const dataRows = outputResult.map((item) => `| ${headers.map((header) => item[header] || '').join(' | ')} |`);
-          resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
-        } else {
-          // For other objects, format as code block
-          resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
-        }
+      // If the result contains S3 information, fetch and replace the content
+      if (outputResult?.output_bucket && outputResult?.output_key) {
+        console.log('Found S3 information, fetching content...');
+        const credentials = await getIdentityPoolCredentials();
+        const s3Content = await fetchS3Content(outputResult.output_bucket, outputResult.output_key, credentials);
+        console.log('Retrieved S3 content:', s3Content);
+
+        // Replace the S3 info with the actual content in currentResults
+        const taskId = outputRef.split('/')[0].replace('@', '');
+        currentResults[taskId] = s3Content;
+
+        // Re-resolve to get the specific path from the content
+        outputResult = resolveReference(outputRef, currentResults);
+        console.log('Re-resolved reference after S3 fetch:', outputResult);
       }
 
-      setNumaTaskResponses((prevResponses) => [
-        ...prevResponses.filter((response) => response.taskId !== task.id),
-        { taskId: task.id, result: resultToDisplay },
-      ]);
+      if (outputResult) {
+        let resultToDisplay = outputResult;
+        console.log('Processing result for display:', { type: typeof resultToDisplay, value: resultToDisplay });
+
+        if (typeof outputResult === 'object') {
+          if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
+            console.log('Converting array of objects to markdown table');
+            const headers = Object.keys(outputResult[0]);
+            const headerRow = `| ${headers.join(' | ')} |`;
+            const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
+            const dataRows = outputResult.map((item) => `| ${headers.map((header) => item[header] || '').join(' | ')} |`);
+            resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
+          } else {
+            console.log('Converting object to JSON string');
+            resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
+          }
+        } else if (typeof outputResult === 'string') {
+          console.log('Processing string output:', {
+            startsWithMarkdown: outputResult.startsWith('```markdown'),
+            containsMarkdownChars: /[#*`[\]()|\n]/.test(outputResult),
+            firstFewChars: outputResult.slice(0, 20)
+          });
+
+          // First check if it's a markdown code block and extract its content
+          const markdownBlockMatch = outputResult.match(/^```markdown\n([\s\S]*)\n```$/);
+          if (markdownBlockMatch) {
+            console.log('Extracted content from markdown block');
+            // Extract the content from inside the markdown block
+            resultToDisplay = markdownBlockMatch[1];
+          } else if (outputResult.includes('```markdown')) {
+            // If it contains markdown blocks but isn't a perfect match (might be inside JSON)
+            try {
+              const parsed = JSON.parse(outputResult);
+              if (parsed.value && typeof parsed.value === 'string') {
+                const valueMarkdownMatch = parsed.value.match(/^```markdown\n([\s\S]*)\n```$/);
+                if (valueMarkdownMatch) {
+                  console.log('Extracted markdown from JSON value');
+                  resultToDisplay = valueMarkdownMatch[1];
+                }
+              }
+            } catch (e) {
+              console.log('Not valid JSON with markdown:', e);
+            }
+          } else {
+            // Check if the string already contains markdown-like formatting
+            const hasMarkdown = /[#*`[\]()|\n]/.test(outputResult);
+            if (!hasMarkdown) {
+              // If it doesn't look like markdown, try to detect if it's JSON or code
+              try {
+                JSON.parse(outputResult);
+                // If it parses as JSON, format it as a code block
+                resultToDisplay = '```json\n' + JSON.stringify(JSON.parse(outputResult), null, 2) + '\n```';
+              } catch {
+                // If it's not JSON and doesn't have markdown, wrap paragraphs
+                resultToDisplay = outputResult
+                  .split('\n\n')
+                  .map(para => para.trim())
+                  .filter(para => para)
+                  .join('\n\n');
+              }
+            }
+          }
+          console.log('Final processed string:', {
+            firstFewChars: resultToDisplay.slice(0, 20),
+            length: resultToDisplay.length
+          });
+        }
+
+        console.log('Final result to display:', resultToDisplay);
+        currentResults[task.id] = resultToDisplay;
+
+        // Update numaTaskResponses with the new result
+        setNumaTaskResponses(prevResponses => {
+          // Remove any existing response for this task
+          const filteredResponses = prevResponses.filter(r => r.taskId !== task.id);
+          // Add the new response
+          return [...filteredResponses, {
+            taskId: task.id,
+            result: resultToDisplay
+          }];
+        });
+      } else {
+        console.warn('No output result found for task:', task.id);
+      }
+
+      console.log('Updated current results:', currentResults);
+      return currentResults;
+    } catch (error) {
+      console.error('Error in processTextOutputTask:', error);
+      throw error;
     }
-    return currentResults;
+  };
+
+  // Fetch content from S3
+  const fetchS3Content = async (bucket, key, credentials) => {
+    console.log('Fetching S3 content:', { bucket, key });
+
+    try {
+      console.log('Creating S3 client with provided credentials...');
+      const s3Client = new S3Client({
+        region: 'us-east-1',
+        credentials
+      });
+
+      console.log('Creating GetObject command...');
+      const command = new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      });
+
+      console.log('Getting signed URL...');
+      const signedUrl = await getSignedUrl(s3Client, command, {
+        expiresIn: 3600,
+      });
+      console.log('Got signed URL:', signedUrl);
+
+      console.log('Fetching content...');
+      const response = await fetch(signedUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('S3 content retrieved:', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching S3 content:', error);
+      throw error;
+    }
   };
 
   const pollQAppSession = async (sessionId, updateProgress) => {
@@ -517,6 +654,12 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
+  // Clean title of process-related words
+  const cleanTaskTitle = (title) => {
+    if (!title) return 'task';
+    return title.replace(/\b(process(ing)?|running)\b/gi, '').trim();
+  };
+
   const handleRunButtonClick = async () => {
     if (!numaAppData || !numaAppData.tasks) return;
 
@@ -535,7 +678,7 @@ export const NumaAppProvider = ({ children }) => {
       const totalWeight = calculateTotalWeight(orderedTasks);
 
       for (const task of orderedTasks) {
-        setProcessingStatus(`Processing ${task.name}...`);
+        setProcessingStatus(`Processing: ${cleanTaskTitle(task.title)}...`);
         const taskWeight = calculateTaskWeight(task);
 
         switch (task.type) {
@@ -560,7 +703,7 @@ export const NumaAppProvider = ({ children }) => {
             break;
 
           case 'text-output':
-            currentResults = processTextOutputTask(task, currentResults);
+            currentResults = await processTextOutputTask(task, currentResults);
             completedWeight += taskWeight;
             break;
 

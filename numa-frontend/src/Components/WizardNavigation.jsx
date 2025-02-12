@@ -14,11 +14,12 @@ const WizardNavigation = ({
   runButtonProps,
   processingProgress,
   processingStatus,
+  hasRun,
 }) => {
   const { isRunning, disabled, onClick, ...otherRunButtonProps } = runButtonProps;
 
   // Show post-run steps if app is running or has been run (has results)
-  const hasBeenRun = isRunning || postRunSteps.some((_, index) => isStepComplete?.(index + preRunSteps.length));
+  const hasBeenRun = isRunning || hasRun;
 
   return (
     <div className="wizard-navigation">
@@ -51,24 +52,6 @@ const WizardNavigation = ({
         </div>
       </div>
 
-      <div className="task-navigation">
-        {activeStep < preRunSteps.length && (
-          <>
-            <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
-              <i className="bi bi-arrow-left me-2"></i>
-              Previous Input
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleNextStep}
-              disabled={activeStep === preRunSteps.length - 1 || !taskCompletionStatus[visibleTasks[activeStep].id]}
-            >
-              Next Input
-              <i className="bi bi-arrow-right ms-2"></i>
-            </Button>
-          </>
-        )}
-      </div>
 
       <div className="run-button-wrapper">
         <Button

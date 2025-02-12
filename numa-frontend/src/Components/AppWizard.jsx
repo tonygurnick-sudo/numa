@@ -86,20 +86,23 @@ const AppWizard = ({ manifest }) => {
       });
       setTaskCompletionStatus(updatedStatus);
 
-      setHasRun(true);
-      setAppRunning(true);
-      await handleRunButtonClick(numaAppData);
+      // Find and set the first output task as active immediately
+      const firstOutputTask = visibleTasks.find((task) =>
+        task.type.includes('output')
+      );
 
-      // Find the first output task and set it as active
-      const firstOutputTask = visibleTasks.find((task) => task.type.includes('output'));
       if (firstOutputTask) {
         const outputIndex = visibleTasks.indexOf(firstOutputTask);
         setActiveStep(outputIndex);
         setSelectedTaskId(firstOutputTask.id);
       }
+
+      setHasRun(true);
+      setAppRunning(true);
+      await handleRunButtonClick(numaAppData);
     } catch (error) {
       console.error('Error running app:', error);
-      setError(error); // Set the error state directly
+      setError(error);
     } finally {
       setAppRunning(false);
     }
@@ -208,6 +211,7 @@ const AppWizard = ({ manifest }) => {
             }}
             processingProgress={processingProgress}
             processingStatus={processingStatus}
+            hasRun={hasRun}
           />
 
           {/* Error and Processing Status */}
@@ -217,23 +221,42 @@ const AppWizard = ({ manifest }) => {
                 {error.message || error}
               </Alert>
             )}
-
-            {appRunning && (
-              <div className="text-center py-2">
-                <Preloader smallscreen={true} />
-                <div className="mt-1 text-muted">
-                  {processingStatus}
-                  {processingProgress > 0 && ` (${processingProgress}%)`}
-                </div>
-              </div>
-            )}
           </div>
         </Col>
       </Row>
 
       <Row>
-        <Col xs={12} className="px-2 px-md-4">
-          {activeStep < visibleTasks.length && <div className="mb-4">{renderTask(visibleTasks[activeStep])}</div>}
+        <Col xs={12} className="px-2 px-md-4 position-relative">
+          {activeStep < visibleTasks.length && (
+            <div className="mb-4 position-relative">
+              {renderTask(visibleTasks[activeStep])}
+              <div className="task-navigation position-absolute start-0 end-0 d-flex justify-content-between" style={{ bottom: '-50px' }}>
+                {activeStep < visibleTasks.length && (
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={handlePrevStep}
+                      disabled={activeStep === 0}
+                    >
+                      <i className="bi bi-arrow-left me-2"></i>
+                      Previous Input
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={handleNextStep}
+                      disabled={
+                        activeStep === visibleTasks.length - 1 ||
+                        !taskCompletionStatus[visibleTasks[activeStep].id]
+                      }
+                    >
+                      Next Input
+                      <i className="bi bi-arrow-right ms-2"></i>
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </Col>
       </Row>
     </Container>

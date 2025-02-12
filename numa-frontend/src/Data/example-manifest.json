@@ -69,84 +69,99 @@
       "createdDate": "2025-01-31",
       "appDescription": "Transform raw meeting data into comprehensive summaries, insightful analyses, and actionable outputs. Whether your meetings are in\nperson, virtual, or a blend of both, this app helps you make the most out of\nyour meeting notes and transcripts by providing structured, automated reports\nand follow-up resources.",
       "tasks": [
-        {
-          "id": "upload-files-to-s3",
-          "title": "Upload Files",
-          "description": "Upload your notes or transcripts from your meeting",
-          "type": "s3-upload",
-          "required": true,
-          "order": 1,
-          "params": {
-            "bucketName": "numa-meeting-notes"
+          {
+              "id": "upload-files-to-s3",
+              "title": "Upload Files",
+              "description": "Upload your notes or transcripts from your meeting",
+              "type": "s3-upload",
+              "required": true,
+              "order": 1
+          },
+          {
+              "id": "template-task",
+              "description": "The structure you would like your meeting summary to follow",
+              "title": "Template",
+              "type": "text-input",
+              "default": "\n              - summarise the discussion\n              - summarise the event\n              - outline the requirements\n              - actions and next steps\n          ",
+              "order": 2
+          },
+          {
+              "id": "other-notes",
+              "title": "Other Notes",
+              "description": "Any other notes that might be useful such as participants (if not in transcript), prior meeting context, etc",
+              "type": "text-input",
+              "order": 3
+          },
+          {
+              "id": "call-step-function",
+              "title": "Process Meeting Notes",
+              "type": "http-request",
+              "endpoint": "meeting-analyser",
+              "params": {
+                  "payload": {
+                      "uploaded_files": "@upload-files-to-s3",
+                      "template": "@template-task",
+                      "other_notes": "@other-notes"
+                  }
+              },
+              "order": 4
+          },
+          {
+              "id": "analysis-templated",
+              "title": "Analysis based on template",
+              "type": "text-output",
+              "params": {
+                  "dataRef": "@call-step-function/template_output"
+              },
+              "order": 5
+          },
+          {
+              "id": "summary",
+              "title": "Summary",
+              "type": "text-output",
+              "params": {
+                  "dataRef": "@call-step-function/summary"
+              },
+              "order": 6
+          },
+          {
+              "id": "topic-analysis",
+              "title": "Topic Analysis",
+              "type": "text-output",
+              "params": {
+                  "dataRef": "@call-step-function/topic_analysis"
+              },
+              "order": 7
+          },
+          {
+              "id": "participant-insights",
+              "title": "Participant Insights",
+              "type": "text-output",
+              "params": {
+                  "dataRef": "@call-step-function/participant_insights"
+              },
+              "order": 8
+          },
+          {
+              "id": "action-items",
+              "title": "Action Items",
+              "type": "text-output",
+              "params": {
+                  "dataRef": "@call-step-function/action_items"
+              },
+              "order": 9
+          },
+          {
+              "id": "follow-up-emails",
+              "title": "Follow Up Emails",
+              "type": "text-output",
+              "params": {
+                  "dataRef": "@call-step-function/follow_up_emails"
+              },
+              "order": 10
           }
-        },
-        {
-          "id": "template-task",
-          "description": "The structure you would like your meeting summary to follow",
-          "title": "Template",
-          "type": "text-input",
-          "default": "\n              - summarise the discussion\n              - summarise the event\n              - outline the requirements\n              - actions and next steps\n          ",
-          "order": 2
-        },
-        {
-          "id": "other-notes",
-          "title": "Other Notes",
-          "description": "Any other notes that might be useful such as participants (if not in transcript), prior meeting context, etc",
-          "type": "text-input",
-          "order": 3
-        },
-        {
-          "id": "call-step-function",
-          "title": "Process Meeting Notes",
-          "type": "http-request",
-          "endpoint": "meeting-analyser",
-          "params": {
-            "payload": {
-              "uploaded_files": "@upload-files-to-s3",
-              "template": "@template-task",
-              "other_notes": "@other-notes"
-            }
-          },
-          "order": 4
-        },
-        {
-          "id": "meeting-summary",
-          "title": "Meeting Summary",
-          "type": "text-output",
-          "params": {
-            "dataRef": "@call-step-function/summary"
-          },
-          "order": 5
-        },
-        {
-          "id": "action-items",
-          "title": "Action Items",
-          "type": "text-output",
-          "params": {
-            "dataRef": "@call-step-function/action_items"
-          },
-          "order": 6
-        },
-        {
-          "id": "follow-up-emails",
-          "title": "Follow-up Emails",
-          "type": "text-output",
-          "params": {
-            "dataRef": "@call-step-function/follow_up_emails"
-          },
-          "order": 7
-        },
-        {
-          "id": "key-decisions",
-          "title": "Key Decisions",
-          "type": "text-output",
-          "params": {
-            "dataRef": "@call-step-function/key_decisions"
-          },
-          "order": 8
-        }
       ]
-    },
+  },
     {
       "appName": "Meeting Tools App",
       "id": "meeting-tools-app",
