@@ -1,5 +1,5 @@
 import { argv } from 'node:process';
-import { Support, DescribeCasesCommand, DescribeCasesCommandInput } from '@aws-sdk/client-support';
+import { Support, DescribeCasesCommand, DescribeCasesCommandInput, CaseDetails } from '@aws-sdk/client-support';
 import { ServiceQuotas, GetServiceQuotaCommand } from '@aws-sdk/client-service-quotas';
 import { AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import { temporaryCredentials } from './utils';
@@ -30,7 +30,10 @@ async function getCurrentQuota(credentials: AwsCredentialIdentityProvider): Prom
   }
 }
 
-async function findBedrockCases(credentials: AwsCredentialIdentityProvider, clientName: string): Promise<any[]> {
+async function findBedrockCases(
+  credentials: AwsCredentialIdentityProvider,
+  clientName: string,
+): Promise<CaseDetails[]> {
   const support = new Support({ region, credentials });
   try {
     const params: DescribeCasesCommandInput = {
