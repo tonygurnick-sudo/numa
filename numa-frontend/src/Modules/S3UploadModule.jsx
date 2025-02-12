@@ -38,8 +38,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
     fetchConfig();
   }, [fetchConfig]);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const handleFileSelection = (file) => {
     if (file) {
       setSelectedFile(file);
       setUploadStatus(null);
@@ -47,6 +46,10 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setError(null);
       onNotComplete();
     }
+  };
+
+  const handleFileChange = (e) => {
+    handleFileSelection(e.target.files[0]);
   };
 
   const handleDragEnter = (e) => {
@@ -70,15 +73,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      setSelectedFile(file);
-      setUploadStatus(null);
-      setUploadProgress(0);
-      setError(null);
-      onNotComplete();
-    }
+    handleFileSelection(e.dataTransfer.files[0]);
   };
 
   const handleZoneClick = (e) => {
