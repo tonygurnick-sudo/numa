@@ -28,9 +28,17 @@ const resolveReference = (key, taskResults) => {
   // Split the reference into taskId and subPath
   const [fullTaskId, ...subPaths] = key.slice(1).split('/');
 
-  // Get the base result
-  const baseResult = taskResults[fullTaskId];
+  // Try both hyphen and underscore versions of the task ID
+  const hyphenTaskId = fullTaskId.replace(/_/g, '-');
+  const underscoreTaskId = fullTaskId.replace(/-/g, '_');
+
+  // Get the base result, trying both versions of the task ID
+  let baseResult = taskResults[hyphenTaskId];
   if (baseResult === undefined) {
+    baseResult = taskResults[underscoreTaskId];
+  }
+  if (baseResult === undefined) {
+    console.warn(`Could not find task result for either ${hyphenTaskId} or ${underscoreTaskId}`);
     return '';
   }
 
@@ -319,10 +327,71 @@ export const NumaAppProvider = ({ children }) => {
             console.log('Converting object to JSON string');
             resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
           }
+        } else if (typeof outputResult === 'string') {
+          console.log('Processing string output:', {
+            startsWithMarkdown: outputResult.startsWith('```markdown'),
+            containsMarkdownChars: /[#*`[\]()|\n]/.test(outputResult),
+            firstFewChars: outputResult.slice(0, 20)
+          });
+
+          // First check if it's a markdown code block and extract its content
+          const markdownBlockMatch = outputResult.match(/^```markdown\n([\s\S]*)\n```$/);
+          if (markdownBlockMatch) {
+            console.log('Extracted content from markdown block');
+            // Extract the content from inside the markdown block
+            resultToDisplay = markdownBlockMatch[1];
+          } else if (outputResult.includes('```markdown')) {
+            // If it contains markdown blocks but isn't a perfect match (might be inside JSON)
+            try {
+              const parsed = JSON.parse(outputResult);
+              if (parsed.value && typeof parsed.value === 'string') {
+                const valueMarkdownMatch = parsed.value.match(/^```markdown\n([\s\S]*)\n```$/);
+                if (valueMarkdownMatch) {
+                  console.log('Extracted markdown from JSON value');
+                  resultToDisplay = valueMarkdownMatch[1];
+                }
+              }
+            } catch (e) {
+              console.log('Not valid JSON with markdown:', e);
+            }
+          } else {
+            // Check if the string already contains markdown-like formatting
+            const hasMarkdown = /[#*`[\]()|\n]/.test(outputResult);
+            if (!hasMarkdown) {
+              // If it doesn't look like markdown, try to detect if it's JSON or code
+              try {
+                JSON.parse(outputResult);
+                // If it parses as JSON, format it as a code block
+                resultToDisplay = '```json\n' + JSON.stringify(JSON.parse(outputResult), null, 2) + '\n```';
+              } catch {
+                // If it's not JSON and doesn't have markdown, wrap paragraphs
+                resultToDisplay = outputResult
+                  .split('\n\n')
+                  .map(para => para.trim())
+                  .filter(para => para)
+                  .join('\n\n');
+              }
+            }
+          }
+          console.log('Final processed string:', {
+            firstFewChars: resultToDisplay.slice(0, 20),
+            length: resultToDisplay.length
+          });
         }
 
         console.log('Final result to display:', resultToDisplay);
         currentResults[task.id] = resultToDisplay;
+
+        // Update numaTaskResponses with the new result
+        setNumaTaskResponses(prevResponses => {
+          // Remove any existing response for this task
+          const filteredResponses = prevResponses.filter(r => r.taskId !== task.id);
+          // Add the new response
+          return [...filteredResponses, {
+            taskId: task.id,
+            result: resultToDisplay
+          }];
+        });
       } else {
         console.warn('No output result found for task:', task.id);
       }
