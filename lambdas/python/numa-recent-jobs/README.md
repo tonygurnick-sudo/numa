@@ -21,7 +21,7 @@ The following environment variables are used by the Lambda functions:
 
 ## API Endpoints
 
-Base path: `/api/{app_name}/jobs`
+Base path: `/api/{app_id}/jobs`
 
 Example path: `/api/example-app/jobs`
 

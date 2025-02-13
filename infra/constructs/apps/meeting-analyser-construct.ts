@@ -22,14 +22,12 @@ export class MeetingAnalyser extends BaseNumaApp {
   readonly manifest;
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
-    const appId = 'meeting-analyser';
     props.enableJobs = true;
-    props.pathPrefix ??= appId;
-    super(scope, name, props);
+    super(scope, name, { ...props, appId: 'meeting-analyser' });
 
     this.manifest = {
       appName: 'Meeting Analyser',
-      id: props.pathPrefix,
+      id: this.appId,
       type: AppType.NUMA,
       status: AppStatus.ACTIVE,
       category: AppCategory.PRODUCTIVITY,
@@ -140,7 +138,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       {
         actions: ['s3:GetObject', 's3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${appId}/*`],
+        resources: [`${props.outputsBucket.arn}/${this.appId}/*`],
       },
       {
         actions: ['bedrock:InvokeModel'],
@@ -166,7 +164,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       {
         actions: ['s3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${appId}/*`],
+        resources: [`${props.outputsBucket.arn}/${this.appId}/*`],
       },
       {
         actions: ['bedrock:InvokeModel'],
@@ -184,19 +182,20 @@ export class MeetingAnalyser extends BaseNumaApp {
       timeout: 900,
     });
 
-    function writeStatus(body: Record<string, string | Record<string, string>>, next: string): asl.State {
+    // TODO: push down, create success and failure function
+    const writeStatus = (body: Record<string, string | Record<string, string>>, next: string): asl.State => {
       return {
         Type: 'Task',
         Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
         Parameters: {
           Body: body,
           Bucket: props.outputsBucket.bucket,
-          'Key.$': `States.Format('${appId}/{}/status.json', $$.Execution.Input.job_id)`,
+          'Key.$': `States.Format('${this.appId}/{}/status.json', $$.Execution.Input.job_id)`,
         },
         ResultPath: null,
         Next: next,
       };
-    }
+    };
 
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
@@ -205,7 +204,6 @@ export class MeetingAnalyser extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            app_name: appId,
             'job_id.$': '$$.Execution.Input.job_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
           },
@@ -264,7 +262,7 @@ export class MeetingAnalyser extends BaseNumaApp {
           Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
           Parameters: {
             Bucket: props.outputsBucket.bucket,
-            'Key.$': `States.Format('${appId}/{}/extracted_content.json', $$.Execution.Input.job_id)`,
+            'Key.$': `States.Format('${this.appId}/{}/extracted_content.json', $$.Execution.Input.job_id)`,
             'Body.$': '$.extracted[*].Payload.content',
             ContentType: 'text/json',
           },
@@ -284,11 +282,11 @@ export class MeetingAnalyser extends BaseNumaApp {
           Parameters: {
             FunctionName: analyserLambda.arn,
             Payload: {
-              'app_name.$': '$.app_name',
+              app_id: this.appId,
               'job_id.$': '$.job_id',
               'meeting_notes_and_or_transcript.$': '$.extracted[*].Payload.content',
               'other_notes.$': '$$.Execution.Input.other_notes',
-              'output_key.$': `States.Format('${appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
+              'output_key.$': `States.Format('${this.appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
               'template.$': '$$.Execution.Input.template',
             },
           },
@@ -339,7 +337,6 @@ export class MeetingAnalyser extends BaseNumaApp {
     };
 
     this.addStepFunction(this, 'main', {
-      appName: appId,
       outputsBucket: props.outputsBucket,
       additionalPolicyStatements: [
         {
@@ -352,6 +349,7 @@ export class MeetingAnalyser extends BaseNumaApp {
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
+      urlPath: 'main',
     });
   }
 }

@@ -94,13 +94,11 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
   readonly manifest;
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
-    props.enableJobs = true;
-    props.pathPrefix ??= 'policy-builder';
-    super(scope, name, props);
+    super(scope, name, { ...props, appId: 'policy-builder', enableJobs: true });
 
     this.manifest = {
       appName: 'Policy Designer',
-      id: props.pathPrefix,
+      id: this.appId,
       type: AppType.NZSBA_POLICY_DESIGNER,
       category: AppCategory.COMPLIANCE,
       status: AppStatus.ACTIVE,
@@ -163,7 +161,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
       {
         actions: ['s3:GetObject', 's3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${name}/*`],
+        resources: [`${props.outputsBucket.arn}/${this.appId}/*`],
       },
 
       {
@@ -178,9 +176,9 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
       ['legal-review', 'python/policy-builder-legal-review', policyStatements],
     ];
     const lambdas = new Map(
-      lambdaConfig.map(([name, directory, additionalPolicyStatements]) => [
-        name,
-        this.addLambdaFunction(this, name, {
+      lambdaConfig.map(([lambdaName, directory, additionalPolicyStatements]) => [
+        lambdaName,
+        this.addLambdaFunction(this, lambdaName, {
           additionalPolicyStatements,
           environment: {
             variables: {
@@ -196,37 +194,37 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
     const exemplar_policy_file_name = 'examplar_policy_nzsba.pdf.json';
     const exemplar_policy: S3Object = new S3Object(this, 'exemplar_policy', {
       bucket: props.outputsBucket.bucket,
-      key: `${name}/${exemplar_policy_file_name}`,
+      key: `${this.appId}/${exemplar_policy_file_name}`,
       source: path.join(import.meta.dirname, '..', '..', 'assets', exemplar_policy_file_name),
     });
 
     const board_assurance_statement_file_name = 'examplar_policy_nzsba.pdf.json';
     const board_assurance_statement: S3Object = new S3Object(this, 'board_assurance_statement', {
       bucket: props.outputsBucket.bucket,
-      key: `${name}/${board_assurance_statement_file_name}`,
+      key: `${this.appId}/${board_assurance_statement_file_name}`,
       source: path.join(import.meta.dirname, '..', '..', 'assets', exemplar_policy_file_name),
     });
 
     const board_assurance_statement_guidelines_file_name = 'examplar_policy_nzsba.pdf.json';
     const board_assurance_statement_guidelines: S3Object = new S3Object(this, 'board_assurance_statement_guidelines', {
       bucket: props.outputsBucket.bucket,
-      key: `${name}/${board_assurance_statement_guidelines_file_name}`,
+      key: `${this.appId}/${board_assurance_statement_guidelines_file_name}`,
       source: path.join(import.meta.dirname, '..', '..', 'assets', exemplar_policy_file_name),
     });
 
-    function writeStatus(body: Record<string, string>, next: string): asl.State {
+    const writeStatus = (body: Record<string, string>, next: string): asl.State => {
       return {
         Type: 'Task',
         Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
         Parameters: {
           Body: body,
           Bucket: props.outputsBucket.bucket,
-          'Key.$': "States.Format('{}/{}/status.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)",
+          'Key.$': `States.Format('${this.appId}/{}/status.json',  $$.Execution.Input.job_id)`,
         },
         ResultPath: null,
         Next: next,
       };
-    }
+    };
 
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
@@ -235,7 +233,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'app_name.$': '$$.Execution.Input.app_name',
+            app_id: this.appId,
             'job_id.$': '$$.Execution.Input.job_id',
             'organisation_context.$': '$$.Execution.Input.organisation_context',
             'organisation_name.$': '$$.Execution.Input.organisation_name',
@@ -417,7 +415,6 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
     };
 
     this.addStepFunction(this, 'main', {
-      appName: name,
       outputsBucket: props.outputsBucket,
       additionalPolicyStatements: [
         {
@@ -430,6 +427,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
+      urlPath: 'main',
     });
   }
 }

@@ -23,7 +23,7 @@ INPUT_TEXT = textwrap.dedent(
 
 
 class TestConvert(unittest.TestCase):
-    @patch.dict(os.environ, {"APP_NAME": "test-app", "LOG_TO_CONSOLE": "true"})
+    @patch.dict(os.environ, {"APP_ID": "test-app", "LOG_TO_CONSOLE": "true"})
     def test(self):
         html = markdown_to_pdf.markdown_to_html(INPUT_TEXT)
         self.assertTrue("<h1>Foo</h1>" in html)

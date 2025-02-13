@@ -14,12 +14,12 @@ def __get_job_id(event: dict):
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
-    app_name = event["app_name"]
+    app_id = event["app_id"]
     job_id = __get_job_id(event)
     helpers.setup_logging()
     structlog.contextvars.bind_contextvars(
         function_name=context.function_name,
-        app_name=app_name,
+        app_id=app_id,
         job_id=job_id,
     )
     logger.info("Execute lambda", lambda_event=event)

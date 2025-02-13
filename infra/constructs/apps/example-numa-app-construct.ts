@@ -6,14 +6,12 @@ export class ExampleNumaApp extends BaseNumaApp {
   readonly manifest;
 
   constructor(scope: Construct, name: string, props: ExampleNumaAppProps) {
-    props.pathPrefix ??= 'example';
-    props.enableJobs = true;
-    super(scope, name, props);
+    super(scope, name, { ...props, appId: 'example', enableJobs: true });
 
     this.manifest = {
-      appName: 'Example',
-      appDescription: 'Example app',
-      id: props.pathPrefix,
+      appName: 'Example App',
+      appDescription: 'Example of what functions to call',
+      id: this.appId,
       status: AppStatus.ACTIVE,
       category: AppCategory.GENERAL,
       type: AppType.NUMA,
@@ -54,7 +52,7 @@ export class ExampleNumaApp extends BaseNumaApp {
           Parameters: {
             Body: '{"status":"PROCESSING"}',
             Bucket: `${props.outputsBucket}`,
-            'Key.$': `States.Format('{}/{}/status.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)`,
+            'Key.$': `States.Format('${this.appId}/{}/status.json',  $$.Execution.Input.job_id)`,
           },
           Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
         },
@@ -73,7 +71,7 @@ export class ExampleNumaApp extends BaseNumaApp {
           Parameters: {
             Body: '{"status":"SUCCESS","result":{}}',
             Bucket: `${props.outputsBucket}`,
-            'Key.$': `States.Format('{}/{}/status.json', $$.Execution.Input.app_name, $$.Execution.Input.job_id)`,
+            'Key.$': `States.Format('${this.appId}/{}/status.json',  $$.Execution.Input.job_id)`,
           },
           Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
         },
@@ -84,7 +82,6 @@ export class ExampleNumaApp extends BaseNumaApp {
     };
 
     this.addStepFunction(this, 'example-step-function', {
-      appName: name,
       outputsBucket: props.outputsBucket,
       additionalPolicyStatements: [
         {
@@ -97,6 +94,7 @@ export class ExampleNumaApp extends BaseNumaApp {
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
+      urlPath: 'example-step-function',
     });
   }
 }

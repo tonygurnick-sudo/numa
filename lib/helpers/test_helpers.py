@@ -10,7 +10,7 @@ logger = structlog.getLogger(__name__)
 
 
 class TestSetupLogging(unittest.TestCase):
-    @patch.dict(os.environ, {"APP_NAME": "test-app", "LOG_TO_CONSOLE": "true"})
+    @patch.dict(os.environ, {"APP_ID": "test-app", "LOG_TO_CONSOLE": "true"})
     def test(self):
         logger.info("before")
         helpers.setup_logging()
