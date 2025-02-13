@@ -1,10 +1,10 @@
-import { CognitoIdentityProviderClient, AdminDeleteUserCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { CognitoIdentityProviderClient, AdminDeleteUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { parse } from 'csv-parse';
 import { createReadStream } from 'node:fs';
 import { finished } from 'node:stream/promises';
 import { argv, exit } from 'node:process';
 import chalk from 'chalk';
-import { getQUserPool, temporaryCredentials, AwsCredentialIdentityProvider } from "./utils";
+import { getQUserPool, temporaryCredentials, AwsCredentialIdentityProvider } from './utils';
 import clientConfigProd from '../clientConfigProd.json';
 
 const region = 'us-east-1';
@@ -13,7 +13,7 @@ const inputFile = 'input.csv';
 export async function deleteQUsers(
   credentials: AwsCredentialIdentityProvider,
   userPool: string,
-  dryRun: boolean
+  dryRun: boolean,
 ): Promise<void> {
   const client = new CognitoIdentityProviderClient({ region, credentials });
 
@@ -23,7 +23,7 @@ export async function deleteQUsers(
     console.log(chalk.red('Dry run is disabled, applying changes.'));
   }
 
-  console.log(chalk.yellow("Userpool: " + userPool));
+  console.log(chalk.yellow('Userpool: ' + userPool));
   if (!userPool) {
     console.log(chalk.red('UserPool is missing!'));
     exit(1);
@@ -32,7 +32,7 @@ export async function deleteQUsers(
   const result: string[] = [];
   const readStream = createReadStream(inputFile)
     .pipe(parse({ from_line: 2 }))
-    .on("data", (row) => result.push(row[2].trim()));
+    .on('data', (row) => result.push(row[2].trim()));
 
   await finished(readStream);
 
@@ -42,10 +42,12 @@ export async function deleteQUsers(
     console.log(`Deleting user: ${email}`);
     if (!dryRun) {
       try {
-        await client.send(new AdminDeleteUserCommand({
-          UserPoolId: userPool,
-          Username: email,
-        }));
+        await client.send(
+          new AdminDeleteUserCommand({
+            UserPoolId: userPool,
+            Username: email,
+          }),
+        );
         console.log(chalk.green(`Successfully deleted: ${email}`));
       } catch (error) {
         console.log(chalk.red(`Failed to delete ${email}:`), error);
@@ -53,7 +55,7 @@ export async function deleteQUsers(
     }
   }
 
-  console.log(chalk.green("Done."));
+  console.log(chalk.green('Done.'));
 }
 
 (async (): Promise<void> => {
@@ -62,7 +64,7 @@ export async function deleteQUsers(
   const accountId = clientConfigProd[args[0]].clientAccountId;
   const credentials = temporaryCredentials(accountId);
   const userPool = await getQUserPool(credentials);
-  const dryRun = (args[1] != 'live');
+  const dryRun = args[1] != 'live';
 
   await deleteQUsers(credentials, userPool, dryRun);
 })();

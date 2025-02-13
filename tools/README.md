@@ -149,6 +149,7 @@ Downgrades all licences for a particular customer to lite. Also deletes licences
 ```bash
 AWS_PROFILE=arcanum-q-deployer-prod yarn downgrade-licences <client-name>
 ```
+
 ### check-bedrock-cases
 
 Checks the current Bedrock Claude quota and status of quota increase support cases for a client.
@@ -161,3 +162,4 @@ AWS_PROFILE=arcanum-q-deployer-prod yarn check-bedrock-cases <client-name> [opti
 Options:
 --include-resolved: Include resolved cases in the output
 --details: Show detailed case information including communications history
+```

@@ -1,13 +1,6 @@
 import { argv } from 'node:process';
-import {
-  Support,
-  DescribeCasesCommand,
-  DescribeCasesCommandInput
-} from '@aws-sdk/client-support';
-import {
-  ServiceQuotas,
-  GetServiceQuotaCommand
-} from '@aws-sdk/client-service-quotas';
+import { Support, DescribeCasesCommand, DescribeCasesCommandInput, CaseDetails } from '@aws-sdk/client-support';
+import { ServiceQuotas, GetServiceQuotaCommand } from '@aws-sdk/client-service-quotas';
 import { AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import { temporaryCredentials } from './utils';
 import clientConfigProd from '../clientConfigProd.json';
@@ -17,12 +10,10 @@ const region = 'us-east-1';
 const CLAUDE_QUOTA_CODE = 'L-254CACF4';
 const REQUIRED_QUOTA = 50;
 
-async function getCurrentQuota(
-  credentials: AwsCredentialIdentityProvider
-): Promise<number> {
+async function getCurrentQuota(credentials: AwsCredentialIdentityProvider): Promise<number> {
   const quotasClient = new ServiceQuotas({
     region: process.env.AWS_REGION ?? region,
-    credentials
+    credentials,
   });
 
   try {
@@ -30,7 +21,7 @@ async function getCurrentQuota(
       new GetServiceQuotaCommand({
         ServiceCode: 'bedrock',
         QuotaCode: CLAUDE_QUOTA_CODE,
-      })
+      }),
     );
     return response.Quota?.Value ?? 0;
   } catch (error) {
@@ -41,23 +32,26 @@ async function getCurrentQuota(
 
 async function findBedrockCases(
   credentials: AwsCredentialIdentityProvider,
-  clientName: string
-): Promise<any[]> {
+  clientName: string,
+): Promise<CaseDetails[]> {
   const support = new Support({ region, credentials });
   try {
     const params: DescribeCasesCommandInput = {
       includeResolvedCases: args.includes('--include-resolved'),
       includeCommunications: args.includes('--details'),
       language: 'en',
-      maxResults: 100
+      maxResults: 100,
     };
 
     const response = await support.send(new DescribeCasesCommand(params));
 
-    return response.cases?.filter(c =>
-      c.subject?.includes(`Bedrock Claude 3.5 Sonnet Quota Increase Request for ${clientName}`) &&
-      c.serviceCode === 'service-bedrock'
-    ) ?? [];
+    return (
+      response.cases?.filter(
+        (c) =>
+          c.subject?.includes(`Bedrock Claude 3.5 Sonnet Quota Increase Request for ${clientName}`) &&
+          c.serviceCode === 'service-bedrock',
+      ) ?? []
+    );
   } catch (error) {
     if (error.name === 'SubscriptionRequiredException') {
       console.error('Error: Account requires Business Support plan to view support cases');
@@ -102,7 +96,7 @@ if (import.meta.filename === process?.argv[1]) {
       process.exit(0);
     }
 
-    cases.forEach(c => {
+    cases.forEach((c) => {
       console.log('\nCase Details:');
       console.log(`Case ID: ${c.displayId}`);
       console.log(`Status: ${c.status}`);
@@ -111,7 +105,7 @@ if (import.meta.filename === process?.argv[1]) {
       if (showDetails && c.recentCommunications?.communications) {
         console.log(`Subject: ${c.subject}`);
         console.log(`Recent Communications:`);
-        c.recentCommunications.communications.forEach(comm => {
+        c.recentCommunications.communications.forEach((comm) => {
           console.log(`\n${comm.timeCreated}: ${comm.body}`);
         });
       }
