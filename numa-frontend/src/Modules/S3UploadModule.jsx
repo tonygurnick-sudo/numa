@@ -1,15 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
-import { useNumaRequest } from '../Providers/RequestProvider';
 import { useAuth } from '../Providers/AuthProvider';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
+import { Preloader } from '../Components/Preloader';
 
 function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
-  const { loading, numaAppId } = useNumaApp();
-  const { numaGet } = useNumaRequest();
+  const { loading, numaAppId, appRunning,numaTaskResponses } = useNumaApp();
   const { getIdentityPoolCredentials } = useAuth();
 
   const [selectedFile, setSelectedFile] = useState(null);
@@ -21,6 +20,9 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   const [region, setRegion] = useState();
 
   const fileInputRef = useRef(null);
+
+  const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
+
 
   // Extracting task parameters
   const taskId = task?.id;
@@ -36,8 +38,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
     fetchConfig();
   }, [fetchConfig]);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const handleFileSelection = (file) => {
     if (file) {
       setSelectedFile(file);
       setUploadStatus(null);
@@ -45,6 +46,10 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setError(null);
       onNotComplete();
     }
+  };
+
+  const handleFileChange = (e) => {
+    handleFileSelection(e.target.files[0]);
   };
 
   const handleDragEnter = (e) => {
@@ -68,15 +73,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      setSelectedFile(file);
-      setUploadStatus(null);
-      setUploadProgress(0);
-      setError(null);
-      onNotComplete();
-    }
+    handleFileSelection(e.dataTransfer.files[0]);
   };
 
   const handleZoneClick = (e) => {
@@ -186,6 +183,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
         onDrop={handleDrop}
         onClick={handleZoneClick}
       >
+        {appRunning && !taskResponse?.result && <Preloader overlayParent={true} />}
         <input
           type="file"
           onChange={handleFileChange}
