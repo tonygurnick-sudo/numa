@@ -490,3 +490,49 @@ header {
     transform: scale(1);
   }
 }
+
+// Generic category styles that can be used anywhere
+.category-color {
+  &.productivity {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  &.finance {
+    background: var(--color-royal-900);
+    color: white;
+  }
+
+  &.compliance {
+    background: var(--color-blue);
+    color: white;
+  }
+
+  &.hr {
+    background: var(--color-green-700);
+    color: white;
+  }
+}
+
+// Soft category styles for single app view
+.category-soft {
+  &.productivity {
+    background: rgba(var(--color-primary-rgb), 0.1);
+    color: var(--color-primary);
+  }
+
+  &.finance {
+    background: rgba(var(--color-royal-900-rgb), 0.1);
+    color: var(--color-royal-900);
+  }
+
+  &.compliance {
+    background: rgba(var(--color-blue-rgb), 0.1);
+    color: var(--color-blue);
+  }
+
+  &.hr {
+    background: rgba(var(--color-green-700-rgb), 0.1);
+    color: var(--color-green-700);
+  }
+}
