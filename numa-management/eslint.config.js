@@ -4,6 +4,8 @@ import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import reactRefreshPlugin from 'eslint-plugin-react-refresh';
 import importPlugin from 'eslint-plugin-import';
+import { default as base } from '../eslint.config.base.mjs';
+
 
 export default [
   js.configs.recommended,
@@ -66,7 +68,5 @@ export default [
       'import/no-duplicates': 'warn',
     },
   },
-  {
-    ignores: ['.vite'],
-  },
+  ...base,
 ];
