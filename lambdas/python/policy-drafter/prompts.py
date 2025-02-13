@@ -14,7 +14,7 @@ Ensure the tone is clear, professional, and accessible, making it easy to unders
 
 If the input is too general or lacks specificity, infer common themes or requirements associated with the policy area and draft a generic version based on industry-standard templates. Highlight sections where the user should add tailored details for their specific context.
 
-Return your response in markdown format using:
+Return your response in markdown format using the following:
 - # for main headings
 - ## for subheadings
 - Bullet points for lists
