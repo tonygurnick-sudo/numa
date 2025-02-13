@@ -4,7 +4,8 @@ import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import reactRefreshPlugin from 'eslint-plugin-react-refresh';
 import importPlugin from 'eslint-plugin-import';
-import { default as base } from '../eslint.config.base.mjs';
+import { eslintBase } from '@arcanumai/style';
+
 
 
 export default [
@@ -68,5 +69,5 @@ export default [
       'import/no-duplicates': 'warn',
     },
   },
-  ...base,
+  ...eslintBase,
 ];

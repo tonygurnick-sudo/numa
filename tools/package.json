@@ -4,6 +4,7 @@
   "main": "index.ts",
   "type": "module",
   "dependencies": {
+    "@arcanumai/style": "../style",
     "@aws-sdk/client-cognito-identity-provider": "^3.675.0",
     "@aws-sdk/client-qbusiness": "^3.675.0",
     "@aws-sdk/client-s3": "^3.676.0",
@@ -38,9 +39,6 @@
     "@typescript-eslint/eslint-plugin": "^8.13.0",
     "@typescript-eslint/parser": "^8.13.0",
     "eslint": "^9.14.0",
-    "eslint-config-prettier": "^10.0.0",
-    "eslint-plugin-prettier": "^5.2.1",
-    "prettier": "^3.3.3",
     "typescript": "^5.6.3"
   }
 }

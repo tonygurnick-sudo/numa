@@ -5,6 +5,7 @@
   "main": "index.ts",
   "types": "index.ts",
   "devDependencies": {
+    "@arcanumai/style": "../../../style",
     "@aws-sdk/types": "^3.696.0",
     "@types/aws-lambda": "^8.10.146",
     "@types/node": "^22.10.1",
