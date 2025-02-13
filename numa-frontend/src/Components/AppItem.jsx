@@ -34,7 +34,7 @@ const AppItem = ({ app }) => {
           </div>
           <div className="header-right"></div>
         </div>
-        <div className="app-tags">
+        <div className="app-tags" style={{ justifyContent: 'left' }}>
           {displayTags.map((tag, index) => (
             <span key={index} className={`tag-pill tag-${['green', 'purple', 'blue'][index % 3]}`}>
               {tag}
