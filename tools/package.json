@@ -4,7 +4,6 @@
   "main": "index.ts",
   "type": "module",
   "dependencies": {
-    "@arcanumai/style": "../style",
     "@aws-sdk/client-cognito-identity-provider": "^3.675.0",
     "@aws-sdk/client-qbusiness": "^3.675.0",
     "@aws-sdk/client-s3": "^3.676.0",
@@ -34,6 +33,7 @@
   },
   "packageManager": "yarn@4.6.0",
   "devDependencies": {
+    "@arcanumai/style": "workspace:*",
     "@types/adm-zip": "^0.5.5",
     "@types/node": "^22.9.0",
     "@typescript-eslint/eslint-plugin": "^8.13.0",
