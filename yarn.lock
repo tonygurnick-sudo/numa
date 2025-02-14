@@ -105,32 +105,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@arcanumai/style@file:../style::locator=my-react-app%40workspace%3Anuma-frontend":
-  version: 0.0.0
-  resolution: "@arcanumai/style@file:../style#../style::hash=c7b151&locator=my-react-app%40workspace%3Anuma-frontend"
-  dependencies:
-    eslint-config-prettier: "npm:^10.0.1"
-    eslint-plugin-prettier: "npm:^5.2.3"
-    prettier: "npm:^3.5.0"
-  peerDependencies:
-    eslint: "*"
-  checksum: 10c0/d114d485266d7dd914e42351ca0df8f05b6198dce04c27cefe94a8efe1ec974f027f779275492375350553300dbbb3ee309916ed1d20f2295597372f5ef73955
-  languageName: node
-  linkType: hard
-
-"@arcanumai/style@file:../style::locator=numa-managment%40workspace%3Anuma-management":
-  version: 0.0.0
-  resolution: "@arcanumai/style@file:../style#../style::hash=c7b151&locator=numa-managment%40workspace%3Anuma-management"
-  dependencies:
-    eslint-config-prettier: "npm:^10.0.1"
-    eslint-plugin-prettier: "npm:^5.2.3"
-    prettier: "npm:^3.5.0"
-  peerDependencies:
-    eslint: "*"
-  checksum: 10c0/d114d485266d7dd914e42351ca0df8f05b6198dce04c27cefe94a8efe1ec974f027f779275492375350553300dbbb3ee309916ed1d20f2295597372f5ef73955
-  languageName: node
-  linkType: hard
-
 "@arcanumai/style@workspace:*, @arcanumai/style@workspace:style":
   version: 0.0.0-use.local
   resolution: "@arcanumai/style@workspace:style"
@@ -12674,7 +12648,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "my-react-app@workspace:numa-frontend"
   dependencies:
-    "@arcanumai/style": ../style
+    "@arcanumai/style": "workspace:*"
     "@aws-sdk/client-cognito-identity": "npm:^3.668.0"
     "@aws-sdk/client-cognito-identity-provider": "npm:^3.670.0"
     "@aws-sdk/client-qapps": "npm:^3.682.0"
@@ -12877,7 +12851,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "numa-managment@workspace:numa-management"
   dependencies:
-    "@arcanumai/style": ../style
+    "@arcanumai/style": "workspace:*"
     "@aws-sdk/client-cognito-identity-provider": "npm:^3.693.0"
     "@aws-sdk/client-iam": "npm:^3.696.0"
     "@aws-sdk/client-qapps": "npm:^3.692.0"
