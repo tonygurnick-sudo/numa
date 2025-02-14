@@ -59,17 +59,18 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@arcanumai/style@portal:../style::locator=%40arcanumai%2Fq-apps-deployer-infra%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@arcanumai/style@portal:../style::locator=%40arcanumai%2Fq-apps-deployer-infra%40workspace%3A."
+"@arcanumai/style@file:../style::locator=%40arcanumai%2Fq-apps-deployer-infra%40workspace%3A.":
+  version: 0.0.0
+  resolution: "@arcanumai/style@file:../style#../style::hash=51c6b8&locator=%40arcanumai%2Fq-apps-deployer-infra%40workspace%3A."
   dependencies:
     eslint-config-prettier: "npm:^10.0.1"
     eslint-plugin-prettier: "npm:^5.2.3"
     prettier: "npm:^3.5.0"
   peerDependencies:
     eslint: "*"
+  checksum: 10c0/7df199b38aacd790657fcbad00135c682361f6633aeff302fa02d99fe110c77195f39283ac6188b80b1ffe60cbd244ecf46f26e91df895a93c772e57b2af598f
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@arcanumai/typescript-lambda-construct@npm:^1.2.4":
   version: 1.2.9

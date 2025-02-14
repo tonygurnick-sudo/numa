@@ -12,7 +12,8 @@
   },
   "devDependencies": {
     "@types/eslint": "^9.6.1",
-    "@types/prettier": "^3.0.0"
+    "@types/prettier": "^3.0.0",
+    "eslint": "^9.20.1"
   },
   "scripts": {
     "lint": "eslint ."
