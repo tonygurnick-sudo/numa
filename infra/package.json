@@ -33,7 +33,7 @@
     "uuid": "^11.0.5"
   },
   "devDependencies": {
-    "@arcanumai/style": "../style",
+    "@arcanumai/style": "workspace:*",
     "@cdktf/node-pty-prebuilt-multiarch": "^0.10.1-pre.11",
     "@types/fs-extra": "^11",
     "@types/node": "22.13.1",
