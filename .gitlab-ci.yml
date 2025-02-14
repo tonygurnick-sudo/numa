@@ -51,6 +51,7 @@ variables:
         - lambdas/python/policy-builder-generation
         - lambdas/python/policy-builder-legal-review
         - lambdas/python/policy-builder-principles-and-structure
+        - lambdas/python/policy-drafter
         - lambdas/python/policy-review
         - lambdas/python/recruitment-job-ad-creation
         - lambdas/python/step-function-start
