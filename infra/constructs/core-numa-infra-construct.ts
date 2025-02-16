@@ -227,6 +227,11 @@ export class CoreNumaInfra extends Construct {
           resources: ['*'],
         },
         {
+          actions: ['s3:ListBucket'], // this is required to get a 404 instead of a 403 if object not found
+          effect: 'Allow',
+          resources: [this.outputsBucket.bucket.arn],
+        },
+        {
           effect: 'Allow',
           actions: ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject'],
           resources: [`${this.outputsBucket.bucket.arn}/*`, this.outputsBucket.bucket.arn],
