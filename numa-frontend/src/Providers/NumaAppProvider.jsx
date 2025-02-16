@@ -11,7 +11,7 @@ import {
 import { useJobsApi } from '../Services/jobsApi';
 import { useNumaRequest } from '../Providers/RequestProvider';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Create the context
 const NumaAppContext = createContext();
@@ -321,7 +321,9 @@ export const NumaAppProvider = ({ children }) => {
             const headers = Object.keys(outputResult[0]);
             const headerRow = `| ${headers.join(' | ')} |`;
             const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
-            const dataRows = outputResult.map((item) => `| ${headers.map((header) => item[header] || '').join(' | ')} |`);
+            const dataRows = outputResult.map(
+              (item) => `| ${headers.map((header) => item[header] || '').join(' | ')} |`,
+            );
             resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
           } else {
             console.log('Converting object to JSON string');
@@ -331,7 +333,7 @@ export const NumaAppProvider = ({ children }) => {
           console.log('Processing string output:', {
             startsWithMarkdown: outputResult.startsWith('```markdown'),
             containsMarkdownChars: /[#*`[\]()|\n]/.test(outputResult),
-            firstFewChars: outputResult.slice(0, 20)
+            firstFewChars: outputResult.slice(0, 20),
           });
 
           // First check if it's a markdown code block and extract its content
@@ -367,15 +369,15 @@ export const NumaAppProvider = ({ children }) => {
                 // If it's not JSON and doesn't have markdown, wrap paragraphs
                 resultToDisplay = outputResult
                   .split('\n\n')
-                  .map(para => para.trim())
-                  .filter(para => para)
+                  .map((para) => para.trim())
+                  .filter((para) => para)
                   .join('\n\n');
               }
             }
           }
           console.log('Final processed string:', {
             firstFewChars: resultToDisplay.slice(0, 20),
-            length: resultToDisplay.length
+            length: resultToDisplay.length,
           });
         }
 
@@ -383,14 +385,17 @@ export const NumaAppProvider = ({ children }) => {
         currentResults[task.id] = resultToDisplay;
 
         // Update numaTaskResponses with the new result
-        setNumaTaskResponses(prevResponses => {
+        setNumaTaskResponses((prevResponses) => {
           // Remove any existing response for this task
-          const filteredResponses = prevResponses.filter(r => r.taskId !== task.id);
+          const filteredResponses = prevResponses.filter((r) => r.taskId !== task.id);
           // Add the new response
-          return [...filteredResponses, {
-            taskId: task.id,
-            result: resultToDisplay
-          }];
+          return [
+            ...filteredResponses,
+            {
+              taskId: task.id,
+              result: resultToDisplay,
+            },
+          ];
         });
       } else {
         console.warn('No output result found for task:', task.id);
@@ -412,7 +417,7 @@ export const NumaAppProvider = ({ children }) => {
       console.log('Creating S3 client with provided credentials...');
       const s3Client = new S3Client({
         region: 'us-east-1',
-        credentials
+        credentials,
       });
 
       console.log('Creating GetObject command...');

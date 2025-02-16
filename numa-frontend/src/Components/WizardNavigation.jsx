@@ -52,7 +52,6 @@ const WizardNavigation = ({
         </div>
       </div>
 
-
       <div className="run-button-wrapper">
         <Button
           type="submit"

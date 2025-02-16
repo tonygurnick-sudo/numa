@@ -103,7 +103,7 @@ const AppDetail = () => {
       <Container fluid className="mt-4">
         <Row>
           <Col>
-            {numaAppData?.type === "q-app" ? (
+            {numaAppData?.type === 'q-app' ? (
               <QAppDetail manifest={numaAppData} />
             ) : numaAppData?.type === 'policy-builder' ? (
               <PolicyBuilderDetail id={numaAppData.id} />
