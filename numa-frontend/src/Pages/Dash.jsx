@@ -11,7 +11,7 @@ import { Pagination } from '../Components/Pagination';
 import { Preloader } from '../Components/Preloader';
 import { StarFill } from 'react-bootstrap-icons';
 
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { useFavorites } from '../hooks/useFavorites';
 
 export const Dash = ({ showFavorites }) => {

@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../Providers/AuthProvider';
 import {
   startQappGetSession,
@@ -8,15 +8,10 @@ import {
   importFileToQApp,
 } from '../qAppHelper';
 import { useJobsApi } from '../Services/jobsApi';
-import { useNumaRequest } from '../Providers/RequestProvider';
+import { useNumaRequest } from './NumaRequestContext';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-
-// Create the context
-const NumaAppContext = createContext();
-
-// Custom hook for using context
-export const useNumaApp = () => useContext(NumaAppContext);
+import { NumaAppContext } from './NumaAppContext';
 
 // Global helper function to resolve references like @taskId or @taskId/subPath
 const resolveReference = (key, taskResults) => {
