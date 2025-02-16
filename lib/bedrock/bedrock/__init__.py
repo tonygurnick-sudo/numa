@@ -9,7 +9,7 @@ import structlog
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from prompts import GET_TEXT_FROM_IMAGE_QUERY
+from .prompts import GET_TEXT_FROM_IMAGE_QUERY
 
 CLAUDE_3_5_SONNET_INPUT_PRICE = 0.003
 CLAUDE_3_5_SONNET_OUTPUT_PRICE = 0.015
