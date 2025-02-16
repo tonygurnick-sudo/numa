@@ -6,8 +6,6 @@ import reactRefreshPlugin from 'eslint-plugin-react-refresh';
 import importPlugin from 'eslint-plugin-import';
 import { eslintBase } from '@arcanumai/style';
 
-
-
 export default [
   js.configs.recommended,
   {
@@ -51,10 +49,7 @@ export default [
       ...importPlugin.configs.recommended.rules,
       'react-hooks/exhaustive-deps': 'off',
       'react/prop-types': 'off',
-      'react-refresh/only-export-components': [
-        'warn',
-        { allowConstantExport: true },
-      ],
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       'no-unused-vars': 'warn',
       'no-undef': 'error',
       'react/react-in-jsx-scope': 'off',

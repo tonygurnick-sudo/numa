@@ -291,9 +291,7 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
       displayName: source.displayName || '',
       description: source.description || '',
       syncSchedule: source.syncSchedule || '',
-      configuration: source.configuration
-        ? JSON.stringify(source.configuration, null, 2)
-        : '',
+      configuration: source.configuration ? JSON.stringify(source.configuration, null, 2) : '',
     });
     setShowEditModal(true);
   };
@@ -401,11 +399,7 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
                     <td>{source.displayName}</td>
                     <td>{source.type}</td>
                     <td>
-                      <span
-                        className={`badge bg-${getStatusColor(source.status)}`}
-                      >
-                        {source.status}
-                      </span>
+                      <span className={`badge bg-${getStatusColor(source.status)}`}>{source.status}</span>
                     </td>
                     <td>{new Date(source.createdAt).toLocaleString()}</td>
                     <td>{new Date(source.updatedAt).toLocaleString()}</td>
@@ -455,12 +449,7 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
         </Card.Body>
       </Card>
 
-      <Modal
-        show={showDetailModal}
-        onHide={() => setShowDetailModal(false)}
-        size="lg"
-        scrollable
-      >
+      <Modal show={showDetailModal} onHide={() => setShowDetailModal(false)} size="lg" scrollable>
         <Modal.Header closeButton>
           <Modal.Title>
             Data Source Details
@@ -506,23 +495,19 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
               {activeTab === 'details' && (
                 <>
                   <div className="data-source-details">
-                    {selectedDataSource.error &&
-                      selectedDataSource.error.errorCode && (
-                        <Alert variant="danger" className="mb-4">
-                          <h5>Error Details</h5>
-                          <strong>Code:</strong> {selectedDataSource.error.errorCode}
-                          <br />
-                          <strong>Message:</strong>{' '}
-                          {selectedDataSource.error.errorMessage}
-                        </Alert>
-                      )}
+                    {selectedDataSource.error && selectedDataSource.error.errorCode && (
+                      <Alert variant="danger" className="mb-4">
+                        <h5>Error Details</h5>
+                        <strong>Code:</strong> {selectedDataSource.error.errorCode}
+                        <br />
+                        <strong>Message:</strong> {selectedDataSource.error.errorMessage}
+                      </Alert>
+                    )}
 
                     <div className="mb-4">
                       <h6 className="text-muted text-uppercase small">Status</h6>
                       <div className="border rounded p-2 bg-body-tertiary">
-                        <span
-                          className={`badge bg-${getStatusColor(selectedDataSource.status)}`}
-                        >
+                        <span className={`badge bg-${getStatusColor(selectedDataSource.status)}`}>
                           {selectedDataSource.status}
                         </span>
                       </div>
@@ -530,29 +515,22 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
 
                     {selectedDataSource.syncSchedule && (
                       <div className="mb-4">
-                        <h6 className="text-muted text-uppercase small">
-                          Sync Schedule
-                        </h6>
+                        <h6 className="text-muted text-uppercase small">Sync Schedule</h6>
                         <div className="border rounded p-2 bg-light">
                           <div>{selectedDataSource.syncSchedule}</div>
-                          <small className="text-muted">
-                            {translateCronSchedule(selectedDataSource.syncSchedule)}
-                          </small>
+                          <small className="text-muted">{translateCronSchedule(selectedDataSource.syncSchedule)}</small>
                         </div>
                       </div>
                     )}
 
                     {Object.entries(selectedDataSource).map(([key, value]) => {
-                      if (['error', 'status', 'syncSchedule'].includes(key))
-                        return null;
+                      if (['error', 'status', 'syncSchedule'].includes(key)) return null;
 
                       return (
                         value && (
                           <div key={key} className="mb-3">
                             <h6 className="text-muted text-uppercase small">{key}</h6>
-                            <div className="border rounded p-2 bg-body-tertiary">
-                              {renderDetailValue(value)}
-                            </div>
+                            <div className="border rounded p-2 bg-body-tertiary">{renderDetailValue(value)}</div>
                           </div>
                         )
                       );
@@ -580,20 +558,15 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
                           {syncHistory.map((job) => (
                             <tr key={job.executionId}>
                               <td>{new Date(job.startTime).toLocaleString()}</td>
-                              <td>
-                                {job.endTime
-                                  ? new Date(job.endTime).toLocaleString()
-                                  : '-'}
-                              </td>
+                              <td>{job.endTime ? new Date(job.endTime).toLocaleString() : '-'}</td>
                               <td>
                                 <span
                                   className={`badge bg-${
                                     job.status === 'SUCCEEDED'
                                       ? 'success'
-                                      : job.status === 'SYNCING' ||
-                                        job.status === 'SYNCING_INDEXING'
-                                      ? 'warning'
-                                      : 'danger'
+                                      : job.status === 'SYNCING' || job.status === 'SYNCING_INDEXING'
+                                        ? 'warning'
+                                        : 'danger'
                                   }`}
                                 >
                                   {job.status}
@@ -602,10 +575,8 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
                               <td>
                                 {job.metrics ? (
                                   <small>
-                                    +{job.metrics.documentsAdded || 0} |
-                                    Δ{job.metrics.documentsModified || 0} |
-                                    -{job.metrics.documentsDeleted || 0} |
-                                    ⚠{job.metrics.documentsFailed || 0}
+                                    +{job.metrics.documentsAdded || 0} | Δ{job.metrics.documentsModified || 0} | -
+                                    {job.metrics.documentsDeleted || 0} | ⚠{job.metrics.documentsFailed || 0}
                                   </small>
                                 ) : (
                                   '-'
@@ -653,9 +624,7 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
                           <tr key={doc.documentId}>
                             <td>{doc.documentId}</td>
                             <td>
-                              <span className={`badge bg-${getStatusColor(doc.status)}`}>
-                                {doc.status}
-                              </span>
+                              <span className={`badge bg-${getStatusColor(doc.status)}`}>{doc.status}</span>
                             </td>
                             <td>{new Date(doc.createdAt).toLocaleString()}</td>
                             <td>{new Date(doc.updatedAt).toLocaleString()}</td>
@@ -683,11 +652,7 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button
-            variant="primary"
-            onClick={() => handleShowEdit(selectedDataSource)}
-            className="me-2"
-          >
+          <Button variant="primary" onClick={() => handleShowEdit(selectedDataSource)} className="me-2">
             Edit
           </Button>
           <Button variant="secondary" onClick={() => setShowDetailModal(false)}>
@@ -696,11 +661,7 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
         </Modal.Footer>
       </Modal>
 
-      <Modal
-        show={showEditModal}
-        onHide={() => setShowEditModal(false)}
-        fullscreen
-      >
+      <Modal show={showEditModal} onHide={() => setShowEditModal(false)} fullscreen>
         <Modal.Header closeButton>
           <Modal.Title>Edit Data Source</Modal.Title>
         </Modal.Header>
@@ -780,9 +741,7 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
                       }}
                     />
                   </div>
-                  <small className="text-muted">
-                    Enter valid JSON configuration for the data source
-                  </small>
+                  <small className="text-muted">Enter valid JSON configuration for the data source</small>
                 </div>
               </div>
             </div>
@@ -790,22 +749,13 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
         </Modal.Body>
         <Modal.Footer>
           {error && <div className="text-danger me-auto">{error}</div>}
-          <Button
-            variant="outline-secondary"
-            onClick={formatJson}
-            className="me-2"
-          >
+          <Button variant="outline-secondary" onClick={formatJson} className="me-2">
             Format JSON
           </Button>
           <Button variant="secondary" onClick={() => setShowEditModal(false)}>
             Cancel
           </Button>
-          <Button
-            variant="primary"
-            onClick={() =>
-              handleUpdateDataSource(selectedDataSource.dataSourceId)
-            }
-          >
+          <Button variant="primary" onClick={() => handleUpdateDataSource(selectedDataSource.dataSourceId)}>
             Save Changes
           </Button>
         </Modal.Footer>
@@ -825,8 +775,7 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
         </Modal.Header>
         <Modal.Body>
           <p>
-            Are you sure you want to start a sync for{' '}
-            <strong>{syncTargetSource?.displayName}</strong>?
+            Are you sure you want to start a sync for <strong>{syncTargetSource?.displayName}</strong>?
           </p>
           <Alert variant="info">
             <i className="bi bi-info-circle me-2"></i>
@@ -843,10 +792,7 @@ function DataSourceManager({ temporaryCredentials, applicationId }) {
           >
             Cancel
           </Button>
-          <Button
-            variant="primary"
-            onClick={() => handleStartSync(syncTargetSource)}
-          >
+          <Button variant="primary" onClick={() => handleStartSync(syncTargetSource)}>
             Confirm
           </Button>
         </Modal.Footer>
