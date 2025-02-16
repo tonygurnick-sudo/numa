@@ -1,5 +1,4 @@
-import React from 'react';
-import { Button, Dropdown } from 'react-bootstrap';
+import { Dropdown } from 'react-bootstrap';
 import html2pdf from 'html2pdf.js';
 import { saveAs } from 'file-saver';
 import ReactDOMServer from 'react-dom/server';

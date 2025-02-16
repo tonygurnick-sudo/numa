@@ -13,7 +13,7 @@ import { MarkdownContent } from '../Components/MarkdownContent';
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [error, setError] = useState(null);
+  const [, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState(null);
   const [previousMessageId, setPreviousMessageId] = useState(null);
@@ -188,22 +188,6 @@ const NumaChat = () => {
       setMessages((prevMessages) => [...prevMessages, systemMessage]);
     }
     setShowUploadModal(false);
-  };
-
-  const removeFile = (index) => {
-    const newFiles = [...uploadedFiles];
-    newFiles.splice(index, 1);
-    setUploadedFiles(newFiles);
-
-    // If no more files, revert to default mode and add system message
-    if (newFiles.length === 0) {
-      setChatMode('RETRIEVAL_MODE');
-      const systemMessage = {
-        role: 'system',
-        content: 'All files have been removed. Switched back to retrieval mode.',
-      };
-      setMessages((prevMessages) => [...prevMessages, systemMessage]);
-    }
   };
 
   const renderSourceAttributions = (attributions) => {

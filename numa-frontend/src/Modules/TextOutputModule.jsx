@@ -4,7 +4,7 @@ import { MarkdownContent } from '../Components/MarkdownContent';
 import { ResultActions } from '../Components/ResultActions';
 
 function TextOutputModule({ task }) {
-  const { loading, error, numaTaskResponses, appRunning, selectedTaskId } = useNumaApp();
+  const { error, numaTaskResponses, appRunning, selectedTaskId } = useNumaApp();
 
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
 

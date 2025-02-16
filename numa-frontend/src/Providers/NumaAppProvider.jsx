@@ -1,6 +1,5 @@
 import { createContext, useState, useContext, useEffect } from 'react';
 import { useAuth } from '../Providers/AuthProvider';
-import { v4 as uuidv4 } from 'uuid';
 import {
   startQappGetSession,
   getSessionQApp,
@@ -122,7 +121,7 @@ export const NumaAppProvider = ({ children }) => {
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [hasRun, setHasRun] = useState(false);
-  const { numaPost, numaPut, numaGet } = useNumaRequest();
+  const { numaPost, numaGet } = useNumaRequest();
 
   // Load jobs for the current app
   const loadAppJobs = async () => {
@@ -978,9 +977,5 @@ export const NumaAppProvider = ({ children }) => {
     setHasRun,
   };
 
-  return (
-    <NumaAppContext.Provider value={contextValue}>
-      {children}
-    </NumaAppContext.Provider>
-  );
+  return <NumaAppContext.Provider value={contextValue}>{children}</NumaAppContext.Provider>;
 };

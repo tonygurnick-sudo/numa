@@ -2,11 +2,9 @@
  * @vitest-environment jsdom
  */
 import '@testing-library/jest-dom';
-import { MockBreadcrumbs, MockLayoutDashboard } from '../Mocks/ComponentMock';
 import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
-import { MockAwsClient } from '../Mocks/AwsClientMocks';
 
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NumaChat } from '../../Pages/NumaChat';
 import { authHandlers } from '../Mocks/AuthMock';

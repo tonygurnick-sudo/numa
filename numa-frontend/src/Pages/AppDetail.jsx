@@ -5,7 +5,6 @@ import { StarFill, Star } from 'react-bootstrap-icons';
 
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
-import { Preloader } from '../Components/Preloader';
 import { JobHistorySidebar } from '../Components/JobHistorySidebar';
 
 import { QAppDetail } from '../Components/QAppDetail';

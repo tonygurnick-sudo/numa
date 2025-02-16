@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Button, Alert } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
@@ -23,7 +23,6 @@ const AppWizard = ({ manifest }) => {
     taskInputValues,
     setTaskInputValues,
     setError,
-    selectedTaskId,
     setSelectedTaskId,
     activeStep,
     setActiveStep,

@@ -3,11 +3,10 @@
  */
 
 // Import mock handlers and providers
-import { MockPreloader } from '../Mocks/ComponentMock';
 import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
 
 // Regular imports
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { Dash } from '../../Pages/Dash';
