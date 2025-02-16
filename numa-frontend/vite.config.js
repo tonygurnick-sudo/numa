@@ -56,14 +56,6 @@ export default defineConfig({
         target: 'http://localhost:5173',
         rewrite: () => '/src/Data/example-manifest.json',
       },
-      '^/[^/]+/jobs': {
-        target: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
-        changeOrigin: true,
-        secure: false,
-        headers: {
-          Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
-        },
-      },
       '/api': {
         target: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
         changeOrigin: true,
