@@ -76,16 +76,20 @@ export const useJobsApi = () => {
 
   const getJobsByAppId = async (appId) => {
     try {
-      return await numaGet(`/${appId}/jobs`);
+      const endpoint_call = `/api/${appId}/jobs`;
+      console.log('Getting jobs with endpoint:', endpoint_call);
+      return await numaGet(endpoint_call);
     } catch (error) {
       console.error('API Error fetching jobs:', error);
       throw error;
     }
   };
 
-  const getJobById = async (jobId) => {
+  const getJobById = async (numaAppId, jobId) => {
     try {
-      return await numaGet(`/jobs/${jobId}`);
+      const endpoint_call = `/api/${numaAppId}/jobs/${jobId}`;
+      console.log('Getting job with endpoint:', endpoint_call);
+      return await numaGet(endpoint_call);
     } catch (error) {
       console.error('API Error fetching job:', error);
       throw error;

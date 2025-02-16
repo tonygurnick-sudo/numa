@@ -120,8 +120,8 @@ export const NumaAppProvider = ({ children }) => {
   const [jobs, setJobs] = useState([]);
 
   const [selectedTaskId, setSelectedTaskId] = useState(null);
-
   const [activeStep, setActiveStep] = useState(0);
+  const [hasRun, setHasRun] = useState(false);
   const { numaPost, numaPut, numaGet } = useNumaRequest();
 
   // Load jobs for the current app
@@ -520,18 +520,19 @@ export const NumaAppProvider = ({ children }) => {
       // Get all text-output tasks
       const textOutputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
 
+      console.log('Found text-output tasks to be saved:', textOutputTasks);
       // Build results object from text-output tasks
       const textOutputResults = textOutputTasks.reduce((acc, task) => {
-        // Get the referenced data from currentResults
-        const dataRef = task.params.dataRef.slice(1); // Remove @ from reference
-        if (currentResults[dataRef]) {
-          acc[task.id] = currentResults[dataRef];
+        // Get the referenced data using resolveReference
+        const resolvedValue = resolveReference(task.params.dataRef, currentResults);
+        if (resolvedValue !== '') {
+          acc[task.id] = resolvedValue;
         }
         return acc;
       }, {});
 
+      console.log('Text-output results to be saved:', textOutputResults);
       // Update the job using jobsApi
-      // TODO put back in after demo
       await jobsApi.updateJob(numaAppData, jobID, textOutputResults);
 
       // Refresh the jobs list
@@ -741,10 +742,12 @@ export const NumaAppProvider = ({ children }) => {
   // Load and display historical job results
   const loadJobResults = async (jobId) => {
     try {
-      const job = await jobsApi.getJobById(jobId);
+      const job = await jobsApi.getJobById(numaAppId, jobId);
       if (!job) {
         throw new Error('Job not found');
       }
+
+      console.log('Job:', job);
 
       // Reset states
       setNumaTaskResponses([]);
@@ -752,6 +755,8 @@ export const NumaAppProvider = ({ children }) => {
       setTaskInputValues({});
       setActiveStep(0);
       setSelectedTaskId(null);
+      setAppRunning(true); // Set to true to show post-run navigation
+      setHasRun(true); // Set hasRun to true to show post-run navigation
 
       // Set inputs if available
       if (job.inputs) {
@@ -834,6 +839,9 @@ export const NumaAppProvider = ({ children }) => {
         setProcessingProgress(100);
         setProcessingStatus('Complete!');
       }
+
+      // Set appRunning to false after all results are processed
+      setAppRunning(false);
     } catch (error) {
       console.error('Error loading job results:', error);
       throw error;
@@ -961,7 +969,13 @@ export const NumaAppProvider = ({ children }) => {
     setJobHistorySidebarOpen,
     activeStep,
     setActiveStep,
+    hasRun,
+    setHasRun,
   };
 
-  return <NumaAppContext.Provider value={contextValue}>{children}</NumaAppContext.Provider>;
+  return (
+    <NumaAppContext.Provider value={contextValue}>
+      {children}
+    </NumaAppContext.Provider>
+  );
 };

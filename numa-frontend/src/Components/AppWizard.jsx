@@ -28,8 +28,9 @@ const AppWizard = ({ manifest }) => {
     activeStep,
     setActiveStep,
     error,
+    hasRun,
+    setHasRun,
   } = useNumaApp();
-  const [hasRun, setHasRun] = useState(false);
 
   // Filter out hidden tasks and system tasks (q-app and http-request)
   const visibleTasks = useMemo(
