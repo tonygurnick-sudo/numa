@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Form } from 'react-bootstrap';
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
 
 function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
