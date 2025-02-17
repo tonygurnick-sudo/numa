@@ -112,12 +112,15 @@ def __format_transcript(items: list, speaker_segments: dict) -> str:
 
 
 def __get_transcript(job_info: dict) -> str:
-    """Gets the transcript from S3 using the job info."""
+    """
+    Gets the transcript from S3 using the job info.
+    """
     bucket = job_info["OutputBucketName"]
     key = job_info["OutputKey"]
 
     try:
         logger.info(f"Getting transcript from bucket: {bucket}, key: {key}")
+
         response = s3_client.get_object(Bucket=bucket, Key=key)
         transcript_json = json.loads(response["Body"].read().decode("utf-8"))
 
