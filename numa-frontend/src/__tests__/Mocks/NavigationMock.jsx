@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import React from 'react';
 
-export const navigationHandlers = {
+const navigationHandlers = {
   mockNavigate: vi.fn(),
   currentRoute: '/dash',
 };
@@ -27,11 +27,3 @@ vi.mock('react-router-dom', async () => {
     useParams: () => ({}),
   };
 });
-
-export const setupNavigationMocks = () => {
-  return navigationHandlers;
-};
-
-export const clearNavigationMocks = () => {
-  navigationHandlers.mockNavigate.mockReset();
-};

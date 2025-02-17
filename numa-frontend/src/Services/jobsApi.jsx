@@ -1,6 +1,6 @@
 // API service for job-related operations
 import { createFormattedDate } from '../utils/dateUtils';
-import { useNumaRequest } from '../Providers/RequestProvider';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
 
 const createJobData = (numaAppData, taskInputs, jobID = null) => {
   const { displayDate, isoDate } = createFormattedDate();

@@ -1,39 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import {
-  Container,
-  Table,
-  Badge,
-  Button,
-  Tabs,
-  Tab,
-  Dropdown,
-  Modal,
-  OverlayTrigger,
-  Tooltip,
-  Toast,
-} from 'react-bootstrap';
-import {
-  Download as DownloadIcon,
-  Share as ShareIcon,
-  ThreeDotsVertical as ThreeDotsIcon,
-  Clock as ClockIcon,
-  Plus as PlusIcon,
-  Trash as TrashIcon,
-  PencilFill,
-  PencilSquare,
-} from 'react-bootstrap-icons';
-import pdfPolicy from '../assets/policies.pdf';
+import { Container, Table, Badge, Button, Tabs, Tab, OverlayTrigger, Tooltip, Toast } from 'react-bootstrap';
+import { Download as DownloadIcon, Plus as PlusIcon, PencilSquare } from 'react-bootstrap-icons';
 import PolicyEditor from './PolicyEditor';
 import { CreatePolicyModal } from './PolicyBuilderModal';
 import { useAuth } from '../Providers/AuthProvider';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { useNumaRequest } from '../Providers/RequestProvider';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
 
 export const PolicyBuilderDetail = () => {
   const [activeTab, setActiveTab] = useState('policies');
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [selectedPolicyHistory, setSelectedPolicyHistory] = useState(null);
   const [showNewPolicyModal, setShowNewPolicyModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [policyInputs, setPolicyInputs] = useState({
@@ -41,13 +17,13 @@ export const PolicyBuilderDetail = () => {
     schoolContext: '',
     customInstructions: '',
   });
-  const [showCustomScenarioModal, setShowCustomScenarioModal] = useState(false);
+  const [, setShowCustomScenarioModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedPolicy, setSelectedPolicy] = useState(null);
+  const [selectedPolicy] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [value, setValue] = useState('Loading policy content...');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [policies, setPolicies] = useState([]);
   const [isLoadingPolicies, setIsLoadingPolicies] = useState(true);
@@ -57,7 +33,7 @@ export const PolicyBuilderDetail = () => {
   const [isDownloading, setIsDownloading] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  const { loading, isAuthenticated, getAccessToken, getIdentityPoolCredentials } = useAuth();
+  const { loading, isAuthenticated, getIdentityPoolCredentials } = useAuth();
   const { numaPost, numaPut, numaGet } = useNumaRequest();
 
   const policyTemplates = [
@@ -124,52 +100,6 @@ export const PolicyBuilderDetail = () => {
       category: 'Independent Education',
       defaultInstructions:
         'Generate policies covering: school-specific values, academic excellence, character development, community engagement, student achievement, operational expectations, and governance aligned with independent school requirements.',
-    },
-  ];
-
-  // Update sample history data to include all policies
-  const samplePolicyHistory = [
-    {
-      id: 1,
-      name: 'Digital Technology and Device Usage - Wellington College',
-      versions: [
-        {
-          version: 1,
-          generatedDate: '2024-03-15',
-          status: 'active',
-          changes: 'Initial policy generation',
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: 'Student Support & Wellbeing Guidelines - Wellington Girls College',
-      versions: [
-        {
-          version: 1,
-          generatedDate: '2024-03-10',
-          status: 'active',
-          changes: 'Initial policy generation',
-        },
-      ],
-    },
-    {
-      id: 3,
-      name: 'Cultural Inclusivity Framework - Wellington High School',
-      versions: [
-        {
-          version: 2,
-          generatedDate: '2024-03-01',
-          status: 'out_of_date',
-          changes: 'Updated to include new Ministry guidelines',
-        },
-        {
-          version: 1,
-          generatedDate: '2023-09-15',
-          status: 'archived',
-          changes: 'Initial policy generation',
-        },
-      ],
     },
   ];
 
@@ -249,11 +179,6 @@ export const PolicyBuilderDetail = () => {
     }
   };
 
-  const handleShare = (policyId, method) => {
-    // Implement share logic here
-    console.log(`Sharing policy ${policyId} via ${method}`);
-  };
-
   const formatDate = (dateString, includeDay = false) => {
     if (!dateString) return 'N/A';
 
@@ -276,21 +201,6 @@ export const PolicyBuilderDetail = () => {
     }
   };
 
-  const handleViewPolicy = () => {
-    // Open PDF in new tab
-    window.open(pdfPolicy, '_blank');
-  };
-
-  const getPolicyHistory = (policyId) => {
-    return samplePolicyHistory.find((policy) => policy.id === policyId);
-  };
-
-  const handleShowHistory = (policyId) => {
-    const history = getPolicyHistory(policyId);
-    setSelectedPolicyHistory(history);
-    setShowHistoryModal(true);
-  };
-
   const handleTemplateSelect = (template) => {
     setSelectedTemplate(template);
     setPolicyInputs({
@@ -304,53 +214,6 @@ export const PolicyBuilderDetail = () => {
       characterUrls: [],
     });
     setShowNewPolicyModal(true);
-  };
-
-  const handleAddUrl = () => {
-    setPolicyInputs({
-      ...policyInputs,
-      characterUrls: [...policyInputs.characterUrls, { url: '', description: '' }],
-    });
-  };
-
-  const handleUrlChange = (index, field, value) => {
-    const newUrls = [...policyInputs.characterUrls];
-    newUrls[index][field] = value;
-    setPolicyInputs({
-      ...policyInputs,
-      characterUrls: newUrls,
-    });
-  };
-
-  const handleRemoveUrl = (index) => {
-    setPolicyInputs({
-      ...policyInputs,
-      characterUrls: policyInputs.characterUrls.filter((_, i) => i !== index),
-    });
-  };
-
-  const handleEditPolicy = (policy) => {
-    setSelectedPolicy(policy);
-    setShowEditModal(true);
-    // Initialize chat with a welcome message
-    setChatMessages([
-      {
-        role: 'assistant',
-        content: `I'm here to help you improve the "${policy.name}" policy. What would you like to change?`,
-      },
-    ]);
-    // Load the policy content
-    setIsLoading(true);
-    fetch('/src/assets/final_policy.md')
-      .then((response) => response.text())
-      .then((content) => {
-        setValue(content);
-        setIsLoading(false);
-      })
-      .catch((error) => {
-        console.error('Error loading markdown:', error);
-        setIsLoading(false);
-      });
   };
 
   const handleSendMessage = (e) => {
@@ -599,22 +462,6 @@ export const PolicyBuilderDetail = () => {
       console.error('Error fetching policies:', error);
     } finally {
       setIsLoadingPolicies(false);
-    }
-  };
-
-  // Helper function to map job statuses to policy statuses
-  const mapJobStatusToPolicy = (jobStatus) => {
-    switch (jobStatus) {
-      case 'SUCCESS':
-        return 'SUCCESS';
-      case 'FAILURE':
-        return 'FAILED';
-      case 'PROCESSING':
-        return 'PROCESSING';
-      case 'PENDING':
-        return 'PROCESSING';
-      default:
-        return 'PROCESSING';
     }
   };
 

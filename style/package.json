@@ -1,0 +1,25 @@
+{
+  "name": "@arcanumai/style",
+  "packageManager": "yarn@4.6.0",
+  "type": "module",
+  "exports": [
+    "./eslint.config.base.js"
+  ],
+  "main": "./eslint.config.base.js",
+  "dependencies": {
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.3",
+    "prettier": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/eslint": "^9.6.1",
+    "@types/prettier": "^3.0.0",
+    "eslint": "^9.20.1"
+  },
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "peerDependencies": {
+    "eslint": "*"
+  }
+}

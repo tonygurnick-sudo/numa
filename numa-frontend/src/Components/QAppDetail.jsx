@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Alert } from 'react-bootstrap';
 
 import { QAppWizard } from './QAppWizard';
 import { Preloader } from './Preloader';
@@ -25,7 +24,6 @@ const QAppDetail = () => {
     setQCardInputValues,
     qCardInputValues,
     setQSessionId,
-    numaAppId,
   } = useNumaApp();
 
   const qAppId = numaAppData?.qAppId;

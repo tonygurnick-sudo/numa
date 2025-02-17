@@ -3,12 +3,12 @@
  */
 
 // Import mocks first
-import { setupNavigationMocks, clearNavigationMocks, MockMemoryRouter } from '../Mocks/NavigationMock';
-import { setupAuthMocks, clearAuthMocks, MockAuthProvider } from '../Mocks/AuthMock';
+import { setupNavigationMocks, clearNavigationMocks } from '../Mocks/NavigationMock';
+import { setupAuthMocks, clearAuthMocks } from '../Mocks/AuthMock';
 import { renderWithProviders } from '../Mocks/ProviderWrapper';
 
 // Regular imports
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { Nav } from '../../Components/Nav';

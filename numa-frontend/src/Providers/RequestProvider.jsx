@@ -1,16 +1,6 @@
-import React, { createContext, useContext } from 'react';
 import axios from 'axios';
 import { useAuth } from './AuthProvider';
-
-const NumaRequestContext = createContext();
-
-export const useNumaRequest = () => {
-  const context = useContext(NumaRequestContext);
-  if (!context) {
-    throw new Error('useRequest must be used within a RequestProvider');
-  }
-  return context;
-};
+import { NumaRequestContext } from './NumaRequestContext';
 
 export const NumaRequestProvider = ({ children }) => {
   const { user } = useAuth();
@@ -26,7 +16,7 @@ export const NumaRequestProvider = ({ children }) => {
     if (typeof data === 'string') {
       try {
         return JSON.parse(data);
-      } catch (error) {
+      } catch {
         return data;
       }
     }
@@ -36,7 +26,7 @@ export const NumaRequestProvider = ({ children }) => {
         if (item.body && typeof item.body === 'string') {
           try {
             item.body = JSON.parse(item.body);
-          } catch (error) {
+          } catch {
             // Keep original string if parsing fails
           }
         }
@@ -53,7 +43,7 @@ export const NumaRequestProvider = ({ children }) => {
         try {
           const parsedData = JSON.parse(data);
           return parseNestedJson(parsedData);
-        } catch (error) {
+        } catch {
           return data;
         }
       },

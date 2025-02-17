@@ -1,0 +1,11 @@
+{
+  "packageManager": "yarn@4.6.0",
+  "workspaces": [
+    "style",
+    "infra",
+    "tools",
+    "numa-frontend",
+    "numa-management",
+    "lambdas/node/*"
+  ]
+}

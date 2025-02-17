@@ -1,4 +1,3 @@
-import React, { useEffect, useState } from 'react';
 import { Button, ButtonGroup, Dropdown } from 'react-bootstrap';
 import {
   ArrowCounterclockwise,
@@ -11,7 +10,6 @@ import {
   TypeH1,
   TypeH2,
   TypeH3,
-  Border,
 } from 'react-bootstrap-icons';
 
 // Import necessary plugins

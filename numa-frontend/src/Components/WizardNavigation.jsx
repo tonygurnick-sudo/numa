@@ -4,10 +4,6 @@ const WizardNavigation = ({
   preRunSteps,
   postRunSteps,
   activeStep,
-  handlePrevStep,
-  handleNextStep,
-  visibleTasks,
-  taskCompletionStatus,
   onStepClick,
   isStepComplete,
   isStepDisabled,
@@ -51,7 +47,6 @@ const WizardNavigation = ({
           </div>
         </div>
       </div>
-
 
       <div className="run-button-wrapper">
         <Button

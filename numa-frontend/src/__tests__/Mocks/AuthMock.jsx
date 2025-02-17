@@ -40,7 +40,7 @@ const mockQBusinessClient = {
 };
 
 // Define all auth handlers
-export const authHandlers = {
+const authHandlers = {
   logout: vi.fn(),
   requestPasswordReset: vi.fn(),
   confirmPasswordReset: vi.fn(),
@@ -80,17 +80,3 @@ vi.mock('../../Providers/AuthProvider', () => {
     AuthProvider: ({ children }) => children,
   };
 });
-
-// Update setupAuthMocks to return the handlers
-export const setupAuthMocks = () => {
-  clearAuthMocks();
-  return authHandlers;
-};
-
-export const clearAuthMocks = () => {
-  Object.values(authHandlers).forEach((handler) => {
-    if (typeof handler === 'function') {
-      handler.mockReset();
-    }
-  });
-};
