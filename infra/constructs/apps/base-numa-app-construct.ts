@@ -19,13 +19,15 @@ import {
 export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   abstract readonly manifest: NumaAppManifest;
   protected jobsTable?: DynamodbTable;
+  protected s3KeyPrefix: string;
   readonly appId: string;
 
   constructor(scope: Construct, name: string, props: AppSpecificBaseNumaAppProps) {
     super(scope, name, props);
 
     this.appId = props.appId;
-    this.pathPrefix = '/api' + this.prepPathPart(props.pathPrefix ?? this.appId);
+    this.urlPathPrefix = '/api' + this.prepPathPart(props.urlPathPrefix ?? this.appId);
+    this.s3KeyPrefix = props.s3KeyPrefix ?? `/${this.appId}`;
 
     if (props.enableJobs) {
       this.setupJobs();
@@ -38,7 +40,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         statement: [
           {
             actions: ['s3:PutObject'],
-            resources: [`${props.outputsBucket.arn}/${this.appId}/*`],
+            resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
           },
           {
             actions: [
@@ -125,7 +127,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         {
           actions: ['s3:GetObject'],
           effect: 'Allow',
-          resources: [`${props.outputsBucket.arn}/${this.appId}/*`],
+          resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
         },
       ],
     });
@@ -307,7 +309,8 @@ export interface AddStepFunctionProps {
 
 export interface UserConfigurableBaseNumaAppProps {
   enableJobs?: boolean; // Optional flag to enable jobs functionality
-  pathPrefix?: string;
+  urlPathPrefix?: string;
+  s3KeyPrefix?: string;
 }
 
 export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiGatewayLambdaCollectionProps {

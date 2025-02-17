@@ -19,14 +19,14 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
   private apiGatewayAuthorizerId: string;
   private apiGatewayId: string;
   protected logGroup: CloudwatchLogGroup;
-  protected pathPrefix: string;
+  protected urlPathPrefix: string;
 
   constructor(scope: Construct, name: string, props: ApiGatewayLambdaCollectionProps) {
     super(scope, name);
 
     this.apiGatewayAuthorizerId = props.apiGatewayAuthorizerId;
     this.apiGatewayId = props.apiGatewayId;
-    this.pathPrefix = '/api';
+    this.urlPathPrefix = '/api';
     this.logGroup = new CloudwatchLogGroup(this, 'log-group', {
       name: '/numa/' + this.node.id,
     });
@@ -106,7 +106,7 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       new Apigatewayv2Route(this, name + '_route', {
         ...additionalRouteParameters,
         apiId: this.apiGatewayId,
-        routeKey: `${props.route.verb} ${this.pathPrefix}${this.prepPathPart(props.route.path)}`,
+        routeKey: `${props.route.verb} ${this.urlPathPrefix}${this.prepPathPart(props.route.path)}`,
         target: `integrations/${integration.id}`,
       });
 
