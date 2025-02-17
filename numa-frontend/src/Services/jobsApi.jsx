@@ -15,6 +15,7 @@ const createJobData = (numaAppData, taskInputs, jobID = null) => {
     results: null,
     status: 'running',
     lastUpdated: null,
+    manifest: numaAppData, // Store the full manifest
   };
 };
 

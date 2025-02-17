@@ -763,9 +763,12 @@ export const NumaAppProvider = ({ children }) => {
         setTaskInputValues(job.inputs);
       }
 
+      // Use the stored manifest if available, otherwise fall back to current manifest
+      const manifestToUse = job.manifest || numaAppData;
+
       // Mark all input tasks as complete
       const updatedStatus = {};
-      numaAppData.tasks.forEach((task) => {
+      manifestToUse.tasks.forEach((task) => {
         //  this is a finished job
         if (!task.type.includes('output')) {
           updatedStatus[task.id] = true;
@@ -775,7 +778,7 @@ export const NumaAppProvider = ({ children }) => {
 
       // Process results into task responses
       if (job.results) {
-        const outputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
+        const outputTasks = manifestToUse.tasks.filter((task) => task.type === 'text-output');
         const responses = [];
 
         outputTasks.forEach((task) => {
@@ -816,7 +819,7 @@ export const NumaAppProvider = ({ children }) => {
           const firstTaskWithResults = responses[0];
           if (firstTaskWithResults) {
             // Find the task index in the filtered tasks list
-            const visibleTasks = numaAppData.tasks.filter(
+            const visibleTasks = manifestToUse.tasks.filter(
               (task) => !task.hidden && task.type !== 'q-app' && task.type !== 'http-request',
             );
             const taskIndex = visibleTasks.findIndex((t) => t.id === firstTaskWithResults.taskId);
