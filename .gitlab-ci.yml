@@ -8,12 +8,6 @@ include:
   - project: arcanumai/ci
     file: pipelines/python.yml
 
-.yarn:
-  setup-private-auth:
-    - corepack enable
-    - yarn config set npmScopes.arcanumai.npmRegistryServer https://gitlab.com/api/v4/packages/npm/
-    - yarn config set npmScopes.arcanumai.npmAuthToken "${CI_JOB_TOKEN}"
-
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
