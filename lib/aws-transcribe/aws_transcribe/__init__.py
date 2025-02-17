@@ -25,6 +25,7 @@ class TranscriptionResponse:
 def __start_transcription_job(
     job_name: str,
     media_uri: str,
+    max_speakers: int,
     language_code: str = "en-US",
     output_bucket: Optional[str] = None,
     output_key: Optional[str] = None,
@@ -38,6 +39,11 @@ def __start_transcription_job(
             "LanguageCode": language_code,
             "OutputBucketName": output_bucket,
             "OutputKey": output_key or "transcripts/",
+            "Settings": {
+                "ShowSpeakerLabels": True,
+                "MaxSpeakerLabels": max_speakers,
+                "ChannelIdentification": False,
+            },
         }
 
         transcribe_client.start_transcription_job(**params)
@@ -73,19 +79,59 @@ def __wait_for_completion(job_name: str, timeout: int = 900) -> dict:
     raise TranscriptionError("Transcription timed out")
 
 
+def __format_transcript(items: list, speaker_segments: dict) -> str:
+    """Simple formatting: new line per speaker change with speaker label."""
+    current_speaker = None
+    transcript = []
+    current_text = []
+
+    for item in items:
+        content = item.get("alternatives", [{}])[0].get("content", "")
+        start_time = item.get("start_time")
+
+        if item.get("type") == "punctuation":
+            current_text.append(content)
+            continue
+
+        if start_time in speaker_segments:
+            speaker = speaker_segments[start_time]
+            if speaker != current_speaker:
+                if current_text:
+                    transcript.append(" ".join(current_text))
+                current_speaker = speaker
+                current_text = [f"\n{speaker}: {content}"]
+            else:
+                current_text.append(content)
+        else:
+            current_text.append(content)
+
+    if current_text:
+        transcript.append(" ".join(current_text))
+
+    return "".join(transcript).strip()
+
+
 def __get_transcript(job_info: dict) -> str:
-    """
-    Gets the transcript from S3 using the job info.
-    """
+    """Gets the transcript from S3 using the job info."""
     bucket = job_info["OutputBucketName"]
     key = job_info["OutputKey"]
 
     try:
         logger.info(f"Getting transcript from bucket: {bucket}, key: {key}")
-
         response = s3_client.get_object(Bucket=bucket, Key=key)
         transcript_json = json.loads(response["Body"].read().decode("utf-8"))
-        return transcript_json["results"]["transcripts"][0]["transcript"]
+
+        results = transcript_json.get("results", {})
+        segments = results.get("speaker_labels", {}).get("segments", [])
+        items = results.get("items", [])
+
+        speaker_segments = {}
+        for segment in segments:
+            for item in segment.get("items", []):
+                speaker_segments[item["start_time"]] = segment["speaker_label"]
+
+        return __format_transcript(items, speaker_segments)
+
     except Exception as e:
         logger.exception(
             "Failed to get transcript",
@@ -103,6 +149,7 @@ def transcribe(
     output_bucket: Optional[str] = None,
     output_key: Optional[str] = None,
     name_for_logging: str = "",
+    max_speakers: int = 10,
 ) -> TranscriptionResponse:
     """
     Transcribe an audio file from S3 and return the transcribed text.
@@ -112,13 +159,13 @@ def transcribe(
 
     media_uri = f"s3://{bucket}/{key}"
     job_name = job_name or f"transcription-{int(time.time())}"
-
     output_bucket = output_bucket or bucket
     output_key = output_key or f"transcripts/{job_name}.json"
 
     __start_transcription_job(
         job_name=job_name,
         media_uri=media_uri,
+        max_speakers=max_speakers,
         language_code=language_code,
         output_bucket=output_bucket,
         output_key=output_key,
