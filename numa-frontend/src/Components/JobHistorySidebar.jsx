@@ -1,4 +1,4 @@
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { Button, ListGroup, Offcanvas } from 'react-bootstrap';
 import { formatDistanceToNow } from 'date-fns';
 

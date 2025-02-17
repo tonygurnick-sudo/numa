@@ -1,4 +1,4 @@
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
 import { MarkdownContent } from '../Components/MarkdownContent';
 import { ResultActions } from '../Components/ResultActions';

@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Container, Row, Col } from 'react-bootstrap';
 import { AppCard } from './AppCard';
 import { WizardNavigation } from './WizardNavigation';
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
 
 const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessionResults }) => {
