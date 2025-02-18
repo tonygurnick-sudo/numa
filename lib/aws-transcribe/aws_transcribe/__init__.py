@@ -79,7 +79,7 @@ def __wait_for_completion(job_name: str, timeout: int = 900) -> dict:
     raise TranscriptionError("Transcription timed out")
 
 
-def __format_transcript(items: list, speaker_segments: dict) -> str:
+def _format_transcript(items: list, speaker_segments: dict) -> str:
     """Simple formatting: new line per speaker change with speaker label."""
     current_speaker = None
     transcript = []
@@ -133,7 +133,7 @@ def __get_transcript(job_info: dict) -> str:
             for item in segment.get("items", []):
                 speaker_segments[item["start_time"]] = segment["speaker_label"]
 
-        return __format_transcript(items, speaker_segments)
+        return _format_transcript(items, speaker_segments)
 
     except Exception as e:
         logger.exception(
