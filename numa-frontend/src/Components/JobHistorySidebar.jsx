@@ -1,16 +1,33 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNumaApp } from '../Providers/NumaAppProvider';
 import { Button, ListGroup, Offcanvas } from 'react-bootstrap';
 import { formatDistanceToNow } from 'date-fns';
+import { Preloader } from './Preloader';
 
 const JobHistorySidebar = () => {
   const { getAppJobs, loadAppJobs, loadJobResults, numaAppData, jobHistorySidebarOpen, setJobHistorySidebarOpen } =
     useNumaApp();
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingJobId, setLoadingJobId] = useState(null);
 
   const handleClose = () => setJobHistorySidebarOpen(false);
   const handleShow = async () => {
     setJobHistorySidebarOpen(true);
-    await loadAppJobs();
+    setIsLoading(true);
+    try {
+      await loadAppJobs();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleViewResults = async (jobId) => {
+    setLoadingJobId(jobId);
+    try {
+      await loadJobResults(jobId);
+    } finally {
+      setLoadingJobId(null);
+    }
   };
 
   const jobs = getAppJobs() || [];
@@ -26,7 +43,11 @@ const JobHistorySidebar = () => {
           <Offcanvas.Title>Recent Jobs - {numaAppData?.appName || 'App'}</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>
-          {jobs.length === 0 || typeof jobs === 'string' ? (
+          {isLoading ? (
+            <div className="text-center py-5">
+              <Preloader smallscreen={true} />
+            </div>
+          ) : jobs.length === 0 || typeof jobs === 'string' ? (
             <p className="text-muted">No job history available</p>
           ) : (
             <ListGroup>
@@ -81,10 +102,17 @@ const JobHistorySidebar = () => {
                       <Button
                         variant="outline-secondary"
                         size="sm"
-                        onClick={() => loadJobResults(job.jobID)}
-                        disabled={job.status === 'running'}
+                        onClick={() => handleViewResults(job.jobID)}
+                        disabled={job.status === 'running' || loadingJobId === job.jobID}
                       >
-                        View Results
+                        {loadingJobId === job.jobID ? (
+                          <div className="d-flex align-items-center">
+                            <Preloader smallscreen={true} />
+                            <span className="ms-2">Loading...</span>
+                          </div>
+                        ) : (
+                          'View Results'
+                        )}
                       </Button>
                     </div>
                   </ListGroup.Item>

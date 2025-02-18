@@ -162,6 +162,48 @@
           }
       ]
   },
+  {
+    "appName": "Document Summariser",
+    "id": "document-summariser",
+    "type": "numa-app",
+    "status": "Active",
+    "category": "productivity",
+    "createdDate": "2025-01-31",
+    "appDescription": "Summarise one or multiple documents",
+    "tasks": [
+        {
+            "id": "upload-files-to-s3",
+            "title": "Upload documents",
+            "description": "Upload the documents you would like summarised",
+            "type": "s3-upload",
+            "required": true,
+            "order": 1
+        },
+        {
+            "id": "call-step-function",
+            "title": "Process Documents",
+            "type": "http-request",
+            "endpoint": "document-summariser",
+            "params": {
+                "payload": {
+                    "uploaded_files": "@upload-files-to-s3",
+                    "template": "@template-task",
+                    "other_notes": "@other-notes"
+                }
+            },
+            "order": 2
+        },
+        {
+            "id": "summaries",
+            "title": "Summaries",
+            "type": "text-output",
+            "params": {
+                "dataRef": "@call-step-function/output_key"
+            },
+            "order": 3
+        }
+    ]
+},
     {
       "appName": "Meeting Tools App",
       "id": "meeting-tools-app",

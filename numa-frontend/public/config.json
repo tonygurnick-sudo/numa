@@ -1,12 +1,12 @@
 {
-  "USER_POOL_ID": "us-east-1_o67ZTord4",
-  "CLIENT_ID": "7apkipvdjn0d2gvspc9d974658",
-  "IDENTITY_POOL_ID": "us-east-1:62857240-e366-4e89-9c94-39cab3d4a67e",
-  "IDENTITY_POOL_ROLE_ARN": "arn:aws:cognito-identity:us-east-1:619071323471:identitypool/us-east-1:62857240-e366-4e89-9c94-39cab3d4a67e",
+  "Q_APPLICATION_ID": "2594236d-712a-4355-8b0e-6a4cef023f75",
+  "Q_INDEX_ID": "0cbbe940-c7ce-4013-b4f8-ce4176fef1d8",
+  "Q_DATASOURCE_ID": "b5a0cf1e-99a8-4a74-b92c-3b0103a3b5b0",
+  "IDENTITY_POOL_ID": "us-east-1:facf1439-ef67-48f9-ada4-debb294db187",
+  "ROLE_ARN": "arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo",
   "REGION": "us-east-1",
-  "ROLE_ARN": "arn:aws:iam::619071323471:role/web-experience-role-numa-arcanum-prod-numa-demo",
-  "Q_APPLICATION_ID": "c8f53bf2-34d6-4d66-87da-24f02ce46e0f",
-  "Q_INDEX_ID": "41f61f0c-7948-4155-a81c-2978b27eacb2",
-  "API_ENDPOINT": "https://arcanum-prod-numa-demo.numa.arcanum.ai/api",
-  "CLIENT_NAME": "arcanum-prod-numa-demo"
+  "API_ENDPOINT": "https://arcanum-demo.numa.arcanum.ai/api",
+  "USER_POOL_ID": "us-east-1_kVPZjTM6a",
+  "CLIENT_ID": "48ed21kkeqa0h4jtrs08kbvvvr",
+  "CLIENT_NAME": "arcanum-demo"
 }
