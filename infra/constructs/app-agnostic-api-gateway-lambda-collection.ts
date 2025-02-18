@@ -1,23 +1,9 @@
 import { Construct } from 'constructs';
-import { AppCategory, AppStatus, AppType, BaseNumaApp, BaseNumaAppProps } from './base-numa-app-construct';
+import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
 
-// TODO: This isn't really an app, but wants addLambdaFunction. We should refactor that out so this doesn't need a manifest.
-export class CoreNumaApp extends BaseNumaApp {
-  readonly manifest;
-
+export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaCollection {
   constructor(scope: Construct, name: string, props: CoreNumaAppProps) {
     super(scope, name, props);
-
-    this.manifest = {
-      appName: 'Core',
-      id: 'core-app',
-      type: AppType.NUMA,
-      status: AppStatus.INTERNAL,
-      category: AppCategory.GENERAL,
-      createdDate: '2025-01-01',
-      appDescription: 'Core Numa App',
-      tasks: [],
-    };
 
     // SRP Proxy
     const environment = {
@@ -76,7 +62,7 @@ export class CoreNumaApp extends BaseNumaApp {
   }
 }
 
-export interface CoreNumaAppProps extends BaseNumaAppProps {
+export interface CoreNumaAppProps extends ApiGatewayLambdaCollectionProps {
   clientId: string;
   clientSecret: string;
 }

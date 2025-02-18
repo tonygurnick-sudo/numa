@@ -19,8 +19,8 @@ def __get_job_id(event: dict):
     return event.get("job_id", str(uuid.uuid4()))
 
 
-def __key(app_name: str, job_id: str, name: str, area: str = "") -> str:
-    key = f"{app_name}/{job_id}/{name}"
+def __key(app_id: str, job_id: str, name: str, area: str = "") -> str:
+    key = f"{app_id}/{job_id}/{name}"
     if area:
         key += f"_{area}"
     return key
@@ -38,12 +38,12 @@ def __write_string_to_s3(string: str, key: str):
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
-    app_name = event["app_name"]
+    app_id = event["app_id"]
     job_id = __get_job_id(event)
     helpers.setup_logging()
     structlog.contextvars.bind_contextvars(
         function_name=context.function_name,
-        app_name=app_name,
+        app_id=app_id,
         job_id=job_id,
     )
     logger.info("Execute lambda", lambda_event=event)
@@ -98,7 +98,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
     legal_review = output["legal_policy_review"]
     legal_references = output["legal_references"]
 
-    legal_review_feedback_key = __key(app_name, job_id, "legal_review_feedback", area)
+    legal_review_feedback_key = __key(app_id, job_id, "legal_review_feedback", area)
     __write_string_to_s3(legal_review, legal_review_feedback_key)
 
     board_assurance_statement = __read_string_from_s3(
@@ -130,7 +130,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
     explanation = implement_legal_review_result.response[0]["input"]["explanation"]
 
     legal_review_implementation_key = __key(
-        app_name,
+        app_id,
         job_id,
         "legal_review_implementation",
         area,
@@ -138,7 +138,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
     __write_string_to_s3(policy, legal_review_implementation_key)
 
     legal_review_implementation_explanation_key = __key(
-        app_name,
+        app_id,
         job_id,
         "legal_review_implementation_explanation",
         area,

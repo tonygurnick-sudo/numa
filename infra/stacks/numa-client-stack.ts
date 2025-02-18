@@ -8,9 +8,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import _clientConfigDev from '../../clientConfigDev.json';
 import _clientConfigProd from '../../clientConfigProd.json';
-import { CoreNumaApp, ExampleNumaApp } from '../constructs/apps';
-import { BaseNumaApp, BaseNumaAppProps } from '../constructs/apps/base-numa-app-construct';
+import { AppAgnosticApiGatewayLambdaCollection } from '../constructs/app-agnostic-api-gateway-lambda-collection';
+import {
+  BaseNumaApp,
+  BaseNumaAppProps,
+  UserConfigurableBaseNumaAppProps,
+} from '../constructs/apps/base-numa-app-construct';
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
+import { ExampleNumaApp } from '../constructs/apps/example-numa-app-construct';
 import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
@@ -66,12 +71,11 @@ export class NumaClientStack extends ArcanumStack {
 
     // Resources can't start with a number, so prefix with an underscore if required.
     const safeConstructId = props.client.replace(/^(?=[^a-zA-Z_])/, '_');
-    new CoreNumaApp(this, safeConstructId + '-core', {
+    new AppAgnosticApiGatewayLambdaCollection(this, safeConstructId + '-core', {
       apiGatewayAuthorizerId: fe.authorizer.id,
       apiGatewayId: fe.apiGateway.id,
-      outputsBucket: core.outputsBucket.bucket,
-      clientId: core.userPoolClient?.id ?? '',
-      clientSecret: core.userPoolClient?.clientSecret ?? '',
+      clientId: core.userPoolClient.id,
+      clientSecret: core.userPoolClient.clientSecret,
     });
 
     if (props.config.allApps) {
@@ -187,7 +191,7 @@ interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
    *
    * @default {}
    */
-  apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId' | 'apiGatewayAuthorizerId' | 'outputsBucket'>>;
+  apps?: Record<string, UserConfigurableBaseNumaAppProps>;
   /**
    * Whether to upload the Numa frontend. Used to disable frontend installation when using a custom frontend.
    *

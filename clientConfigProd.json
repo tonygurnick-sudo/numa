@@ -64,7 +64,9 @@
     "apps": {
       "document-summariser": {},
       "meeting-analyser": {},
-      "nzsba-policy-builder": {}
+      "nzsba-policy-builder": {
+        "s3KeyPrefix": "/arcanum-demo-sebastian-nzsba-policy-builder"
+      }
     },
     "devInstance": true
   },
@@ -371,6 +373,11 @@
   "nzsba": {
     "clientAccountId": "307946678276",
     "loadSampleFile": false,
+    "apps": {
+      "nzsba-policy-builder": {
+        "s3KeyPrefix": "/nzsba-nzsba-policy-builder"
+      }
+    },
     "uploadFrontend": false,
     "webCrawlerConfigs": [
       {

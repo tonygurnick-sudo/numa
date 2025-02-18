@@ -14,7 +14,7 @@ class TestLambdaFunction(unittest.TestCase):
     @patch("s3_helpers.write")
     def test_handler(self, write_mock, _read_mock):
         test_event = {
-            "app_name": "test-app",
+            "app_id": "test-app",
             "output_key": "test-key",
             "key_suffix": ".foobar.json",
             "input_keys": [

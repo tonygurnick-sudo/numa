@@ -10,7 +10,7 @@ import lambda_function
 
 
 @patch("lambda_function.s3_client")
-@patch.dict(os.environ, {"APP_NAME": "test-app", "LOG_TO_CONSOLE": "true"})
+@patch.dict(os.environ, {"APP_ID": "test-app", "LOG_TO_CONSOLE": "true"})
 class TestLambdaFunction(unittest.TestCase):
     @patch.dict(os.environ, {"BUCKET": "test-bucket-success"})
     def test_success(self, s3_mock):
