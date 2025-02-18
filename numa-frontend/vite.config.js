@@ -74,6 +74,11 @@ export default defineConfig({
     extensions: ['.js', '.jsx'],
   },
   assetsInclude: ['**/*.md'],
+  // HTML to DOCX needs a browser environment, so we need to define process.env
+  // This is a workaround for MdToDocx.jsx
+  define: {
+    'process.env': {},
+  },
   test: {
     environment: 'jsdom',
     globals: true,

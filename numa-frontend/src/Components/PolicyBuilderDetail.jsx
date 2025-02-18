@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
-import { Container, Table, Badge, Button, Tabs, Tab, OverlayTrigger, Tooltip, Toast } from 'react-bootstrap';
-import { Download as DownloadIcon, Plus as PlusIcon, PencilSquare } from 'react-bootstrap-icons';
+import { useState, useRef, useEffect } from 'react';
+import { Container, Table, Badge, Button, Tabs, Tab, OverlayTrigger, Tooltip, Toast, Dropdown } from 'react-bootstrap';
+import { Download as DownloadIcon, Plus as PlusIcon, PencilSquare, ThreeDots as ThreeDotsIcon } from 'react-bootstrap-icons';
 import PolicyEditor from './PolicyEditor';
 import { CreatePolicyModal } from './PolicyBuilderModal';
 import { useAuth } from '../Providers/AuthProvider';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import MdToDocx from '../hooks/MdToDocx';
 
 export const PolicyBuilderDetail = () => {
   const [activeTab, setActiveTab] = useState('policies');
@@ -32,9 +33,20 @@ export const PolicyBuilderDetail = () => {
   const [config, setConfig] = useState(null);
   const [isDownloading, setIsDownloading] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   const { loading, isAuthenticated, getIdentityPoolCredentials } = useAuth();
   const { numaPost, numaPut, numaGet } = useNumaRequest();
+  const { convertMarkdownToDocx } = MdToDocx();
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const policyTemplates = [
     {
@@ -478,6 +490,58 @@ export const PolicyBuilderDetail = () => {
     });
   };
 
+  const handleDownloadDocx = async (policyId) => {
+    setIsDownloading(policyId);
+    try {
+      // Find the policy to get the school name
+      const policy = policies.find((p) => p.jobDetails.stepFunctionJobId === policyId);
+      const schoolName = policy?.name || 'policy';
+      // Create a sanitized filename
+      const sanitizedFileName = schoolName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
+      const credentials = await getIdentityPoolCredentials();
+
+      // Create S3 client
+      const s3Client = new S3Client({
+        region: 'us-east-1', // replace with your region
+        credentials,
+      });
+
+      // Construct the file path and key for the Markdown file
+      const bucketName = `numa-${config.CLIENT_NAME}-outputs`;
+      const key = `${config.CLIENT_NAME}-nzsba-policy-builder/${policyId}/final_policy.md`;
+
+      // Create the command to get a signed URL for the Markdown file
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      });
+
+      let signedUrl;
+      try {
+        signedUrl = await getSignedUrl(s3Client, command, {
+          expiresIn: 3600,
+        });
+      } catch (error) {
+        console.error('Error fetching signed URL:', error);
+        setErrorMessage(error.message || 'Failed to download file');
+        return;
+      }
+
+      // Fetch the Markdown content
+      const response = await fetch(signedUrl);
+      const markdownContent = await response.text();
+
+      // Convert the Markdown content to DOCX with the specified filename
+      convertMarkdownToDocx(markdownContent, `${sanitizedFileName}.docx`);
+    } catch (error) {
+      console.error('Download failed:', error);
+      setErrorMessage(error.message || 'Failed to download file');
+    } finally {
+      setIsDownloading(null);
+    }
+  };
+
   const renderPoliciesTab = () => (
     <div className="table-responsive">
       {isLoadingPolicies && !policies.length ? (
@@ -507,7 +571,7 @@ export const PolicyBuilderDetail = () => {
                 <td className="d-none d-md-table-cell">{formatDate(policy.jobDetails.dateTime)}</td>
                 <td>
                   <Badge bg={getBadgeColor(policy.status)}>
-                    {policy.status === 'processing' && (
+                    {policy.status === 'PROCESSING' && (
                       <span
                         className="spinner-border spinner-border-sm me-1"
                         style={{ width: '0.8rem', height: '0.8rem' }}
@@ -521,21 +585,89 @@ export const PolicyBuilderDetail = () => {
                 </td>
                 <td>
                   <div className="d-flex flex-wrap gap-2">
-                    <Button
-                      variant="outline-success"
-                      size="sm"
-                      onClick={() => handleDownload(policy.jobDetails.stepFunctionJobId)}
-                      disabled={policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId}
-                    >
-                      {isDownloading === policy.jobDetails.stepFunctionJobId ? (
-                        <span className="spinner-border spinner-border-sm me-1" role="status" />
+                    <Dropdown>
+                      {isMobile ? (
+                        <Dropdown.Toggle
+                          variant="outline-secondary"
+                          size="sm"
+                          disabled={policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId}
+                          className="d-md-none"
+                          id={`dropdown-toggle-${policy.id}`}
+                        >
+                          {isDownloading === policy.jobDetails.stepFunctionJobId ? (
+                            <span className="spinner-border spinner-border-sm" role="status" />
+                          ) : (
+                            <>
+                              <DownloadIcon />
+                              <ThreeDotsIcon className="ms-1" />
+                            </>
+                          )}
+                        </Dropdown.Toggle>
                       ) : (
-                        <DownloadIcon className="me-1" />
+                        <Dropdown.Toggle
+                          variant="outline-secondary"
+                          size="sm"
+                          disabled={policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId}
+                          className="d-none d-md-inline-flex align-items-center"
+                          id={`dropdown-toggle-${policy.id}`}
+                        >
+                          {isDownloading === policy.jobDetails.stepFunctionJobId ? (
+                            <span className="spinner-border spinner-border-sm me-1" role="status" />
+                          ) : (
+                            <>
+                              <DownloadIcon className="me-1" />
+                              Download...
+                            </>
+                          )}
+                        </Dropdown.Toggle>
                       )}
-                      <span className="d-none d-lg-inline">
-                        {isDownloading === policy.jobDetails.stepFunctionJobId ? 'Downloading...' : 'Download'}
-                      </span>
-                    </Button>
+                      <Dropdown.Menu
+                        align="end"
+                        flip
+                        popperConfig={{
+                          strategy: 'absolute',
+                          modifiers: [
+                            {
+                              name: 'offset',
+                              options: {
+                                offset: [0, 4],
+                              },
+                            },
+                            {
+                              name: 'preventOverflow',
+                              options: {
+                                boundary: 'clippingParents',
+                                altAxis: true,
+                                padding: 8
+                              },
+                            }
+                          ],
+                        }}
+                      >
+                        <Dropdown.Item
+                          onClick={() => handleDownload(policy.jobDetails.stepFunctionJobId)}
+                          disabled={isDownloading === policy.jobDetails.stepFunctionJobId}
+                        >
+                          {isDownloading === policy.jobDetails.stepFunctionJobId ? (
+                            <span className="spinner-border spinner-border-sm me-1" role="status" />
+                          ) : (
+                            <DownloadIcon className="me-1" />
+                          )}
+                          PDF
+                        </Dropdown.Item>
+                        <Dropdown.Item
+                          onClick={() => handleDownloadDocx(policy.jobDetails.stepFunctionJobId)}
+                          disabled={isDownloading === policy.jobDetails.stepFunctionJobId}
+                        >
+                          {isDownloading === policy.jobDetails.stepFunctionJobId ? (
+                            <span className="spinner-border spinner-border-sm me-1" role="status" />
+                          ) : (
+                            <DownloadIcon className="me-1" />
+                          )}
+                          DOCX
+                        </Dropdown.Item>
+                      </Dropdown.Menu>
+                    </Dropdown>
                   </div>
                 </td>
               </tr>
