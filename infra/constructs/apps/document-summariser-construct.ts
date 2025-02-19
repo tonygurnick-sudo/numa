@@ -44,8 +44,6 @@ export class DocumentSummariser extends BaseNumaApp {
           params: {
             payload: {
               uploaded_files: '@upload-files-to-s3',
-              template: '@template-task',
-              other_notes: '@other-notes',
             },
           },
           order: 2,
@@ -55,7 +53,7 @@ export class DocumentSummariser extends BaseNumaApp {
           title: 'Summaries',
           type: TEXT_OUTPUT_TASK,
           params: {
-            dataRef: '@call-step-function/output_key',
+            dataRef: '@call-step-function/content',
           },
           order: 3,
         },
@@ -189,6 +187,7 @@ export class DocumentSummariser extends BaseNumaApp {
                     MaxAttempts: 3,
                   },
                 ],
+                // we only need what's in Payload, but can't assign it to the root
                 ResultSelector: {
                   'output_key.$': '$.Payload.output_key',
                 },
@@ -266,10 +265,7 @@ export class DocumentSummariser extends BaseNumaApp {
               MaxAttempts: 3,
             },
           ],
-          ResultSelector: {
-            'output_key.$': '$.Payload.output_key',
-          },
-          ResultPath: '$.aggregated',
+          OutputPath: '$.Payload',
           Catch: [
             {
               ErrorEquals: ['States.ALL'],
@@ -289,7 +285,7 @@ export class DocumentSummariser extends BaseNumaApp {
         WriteSuccessStatus: writeStatus(
           {
             status: 'SUCCESS',
-            'result.$': '$.aggregated',
+            'result.$': '$',
           },
           'Success',
         ),

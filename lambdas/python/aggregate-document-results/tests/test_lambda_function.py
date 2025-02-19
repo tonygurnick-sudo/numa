@@ -25,10 +25,27 @@ class TestLambdaFunction(unittest.TestCase):
 
         result = lambda_function.handler(test_event, CONTEXT)
 
-        self.assertEqual(result, {"output_key": "test-key"})
+        expected_content = (
+            "# Document Summaries\n"
+            "\n"
+            "## Document 1: bar-file\n"
+            "\n"
+            "bar\n"
+            "\n"
+            "## Document 2: foo-file\n"
+            "\n"
+            "foo\n"
+        )
+        self.assertEqual(
+            result,
+            {
+                "content": expected_content,
+                "output_key": "test-key",
+            },
+        )
         write_mock.assert_called_once_with(
             "test-key",
-            b"# Document Summaries\n\n## Document 1: bar-file\n\nbar\n\n## Document 2: foo-file\n\nfoo\n",
+            expected_content.encode("utf-8"),
         )
 
 
