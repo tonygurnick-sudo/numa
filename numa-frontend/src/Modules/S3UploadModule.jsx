@@ -7,7 +7,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
 import { Preloader } from '../Components/Preloader';
 
-function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
+function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
   const { loading, numaAppId, appRunning, numaTaskResponses } = useNumaApp();
   const { getIdentityPoolCredentials } = useAuth();
 
@@ -23,9 +23,12 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
 
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
 
-  // Extracting task parameters
-  const taskId = task?.id;
-  const taskTitle = task?.title;
+  useEffect(() => {
+    if (value) {
+      setSelectedFile({ name: value.split('/').pop() });
+      setUploadStatus('Upload successful!');
+    }
+  }, [value]);
 
   const fetchConfig = useCallback(async () => {
     const config = await (await fetch('/config.json')).json();
@@ -44,6 +47,8 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
       setUploadProgress(0);
       setError(null);
       onNotComplete();
+      // Just store the file path initially
+      onChange(null);
     }
   };
 
@@ -98,12 +103,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
         .map((segment) => encodeURIComponent(segment))
         .join('/');
 
-      console.log('Requesting presigned URL for:', {
-        fileName: relativePath,
-        bucketName: bucketName,
-      });
-
-      // User generates a presigned URL
       const s3Client = new S3Client({
         region,
         credentials: await getIdentityPoolCredentials(),
@@ -111,24 +110,15 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
 
       const command = new PutObjectCommand({
         Bucket: bucketName,
-        Key: `${numaAppId}/${encodedPath}`, // Put files under the numaAppId folder
+        Key: `${numaAppId}/${encodedPath}`,
       });
 
       const presignedUrl = await getSignedUrl(s3Client, command, {
-        expiresIn: 3600, // URL expiration time in seconds
+        expiresIn: 3600,
       });
 
-      console.log('Presigned URL:', presignedUrl);
-
-      // Construct the file path (without S3 URL components)
       const filePath = command.input.Key;
 
-      console.log('S3 Upload Details:', {
-        destinationPath: relativePath,
-        uploadUrl: presignedUrl.split('?')[0], // Show URL without query parameters
-      });
-
-      // Upload file to S3
       await axios.put(presignedUrl, selectedFile, {
         headers: {
           'Content-Type': selectedFile.type || 'application/octet-stream',
@@ -141,8 +131,8 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
 
       setUploadStatus('Upload successful!');
 
-      // Use the onChange prop to update the value
-      onChange([filePath]);
+      // After successful upload, store the S3 path
+      onChange(filePath);
       onComplete();
     } catch (error) {
       console.error('Error during file upload:', error);
@@ -172,7 +162,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
 
   return (
     <div className="task-container">
-      {taskTitle && <h3>{taskTitle}</h3>}
+      {task?.title && <h3>{task.title}</h3>}
 
       <div
         className={`upload-container bg-light p-4 rounded ${isDragging ? 'dragging' : ''}`}
@@ -187,7 +177,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
           type="file"
           onChange={handleFileChange}
           ref={fileInputRef}
-          id={`file-upload-${taskId}`}
+          id={`file-upload-${task?.id}`}
           style={{ display: 'none' }}
         />
         <div className="text-center">
@@ -196,7 +186,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
           <Button
             variant="primary"
             as="label"
-            htmlFor={`file-upload-${taskId}`}
+            htmlFor={`file-upload-${task?.id}`}
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >

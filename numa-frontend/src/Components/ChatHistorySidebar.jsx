@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from 'react-bootstrap';
 import { ListConversationsCommand, ListMessagesCommand } from '@aws-sdk/client-qbusiness';
 
@@ -6,6 +6,7 @@ export const ChatHistorySidebar = ({ qBusinessClient, APPLICATION_ID, onSelectCo
   const [isLoading, setIsLoading] = useState(false);
   const [show, setShow] = useState(false);
   const [conversations, setConversations] = useState([]);
+  const sidebarRef = useRef(null);
 
   const handleShow = () => setShow(!show);
 
@@ -69,13 +70,49 @@ export const ChatHistorySidebar = ({ qBusinessClient, APPLICATION_ID, onSelectCo
     fetchConversations();
   }, [qBusinessClient, APPLICATION_ID, setError]);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(event.target)) {
+        setShow(false);
+      }
+    };
+
+    if (show) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [show]);
+
   return (
-    <>
-      <Button onClick={handleShow} className="chat-history-toggle" variant="primary" size="sm">
-        Chat History
+    <div className="chat-history-sidebar">
+      <Button
+        variant="outline-secondary"
+        className="chat-history-toggle"
+        onClick={handleShow}
+        aria-controls="chat-history-content"
+      >
+        <i className="bi bi-clock-history"></i>
       </Button>
 
-      <div className={`chat-history-sidebar ${show ? 'show' : ''}`}>
+      <div
+        ref={sidebarRef}
+        className={`chat-history-content ${show ? 'show' : ''}`}
+        style={{
+          position: 'fixed',
+          right: show ? '0' : '-320px',
+          top: '0',
+          width: '320px',
+          height: '100vh',
+          backgroundColor: 'white',
+          boxShadow: '-2px 0 5px rgba(0,0,0,0.1)',
+          transition: 'right 0.3s ease-in-out',
+          zIndex: 1000,
+          padding: '1rem',
+        }}
+      >
         <div className="sidebar-header d-flex justify-content-between align-items-center">
           <h6 className="mb-0">Chat History</h6>
           <Button variant="link" className="close-button p-0 text-muted" onClick={handleShow}>
@@ -124,6 +161,6 @@ export const ChatHistorySidebar = ({ qBusinessClient, APPLICATION_ID, onSelectCo
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 };
