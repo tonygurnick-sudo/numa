@@ -79,7 +79,7 @@ node-lint:
   rules:
     - changes:
         paths:
-          - $PYTHON_WORKING_DIRECTORY
+          - $BUILD_DIR
           - style
 
 node-test:
