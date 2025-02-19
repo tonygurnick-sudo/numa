@@ -40,7 +40,10 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
         s3_helpers.write(output_key, formatted_content.encode("utf-8"))
 
-        return {"output_key": output_key}
+        return {
+            "content": formatted_content,  # TODO: remove once frontend supports output_key as this might break step function size limits
+            "output_key": output_key,
+        }
 
     except Exception:
         logger.exception("Error in lambda execution")
