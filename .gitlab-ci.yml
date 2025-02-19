@@ -70,6 +70,10 @@ python-lint:
     - poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
     - poetry run mypy .
     - poetry run pyright .
+  rules:
+    - changes:
+        paths:
+          - $PYTHON_WORKING_DIRECTORY
 
 python-test:
   parallel: !reference [.python-matrix]
