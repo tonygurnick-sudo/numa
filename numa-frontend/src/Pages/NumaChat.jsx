@@ -13,11 +13,12 @@ import { MarkdownContent } from '../Components/MarkdownContent';
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [, setError] = useState(null);
+  const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState(null);
   const [previousMessageId, setPreviousMessageId] = useState(null);
   const [chatMode, setChatMode] = useState('RETRIEVAL_MODE');
+  const [showModeSelector, setShowModeSelector] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const messageEndRef = useRef(null);
@@ -68,6 +69,13 @@ const NumaChat = () => {
         clientToken: Date.now().toString(),
       };
 
+      console.log('Sending chat message with input:', {
+        ...input,
+        conversationId,
+        previousMessageId,
+        chatMode,
+      });
+
       // Add attachments only if there are files
       if (uploadedFiles.length > 0) {
         const attachments = uploadedFiles.map((file) => ({
@@ -86,7 +94,9 @@ const NumaChat = () => {
 
       // Add user message to chat immediately
       const userMessage = { role: 'user', content: inputMessage };
-      setMessages((prevMessages) => [...prevMessages, userMessage]);
+      // Add a system message with the chat mode for history tracking
+      const systemMessage = { role: 'system', content: `Chat started in ${chatMode}` };
+      setMessages((prevMessages) => [...prevMessages, systemMessage, userMessage]);
       setInputMessage('');
 
       // Send message to API
@@ -190,6 +200,22 @@ const NumaChat = () => {
     setShowUploadModal(false);
   };
 
+  const removeFile = (index) => {
+    const newFiles = [...uploadedFiles];
+    newFiles.splice(index, 1);
+    setUploadedFiles(newFiles);
+
+    // If no more files, revert to default mode and add system message
+    if (newFiles.length === 0) {
+      setChatMode('RETRIEVAL_MODE');
+      const systemMessage = {
+        role: 'system',
+        content: 'All files have been removed. Switched back to retrieval mode.',
+      };
+      setMessages((prevMessages) => [...prevMessages, systemMessage]);
+    }
+  };
+
   const renderSourceAttributions = (attributions) => {
     if (!attributions || attributions.length === 0) return null;
 
@@ -218,14 +244,22 @@ const NumaChat = () => {
         content: 'How can I help you today?',
       },
     ]);
-    setUploadedFiles([]);
     setConversationId(null);
     setPreviousMessageId(null);
-    setInputMessage('');
+    setError(null);
+    setShowModeSelector(true);
     setChatMode('RETRIEVAL_MODE');
+    setUploadedFiles([]);
+    setInputMessage('');
   };
 
   const handleLoadConversation = (loadedMessages, selectedConversationId) => {
+    console.log('Loading conversation:', {
+      selectedConversationId,
+      messageCount: loadedMessages?.length,
+      messages: loadedMessages,
+    });
+
     if (!loadedMessages || loadedMessages.length === 0) {
       setError('No messages found in this conversation');
       return;
@@ -243,16 +277,9 @@ const NumaChat = () => {
       setPreviousMessageId(lastMessage.id);
     }
 
-    // Set the conversation mode based on the loaded conversation
-    // Default to RETRIEVAL_MODE if no mode is found
-    const systemMessage = loadedMessages.find((msg) => msg.role === 'system');
-    if (systemMessage && systemMessage.content.includes('CREATOR_MODE')) {
-      setChatMode('CREATOR_MODE');
-    } else if (systemMessage && systemMessage.content.includes('PLUGIN_MODE')) {
-      setChatMode('PLUGIN_MODE');
-    } else {
-      setChatMode('RETRIEVAL_MODE');
-    }
+    // Hide mode selector for loaded conversations since we don't know the original mode
+    setShowModeSelector(false);
+    setChatMode('RETRIEVAL_MODE');
   };
 
   const handleKeyDown = (e) => {
@@ -295,15 +322,17 @@ const NumaChat = () => {
                   New Chat
                 </Button>
 
-                <div className="chat-mode-selector ms-auto">
-                  <Form.Select value={chatMode} onChange={(e) => setChatMode(e.target.value)}>
-                    {chatModes.map((mode) => (
-                      <option key={mode.value} value={mode.value}>
-                        {mode.label}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </div>
+                {showModeSelector && (
+                  <div className="chat-mode-selector ms-auto">
+                    <Form.Select value={chatMode} onChange={(e) => setChatMode(e.target.value)}>
+                      {chatModes.map((mode) => (
+                        <option key={mode.value} value={mode.value}>
+                          {mode.label}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </div>
+                )}
               </div>
 
               <div className="chat-container">
