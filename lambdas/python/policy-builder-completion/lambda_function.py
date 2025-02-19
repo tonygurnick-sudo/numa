@@ -23,8 +23,8 @@ def __get_job_id(event: dict):
     return event.get("job_id", str(uuid.uuid4()))
 
 
-def __key(app_name: str, job_id: str, name: str, area: str = "") -> str:
-    key = f"{app_name}/{job_id}/{name}"
+def __key(app_id: str, job_id: str, name: str, area: str = "") -> str:
+    key = f"{app_id}/{job_id}/{name}"
     if area:
         key += f"_{area}"
     return key
@@ -48,12 +48,12 @@ def __write_file_object_to_s3(fileobj: typing.BinaryIO, file_name: str):
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
-    app_name = event["app_name"]
+    app_id = event["app_id"]
     job_id = __get_job_id(event)
     helpers.setup_logging()
     structlog.contextvars.bind_contextvars(
         function_name=context.function_name,
-        app_name=app_name,
+        app_id=app_id,
         job_id=job_id,
     )
     logger.info("Execute lambda", lambda_event=event)
@@ -121,15 +121,15 @@ def handler(event: dict, context: LambdaContext) -> dict:
         ]
     )
 
-    final_policy_markdown_key = __key(app_name, job_id, "final_policy.md")
+    final_policy_markdown_key = __key(app_id, job_id, "final_policy.md")
     __write_string_to_s3(final_policy, final_policy_markdown_key)
 
     final_policy_html = markdown_to_pdf.markdown_to_html(final_policy)
-    final_policy_html_key = __key(app_name, job_id, "final_policy.html")
+    final_policy_html_key = __key(app_id, job_id, "final_policy.html")
     __write_string_to_s3(final_policy_html, final_policy_html_key)
 
     final_policy_pdf = markdown_to_pdf.html_to_pdf(final_policy_html)
-    final_policy_pdf_key = __key(app_name, job_id, "final_policy.pdf")
+    final_policy_pdf_key = __key(app_id, job_id, "final_policy.pdf")
     __write_file_object_to_s3(final_policy_pdf, final_policy_pdf_key)
 
     return {

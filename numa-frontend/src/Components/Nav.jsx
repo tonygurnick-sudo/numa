@@ -1,15 +1,13 @@
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Logo from '../assets/images/numa-logo.svg';
 
 import { useAuth } from '../Providers/AuthProvider';
-import { useNumaApp } from '../Providers/NumaAppProvider';
 
 import { useState, useEffect } from 'react';
 import { Navbar, Button, Dropdown } from 'react-bootstrap';
 
 const Nav = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { logout: authLogout } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 

@@ -6,10 +6,10 @@ export const MarkdownContent = ({ content }) => {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        table: ({ node, ...props }) => <table className="table table-striped table-bordered" {...props} />,
-        thead: ({ node, ...props }) => <thead className="table-light" {...props} />,
+        table: ({ ...props }) => <table className="table table-striped table-bordered" {...props} />,
+        thead: ({ ...props }) => <thead className="table-light" {...props} />,
         // Add support for code blocks
-        code: ({ node, inline, ...props }) =>
+        code: ({ inline, ...props }) =>
           inline ? (
             <code className="px-1 py-1 bg-light rounded" {...props} />
           ) : (

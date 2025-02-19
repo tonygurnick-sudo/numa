@@ -1,5 +1,4 @@
 import { Preloader } from './Preloader';
-import { GetQAppCommand } from '@aws-sdk/client-qapps';
 import { StarFill, Star } from 'react-bootstrap-icons';
 import { useFavorites } from '../hooks/useFavorites';
 

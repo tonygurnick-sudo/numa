@@ -12,7 +12,7 @@ CONTEXT._function_name = "test_function_name"  # pylint: disable=protected-acces
 
 EVENT = {
     "additional_comments": "",
-    "app_name": "test_app",
+    "app_id": "test_app",
     "custom_additional_instructions": "",
     "default_additional_instructions": "",
     "domain_area": "",

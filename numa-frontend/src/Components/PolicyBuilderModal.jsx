@@ -1,17 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
-import { Container, Table, Badge, Button, Tabs, Tab, Dropdown, Modal, OverlayTrigger, Tooltip } from 'react-bootstrap';
-import {
-  Download as DownloadIcon,
-  Share as ShareIcon,
-  ThreeDotsVertical as ThreeDotsIcon,
-  Clock as ClockIcon,
-  Plus as PlusIcon,
-  Trash as TrashIcon,
-  PencilFill,
-  PencilSquare,
-} from 'react-bootstrap-icons';
-import pdfPolicy from '../assets/policies.pdf';
-import PolicyEditor from './PolicyEditor';
+import { Button, Modal } from 'react-bootstrap';
 
 export const CreatePolicyModal = ({
   visible,

@@ -1,5 +1,4 @@
 import { vi } from 'vitest';
-import React from 'react';
 
 // Breadcrumbs Mock
 export const MockBreadcrumbs = () => <div data-testid="mock-breadcrumbs">Breadcrumbs</div>;

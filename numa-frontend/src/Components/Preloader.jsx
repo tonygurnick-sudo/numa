@@ -1,6 +1,5 @@
 import '../assets/css/Preloader.scss';
 
-// eslint-disable-next-line react/prop-types
 const Preloader = ({ smallscreen, overlayParent }) => {
   return (
     <>

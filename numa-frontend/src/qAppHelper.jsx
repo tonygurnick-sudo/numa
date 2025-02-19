@@ -6,7 +6,6 @@ import {
   ListQAppsCommand,
   GetQAppSessionCommand,
   UpdateQAppSessionCommand,
-  ListLibraryItemsCommand,
   StartQAppSessionCommand,
   ImportDocumentCommand,
 } from '@aws-sdk/client-qapps';
@@ -168,7 +167,7 @@ export const importFileToQApp = async ({ qAppsClient, sessionId, qAppId, cardId,
 
     // Try decoding to verify content
     try {
-      const decoded = atob(paddedBase64);
+      atob(paddedBase64);
     } catch (e) {
       console.error('Failed to decode base64:', e);
       throw new Error('Invalid base64 encoding');
@@ -242,7 +241,7 @@ export const deleteQAppById = async ({ qAppsClient, qAppId, setLoading, setError
   }
 };
 
-export const createQApp = async ({ qAppsClient, appPayload, setLoading, setError, setResponse }) => {
+export const createQApp = async ({ qAppsClient, setLoading, setError, setResponse }) => {
   if (!qAppsClient) {
     const error = 'Q Apps client is not initialized';
     console.error(error);
@@ -277,7 +276,7 @@ export const createQApp = async ({ qAppsClient, appPayload, setLoading, setError
   }
 };
 
-export const addAppToLibrary = async ({ qAppsClient, appId, setLoading, setError, setResponse }) => {
+export const addAppToLibrary = async ({ qAppsClient, appId, setLoading, setResponse }) => {
   if (!qAppsClient) {
     console.error('Missing required parameters.');
     return;
@@ -300,25 +299,6 @@ export const addAppToLibrary = async ({ qAppsClient, appId, setLoading, setError
     console.error('Error adding Q App to lib:', error);
   } finally {
     setLoading(false);
-  }
-};
-
-export const fetchLibItems = async (qAppsClient) => {
-  if (!qAppsClient) return;
-
-  // Get lib apps
-  try {
-    const input = {
-      instanceId: Q_APPLICATION_ID,
-    };
-
-    const lib_command = new ListLibraryItemsCommand(input);
-    const lib_response = await qAppsClient.send(lib_command);
-
-    // TODO
-    //setLibraryApps(lib_response.libraryItems);
-  } catch (error) {
-    console.error('Error fetching Q Apps:', error);
   }
 };
 

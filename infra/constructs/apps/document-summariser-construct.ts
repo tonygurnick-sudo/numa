@@ -17,14 +17,11 @@ export class DocumentSummariser extends BaseNumaApp {
   readonly manifest;
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
-    const appId = 'document-summariser';
-    props.enableJobs = true;
-    props.pathPrefix ??= appId;
-    super(scope, name, props);
+    super(scope, name, { ...props, appId: 'document-summariser', enableJobs: true });
 
     this.manifest = {
       appName: 'Document Summariser',
-      id: props.pathPrefix,
+      id: this.appId,
       type: AppType.NUMA,
       status: AppStatus.ACTIVE,
       category: AppCategory.PRODUCTIVITY,
@@ -69,7 +66,7 @@ export class DocumentSummariser extends BaseNumaApp {
       {
         actions: ['s3:GetObject', 's3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${appId}/*`],
+        resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
       },
       {
         actions: ['bedrock:InvokeModel'],
@@ -90,7 +87,7 @@ export class DocumentSummariser extends BaseNumaApp {
       {
         actions: ['s3:GetObject', 's3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${appId}/*`],
+        resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
       },
       {
         actions: ['bedrock:InvokeModel'],
@@ -112,7 +109,7 @@ export class DocumentSummariser extends BaseNumaApp {
       {
         actions: ['s3:GetObject', 's3:PutObject'],
         effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}/${appId}/*`],
+        resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
       },
     ];
     const aggregatorLambda = this.addLambdaFunction(this, 'aggregate', {
@@ -126,19 +123,19 @@ export class DocumentSummariser extends BaseNumaApp {
       timeout: 900,
     });
 
-    function writeStatus(body: Record<string, string | Record<string, string>>, next: string): asl.State {
+    const writeStatus = (body: Record<string, string | Record<string, string>>, next: string): asl.State => {
       return {
         Type: 'Task',
         Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
         Parameters: {
           Body: body,
           Bucket: props.outputsBucket.bucket,
-          'Key.$': `States.Format('${appId}/{}/status.json', $$.Execution.Input.job_id)`,
+          'Key.$': `States.Format('${this.appId}/{}/status.json', $$.Execution.Input.job_id)`,
         },
         ResultPath: null,
         Next: next,
       };
-    }
+    };
 
     const extractedSuffix = '.extracted.json';
     const summarisedSuffix = '.summarised.txt';
@@ -149,7 +146,6 @@ export class DocumentSummariser extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            app_name: appId,
             'job_id.$': '$$.Execution.Input.job_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
           },
@@ -159,7 +155,6 @@ export class DocumentSummariser extends BaseNumaApp {
           Type: 'Map',
           ItemsPath: '$.uploaded_files',
           Parameters: {
-            'app_name.$': '$.app_name',
             'job_id.$': '$.job_id',
             'key.$': '$$.Map.Item.Value',
           },
@@ -206,7 +201,7 @@ export class DocumentSummariser extends BaseNumaApp {
                 Parameters: {
                   FunctionName: summariseDocumentLambda.arn,
                   Payload: {
-                    'app_name.$': '$.app_name',
+                    app_id: this.appId,
                     'job_id.$': '$.job_id',
                     'input_key.$': '$.extracted.output_key',
                     'output_key.$': `States.Format('{}${summarisedSuffix}', $.key)`,
@@ -250,11 +245,11 @@ export class DocumentSummariser extends BaseNumaApp {
           Parameters: {
             FunctionName: aggregatorLambda.arn,
             Payload: {
-              'app_name.$': '$.app_name',
+              app_id: this.appId,
               'job_id.$': '$.job_id',
               'input_keys.$': '$.mapped[*].summarised.output_key',
               key_suffix: summarisedSuffix,
-              'output_key.$': `States.Format('${appId}/{}/aggregated.md', $$.Execution.Input.job_id)`,
+              'output_key.$': `States.Format('${this.appId}/{}/aggregated.md', $$.Execution.Input.job_id)`,
             },
           },
           Retry: [
@@ -308,7 +303,6 @@ export class DocumentSummariser extends BaseNumaApp {
     };
 
     this.addStepFunction(this, 'main', {
-      appName: appId,
       outputsBucket: props.outputsBucket,
       additionalPolicyStatements: [
         {
@@ -321,6 +315,7 @@ export class DocumentSummariser extends BaseNumaApp {
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
+      urlPath: 'main',
     });
   }
 }

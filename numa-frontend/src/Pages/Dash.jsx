@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
 
-import { Alert, Container, Row, Col, Button } from 'react-bootstrap';
+import { Alert, Container, Row, Col } from 'react-bootstrap';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 
 import { Breadcrumbs } from '../Components/Breadcrumbs';
@@ -12,16 +11,11 @@ import { Pagination } from '../Components/Pagination';
 import { Preloader } from '../Components/Preloader';
 import { StarFill } from 'react-bootstrap-icons';
 
-import { useAuth } from '../Providers/AuthProvider';
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { useFavorites } from '../hooks/useFavorites';
 
 export const Dash = ({ showFavorites }) => {
   const { error, setError, loading, setLoading, setNumaApps, numaApps } = useNumaApp();
-  const { qAppsClient } = useAuth();
-  const [qApps, setQApps] = useState([]);
-  const [qAppsLoading, setQAppsLoading] = useState(false);
-  const [qAppsError, setQAppsError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategories, setActiveCategories] = useState(() => {
     const saved = localStorage.getItem('numaAppsActiveCategories');
@@ -33,8 +27,6 @@ export const Dash = ({ showFavorites }) => {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const { favorites } = useFavorites();
-
-  const navigate = useNavigate();
 
   // Fetch apps data
   useEffect(() => {

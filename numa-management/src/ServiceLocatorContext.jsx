@@ -10,22 +10,10 @@ import {
   ListTagsForResourceCommand as ListTagsForIdp,
 } from '@aws-sdk/client-cognito-identity';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
-import {
-  IAMClient,
-  ListRolesCommand,
-  ListRoleTagsCommand,
-} from '@aws-sdk/client-iam';
-import {
-  QBusinessClient,
-  ListApplicationsCommand,
-} from '@aws-sdk/client-qbusiness';
-import {
-  SecretsManagerClient,
-  GetSecretValueCommand,
-} from '@aws-sdk/client-secrets-manager';
-import {
-  ServiceLocatorContext
-} from './ServiceLocatorFunction';
+import { IAMClient, ListRolesCommand, ListRoleTagsCommand } from '@aws-sdk/client-iam';
+import { QBusinessClient, ListApplicationsCommand } from '@aws-sdk/client-qbusiness';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { ServiceLocatorContext } from './ServiceLocatorFunction';
 
 export function ServiceLocatorProvider({ children }) {
   const [userPoolId, setUserPoolId] = useState(null);
@@ -82,9 +70,7 @@ export function ServiceLocatorProvider({ children }) {
       const command = new ListUserPoolsCommand({ MaxResults: 60 });
       const response = await cognitoClient.send(command);
 
-      const potentialNumaPools = response.UserPools.filter((pool) =>
-        pool.Name.toLowerCase().includes('numa'),
-      );
+      const potentialNumaPools = response.UserPools.filter((pool) => pool.Name.toLowerCase().includes('numa'));
 
       const tagCheckPromises = potentialNumaPools.map(async (pool) => {
         const tagsCommand = new ListTagsForResourceCommand({
@@ -100,9 +86,7 @@ export function ServiceLocatorProvider({ children }) {
         }
       });
 
-      const numaUserPools = (await Promise.all(tagCheckPromises)).filter(
-        Boolean,
-      );
+      const numaUserPools = (await Promise.all(tagCheckPromises)).filter(Boolean);
 
       if (numaUserPools.length > 0) {
         setUserPoolId(numaUserPools[0].Id);
@@ -145,17 +129,12 @@ export function ServiceLocatorProvider({ children }) {
           const tagsResponse = await cognitoIdentityClient.send(tagsCommand);
           return tagsResponse.Tags?.ServiceName === 'numa' ? pool : null;
         } catch (error) {
-          console.warn(
-            `Failed to fetch tags for identity pool ${pool.IdentityPoolName}:`,
-            error,
-          );
+          console.warn(`Failed to fetch tags for identity pool ${pool.IdentityPoolName}:`, error);
           return null;
         }
       });
 
-      const numaIdentityPools = (await Promise.all(tagCheckPromises)).filter(
-        Boolean,
-      );
+      const numaIdentityPools = (await Promise.all(tagCheckPromises)).filter(Boolean);
 
       if (numaIdentityPools.length > 0) {
         setIdentityPoolId(numaIdentityPools[0].IdentityPoolId);
@@ -193,13 +172,9 @@ export function ServiceLocatorProvider({ children }) {
         marker = response.IsTruncated ? response.Marker : undefined;
       } while (marker);
 
-      let potentialNumaRoles = allRoles.filter((role) =>
-        role.RoleName.toLowerCase().includes('numa'),
-      );
+      let potentialNumaRoles = allRoles.filter((role) => role.RoleName.toLowerCase().includes('numa'));
 
-      potentialNumaRoles = potentialNumaRoles.filter((role) =>
-        role.RoleName.toLowerCase().includes('web-experience'),
-      );
+      potentialNumaRoles = potentialNumaRoles.filter((role) => role.RoleName.toLowerCase().includes('web-experience'));
 
       const tagCheckPromises = potentialNumaRoles.map(async (role) => {
         const tagsCommand = new ListRoleTagsCommand({
@@ -209,15 +184,10 @@ export function ServiceLocatorProvider({ children }) {
         try {
           const tagsResponse = await iamClient.send(tagsCommand);
           const tags = tagsResponse.Tags || [];
-          const isNumaService = tags.some(
-            (tag) => tag.Key === 'ServiceName' && tag.Value === 'numa',
-          );
+          const isNumaService = tags.some((tag) => tag.Key === 'ServiceName' && tag.Value === 'numa');
           return isNumaService ? role : null;
         } catch (error) {
-          console.warn(
-            `Failed to fetch tags for role ${role.RoleName}:`,
-            error,
-          );
+          console.warn(`Failed to fetch tags for role ${role.RoleName}:`, error);
           return null;
         }
       });
@@ -254,9 +224,7 @@ export function ServiceLocatorProvider({ children }) {
       });
       const response = await qBusinessClient.send(command);
 
-      const potentialNumaApps = response.applications.filter((app) =>
-        app.displayName.toLowerCase().includes('numa'),
-      );
+      const potentialNumaApps = response.applications.filter((app) => app.displayName.toLowerCase().includes('numa'));
 
       // if there is only one app, return it
       if (potentialNumaApps.length === 1) {
@@ -266,18 +234,14 @@ export function ServiceLocatorProvider({ children }) {
 
       // if there is more than one app, throw an error
       if (potentialNumaApps.length > 1) {
-        throw new Error(
-          'Multiple Q Business Applications found with ServiceName: numa',
-        );
+        throw new Error('Multiple Q Business Applications found with ServiceName: numa');
       }
 
       if (potentialNumaApps.length > 0) {
         setQBusinessAppId(potentialNumaApps[0].applicationId);
         return potentialNumaApps[0].applicationId;
       } else {
-        throw new Error(
-          'No Q Business Application found with ServiceName: numa',
-        );
+        throw new Error('No Q Business Application found with ServiceName: numa');
       }
     } catch (error) {
       console.error('Error fetching Q Business Application:', error);

@@ -1,39 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-  Container,
-  Table,
-  Badge,
-  Button,
-  Tabs,
-  Tab,
-  Dropdown,
-  Modal,
-  OverlayTrigger,
-  Tooltip,
-  Toast,
-} from 'react-bootstrap';
-import {
-  Download as DownloadIcon,
-  Share as ShareIcon,
-  ThreeDotsVertical as ThreeDotsIcon,
-  Clock as ClockIcon,
-  Plus as PlusIcon,
-  Trash as TrashIcon,
-  PencilFill,
-  PencilSquare,
-} from 'react-bootstrap-icons';
-import pdfPolicy from '../assets/policies.pdf';
+import { useState, useRef, useEffect } from 'react';
+import { Container, Table, Badge, Button, Tabs, Tab, OverlayTrigger, Tooltip, Toast, Dropdown } from 'react-bootstrap';
+import { Download as DownloadIcon, Plus as PlusIcon, PencilSquare, ThreeDots as ThreeDotsIcon } from 'react-bootstrap-icons';
 import PolicyEditor from './PolicyEditor';
 import { CreatePolicyModal } from './PolicyBuilderModal';
 import { useAuth } from '../Providers/AuthProvider';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { useNumaRequest } from '../Providers/RequestProvider';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
+import MdToDocx from '../hooks/MdToDocx';
 
 export const PolicyBuilderDetail = () => {
   const [activeTab, setActiveTab] = useState('policies');
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [selectedPolicyHistory, setSelectedPolicyHistory] = useState(null);
   const [showNewPolicyModal, setShowNewPolicyModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [policyInputs, setPolicyInputs] = useState({
@@ -41,13 +18,13 @@ export const PolicyBuilderDetail = () => {
     schoolContext: '',
     customInstructions: '',
   });
-  const [showCustomScenarioModal, setShowCustomScenarioModal] = useState(false);
+  const [, setShowCustomScenarioModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedPolicy, setSelectedPolicy] = useState(null);
+  const [selectedPolicy] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [value, setValue] = useState('Loading policy content...');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [policies, setPolicies] = useState([]);
   const [isLoadingPolicies, setIsLoadingPolicies] = useState(true);
@@ -56,9 +33,20 @@ export const PolicyBuilderDetail = () => {
   const [config, setConfig] = useState(null);
   const [isDownloading, setIsDownloading] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
-  const { loading, isAuthenticated, getAccessToken, getIdentityPoolCredentials } = useAuth();
+  const { loading, isAuthenticated, getIdentityPoolCredentials } = useAuth();
   const { numaPost, numaPut, numaGet } = useNumaRequest();
+  const { convertMarkdownToDocx } = MdToDocx();
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const policyTemplates = [
     {
@@ -124,52 +112,6 @@ export const PolicyBuilderDetail = () => {
       category: 'Independent Education',
       defaultInstructions:
         'Generate policies covering: school-specific values, academic excellence, character development, community engagement, student achievement, operational expectations, and governance aligned with independent school requirements.',
-    },
-  ];
-
-  // Update sample history data to include all policies
-  const samplePolicyHistory = [
-    {
-      id: 1,
-      name: 'Digital Technology and Device Usage - Wellington College',
-      versions: [
-        {
-          version: 1,
-          generatedDate: '2024-03-15',
-          status: 'active',
-          changes: 'Initial policy generation',
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: 'Student Support & Wellbeing Guidelines - Wellington Girls College',
-      versions: [
-        {
-          version: 1,
-          generatedDate: '2024-03-10',
-          status: 'active',
-          changes: 'Initial policy generation',
-        },
-      ],
-    },
-    {
-      id: 3,
-      name: 'Cultural Inclusivity Framework - Wellington High School',
-      versions: [
-        {
-          version: 2,
-          generatedDate: '2024-03-01',
-          status: 'out_of_date',
-          changes: 'Updated to include new Ministry guidelines',
-        },
-        {
-          version: 1,
-          generatedDate: '2023-09-15',
-          status: 'archived',
-          changes: 'Initial policy generation',
-        },
-      ],
     },
   ];
 
@@ -249,11 +191,6 @@ export const PolicyBuilderDetail = () => {
     }
   };
 
-  const handleShare = (policyId, method) => {
-    // Implement share logic here
-    console.log(`Sharing policy ${policyId} via ${method}`);
-  };
-
   const formatDate = (dateString, includeDay = false) => {
     if (!dateString) return 'N/A';
 
@@ -276,21 +213,6 @@ export const PolicyBuilderDetail = () => {
     }
   };
 
-  const handleViewPolicy = () => {
-    // Open PDF in new tab
-    window.open(pdfPolicy, '_blank');
-  };
-
-  const getPolicyHistory = (policyId) => {
-    return samplePolicyHistory.find((policy) => policy.id === policyId);
-  };
-
-  const handleShowHistory = (policyId) => {
-    const history = getPolicyHistory(policyId);
-    setSelectedPolicyHistory(history);
-    setShowHistoryModal(true);
-  };
-
   const handleTemplateSelect = (template) => {
     setSelectedTemplate(template);
     setPolicyInputs({
@@ -304,53 +226,6 @@ export const PolicyBuilderDetail = () => {
       characterUrls: [],
     });
     setShowNewPolicyModal(true);
-  };
-
-  const handleAddUrl = () => {
-    setPolicyInputs({
-      ...policyInputs,
-      characterUrls: [...policyInputs.characterUrls, { url: '', description: '' }],
-    });
-  };
-
-  const handleUrlChange = (index, field, value) => {
-    const newUrls = [...policyInputs.characterUrls];
-    newUrls[index][field] = value;
-    setPolicyInputs({
-      ...policyInputs,
-      characterUrls: newUrls,
-    });
-  };
-
-  const handleRemoveUrl = (index) => {
-    setPolicyInputs({
-      ...policyInputs,
-      characterUrls: policyInputs.characterUrls.filter((_, i) => i !== index),
-    });
-  };
-
-  const handleEditPolicy = (policy) => {
-    setSelectedPolicy(policy);
-    setShowEditModal(true);
-    // Initialize chat with a welcome message
-    setChatMessages([
-      {
-        role: 'assistant',
-        content: `I'm here to help you improve the "${policy.name}" policy. What would you like to change?`,
-      },
-    ]);
-    // Load the policy content
-    setIsLoading(true);
-    fetch('/src/assets/final_policy.md')
-      .then((response) => response.text())
-      .then((content) => {
-        setValue(content);
-        setIsLoading(false);
-      })
-      .catch((error) => {
-        console.error('Error loading markdown:', error);
-        setIsLoading(false);
-      });
   };
 
   const handleSendMessage = (e) => {
@@ -602,22 +477,6 @@ export const PolicyBuilderDetail = () => {
     }
   };
 
-  // Helper function to map job statuses to policy statuses
-  const mapJobStatusToPolicy = (jobStatus) => {
-    switch (jobStatus) {
-      case 'SUCCESS':
-        return 'SUCCESS';
-      case 'FAILURE':
-        return 'FAILED';
-      case 'PROCESSING':
-        return 'PROCESSING';
-      case 'PENDING':
-        return 'PROCESSING';
-      default:
-        return 'PROCESSING';
-    }
-  };
-
   // Add a helper function to clear polling
   const clearPollingForJob = (jobId) => {
     if (pollingIntervalsRef.current[jobId]) {
@@ -629,6 +488,58 @@ export const PolicyBuilderDetail = () => {
       newSet.delete(jobId);
       return newSet;
     });
+  };
+
+  const handleDownloadDocx = async (policyId) => {
+    setIsDownloading(policyId);
+    try {
+      // Find the policy to get the school name
+      const policy = policies.find((p) => p.jobDetails.stepFunctionJobId === policyId);
+      const schoolName = policy?.name || 'policy';
+      // Create a sanitized filename
+      const sanitizedFileName = schoolName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
+      const credentials = await getIdentityPoolCredentials();
+
+      // Create S3 client
+      const s3Client = new S3Client({
+        region: 'us-east-1', // replace with your region
+        credentials,
+      });
+
+      // Construct the file path and key for the Markdown file
+      const bucketName = `numa-${config.CLIENT_NAME}-outputs`;
+      const key = `${config.CLIENT_NAME}-nzsba-policy-builder/${policyId}/final_policy.md`;
+
+      // Create the command to get a signed URL for the Markdown file
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      });
+
+      let signedUrl;
+      try {
+        signedUrl = await getSignedUrl(s3Client, command, {
+          expiresIn: 3600,
+        });
+      } catch (error) {
+        console.error('Error fetching signed URL:', error);
+        setErrorMessage(error.message || 'Failed to download file');
+        return;
+      }
+
+      // Fetch the Markdown content
+      const response = await fetch(signedUrl);
+      const markdownContent = await response.text();
+
+      // Convert the Markdown content to DOCX with the specified filename
+      convertMarkdownToDocx(markdownContent, `${sanitizedFileName}.docx`);
+    } catch (error) {
+      console.error('Download failed:', error);
+      setErrorMessage(error.message || 'Failed to download file');
+    } finally {
+      setIsDownloading(null);
+    }
   };
 
   const renderPoliciesTab = () => (
@@ -660,7 +571,7 @@ export const PolicyBuilderDetail = () => {
                 <td className="d-none d-md-table-cell">{formatDate(policy.jobDetails.dateTime)}</td>
                 <td>
                   <Badge bg={getBadgeColor(policy.status)}>
-                    {policy.status === 'processing' && (
+                    {policy.status === 'PROCESSING' && (
                       <span
                         className="spinner-border spinner-border-sm me-1"
                         style={{ width: '0.8rem', height: '0.8rem' }}
@@ -674,21 +585,89 @@ export const PolicyBuilderDetail = () => {
                 </td>
                 <td>
                   <div className="d-flex flex-wrap gap-2">
-                    <Button
-                      variant="outline-success"
-                      size="sm"
-                      onClick={() => handleDownload(policy.jobDetails.stepFunctionJobId)}
-                      disabled={policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId}
-                    >
-                      {isDownloading === policy.jobDetails.stepFunctionJobId ? (
-                        <span className="spinner-border spinner-border-sm me-1" role="status" />
+                    <Dropdown>
+                      {isMobile ? (
+                        <Dropdown.Toggle
+                          variant="outline-secondary"
+                          size="sm"
+                          disabled={policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId}
+                          className="d-md-none"
+                          id={`dropdown-toggle-${policy.id}`}
+                        >
+                          {isDownloading === policy.jobDetails.stepFunctionJobId ? (
+                            <span className="spinner-border spinner-border-sm" role="status" />
+                          ) : (
+                            <>
+                              <DownloadIcon />
+                              <ThreeDotsIcon className="ms-1" />
+                            </>
+                          )}
+                        </Dropdown.Toggle>
                       ) : (
-                        <DownloadIcon className="me-1" />
+                        <Dropdown.Toggle
+                          variant="outline-secondary"
+                          size="sm"
+                          disabled={policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId}
+                          className="d-none d-md-inline-flex align-items-center"
+                          id={`dropdown-toggle-${policy.id}`}
+                        >
+                          {isDownloading === policy.jobDetails.stepFunctionJobId ? (
+                            <span className="spinner-border spinner-border-sm me-1" role="status" />
+                          ) : (
+                            <>
+                              <DownloadIcon className="me-1" />
+                              Download...
+                            </>
+                          )}
+                        </Dropdown.Toggle>
                       )}
-                      <span className="d-none d-lg-inline">
-                        {isDownloading === policy.jobDetails.stepFunctionJobId ? 'Downloading...' : 'Download'}
-                      </span>
-                    </Button>
+                      <Dropdown.Menu
+                        align="end"
+                        flip
+                        popperConfig={{
+                          strategy: 'absolute',
+                          modifiers: [
+                            {
+                              name: 'offset',
+                              options: {
+                                offset: [0, 4],
+                              },
+                            },
+                            {
+                              name: 'preventOverflow',
+                              options: {
+                                boundary: 'clippingParents',
+                                altAxis: true,
+                                padding: 8
+                              },
+                            }
+                          ],
+                        }}
+                      >
+                        <Dropdown.Item
+                          onClick={() => handleDownload(policy.jobDetails.stepFunctionJobId)}
+                          disabled={isDownloading === policy.jobDetails.stepFunctionJobId}
+                        >
+                          {isDownloading === policy.jobDetails.stepFunctionJobId ? (
+                            <span className="spinner-border spinner-border-sm me-1" role="status" />
+                          ) : (
+                            <DownloadIcon className="me-1" />
+                          )}
+                          PDF
+                        </Dropdown.Item>
+                        <Dropdown.Item
+                          onClick={() => handleDownloadDocx(policy.jobDetails.stepFunctionJobId)}
+                          disabled={isDownloading === policy.jobDetails.stepFunctionJobId}
+                        >
+                          {isDownloading === policy.jobDetails.stepFunctionJobId ? (
+                            <span className="spinner-border spinner-border-sm me-1" role="status" />
+                          ) : (
+                            <DownloadIcon className="me-1" />
+                          )}
+                          DOCX
+                        </Dropdown.Item>
+                      </Dropdown.Menu>
+                    </Dropdown>
                   </div>
                 </td>
               </tr>

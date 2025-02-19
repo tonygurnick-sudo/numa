@@ -10,7 +10,7 @@ import lambda_function
 
 
 @patch("lambda_function.step_function_client")
-@patch.dict(os.environ, {"APP_NAME": "test-app", "LOG_TO_CONSOLE": "true"})
+@patch.dict(os.environ, {"APP_ID": "test-app", "LOG_TO_CONSOLE": "true"})
 class TestLambdaFunction(unittest.TestCase):
     @patch.dict(os.environ, {"STEP_FUNCTION_ARN": "step-function-arn-success"})
     def test_success(self, step_function_mock):
@@ -30,7 +30,7 @@ class TestLambdaFunction(unittest.TestCase):
         self.assertEqual(kwargs["stateMachineArn"], "step-function-arn-success")
         self.assertEqual(kwargs["name"], job_id)
         input_ = json.loads(kwargs["input"])
-        self.assertEqual(input_["app_name"], "test-app")
+        self.assertEqual(input_["app_id"], "test-app")
         self.assertEqual(input_["job_id"], job_id)
         self.assertEqual(input_["foo"], "bar")
 

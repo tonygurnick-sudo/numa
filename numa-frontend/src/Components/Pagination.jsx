@@ -1,19 +1,5 @@
 import { Pagination as BSPagination } from 'react-bootstrap';
 
-export const usePagination = ({ items = [], itemsPerPage = 6, currentPage = 1 }) => {
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = items.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(items.length / itemsPerPage);
-
-  return {
-    currentItems,
-    totalPages,
-    indexOfFirstItem,
-    indexOfLastItem,
-  };
-};
-
 export const Pagination = ({ currentPage, totalPages, onPageChange, maxVisiblePages = 5, className = '' }) => {
   if (totalPages <= 1) return null;
 

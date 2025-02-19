@@ -1,123 +1,37 @@
 import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
-import { Apigatewayv2Integration } from '@cdktf/provider-aws/lib/apigatewayv2-integration';
-import { Apigatewayv2Route } from '@cdktf/provider-aws/lib/apigatewayv2-route';
-import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
-import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
-import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
 import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
-import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
-import path from 'node:path';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import {
   DataAwsIamPolicyDocument,
   DataAwsIamPolicyDocumentStatement,
 } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import {
+  ApiGatewayLambdaCollection,
+  ApiGatewayLambdaCollectionProps,
+  RouteDefinition,
+} from '../api-gateway-lambda-collection';
 
-export abstract class BaseNumaApp extends Construct {
-  private apiGatewayAuthorizerId: string;
-  private apiGatewayId: string;
-  private prefix: string;
-  private logGroup: CloudwatchLogGroup;
-  protected jobsTable?: DynamodbTable;
+export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   abstract readonly manifest: NumaAppManifest;
+  protected jobsTable?: DynamodbTable;
+  protected s3KeyPrefix: string;
+  readonly appId: string;
 
-  constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
-    super(scope, name);
-    this.apiGatewayAuthorizerId = props.apiGatewayAuthorizerId;
-    this.apiGatewayId = props.apiGatewayId;
-    this.prefix = '/api' + this.prepPathPart(props.pathPrefix ?? '');
-    this.logGroup = new CloudwatchLogGroup(this, 'log-group', {
-      name: '/numa/' + this.node.id,
-    });
+  constructor(scope: Construct, name: string, props: AppSpecificBaseNumaAppProps) {
+    super(scope, name, props);
+
+    this.appId = props.appId;
+    this.urlPathPrefix = '/api' + this.prepPathPart(props.urlPathPrefix ?? this.appId);
+    this.s3KeyPrefix = props.s3KeyPrefix ?? `/${this.appId}`;
 
     if (props.enableJobs) {
       this.setupJobs();
     }
-  }
-
-  addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): LambdaFunction {
-    const role = new IamRole(scope, scope.node.id + '_' + name + '_role', {
-      name: scope.node.id + '_' + name,
-      assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
-    });
-
-    const additionalPolicyArns = !props.additionalPolicyStatements
-      ? []
-      : [
-          new IamPolicy(this, name + '_policy', {
-            policy: new DataAwsIamPolicyDocument(this, name + '_policy-document', {
-              statement: props.additionalPolicyStatements,
-            }).json,
-          }).arn,
-        ];
-
-    new IamRolePolicyAttachmentsExclusive(scope, name + '_role-policy', {
-      policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', ...additionalPolicyArns],
-      roleName: role.name,
-    });
-
-    const filename = path.resolve(
-      import.meta.dirname,
-      '..',
-      '..',
-      '..',
-      'lambdas',
-      props.lambdaDirectory,
-      'lambda_function.zip',
-    );
-
-    const lf = new LambdaFunction(this, name + '_lambda', {
-      functionName: scope.node.id + '_' + name,
-      role: role.arn,
-      filename,
-      sourceCodeHash: Fn.filebase64sha256(filename),
-      runtime: props.runtime ?? 'python3.13',
-      handler: props.handler ?? 'lambda_function.handler',
-      timeout: props.timeout || 29, // API Gateway will only wait 30 seconds. Let's try to come in under that.
-      loggingConfig: {
-        logFormat: 'JSON',
-        logGroup: this.logGroup.name,
-        systemLogLevel: 'INFO',
-      },
-      environment: props.environment,
-    });
-
-    if (props.route) {
-      const integration = new Apigatewayv2Integration(this, name + '_integration', {
-        apiId: this.apiGatewayId,
-        integrationType: 'AWS_PROXY',
-        integrationUri: lf.invokeArn,
-        payloadFormatVersion: '2.0',
-      });
-
-      let additionalRouteParameters = {};
-
-      if (props.addAuthorizer ?? true) {
-        additionalRouteParameters = {
-          authorizationType: 'CUSTOM',
-          authorizerId: this.apiGatewayAuthorizerId,
-        };
-      }
-
-      new Apigatewayv2Route(this, name + '_route', {
-        ...additionalRouteParameters,
-        apiId: this.apiGatewayId,
-        routeKey: `${props.route.verb} ${this.prefix}${this.prepPathPart(props.route.path)}`,
-        target: `integrations/${integration.id}`,
-      });
-
-      new LambdaPermission(this, name + '_permission', {
-        functionName: lf.functionName,
-        principal: 'apigateway.amazonaws.com',
-        action: 'lambda:InvokeFunction',
-      });
-    }
-    return lf;
   }
 
   addStepFunction(scope: Construct, name: string, props: AddStepFunctionProps): void {
@@ -126,7 +40,7 @@ export abstract class BaseNumaApp extends Construct {
         statement: [
           {
             actions: ['s3:PutObject'],
-            resources: [`${props.outputsBucket.arn}/${props.appName}/*`],
+            resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
           },
           {
             actions: [
@@ -174,13 +88,13 @@ export abstract class BaseNumaApp extends Construct {
     this.addLambdaFunction(scope, name + '-start', {
       route: {
         verb: 'POST',
-        path: name,
+        path: props.urlPath,
       },
       lambdaDirectory: 'python/step-function-start',
       environment: {
         variables: {
           STEP_FUNCTION_ARN: stepFunction.arn,
-          APP_NAME: props.appName,
+          APP_ID: this.appId,
         },
       },
       additionalPolicyStatements: [
@@ -195,13 +109,13 @@ export abstract class BaseNumaApp extends Construct {
     this.addLambdaFunction(scope, name + '-status', {
       route: {
         verb: 'GET',
-        path: name,
+        path: props.urlPath,
       },
       lambdaDirectory: 'python/step-function-status',
       environment: {
         variables: {
           BUCKET: props.outputsBucket.bucket,
-          APP_NAME: props.appName,
+          APP_ID: this.appId,
         },
       },
       additionalPolicyStatements: [
@@ -213,7 +127,7 @@ export abstract class BaseNumaApp extends Construct {
         {
           actions: ['s3:GetObject'],
           effect: 'Allow',
-          resources: [`${props.outputsBucket.arn}/${props.appName}/*`],
+          resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
         },
       ],
     });
@@ -287,14 +201,6 @@ export abstract class BaseNumaApp extends Construct {
         ],
       });
     });
-  }
-
-  private prepPathPart(part: string): string {
-    return part
-      .trim()
-      .replace(/^(?!\/)/, '/')
-      .replace(/\/$/, '')
-      .trim();
   }
 }
 
@@ -394,35 +300,23 @@ export interface NumaAppManifest {
   tasks: NumaAppManifestTask[];
 }
 
-export interface RouteDefinition {
-  verb: 'GET' | 'POST' | 'HEAD' | 'PUT' | 'OPTIONS';
-  path: string;
-}
-
-export interface AddLambdaFunctionProps {
-  addAuthorizer?: boolean;
-  additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
-  environment?: {
-    variables: Record<string, string>;
-  };
-  handler?: string;
-  lambdaDirectory: string;
-  route?: RouteDefinition;
-  runtime?: string;
-  timeout?: number;
-}
-
 export interface AddStepFunctionProps {
-  appName: string;
-  outputsBucket: S3Bucket;
   additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
+  outputsBucket: S3Bucket;
   stepFunctionDefinition: string;
+  urlPath: string;
 }
 
-export interface BaseNumaAppProps {
-  apiGatewayId: string;
-  apiGatewayAuthorizerId: string;
+export interface UserConfigurableBaseNumaAppProps {
   enableJobs?: boolean; // Optional flag to enable jobs functionality
-  pathPrefix?: string;
+  urlPathPrefix?: string;
+  s3KeyPrefix?: string;
+}
+
+export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiGatewayLambdaCollectionProps {
   outputsBucket: S3Bucket;
+}
+
+export interface AppSpecificBaseNumaAppProps extends BaseNumaAppProps {
+  appId: string;
 }

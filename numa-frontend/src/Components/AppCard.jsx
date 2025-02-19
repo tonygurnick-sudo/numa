@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Row, Col } from 'react-bootstrap';
 import { S3UploadModule } from '../Modules/S3UploadModule';
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { MarkdownContent } from './MarkdownContent';
 import { ResultActions } from './ResultActions';
 import { Preloader } from '../Components/Preloader';

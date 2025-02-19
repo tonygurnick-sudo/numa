@@ -24,7 +24,7 @@ export const DataSourcesList = () => {
   const [error, setError] = useState(null);
   const [show, setShow] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [, setShowUploadModal] = useState(false);
   const { qBusinessClient } = useAuth();
 
   const handleShow = () => setShow(!show);

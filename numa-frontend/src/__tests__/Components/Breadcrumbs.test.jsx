@@ -1,11 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
-import { MockMemoryRouter, navigationHandlers, clearNavigationMocks } from '../Mocks/NavigationMock';
+import { navigationHandlers } from '../Mocks/NavigationMock';
 import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
 
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 

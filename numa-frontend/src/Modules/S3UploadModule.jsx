@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from 'react-bootstrap';
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { useAuth } from '../Providers/AuthProvider';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -8,7 +8,7 @@ import axios from 'axios';
 import { Preloader } from '../Components/Preloader';
 
 function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
-  const { loading, numaAppId, appRunning,numaTaskResponses } = useNumaApp();
+  const { loading, numaAppId, appRunning, numaTaskResponses } = useNumaApp();
   const { getIdentityPoolCredentials } = useAuth();
 
   const [selectedFile, setSelectedFile] = useState(null);
@@ -22,7 +22,6 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   const fileInputRef = useRef(null);
 
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
-
 
   // Extracting task parameters
   const taskId = task?.id;

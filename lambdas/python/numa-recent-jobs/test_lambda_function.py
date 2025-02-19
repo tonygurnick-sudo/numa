@@ -81,7 +81,7 @@ class TestLambdaFunction(unittest.TestCase):
         }
 
         event = {
-            "pathParameters": {"app_name": "test-app", "job_id": "job1"},
+            "pathParameters": {"app_id": "test-app", "job_id": "job1"},
             "httpMethod": "GET",
         }
 

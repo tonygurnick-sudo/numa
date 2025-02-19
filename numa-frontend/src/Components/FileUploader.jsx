@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Button, Alert, ProgressBar } from 'react-bootstrap';
+import { Button, Alert } from 'react-bootstrap';
 import axios from 'axios';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -16,14 +16,14 @@ const dashedBorderKeyframes = `
   }
 `;
 
-const FileUploader = ({ onUploadSuccess, getAccessToken }) => {
+const FileUploader = ({ onUploadSuccess }) => {
   const [files, setFiles] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [showProgress, setShowProgress] = useState(false);
+  const [, setShowSuccess] = useState(false);
+  const [, setShowProgress] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadingFileIndex, setUploadingFileIndex] = useState(0);
   const [totalFiles, setTotalFiles] = useState(0);

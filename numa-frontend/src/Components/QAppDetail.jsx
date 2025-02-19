@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Alert } from 'react-bootstrap';
 
 import { QAppWizard } from './QAppWizard';
 import { Preloader } from './Preloader';
 
 import { useAuth } from '../Providers/AuthProvider';
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 
 import { GetQAppCommand, GetQAppSessionCommand, StartQAppSessionCommand } from '@aws-sdk/client-qapps';
 
@@ -25,7 +24,6 @@ const QAppDetail = () => {
     setQCardInputValues,
     qCardInputValues,
     setQSessionId,
-    numaAppId,
   } = useNumaApp();
 
   const qAppId = numaAppData?.qAppId;

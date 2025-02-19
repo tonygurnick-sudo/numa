@@ -1,6 +1,5 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../Providers/AuthProvider';
-import { v4 as uuidv4 } from 'uuid';
 import {
   startQappGetSession,
   getSessionQApp,
@@ -9,15 +8,10 @@ import {
   importFileToQApp,
 } from '../qAppHelper';
 import { useJobsApi } from '../Services/jobsApi';
-import { useNumaRequest } from '../Providers/RequestProvider';
+import { useNumaRequest } from './NumaRequestContext';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-
-// Create the context
-const NumaAppContext = createContext();
-
-// Custom hook for using context
-export const useNumaApp = () => useContext(NumaAppContext);
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { NumaAppContext } from './NumaAppContext';
 
 // Global helper function to resolve references like @taskId or @taskId/subPath
 const resolveReference = (key, taskResults) => {
@@ -122,7 +116,7 @@ export const NumaAppProvider = ({ children }) => {
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [hasRun, setHasRun] = useState(false);
-  const { numaPost, numaPut, numaGet } = useNumaRequest();
+  const { numaPost, numaGet } = useNumaRequest();
 
   // Load jobs for the current app
   const loadAppJobs = async () => {
@@ -321,7 +315,9 @@ export const NumaAppProvider = ({ children }) => {
             const headers = Object.keys(outputResult[0]);
             const headerRow = `| ${headers.join(' | ')} |`;
             const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
-            const dataRows = outputResult.map((item) => `| ${headers.map((header) => item[header] || '').join(' | ')} |`);
+            const dataRows = outputResult.map(
+              (item) => `| ${headers.map((header) => item[header] || '').join(' | ')} |`,
+            );
             resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
           } else {
             console.log('Converting object to JSON string');
@@ -331,7 +327,7 @@ export const NumaAppProvider = ({ children }) => {
           console.log('Processing string output:', {
             startsWithMarkdown: outputResult.startsWith('```markdown'),
             containsMarkdownChars: /[#*`[\]()|\n]/.test(outputResult),
-            firstFewChars: outputResult.slice(0, 20)
+            firstFewChars: outputResult.slice(0, 20),
           });
 
           // First check if it's a markdown code block and extract its content
@@ -367,15 +363,15 @@ export const NumaAppProvider = ({ children }) => {
                 // If it's not JSON and doesn't have markdown, wrap paragraphs
                 resultToDisplay = outputResult
                   .split('\n\n')
-                  .map(para => para.trim())
-                  .filter(para => para)
+                  .map((para) => para.trim())
+                  .filter((para) => para)
                   .join('\n\n');
               }
             }
           }
           console.log('Final processed string:', {
             firstFewChars: resultToDisplay.slice(0, 20),
-            length: resultToDisplay.length
+            length: resultToDisplay.length,
           });
         }
 
@@ -383,14 +379,17 @@ export const NumaAppProvider = ({ children }) => {
         currentResults[task.id] = resultToDisplay;
 
         // Update numaTaskResponses with the new result
-        setNumaTaskResponses(prevResponses => {
+        setNumaTaskResponses((prevResponses) => {
           // Remove any existing response for this task
-          const filteredResponses = prevResponses.filter(r => r.taskId !== task.id);
+          const filteredResponses = prevResponses.filter((r) => r.taskId !== task.id);
           // Add the new response
-          return [...filteredResponses, {
-            taskId: task.id,
-            result: resultToDisplay
-          }];
+          return [
+            ...filteredResponses,
+            {
+              taskId: task.id,
+              result: resultToDisplay,
+            },
+          ];
         });
       } else {
         console.warn('No output result found for task:', task.id);
@@ -412,7 +411,7 @@ export const NumaAppProvider = ({ children }) => {
       console.log('Creating S3 client with provided credentials...');
       const s3Client = new S3Client({
         region: 'us-east-1',
-        credentials
+        credentials,
       });
 
       console.log('Creating GetObject command...');
@@ -976,9 +975,5 @@ export const NumaAppProvider = ({ children }) => {
     setHasRun,
   };
 
-  return (
-    <NumaAppContext.Provider value={contextValue}>
-      {children}
-    </NumaAppContext.Provider>
-  );
+  return <NumaAppContext.Provider value={contextValue}>{children}</NumaAppContext.Provider>;
 };

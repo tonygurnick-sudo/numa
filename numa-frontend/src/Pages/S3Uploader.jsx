@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, createRef } from 'react';
-import { Button, Alert, Container, Row, Col, Modal } from 'react-bootstrap';
+import { useState, useRef, useEffect } from 'react';
+import { Button, Container, Row, Col, Modal } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
@@ -62,20 +62,6 @@ const S3Uploader = () => {
   const initialFetchDone = useRef(false);
   const [collapsedFolders, setCollapsedFolders] = useState(new Set());
   const [dataSourceId, setDataSourceId] = useState(null);
-  const [folderRefs] = useState(() => {
-    const refs = new Map();
-    // Pre-populate with refs for all possible folder paths from files
-    files.forEach((file) => {
-      const parts = file.key.split('/');
-      for (let i = 0; i < parts.length - 1; i++) {
-        const folderPath = parts.slice(0, i + 1).join('/');
-        if (!refs.has(folderPath)) {
-          refs.set(folderPath, createRef());
-        }
-      }
-    });
-    return refs;
-  });
 
   const { getAccessToken, qBusinessClient, getIdentityPoolCredentials } = useAuth();
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
@@ -387,7 +373,6 @@ const S3Uploader = () => {
             return depthA - depthB || pathA.localeCompare(pathB);
           })
           .map(([folder, files]) => {
-            const nodeRef = folderRefs.get(folder);
             const depth = folder.split('/').length;
             const folderName = folder.split('/').pop();
             const indentLevel = Math.max(0, depth - 1);
