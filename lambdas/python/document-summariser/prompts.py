@@ -7,7 +7,15 @@ DOCUMENT_SUMMARY_PROMPT = """Summarize the document(s) based on the following re
 - If the documents are specialized (e.g. financial reports, legal contracts), adapt the format and tone to industry norms.
 - The desired level of detail is {summary_level}.
 
+## Formatting Guidelines:
+- Use **one `#` title header** for the document title (e.g., `# Financial Report Summary`).
+- Use `##` for major sections (e.g., `## Key Findings`, `## Compliance Analysis`).
+- Use `###` for specific areas within sections.
+- Use `-` for bullet points summarising key information.
+- Use `>` for direct quotes from the document.
+- Use tables where applicable for comparing current vs. recommended content.
+
 Document content:
 {document_content}
 
-Present the summary in markdown format for a clear, structured output suitable for quick review."""
+Return the summary following these markdown conventions to ensure clarity and structured presentation."""
