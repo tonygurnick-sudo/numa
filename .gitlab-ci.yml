@@ -62,6 +62,13 @@ variables:
         - lib/helpers
         - lib/markdown-to-pdf
 
+infra-lint:
+  rules:
+    - changes:
+        paths:
+          - infra
+          - style
+
 python-lint:
   extends: .poetry-job
   needs: []
@@ -70,12 +77,21 @@ python-lint:
     - poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
     - poetry run mypy .
     - poetry run pyright .
+  rules:
+    - changes:
+        paths:
+          - $PYTHON_WORKING_DIRECTORY
 
 python-test:
   parallel: !reference [.python-matrix]
 
 node-lint:
   parallel: !reference [.node-matrix]
+  rules:
+    - changes:
+        paths:
+          - $BUILD_DIR
+          - style
 
 node-test:
   parallel: !reference [.node-matrix]
