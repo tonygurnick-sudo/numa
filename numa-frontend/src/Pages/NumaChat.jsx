@@ -94,9 +94,7 @@ const NumaChat = () => {
 
       // Add user message to chat immediately
       const userMessage = { role: 'user', content: inputMessage };
-      // Add a system message with the chat mode for history tracking
-      const systemMessage = { role: 'system', content: `Chat started in ${chatMode}` };
-      setMessages((prevMessages) => [...prevMessages, systemMessage, userMessage]);
+      setMessages((prevMessages) => [...prevMessages, userMessage]);
       setInputMessage('');
 
       // Send message to API
