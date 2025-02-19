@@ -62,6 +62,13 @@ variables:
         - lib/helpers
         - lib/markdown-to-pdf
 
+infra-lint:
+  rules:
+    - changes:
+        paths:
+          - infra
+          - style
+
 python-lint:
   extends: .poetry-job
   needs: []
