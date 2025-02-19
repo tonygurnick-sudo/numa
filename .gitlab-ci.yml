@@ -76,6 +76,11 @@ python-test:
 
 node-lint:
   parallel: !reference [.node-matrix]
+  rules:
+    - changes:
+        paths:
+          - $PYTHON_WORKING_DIRECTORY
+          - style
 
 node-test:
   parallel: !reference [.node-matrix]
