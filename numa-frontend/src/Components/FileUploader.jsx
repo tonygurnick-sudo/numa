@@ -62,7 +62,22 @@ const FileUploader = ({ onUploadSuccess }) => {
       })),
     );
 
+    // Create a set of unique folder paths
+    const folders = new Set();
+    fileList.forEach((file) => {
+      const path = file.webkitRelativePath || file.name;
+      const parts = path.split('/');
+      // Add all parent folders
+      for (let i = 0; i < parts.length - 1; i++) {
+        folders.add(parts.slice(0, i + 1).join('/'));
+      }
+    });
+
     setFiles(fileList);
+    setFileStructure({
+      files: fileList,
+      folders: folders,
+    });
     setTotalFiles(fileList.length);
     setError(null);
     setSuccess(false);

@@ -9,6 +9,7 @@ const copyBuildPlugin = () => ({
   closeBundle: async () => {
     const sourceDir = 'dist';
     const targetDir = '../infra/build/numa-frontend';
+    const excludeFiles = ['config.json', 'manifest.json'];
 
     // Create target directory if it doesn't exist
     if (!existsSync(targetDir)) {
@@ -28,7 +29,7 @@ const copyBuildPlugin = () => ({
         if (entry.isDirectory()) {
           mkdirSync(destPath, { recursive: true });
           copyDir(srcPath, destPath);
-        } else {
+        } else if (!excludeFiles.includes(entry.name)) {
           copyFileSync(srcPath, destPath);
         }
       }
