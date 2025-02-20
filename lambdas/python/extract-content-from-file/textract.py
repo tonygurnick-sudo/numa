@@ -2,6 +2,7 @@
 
 import time
 import typing
+import unicodedata
 from collections import defaultdict
 
 import boto3
@@ -15,12 +16,22 @@ textract_client = boto3.client("textract")
 WAIT_TIME = 10
 
 
+def _normalize_text(text: str) -> str:
+    """
+    Converts Unicode characters to their basic ASCII equivalents.
+    """
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)
+    )
+
+
 def _get_pages(blocks: list[dict]) -> typing.Dict[int, str]:
     pages: dict[int, str] = defaultdict(str)
     for block in blocks:
         if block["BlockType"] == "LINE":
             page = block["Page"]
-            pages[page] += block["Text"] + "\n"
+            normalized_text = _normalize_text(block["Text"])
+            pages[page] += normalized_text + "\n"
     return pages
 
 
