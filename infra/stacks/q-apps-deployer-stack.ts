@@ -28,7 +28,7 @@ export class QAppsDeployerStack extends ArcanumStack {
 
     new TerraformOutput(this, 'zone-id', {
       value: zone.id,
-    })
+    });
   }
 }
 

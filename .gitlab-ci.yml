@@ -11,11 +11,20 @@ include:
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
     - if: $CI_PIPELINE_SOURCE == "push"
     - if: $CI_PIPELINE_SOURCE == "web"
 
 variables:
   PYTHON_VER: '3.13'
+
+.node-lambdas-matrix:
+  matrix:
+    - BUILD_DIR:
+        - lambdas/node/api-gateway-authorizer
+        - lambdas/node/q-business-chat-control-configurer
+        - lambdas/node/srp-proxy
 
 .node-matrix:
   matrix:
@@ -25,6 +34,34 @@ variables:
         - lambdas/node/srp-proxy
         - numa-management
         - tools
+
+.python-lambdas-matrix:
+  matrix:
+    - PYTHON_WORKING_DIRECTORY:
+        - lambdas/python/aggregate-candidate-results
+        - lambdas/python/aggregate-document-results
+        - lambdas/python/candidate-screening
+        - lambdas/python/document-summariser
+        - lambdas/python/example-1
+        - lambdas/python/example-2
+        - lambdas/python/example-3
+        - lambdas/python/extract-content-from-file
+        - lambdas/python/financial-analysis-analysis
+        - lambdas/python/financial-analysis-data-extraction
+        - lambdas/python/meeting-analyser
+        - lambdas/python/numa-recent-jobs
+        - lambdas/python/policy-builder-completion
+        - lambdas/python/policy-builder-expert-review
+        - lambdas/python/policy-builder-explainability
+        - lambdas/python/policy-builder-generation
+        - lambdas/python/policy-builder-legal-review
+        - lambdas/python/policy-builder-principles-and-structure
+        - lambdas/python/policy-drafter
+        - lambdas/python/policy-review
+        - lambdas/python/recruitment-job-ad-creation
+        - lambdas/python/step-function-start
+        - lambdas/python/step-function-status
+        - lambdas/python/structured-data-extraction
 
 .python-matrix:
   matrix:
@@ -49,14 +86,23 @@ variables:
         - lambdas/python/policy-builder-generation
         - lambdas/python/policy-builder-legal-review
         - lambdas/python/policy-builder-principles-and-structure
+        - lambdas/python/policy-drafter
         - lambdas/python/policy-review
         - lambdas/python/recruitment-job-ad-creation
         - lambdas/python/step-function-start
         - lambdas/python/step-function-status
         - lambdas/python/structured-data-extraction
+        - lib/aws-transcribe
         - lib/bedrock
         - lib/helpers
         - lib/markdown-to-pdf
+
+infra-lint:
+  rules:
+    - changes:
+        paths:
+          - infra
+          - style
 
 python-lint:
   extends: .poetry-job
@@ -66,15 +112,75 @@ python-lint:
     - poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
     - poetry run mypy .
     - poetry run pyright .
+  rules:
+    - changes:
+        paths:
+          - $PYTHON_WORKING_DIRECTORY
 
 python-test:
   parallel: !reference [.python-matrix]
 
 node-lint:
   parallel: !reference [.node-matrix]
+  rules:
+    - changes:
+        paths:
+          - $BUILD_DIR
+          - style
 
 node-test:
   parallel: !reference [.node-matrix]
 
 node-build:
   parallel: !reference [.node-matrix]
+
+frontend-build:
+  extends: node-build
+  parallel:
+    matrix:
+      - BUILD_DIR: [numa-frontend]
+  artifacts:
+    paths: ['infra/build/numa-frontend']
+
+python-package:
+  extends: .poetry-job
+  stage: package
+  script:
+    - poetry build-lambda zip-compression=ZIP_DEFLATED
+  parallel: !reference [.python-lambdas-matrix]
+  artifacts:
+    paths: ['$PYTHON_WORKING_DIRECTORY/lambda_function.zip']
+
+node-package:
+  extends: .node_job
+  stage: package
+  before_script:
+    - !reference [.node_job, before_script]
+    - apt update && apt install -y zip
+  script:
+    - yarn bundle
+  parallel: !reference [.node-lambdas-matrix]
+  artifacts:
+    paths:
+      - '$BUILD_DIR/dist'
+      - '$BUILD_DIR/lambda_function.zip'
+
+deploy-to-arcanum-demo:
+  extends: infra-build
+  stage: deploy
+  variables:
+    TF_ENVIRONMENT: prod
+    AWS_REGION: us-east-1
+  script:
+    - yarn exec cdktf deploy --auto-approve numa-arcanum-demo
+  needs:
+    - artifacts: true
+      job: python-package
+      parallel: !reference [.python-lambdas-matrix]
+    - artifacts: true
+      job: node-package
+      parallel: !reference [.node-lambdas-matrix]
+    - artifacts: true
+      job: frontend-build
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

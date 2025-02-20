@@ -5,7 +5,7 @@ import {
   StartDataSourceSyncJobCommand,
   ListDataSourcesCommand,
   DataSourceSyncJob,
-  DataSource
+  DataSource,
 } from '@aws-sdk/client-qbusiness';
 import { AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import { temporaryCredentials, getQInstanceDetails } from './utils';
@@ -17,13 +17,15 @@ const region = 'us-east-1';
 async function listDataSources(
   credentials: AwsCredentialIdentityProvider,
   applicationId: string,
-  indexId: string
+  indexId: string,
 ): Promise<DataSource[]> {
   const qbusiness = new QBusinessClient({ region, credentials });
-  const response = await qbusiness.send(new ListDataSourcesCommand({
-    applicationId,
-    indexId,
-  }));
+  const response = await qbusiness.send(
+    new ListDataSourcesCommand({
+      applicationId,
+      indexId,
+    }),
+  );
   return response.dataSources;
 }
 
@@ -31,12 +33,16 @@ async function findSyncJobs(
   credentials: AwsCredentialIdentityProvider,
   applicationId: string,
   indexId: string,
-  dataSourceId: string
+  dataSourceId: string,
 ): Promise<DataSourceSyncJob[]> {
   const qbusiness = new QBusinessClient({ region, credentials });
-  const response = await qbusiness.send(new ListDataSourceSyncJobsCommand({
-    applicationId, dataSourceId, indexId,
-  }));
+  const response = await qbusiness.send(
+    new ListDataSourceSyncJobsCommand({
+      applicationId,
+      dataSourceId,
+      indexId,
+    }),
+  );
   return response.history;
 }
 
@@ -44,14 +50,16 @@ async function startSync(
   credentials: AwsCredentialIdentityProvider,
   applicationId: string,
   indexId: string,
-  dataSourceId: string
+  dataSourceId: string,
 ): Promise<void> {
   const qbusiness = new QBusinessClient({ region, credentials });
-  await qbusiness.send(new StartDataSourceSyncJobCommand({
-    applicationId,
-    indexId,
-    dataSourceId,
-  }));
+  await qbusiness.send(
+    new StartDataSourceSyncJobCommand({
+      applicationId,
+      indexId,
+      dataSourceId,
+    }),
+  );
   console.log(`Started sync for data source: ${dataSourceId}`);
 }
 
@@ -80,7 +88,7 @@ if (import.meta.filename === process?.argv[1]) {
 
   if (showList) {
     console.log('\nAvailable data sources:');
-    dataSources.forEach(ds => {
+    dataSources.forEach((ds) => {
       console.log(`\nName: ${ds.displayName}`);
       console.log(`ID: ${ds.dataSourceId}`);
       console.log(`Type: ${ds.type}`);
@@ -94,22 +102,32 @@ if (import.meta.filename === process?.argv[1]) {
         await startSync(credentials, accountDetails.qApplicationId, accountDetails.qIndexId, dataSource.dataSourceId);
       }
     } else {
-      const s3DataSource = dataSources.find(ds => ds.type === 'S3');
+      const s3DataSource = dataSources.find((ds) => ds.type === 'S3');
       if (s3DataSource) {
         await startSync(credentials, accountDetails.qApplicationId, accountDetails.qIndexId, s3DataSource.dataSourceId);
       }
     }
   } else if (showSyncStatus) {
     if (dataSourceId) {
-      const dataSource = dataSources.find(ds => ds.dataSourceId === dataSourceId);
+      const dataSource = dataSources.find((ds) => ds.dataSourceId === dataSourceId);
       if (dataSource) {
-        const syncJobs = await findSyncJobs(credentials, accountDetails.qApplicationId, accountDetails.qIndexId, dataSource.dataSourceId);
+        const syncJobs = await findSyncJobs(
+          credentials,
+          accountDetails.qApplicationId,
+          accountDetails.qIndexId,
+          dataSource.dataSourceId,
+        );
         console.log(`\nSync Status for ${dataSource.displayName}:`);
         console.log(JSON.stringify(syncJobs[0], null, 2));
       }
     } else {
       for (const dataSource of dataSources) {
-        const syncJobs = await findSyncJobs(credentials, accountDetails.qApplicationId, accountDetails.qIndexId, dataSource.dataSourceId);
+        const syncJobs = await findSyncJobs(
+          credentials,
+          accountDetails.qApplicationId,
+          accountDetails.qIndexId,
+          dataSource.dataSourceId,
+        );
         console.log(`\nSync Status for ${dataSource.displayName}:`);
         if (syncJobs.length > 0) {
           console.log(JSON.stringify(syncJobs[0], null, 2));
@@ -119,7 +137,12 @@ if (import.meta.filename === process?.argv[1]) {
       }
     }
   } else {
-  const syncJobs = await findSyncJobs(credentials, accountDetails.qApplicationId, accountDetails.qIndexId, accountDetails.qDataSourceId);
-  console.log(JSON.stringify(syncJobs[0]));
+    const syncJobs = await findSyncJobs(
+      credentials,
+      accountDetails.qApplicationId,
+      accountDetails.qIndexId,
+      accountDetails.qDataSourceId,
+    );
+    console.log(JSON.stringify(syncJobs[0]));
   }
 }

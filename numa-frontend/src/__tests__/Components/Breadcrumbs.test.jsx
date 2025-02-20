@@ -1,15 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
-import {
-  MockMemoryRouter,
-  navigationHandlers,
-  clearNavigationMocks,
-} from '../Mocks/NavigationMock';
+import { navigationHandlers } from '../Mocks/NavigationMock';
 import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
 
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 
@@ -49,9 +44,7 @@ describe('Breadcrumbs Component', () => {
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
 
     // Verify initial navigation stack
-    const navigationStack = JSON.parse(
-      mockSessionStorage['navigation_stack'] || '[]',
-    );
+    const navigationStack = JSON.parse(mockSessionStorage['navigation_stack'] || '[]');
     expect(navigationStack).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -104,9 +97,7 @@ describe('Breadcrumbs Component', () => {
     rerender(<Breadcrumbs label="Settings" />);
 
     await waitFor(() => {
-      const navigationStack = JSON.parse(
-        mockSessionStorage['navigation_stack'],
-      );
+      const navigationStack = JSON.parse(mockSessionStorage['navigation_stack']);
       expect(navigationStack).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -138,10 +129,7 @@ describe('Breadcrumbs Component', () => {
     // Set current route to match the last item in navigation stack
     navigationHandlers.currentRoute = '/app/1/settings';
 
-    const { rerender } = renderBreadcrumbs(
-      { label: 'Settings' },
-      '/app/1/settings',
-    );
+    const { rerender } = renderBreadcrumbs({ label: 'Settings' }, '/app/1/settings');
 
     // Verify all breadcrumbs are rendered
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
@@ -161,9 +149,7 @@ describe('Breadcrumbs Component', () => {
 
     // Check if navigation stack was updated
     await waitFor(() => {
-      const navigationStack = JSON.parse(
-        mockSessionStorage['navigation_stack'] || '[]',
-      );
+      const navigationStack = JSON.parse(mockSessionStorage['navigation_stack'] || '[]');
       expect(navigationStack).toHaveLength(2);
       expect(navigationStack[1].label).toBe('App 1');
     });
@@ -180,9 +166,7 @@ describe('Breadcrumbs Component', () => {
     renderBreadcrumbs({}, '/app/1');
 
     // Check that duplicates are removed
-    const navigationStack = JSON.parse(
-      mockSessionStorage['navigation_stack'] || '[]',
-    );
+    const navigationStack = JSON.parse(mockSessionStorage['navigation_stack'] || '[]');
     expect(navigationStack).toHaveLength(2);
   });
 
@@ -220,9 +204,7 @@ describe('Breadcrumbs Component', () => {
     // Render with route '/dash' since that's the dashboard route
     renderBreadcrumbs({}, '/dash');
 
-    const navigationStack = JSON.parse(
-      mockSessionStorage['navigation_stack'] || '[]',
-    );
+    const navigationStack = JSON.parse(mockSessionStorage['navigation_stack'] || '[]');
     expect(navigationStack).toEqual([
       {
         path: '/dash',
@@ -241,18 +223,14 @@ describe('Breadcrumbs Component', () => {
     renderBreadcrumbs({}, '/dash');
 
     // Check that only dashboard remains
-    const navigationStack = JSON.parse(
-      mockSessionStorage['navigation_stack'] || '[]',
-    );
+    const navigationStack = JSON.parse(mockSessionStorage['navigation_stack'] || '[]');
     expect(navigationStack).toHaveLength(1);
     expect(navigationStack[0].label).toBe('Dashboard');
   });
 
   it('should handle clicks when clicked index exceeds stack length', async () => {
     // Setup initial navigation stack with only Dashboard
-    mockSessionStorage['navigation_stack'] = JSON.stringify([
-      { path: '/dash', label: 'Dashboard' },
-    ]);
+    mockSessionStorage['navigation_stack'] = JSON.stringify([{ path: '/dash', label: 'Dashboard' }]);
 
     // First render with Dashboard
     const { rerender } = renderBreadcrumbs({}, '/dash');
@@ -263,9 +241,7 @@ describe('Breadcrumbs Component', () => {
 
     // Manually modify the stack to create the edge case
     // Now the UI will show Dashboard > App 1, but stack only has Dashboard
-    mockSessionStorage['navigation_stack'] = JSON.stringify([
-      { path: '/dash', label: 'Dashboard' },
-    ]);
+    mockSessionStorage['navigation_stack'] = JSON.stringify([{ path: '/dash', label: 'Dashboard' }]);
 
     // Click App 1 - this should trigger the condition since clickedIndex will be 1
     // but stack.length is 1, so 1 >= 1 is true
@@ -274,9 +250,7 @@ describe('Breadcrumbs Component', () => {
 
     // Verify the stack adjustment
     await waitFor(() => {
-      const navigationStack = JSON.parse(
-        mockSessionStorage['navigation_stack'] || '[]',
-      );
+      const navigationStack = JSON.parse(mockSessionStorage['navigation_stack'] || '[]');
       expect(navigationStack).toHaveLength(1);
       expect(navigationStack[0].path).toBe('/dash');
     });

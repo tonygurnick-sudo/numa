@@ -10,5 +10,5 @@ export const formatCategory = (category) => {
   }
 
   // Otherwise capitalize first letter of each word
-  return category.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  return category.toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase());
 };

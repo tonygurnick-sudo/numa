@@ -24,22 +24,14 @@ export class BedrockQuotaChecker extends Construct {
       statement: [
         {
           effect: 'Allow',
-          actions: [
-            'servicequotas:GetServiceQuota',
-            'support:CreateCase',
-            'support:DescribeCases'
-          ],
+          actions: ['servicequotas:GetServiceQuota', 'support:CreateCase', 'support:DescribeCases'],
           resources: ['*'],
         },
         {
           effect: 'Allow',
-          actions: [
-            'logs:CreateLogGroup',
-            'logs:CreateLogStream',
-            'logs:PutLogEvents'
-          ],
+          actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'],
           resources: ['*'],
-        }
+        },
       ],
     });
 
@@ -49,31 +41,31 @@ export class BedrockQuotaChecker extends Construct {
     });
 
     const func = new TypescriptLambdaConstruct(this, 'function', {
-        lambdaProps: {
-          functionName: `bedrock-quota-check-${props.client}`,
-          role: role.arn,
-          runtime: 'nodejs18.x',
-          handler: 'index.handler',
-        },
-        path: path.join('constructs', 'bedrock-quota-checker'),
-      });
+      lambdaProps: {
+        functionName: `bedrock-quota-check-${props.client}`,
+        role: role.arn,
+        runtime: 'nodejs18.x',
+        handler: 'index.handler',
+      },
+      path: path.join('constructs', 'bedrock-quota-checker'),
+    });
 
-      this.result = new LambdaInvocation(this, 'check', {
-        functionName: func.lambdaFunction.functionName,
-        input: JSON.stringify({
-          client: props.client,
-          timestamp: new Date().toISOString()
-        }),
-        triggers: {
-          timestamp: new Date().toISOString()
-        }
-      });
+    this.result = new LambdaInvocation(this, 'check', {
+      functionName: func.lambdaFunction.functionName,
+      input: JSON.stringify({
+        client: props.client,
+        timestamp: new Date().toISOString(),
+      }),
+      triggers: {
+        timestamp: new Date().toISOString(),
+      },
+    });
 
     new TerraformOutput(this, 'quota-check-result', {
-        value: this.result.result
-      });
-    }
+      value: this.result.result,
+    });
   }
+}
 
 export interface BedrockQuotaCheckerProps {
   client: string;

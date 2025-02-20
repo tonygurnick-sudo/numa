@@ -1,25 +1,36 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import lambda_function
 
+CONTEXT = LambdaContext()
+CONTEXT._function_name = "test_function_name"  # pylint: disable=protected-access
+
 
 class TestLambdaFunction(unittest.TestCase):
-    @patch("lambda_function.s3_client")
-    def test_read_file_from_s3(self, mock_s3):
-        mock_s3.get_object.return_value = {
-            "Body": MagicMock(read=lambda: b"test content")
+    @patch("s3_helpers.read", return_value="test-document")
+    @patch(
+        "lambda_function._summarise",
+        return_value={"markdown_summary": "test-summary"},
+    )
+    @patch("s3_helpers.write")
+    def test_handler(self, write_mock, _summarise_mock, _read_mock):
+        test_event = {
+            "app_id": "test-app",
+            "input_key": "test-in-key",
+            "output_key": "test-out-key",
         }
 
-        result = lambda_function.read_file_from_s3("test-bucket", "test-key")
+        result = lambda_function.handler(test_event, CONTEXT)
 
-        self.assertEqual(result, "test content")
-        mock_s3.get_object.assert_called_with(Bucket="test-bucket", Key="test-key")
+        self.assertEqual(result, {"output_key": "test-out-key"})
+        write_mock.assert_called_once_with(
+            "test-out-key",
+            b"test-summary",
+        )
 
-    @patch("lambda_function.s3_client")
-    def test_save_results_to_s3(self, mock_s3):
-        test_data = {"test": "data"}
 
-        lambda_function.save_results_to_s3("test-bucket", "test-key", test_data)
-
-        mock_s3.put_object.assert_called_once()
+if __name__ == "__main__":
+    unittest.main()

@@ -1,30 +1,6 @@
 import { Pagination as BSPagination } from 'react-bootstrap';
 
-export const usePagination = ({
-  items = [],
-  itemsPerPage = 6,
-  currentPage = 1
-}) => {
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = items.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(items.length / itemsPerPage);
-
-  return {
-    currentItems,
-    totalPages,
-    indexOfFirstItem,
-    indexOfLastItem
-  };
-};
-
-export const Pagination = ({
-  currentPage,
-  totalPages,
-  onPageChange,
-  maxVisiblePages = 5,
-  className = ''
-}) => {
+export const Pagination = ({ currentPage, totalPages, onPageChange, maxVisiblePages = 5, className = '' }) => {
   if (totalPages <= 1) return null;
 
   let items = [];
@@ -41,7 +17,7 @@ export const Pagination = ({
     items.push(
       <BSPagination.Item key={1} onClick={() => onPageChange(1)}>
         1
-      </BSPagination.Item>
+      </BSPagination.Item>,
     );
     if (startPage > 2) {
       items.push(<BSPagination.Ellipsis key="ellipsis1" />);
@@ -51,13 +27,9 @@ export const Pagination = ({
   // Add page numbers
   for (let number = startPage; number <= endPage; number++) {
     items.push(
-      <BSPagination.Item
-        key={number}
-        active={number === currentPage}
-        onClick={() => onPageChange(number)}
-      >
+      <BSPagination.Item key={number} active={number === currentPage} onClick={() => onPageChange(number)}>
         {number}
-      </BSPagination.Item>
+      </BSPagination.Item>,
     );
   }
 
@@ -67,26 +39,17 @@ export const Pagination = ({
       items.push(<BSPagination.Ellipsis key="ellipsis2" />);
     }
     items.push(
-      <BSPagination.Item
-        key={totalPages}
-        onClick={() => onPageChange(totalPages)}
-      >
+      <BSPagination.Item key={totalPages} onClick={() => onPageChange(totalPages)}>
         {totalPages}
-      </BSPagination.Item>
+      </BSPagination.Item>,
     );
   }
 
   return (
     <BSPagination className={`justify-content-center mt-4 ${className}`}>
-      <BSPagination.Prev
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage === 1}
-      />
+      <BSPagination.Prev onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1} />
       {items}
-      <BSPagination.Next
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage === totalPages}
-      />
+      <BSPagination.Next onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages} />
     </BSPagination>
   );
 };

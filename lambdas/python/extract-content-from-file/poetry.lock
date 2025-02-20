@@ -13,6 +13,25 @@ files = [
 ]
 
 [[package]]
+name = "aws-transcribe"
+version = "0.1.0"
+description = "AWS Transcribe service wrapper"
+optional = false
+python-versions = "~3.13.0"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+boto3 = "1.36.13"
+filetype = "1.2.0"
+structlog = "25.1.0"
+
+[package.source]
+type = "directory"
+url = "../../../lib/aws-transcribe"
+
+[[package]]
 name = "bedrock"
 version = "0.1.0"
 description = ""
@@ -883,4 +902,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.13.0"
-content-hash = "ca1f9b272b77ebefb9f772cb71e1257916e6c3d091dcf6b661705e591e03a37e"
+content-hash = "fbd5b804bc1e475d178c38b198561b27590a43c777ed072369ad71b87c95b0ad"

@@ -1,6 +1,6 @@
 // API service for job-related operations
 import { createFormattedDate } from '../utils/dateUtils';
-import { useNumaRequest } from '../Providers/RequestProvider';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
 
 const createJobData = (numaAppData, taskInputs, jobID = null) => {
   const { displayDate, isoDate } = createFormattedDate();
@@ -15,6 +15,7 @@ const createJobData = (numaAppData, taskInputs, jobID = null) => {
     results: null,
     status: 'running',
     lastUpdated: null,
+    manifest: numaAppData, // Store the full manifest
   };
 };
 
@@ -66,12 +67,6 @@ export const useJobsApi = () => {
       const response = await numaPut(endpoint, updateData);
       console.log('Job update response:', response);
 
-      if (!response.ok) {
-        const errorMessage = response.error || 'Failed to update job';
-        console.error('Job update failed:', errorMessage);
-        throw new Error(errorMessage);
-      }
-
       return response;
     } catch (error) {
       console.error('API Error updating job:', error);
@@ -82,16 +77,20 @@ export const useJobsApi = () => {
 
   const getJobsByAppId = async (appId) => {
     try {
-      return await numaGet(`/${appId}/jobs`);
+      const endpoint_call = `/api/${appId}/jobs`;
+      console.log('Getting jobs with endpoint:', endpoint_call);
+      return await numaGet(endpoint_call);
     } catch (error) {
       console.error('API Error fetching jobs:', error);
       throw error;
     }
   };
 
-  const getJobById = async (jobId) => {
+  const getJobById = async (numaAppId, jobId) => {
     try {
-      return await numaGet(`/jobs/${jobId}`);
+      const endpoint_call = `/api/${numaAppId}/jobs/${jobId}`;
+      console.log('Getting job with endpoint:', endpoint_call);
+      return await numaGet(endpoint_call);
     } catch (error) {
       console.error('API Error fetching job:', error);
       throw error;

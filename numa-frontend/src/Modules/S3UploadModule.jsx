@@ -1,16 +1,14 @@
-import { useState, useRef } from "react";
-import { Button } from "react-bootstrap";
-import config from "../../public/config.json";
-import { useNumaApp } from "../Providers/NumaAppProvider";
-import { useNumaRequest } from "../Providers/RequestProvider";
-import { useAuth } from "../Providers/AuthProvider";
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Button } from 'react-bootstrap';
+import { useNumaApp } from '../Providers/NumaAppContext';
+import { useAuth } from '../Providers/AuthProvider';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import axios from "axios";
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import axios from 'axios';
+import { Preloader } from '../Components/Preloader';
 
-function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
-  const { loading, numaAppId } = useNumaApp();
-  const { numaGet } = useNumaRequest();
+function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
+  const { loading, numaAppId, appRunning, numaTaskResponses } = useNumaApp();
   const { getIdentityPoolCredentials } = useAuth();
 
   const [selectedFile, setSelectedFile] = useState(null);
@@ -18,24 +16,44 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [bucketName, setBucketName] = useState();
+  const [region, setRegion] = useState();
 
   const fileInputRef = useRef(null);
 
+  const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
 
-  // Extracting task parameters
-  const taskId = task?.id;
-  const taskTitle = task?.title;
-  const bucketName = `numa-${config.CLIENT_NAME}-outputs`;
+  useEffect(() => {
+    if (value) {
+      setSelectedFile({ name: value.split('/').pop() });
+      setUploadStatus('Upload successful!');
+    }
+  }, [value]);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const fetchConfig = useCallback(async () => {
+    const config = await (await fetch('/config.json')).json();
+    setBucketName(`numa-${config.CLIENT_NAME}-outputs`);
+    setRegion(config.REGION);
+  }, []);
+
+  useEffect(() => {
+    fetchConfig();
+  }, [fetchConfig]);
+
+  const handleFileSelection = (file) => {
     if (file) {
       setSelectedFile(file);
       setUploadStatus(null);
       setUploadProgress(0);
       setError(null);
       onNotComplete();
+      // Just store the file path initially
+      onChange(null);
     }
+  };
+
+  const handleFileChange = (e) => {
+    handleFileSelection(e.target.files[0]);
   };
 
   const handleDragEnter = (e) => {
@@ -59,15 +77,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      setSelectedFile(file);
-      setUploadStatus(null);
-      setUploadProgress(0);
-      setError(null);
-      onNotComplete();
-    }
+    handleFileSelection(e.dataTransfer.files[0]);
   };
 
   const handleZoneClick = (e) => {
@@ -79,12 +89,12 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
 
   const handleUpload = async () => {
     if (!selectedFile) {
-      setError("Please select a file first");
+      setError('Please select a file first');
       return;
     }
 
     try {
-      setUploadStatus("Uploading...");
+      setUploadStatus('Uploading...');
       setError(null);
 
       const relativePath = selectedFile.name;
@@ -93,109 +103,91 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
         .map((segment) => encodeURIComponent(segment))
         .join('/');
 
-      console.log("Requesting presigned URL for:", {
-        fileName: relativePath,
-        bucketName: bucketName,
-      });
-
-      // User generates a presigned URL
       const s3Client = new S3Client({
-        region: config.REGION,
-        credentials: await getIdentityPoolCredentials()
+        region,
+        credentials: await getIdentityPoolCredentials(),
       });
 
       const command = new PutObjectCommand({
         Bucket: bucketName,
-        Key: `${numaAppId}/${encodedPath}`,  // Put files under the numaAppId folder
+        Key: `${numaAppId}/${encodedPath}`,
       });
 
       const presignedUrl = await getSignedUrl(s3Client, command, {
-        expiresIn: 3600, // URL expiration time in seconds
+        expiresIn: 3600,
       });
 
-      console.log('Presigned URL:', presignedUrl);
-
-      // Construct the file path (without S3 URL components)
       const filePath = command.input.Key;
 
-      console.log('S3 Upload Details:', {
-        destinationPath: relativePath,
-        uploadUrl: presignedUrl.split('?')[0], // Show URL without query parameters
-      });
-
-      // Upload file to S3
       await axios.put(presignedUrl, selectedFile, {
         headers: {
-          "Content-Type": selectedFile.type || "application/octet-stream",
+          'Content-Type': selectedFile.type || 'application/octet-stream',
         },
         onUploadProgress: (progressEvent) => {
-          const progress = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           setUploadProgress(progress);
         },
       });
 
-      setUploadStatus("Upload successful!");
+      setUploadStatus('Upload successful!');
 
-      // Use the onChange prop to update the value
-      onChange([filePath]);
+      // After successful upload, store the S3 path
+      onChange(filePath);
       onComplete();
     } catch (error) {
-      console.error("Error during file upload:", error);
+      console.error('Error during file upload:', error);
 
       // Determine user-friendly error message
       let errorMessage;
       if (error.response?.status === 403) {
-        errorMessage = "Permission denied - please check your access rights";
+        errorMessage = 'Permission denied - please check your access rights';
       } else if (error.response?.status === 401) {
-        errorMessage = "Session expired - please log in again";
-      } else if (error.message.includes("Authentication error")) {
+        errorMessage = 'Session expired - please log in again';
+      } else if (error.message.includes('Authentication error')) {
         errorMessage = error.message;
-      } else if (error.message.includes("upload URL")) {
-        errorMessage = "Server configuration error - please contact support";
-      } else if (error.code === "ERR_NETWORK") {
-        errorMessage = "Network error - please check your internet connection";
+      } else if (error.message.includes('upload URL')) {
+        errorMessage = 'Server configuration error - please contact support';
+      } else if (error.code === 'ERR_NETWORK') {
+        errorMessage = 'Network error - please check your internet connection';
       } else {
-        errorMessage = error.response?.data?.error ||
-                      error.response?.data?.message ||
-                      error.message ||
-                      "Error uploading file";
+        errorMessage =
+          error.response?.data?.error || error.response?.data?.message || error.message || 'Error uploading file';
       }
 
       setError(errorMessage);
-      setUploadStatus("Upload failed");
+      setUploadStatus('Upload failed');
       onNotComplete?.();
     }
   };
 
   return (
     <div className="task-container">
-      {taskTitle && <h3>{taskTitle}</h3>}
+      {task?.title && <h3>{task.title}</h3>}
 
       <div
-        className={`upload-container bg-light p-4 rounded ${isDragging ? "dragging" : ""}`}
+        className={`upload-container bg-light p-4 rounded ${isDragging ? 'dragging' : ''}`}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={handleZoneClick}
       >
+        {appRunning && !taskResponse?.result && <Preloader overlayParent={true} />}
         <input
           type="file"
           onChange={handleFileChange}
           ref={fileInputRef}
-          id={`file-upload-${taskId}`}
-          style={{ display: "none" }}
+          id={`file-upload-${task?.id}`}
+          style={{ display: 'none' }}
         />
         <div className="text-center">
-          <i className="bi bi-cloud-upload" style={{ fontSize: "2rem" }}></i>
+          <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
           <p className="mt-2">Drag and drop your files here, or</p>
           <Button
             variant="primary"
             as="label"
-            htmlFor={`file-upload-${taskId}`}
-            style={{ cursor: "pointer", pointerEvents: "auto" }}
+            htmlFor={`file-upload-${task?.id}`}
+            style={{ cursor: 'pointer', pointerEvents: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
             Select Files
@@ -206,12 +198,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange }) {
             </div>
           )}
           {selectedFile && !uploadStatus && (
-            <Button
-              variant="primary"
-              onClick={handleUpload}
-              className="mt-3"
-              disabled={loading}
-            >
+            <Button variant="primary" onClick={handleUpload} className="mt-3" disabled={loading}>
               Upload
             </Button>
           )}

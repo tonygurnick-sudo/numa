@@ -9,11 +9,12 @@ import structlog
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+from .prompts import GET_TEXT_FROM_IMAGE_QUERY
+
 CLAUDE_3_5_SONNET_INPUT_PRICE = 0.003
 CLAUDE_3_5_SONNET_OUTPUT_PRICE = 0.015
 
 MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024  # 5MB
-GET_TEXT_FROM_IMAGE_QUERY = """Below is an image of some meeting notes. Please scrape and return the text from the image. If there are images/drawings, describe what they are in as much detail as possible as part of your extraction. E.g. drawing: a drawing of a dog. Just return the extract text and image/drawing information from the document."""
 
 logger = structlog.get_logger(__name__)
 s3_client = boto3.client("s3")

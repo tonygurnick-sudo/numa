@@ -1,19 +1,14 @@
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
-import { NumaLogin } from "./Pages/Login";
-import { ResetPassword } from "./Pages/ResetPassword";
-import { Dash } from "./Pages/Dash";
-import AppDetail from "./Pages/AppDetail";
+import { BrowserRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
+import { NumaLogin } from './Pages/Login';
+import { ResetPassword } from './Pages/ResetPassword';
+import { Dash } from './Pages/Dash';
+import AppDetail from './Pages/AppDetail';
 
-import { AuthProvider, useAuth } from "./Providers/AuthProvider";
-import { NumaAppProvider } from "./Providers/NumaAppProvider";
-import { NumaChat } from "./Pages/NumaChat";
-import { S3Uploader } from "./Pages/S3Uploader";
-import { NumaRequestProvider } from "./Providers/RequestProvider";
+import { AuthProvider, useAuth } from './Providers/AuthProvider';
+import { NumaAppProvider } from './Providers/NumaAppProvider';
+import { NumaChat } from './Pages/NumaChat';
+import { S3Uploader } from './Pages/S3Uploader';
+import { NumaRequestProvider } from './Providers/RequestProvider';
 
 const NumaRoutes = () => {
   return (
@@ -30,6 +25,8 @@ const NumaRoutes = () => {
 };
 
 const AppRoutes = () => {
+  const navigate = useNavigate();
+
   const { user, loading, tokenValidationComplete } = useAuth();
 
   if (loading || !tokenValidationComplete) {
@@ -47,18 +44,17 @@ const AppRoutes = () => {
     return children;
   };
 
+  const reloadFavsToRefresh = () => {
+    navigate('/favourite-apps');
+    window.location.reload();
+  };
+
   return (
     <Routes>
-      <Route
-        path="/login"
-        element={user ? <Navigate to="/dash" replace /> : <NumaLogin />}
-      />
+      <Route path="/login" element={user ? <Navigate to="/dash" replace /> : <NumaLogin />} />
       <Route path="/reset-password" element={<ResetPassword />} />
 
-      <Route
-        path="/"
-        element={<Navigate to={user ? "/dash" : "/login"} replace />}
-      />
+      <Route path="/" element={<Navigate to={user ? '/dash' : '/login'} replace />} />
 
       <Route
         path="/dash"
@@ -73,7 +69,7 @@ const AppRoutes = () => {
         path="/favourite-apps"
         element={
           <ProtectedRoute>
-            <Dash showFavorites={true} />
+            <Dash onClick={reloadFavsToRefresh} showFavorites={true} />
           </ProtectedRoute>
         }
       />

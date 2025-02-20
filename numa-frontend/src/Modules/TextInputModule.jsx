@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Form } from 'react-bootstrap';
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
 
 function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
-  const { loading, taskInputValues } = useNumaApp();
+  const { numaTaskResponses, appRunning, taskInputValues } = useNumaApp();
   const [inputValue, setInputValue] = useState('');
 
-  // const [isTaskComplete, setIsTaskComplete] = useState(false);
-  // const inputRef = useRef();
+  const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
 
   // Set the input value on the first render based on taskInputValues or task.default
   useEffect(() => {
@@ -47,21 +46,21 @@ function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
 
   return (
     <>
-          {task.title && <h3>{task.title}</h3>}
-        {loading && <Preloader smallscreen={true} overlayParent={true} />}
-        <Form.Group controlId={`text-input-${task.id}`}>
-          <Form.Label>{task?.title}</Form.Label>
-          <Form.Control
-            as="textarea"
-            rows={7}
-            placeholder="Enter text here..."
-            value={inputValue}
-            onChange={handleInputChange}
-            onBlur={handleCommit}
-            onKeyPress={handleKeyPress}
-          />
-        </Form.Group>
-</>
+      {task.title && <h3>{task.title}</h3>}
+      <Form.Group controlId={`text-input-${task.id}`}>
+        <Form.Label>{task?.title}</Form.Label>
+        {appRunning && !taskResponse?.result && <Preloader overlayParent={true} />}
+        <Form.Control
+          as="textarea"
+          rows={7}
+          placeholder="Enter text here..."
+          value={inputValue}
+          onChange={handleInputChange}
+          onBlur={handleCommit}
+          onKeyPress={handleKeyPress}
+        />
+      </Form.Group>
+    </>
   );
 }
 

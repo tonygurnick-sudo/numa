@@ -1,4 +1,8 @@
-import { CognitoIdentityProviderClient, DescribeUserPoolClientCommand, UpdateUserPoolClientCommand } from '@aws-sdk/client-cognito-identity-provider';
+import {
+  CognitoIdentityProviderClient,
+  DescribeUserPoolClientCommand,
+  UpdateUserPoolClientCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 
 export async function handler(event, _context) {
   const { userPoolId, userPoolClientId, callbackAddress } = event;
@@ -16,4 +20,4 @@ export async function handler(event, _context) {
   });
   const updateResult = await client.send(updateCommand);
   console.log(updateResult);
-};
+}

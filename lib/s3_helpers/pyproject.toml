@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "s3_helpers"
+version = "0.1.0"
+description = ""
+authors = ["Arcanum AI"]
+readme = "README.md"
+packages = [
+    { include = "s3_helpers" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+
+boto3 = "1.36.13"
+structlog = "25.1.0"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = "1.36.13"
+mypy = "1.15.0"
+pylint = "3.3.4"
+pyright = "1.1.393"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

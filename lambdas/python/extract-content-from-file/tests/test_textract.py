@@ -56,6 +56,30 @@ class TestTextract(unittest.TestCase):
         start_job_mock.assert_called_once_with("test-bucket", "test-key")
         get_blocks_mock.assert_called_once_with("test_job_id")
 
+    def test_unicode_normalization(self):
+        blocks = [
+            {
+                "BlockType": "LINE",
+                "Text": "M\u00e3ori and 8% Samoan students",
+                "Page": 1,
+            },
+            {
+                "BlockType": "LINE",
+                "Text": "role within the Northern Porirua K\u00e4hui",
+                "Page": 1,
+            },
+            {"BlockType": "LINE", "Text": "Te K\u014dhanga Reo wh\u0101nau", "Page": 2},
+        ]
+        pages = textract._get_pages(blocks)
+        self.assertEqual(
+            pages,
+            {
+                1: "Maori and 8% Samoan students\n"
+                "role within the Northern Porirua Kahui\n",
+                2: "Te Kohanga Reo whanau\n",
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

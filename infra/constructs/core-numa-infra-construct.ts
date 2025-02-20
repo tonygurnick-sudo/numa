@@ -200,6 +200,25 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
+    const dataBucket = new NumaCorsEnabledBucket(this, 'data-source-bucket', {
+      bucketName: 'data',
+      client: props.client,
+      environmentName: props.environmentName,
+      clientAccountId: props.clientAccountId,
+      allowedMethods: ['GET', 'PUT', 'DELETE'],
+      allowLocalhostOrigin: props.devInstance,
+    });
+
+    this.outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
+      client: props.client,
+      clientAccountId: props.clientAccountId,
+      environmentName: props.environmentName,
+      bucketName: 'outputs',
+      allowedMethods: ['GET', 'PUT'],
+      allowLocalhostOrigin: props.devInstance,
+    });
+    this.outputsBucket.bucket.moveFromId('aws_s3_bucket.outputs-bucket_1F269801');
+
     const identityPoolRolePolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-policy', {
       statement: [
         {
@@ -208,14 +227,19 @@ export class CoreNumaInfra extends Construct {
           resources: ['*'],
         },
         {
+          actions: ['s3:ListBucket'], // this is required to get a 404 instead of a 403 if object not found
+          effect: 'Allow',
+          resources: [this.outputsBucket.bucket.arn],
+        },
+        {
           effect: 'Allow',
           actions: ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject'],
-          resources: [`arn:aws:s3:::${numaClient}-outputs/*`, `arn:aws:s3:::${numaClient}-outputs`],
+          resources: [`${this.outputsBucket.bucket.arn}/*`, this.outputsBucket.bucket.arn],
         },
         {
           effect: 'Allow',
           actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject'],
-          resources: [`arn:aws:s3:::${numaClient}-data/*`, `arn:aws:s3:::${numaClient}-data`],
+          resources: [`${dataBucket.bucket.arn}/*`, dataBucket.bucket.arn],
         },
       ],
     });
@@ -467,23 +491,6 @@ export class CoreNumaInfra extends Construct {
       }),
     });
 
-    const dataBucket = new NumaCorsEnabledBucket(this, 'data-source-bucket', {
-      bucketName: 'data',
-      client: props.client,
-      environmentName: props.environmentName,
-      clientAccountId: props.clientAccountId,
-      allowedMethods: ['GET', 'PUT', 'DELETE'],
-    });
-
-    this.outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
-      client: props.client,
-      clientAccountId: props.clientAccountId,
-      environmentName: props.environmentName,
-      bucketName: 'outputs',
-      allowedMethods: ['GET', 'PUT'],
-      allowLocalhostOrigin: props.devInstance,
-    });
-
     if (props.loadSampleFile) {
       const sampleFile = 'numa-one-pager.pdf';
       new S3Object(this, 'sample-file', {
@@ -730,6 +737,7 @@ interface _CoreNumaInfraProps {
    * Various settings to make development easier:
    *
    * - add localhost CORS value to outputs bucket.
+   * - add localhost CORS value to data bucket.
    *
    * @default false
    */

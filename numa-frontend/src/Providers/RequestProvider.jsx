@@ -1,16 +1,6 @@
-import React, { createContext, useContext } from 'react';
 import axios from 'axios';
 import { useAuth } from './AuthProvider';
-
-const NumaRequestContext = createContext();
-
-export const useNumaRequest = () => {
-  const context = useContext(NumaRequestContext);
-  if (!context) {
-    throw new Error('useRequest must be used within a RequestProvider');
-  }
-  return context;
-};
+import { NumaRequestContext } from './NumaRequestContext';
 
 export const NumaRequestProvider = ({ children }) => {
   const { user } = useAuth();
@@ -18,7 +8,7 @@ export const NumaRequestProvider = ({ children }) => {
   const defaultHeaders = {
     'Content-Type': 'application/json',
     ...(user?.tokens?.accessToken && {
-      'authorization': user.tokens.accessToken
+      authorization: user.tokens.accessToken,
     }),
   };
 
@@ -26,17 +16,17 @@ export const NumaRequestProvider = ({ children }) => {
     if (typeof data === 'string') {
       try {
         return JSON.parse(data);
-      } catch (error) {
+      } catch {
         return data;
       }
     }
 
     if (Array.isArray(data)) {
-      return data.map(item => {
+      return data.map((item) => {
         if (item.body && typeof item.body === 'string') {
           try {
             item.body = JSON.parse(item.body);
-          } catch (error) {
+          } catch {
             // Keep original string if parsing fails
           }
         }
@@ -48,14 +38,16 @@ export const NumaRequestProvider = ({ children }) => {
   };
 
   const axiosConfig = {
-    transformResponse: [(data) => {
-      try {
-        const parsedData = JSON.parse(data);
-        return parseNestedJson(parsedData);
-      } catch (error) {
-        return data;
-      }
-    }],
+    transformResponse: [
+      (data) => {
+        try {
+          const parsedData = JSON.parse(data);
+          return parseNestedJson(parsedData);
+        } catch {
+          return data;
+        }
+      },
+    ],
   };
 
   // Common request methods
@@ -96,9 +88,5 @@ export const NumaRequestProvider = ({ children }) => {
     numaDelete,
   };
 
-  return (
-    <NumaRequestContext.Provider value={value}>
-      {children}
-    </NumaRequestContext.Provider>
-  );
+  return <NumaRequestContext.Provider value={value}>{children}</NumaRequestContext.Provider>;
 };

@@ -1,20 +1,8 @@
 import { useState, useEffect } from 'react';
 import { parse } from 'ini';
-import {
-  Container,
-  Form,
-  ListGroup,
-  Card,
-  Button,
-  Tabs,
-  Tab,
-  Alert,
-} from 'react-bootstrap';
+import { Container, Form, ListGroup, Card, Button, Tabs, Tab, Alert } from 'react-bootstrap';
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
-import {
-  QBusinessClient,
-  ListApplicationsCommand,
-} from '@aws-sdk/client-qbusiness';
+import { QBusinessClient, ListApplicationsCommand } from '@aws-sdk/client-qbusiness';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 import DataSourceManager from './DatasourceManager';
@@ -71,11 +59,12 @@ function App() {
   }, [temporaryCredentials]);
 
   useEffect(() => {
-    setOtherProfiles(Object.entries(clients)
-      .map(([profile, details]) => ({
+    setOtherProfiles(
+      Object.entries(clients).map(([profile, details]) => ({
         profile,
         role_arn: `arn:aws:iam::${details.clientAccountId}:role/ArcanumAIAccess`,
-      })));
+      })),
+    );
   }, []);
 
   const handleFileUpload = (event) => {
@@ -87,8 +76,7 @@ function App() {
       const parsedCredentials = parse(content);
 
       // Extract default profile
-      const defaultCreds =
-        parsedCredentials.default || parsedCredentials.DEFAULT;
+      const defaultCreds = parsedCredentials.default || parsedCredentials.DEFAULT;
       setDefaultProfile(defaultCreds);
     };
 
@@ -117,10 +105,8 @@ function App() {
       const firstResponse = await stsClient.send(firstAssumeCommand);
       console.log('First assumed role credentials:', {
         accessKeyId: firstResponse.Credentials.AccessKeyId,
-        secretAccessKey:
-          firstResponse.Credentials.SecretAccessKey.substring(0, 5) + '...',
-        sessionToken:
-          firstResponse.Credentials.SessionToken.substring(0, 10) + '...',
+        secretAccessKey: firstResponse.Credentials.SecretAccessKey.substring(0, 5) + '...',
+        sessionToken: firstResponse.Credentials.SessionToken.substring(0, 10) + '...',
         expiration: firstResponse.Credentials.Expiration,
       });
 
@@ -148,10 +134,8 @@ function App() {
       const finalResponse = await secondStsClient.send(secondAssumeCommand);
       console.log('Final assumed role credentials:', {
         accessKeyId: finalResponse.Credentials.AccessKeyId,
-        secretAccessKey:
-          finalResponse.Credentials.SecretAccessKey.substring(0, 5) + '...',
-        sessionToken:
-          finalResponse.Credentials.SessionToken.substring(0, 10) + '...',
+        secretAccessKey: finalResponse.Credentials.SecretAccessKey.substring(0, 5) + '...',
+        sessionToken: finalResponse.Credentials.SessionToken.substring(0, 10) + '...',
         expiration: finalResponse.Credentials.Expiration,
       });
 
@@ -190,11 +174,7 @@ function App() {
 
             <Form.Group controlId="credentialsFile" className="mb-4">
               <Form.Label>AWS Credentials File</Form.Label>
-              <Form.Control
-                type="file"
-                accept="*"
-                onChange={handleFileUpload}
-              />
+              <Form.Control type="file" accept="*" onChange={handleFileUpload} />
             </Form.Group>
 
             <div className="row mb-4">
@@ -205,9 +185,7 @@ function App() {
                       <h2 className="h5 mb-0">Default Profile</h2>
                     </Card.Header>
                     <Card.Body>
-                      <p className="text-success mb-0">
-                        ✓ Default credentials loaded successfully
-                      </p>
+                      <p className="text-success mb-0">✓ Default credentials loaded successfully</p>
                     </Card.Body>
                   </Card>
                 )}
@@ -246,9 +224,7 @@ function App() {
                     </ListGroup>
                     {assumedRoleStatus && (
                       <Card.Footer>
-                        <p
-                          className={`mb-0 ${assumedRoleStatus.includes('Error') ? 'text-danger' : 'text-success'}`}
-                        >
+                        <p className={`mb-0 ${assumedRoleStatus.includes('Error') ? 'text-danger' : 'text-success'}`}>
                           {assumedRoleStatus}
                         </p>
                       </Card.Footer>
@@ -269,15 +245,9 @@ function App() {
             </div>
 
             {applicationError ? (
-              <Alert variant="danger">
-                Error loading applications: {applicationError}
-              </Alert>
+              <Alert variant="danger">Error loading applications: {applicationError}</Alert>
             ) : applications.length > 0 ? (
-              <Tabs
-                activeKey={activeTab}
-                onSelect={(k) => setActiveTab(k)}
-                className="mb-4"
-              >
+              <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="mb-4">
                 <Tab eventKey="datasources" title="Data Sources">
                   <DataSourceManager
                     temporaryCredentials={temporaryCredentials}

@@ -18,6 +18,7 @@ const NumaChat = () => {
   const [conversationId, setConversationId] = useState(null);
   const [previousMessageId, setPreviousMessageId] = useState(null);
   const [chatMode, setChatMode] = useState('RETRIEVAL_MODE');
+  const [showModeSelector, setShowModeSelector] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const messageEndRef = useRef(null);
@@ -28,7 +29,7 @@ const NumaChat = () => {
   const chatModes = [
     { value: 'RETRIEVAL_MODE', label: 'Retrieval Mode - Use indexed data sources' },
     { value: 'CREATOR_MODE', label: 'Creator Mode - Use LLM knowledge' },
-    { value: 'PLUGIN_MODE', label: 'Plugin Mode - Use plugins' }
+    { value: 'PLUGIN_MODE', label: 'Plugin Mode - Use plugins' },
   ];
 
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
@@ -36,7 +37,6 @@ const NumaChat = () => {
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
 
   useEffect(() => {
     const handleResize = () => {
@@ -47,7 +47,6 @@ const NumaChat = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!inputMessage.trim()) return;
@@ -56,7 +55,7 @@ const NumaChat = () => {
       setIsLoading(true);
       setError(null);
 
-      if(!Q_APPLICATION_ID) {
+      if (!Q_APPLICATION_ID) {
         setError('No Q application ID found');
         console.error('No Q application ID found');
         return;
@@ -67,14 +66,21 @@ const NumaChat = () => {
         applicationId: Q_APPLICATION_ID,
         userMessage: inputMessage,
         chatMode: chatMode,
-        clientToken: Date.now().toString()
+        clientToken: Date.now().toString(),
       };
+
+      console.log('Sending chat message with input:', {
+        ...input,
+        conversationId,
+        previousMessageId,
+        chatMode,
+      });
 
       // Add attachments only if there are files
       if (uploadedFiles.length > 0) {
-        const attachments = uploadedFiles.map(file => ({
+        const attachments = uploadedFiles.map((file) => ({
           name: file.name,
-          data: file.data
+          data: file.data,
         }));
 
         input.attachments = attachments;
@@ -88,7 +94,7 @@ const NumaChat = () => {
 
       // Add user message to chat immediately
       const userMessage = { role: 'user', content: inputMessage };
-      setMessages(prevMessages => [...prevMessages, userMessage]);
+      setMessages((prevMessages) => [...prevMessages, userMessage]);
       setInputMessage('');
 
       // Send message to API
@@ -98,37 +104,35 @@ const NumaChat = () => {
 
         // Handle failed attachments
         if (response.failedAttachments && response.failedAttachments.length > 0) {
-          const failedFiles = response.failedAttachments.map(failure => ({
+          const failedFiles = response.failedAttachments.map((failure) => ({
             name: failure.name,
-            reason: failure.failureReason || 'Unknown error'
+            reason: failure.failureReason || 'Unknown error',
           }));
           console.error('Failed attachments details:', {
             failedFiles,
             fullResponse: response,
             sentInput: {
               ...input,
-              attachments: input.attachments.map(a => ({
+              attachments: input.attachments.map((a) => ({
                 name: a.name,
                 dataPreview: a.data?.substring(0, 100) + '...',
-                dataLength: a.data?.length
-              }))
-            }
+                dataLength: a.data?.length,
+              })),
+            },
           });
 
           // Remove failed files from uploadedFiles
-          const failedFileNames = new Set(failedFiles.map(f => f.name));
-          setUploadedFiles(prevFiles =>
-            prevFiles.filter(f => !failedFileNames.has(f.name))
-          );
+          const failedFileNames = new Set(failedFiles.map((f) => f.name));
+          setUploadedFiles((prevFiles) => prevFiles.filter((f) => !failedFileNames.has(f.name)));
 
           // Add error message to chat
           const errorMessage = {
             role: 'system',
-            content: `Failed to process files: ${failedFiles.map(f =>
-              `${f.name} (${f.reason})`
-            ).join(', ')}. Please try uploading the files again.`
+            content: `Failed to process files: ${failedFiles
+              .map((f) => `${f.name} (${f.reason})`)
+              .join(', ')}. Please try uploading the files again.`,
           };
-          setMessages(prevMessages => [...prevMessages, errorMessage]);
+          setMessages((prevMessages) => [...prevMessages, errorMessage]);
           return; // Don't proceed with the conversation if files failed
         }
 
@@ -147,9 +151,9 @@ const NumaChat = () => {
           const assistantMessage = {
             role: 'assistant',
             content: responseContent,
-            sourceAttributions: response.sourceAttributions
+            sourceAttributions: response.sourceAttributions,
           };
-          setMessages(prevMessages => [...prevMessages, assistantMessage]);
+          setMessages((prevMessages) => [...prevMessages, assistantMessage]);
         }
 
         setIsLoading(false);
@@ -157,10 +161,10 @@ const NumaChat = () => {
         console.error('API Error:', {
           error,
           input,
-          attachments: input.attachments.map(a => ({
+          attachments: input.attachments.map((a) => ({
             name: a.name,
-            dataLength: a.data?.length
-          }))
+            dataLength: a.data?.length,
+          })),
         });
         throw error;
       }
@@ -172,9 +176,9 @@ const NumaChat = () => {
       // Add error message to chat
       const errorMessage = {
         role: 'system',
-        content: `Error: ${error.message || 'Failed to send message'}. Please try again.`
+        content: `Error: ${error.message || 'Failed to send message'}. Please try again.`,
       };
-      setMessages(prevMessages => [...prevMessages, errorMessage]);
+      setMessages((prevMessages) => [...prevMessages, errorMessage]);
     }
   };
 
@@ -184,12 +188,12 @@ const NumaChat = () => {
     if (processedFiles.length > 0) {
       setChatMode('CREATOR_MODE');
       // Add system message about uploaded files
-      const fileNames = processedFiles.map(file => file.name).join(', ');
+      const fileNames = processedFiles.map((file) => file.name).join(', ');
       const systemMessage = {
         role: 'system',
-        content: `Files uploaded successfully: ${fileNames}\n\nYou can now ask questions about the content of these files. For example:\n- "What is this document about?"\n- "Can you summarize the main points?"\n- "What are the key findings?"`
+        content: `Files uploaded successfully: ${fileNames}\n\nYou can now ask questions about the content of these files. For example:\n- "What is this document about?"\n- "Can you summarize the main points?"\n- "What are the key findings?"`,
       };
-      setMessages(prevMessages => [...prevMessages, systemMessage]);
+      setMessages((prevMessages) => [...prevMessages, systemMessage]);
     }
     setShowUploadModal(false);
   };
@@ -204,9 +208,9 @@ const NumaChat = () => {
       setChatMode('RETRIEVAL_MODE');
       const systemMessage = {
         role: 'system',
-        content: 'All files have been removed. Switched back to retrieval mode.'
+        content: 'All files have been removed. Switched back to retrieval mode.',
       };
-      setMessages(prevMessages => [...prevMessages, systemMessage]);
+      setMessages((prevMessages) => [...prevMessages, systemMessage]);
     }
   };
 
@@ -214,36 +218,45 @@ const NumaChat = () => {
     if (!attributions || attributions.length === 0) return null;
 
     return (
-        <small>
-          Sources:
-          {attributions.map((source, index) => (
-            <div key={index} className="ms-2">
-              {source.citationNumber}. {source.title}
-              {source.url && (
-                <a href={source.url} target="_blank" rel="noopener noreferrer">
-                  {' '}
-                  (link)
-                </a>
-              )}
-            </div>
-          ))}
-        </small>
+      <small>
+        Sources:
+        {attributions.map((source, index) => (
+          <div key={index} className="ms-2">
+            {source.citationNumber}. {source.title}
+            {source.url && (
+              <a href={source.url} target="_blank" rel="noopener noreferrer">
+                {' '}
+                (link)
+              </a>
+            )}
+          </div>
+        ))}
+      </small>
     );
   };
 
   const handleNewChat = () => {
-    setMessages([{
-      role: 'system',
-      content: 'How can I help you today?'
-    }]);
-    setUploadedFiles([]);
+    setMessages([
+      {
+        role: 'system',
+        content: 'How can I help you today?',
+      },
+    ]);
     setConversationId(null);
     setPreviousMessageId(null);
-    setInputMessage('');
+    setError(null);
+    setShowModeSelector(true);
     setChatMode('RETRIEVAL_MODE');
+    setUploadedFiles([]);
+    setInputMessage('');
   };
 
   const handleLoadConversation = (loadedMessages, selectedConversationId) => {
+    console.log('Loading conversation:', {
+      selectedConversationId,
+      messageCount: loadedMessages?.length,
+      messages: loadedMessages,
+    });
 
     if (!loadedMessages || loadedMessages.length === 0) {
       setError('No messages found in this conversation');
@@ -262,16 +275,9 @@ const NumaChat = () => {
       setPreviousMessageId(lastMessage.id);
     }
 
-    // Set the conversation mode based on the loaded conversation
-    // Default to RETRIEVAL_MODE if no mode is found
-    const systemMessage = loadedMessages.find(msg => msg.role === 'system');
-    if (systemMessage && systemMessage.content.includes('CREATOR_MODE')) {
-      setChatMode('CREATOR_MODE');
-    } else if (systemMessage && systemMessage.content.includes('PLUGIN_MODE')) {
-      setChatMode('PLUGIN_MODE');
-    } else {
-      setChatMode('RETRIEVAL_MODE');
-    }
+    // Hide mode selector for loaded conversations since we don't know the original mode
+    setShowModeSelector(false);
+    setChatMode('RETRIEVAL_MODE');
   };
 
   const handleKeyDown = (e) => {
@@ -307,30 +313,24 @@ const NumaChat = () => {
           <div className="flex-grow-1 d-flex">
             <DataSourcesList />
             <div className="chat-content flex-grow-1 d-flex flex-column">
-              <p className="mb-1 small text-muted">
-                Chat with your documents using Amazon Q Business. Ask anything!
-              </p>
+              <p className="mb-1 small text-muted">Chat with your documents using Amazon Q Business. Ask anything!</p>
 
               <div className="chat-header d-flex align-items-center mb-3">
-                <Button
-                  className="btn btn-primary"
-                  onClick={handleNewChat}
-                >
+                <Button className="btn btn-primary" onClick={handleNewChat}>
                   New Chat
                 </Button>
 
-                <div className="chat-mode-selector ms-auto">
-                  <Form.Select
-                    value={chatMode}
-                    onChange={(e) => setChatMode(e.target.value)}
-                  >
-                    {chatModes.map((mode) => (
-                      <option key={mode.value} value={mode.value}>
-                        {mode.label}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </div>
+                {showModeSelector && (
+                  <div className="chat-mode-selector ms-auto">
+                    <Form.Select value={chatMode} onChange={(e) => setChatMode(e.target.value)}>
+                      {chatModes.map((mode) => (
+                        <option key={mode.value} value={mode.value}>
+                          {mode.label}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </div>
+                )}
               </div>
 
               <div className="chat-container">
@@ -342,10 +342,7 @@ const NumaChat = () => {
                     </div>
                   ) : (
                     messages.map((message, index) => (
-                      <div
-                        key={index}
-                        className={`message ${message.role}`}
-                      >
+                      <div key={index} className={`message ${message.role}`}>
                         {message.role === 'system' ? (
                           <div className="system-message">
                             <i className="bi bi-info-circle me-2"></i>
@@ -355,9 +352,7 @@ const NumaChat = () => {
                           </div>
                         ) : (
                           <>
-                            <strong className="message-role">
-                              {message.role === 'user' ? 'You:' : 'Numa:'}
-                            </strong>
+                            <strong className="message-role">{message.role === 'user' ? 'You:' : 'Numa:'}</strong>
                             <div className="message-content markdown-content">
                               <MarkdownContent content={message.content} />
                             </div>
@@ -383,10 +378,7 @@ const NumaChat = () => {
                 </div>
 
                 <div className="chat-input-container">
-                  <Form
-                    onSubmit={handleSubmit}
-                    data-testid="chat-form"
-                  >
+                  <Form onSubmit={handleSubmit} data-testid="chat-form">
                     <Form.Group className="mb-2 position-relative">
                       <Form.Control
                         as="textarea"

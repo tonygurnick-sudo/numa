@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 
 export async function handler(event, _context) {
   const { distributionId, paths } = event;
-  const items = paths?.split(',').map((path) => path.startsWith('/') ? path : `/${path}`) ?? ['/*'];
+  const items = paths?.split(',').map((path) => (path.startsWith('/') ? path : `/${path}`)) ?? ['/*'];
 
   const client = new CloudFrontClient({ region: 'us-east-1' });
   const input = {
@@ -18,4 +18,4 @@ export async function handler(event, _context) {
   };
   const invalidationCommand = new CreateInvalidationCommand(input);
   console.log(await client.send(invalidationCommand));
-};
+}

@@ -101,10 +101,7 @@ describe('S3Uploader', () => {
       expect(screen.getByText('file1.txt')).toBeInTheDocument();
     });
 
-    const newFiles = [
-      ...mockFiles,
-      { key: 'newfile.txt', lastModified: '2024-01-04', size: 4096 },
-    ];
+    const newFiles = [...mockFiles, { key: 'newfile.txt', lastModified: '2024-01-04', size: 4096 }];
     axios.get.mockResolvedValueOnce({ data: { files: newFiles } });
 
     const mockUploadButton = screen.getByText('Mock Upload');
@@ -116,9 +113,7 @@ describe('S3Uploader', () => {
   });
 
   it('should show loading state while fetching files', async () => {
-    axios.get.mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 100)),
-    );
+    axios.get.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 100)));
 
     renderComponent();
 
@@ -130,17 +125,13 @@ describe('S3Uploader', () => {
   });
 
   it('should handle API errors gracefully', async () => {
-    const consoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     axios.get.mockRejectedValue(new Error('API Error'));
 
     renderComponent();
 
     await waitFor(() => {
-      expect(
-        screen.getByText('No files in knowledge base'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('No files in knowledge base')).toBeInTheDocument();
     });
 
     consoleError.mockRestore();
@@ -158,9 +149,7 @@ describe('S3Uploader', () => {
 
     // Wait for initial expanded state
     await waitFor(() => {
-      const folderContent = screen
-        .getByText('file2.txt')
-        .closest('.folder-content');
+      const folderContent = screen.getByText('file2.txt').closest('.folder-content');
       expect(folderContent).toHaveClass('folder-content-expanded');
     });
 
@@ -169,9 +158,7 @@ describe('S3Uploader', () => {
 
     // Wait for folder content to be collapsed
     await waitFor(() => {
-      const folderContent = screen
-        .getByText('file2.txt')
-        .closest('.folder-content');
+      const folderContent = screen.getByText('file2.txt').closest('.folder-content');
       expect(folderContent).toHaveClass('folder-content-collapsed');
     });
 
@@ -180,9 +167,7 @@ describe('S3Uploader', () => {
 
     // Wait for folder content to be expanded
     await waitFor(() => {
-      const folderContent = screen
-        .getByText('file2.txt')
-        .closest('.folder-content');
+      const folderContent = screen.getByText('file2.txt').closest('.folder-content');
       expect(folderContent).toHaveClass('folder-content-expanded');
     });
   });

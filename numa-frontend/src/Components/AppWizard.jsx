@@ -1,6 +1,6 @@
-import { useState, useMemo, useCallback } from 'react';
-import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useMemo, useCallback } from 'react';
+import { Container, Row, Col, Button, Alert } from 'react-bootstrap';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
 import { TextOutputModule } from '../Modules/TextOutputModule';
@@ -23,43 +23,31 @@ const AppWizard = ({ manifest }) => {
     taskInputValues,
     setTaskInputValues,
     setError,
-    selectedTaskId,
     setSelectedTaskId,
     activeStep,
     setActiveStep,
     error,
+    hasRun,
+    setHasRun,
   } = useNumaApp();
-  const [hasRun, setHasRun] = useState(false);
 
   // Filter out hidden tasks and system tasks (q-app and http-request)
   const visibleTasks = useMemo(
     () =>
-      manifest?.tasks?.filter(
-        (task) =>
-          !task.hidden && task.type !== 'q-app' && task.type !== 'http-request',
-      ) || [],
+      manifest?.tasks?.filter((task) => !task.hidden && task.type !== 'q-app' && task.type !== 'http-request') || [],
     [manifest?.tasks],
   );
 
   // Split tasks into pre-run and post-run groups
-  const preRunTasks = useMemo(
-    () => visibleTasks.filter((task) => !task.type.includes('output')),
-    [visibleTasks],
-  );
+  const preRunTasks = useMemo(() => visibleTasks.filter((task) => !task.type.includes('output')), [visibleTasks]);
 
-  const postRunTasks = useMemo(
-    () => visibleTasks.filter((task) => task.type.includes('output')),
-    [visibleTasks],
-  );
+  const postRunTasks = useMemo(() => visibleTasks.filter((task) => task.type.includes('output')), [visibleTasks]);
 
   // Mark tasks with default content as complete when navigating
   const markDefaultContentComplete = useCallback(
     (taskIndex) => {
       const currentTask = visibleTasks[taskIndex];
-      if (
-        currentTask?.defaultContent &&
-        !taskCompletionStatus[currentTask.id]
-      ) {
+      if (currentTask?.defaultContent && !taskCompletionStatus[currentTask.id]) {
         updateTaskCompletionStatus(currentTask.id, true);
       }
     },
@@ -78,9 +66,7 @@ const AppWizard = ({ manifest }) => {
         }
 
         // For input tasks, check if we can navigate there
-        const maxAllowedStep = visibleTasks.findIndex(
-          (task, i) => !taskCompletionStatus[task.id] && i !== activeStep,
-        );
+        const maxAllowedStep = visibleTasks.findIndex((task, i) => !taskCompletionStatus[task.id] && i !== activeStep);
         if (maxAllowedStep === -1 || index <= maxAllowedStep) {
           markDefaultContentComplete(activeStep); // Mark current task if it has default content
           setActiveStep(index);
@@ -88,13 +74,7 @@ const AppWizard = ({ manifest }) => {
         }
       }
     },
-    [
-      visibleTasks,
-      taskCompletionStatus,
-      activeStep,
-      markDefaultContentComplete,
-      setSelectedTaskId,
-    ],
+    [visibleTasks, taskCompletionStatus, activeStep, markDefaultContentComplete, setSelectedTaskId],
   );
 
   const handleRunApp = async () => {
@@ -106,22 +86,21 @@ const AppWizard = ({ manifest }) => {
       });
       setTaskCompletionStatus(updatedStatus);
 
-      setHasRun(true);
-      setAppRunning(true);
-      await handleRunButtonClick(numaAppData);
+      // Find and set the first output task as active immediately
+      const firstOutputTask = visibleTasks.find((task) => task.type.includes('output'));
 
-      // Find the first output task and set it as active
-      const firstOutputTask = visibleTasks.find((task) =>
-        task.type.includes('output'),
-      );
       if (firstOutputTask) {
         const outputIndex = visibleTasks.indexOf(firstOutputTask);
         setActiveStep(outputIndex);
         setSelectedTaskId(firstOutputTask.id);
       }
+
+      setHasRun(true);
+      setAppRunning(true);
+      await handleRunButtonClick(numaAppData);
     } catch (error) {
       console.error('Error running app:', error);
-      setError(error); // Set the error state directly
+      setError(error);
     } finally {
       setAppRunning(false);
     }
@@ -137,9 +116,7 @@ const AppWizard = ({ manifest }) => {
 
   const isStepDisabled = useCallback(
     (index) => {
-      const maxAllowedStep = visibleTasks.findIndex(
-        (task, i) => !taskCompletionStatus[task.id] && i !== activeStep,
-      );
+      const maxAllowedStep = visibleTasks.findIndex((task, i) => !taskCompletionStatus[task.id] && i !== activeStep);
       return maxAllowedStep !== -1 && index > maxAllowedStep;
     },
     [visibleTasks, taskCompletionStatus, activeStep],
@@ -232,39 +209,48 @@ const AppWizard = ({ manifest }) => {
             }}
             processingProgress={processingProgress}
             processingStatus={processingStatus}
+            hasRun={hasRun}
           />
 
           {/* Error and Processing Status */}
           <div className="mt-2" style={{ maxWidth: '600px', margin: '0 auto' }}>
             {error && (
-              <Alert
-                variant="danger"
-                onClose={() => setError(null)}
-                dismissible
-                className="py-2"
-              >
+              <Alert variant="danger" onClose={() => setError(null)} dismissible className="py-2">
                 {error.message || error}
               </Alert>
-            )}
-
-            {appRunning && (
-              <div className="text-center py-2">
-                <Preloader smallscreen={true} />
-                <div className="mt-1 text-muted">
-                  {processingStatus}
-                  {processingProgress > 0 && ` (${processingProgress}%)`}
-                </div>
-              </div>
             )}
           </div>
         </Col>
       </Row>
 
       <Row>
-        <Col xs={12} className="px-2 px-md-4">
+        <Col xs={12} className="px-2 px-md-4 position-relative">
           {activeStep < visibleTasks.length && (
-            <div className="mb-4">
+            <div className="mb-4 position-relative">
               {renderTask(visibleTasks[activeStep])}
+              <div
+                className="task-navigation position-absolute start-0 end-0 d-flex justify-content-between"
+                style={{ bottom: '-50px' }}
+              >
+                {activeStep < visibleTasks.length && (
+                  <>
+                    <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
+                      <i className="bi bi-arrow-left me-2"></i>
+                      Previous Input
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={handleNextStep}
+                      disabled={
+                        activeStep === visibleTasks.length - 1 || !taskCompletionStatus[visibleTasks[activeStep].id]
+                      }
+                    >
+                      Next Input
+                      <i className="bi bi-arrow-right ms-2"></i>
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           )}
         </Col>

@@ -7,7 +7,12 @@ Use the meeting notes or transcript to create a structured output that follows t
 
 <Template>
 {template}
-</Template>:
+</Template>
+
+Please also take into consideration meeting context or other notes if applicable.
+<Other Notes>
+{other_notes}
+</Other Notes>
 
 Output just the populated template and nothing else. Use subheadings and dot points as applicable. Return your output in markdown format.
 Result:"""

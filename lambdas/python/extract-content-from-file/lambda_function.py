@@ -5,9 +5,11 @@ import dataclasses
 import io
 import json
 import os
+import time
 
 import boto3
 
+import aws_transcribe
 import bedrock
 import helpers
 import textract
@@ -54,7 +56,18 @@ def handler(event: dict, _context) -> dict:
     elif input_key.lower().endswith((".pdf", ".tiff")):
         pages = textract.get_pages_from_document(input_bucket, input_key)
         document = _textract_pages_to_document(pages, input_key)
-    # TODO: Implement docx extraction
+    elif input_key.lower().endswith(
+        (".mp3", ".mp4", ".wav", ".flac", ".ogg", ".amr", ".webm", ".m4a")
+    ):
+        response = aws_transcribe.transcribe(
+            bucket=input_bucket,
+            key=input_key,
+            job_name=f"transcribe-{int(time.time())}",
+            output_bucket=output_bucket,
+            output_key=output_key,
+            name_for_logging=f"transcribe-{input_key}",
+        )
+        document = __text_to_document(response.text, input_key)
     else:
         raise UnsupportedFileFormat(f"{input_key} has an unsupported file format")
 

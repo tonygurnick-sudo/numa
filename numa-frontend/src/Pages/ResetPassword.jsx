@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Form } from 'react-bootstrap';
@@ -53,11 +53,7 @@ const ResetPassword = () => {
     }
 
     try {
-      await confirmPasswordReset(
-        emailRef.current.value,
-        codeRef.current.value,
-        newPassword,
-      );
+      await confirmPasswordReset(emailRef.current.value, codeRef.current.value, newPassword);
       setSuccess('Password reset successfully. Redirecting to login...');
       setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
@@ -78,17 +74,10 @@ const ResetPassword = () => {
           {!isCodeSent ? (
             <Form onSubmit={handleRequestReset}>
               <h1 className="mb-2">Request Password Reset</h1>
-              <p className="mb-4 fs-lg-1">
-                Enter your email to receive a password reset code.
-              </p>
+              <p className="mb-4 fs-lg-1">Enter your email to receive a password reset code.</p>
               <Form.Group className="mb-3">
                 <Form.Label>Email</Form.Label>
-                <Form.Control
-                  type="email"
-                  placeholder="Enter your email"
-                  ref={emailRef}
-                  required
-                />
+                <Form.Control type="email" placeholder="Enter your email" ref={emailRef} required />
               </Form.Group>
               <Button variant="primary" type="submit" disabled={loading}>
                 {loading ? 'Requesting...' : 'Request Password Reset'}
@@ -100,36 +89,19 @@ const ResetPassword = () => {
           ) : (
             <Form onSubmit={handleResetPassword}>
               <h1 className="mb-2">Reset Your Password</h1>
-              <p className="mb-4 fs-lg-1">
-                Enter the code you received and your new password.
-              </p>
+              <p className="mb-4 fs-lg-1">Enter the code you received and your new password.</p>
 
               <Form.Group className="mb-3">
                 <Form.Label>Reset Code</Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Enter the code"
-                  ref={codeRef}
-                  required
-                />
+                <Form.Control type="text" placeholder="Enter the code" ref={codeRef} required />
               </Form.Group>
 
               <Form.Label>Email</Form.Label>
-              <Form.Control
-                type="email"
-                placeholder="Enter your email"
-                ref={emailRef}
-                required
-              />
+              <Form.Control type="email" placeholder="Enter your email" ref={emailRef} required />
 
               <Form.Group className="mb-3">
                 <Form.Label>New Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  placeholder="Enter your new password"
-                  ref={newPasswordRef}
-                  required
-                />
+                <Form.Control type="password" placeholder="Enter your new password" ref={newPasswordRef} required />
               </Form.Group>
 
               <Form.Group className="mb-3">

@@ -1,21 +1,14 @@
 import '../assets/css/Preloader.scss';
 
-// eslint-disable-next-line react/prop-types
 const Preloader = ({ smallscreen, overlayParent }) => {
   return (
     <>
       {smallscreen ? (
-        <div
-          className={`preloader_small ${overlayParent ? 'overlay' : ''}`}
-          data-testid="preloader"
-        >
+        <div className={`preloader_small ${overlayParent ? 'overlay' : ''}`} data-testid="preloader">
           <Wrap />
         </div>
       ) : (
-        <div
-          className={`preloader ${overlayParent ? 'overlay' : ''}`}
-          data-testid="preloader"
-        >
+        <div className={`preloader ${overlayParent ? 'overlay' : ''}`} data-testid="preloader">
           <Wrap />
         </div>
       )}
@@ -26,17 +19,8 @@ const Preloader = ({ smallscreen, overlayParent }) => {
     return (
       <>
         <div className="wrap">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="40"
-            height="40"
-            viewBox="0 0 48 48"
-          >
-            <g
-              id="Group_382"
-              data-name="Group 382"
-              transform="translate(-2605 -23067)"
-            >
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 48 48">
+            <g id="Group_382" data-name="Group 382" transform="translate(-2605 -23067)">
               <rect
                 id="Rectangle_116"
                 data-name="Rectangle 116"

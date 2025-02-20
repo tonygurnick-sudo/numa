@@ -1,6 +1,5 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../Providers/AuthProvider';
-import { v4 as uuidv4 } from 'uuid';
 import {
   startQappGetSession,
   getSessionQApp,
@@ -9,13 +8,10 @@ import {
   importFileToQApp,
 } from '../qAppHelper';
 import { useJobsApi } from '../Services/jobsApi';
-import { useNumaRequest } from '../Providers/RequestProvider';
-
-// Create the context
-const NumaAppContext = createContext();
-
-// Custom hook for using context
-export const useNumaApp = () => useContext(NumaAppContext);
+import { useNumaRequest } from './NumaRequestContext';
+import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { NumaAppContext } from './NumaAppContext';
 
 // Global helper function to resolve references like @taskId or @taskId/subPath
 const resolveReference = (key, taskResults) => {
@@ -26,9 +22,17 @@ const resolveReference = (key, taskResults) => {
   // Split the reference into taskId and subPath
   const [fullTaskId, ...subPaths] = key.slice(1).split('/');
 
-  // Get the base result
-  const baseResult = taskResults[fullTaskId];
+  // Try both hyphen and underscore versions of the task ID
+  const hyphenTaskId = fullTaskId.replace(/_/g, '-');
+  const underscoreTaskId = fullTaskId.replace(/-/g, '_');
+
+  // Get the base result, trying both versions of the task ID
+  let baseResult = taskResults[hyphenTaskId];
   if (baseResult === undefined) {
+    baseResult = taskResults[underscoreTaskId];
+  }
+  if (baseResult === undefined) {
+    console.warn(`Could not find task result for either ${hyphenTaskId} or ${underscoreTaskId}`);
     return '';
   }
 
@@ -81,7 +85,7 @@ function createPayloadFromTemplate(template, inputValues, taskResults) {
 
 // Provider component
 export const NumaAppProvider = ({ children }) => {
-  const { qAppsClient } = useAuth();
+  const { qAppsClient, getIdentityPoolCredentials } = useAuth();
   const jobsApi = useJobsApi();
 
   const [loading, setLoading] = useState(false);
@@ -110,9 +114,9 @@ export const NumaAppProvider = ({ children }) => {
   const [jobs, setJobs] = useState([]);
 
   const [selectedTaskId, setSelectedTaskId] = useState(null);
-
   const [activeStep, setActiveStep] = useState(0);
-  const { numaPost, numaPut, numaGet } = useNumaRequest();
+  const [hasRun, setHasRun] = useState(false);
+  const { numaPost, numaGet } = useNumaRequest();
 
   // Load jobs for the current app
   const loadAppJobs = async () => {
@@ -275,33 +279,165 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
-  const processTextOutputTask = (task, currentResults) => {
-    const outputRef = task.params?.dataRef;
-    const outputResult = resolveReference(outputRef, currentResults);
+  const processTextOutputTask = async (task, currentResults) => {
+    try {
+      console.log('Processing text output task:', task);
+      const outputRef = task.params?.dataRef;
+      console.log('Output reference:', outputRef);
 
-    if (outputResult) {
-      let resultToDisplay = outputResult;
+      // First get the initial result
+      let outputResult = resolveReference(outputRef, currentResults);
+      console.log('Initial resolved reference result:', outputResult);
 
-      if (typeof outputResult === 'object') {
-        // If it's an array of objects, convert to markdown table
-        if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
-          const headers = Object.keys(outputResult[0]);
-          const headerRow = `| ${headers.join(' | ')} |`;
-          const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
-          const dataRows = outputResult.map((item) => `| ${headers.map((header) => item[header] || '').join(' | ')} |`);
-          resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
-        } else {
-          // For other objects, format as code block
-          resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
-        }
+      // If the result contains S3 information, fetch and replace the content
+      if (outputResult?.output_bucket && outputResult?.output_key) {
+        console.log('Found S3 information, fetching content...');
+        const credentials = await getIdentityPoolCredentials();
+        const s3Content = await fetchS3Content(outputResult.output_bucket, outputResult.output_key, credentials);
+        console.log('Retrieved S3 content:', s3Content);
+
+        // Replace the S3 info with the actual content in currentResults
+        const taskId = outputRef.split('/')[0].replace('@', '');
+        currentResults[taskId] = s3Content;
+
+        // Re-resolve to get the specific path from the content
+        outputResult = resolveReference(outputRef, currentResults);
+        console.log('Re-resolved reference after S3 fetch:', outputResult);
       }
 
-      setNumaTaskResponses((prevResponses) => [
-        ...prevResponses.filter((response) => response.taskId !== task.id),
-        { taskId: task.id, result: resultToDisplay },
-      ]);
+      if (outputResult) {
+        let resultToDisplay = outputResult;
+        console.log('Processing result for display:', { type: typeof resultToDisplay, value: resultToDisplay });
+
+        if (typeof outputResult === 'object') {
+          if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
+            console.log('Converting array of objects to markdown table');
+            const headers = Object.keys(outputResult[0]);
+            const headerRow = `| ${headers.join(' | ')} |`;
+            const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
+            const dataRows = outputResult.map(
+              (item) => `| ${headers.map((header) => item[header] || '').join(' | ')} |`,
+            );
+            resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
+          } else {
+            console.log('Converting object to JSON string');
+            resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
+          }
+        } else if (typeof outputResult === 'string') {
+          console.log('Processing string output:', {
+            startsWithMarkdown: outputResult.startsWith('```markdown'),
+            containsMarkdownChars: /[#*`[\]()|\n]/.test(outputResult),
+            firstFewChars: outputResult.slice(0, 20),
+          });
+
+          // First check if it's a markdown code block and extract its content
+          const markdownBlockMatch = outputResult.match(/^```markdown\n([\s\S]*)\n```$/);
+          if (markdownBlockMatch) {
+            console.log('Extracted content from markdown block');
+            // Extract the content from inside the markdown block
+            resultToDisplay = markdownBlockMatch[1];
+          } else if (outputResult.includes('```markdown')) {
+            // If it contains markdown blocks but isn't a perfect match (might be inside JSON)
+            try {
+              const parsed = JSON.parse(outputResult);
+              if (parsed.value && typeof parsed.value === 'string') {
+                const valueMarkdownMatch = parsed.value.match(/^```markdown\n([\s\S]*)\n```$/);
+                if (valueMarkdownMatch) {
+                  console.log('Extracted markdown from JSON value');
+                  resultToDisplay = valueMarkdownMatch[1];
+                }
+              }
+            } catch (e) {
+              console.log('Not valid JSON with markdown:', e);
+            }
+          } else {
+            // Check if the string already contains markdown-like formatting
+            const hasMarkdown = /[#*`[\]()|\n]/.test(outputResult);
+            if (!hasMarkdown) {
+              // If it doesn't look like markdown, try to detect if it's JSON or code
+              try {
+                JSON.parse(outputResult);
+                // If it parses as JSON, format it as a code block
+                resultToDisplay = '```json\n' + JSON.stringify(JSON.parse(outputResult), null, 2) + '\n```';
+              } catch {
+                // If it's not JSON and doesn't have markdown, wrap paragraphs
+                resultToDisplay = outputResult
+                  .split('\n\n')
+                  .map((para) => para.trim())
+                  .filter((para) => para)
+                  .join('\n\n');
+              }
+            }
+          }
+          console.log('Final processed string:', {
+            firstFewChars: resultToDisplay.slice(0, 20),
+            length: resultToDisplay.length,
+          });
+        }
+
+        console.log('Final result to display:', resultToDisplay);
+        currentResults[task.id] = resultToDisplay;
+
+        // Update numaTaskResponses with the new result
+        setNumaTaskResponses((prevResponses) => {
+          // Remove any existing response for this task
+          const filteredResponses = prevResponses.filter((r) => r.taskId !== task.id);
+          // Add the new response
+          return [
+            ...filteredResponses,
+            {
+              taskId: task.id,
+              result: resultToDisplay,
+            },
+          ];
+        });
+      } else {
+        console.warn('No output result found for task:', task.id);
+      }
+
+      console.log('Updated current results:', currentResults);
+      return currentResults;
+    } catch (error) {
+      console.error('Error in processTextOutputTask:', error);
+      throw error;
     }
-    return currentResults;
+  };
+
+  // Fetch content from S3
+  const fetchS3Content = async (bucket, key, credentials) => {
+    console.log('Fetching S3 content:', { bucket, key });
+
+    try {
+      console.log('Creating S3 client with provided credentials...');
+      const s3Client = new S3Client({
+        region: 'us-east-1',
+        credentials,
+      });
+
+      console.log('Creating GetObject command...');
+      const command = new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      });
+
+      console.log('Getting signed URL...');
+      const signedUrl = await getSignedUrl(s3Client, command, {
+        expiresIn: 3600,
+      });
+      console.log('Got signed URL:', signedUrl);
+
+      console.log('Fetching content...');
+      const response = await fetch(signedUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('S3 content retrieved:', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching S3 content:', error);
+      throw error;
+    }
   };
 
   const pollQAppSession = async (sessionId, updateProgress) => {
@@ -383,19 +519,20 @@ export const NumaAppProvider = ({ children }) => {
       // Get all text-output tasks
       const textOutputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
 
+      console.log('Found text-output tasks to be saved:', textOutputTasks);
       // Build results object from text-output tasks
       const textOutputResults = textOutputTasks.reduce((acc, task) => {
-        // Get the referenced data from currentResults
-        const dataRef = task.params.dataRef.slice(1); // Remove @ from reference
-        if (currentResults[dataRef]) {
-          acc[task.id] = currentResults[dataRef];
+        // Get the referenced data using resolveReference
+        const resolvedValue = resolveReference(task.params.dataRef, currentResults);
+        if (resolvedValue !== '') {
+          acc[task.id] = resolvedValue;
         }
         return acc;
       }, {});
 
+      console.log('Text-output results to be saved:', textOutputResults);
       // Update the job using jobsApi
-      // TODO put back in after demo
-      //await jobsApi.updateJob(numaAppData, jobID, textOutputResults);
+      await jobsApi.updateJob(numaAppData, jobID, textOutputResults);
 
       // Refresh the jobs list
       await loadAppJobs();
@@ -517,6 +654,12 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
+  // Clean title of process-related words
+  const cleanTaskTitle = (title) => {
+    if (!title) return 'task';
+    return title.replace(/\b(process(ing)?|running)\b/gi, '').trim();
+  };
+
   const handleRunButtonClick = async () => {
     if (!numaAppData || !numaAppData.tasks) return;
 
@@ -535,7 +678,7 @@ export const NumaAppProvider = ({ children }) => {
       const totalWeight = calculateTotalWeight(orderedTasks);
 
       for (const task of orderedTasks) {
-        setProcessingStatus(`Processing ${task.name}...`);
+        setProcessingStatus(`Processing: ${cleanTaskTitle(task.title)}...`);
         const taskWeight = calculateTaskWeight(task);
 
         switch (task.type) {
@@ -560,7 +703,7 @@ export const NumaAppProvider = ({ children }) => {
             break;
 
           case 'text-output':
-            currentResults = processTextOutputTask(task, currentResults);
+            currentResults = await processTextOutputTask(task, currentResults);
             completedWeight += taskWeight;
             break;
 
@@ -598,10 +741,12 @@ export const NumaAppProvider = ({ children }) => {
   // Load and display historical job results
   const loadJobResults = async (jobId) => {
     try {
-      const job = await jobsApi.getJobById(jobId);
+      const job = await jobsApi.getJobById(numaAppId, jobId);
       if (!job) {
         throw new Error('Job not found');
       }
+
+      console.log('Job:', job);
 
       // Reset states
       setNumaTaskResponses([]);
@@ -609,15 +754,20 @@ export const NumaAppProvider = ({ children }) => {
       setTaskInputValues({});
       setActiveStep(0);
       setSelectedTaskId(null);
+      setAppRunning(true); // Set to true to show post-run navigation
+      setHasRun(true); // Set hasRun to true to show post-run navigation
 
       // Set inputs if available
       if (job.inputs) {
         setTaskInputValues(job.inputs);
       }
 
+      // Use the stored manifest if available, otherwise fall back to current manifest
+      const manifestToUse = job.manifest || numaAppData;
+
       // Mark all input tasks as complete
       const updatedStatus = {};
-      numaAppData.tasks.forEach((task) => {
+      manifestToUse.tasks.forEach((task) => {
         //  this is a finished job
         if (!task.type.includes('output')) {
           updatedStatus[task.id] = true;
@@ -627,7 +777,7 @@ export const NumaAppProvider = ({ children }) => {
 
       // Process results into task responses
       if (job.results) {
-        const outputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
+        const outputTasks = manifestToUse.tasks.filter((task) => task.type === 'text-output');
         const responses = [];
 
         outputTasks.forEach((task) => {
@@ -668,7 +818,7 @@ export const NumaAppProvider = ({ children }) => {
           const firstTaskWithResults = responses[0];
           if (firstTaskWithResults) {
             // Find the task index in the filtered tasks list
-            const visibleTasks = numaAppData.tasks.filter(
+            const visibleTasks = manifestToUse.tasks.filter(
               (task) => !task.hidden && task.type !== 'q-app' && task.type !== 'http-request',
             );
             const taskIndex = visibleTasks.findIndex((t) => t.id === firstTaskWithResults.taskId);
@@ -691,6 +841,9 @@ export const NumaAppProvider = ({ children }) => {
         setProcessingProgress(100);
         setProcessingStatus('Complete!');
       }
+
+      // Set appRunning to false after all results are processed
+      setAppRunning(false);
     } catch (error) {
       console.error('Error loading job results:', error);
       throw error;
@@ -818,6 +971,8 @@ export const NumaAppProvider = ({ children }) => {
     setJobHistorySidebarOpen,
     activeStep,
     setActiveStep,
+    hasRun,
+    setHasRun,
   };
 
   return <NumaAppContext.Provider value={contextValue}>{children}</NumaAppContext.Provider>;

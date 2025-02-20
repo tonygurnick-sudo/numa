@@ -6,7 +6,6 @@ import {
   ListQAppsCommand,
   GetQAppSessionCommand,
   UpdateQAppSessionCommand,
-  ListLibraryItemsCommand,
   StartQAppSessionCommand,
   ImportDocumentCommand,
 } from '@aws-sdk/client-qapps';
@@ -15,12 +14,7 @@ const Q_APPLICATION_ID = sessionStorage.getItem('Q_APPLICATION_ID');
 /*
  *   Start a Q app session
  */
-export const startQappGetSession = async ({
-  qAppsClient,
-  qAppId,
-  appVersion,
-  initialValues,
-}) => {
+export const startQappGetSession = async ({ qAppsClient, qAppId, appVersion, initialValues }) => {
   if (!qAppsClient) return;
 
   try {
@@ -47,11 +41,7 @@ export const startQappGetSession = async ({
 /*
  *   updat an already running Q app session
  */
-export const updateQSessionData = async ({
-  qAppsClient,
-  sessionId,
-  values,
-}) => {
+export const updateQSessionData = async ({ qAppsClient, sessionId, values }) => {
   try {
     const payload = {
       instanceId: Q_APPLICATION_ID,
@@ -120,16 +110,12 @@ export const fetchAndEncodeFile = async (fileUrl) => {
     const base64Content = btoa(unescape(encodeURIComponent(text)));
 
     // Ensure proper base64 padding
-    const paddedBase64 =
-      base64Content + '='.repeat((4 - (base64Content.length % 4)) % 4);
+    const paddedBase64 = base64Content + '='.repeat((4 - (base64Content.length % 4)) % 4);
 
     // Additional validation
     const isValidBase64 = /^[A-Za-z0-9+/]+={0,3}$/.test(paddedBase64);
     if (!isValidBase64) {
-      console.log(
-        'Invalid characters:',
-        paddedBase64.match(/[^A-Za-z0-9+/=]/g),
-      );
+      console.log('Invalid characters:', paddedBase64.match(/[^A-Za-z0-9+/=]/g));
     }
 
     // Validate base64 string (including proper padding)
@@ -147,14 +133,7 @@ export const fetchAndEncodeFile = async (fileUrl) => {
 /*
  *   upload a file to a Q App
  */
-export const importFileToQApp = async ({
-  qAppsClient,
-  sessionId,
-  qAppId,
-  cardId,
-  fileName,
-  base64Content,
-}) => {
+export const importFileToQApp = async ({ qAppsClient, sessionId, qAppId, cardId, fileName, base64Content }) => {
   // Validate all required fields
   const requiredFields = {
     qAppsClient,
@@ -188,7 +167,7 @@ export const importFileToQApp = async ({
 
     // Try decoding to verify content
     try {
-      const decoded = atob(paddedBase64);
+      atob(paddedBase64);
     } catch (e) {
       console.error('Failed to decode base64:', e);
       throw new Error('Invalid base64 encoding');
@@ -236,13 +215,7 @@ export const importFileToQApp = async ({
 /*
  *   Used to delete a Q app from the user accounta
  */
-export const deleteQAppById = async ({
-  qAppsClient,
-  qAppId,
-  setLoading,
-  setError,
-  setResponse,
-}) => {
+export const deleteQAppById = async ({ qAppsClient, qAppId, setLoading, setError, setResponse }) => {
   if (!qAppsClient || !qAppId) {
     console.error('Missing required parameters.');
     return;
@@ -268,13 +241,7 @@ export const deleteQAppById = async ({
   }
 };
 
-export const createQApp = async ({
-  qAppsClient,
-  appPayload,
-  setLoading,
-  setError,
-  setResponse,
-}) => {
+export const createQApp = async ({ qAppsClient, setLoading, setError, setResponse }) => {
   if (!qAppsClient) {
     const error = 'Q Apps client is not initialized';
     console.error(error);
@@ -303,22 +270,13 @@ export const createQApp = async ({
     }
   } catch (error) {
     console.error('Error creating Q App:', error);
-    setError(
-      error.message ||
-        'Failed to create Q App. Please check your configuration and try again.',
-    );
+    setError(error.message || 'Failed to create Q App. Please check your configuration and try again.');
   } finally {
     setLoading(false);
   }
 };
 
-export const addAppToLibrary = async ({
-  qAppsClient,
-  appId,
-  setLoading,
-  setError,
-  setResponse,
-}) => {
+export const addAppToLibrary = async ({ qAppsClient, appId, setLoading, setResponse }) => {
   if (!qAppsClient) {
     console.error('Missing required parameters.');
     return;
@@ -341,25 +299,6 @@ export const addAppToLibrary = async ({
     console.error('Error adding Q App to lib:', error);
   } finally {
     setLoading(false);
-  }
-};
-
-export const fetchLibItems = async (qAppsClient) => {
-  if (!qAppsClient) return;
-
-  // Get lib apps
-  try {
-    const input = {
-      instanceId: Q_APPLICATION_ID,
-    };
-
-    const lib_command = new ListLibraryItemsCommand(input);
-    const lib_response = await qAppsClient.send(lib_command);
-
-    // TODO
-    //setLibraryApps(lib_response.libraryItems);
-  } catch (error) {
-    console.error('Error fetching Q Apps:', error);
   }
 };
 

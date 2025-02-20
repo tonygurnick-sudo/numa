@@ -27,13 +27,13 @@ def handler(
         function_name=context.function_name,
     )
 
-    app_name = os.environ["APP_NAME"]
+    app_id = os.environ["APP_ID"]
     bucket = os.environ["BUCKET"]
     logger.info("Get step function status")
     try:
         s3_file_object = s3_client.get_object(
             Bucket=bucket,
-            Key=f"{app_name}/{job_id}/status.json",
+            Key=f"{app_id}/{job_id}/status.json",
         )
 
         status_json: str = s3_file_object["Body"].read().decode("utf-8")

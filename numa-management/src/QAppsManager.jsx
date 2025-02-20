@@ -1,16 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import {
-  Container,
-  Card,
-  Form,
-  Button,
-  Alert,
-  Spinner,
-  Row,
-  Col,
-  Badge,
-  Modal,
-} from 'react-bootstrap';
+import { Container, Card, Form, Button, Alert, Spinner, Row, Col, Badge, Modal } from 'react-bootstrap';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
 import {
@@ -21,23 +10,13 @@ import {
   ListCategoriesCommand,
   GetQAppCommand,
 } from '@aws-sdk/client-qapps';
-import {
-  Star,
-  Person,
-  CheckCircleFill,
-  ArrowClockwise,
-  Calendar,
-  Clock,
-  Download,
-} from 'react-bootstrap-icons';
+import { Star, Person, CheckCircleFill, ArrowClockwise, Calendar, Clock, Download } from 'react-bootstrap-icons';
 import { useServiceLocator } from './ServiceLocatorFunction';
 import QPolicy from './assets/QPolicy.json';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { ListConversationsCommand, QBusinessClient } from '@aws-sdk/client-qbusiness';
 
 const exportMode = false;
-
-
 
 function QAppsManager({ temporaryCredentials, selectedProfile }) {
   const [error, setError] = useState(null);
@@ -79,7 +58,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
       if (res && usernameRef.current) {
         usernameRef.current.value = 'numa-system-user@arcanum.ai';
         passwordRef.current.value = res;
-      };
+      }
     };
     getPassword();
   }, []);
@@ -111,9 +90,9 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
           fetchCognitoUserPools(temporaryCredentials),
           fetchCognitoIdentityPools(temporaryCredentials),
         ]);
-        if(exportMode) {
-          setUserPoolId("us-east-1_kVPZjTM6a"); // export
-          setIdentityPoolId("us-east-1:facf1439-ef67-48f9-ada4-debb294db187"); //export
+        if (exportMode) {
+          setUserPoolId('us-east-1_kVPZjTM6a'); // export
+          setIdentityPoolId('us-east-1:facf1439-ef67-48f9-ada4-debb294db187'); //export
         } else {
           setUserPoolId(userPoolId);
           setIdentityPoolId(identityPoolId);
@@ -126,11 +105,10 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
   useEffect(() => {
     if (temporaryCredentials && !instanceId) {
       const fetchInstance = async () => {
-        if(exportMode) {
-          setInstanceId("2594236d-712a-4355-8b0e-6a4cef023f75") //export
+        if (exportMode) {
+          setInstanceId('2594236d-712a-4355-8b0e-6a4cef023f75'); //export
         } else {
-          const qBusinessAppId =
-            await fetchQBusinessApplication(temporaryCredentials);
+          const qBusinessAppId = await fetchQBusinessApplication(temporaryCredentials);
           if (qBusinessAppId) {
             setInstanceId(qBusinessAppId);
           }
@@ -152,18 +130,12 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
     }
 
     // TODO: Make these values dynamic
-    const poolId =
-      userPoolId || (await fetchCognitoUserPools(temporaryCredentials));
+    const poolId = userPoolId || (await fetchCognitoUserPools(temporaryCredentials));
 
     const USER_POOL_ID = poolId;
 
     // Step 1: Create the SRP session
-    const srpSession = createSrpSession(
-      username,
-      password,
-      USER_POOL_ID,
-      false,
-    );
+    const srpSession = createSrpSession(username, password, USER_POOL_ID, false);
 
     // Step 2: Send SRP-A to initiate SRP flow
     const initiateAuthRes = await fetch(`${apiEndpoint}/initiate`, {
@@ -176,9 +148,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
     });
 
     if (!initiateAuthRes.ok) {
-      throw new Error(
-        `Authentication failed: ${initiateAuthRes.status} ${initiateAuthRes.statusText}`,
-      );
+      throw new Error(`Authentication failed: ${initiateAuthRes.status} ${initiateAuthRes.statusText}`);
     }
 
     const initiateData = await initiateAuthRes.json();
@@ -273,14 +243,13 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
       });
 
       const idToken = srpCredentials.IdToken;
-      const [poolId, roleArn] =
-      (exportMode) ?
-         [identityPoolId,'arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo']: // export
-        // Fetch both poolId and roleArn in parallel
-         await Promise.all([
-          identityPoolId || fetchCognitoIdentityPools(temporaryCredentials),
-          fetchNumaRoleArn(temporaryCredentials),
-        ]);
+      const [poolId, roleArn] = exportMode
+        ? [identityPoolId, 'arn:aws:iam::905418183804:role/web-experience-role-numa-arcanum-demo'] // export
+        : // Fetch both poolId and roleArn in parallel
+          await Promise.all([
+            identityPoolId || fetchCognitoIdentityPools(temporaryCredentials),
+            fetchNumaRoleArn(temporaryCredentials),
+          ]);
 
       if (!poolId) {
         throw new Error('Unable to determine Identity Pool ID');
@@ -314,9 +283,11 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
       });
 
       // This is necessary to provision a licence, which will allow subsequent requests.
-      const conversations = await newQBusinessClient.send(new ListConversationsCommand({
-        applicationId: instanceId,
-      }));
+      const conversations = await newQBusinessClient.send(
+        new ListConversationsCommand({
+          applicationId: instanceId,
+        }),
+      );
       [conversations];
 
       console.log('Client initialized');
@@ -324,9 +295,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
       return newQAppsClient;
     } catch (error) {
       console.error('Error initializing QAppsClient:', error);
-      setLibraryError(
-        'Failed to initialize Q Apps client. Please try refreshing the page.',
-      );
+      setLibraryError('Failed to initialize Q Apps client. Please try refreshing the page.');
       return null;
     }
   };
@@ -363,10 +332,9 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
         libraryItems.push(...response.libraryItems);
 
         nextToken = response.nextToken;
-
       } while (nextToken);
 
-      console.log('Total library items', libraryItems.length)
+      console.log('Total library items', libraryItems.length);
 
       setLibraryItems(libraryItems);
     } catch (error) {
@@ -374,13 +342,9 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
 
       // More specific error handling
       if (!qAppsClient) {
-        setLibraryError(
-          'QApps client not initialized. Please try refreshing the page.',
-        );
+        setLibraryError('QApps client not initialized. Please try refreshing the page.');
       } else if (error.name === 'ValidationException') {
-        setLibraryError(
-          'Invalid request parameters. Please check instance ID.',
-        );
+        setLibraryError('Invalid request parameters. Please check instance ID.');
       } else if (error.name === 'AccessDeniedException') {
         setLibraryError('Access denied. Please check your permissions.');
       } else if (error.name === 'ResourceNotFoundException') {
@@ -388,9 +352,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
       } else if (error.name === 'ThrottlingException') {
         setLibraryError('Too many requests. Please try again in a moment.');
       } else if (error.name === 'ExpiredTokenException') {
-        setLibraryError(
-          'Session expired. Please refresh the page to re-authenticate.',
-        );
+        setLibraryError('Session expired. Please refresh the page to re-authenticate.');
       } else {
         setLibraryError(error.message || 'An unexpected error occurred');
       }
@@ -436,9 +398,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
             }
             if (card.SDK_UNKNOWN_MEMBER) {
               // Throw an error
-              throw new Error(
-                'Invalid app definition, SDK_UNKNOWN_MEMBER not allowed',
-              );
+              throw new Error('Invalid app definition, SDK_UNKNOWN_MEMBER not allowed');
             }
             return card;
           }),
@@ -468,9 +428,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
       console.log('Selected categories:', selectedCategories);
 
       console.log('Creating Library Item with input:', createLibraryInput);
-      const createLibraryCommand = new CreateLibraryItemCommand(
-        createLibraryInput,
-      );
+      const createLibraryCommand = new CreateLibraryItemCommand(createLibraryInput);
       const libraryResponse = await qAppsClient.send(createLibraryCommand);
 
       console.log('Library Item created:', libraryResponse);
@@ -553,10 +511,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
         if (result.status === 'fulfilled') {
           newAppDetails[libraryItems[index].appId] = result.value;
         } else {
-          console.error(
-            `Failed to fetch app details for ${libraryItems[index].appId}:`,
-            result.reason,
-          );
+          console.error(`Failed to fetch app details for ${libraryItems[index].appId}:`, result.reason);
         }
       });
 
@@ -615,13 +570,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
         <Form onSubmit={handleImportApp}>
           <Form.Group className="mb-3">
             <Form.Label>Import Q App JSON</Form.Label>
-            <Form.Control
-              type="file"
-              accept=".json"
-              onChange={handleFileSelect}
-              ref={fileInputRef}
-              required
-            />
+            <Form.Control type="file" accept=".json" onChange={handleFileSelect} ref={fileInputRef} required />
           </Form.Group>
 
           <Form.Group className="mb-3">
@@ -648,9 +597,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
                     const isSelected = selectedCategories.includes(category.id);
 
                     if (isSelected) {
-                      setSelectedCategories((prev) =>
-                        prev.filter((id) => id !== category.id),
-                      );
+                      setSelectedCategories((prev) => prev.filter((id) => id !== category.id));
                     } else if (selectedCategories.length < 3) {
                       setSelectedCategories((prev) => [...prev, category.id]);
                     }
@@ -660,9 +607,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
                 </div>
               ))}
             </div>
-            <Form.Text className="text-muted">
-              {`Selected ${selectedCategories.length}/3 categories`}
-            </Form.Text>
+            <Form.Text className="text-muted">{`Selected ${selectedCategories.length}/3 categories`}</Form.Text>
           </Form.Group>
 
           {importJson && (
@@ -680,17 +625,10 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
             </div>
           )}
           <div className="d-flex justify-content-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => setShowCreateModal(false)}
-            >
+            <Button variant="secondary" onClick={() => setShowCreateModal(false)}>
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              type="submit"
-              disabled={creatingApp || !importJson}
-            >
+            <Button variant="primary" type="submit" disabled={creatingApp || !importJson}>
               {creatingApp ? 'Creating...' : 'Create Q App'}
             </Button>
           </div>
@@ -700,20 +638,19 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
   );
 
   useEffect(() => {
-    if(importJson) {
+    if (importJson) {
       const catIdMap = Object.fromEntries(availableCategories.map((cat) => [cat.title, cat.id]));
-      const defaultCats = ({
-        'Arcanum Meeting Analyser lite': ['Operations', 'HR', 'General'],
-        'Arcanum Candidate Reviewer lite': ['Operations', 'HR'],
-        'Arcanum Document Summariser lite': ['General'],
-        'Arcanum Policy Drafter lite': ['Legal', 'Operations', 'Support'],
-        'Arcanum Policy Reviewer lite': ['Legal', 'Operations'],
-      })[importJson.title] ?? [];
+      const defaultCats =
+        {
+          'Arcanum Meeting Analyser lite': ['Operations', 'HR', 'General'],
+          'Arcanum Candidate Reviewer lite': ['Operations', 'HR'],
+          'Arcanum Document Summariser lite': ['General'],
+          'Arcanum Policy Drafter lite': ['Legal', 'Operations', 'Support'],
+          'Arcanum Policy Reviewer lite': ['Legal', 'Operations'],
+        }[importJson.title] ?? [];
       setSelectedCategories(defaultCats.map((cat) => catIdMap[cat]));
     }
-  }, [
-    importJson,
-  ]);
+  }, [importJson]);
 
   if (!srpCredentials) {
     return (
@@ -728,22 +665,12 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
             <Form onSubmit={handleLogin}>
               <Form.Group className="mb-3">
                 <Form.Label>Username</Form.Label>
-                <Form.Control
-                  type="text"
-                  ref={usernameRef}
-                  placeholder="Enter username"
-                  required
-                />
+                <Form.Control type="text" ref={usernameRef} placeholder="Enter username" required />
               </Form.Group>
 
               <Form.Group className="mb-3">
                 <Form.Label>Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  ref={passwordRef}
-                  placeholder="Enter password"
-                  required
-                />
+                <Form.Control type="password" ref={passwordRef} placeholder="Enter password" required />
               </Form.Group>
 
               <Button variant="primary" type="submit" disabled={loading}>
@@ -772,20 +699,11 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2 className="mb-0">Q Apps Library</h2>
         <div className="d-flex gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setShowCreateModal(true)}
-          >
+          <Button variant="primary" size="sm" onClick={() => setShowCreateModal(true)}>
             Create App
           </Button>
           {!loadingLibrary && (
-            <Button
-              variant="outline-primary"
-              size="sm"
-              onClick={fetchLibraryItems}
-              title="Refresh library items"
-            >
+            <Button variant="outline-primary" size="sm" onClick={fetchLibraryItems} title="Refresh library items">
               <ArrowClockwise size={16} className="me-2" />
               Refresh
             </Button>
@@ -794,19 +712,11 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
       </div>
 
       {libraryError && (
-        <Alert
-          variant="danger"
-          className="d-flex align-items-center justify-content-between"
-        >
+        <Alert variant="danger" className="d-flex align-items-center justify-content-between">
           <div>
             <strong>Error loading library:</strong> {libraryError}
           </div>
-          <Button
-            variant="outline-danger"
-            size="sm"
-            onClick={fetchLibraryItems}
-            disabled={loadingLibrary}
-          >
+          <Button variant="outline-danger" size="sm" onClick={fetchLibraryItems} disabled={loadingLibrary}>
             {loadingLibrary ? (
               <Spinner animation="border" size="sm" />
             ) : (
@@ -834,8 +744,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
                   {/* Header Section */}
                   <div className="text-center mb-3">
                     <h4 className="text-primary mb-1">
-                      {appDetails[item.appId]?.title ||
-                        `${item.appId.split('-')[0]}...`}
+                      {appDetails[item.appId]?.title || `${item.appId.split('-')[0]}...`}
                     </h4>
                     {item.isVerified && (
                       <Badge
@@ -899,10 +808,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
 
                   {/* Status Badge */}
                   <div className="text-center mb-3">
-                    <Badge
-                      bg={item.status === 'PUBLISHED' ? 'success' : 'warning'}
-                      className="text-uppercase"
-                    >
+                    <Badge bg={item.status === 'PUBLISHED' ? 'success' : 'warning'} className="text-uppercase">
                       {item.status}
                     </Badge>
                   </div>
@@ -923,10 +829,7 @@ function QAppsManager({ temporaryCredentials, selectedProfile }) {
                   {/* Footer Stats */}
                   <div className="mt-auto d-flex justify-content-between align-items-center">
                     <div className="d-flex gap-3">
-                      <div
-                        className="d-flex align-items-center"
-                        title="Ratings"
-                      >
+                      <div className="d-flex align-items-center" title="Ratings">
                         <Star className="text-warning me-1" size={14} />
                         <small>{item.ratingCount}</small>
                       </div>

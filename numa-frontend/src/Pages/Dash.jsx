@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Alert, Container, Row, Col, Button } from 'react-bootstrap';
+
+import { Alert, Container, Row, Col } from 'react-bootstrap';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 
 import { Breadcrumbs } from '../Components/Breadcrumbs';
@@ -10,17 +11,11 @@ import { Pagination } from '../Components/Pagination';
 import { Preloader } from '../Components/Preloader';
 import { StarFill } from 'react-bootstrap-icons';
 
-import { useAuth } from '../Providers/AuthProvider';
-import { useNumaApp } from '../Providers/NumaAppProvider';
+import { useNumaApp } from '../Providers/NumaAppContext';
 import { useFavorites } from '../hooks/useFavorites';
 
 export const Dash = ({ showFavorites }) => {
-  const { error, setError, loading, setLoading, setNumaApps, numaApps } =
-    useNumaApp();
-  const { qAppsClient } = useAuth();
-  const [qApps, setQApps] = useState([]);
-  const [qAppsLoading, setQAppsLoading] = useState(false);
-  const [qAppsError, setQAppsError] = useState(null);
+  const { error, setError, loading, setLoading, setNumaApps, numaApps } = useNumaApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategories, setActiveCategories] = useState(() => {
     const saved = localStorage.getItem('numaAppsActiveCategories');
@@ -38,13 +33,12 @@ export const Dash = ({ showFavorites }) => {
     const fetchAppsFromManifest = async () => {
       setLoading(true);
       try {
-
-       // await new Promise((resolve) => setTimeout(resolve, 100));
+        // await new Promise((resolve) => setTimeout(resolve, 100));
 
         // TODO
         // load from cache if cache time less than x
 
-                // First try to load from sessionStorage
+        // First try to load from sessionStorage
         // const cachedData = sessionStorage.getItem('appsData');
 
         // if (cachedData) {
@@ -77,7 +71,6 @@ export const Dash = ({ showFavorites }) => {
 
         setNumaApps(appsData);
         sessionStorage.setItem('appsData', JSON.stringify(appsData));
-
       } catch (error) {
         console.error('Error loading apps:', error);
         setError(`Failed to load apps: ${error.message}`);
@@ -89,7 +82,6 @@ export const Dash = ({ showFavorites }) => {
 
     fetchAppsFromManifest();
   }, [setError, setLoading, setNumaApps]);
-
 
   // useEffect(() => {
   //   const loadQApps = async () => {
@@ -112,11 +104,10 @@ export const Dash = ({ showFavorites }) => {
   //   loadQApps();
   // }, [qAppsClient]);
 
-
   // Get unique categories from apps
   useEffect(() => {
     if (numaApps) {
-      const uniqueCategories = [...new Set(numaApps.map(app => app.category).filter(Boolean))];
+      const uniqueCategories = [...new Set(numaApps.map((app) => app.category).filter(Boolean))];
       setCategories(uniqueCategories);
     }
   }, [numaApps]);
@@ -124,18 +115,19 @@ export const Dash = ({ showFavorites }) => {
   // Memoize filtered apps to avoid unnecessary recalculations
   const filteredApps = useMemo(() => {
     // Filter and sort apps based on search term, active categories, and sort order
-    let filtered = numaApps.filter(app => {
+    let filtered = numaApps.filter((app) => {
       // Favorites filtering
       if (showFavorites && !favorites.includes(app.id)) {
         return false;
       }
 
       // Category filtering
-      const matchesCategories = activeCategories.length === 0 ||
-        (app.category && activeCategories.includes(app.category));
+      const matchesCategories =
+        activeCategories.length === 0 || (app.category && activeCategories.includes(app.category));
 
       // Search filtering - look at title and description
-      const matchesSearch = searchTerm === '' ||
+      const matchesSearch =
+        searchTerm === '' ||
         app.appName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         app.appDescription?.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -144,8 +136,8 @@ export const Dash = ({ showFavorites }) => {
 
     // Define status priority order
     const statusPriority = {
-      'Active': 0,
-      'Deploy': 1
+      Active: 0,
+      Deploy: 1,
     };
 
     // Sort apps by favorites and status priority first, then alphabetically within each group
@@ -169,9 +161,7 @@ export const Dash = ({ showFavorites }) => {
       // Finally, sort alphabetically within each group
       const nameA = a.appName.toLowerCase();
       const nameB = b.appName.toLowerCase();
-      return sortOrder === 'asc'
-        ? nameA.localeCompare(nameB)
-        : nameB.localeCompare(nameA);
+      return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
     });
   }, [searchTerm, activeCategories, numaApps, sortOrder, showFavorites, favorites]);
 
@@ -199,10 +189,7 @@ export const Dash = ({ showFavorites }) => {
 
   const itemsPerPage = 12;
   const totalPages = Math.ceil(filteredApps.length / itemsPerPage);
-  const currentItems = filteredApps.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const currentItems = filteredApps.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <>
@@ -213,22 +200,17 @@ export const Dash = ({ showFavorites }) => {
               <Col lg={9} className="pe-5">
                 <Breadcrumbs label={showFavorites ? 'Favourite Apps' : 'Dashboard'} />
                 <h1>
-                  {showFavorites && (
-                    <StarFill className="text-warning title-star" />
-                  )}
+                  {showFavorites && <StarFill className="text-warning title-star" />}
                   {showFavorites ? 'Favourite Apps' : 'Numa Apps'}
                 </h1>
                 <p>
                   {showFavorites
                     ? 'Your favorite apps at a glance'
-                    : 'Get started uncovering insights from your data with Numa.'
-                  }
+                    : 'Get started uncovering insights from your data with Numa.'}
                 </p>
               </Col>
               <Col lg={3} className="ps-5">
-                <>
-                  {/* <QAppCreate /> */}
-                </>
+                <>{/* <QAppCreate /> */}</>
               </Col>
             </Row>
           </Container>
@@ -262,17 +244,19 @@ export const Dash = ({ showFavorites }) => {
                 {!error &&
                   Array.isArray(currentItems) &&
                   currentItems?.map((app) => (
-                    <Col key={`${app.id}-${app.appName.replace(/\s+/g, '-').toLowerCase()}`} lg={4} md={6} sm={12} className="d-flex">
+                    <Col
+                      key={`${app.id}-${app.appName.replace(/\s+/g, '-').toLowerCase()}`}
+                      lg={4}
+                      md={6}
+                      sm={12}
+                      className="d-flex"
+                    >
                       <AppItem app={app} />
                     </Col>
                   ))}
               </Row>
             )}
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-            />
+            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
           </Container>
         </LayoutDashboard>
       </div>

@@ -35,7 +35,7 @@ def handler(
         function_name=context.function_name,
     )
 
-    app_name = os.environ["APP_NAME"]
+    app_id = os.environ["APP_ID"]
     step_function_arn = os.environ["STEP_FUNCTION_ARN"]
 
     logger.info(
@@ -50,7 +50,7 @@ def handler(
             input=json.dumps(
                 {
                     **event.json_body,
-                    "app_name": app_name,
+                    "app_id": app_id,
                     "job_id": job_id,
                 }
             ),

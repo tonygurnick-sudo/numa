@@ -145,9 +145,7 @@ function UserManagement({ temporaryCredentials }) {
         <Card.Header>
           <h3 className="h5 mb-0">
             User Management
-            {userPool && (
-              <small className="text-muted ms-2">Pool: {userPool.Name}</small>
-            )}
+            {userPool && <small className="text-muted ms-2">Pool: {userPool.Name}</small>}
           </h3>
         </Card.Header>
         <Card.Body>
@@ -170,15 +168,9 @@ function UserManagement({ temporaryCredentials }) {
                     <td>{user.Username}</td>
                     <td>{getEmailFromAttributes(user.Attributes)}</td>
                     <td>{new Date(user.UserCreateDate).toLocaleString()}</td>
+                    <td>{new Date(user.UserLastModifiedDate).toLocaleString()}</td>
                     <td>
-                      {new Date(user.UserLastModifiedDate).toLocaleString()}
-                    </td>
-                    <td>
-                      <Button
-                        size="sm"
-                        variant="outline-secondary"
-                        onClick={() => handleViewLogs(user)}
-                      >
+                      <Button size="sm" variant="outline-secondary" onClick={() => handleViewLogs(user)}>
                         View Logs
                       </Button>
                     </td>
@@ -191,19 +183,12 @@ function UserManagement({ temporaryCredentials }) {
       </Card>
 
       {/* Auth Events Modal */}
-      <Modal
-        show={showLogsModal}
-        onHide={() => setShowLogsModal(false)}
-        size="lg"
-        scrollable
-      >
+      <Modal show={showLogsModal} onHide={() => setShowLogsModal(false)} size="lg" scrollable>
         <Modal.Header closeButton>
           <Modal.Title>
             Authentication Logs
             {selectedUser && (
-              <small className="text-muted ms-2">
-                {getEmailFromAttributes(selectedUser.Attributes)}
-              </small>
+              <small className="text-muted ms-2">{getEmailFromAttributes(selectedUser.Attributes)}</small>
             )}
           </Modal.Title>
         </Modal.Header>
@@ -232,13 +217,10 @@ function UserManagement({ temporaryCredentials }) {
                   <tr key={index}>
                     <td>{new Date(event.CreationDate).toLocaleString()}</td>
                     <td>{event.EventType}</td>
-                    <td className={getEventStatusStyle(event.EventResponse)}>
-                      {event.EventResponse}
-                    </td>
+                    <td className={getEventStatusStyle(event.EventResponse)}>{event.EventResponse}</td>
                     <td>{event.DeviceName || '-'}</td>
                     <td>
-                      {event.EventContextData?.City &&
-                      event.EventContextData?.Country
+                      {event.EventContextData?.City && event.EventContextData?.Country
                         ? `${event.EventContextData.City}, ${event.EventContextData.Country}`
                         : '-'}
                     </td>

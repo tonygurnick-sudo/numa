@@ -27,7 +27,7 @@ export async function uploadFiles(credentials, zipFile: string, bucket: string):
         Bucket: bucket,
         Key: fileName,
         Body: readStream,
-      }
+      },
     });
     await upload.done();
   }
@@ -35,11 +35,13 @@ export async function uploadFiles(credentials, zipFile: string, bucket: string):
 }
 export async function startSync(credentials, applicationId: string, indexId: string, dataSourceId): Promise<void> {
   const qbusiness = new QBusinessClient({ region, credentials });
-  const response = await qbusiness.send(new StartDataSourceSyncJobCommand({
-    applicationId,
-    dataSourceId,
-    indexId,
-  }));
+  const response = await qbusiness.send(
+    new StartDataSourceSyncJobCommand({
+      applicationId,
+      dataSourceId,
+      indexId,
+    }),
+  );
   console.log(response.executionId);
 }
 

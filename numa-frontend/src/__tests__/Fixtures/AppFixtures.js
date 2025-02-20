@@ -84,8 +84,7 @@ export const dashboardFixtures = {
         type: 'numa-app',
         status: 'Coming Soon',
         createdDate: '2023-11-06T10:38:12Z',
-        appDescription:
-          'Processes a file through S3, Q App, and Lambda, then displays the output.',
+        appDescription: 'Processes a file through S3, Q App, and Lambda, then displays the output.',
         tasks: [
           {
             id: 'upload-file-to-s3-bucket',
@@ -115,8 +114,7 @@ export const dashboardFixtures = {
             title: 'Process with Lambda',
             type: 'backend',
             params: {
-              lambdaArn:
-                'arn:aws:lambda:us-east-1:123456789012:function:my-lambda-function',
+              lambdaArn: 'arn:aws:lambda:us-east-1:123456789012:function:my-lambda-function',
               input: {
                 inputContentRef: 'process-with-q-app',
               },
@@ -142,8 +140,7 @@ export const dashboardFixtures = {
         qAppId: 'dc1427b5-7673-4c26-9add-5bda95c00b30',
         status: 'Coming Soon',
         createdDate: '2023-11-06T10:38:12Z',
-        appDescription:
-          'An app to calculate if refinancing a loan is worth it based on current and new loan details.',
+        appDescription: 'An app to calculate if refinancing a loan is worth it based on current and new loan details.',
       },
       {
         appName: 'Data Processing App',
@@ -169,8 +166,7 @@ export const dashboardFixtures = {
             title: 'Data Analysis',
             type: 'backend',
             params: {
-              lambdaArn:
-                'arn:aws:lambda:us-east-1:123456789012:function:data-analysis-step-function',
+              lambdaArn: 'arn:aws:lambda:us-east-1:123456789012:function:data-analysis-step-function',
             },
             order: 2,
             nextTask: 'display-insights',
@@ -199,8 +195,7 @@ export const dashboardFixtures = {
             title: 'Model Deployment',
             type: 'backend',
             params: {
-              lambdaArn:
-                'arn:aws:lambda:us-east-1:123456789012:function:model-deployment-step-function',
+              lambdaArn: 'arn:aws:lambda:us-east-1:123456789012:function:model-deployment-step-function',
             },
             order: 1,
             nextTask: 'display-model-metrics',

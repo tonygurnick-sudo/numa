@@ -1,12 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Modal, Button } from 'react-bootstrap';
 
 // Supported file extensions
-const SUPPORTED_EXTENSIONS = [
-  '.txt', '.csv', '.md', '.pdf',
-  '.doc', '.docx', '.xls', '.xlsx',
-  '.ppt', '.pptx'
-];
+const SUPPORTED_EXTENSIONS = ['.txt', '.csv', '.md', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'];
 
 const getFileExtension = (filename) => {
   const lastDotIndex = filename.lastIndexOf('.');
@@ -22,22 +18,26 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
       const selectedFiles = Array.from(event.target.files);
 
       // Validate file types
-      const unsupportedFiles = selectedFiles.filter(file =>
-        !SUPPORTED_EXTENSIONS.includes(getFileExtension(file.name))
+      const unsupportedFiles = selectedFiles.filter(
+        (file) => !SUPPORTED_EXTENSIONS.includes(getFileExtension(file.name)),
       );
 
       if (unsupportedFiles.length > 0) {
-        setError(`Unsupported file type(s): ${unsupportedFiles.map(f => f.name).join(', ')}\nSupported types: ${SUPPORTED_EXTENSIONS.join(', ')}`);
+        setError(
+          `Unsupported file type(s): ${unsupportedFiles.map((f) => f.name).join(', ')}\nSupported types: ${SUPPORTED_EXTENSIONS.join(', ')}`,
+        );
         return;
       }
 
       // Store files with original File object
-      setFiles(selectedFiles.map(file => ({
-        name: file.name,
-        size: file.size,
-        type: file.type || 'text/plain',
-        file: file
-      })));
+      setFiles(
+        selectedFiles.map((file) => ({
+          name: file.name,
+          size: file.size,
+          type: file.type || 'text/plain',
+          file: file,
+        })),
+      );
       setError(null);
     } catch (error) {
       console.error('Error selecting files:', error);
@@ -59,26 +59,31 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
 
     try {
       // Process files and read their content
-      const processedFiles = await Promise.all(files.map(async (fileInfo) => {
-        // Read file content as text
-        const text = await fileInfo.file.text();
-        // Convert to base64
-        const base64Data = btoa(unescape(encodeURIComponent(text)));
+      const processedFiles = await Promise.all(
+        files.map(async (fileInfo) => {
+          // Read file content as text
+          const text = await fileInfo.file.text();
+          // Convert to base64
+          const base64Data = btoa(unescape(encodeURIComponent(text)));
 
-        return {
-          name: fileInfo.name,
-          size: fileInfo.size,
-          type: fileInfo.type || 'text/plain',
-          data: base64Data // Send base64 encoded content
-        };
-      }));
+          return {
+            name: fileInfo.name,
+            size: fileInfo.size,
+            type: fileInfo.type || 'text/plain',
+            data: base64Data, // Send base64 encoded content
+          };
+        }),
+      );
 
-      console.log('Files being sent to NumaChat:', processedFiles.map(f => ({
-        name: f.name,
-        type: f.type,
-        size: f.size,
-        dataLength: f.data?.length
-      })));
+      console.log(
+        'Files being sent to NumaChat:',
+        processedFiles.map((f) => ({
+          name: f.name,
+          type: f.type,
+          size: f.size,
+          dataLength: f.data?.length,
+        })),
+      );
 
       onUploadSuccess(processedFiles);
       setFiles([]);

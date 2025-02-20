@@ -22,8 +22,8 @@ def __get_job_id(event: dict):
     return event.get("job_id", str(uuid.uuid4()))
 
 
-def __key(app_name: str, job_id: str, name: str, area: str = "") -> str:
-    key = f"{app_name}/{job_id}/{name}"
+def __key(app_id: str, job_id: str, name: str, area: str = "") -> str:
+    key = f"{app_id}/{job_id}/{name}"
     if area:
         key += f"_{area}"
     return key
@@ -47,12 +47,12 @@ def __write_file_object_to_s3(fileobj: typing.BinaryIO, file_name: str):
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
-    app_name = event["app_name"]
+    app_id = event["app_id"]
     job_id = __get_job_id(event)
     helpers.setup_logging()
     structlog.contextvars.bind_contextvars(
         function_name=context.function_name,
-        app_name=app_name,
+        app_id=app_id,
         job_id=job_id,
     )
     logger.info("Execute lambda", lambda_event=event)
@@ -119,15 +119,15 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
     explainability = result.response[0]["text"]
 
-    explainability_markdown_key = __key(app_name, job_id, "explainability.md")
+    explainability_markdown_key = __key(app_id, job_id, "explainability.md")
     __write_string_to_s3(explainability, explainability_markdown_key)
 
     explainability_html = markdown_to_pdf.markdown_to_html(explainability)
-    explainability_html_key = __key(app_name, job_id, "explainability.html")
+    explainability_html_key = __key(app_id, job_id, "explainability.html")
     __write_string_to_s3(explainability_html, explainability_html_key)
 
     explainability_pdf = markdown_to_pdf.html_to_pdf(explainability_html)
-    explainability_pdf_key = __key(app_name, job_id, "explainability.pdf")
+    explainability_pdf_key = __key(app_id, job_id, "explainability.pdf")
     __write_file_object_to_s3(explainability_pdf, explainability_pdf_key)
 
     return {

@@ -1,28 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-  Container,
-  Table,
-  Badge,
-  Button,
-  Tabs,
-  Tab,
-  Dropdown,
-  Modal,
-  OverlayTrigger,
-  Tooltip,
-} from 'react-bootstrap';
-import {
-  Download as DownloadIcon,
-  Share as ShareIcon,
-  ThreeDotsVertical as ThreeDotsIcon,
-  Clock as ClockIcon,
-  Plus as PlusIcon,
-  Trash as TrashIcon,
-  PencilFill,
-  PencilSquare,
-} from 'react-bootstrap-icons';
-import pdfPolicy from '../assets/policies.pdf';
-import PolicyEditor from './PolicyEditor';
+import { Button, Modal } from 'react-bootstrap';
 
 export const CreatePolicyModal = ({
   visible,
@@ -33,17 +9,12 @@ export const CreatePolicyModal = ({
   handleGeneratePolicy,
   isGenerating,
 }) => {
-
   return (
     <Modal show={visible} onHide={onClose} size="xl">
       <Modal.Header closeButton>
         <Modal.Title>
           Create New Policy
-          {selectedTemplate && (
-            <div className="fs-6 fw-normal text-muted">
-              Using {selectedTemplate.name} Scenario
-            </div>
-          )}
+          {selectedTemplate && <div className="fs-6 fw-normal text-muted">Using {selectedTemplate.name} Scenario</div>}
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -159,18 +130,10 @@ export const CreatePolicyModal = ({
         <Button variant="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button
-          variant="primary"
-          onClick={handleGeneratePolicy}
-          disabled={isGenerating}
-        >
+        <Button variant="primary" onClick={handleGeneratePolicy} disabled={isGenerating}>
           {isGenerating ? (
             <>
-              <span
-                className="spinner-border spinner-border-sm me-2"
-                role="status"
-                aria-hidden="true"
-              ></span>
+              <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
               Generating...
             </>
           ) : (

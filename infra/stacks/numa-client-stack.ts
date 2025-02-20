@@ -1,20 +1,26 @@
 import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdktf-util';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
+import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
+import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
+import { execSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import _clientConfigDev from '../../clientConfigDev.json';
 import _clientConfigProd from '../../clientConfigProd.json';
-import { CoreNumaApp, ExampleNumaApp } from '../constructs/apps';
-import { BaseNumaApp, BaseNumaAppProps } from '../constructs/apps/base-numa-app-construct';
+import { AppAgnosticApiGatewayLambdaCollection } from '../constructs/app-agnostic-api-gateway-lambda-collection';
+import {
+  BaseNumaApp,
+  BaseNumaAppProps,
+  UserConfigurableBaseNumaAppProps,
+} from '../constructs/apps/base-numa-app-construct';
+import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
+import { ExampleNumaApp } from '../constructs/apps/example-numa-app-construct';
 import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
-import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
-import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
-import { Fn } from 'cdktf';
-import { execSync } from 'node:child_process';
+import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -60,17 +66,16 @@ export class NumaClientStack extends ArcanumStack {
       userPoolId: core.userPoolId,
       userPoolClientId: core.userPoolClient.id,
       outputsBucket: core.outputsBucket,
-      accountId: props.config.clientAccountId
+      accountId: props.config.clientAccountId,
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
-    const coreAppId = props.client.replace(/^(?=[0-9])/, '_') + '-core';
-    new CoreNumaApp(this, coreAppId, {
+    const safeConstructId = props.client.replace(/^(?=[^a-zA-Z_])/, '_');
+    new AppAgnosticApiGatewayLambdaCollection(this, safeConstructId + '-core', {
       apiGatewayAuthorizerId: fe.authorizer.id,
       apiGatewayId: fe.apiGateway.id,
-      outputsBucket: core.outputsBucket.bucket,
-      clientId: core.userPoolClient?.id ?? '',
-      clientSecret: core.userPoolClient?.clientSecret ?? '',
+      clientId: core.userPoolClient.id,
+      clientSecret: core.userPoolClient.clientSecret,
     });
 
     if (props.config.allApps) {
@@ -78,7 +83,7 @@ export class NumaClientStack extends ArcanumStack {
     }
     const apps = Object.entries(props.config.apps ?? {}).map(([appId, appConfig]) => {
       const app = lookupAppFromId(appId);
-      return new app(this, `${props.client}-${appId}`, {
+      return new app(this, `${safeConstructId}-${appId}`, {
         ...appConfig,
         apiGatewayAuthorizerId: fe.authorizer.id,
         apiGatewayId: fe.apiGateway.id,
@@ -186,7 +191,7 @@ interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
    *
    * @default {}
    */
-  apps?: Record<string, Omit<BaseNumaAppProps, 'apiGatewayId' | 'apiGatewayAuthorizerId' | 'outputsBucket'>>;
+  apps?: Record<string, UserConfigurableBaseNumaAppProps>;
   /**
    * Whether to upload the Numa frontend. Used to disable frontend installation when using a custom frontend.
    *
@@ -223,6 +228,7 @@ export interface NumaClientStackProps extends ArcanumStackProps {
 }
 
 const appLibrary: Record<string, new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp> = {
+  'document-summariser': DocumentSummariser,
   'example-app': ExampleNumaApp,
   'meeting-analyser': MeetingAnalyser,
   'nzsba-policy-builder': NZSBAPolicyBuilder,
