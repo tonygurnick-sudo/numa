@@ -29,12 +29,12 @@ class TestLambdaFunction(unittest.TestCase):
             "# Document Summaries\n"
             "\n"
             "## Document 1: bar-file\n"
-            "\n"
             "bar\n"
+            "\n---\n"
             "\n"
             "## Document 2: foo-file\n"
-            "\n"
             "foo\n"
+            "\n---\n"
         )
         self.assertEqual(
             result,
