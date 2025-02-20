@@ -87,7 +87,16 @@
     "clientAccountId": "060795909741"
   },
   "align-me": {
-    "clientAccountId": "048723025977"
+    "clientAccountId": "390403893889",
+    "teamsConfigs": [
+      {
+        "tenantId": "ebac7c22-df8c-4c82-9e2b-38f1690f6f5a",
+        "configuration": {
+          "isCrawlChatMessages": false,
+          "isCrawlChatAttachment": false
+        }
+      }
+    ]
   },
   "av-media": {
     "clientAccountId": "961341552812"

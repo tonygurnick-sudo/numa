@@ -28,6 +28,7 @@ export interface TeamsConfiguration {
   inclusionUserEmailFilter?: string[];
   startCalendarDateTime?: string;
   // endCalendarDateTime?: string;  NOTE: Wondering if it creates it up to the current date if we don't include this.
+  paymentModel?: string;
 }
 
 const repositoryConfigurations: Record<string, RepositoryConfiguration> = {
@@ -335,8 +336,9 @@ export class TeamsDataSource extends DataSource {
       inclusionUserEmailFilter: [],
       startCalendarDateTime: '2023-01-01T00:00:00Z',
       // endCalendarDateTime: '2025-01-28T00:00:00Z',  NOTE: Wondering if it creates it up to the current date if we don't include this.
-      enableDeletionProtection: false, // Not sure if this is necessary
-      deletionProtectionThreshold: '100', // Not sure what this should be set to or if it's necessary
+      paymentModel: 'B',
+      enableDeletionProtection: false,  // Not sure if this is necessary
+      deletionProtectionThreshold: '100',  // Not sure what this should be set to or if it's necessary
     };
 
     super(scope, name, {
