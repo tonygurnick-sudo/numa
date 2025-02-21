@@ -96,6 +96,11 @@
           "isCrawlChatAttachment": false
         }
       }
+    ],
+    "boxConfigs": [
+      {
+        "enterpriseId": "511773"
+      }
     ]
   },
   "av-media": {
