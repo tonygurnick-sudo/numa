@@ -118,6 +118,31 @@ export const NumaAppProvider = ({ children }) => {
   const [hasRun, setHasRun] = useState(false);
   const { numaPost, numaGet } = useNumaRequest();
 
+  const resetAppState = () => {
+    setLoading(false);
+    setError(null);
+    setNumaApps([]);
+    setNumaAppData(null);
+    setNumaAppId(null);
+    setJobHistorySidebarOpen(false);
+    setNumaTaskResponses([]);
+    setTaskInputValues({});
+    setTaskCompletionStatus({});
+    setRunActive('disabled');
+    setProgress(0);
+    setIsPolling(false);
+    setAppRunning(false);
+    setProcessingProgress(0);
+    setProcessingStatus('');
+    setqAppData([]);
+    setQSessionId(null);
+    setQCardInputValues({});
+    setJobs([]);
+    setSelectedTaskId(null);
+    setActiveStep(0);
+    setHasRun(false);
+  };
+
   // Load jobs for the current app
   const loadAppJobs = async () => {
     if (!numaAppId) return;
@@ -973,6 +998,7 @@ export const NumaAppProvider = ({ children }) => {
     setActiveStep,
     hasRun,
     setHasRun,
+    resetAppState,
   };
 
   return <NumaAppContext.Provider value={contextValue}>{children}</NumaAppContext.Provider>;
