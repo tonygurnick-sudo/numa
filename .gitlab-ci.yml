@@ -19,6 +19,10 @@ workflow:
 variables:
   PYTHON_VER: '3.13'
 
+.rules:
+  if-main:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 .node-lambdas-matrix:
   matrix:
     - BUILD_DIR:
@@ -150,6 +154,8 @@ python-package:
   parallel: !reference [.python-lambdas-matrix]
   artifacts:
     paths: ['$PYTHON_WORKING_DIRECTORY/lambda_function.zip']
+  rules:
+    - !reference [.rules, if-main]
 
 node-package:
   extends: .node_job
@@ -164,6 +170,8 @@ node-package:
     paths:
       - '$BUILD_DIR/dist'
       - '$BUILD_DIR/lambda_function.zip'
+  rules:
+    - !reference [.rules, if-main]
 
 deploy-to-arcanum-demo:
   extends: infra-build
@@ -183,4 +191,4 @@ deploy-to-arcanum-demo:
     - artifacts: true
       job: frontend-build
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - !reference [.rules, if-main]
