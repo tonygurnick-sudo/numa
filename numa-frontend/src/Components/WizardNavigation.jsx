@@ -53,7 +53,7 @@ const WizardNavigation = ({
           type="submit"
           id="submit"
           className="run-app-button"
-          disabled={disabled}
+          disabled={disabled || hasRun}
           onClick={onClick}
           {...otherRunButtonProps}
         >

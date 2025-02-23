@@ -71,11 +71,8 @@ function createPayloadFromTemplate(template, inputValues, taskResults) {
     // Handle case for objects (recursively apply transformation)
     return Object.entries(template).reduce((acc, [key, value]) => {
       const processedValue = createPayloadFromTemplate(value, inputValues, taskResults);
-
-      // Only include non-empty values
-      if (processedValue !== '') {
-        acc[key] = processedValue;
-      }
+      // Always include the key in the accumulator, even if the value is empty
+      acc[key] = [processedValue];
       return acc;
     }, {});
   }
@@ -153,23 +150,21 @@ export const NumaAppProvider = ({ children }) => {
     let totalRequiredTasks = 0;
 
     const allTasksCompleted = numaAppData.tasks.every((task) => {
-      if (!task.requiredTasks) return true; // No dependencies, task is valid for 'Run' button
+      // If task is not required, it doesn't affect completion status
+      if (!task.required) return true;
 
-      const { any } = task.requiredTasks;
-      if (any) {
-        totalRequiredTasks++; // Increment count for required tasks
+      // For required tasks, increment total count
+      totalRequiredTasks++;
 
-        // Check if any required task is completed
-        const isTaskCompleted = any.some((requiredTaskId) => {
-          const lookupId = requiredTaskId.startsWith('@') ? requiredTaskId.slice(1) : requiredTaskId;
-          const isCompleted = taskCompletionStatus[lookupId];
-          if (isCompleted) completedCount++; // Increment completed task count if this task is completed
-          return isCompleted;
-        });
+      // Check if this required task is completed
+      const isCompleted = taskCompletionStatus[task.id];
 
-        return isTaskCompleted;
+      // Increment completed count if this task is done
+      if (isCompleted) {
+        completedCount++;
       }
-      return false;
+
+      return isCompleted;
     });
 
     // Enable the 'Run' button only if all required tasks are completed
@@ -213,8 +208,14 @@ export const NumaAppProvider = ({ children }) => {
 
   const processS3UploadTask = (task, currentResults) => {
     const uploadedFilePath = taskInputValues[task.id];
+
+    // Only consider the task complete if we have a valid upload path
+    if (!uploadedFilePath || (Array.isArray(uploadedFilePath) && uploadedFilePath.length === 0)) {
+      throw new Error('No file uploaded');
+    }
+
     // Preserve array structure from taskInputValues
-    currentResults[task.id] = uploadedFilePath; // uploadedFilePath is already an array from S3UploadModule
+    currentResults[task.id] = uploadedFilePath;
     console.log(`S3 upload result: ${currentResults[task.id]}`);
     return currentResults;
   };
@@ -918,7 +919,7 @@ export const NumaAppProvider = ({ children }) => {
     }));
   };
 
-  function updateTaskCompletionStatus(taskId, isComplete = true) {
+  function updateTaskCompletionStatus(taskId, isComplete = false) {
     setTaskCompletionStatus((prev) => ({
       ...prev,
       [taskId]: isComplete,

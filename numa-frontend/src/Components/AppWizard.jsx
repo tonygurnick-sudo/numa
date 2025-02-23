@@ -211,15 +211,6 @@ const AppWizard = ({ manifest }) => {
             processingStatus={processingStatus}
             hasRun={hasRun}
           />
-
-          {/* Error and Processing Status */}
-          <div className="mt-2" style={{ maxWidth: '600px', margin: '0 auto' }}>
-            {error && (
-              <Alert variant="danger" onClose={() => setError(null)} dismissible className="py-2">
-                {error.message || error}
-              </Alert>
-            )}
-          </div>
         </Col>
       </Row>
 
