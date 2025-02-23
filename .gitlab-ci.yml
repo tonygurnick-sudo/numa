@@ -46,9 +46,6 @@ variables:
         - lambdas/python/aggregate-document-results
         - lambdas/python/candidate-screening
         - lambdas/python/document-summariser
-        - lambdas/python/example-1
-        - lambdas/python/example-2
-        - lambdas/python/example-3
         - lambdas/python/extract-content-from-file
         - lambdas/python/financial-analysis-analysis
         - lambdas/python/financial-analysis-data-extraction
@@ -76,9 +73,6 @@ variables:
         - lambdas/python/aggregate-document-results
         - lambdas/python/candidate-screening
         - lambdas/python/document-summariser
-        - lambdas/python/example-1
-        - lambdas/python/example-2
-        - lambdas/python/example-3
         - lambdas/python/extract-content-from-file
         - lambdas/python/financial-analysis-analysis
         - lambdas/python/financial-analysis-data-extraction
