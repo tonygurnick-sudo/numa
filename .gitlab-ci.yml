@@ -19,6 +19,10 @@ workflow:
 variables:
   PYTHON_VER: '3.13'
 
+.rules:
+  if-main:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 .node-lambdas-matrix:
   matrix:
     - BUILD_DIR:
@@ -150,6 +154,8 @@ python-package:
   parallel: !reference [.python-lambdas-matrix]
   artifacts:
     paths: ['$PYTHON_WORKING_DIRECTORY/lambda_function.zip']
+  rules:
+    - !reference [.rules, if-main]
 
 node-package:
   extends: .node_job
@@ -164,16 +170,41 @@ node-package:
     paths:
       - '$BUILD_DIR/dist'
       - '$BUILD_DIR/lambda_function.zip'
+  rules:
+    - !reference [.rules, if-main]
 
-deploy-to-arcanum-demo:
+.deploy-infra:
   extends: infra-build
   stage: deploy
   variables:
     TF_ENVIRONMENT: prod
     AWS_REGION: us-east-1
   script:
-    - yarn exec cdktf deploy --auto-approve numa-arcanum-demo
+    - yarn exec cdktf deploy --auto-approve numa-${CLIENT_NAME}
   needs:
+    - artifacts: true
+      job: python-package
+      parallel: !reference [.python-lambdas-matrix]
+    - artifacts: true
+      job: node-package
+      parallel: !reference [.node-lambdas-matrix]
+    - artifacts: true
+      job: frontend-build
+
+deploy-to-arcanum-demo:
+  extends: .deploy-infra
+  variables:
+    CLIENT_NAME: arcanum-demo
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+deploy-to-arcanum-prod-numa-demo:
+  extends: .deploy-infra
+  variables:
+    CLIENT_NAME: arcanum-prod-numa-demo
+  needs:
+    - job: deploy-to-arcanum-demo
+    # This needs to be duplicated as referencing .deploy-infra, needs doesn't work properly
     - artifacts: true
       job: python-package
       parallel: !reference [.python-lambdas-matrix]
@@ -184,3 +215,4 @@ deploy-to-arcanum-demo:
       job: frontend-build
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual

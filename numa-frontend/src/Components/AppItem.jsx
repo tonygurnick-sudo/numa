@@ -19,7 +19,12 @@ const AppItem = ({ app }) => {
   };
 
   return (
-    <div className="card card-apps w-100" data-testid={`app-card-${app.id}`}>
+    <div
+      className={`card card-apps w-100 ${app.status !== 'Active' ? 'card-disabled' : ''}`}
+      data-testid={`app-card-${app.id}`}
+      title={app.status !== 'Active' ? 'This app is unavailable' : ''}
+      data-tooltip-delay="500"
+    >
       <div className={`card-category ${app?.category?.toLowerCase()}`}>
         {app?.category?.toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase()) || '\u00A0'}
       </div>
@@ -82,18 +87,31 @@ const AppItem = ({ app }) => {
             </div>
           </div>
           <div className="footer-right">
-            <a href={`/app/${app.id}`} rel="noopener">
-              <div className="icon-flip-container">
+            {app.status === 'Active' ? (
+              <a href={`/app/${app.id}`} rel="noopener">
+                <div className="icon-flip-container">
+                  <div className="icon-flipper">
+                    <div className="front">
+                      <i className="bi bi-arrow-right-circle"></i>
+                    </div>
+                    <div className="back">
+                      <i className="bi bi-arrow-right-circle"></i>
+                    </div>
+                  </div>
+                </div>
+              </a>
+            ) : (
+              <div className="icon-flip-container disabled" title="App is unavailable">
                 <div className="icon-flipper">
                   <div className="front">
-                    <i className="bi bi-arrow-right-circle"></i>
+                    <i className="bi bi-arrow-right-circle text-muted"></i>
                   </div>
                   <div className="back">
-                    <i className="bi bi-arrow-right-circle"></i>
+                    <i className="bi bi-arrow-right-circle text-muted"></i>
                   </div>
                 </div>
               </div>
-            </a>
+            )}
           </div>
         </div>
       </div>

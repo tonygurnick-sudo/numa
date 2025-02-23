@@ -30,20 +30,15 @@ const AppDetail = () => {
     toggleFavorite(appId);
   };
 
-  if (error) {
-    return (
-      <div className="dashboard">
-        <Container fluid>
-          <Alert variant="danger">
-            {typeof error === 'string' ? error : 'An error occurred while loading the app'}
-          </Alert>
-        </Container>
-      </div>
-    );
-  }
-
   return (
     <div className="dashboard">
+      {error && (
+        <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1000 }}>
+          <Alert variant="danger" dismissible className="mb-0 shadow" onClose={() => setError(null)}>
+            {typeof error === 'string' ? error : 'An error occurred while loading the app'}
+          </Alert>
+        </div>
+      )}
       <JobHistorySidebar />
       <header>
         <Container fluid>

@@ -134,13 +134,7 @@ export const Dash = ({ showFavorites }) => {
       return matchesSearch && matchesCategories;
     });
 
-    // Define status priority order
-    const statusPriority = {
-      Active: 0,
-      Deploy: 1,
-    };
-
-    // Sort apps by favorites and status priority first, then alphabetically within each group
+    // Sort apps by favorites first, then active status, then by priority, then alphabetically
     return filtered.sort((a, b) => {
       // First, check if either app is a favorite
       const isFavA = favorites.includes(a.id);
@@ -150,18 +144,26 @@ export const Dash = ({ showFavorites }) => {
         return isFavA ? -1 : 1;
       }
 
-      // Then check status priority
-      const priorityA = statusPriority[a.status] ?? 2;
-      const priorityB = statusPriority[b.status] ?? 2;
+      // Then sort by active status
+      const isActiveA = a.status === 'Active';
+      const isActiveB = b.status === 'Active';
 
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
+      if (isActiveA !== isActiveB) {
+        return isActiveA ? -1 : 1;
       }
 
-      // Finally, sort alphabetically within each group
-      const nameA = a.appName.toLowerCase();
-      const nameB = b.appName.toLowerCase();
-      return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+      // Then sort by priority
+      const priorityA = a.priority || 0;
+      const priorityB = b.priority || 0;
+
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA; // Higher priority first
+      }
+
+      // Finally sort alphabetically
+      return sortOrder === 'asc'
+        ? a.appName.toLowerCase().localeCompare(b.appName.toLowerCase())
+        : b.appName.toLowerCase().localeCompare(a.appName.toLowerCase());
     });
   }, [searchTerm, activeCategories, numaApps, sortOrder, showFavorites, favorites]);
 

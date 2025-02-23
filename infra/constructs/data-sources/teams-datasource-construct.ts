@@ -337,8 +337,8 @@ export class TeamsDataSource extends DataSource {
       startCalendarDateTime: '2023-01-01T00:00:00Z',
       // endCalendarDateTime: '2025-01-28T00:00:00Z',  NOTE: Wondering if it creates it up to the current date if we don't include this.
       paymentModel: 'B',
-      enableDeletionProtection: false,  // Not sure if this is necessary
-      deletionProtectionThreshold: '100',  // Not sure what this should be set to or if it's necessary
+      enableDeletionProtection: false, // Not sure if this is necessary
+      deletionProtectionThreshold: '100', // Not sure what this should be set to or if it's necessary
     };
 
     super(scope, name, {
