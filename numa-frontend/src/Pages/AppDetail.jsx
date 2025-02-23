@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { Alert, Container, Row, Col } from 'react-bootstrap';
-import { useParams } from 'react-router-dom';
+import { Alert, Container, Row, Col, Button } from 'react-bootstrap';
+import { useParams, useNavigate } from 'react-router-dom';
 import { StarFill, Star } from 'react-bootstrap-icons';
 
 import { Breadcrumbs } from '../Components/Breadcrumbs';
@@ -16,9 +16,10 @@ import { PolicyBuilderDetail } from '../Components/PolicyBuilderDetail';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, setNumaAppId, numaAppData, setError } = useNumaApp();
+  const { error, setNumaAppId, numaAppData, resetAppState } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setNumaAppId(appId);
@@ -46,6 +47,18 @@ const AppDetail = () => {
             <Col lg={8} className="pe-5">
               <h1 className="h3 mb-0">
                 {numaAppData?.appName}
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  className="reset-app-btn ms-2"
+                  onClick={() => {
+                    resetAppState();
+                    navigate(`/app/${numaAppData.id}`);
+                  }}
+                >
+                  <i className="bi bi-arrow-counterclockwise me-2"></i>
+                  Reset App
+                </Button>
                 <button onClick={handleFavoriteClick} className="btn btn-link text-warning p-0 ms-2">
                   {favorite ? <StarFill size={20} /> : <Star size={20} />}
                 </button>
