@@ -15,7 +15,7 @@ const createJobData = (numaAppData, taskInputs, jobID = null) => {
     results: null,
     status: 'running',
     lastUpdated: null,
-    manifest: numaAppData, // Store the full manifest
+    manifest: JSON.stringify(numaAppData), // Store the full manifest
   };
 };
 
@@ -33,7 +33,12 @@ export const useJobsApi = () => {
 
       console.log('Job creation response:', response);
 
-      if (!response.status === '"running"') {
+      // Check if the response is an object
+      if (typeof response !== 'object') {
+        throw new Error('Invalid job creation response from API');
+      }
+
+      if (response.status !== 'running') {
         const errorMessage = response.error || 'Failed to create job';
         console.error('Job creation failed:', errorMessage);
         throw new Error(errorMessage);
