@@ -112,10 +112,10 @@ export class NumaClientStack extends ArcanumStack {
             }[source.split('.')?.pop() ?? 'default'];
             return new S3Object(this, `website-file-${source}`, {
               bucket: fe.frontendBucket.bucket,
-              source,
-              key: path.relative(folderPath, source),
               contentType,
-              etag: Fn.filemd5(source),
+              key: path.relative(folderPath, source),
+              source,
+              sourceHash: Fn.filemd5(source),
             });
           });
       } catch {
