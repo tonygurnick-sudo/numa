@@ -1,8 +1,24 @@
 # Example 1
 
-Build a deployable zip file with:
+# Overview: AWS Lambda function to create a structured user/company profile from text inputs and accompanying documentation.
 
+# Inputs:
+- **details** (required): Basic profile information (e.g., name, email, phone, address).
+- **about** (optional): Additional narrative description.
+- **documentation_text** (optional): Accompanying documentation text.
+- **app_id** (required): Application identifier.
+- **output_bucket** (required): S3 bucket to store the profile JSON.
+
+# Outputs:
+- A JSON profile saved to S3 containing:
+  - **profile_summary** (optional)
+  - **profile_details** (required: `name`)
+  - **about** (optional)
+  - **document_analysis** (optional)
+- The output key is auto-generated from the profile name (e.g., `profiles/jane_doe_profile.json`).
+
+# Build Info:
+Build a deployable zip file with:
 ```bash
-poetry self add poetry-plugin-lambda-build # if the plugin isn't installed already
+poetry self add poetry-plugin-lambda-build
 poetry build-lambda
-```
