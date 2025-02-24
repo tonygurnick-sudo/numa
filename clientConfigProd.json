@@ -63,7 +63,8 @@
       "meeting-analyser": {},
       "nzsba-policy-builder": {
         "s3KeyPrefix": "/arcanum-demo-sebastian-nzsba-policy-builder"
-      }
+      },
+      "policy-reviewer": {}
     },
     "devInstance": true
   },

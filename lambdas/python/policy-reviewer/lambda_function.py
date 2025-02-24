@@ -1,11 +1,11 @@
-import json
-import logging
-from datetime import datetime
-from pathlib import Path
+import uuid
 
-import boto3
+import structlog
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import bedrock
+import helpers
+import s3_helpers
 from prompts import (
     INITIAL_ANALYSIS_PROMPT,
     POLICY_REVIEW_PROMPT,
@@ -15,26 +15,29 @@ from prompts import (
 
 MAX_TOKENS = 4096
 
-s3_client = boto3.client("s3")
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = structlog.get_logger()
 
 
-def handler(event: dict, _context) -> dict:
-    """Main handler function for the lambda."""
+def __get_job_id(event: dict):
+    return event.get("job_id", str(uuid.uuid4()))
+
+
+def handler(event: dict, context: LambdaContext) -> dict:
+    app_id = event["app_id"]
+    job_id = __get_job_id(event)
+    helpers.setup_logging()
+    structlog.contextvars.bind_contextvars(
+        function_name=context.function_name,
+        app_id=app_id,
+        job_id=job_id,
+    )
+    logger.info("Execute lambda", lambda_event=event)
     try:
-        content_s3_key = event["content_s3_key"]
-        document_key = event["document_key"]
-        output_bucket = event["output_bucket"]
-        execution_id = event["execution_id"]
-        policy_context = event.get(
-            "policy_context",
-            "Provide a brief description of your policy’s purpose, scope, and any relevant background information. Include details such as the industry or organization it applies to, key stakeholders, and specific goals or concerns. This context will help tailor the review to your needs.",
-        )
-        legislation_content = event.get("legislation_content", "")
+        input_key = event["input_key"]
+        legislation_content = event["legislation_content"]
+        policy_context = event["policy_context"]
 
-        document_stem = Path(document_key).stem
-        policy_content = read_file_from_s3(output_bucket, content_s3_key)
+        policy_content = s3_helpers.read(input_key)
 
         initial_analysis = get_model_response(
             prompt=INITIAL_ANALYSIS_PROMPT,
@@ -74,28 +77,12 @@ def handler(event: dict, _context) -> dict:
             "policy_review": policy_review,
             "recommended_updates": recommended_updates,
             "updated_policy": updated_policy,
-            "metadata": {
-                "document_key": document_key,
-                "execution_id": execution_id,
-                "timestamp": datetime.now().isoformat(),
-            },
         }
 
-        output_key = f"policy_reviews/{execution_id}/review_{document_stem}.json"
-        s3_client.put_object(
-            Bucket=output_bucket,
-            Key=output_key,
-            Body=json.dumps(results, indent=2).encode("utf-8"),
-            ContentType="application/json",
-        )
+        return results
 
-        return {
-            "output_bucket": output_bucket,
-            "output_key": output_key,
-        }
-
-    except Exception as e:
-        logger.error(f"Error in lambda execution: {str(e)}")
+    except Exception:
+        logger.exception("Error in lambda execution")
         raise
 
 
@@ -115,14 +102,3 @@ def get_model_response(prompt: str, input_data: dict) -> str:
         if isinstance(response.response[0], dict):
             return response.response[0].get("text", "")
     return str(response.response)
-
-
-def read_file_from_s3(bucket: str, key: str) -> str:
-    """Read a file from S3 and return its contents."""
-    try:
-        response = s3_client.get_object(Bucket=bucket, Key=key)
-        content = response["Body"].read().decode("utf-8")
-        return content
-    except Exception as e:
-        logger.error(f"Error reading from S3: {str(e)}")
-        raise
