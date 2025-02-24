@@ -11,10 +11,10 @@
 
 # Outputs:
 - A JSON profile saved to S3 containing:
-  - **profile_summary** (optional)
+  - **profile_summary**
   - **profile_details** (required: `name`)
-  - **about** (optional)
-  - **document_analysis** (optional)
+  - **about**
+  - **document_analysis**
 - The output key is auto-generated from the profile name (e.g., `profiles/jane_doe_profile.json`).
 
 # Build Info:
