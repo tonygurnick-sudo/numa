@@ -11,8 +11,8 @@ DOCUMENT_SUMMARY_PROMPT = """Summarize the document(s) based on the following re
 
 Follow this exact header hierarchy:
 
-1. Then `#### [Main Section]` (e.g., Key Points and Details)
-2. Then `##### [Subsection]` (e.g., Introduction)
+1. Then `## [Main Section]` (e.g., Key Points and Details)
+2. Then `### [Subsection]` (e.g., Introduction)
 -  Use `-` for bullet points under each section
 -  Use `>` for direct quotes from the document
 -  Use tables where applicable for comparing content
