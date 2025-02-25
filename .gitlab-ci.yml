@@ -137,6 +137,9 @@ frontend-build:
   parallel:
     matrix:
       - BUILD_DIR: [numa-frontend]
+  script:
+    - corepack enable
+    - NODE_OPTIONS=--max-old-space-size=4096 yarn build
   artifacts:
     paths: ['infra/build/numa-frontend']
 
