@@ -51,15 +51,18 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
 
 def format_summaries(summaries: list[tuple[str, str]]) -> str:
-    formatted_parts = ["# Document Summaries\n"]
+    formatted_parts = []
 
     for index, (document_name, summary) in enumerate(summaries, 1):
         formatted_parts.extend(
             [
-                f"\n## Document {index}: {document_name}\n",
+                f"# Document {index}: {document_name}\n",
                 f"{summary.strip()}\n",
                 "\n---\n",
             ]
         )
+
+        if index < len(summaries):
+            formatted_parts.append("\n")
 
     return "".join(formatted_parts)

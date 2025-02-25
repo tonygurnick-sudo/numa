@@ -26,13 +26,11 @@ class TestLambdaFunction(unittest.TestCase):
         result = lambda_function.handler(test_event, CONTEXT)
 
         expected_content = (
-            "# Document Summaries\n"
-            "\n"
-            "## Document 1: bar-file\n"
+            "# Document 1: bar-file\n"
             "bar\n"
             "\n---\n"
             "\n"
-            "## Document 2: foo-file\n"
+            "# Document 2: foo-file\n"
             "foo\n"
             "\n---\n"
         )
