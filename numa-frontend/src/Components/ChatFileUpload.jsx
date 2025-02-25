@@ -70,15 +70,16 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
         return;
       }
 
-      // Store files with original File object
-      setFiles(
-        validFiles.map((file) => ({
+      // Append new files to existing ones
+      setFiles((prevFiles) => [
+        ...prevFiles,
+        ...validFiles.map((file) => ({
           name: file.name,
           size: file.size,
           type: file.type || 'text/plain',
           file: file,
         })),
-      );
+      ]);
       setError(null);
     } catch (error) {
       console.error('Error selecting files:', error);
@@ -96,26 +97,26 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
+        const text = reader.result;
+        // Check content size before encoding
+        const contentSize = new Blob([text]).size;
+        if (contentSize > MAX_FILE_SIZE) {
+          reject(
+            new Error(
+              `File content size exceeds 10MB limit. File "${file.name}" content is ${(
+                contentSize /
+                (1024 * 1024)
+              ).toFixed(2)}MB`,
+            ),
+          );
+          return;
+        }
+        // Convert to base64
         try {
-          const text = reader.result;
-          // Check content size before encoding
-          const contentSize = new Blob([text]).size;
-          if (contentSize > MAX_FILE_SIZE) {
-            reject(
-              new Error(
-                `File content size exceeds 10MB limit. File "${file.name}" content is ${(
-                  contentSize /
-                  (1024 * 1024)
-                ).toFixed(2)}MB`,
-              ),
-            );
-            return;
-          }
-          // Convert to base64
           const base64Data = btoa(unescape(encodeURIComponent(text)));
           resolve(base64Data);
         } catch (error) {
-          reject(error);
+          reject(new Error(`Error encoding file "${file.name}": ${error.message}`));
         }
       };
       reader.onerror = () => reject(new Error(`Error reading file: ${file.name}`));
@@ -145,16 +146,6 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
             throw new Error(`Error processing file "${fileInfo.name}": ${error.message}`);
           }
         }),
-      );
-
-      console.log(
-        'Files being sent to NumaChat:',
-        processedFiles.map((f) => ({
-          name: f.name,
-          type: f.type,
-          size: f.size,
-          dataLength: f.data?.length,
-        })),
       );
 
       onUploadSuccess(processedFiles);
