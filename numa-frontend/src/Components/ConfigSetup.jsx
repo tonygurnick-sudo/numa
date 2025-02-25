@@ -13,6 +13,11 @@ export const fetchConfigAddtoSession = async () => {
 
   const configData = await response.json();
 
+  // Check if configData is empty
+  if (!configData || Object.keys(configData).length === 0) {
+    throw new Error('Config file is empty');
+  }
+
   // Loop through the desired properties and add them to sessionStorage
   const propertiesToAdd = [
     'Q_APPLICATION_ID',
@@ -27,6 +32,13 @@ export const fetchConfigAddtoSession = async () => {
     'CLIENT_ID',
     'CLIENT_NAME',
   ];
+
+  // Check if all required properties exist
+  const missingProperties = propertiesToAdd.filter((prop) => !Object.hasOwn(configData, prop));
+  if (missingProperties.length > 0) {
+    throw new Error(`Missing required properties in config: ${missingProperties.join(', ')}`);
+  }
+
   propertiesToAdd.forEach((property) => {
     const existing = sessionStorage.getItem(property);
     if ((configData[property] ?? 'undefined') != existing) {

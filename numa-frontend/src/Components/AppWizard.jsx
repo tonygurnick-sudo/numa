@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import { Container, Row, Col, Button, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Button } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
@@ -26,7 +26,6 @@ const AppWizard = ({ manifest }) => {
     setSelectedTaskId,
     activeStep,
     setActiveStep,
-    error,
     hasRun,
     setHasRun,
   } = useNumaApp();

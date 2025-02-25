@@ -16,7 +16,7 @@ import { PolicyBuilderDetail } from '../Components/PolicyBuilderDetail';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, setError, setNumaAppId, numaAppData, resetAppState } = useNumaApp();
+  const { error, setNumaAppId, numaAppData, resetAppState, setError } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
   const navigate = useNavigate();
