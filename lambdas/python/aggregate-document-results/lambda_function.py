@@ -56,10 +56,13 @@ def format_summaries(summaries: list[tuple[str, str]]) -> str:
     for index, (document_name, summary) in enumerate(summaries, 1):
         formatted_parts.extend(
             [
-                f"\n## Document {index}: {document_name}\n",
+                f"# Document {index}: {document_name}\n",
                 f"{summary.strip()}\n",
                 "\n---\n",
             ]
         )
+
+        if index < len(summaries):
+            formatted_parts.append("\n")
 
     return "".join(formatted_parts)
