@@ -16,7 +16,7 @@ import { PolicyBuilderDetail } from '../Components/PolicyBuilderDetail';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, setNumaAppId, numaAppData, resetAppState } = useNumaApp();
+  const { error, setError, setNumaAppId, numaAppData, resetAppState } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
   const navigate = useNavigate();
@@ -45,12 +45,12 @@ const AppDetail = () => {
           <Breadcrumbs label={numaAppData?.appName} />
           <Row>
             <Col lg={8} className="pe-5">
-              <h1 className="h3 mb-0">
-                {numaAppData?.appName}
+              <div className="d-flex align-items-center mb-3">
+                <h1 className="h3 mb-0">{numaAppData?.appName}</h1>
                 <Button
                   variant="outline-secondary"
                   size="sm"
-                  className="reset-app-btn ms-2"
+                  className="ms-2"
                   onClick={() => {
                     resetAppState();
                     navigate(`/app/${numaAppData.id}`);
@@ -62,7 +62,7 @@ const AppDetail = () => {
                 <button onClick={handleFavoriteClick} className="btn btn-link text-warning p-0 ms-2">
                   {favorite ? <StarFill size={20} /> : <Star size={20} />}
                 </button>
-              </h1>
+              </div>
               {numaAppData?.appDescription && (
                 <p
                   className="text-muted mb-3"

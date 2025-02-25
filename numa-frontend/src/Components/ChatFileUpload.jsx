@@ -1,8 +1,21 @@
 import { useState } from 'react';
 import { Modal, Button } from 'react-bootstrap';
 
-// Supported file extensions
+// Supported file extensions and MIME types
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
 const SUPPORTED_EXTENSIONS = ['.txt', '.csv', '.md', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'];
+const SUPPORTED_MIME_TYPES = {
+  'text/plain': '.txt',
+  'application/pdf': '.pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'text/csv': '.csv',
+  'text/markdown': '.md',
+  'application/msword': '.doc',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+};
 
 const getFileExtension = (filename) => {
   const lastDotIndex = filename.lastIndexOf('.');
@@ -13,25 +26,53 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
   const [files, setFiles] = useState([]);
   const [error, setError] = useState(null);
 
+  const validateFile = (file) => {
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error(
+        `File size exceeds 10MB limit. File "${file.name}" is ${(file.size / (1024 * 1024)).toFixed(2)}MB`,
+      );
+    }
+
+    // Check file type by both extension and MIME type
+    const extension = getFileExtension(file.name);
+    const mimeType = file.type;
+
+    const isValidExtension = SUPPORTED_EXTENSIONS.includes(extension);
+    const isValidMimeType = Object.keys(SUPPORTED_MIME_TYPES).includes(mimeType);
+
+    if (!isValidExtension && !isValidMimeType) {
+      throw new Error(`Invalid file type: "${file.name}". Please upload PDF, DOCX, or TXT files only.`);
+    }
+
+    return true;
+  };
+
   const handleFileChange = (event) => {
     try {
       const selectedFiles = Array.from(event.target.files);
 
-      // Validate file types
-      const unsupportedFiles = selectedFiles.filter(
-        (file) => !SUPPORTED_EXTENSIONS.includes(getFileExtension(file.name)),
-      );
+      // Validate each file
+      const validationErrors = [];
+      const validFiles = [];
 
-      if (unsupportedFiles.length > 0) {
-        setError(
-          `Unsupported file type(s): ${unsupportedFiles.map((f) => f.name).join(', ')}\nSupported types: ${SUPPORTED_EXTENSIONS.join(', ')}`,
-        );
+      selectedFiles.forEach((file) => {
+        try {
+          validateFile(file);
+          validFiles.push(file);
+        } catch (error) {
+          validationErrors.push(error.message);
+        }
+      });
+
+      if (validationErrors.length > 0) {
+        setError(validationErrors.join('\n'));
         return;
       }
 
       // Store files with original File object
       setFiles(
-        selectedFiles.map((file) => ({
+        validFiles.map((file) => ({
           name: file.name,
           size: file.size,
           type: file.type || 'text/plain',
@@ -51,6 +92,37 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
     setFiles(newFiles);
   };
 
+  const readFileContent = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const text = reader.result;
+          // Check content size before encoding
+          const contentSize = new Blob([text]).size;
+          if (contentSize > MAX_FILE_SIZE) {
+            reject(
+              new Error(
+                `File content size exceeds 10MB limit. File "${file.name}" content is ${(
+                  contentSize /
+                  (1024 * 1024)
+                ).toFixed(2)}MB`,
+              ),
+            );
+            return;
+          }
+          // Convert to base64
+          const base64Data = btoa(unescape(encodeURIComponent(text)));
+          resolve(base64Data);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = () => reject(new Error(`Error reading file: ${file.name}`));
+      reader.readAsText(file);
+    });
+  };
+
   const handleSubmit = async () => {
     if (files.length === 0) {
       setError('Please select at least one file.');
@@ -61,17 +133,17 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
       // Process files and read their content
       const processedFiles = await Promise.all(
         files.map(async (fileInfo) => {
-          // Read file content as text
-          const text = await fileInfo.file.text();
-          // Convert to base64
-          const base64Data = btoa(unescape(encodeURIComponent(text)));
-
-          return {
-            name: fileInfo.name,
-            size: fileInfo.size,
-            type: fileInfo.type || 'text/plain',
-            data: base64Data, // Send base64 encoded content
-          };
+          try {
+            const base64Data = await readFileContent(fileInfo.file);
+            return {
+              name: fileInfo.name,
+              size: fileInfo.size,
+              type: fileInfo.type || 'text/plain',
+              data: base64Data,
+            };
+          } catch (error) {
+            throw new Error(`Error processing file "${fileInfo.name}": ${error.message}`);
+          }
         }),
       );
 
@@ -88,9 +160,10 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
       onUploadSuccess(processedFiles);
       setFiles([]);
       setError(null);
+      onHide();
     } catch (error) {
       console.error('Error submitting files:', error);
-      setError('Failed to upload files. Please try again.');
+      setError(error.message || 'Failed to upload files. Please try again.');
     }
   };
 
@@ -103,11 +176,15 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
         <div className="chat-file-upload">
           <input
             type="file"
-            onChange={handleFileChange}
-            multiple
             className="form-control"
-            accept=".txt,.csv,.md,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+            multiple
+            accept={SUPPORTED_EXTENSIONS.join(',')}
+            onChange={handleFileChange}
+            data-testid="file-input"
           />
+          <p className="text-muted small mt-2">
+            Accepts {SUPPORTED_EXTENSIONS.join(', ').replace(/\./g, '').toUpperCase()} files up to 10MB each
+          </p>
           {files.length > 0 && (
             <div className="uploaded-files mt-3">
               <h6>Selected Files:</h6>
@@ -117,9 +194,11 @@ const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
                     <span className="file-name">{file.name}</span>
                     <span className="file-size text-muted ms-2">({(file.size / 1024).toFixed(1)} KB)</span>
                     <button
+                      type="button"
+                      className="btn btn-sm ms-2 remove-file-btn"
                       onClick={() => handleRemoveFile(index)}
-                      className="remove-file btn btn-link p-0 ms-2"
-                      title="Remove file"
+                      aria-label={`Remove ${file.name}`}
+                      data-testid={`remove-file-${file.name}`}
                     >
                       ×
                     </button>
