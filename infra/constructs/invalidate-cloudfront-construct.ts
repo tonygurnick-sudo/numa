@@ -1,15 +1,14 @@
-import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
-import { TypescriptLambdaConstruct } from '@arcanumai/typescript-lambda-construct';
-import { Construct } from 'constructs';
-import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
-import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
-import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
-import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
-import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
+import { TypescriptLambdaConstruct } from '@arcanumai/typescript-lambda-construct';
 import { CloudfrontDistribution } from '@cdktf/provider-aws/lib/cloudfront-distribution';
-import { hash } from 'node:crypto';
+import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
+import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
+import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
+import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { Fn } from 'cdktf';
+import { Construct } from 'constructs';
 
 export class InvalidateCloudfront extends Construct {
   constructor(scope: Construct, name: string, props: InvalidateCloudfrontProps) {
@@ -54,9 +53,11 @@ export class InvalidateCloudfront extends Construct {
       input,
       triggers: {
         // This causes the lambda to trigger on every source change.
-        sourceHash: hash(
-          'sha256',
-          props.dependsOn.map((dep) => Fn.coalesce([dep.sourceHash, Fn.sha256(dep.content)])).join(''),
+        sourceHash: Fn.sha256(
+          Fn.join(
+            '',
+            props.dependsOn.map((dependency) => Fn.coalesce([dependency.sourceHash, dependency.content])),
+          ),
         ),
       },
       dependsOn: [...props.dependsOn, func.lambdaFunction, policyAttachment],
