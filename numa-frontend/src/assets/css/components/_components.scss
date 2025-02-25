@@ -83,7 +83,7 @@ label {
     display: inline-block;
     line-height: 1;
     position: absolute;
-    top: -8px;
+    top: 2px;
     width: fit-content;
     left: 50%;
   }
@@ -799,6 +799,22 @@ label {
     align-items: center;
     cursor: pointer;
     position: relative;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.2s ease-in-out;
+
+    &:hover {
+      background-color: rgba(75, 129, 161, 0.05);
+      transform: translateY(-2px);
+
+      .step-number {
+        box-shadow: 0 2px 8px rgba(75, 129, 161, 0.2);
+      }
+
+      .step-label {
+        color: var(--color-primary);
+      }
+    }
 
     .step-number {
       width: 35px;
@@ -813,11 +829,38 @@ label {
       font-weight: bold;
       transition: all 0.3s ease;
       color: #6c757d;
+      position: relative;
+
+      &::after {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        top: -2px;
+        left: -2px;
+        animation: pulse 2s infinite;
+        opacity: 0;
+      }
     }
 
-    &.active .step-number {
-      border-color: var(--color-primary);
-      color: var(--color-primary);
+    &:hover .step-number::after {
+      opacity: 1;
+    }
+
+    &.active {
+      background-color: rgba(75, 129, 161, 0.08);
+
+      .step-number {
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+      }
+
+      .step-label {
+        color: var(--color-primary);
+        font-weight: 500;
+      }
     }
 
     &.completed .step-number {
@@ -830,6 +873,7 @@ label {
       font-size: 14px;
       color: #6c757d;
       text-align: center;
+      transition: color 0.2s ease;
     }
 
     .completion-dot {
@@ -841,6 +885,21 @@ label {
       border-radius: 50%;
       background: #28a745;
       border: 2px solid white;
+    }
+  }
+
+  @keyframes pulse {
+    0% {
+      transform: scale(1);
+      border-color: rgba(75, 129, 161, 0.2);
+    }
+    50% {
+      transform: scale(1.1);
+      border-color: rgba(75, 129, 161, 0.1);
+    }
+    100% {
+      transform: scale(1);
+      border-color: rgba(75, 129, 161, 0);
     }
   }
 
@@ -2088,7 +2147,10 @@ svg.title-star {
 }
 
 .reset-app-btn {
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
 }
 
 .reset-app-btn:hover {
