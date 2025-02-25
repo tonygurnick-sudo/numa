@@ -14,7 +14,6 @@ function TextOutputModule({ task }) {
 
   return (
     <div className={`output-module ${isSelected ? 'selected' : ''}`}>
-      {task.title && <h4>{task.title}</h4>}
       <div className="output-text markdown-content">
         {appRunning && !taskResponse?.result && <Preloader smallscreen={true} />}
         {error && <div className="text-danger">{error instanceof Error ? error.message : 'An error occurred'}</div>}

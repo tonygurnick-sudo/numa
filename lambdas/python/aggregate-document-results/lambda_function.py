@@ -51,7 +51,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
 
 def format_summaries(summaries: list[tuple[str, str]]) -> str:
-    formatted_parts = ["# Document Summaries\n"]
+    formatted_parts = []
 
     for index, (document_name, summary) in enumerate(summaries, 1):
         formatted_parts.extend(
