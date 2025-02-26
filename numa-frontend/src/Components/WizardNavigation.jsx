@@ -1,4 +1,6 @@
 import { Button, ProgressBar } from 'react-bootstrap';
+import { CheckCircleFill } from 'react-bootstrap-icons';
+import { useEffect, useState } from 'react';
 
 const WizardNavigation = ({
   preRunSteps,
@@ -13,9 +15,20 @@ const WizardNavigation = ({
   hasRun,
 }) => {
   const { isRunning, disabled, onClick, ...otherRunButtonProps } = runButtonProps;
+  const [wasDisabled, setWasDisabled] = useState(true);
+  const [showHighlight, setShowHighlight] = useState(false);
 
   // Show post-run steps if app is running or has been run (has results)
   const hasBeenRun = isRunning || hasRun;
+
+  useEffect(() => {
+    if (wasDisabled && !disabled) {
+      setShowHighlight(true);
+      const timer = setTimeout(() => setShowHighlight(false), 2000);
+      return () => clearTimeout(timer);
+    }
+    setWasDisabled(disabled);
+  }, [disabled, wasDisabled]);
 
   return (
     <div className="wizard-navigation">
@@ -29,17 +42,18 @@ const WizardNavigation = ({
                   className={`step-indicator ${
                     activeStep === index ? 'active' : ''
                   } ${isStepComplete?.(index) ? 'completed' : ''}`}
-                  onClick={() => !isStepDisabled?.(index) && onStepClick(index)}
+                  onClick={() => onStepClick(index)}
                 >
                   <span className="step-number">{index + 1}</span>
                   <div className="step-label-container">
                     <span className="step-label">{step.title}</span>
-                    {step?.required && (
+                    {step?.required && !isStepComplete?.(index) && (
                       <span className="required-label" title="Required item to run">
                         req
                       </span>
                     )}
                   </div>
+                  {isStepComplete?.(index) && <CheckCircleFill className="step-complete-icon text-success" />}
                 </div>
                 {index < preRunSteps.length - 1 && <div className="step-connector" />}
               </div>
@@ -52,7 +66,7 @@ const WizardNavigation = ({
         <Button
           type="submit"
           id="submit"
-          className="run-app-button"
+          className={`run-app-button ${showHighlight ? 'highlight-ready' : ''}`}
           disabled={disabled || hasRun}
           onClick={onClick}
           {...otherRunButtonProps}

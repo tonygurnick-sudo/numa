@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Container, Row, Col, Button } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { StarFill, Star } from 'react-bootstrap-icons';
@@ -13,17 +13,41 @@ import { useFavorites } from '../hooks/useFavorites';
 import AppWizard from '../Components/AppWizard';
 import { formatCategory } from '../utils/textUtils';
 import { PolicyBuilderDetail } from '../Components/PolicyBuilderDetail';
+import { manifestService } from '../Services/manifestService';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, setNumaAppId, numaAppData, resetAppState, setError } = useNumaApp();
+  const { error, setNumaAppId, numaAppData, resetAppState, setError, setNumaAppData } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
 
+  // Single useEffect to handle both app loading and ID setting
   useEffect(() => {
-    setNumaAppId(appId);
-  }, [appId]);
+    const loadApp = async () => {
+      if (!appId) return;
+
+      // If we already have the correct app data, don't reload
+      if (numaAppData?.id === appId) {
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const app = await manifestService.fetchAppById(appId);
+        // Set both ID and data together to prevent multiple rerenders
+        setNumaAppId(appId);
+        setNumaAppData(app);
+      } catch (error) {
+        setError(`Failed to load app: ${error.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadApp();
+  }, [appId, numaAppData?.id]); // Only depend on appId and current app ID
 
   const handleFavoriteClick = (e) => {
     e.preventDefault();
@@ -52,6 +76,10 @@ const AppDetail = () => {
                   size="sm"
                   className="ms-2"
                   onClick={() => {
+                    // Mark the app as resetting to prevent reload
+                    if (numaAppData) {
+                      numaAppData.isResetting = true;
+                    }
                     resetAppState();
                     navigate(`/app/${numaAppData.id}`);
                   }}
@@ -114,7 +142,9 @@ const AppDetail = () => {
       <Container fluid className="mt-4">
         <Row>
           <Col>
-            {numaAppData?.type === 'q-app' ? (
+            {loading ? (
+              <div>Loading...</div>
+            ) : numaAppData?.type === 'q-app' ? (
               <QAppDetail manifest={numaAppData} />
             ) : numaAppData?.type === 'policy-builder' ? (
               <PolicyBuilderDetail id={numaAppData.id} />
