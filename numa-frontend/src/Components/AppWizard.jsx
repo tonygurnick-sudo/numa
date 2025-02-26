@@ -154,9 +154,11 @@ const AppWizard = ({ manifest }) => {
     }
   };
 
-  // Check if we're on the last input step
+  // Navigation control flags
   const isLastInputStep = activeStep + 1 === preRunTasks.length;
   const nextDisabled = isLastInputStep && !appRunning;
+  const isLastVisibleStep = activeStep === visibleTasks.length - 1;
+  const isCurrentStepIncomplete = !taskCompletionStatus[visibleTasks[activeStep]?.id];
 
   const renderTask = (task) => {
     const handleComplete = () => handleTaskCompletion(task.id, true);
@@ -235,12 +237,7 @@ const AppWizard = ({ manifest }) => {
                     <Button
                       variant="primary"
                       onClick={handleNextStep}
-                      disabled={
-                        activeStep === visibleTasks.length - 1 ||
-                        !taskCompletionStatus[visibleTasks[activeStep].id] ||
-                        nextDisabled
-                      }
-                      className={nextDisabled ? 'disabled' : ''}
+                      disabled={isLastVisibleStep || isCurrentStepIncomplete || nextDisabled}
                     >
                       Next Input
                       <i className="bi bi-arrow-right ms-2"></i>
