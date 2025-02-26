@@ -60,10 +60,10 @@ export class CompanyProfile extends BaseNumaApp {
               app_id: this.appId,
               details: '@company-details',
               about: '@company-about',
-              documentation_text: '@upload-supporting-docs',
+              documentation_text: '@call-profile-generator/documentation_text',
             },
           },
-          order: 4,
+          order: 5,
         },
         {
           id: 'profile-output',
@@ -72,10 +72,32 @@ export class CompanyProfile extends BaseNumaApp {
           params: {
             dataRef: '@call-profile-generator/output_key',
           },
-          order: 5,
+          order: 6,
         },
       ],
     };
+
+    const extractContentLambdaPolicyStatements = [
+      {
+        actions: ['s3:GetObject', 's3:PutObject'],
+        effect: 'Allow',
+        resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
+      },
+      {
+        actions: ['bedrock:InvokeModel'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+      },
+      {
+        actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
+        resources: ['*'],
+      },
+    ];
+
+    const extractContentLambda = this.addLambdaFunction(this, 'extract', {
+      additionalPolicyStatements: extractContentLambdaPolicyStatements,
+      lambdaDirectory: 'python/extract-content-from-file',
+      timeout: 900,
+    });
 
     const companyProfileLambdaPolicyStatements = [
       {
@@ -124,8 +146,46 @@ export class CompanyProfile extends BaseNumaApp {
             'job_id.$': '$.job_id',
             'details.$': '$.details',
             'about.$': '$.about',
-            'documentation_text.$': '$.uploaded_files[0]',
+            'documentation_key.$': '$.uploaded_files[0]',
           },
+          Next: 'ExtractContent',
+        },
+        ExtractContent: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::lambda:invoke',
+          Parameters: {
+            FunctionName: extractContentLambda.arn,
+            Payload: {
+              'input_key.$': '$.documentation_key',
+              'output_key.$': `States.Format('${this.appId}/{}/extracted.json', $$.Execution.Input.job_id)`,
+              input_bucket: props.outputsBucket.bucket,
+            },
+          },
+          Retry: [
+            {
+              BackoffRate: 2,
+              ErrorEquals: [
+                'Lambda.ServiceException',
+                'Lambda.AWSLambdaException',
+                'Lambda.SdkClientException',
+                'Lambda.TooManyRequestsException',
+              ],
+              IntervalSeconds: 1,
+              JitterStrategy: 'FULL',
+              MaxAttempts: 3,
+            },
+          ],
+          Catch: [
+            {
+              ErrorEquals: ['States.ALL'],
+              Next: 'WriteFailureStatus',
+              ResultPath: '$.CatcherOutput',
+            },
+          ],
+          ResultSelector: {
+            'output_key.$': '$.Payload.output_key',
+          },
+          ResultPath: '$.extracted',
           Next: 'GenerateProfile',
         },
         GenerateProfile: {
@@ -138,7 +198,7 @@ export class CompanyProfile extends BaseNumaApp {
               'job_id.$': '$.job_id',
               'details.$': '$.details',
               'about.$': '$.about',
-              'documentation_text.$': '$.documentation_text',
+              'documentation_text.$': '$.extracted.output_key',
             },
           },
           Retry: [
@@ -173,14 +233,14 @@ export class CompanyProfile extends BaseNumaApp {
             status: 'FAILURE',
             'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
           },
-          'Failure',
+          'Failure'
         ),
         WriteSuccessStatus: writeStatus(
           {
             status: 'SUCCESS',
             'result.$': '$',
           },
-          'Success',
+          'Success'
         ),
         Success: {
           Type: 'Succeed',
@@ -196,11 +256,11 @@ export class CompanyProfile extends BaseNumaApp {
       additionalPolicyStatements: [
         {
           actions: ['lambda:InvokeFunction'],
-          resources: [companyProfileLambda.arn],
+          resources: [extractContentLambda.arn, companyProfileLambda.arn],
         },
         {
           actions: ['iam:PassRole'],
-          resources: [companyProfileLambda.role],
+          resources: [extractContentLambda.role, companyProfileLambda.role],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
