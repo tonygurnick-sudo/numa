@@ -99,5 +99,112 @@ export class CompanyProfile extends BaseNumaApp {
       lambdaDirectory: 'python/company-profile',
       timeout: 900,
     });
+
+    const writeStatus = (body: Record<string, string | Record<string, string>>, next: string): asl.State => {
+      return {
+        Type: 'Task',
+        Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
+        Parameters: {
+          Body: body,
+          Bucket: props.outputsBucket.bucket,
+          'Key.$': `States.Format('${this.appId}/{}/status.json', $$.Execution.Input.job_id)`,
+        },
+        ResultPath: null,
+        Next: next,
+      };
+    };
+
+    const stepFunctionDefinition = {
+      StartAt: 'WriteProcessingStatus',
+      States: {
+        WriteProcessingStatus: writeStatus({ status: 'PROCESSING' }, 'Initialize'),
+        Initialize: {
+          Type: 'Pass',
+          Parameters: {
+            'job_id.$': '$$.Execution.Input.job_id',
+            'details.$': '$$.Execution.Input.details',
+            'about.$': '$$.Execution.Input.about',
+            'documentation_text.$': '$$.Execution.Input.documentation_text',
+          },
+          Next: 'GenerateProfile',
+        },
+        GenerateProfile: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::lambda:invoke',
+          Parameters: {
+            FunctionName: companyProfileLambda.arn,
+            Payload: {
+              app_name: this.appId,
+              'job_id.$': '$.job_id',
+              'details.$': '$.details',
+              'about.$': '$.about',
+              'documentation_text.$': '$.documentation_text',
+            },
+          },
+          Retry: [
+            {
+              BackoffRate: 2,
+              ErrorEquals: [
+                'Lambda.ServiceException',
+                'Lambda.AWSLambdaException',
+                'Lambda.SdkClientException',
+                'Lambda.TooManyRequestsException',
+              ],
+              IntervalSeconds: 1,
+              JitterStrategy: 'FULL',
+              MaxAttempts: 3,
+            },
+          ],
+          ResultSelector: {
+            'output_key.$': '$.Payload.output_key',
+          },
+          OutputPath: '$.Payload',
+          Catch: [
+            {
+              ErrorEquals: ['States.ALL'],
+              Next: 'WriteFailureStatus',
+              ResultPath: '$.CatcherOutput',
+            },
+          ],
+          Next: 'WriteSuccessStatus',
+        },
+        WriteFailureStatus: writeStatus(
+          {
+            status: 'FAILURE',
+            'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
+          },
+          'Failure',
+        ),
+        WriteSuccessStatus: writeStatus(
+          {
+            status: 'SUCCESS',
+            'result.$': '$',
+          },
+          'Success',
+        ),
+        Success: {
+          Type: 'Succeed',
+        },
+        Failure: {
+          Type: 'Fail',
+        },
+      },
+    };
+
+    this.addStepFunction(this, 'main', {
+      outputsBucket: props.outputsBucket,
+      additionalPolicyStatements: [
+        {
+          actions: ['lambda:InvokeFunction'],
+          resources: [companyProfileLambda.arn],
+        },
+        {
+          actions: ['iam:PassRole'],
+          resources: [companyProfileLambda.role],
+        },
+      ],
+      stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
+      urlPath: 'main',
+    });
   }
 }
