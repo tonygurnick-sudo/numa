@@ -21,11 +21,11 @@ def handler(event: dict, context) -> dict:
     """
     Lambda function to create a structured user/company profile.
     """
-    app_id = event["app_id"]
+    app_name = event["app_name"]
     job_id = __get_job_id(event)
     helpers.setup_logging()
     structlog.contextvars.bind_contextvars(
-        function_name=context.function_name, app_id=app_id, job_id=job_id
+        function_name=context.function_name, app_name=app_name, job_id=job_id
     )
     logger.info("Executing user profile lambda", lambda_event=event)
 

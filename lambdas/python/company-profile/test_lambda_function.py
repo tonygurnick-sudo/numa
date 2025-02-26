@@ -1,17 +1,43 @@
 # pylint: disable=protected-access
-import sys
 import unittest
 from unittest.mock import Mock, patch
 
-sys.modules["helpers"] = Mock()
-sys.modules["bedrock"] = Mock()
-sys.modules["s3_helpers"] = Mock()
-sys.modules["structlog"] = Mock()
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import lambda_function
 
+CONTEXT = LambdaContext()
+CONTEXT._function_name = "test_function_name"
+
 
 class TestLambdaFunction(unittest.TestCase):
+    @patch("s3_helpers.write")
+    @patch(
+        "lambda_function._create_profile",
+        return_value={
+            "profile_summary": "Senior Software Engineer with 10 years experience",
+            "profile_details": {
+                "name": "John Doe",
+                "email": "john@example.com",
+            },
+            "about": "Experienced engineer specializing in Python",
+            "document_analysis": "Shows strong technical background",
+            "metadata": {"model": "claude-3"},
+        },
+    )
+    def test_handler(self, create_profile_mock, write_mock):
+        test_event = {
+            "app_name": "company-profile",
+            "details": "Name: John Doe\nEmail: john@example.com",
+            "about": "Senior Software Engineer",
+            "documentation_text": "Technical resume content...",
+        }
+
+        result = lambda_function.handler(test_event, CONTEXT)
+
+        self.assertEqual(result, {"output_key": "profiles/john_doe_profile.json"})
+        write_mock.assert_called_once()
+
     def test_create_profile(self):
         mock_model = Mock()
         mock_model.run.return_value = Mock(

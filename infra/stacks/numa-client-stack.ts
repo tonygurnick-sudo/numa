@@ -14,6 +14,7 @@ import {
   BaseNumaAppProps,
   UserConfigurableBaseNumaAppProps,
 } from '../constructs/apps/base-numa-app-construct';
+import { CompanyProfile } from '../constructs/apps/company-profile-construct';
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
 import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
@@ -228,6 +229,7 @@ export interface NumaClientStackProps extends ArcanumStackProps {
 }
 
 const appLibrary: Record<string, new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp> = {
+  'company-profile': CompanyProfile,
   'document-summariser': DocumentSummariser,
   'meeting-analyser': MeetingAnalyser,
   'nzsba-policy-builder': NZSBAPolicyBuilder,
