@@ -17,6 +17,7 @@ import {
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
 import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
+import { PolicyReviewer } from '../constructs/apps/policy-reviewer-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
@@ -230,6 +231,7 @@ const appLibrary: Record<string, new (scope: Construct, name: string, props: Bas
   'document-summariser': DocumentSummariser,
   'meeting-analyser': MeetingAnalyser,
   'nzsba-policy-builder': NZSBAPolicyBuilder,
+  'policy-reviewer': PolicyReviewer,
 };
 
 function lookupAppFromId(id: string): new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp {

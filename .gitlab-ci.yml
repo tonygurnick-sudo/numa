@@ -17,7 +17,7 @@ workflow:
     - if: $CI_PIPELINE_SOURCE == "web"
 
 variables:
-  PYTHON_VER: '3.13'
+  PYTHON_VER: 3.13
 
 .rules:
   if-main:
@@ -58,7 +58,7 @@ variables:
         - lambdas/python/policy-builder-legal-review
         - lambdas/python/policy-builder-principles-and-structure
         - lambdas/python/policy-drafter
-        - lambdas/python/policy-review
+        - lambdas/python/policy-reviewer
         - lambdas/python/recruitment-job-ad-creation
         - lambdas/python/step-function-start
         - lambdas/python/step-function-status
@@ -85,7 +85,7 @@ variables:
         - lambdas/python/policy-builder-legal-review
         - lambdas/python/policy-builder-principles-and-structure
         - lambdas/python/policy-drafter
-        - lambdas/python/policy-review
+        - lambdas/python/policy-reviewer
         - lambdas/python/recruitment-job-ad-creation
         - lambdas/python/step-function-start
         - lambdas/python/step-function-status
@@ -141,7 +141,7 @@ frontend-build:
     - corepack enable
     - NODE_OPTIONS=--max-old-space-size=4096 yarn build
   artifacts:
-    paths: ['infra/build/numa-frontend']
+    paths: [infra/build/numa-frontend]
 
 python-package:
   extends: .poetry-job
@@ -150,7 +150,7 @@ python-package:
     - poetry build-lambda zip-compression=ZIP_DEFLATED
   parallel: !reference [.python-lambdas-matrix]
   artifacts:
-    paths: ['$PYTHON_WORKING_DIRECTORY/lambda_function.zip']
+    paths: [$PYTHON_WORKING_DIRECTORY/lambda_function.zip]
   rules:
     - !reference [.rules, if-main]
 
@@ -165,8 +165,8 @@ node-package:
   parallel: !reference [.node-lambdas-matrix]
   artifacts:
     paths:
-      - '$BUILD_DIR/dist'
-      - '$BUILD_DIR/lambda_function.zip'
+      - $BUILD_DIR/dist
+      - $BUILD_DIR/lambda_function.zip
   rules:
     - !reference [.rules, if-main]
 
