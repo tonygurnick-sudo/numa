@@ -7,6 +7,7 @@ import {
   BaseNumaApp,
   BaseNumaAppProps,
   HTTP_REQUEST_TASK,
+  S3_UPLOAD_TASK,
   TEXT_INPUT_TASK,
   TEXT_OUTPUT_TASK,
 } from './base-numa-app-construct';
@@ -46,7 +47,7 @@ export class CompanyProfile extends BaseNumaApp {
           id: 'upload-supporting-docs',
           title: 'Upload Supporting Documents',
           description: 'Upload any additional documents about the company (optional)',
-          type: TEXT_INPUT_TASK,
+          type: S3_UPLOAD_TASK,
           order: 3,
         },
         {
@@ -56,7 +57,7 @@ export class CompanyProfile extends BaseNumaApp {
           endpoint: 'company-profile',
           params: {
             payload: {
-              app_name: this.appId,
+              app_id: this.appId,
               details: '@company-details',
               about: '@company-about',
               documentation_text: '@upload-supporting-docs',
@@ -93,7 +94,6 @@ export class CompanyProfile extends BaseNumaApp {
       environment: {
         variables: {
           BUCKET: props.outputsBucket.bucket,
-          APP_ID: this.appId,
         },
       },
       lambdaDirectory: 'python/company-profile',
@@ -121,10 +121,10 @@ export class CompanyProfile extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'job_id.$': '$$.Execution.Input.job_id',
-            'details.$': '$$.Execution.Input.details',
-            'about.$': '$$.Execution.Input.about',
-            'documentation_text.$': '$$.Execution.Input.documentation_text',
+            'job_id.$': '$.job_id',
+            'details.$': '$.details',
+            'about.$': '$.about',
+            'documentation_text.$': '$.uploaded_files[0]',
           },
           Next: 'GenerateProfile',
         },
@@ -134,7 +134,7 @@ export class CompanyProfile extends BaseNumaApp {
           Parameters: {
             FunctionName: companyProfileLambda.arn,
             Payload: {
-              app_name: this.appId,
+              app_id: this.appId,
               'job_id.$': '$.job_id',
               'details.$': '$.details',
               'about.$': '$.about',

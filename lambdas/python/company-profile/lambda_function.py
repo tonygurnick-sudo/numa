@@ -2,6 +2,7 @@ import json
 import uuid
 
 import structlog
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import bedrock
 import helpers
@@ -17,22 +18,23 @@ def __get_job_id(event: dict) -> str:
     return event.get("job_id", str(uuid.uuid4()))
 
 
-def handler(event: dict, context) -> dict:
+def handler(event: dict, context: LambdaContext) -> dict:
     """
-    Lambda function to create a structured user/company profile.
+    Lambda function to create a structured company profile.
     """
-    app_name = event["app_name"]
+    app_id = event["app_id"]
     job_id = __get_job_id(event)
     helpers.setup_logging()
     structlog.contextvars.bind_contextvars(
-        function_name=context.function_name, app_name=app_name, job_id=job_id
+        function_name=context.function_name, app_id=app_id, job_id=job_id
     )
-    logger.info("Executing user profile lambda", lambda_event=event)
+    logger.info("Execute lambda", lambda_event=event)
 
     try:
         details = event["details"]
         about = event.get("about", "")
-        documentation_text = event.get("documentation_text", "")
+        docs_key = event.get("documentation_text")
+        documentation_text = s3_helpers.read(docs_key) if docs_key else ""
 
         input_data = {
             "details": details,

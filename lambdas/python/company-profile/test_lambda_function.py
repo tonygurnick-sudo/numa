@@ -11,6 +11,9 @@ CONTEXT._function_name = "test_function_name"
 
 
 class TestLambdaFunction(unittest.TestCase):
+    @patch(
+        "lambda_function.s3_helpers.read", return_value="Technical resume content..."
+    )
     @patch("s3_helpers.write")
     @patch(
         "lambda_function._create_profile",
@@ -25,9 +28,9 @@ class TestLambdaFunction(unittest.TestCase):
             "metadata": {"model": "claude-3"},
         },
     )
-    def test_handler(self, create_profile_mock, write_mock):
+    def test_handler(self, create_profile_mock, write_mock, read_mock):
         test_event = {
-            "app_name": "company-profile",
+            "app_id": "company-profile",
             "details": "Name: John Doe\nEmail: john@example.com",
             "about": "Senior Software Engineer",
             "documentation_text": "Technical resume content...",
