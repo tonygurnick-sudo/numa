@@ -154,6 +154,10 @@ const AppWizard = ({ manifest }) => {
     }
   };
 
+  // Check if we're on the last input step
+  const isLastInputStep = activeStep + 1 === preRunTasks.length;
+  const nextDisabled = isLastInputStep && !appRunning;
+
   const renderTask = (task) => {
     const handleComplete = () => handleTaskCompletion(task.id, true);
     const handleNotComplete = () => handleTaskCompletion(task.id, false);
@@ -232,8 +236,11 @@ const AppWizard = ({ manifest }) => {
                       variant="primary"
                       onClick={handleNextStep}
                       disabled={
-                        activeStep === visibleTasks.length - 1 || !taskCompletionStatus[visibleTasks[activeStep].id]
+                        activeStep === visibleTasks.length - 1 ||
+                        !taskCompletionStatus[visibleTasks[activeStep].id] ||
+                        nextDisabled
                       }
+                      className={nextDisabled ? 'disabled' : ''}
                     >
                       Next Input
                       <i className="bi bi-arrow-right ms-2"></i>
