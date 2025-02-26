@@ -13,6 +13,7 @@ import { StarFill } from 'react-bootstrap-icons';
 
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { useFavorites } from '../hooks/useFavorites';
+import { manifestService } from '../Services/manifestService';
 
 export const Dash = ({ showFavorites }) => {
   const { error, setError, loading, setLoading, setNumaApps, numaApps } = useNumaApp();
@@ -28,89 +29,26 @@ export const Dash = ({ showFavorites }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const { favorites } = useFavorites();
 
-  // Fetch apps data
+  // Fetch apps data and get unique categories
   useEffect(() => {
-    const fetchAppsFromManifest = async () => {
+    const loadApps = async () => {
       setLoading(true);
       try {
-        // await new Promise((resolve) => setTimeout(resolve, 100));
-
-        // TODO
-        // load from cache if cache time less than x
-
-        // First try to load from sessionStorage
-        // const cachedData = sessionStorage.getItem('appsData');
-
-        // if (cachedData) {
-        //   const parsedData = JSON.parse(cachedData);
-        //   console.log('Loading from cache:', parsedData);
-        //   if (Array.isArray(parsedData) && parsedData.length > 0) {
-        //     setNumaApps(parsedData);
-        //     setLoading(false);
-        //     return;
-        //   }
-        // }
-
-        // If no valid cached data, fetch from manifest
-        const response = await fetch('../manifest.json', {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch manifest');
-        }
-
-        const data = await response.json();
-        const appsData = data.apps;
-
-        if (!Array.isArray(appsData)) {
-          throw new Error('Data must be an array');
-        }
-
+        const appsData = await manifestService.fetchAppsFromManifest();
         setNumaApps(appsData);
-        sessionStorage.setItem('appsData', JSON.stringify(appsData));
+        const uniqueCategories = [...new Set(appsData.map((app) => app.category).filter(Boolean))];
+        setCategories(uniqueCategories);
       } catch (error) {
-        console.error('Error loading apps:', error);
         setError(`Failed to load apps: ${error.message}`);
         setNumaApps([]);
+        setCategories([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchAppsFromManifest();
-  }, [setError, setLoading, setNumaApps]);
-
-  // useEffect(() => {
-  //   const loadQApps = async () => {
-  //     if (!qAppsClient) return;
-
-  //     setQAppsLoading(true);
-  //     try {
-  //       const apps = await fetchApps(qAppsClient);
-  //       if (apps) {
-  //         setQApps(apps);
-  //       }
-  //     } catch (error) {
-  //       console.error('Error loading Q Apps:', error);
-  //       setQAppsError(error.message);
-  //     } finally {
-  //       setQAppsLoading(false);
-  //     }
-  //   };
-
-  //   loadQApps();
-  // }, [qAppsClient]);
-
-  // Get unique categories from apps
-  useEffect(() => {
-    if (numaApps) {
-      const uniqueCategories = [...new Set(numaApps.map((app) => app.category).filter(Boolean))];
-      setCategories(uniqueCategories);
-    }
-  }, [numaApps]);
+    loadApps();
+  }, []); // Only run on mount since we don't need to reload
 
   // Memoize filtered apps to avoid unnecessary recalculations
   const filteredApps = useMemo(() => {

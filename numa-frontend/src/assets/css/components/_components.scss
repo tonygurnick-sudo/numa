@@ -799,6 +799,17 @@ label {
     align-items: center;
     cursor: pointer;
     position: relative;
+
+    .step-complete-icon {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      font-size: 16px;
+      background: white;
+      border-radius: 50%;
+      filter: drop-shadow(0 0 1px white);
+    }
+    position: relative;
     padding: 8px;
     border-radius: 8px;
     transition: all 0.2s ease-in-out;

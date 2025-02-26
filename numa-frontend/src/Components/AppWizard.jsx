@@ -57,23 +57,24 @@ const AppWizard = ({ manifest }) => {
     (index) => {
       const task = visibleTasks[index];
       if (task) {
-        // For output tasks, always allow clicking if there are results
+        // For output tasks, only allow clicking if we have results
         if (task.type.includes('output')) {
-          setActiveStep(index);
-          setSelectedTaskId(task.id);
+          if (hasRun) {
+            setActiveStep(index);
+            setSelectedTaskId(task.id);
+          }
           return;
         }
 
-        // For input tasks, check if we can navigate there
-        const maxAllowedStep = visibleTasks.findIndex((task, i) => !taskCompletionStatus[task.id] && i !== activeStep);
-        if (maxAllowedStep === -1 || index <= maxAllowedStep) {
+        // For input tasks, allow clicking any input step
+        if (!task.type.includes('output')) {
           markDefaultContentComplete(activeStep); // Mark current task if it has default content
           setActiveStep(index);
           setSelectedTaskId(task.id);
         }
       }
     },
-    [visibleTasks, taskCompletionStatus, activeStep, markDefaultContentComplete, setSelectedTaskId],
+    [visibleTasks, activeStep, markDefaultContentComplete, setSelectedTaskId, hasRun],
   );
 
   const handleRunApp = async () => {

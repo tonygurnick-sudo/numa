@@ -1,0 +1,56 @@
+let manifestCache = null;
+let lastFetchTime = 0;
+const CACHE_DURATION = 300000; // 5 minutes
+
+export const manifestService = {
+  // Fetch all apps from manifest
+  fetchAppsFromManifest: async () => {
+    const now = Date.now();
+    // Use cache if it's fresh
+    if (manifestCache && now - lastFetchTime < CACHE_DURATION) {
+      return manifestCache;
+    }
+
+    try {
+      const response = await fetch('../manifest.json', {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch manifest');
+      }
+
+      const data = await response.json();
+      const appsData = data.apps;
+
+      if (!Array.isArray(appsData)) {
+        throw new Error('Data must be an array');
+      }
+
+      // Update cache
+      manifestCache = appsData;
+      lastFetchTime = now;
+      return appsData;
+    } catch (error) {
+      console.error('Error loading apps:', error);
+      throw error;
+    }
+  },
+
+  // Fetch single app from manifest by ID
+  fetchAppById: async (appId) => {
+    try {
+      const apps = await manifestService.fetchAppsFromManifest();
+      const app = apps.find((app) => app.id === appId);
+      if (!app) {
+        throw new Error(`App with ID ${appId} not found`);
+      }
+      return app;
+    } catch (error) {
+      console.error('Error loading app:', error);
+      throw error;
+    }
+  },
+};
