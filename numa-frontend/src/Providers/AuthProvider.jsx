@@ -13,6 +13,7 @@ import {
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
+import { fetchConfigAddtoSession } from '../Components/ConfigSetup';
 
 const AuthContext = createContext(null);
 
@@ -331,6 +332,9 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   };
 
   const login = async (username, password) => {
+    // Check if the config.json contains the CLIENT_ID, if not, fetch the config.json file
+    if (sessionStorage.getItem('CLIENT_ID') === null) await fetchConfigAddtoSession();
+
     // Step 1: Create the SRP session
     const srpSession = createSrpSession(username, password, USER_POOL_ID, false);
 
