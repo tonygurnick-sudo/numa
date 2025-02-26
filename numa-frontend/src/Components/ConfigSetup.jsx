@@ -36,7 +36,7 @@ export const fetchConfigAddtoSession = async () => {
   // Check if all required properties exist
   const missingProperties = propertiesToAdd.filter((prop) => !Object.hasOwn(configData, prop));
   if (missingProperties.length > 0) {
-    throw new Error(`Missing required properties in config: ${missingProperties.join(', ')}`);
+    console.error(`Missing required properties in config: ${missingProperties.join(', ')}`);
   }
 
   propertiesToAdd.forEach((property) => {
