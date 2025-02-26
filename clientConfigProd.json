@@ -67,7 +67,7 @@
     },
     "devInstance": true
   },
-  "arcanum-dave-2": {
+  "arcanum-dave": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "apps": {},
