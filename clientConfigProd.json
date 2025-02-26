@@ -479,7 +479,17 @@
     "loadSampleFile": false
   },
   "tda": {
-    "clientAccountId": "575108948290"
+    "clientAccountId": "575108948290",
+    "sharePointConfigs": [
+      {
+        "tenantId": "91ff374c-03ff-4eed-9628-d89e52352b55",
+        "domain": "teachersrcc.sharepoint.com",
+        "siteUrls": [
+          "https://teachersrcc.sharepoint.com/sites/Company"
+        ],
+        "configuration": {}
+      }
+    ]
   },
   "transit": {
     "clientAccountId": "442426865055"
