@@ -332,8 +332,8 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   };
 
   const login = async (username, password) => {
-    // Check if the config.json contains the CLIENT_ID, if not, fetch the config.json file
-    if (sessionStorage.getItem('CLIENT_ID') === null) await fetchConfigAddtoSession();
+    // Fetch the config.json file so the sessionStorage is populated with the correct values
+    await fetchConfigAddtoSession();
 
     // Step 1: Create the SRP session
     const srpSession = createSrpSession(username, password, USER_POOL_ID, false);
