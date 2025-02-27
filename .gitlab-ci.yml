@@ -44,6 +44,7 @@ variables:
     - PYTHON_WORKING_DIRECTORY:
         - lambdas/python/aggregate-candidate-results
         - lambdas/python/aggregate-document-results
+        - lambdas/python/company-profile
         - lambdas/python/candidate-screening
         - lambdas/python/document-summariser
         - lambdas/python/extract-content-from-file
@@ -72,6 +73,7 @@ variables:
         - lambdas/python/aggregate-candidate-results
         - lambdas/python/aggregate-document-results
         - lambdas/python/candidate-screening
+        - lambdas/python/company-profile
         - lambdas/python/document-summariser
         - lambdas/python/extract-content-from-file
         - lambdas/python/financial-analysis-analysis

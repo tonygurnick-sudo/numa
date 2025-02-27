@@ -32,7 +32,7 @@ USER_PROFILE_TOOL = [
             "required": [
                 "profile_summary",
                 "profile_details",
-                "detailed_bio",
+                "about",
                 "document_analysis",
             ],
         },
