@@ -62,16 +62,7 @@ const AppItem = ({ app }) => {
       <div className="card-footer">
         <div className="footer-content">
           <div className="footer-left">
-            <div className="d-flex align-items-center gap-4 mb-3">
-              <div className="likes">
-                <i className="bi bi-download"></i>
-                <span>238</span>
-              </div>
-              <div className="likes">
-                <i className="bi bi-heart"></i>
-                <span>45</span>
-              </div>
-            </div>
+            <div className="d-flex align-items-center gap-4 mb-3"></div>
             <div className="d-flex align-items-center gap-3">
               <div className={`favorite-button ${favorite ? 'fav-active' : ''}`} onClick={handleFavoriteClick}>
                 {favorite ? <StarFill className="text-warning" size={24} /> : <Star className="text-muted" size={24} />}
