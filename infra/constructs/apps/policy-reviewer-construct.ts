@@ -1,4 +1,3 @@
-import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import {
   AppCategory,
@@ -148,24 +147,10 @@ export class PolicyReviewer extends BaseNumaApp {
       timeout: 900,
     });
 
-    const writeStatus = (body: Record<string, string | Record<string, string>>, next: string): asl.State => {
-      return {
-        Type: 'Task',
-        Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
-        Parameters: {
-          Body: body,
-          Bucket: props.outputsBucket.bucket,
-          'Key.$': `States.Format('${this.appId}/{}/status.json', $$.Execution.Input.job_id)`,
-        },
-        ResultPath: null,
-        Next: next,
-      };
-    };
-
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
       States: {
-        WriteProcessingStatus: writeStatus({ status: 'PROCESSING' }, 'Initialize'),
+        WriteProcessingStatus: this.writeProcessingStatus(),
         Initialize: {
           Type: 'Pass',
           Parameters: {
@@ -251,20 +236,8 @@ export class PolicyReviewer extends BaseNumaApp {
           ],
           Next: 'WriteSuccessStatus',
         },
-        WriteFailureStatus: writeStatus(
-          {
-            status: 'FAILURE',
-            'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
-          },
-          'Failure',
-        ),
-        WriteSuccessStatus: writeStatus(
-          {
-            status: 'SUCCESS',
-            'result.$': '$',
-          },
-          'Success',
-        ),
+        WriteFailureStatus: this.writeFailureStatus(),
+        WriteSuccessStatus: this.writeSuccessStatus(),
         Success: {
           Type: 'Succeed',
         },
