@@ -1,4 +1,5 @@
 import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
+import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import {
   DataAwsIamPolicyDocument,
   DataAwsIamPolicyDocumentStatement,
@@ -134,6 +135,35 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
           resources: [`${this.outputsBucket.arn}${this.s3KeyPrefix}/*`],
         },
       ],
+    });
+  }
+
+  addExtractContentLambda(): LambdaFunction {
+    const extractContentLambdaPolicyStatements = [
+      {
+        actions: ['s3:GetObject', 's3:PutObject'],
+        effect: 'Allow',
+        resources: [`${this.outputsBucket.arn}${this.s3KeyPrefix}/*`],
+      },
+      {
+        actions: ['bedrock:InvokeModel'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+      },
+      {
+        actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
+        resources: ['*'],
+      },
+
+      {
+        actions: ['transcribe:StartTranscriptionJob', 'transcribe:GetTranscriptionJob'],
+        effect: 'Allow',
+        resources: ['*'],
+      },
+    ];
+    return this.addLambdaFunction(this, 'extract', {
+      additionalPolicyStatements: extractContentLambdaPolicyStatements,
+      lambdaDirectory: 'python/extract-content-from-file',
+      timeout: 900,
     });
   }
 

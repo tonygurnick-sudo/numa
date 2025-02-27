@@ -104,26 +104,7 @@ export class PolicyReviewer extends BaseNumaApp {
       ],
     };
 
-    const extractContentLambdaPolicyStatements = [
-      {
-        actions: ['s3:GetObject', 's3:PutObject'],
-        effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
-      },
-      {
-        actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
-      },
-      {
-        actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
-        resources: ['*'],
-      },
-    ];
-    const extractContentLambda = this.addLambdaFunction(this, 'extract', {
-      additionalPolicyStatements: extractContentLambdaPolicyStatements,
-      lambdaDirectory: 'python/extract-content-from-file',
-      timeout: 900,
-    });
+    const extractContentLambda = this.addExtractContentLambda();
 
     const policyReviewerLambdaPolicyStatements = [
       {
