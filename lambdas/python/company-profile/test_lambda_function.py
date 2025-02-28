@@ -28,7 +28,7 @@ class TestLambdaFunction(unittest.TestCase):
             "metadata": {"model": "claude-3"},
         },
     )
-    def test_handler(self, create_profile_mock, write_mock, read_mock):
+    def test_handler(self, _create_profile_mock, write_mock, _read_mock):
         test_event = {
             "app_id": "company-profile",
             "details": "Name: John Doe\nEmail: john@example.com",
