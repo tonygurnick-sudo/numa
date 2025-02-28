@@ -38,8 +38,7 @@ class TestLambdaFunction(unittest.TestCase):
 
         result = lambda_function.handler(test_event, CONTEXT)
 
-        self.assertEqual(
-            result, {"output_key": "profiles/john_doe_profile.json"})
+        self.assertEqual(result, {"output_key": "profiles/john_doe_profile.json"})
         write_mock.assert_called_once()
 
     def test_create_profile(self):
