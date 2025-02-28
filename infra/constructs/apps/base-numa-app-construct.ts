@@ -1,15 +1,17 @@
 import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
+import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
+import {
+  DataAwsIamPolicyDocument,
+  DataAwsIamPolicyDocumentStatement,
+} from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
 import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
 import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
+import * as asl from 'asl-types';
 import { Construct } from 'constructs';
-import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
-import {
-  DataAwsIamPolicyDocument,
-  DataAwsIamPolicyDocumentStatement,
-} from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import {
   ApiGatewayLambdaCollection,
   ApiGatewayLambdaCollectionProps,
@@ -20,12 +22,15 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   abstract readonly manifest: NumaAppManifest;
   protected jobsTable?: DynamodbTable;
   protected s3KeyPrefix: string;
+  protected outputsBucket: S3Bucket;
   readonly appId: string;
 
   constructor(scope: Construct, name: string, props: AppSpecificBaseNumaAppProps) {
     super(scope, name, props);
 
     this.appId = props.appId;
+    this.outputsBucket = props.outputsBucket;
+
     this.urlPathPrefix = '/api' + this.prepPathPart(props.urlPathPrefix ?? this.appId);
     this.s3KeyPrefix = props.s3KeyPrefix ?? `/${this.appId}`;
 
@@ -40,7 +45,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         statement: [
           {
             actions: ['s3:PutObject'],
-            resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
+            resources: [`${this.outputsBucket.arn}${this.s3KeyPrefix}/*`],
           },
           {
             actions: [
@@ -114,7 +119,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       lambdaDirectory: 'python/step-function-status',
       environment: {
         variables: {
-          BUCKET: props.outputsBucket.bucket,
+          BUCKET: this.outputsBucket.bucket,
           APP_ID: this.appId,
         },
       },
@@ -122,15 +127,145 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         {
           actions: ['s3:ListBucket'], // this is required to get a 404 instead of a 403 if object not found
           effect: 'Allow',
-          resources: [props.outputsBucket.arn],
+          resources: [this.outputsBucket.arn],
         },
         {
           actions: ['s3:GetObject'],
           effect: 'Allow',
-          resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
+          resources: [`${this.outputsBucket.arn}${this.s3KeyPrefix}/*`],
         },
       ],
     });
+  }
+
+  addLambdaTask(
+    lambdaArn: string,
+    payload: Record<string, string | boolean>,
+    next: string | null,
+    additionalParameters?: AdditionalLambdaParameters,
+  ): asl.State {
+    return {
+      Type: 'Task',
+      Resource: 'arn:aws:states:::lambda:invoke',
+      Parameters: {
+        FunctionName: lambdaArn,
+        Payload: payload,
+      },
+      Retry: [
+        {
+          BackoffRate: 2,
+          ErrorEquals: [
+            'Lambda.ServiceException',
+            'Lambda.AWSLambdaException',
+            'Lambda.SdkClientException',
+            'Lambda.TooManyRequestsException',
+          ],
+          IntervalSeconds: 1,
+          JitterStrategy: 'FULL',
+          MaxAttempts: 3,
+        },
+      ],
+      Catch: [
+        {
+          ErrorEquals: ['States.ALL'],
+          Next: 'WriteFailureStatus',
+          ResultPath: '$.CatcherOutput',
+        },
+      ],
+      ...additionalParameters,
+      ...(next ? { Next: next } : { End: true }),
+    };
+  }
+
+  addExtractContentLambda(): LambdaFunction {
+    const extractContentLambdaPolicyStatements = [
+      {
+        actions: ['s3:GetObject', 's3:PutObject'],
+        effect: 'Allow',
+        resources: [`${this.outputsBucket.arn}${this.s3KeyPrefix}/*`],
+      },
+      {
+        actions: ['bedrock:InvokeModel'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+      },
+      {
+        actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
+        resources: ['*'],
+      },
+
+      {
+        actions: ['transcribe:StartTranscriptionJob', 'transcribe:GetTranscriptionJob'],
+        effect: 'Allow',
+        resources: ['*'],
+      },
+    ];
+    return this.addLambdaFunction(this, 'extract', {
+      additionalPolicyStatements: extractContentLambdaPolicyStatements,
+      lambdaDirectory: 'python/extract-content-from-file',
+      timeout: 900,
+    });
+  }
+
+  addExtractContentTask(
+    extractContentLambda: LambdaFunction,
+    input_key: string,
+    next: string,
+    additionalParameters?: AdditionalLambdaParameters,
+  ): asl.State {
+    return this.addLambdaTask(
+      extractContentLambda.arn,
+      {
+        'input_key.$': input_key,
+        'output_key.$': `States.Format('${this.appId}/{}/extracted.json', $$.Execution.Input.job_id)`,
+        input_bucket: this.outputsBucket.bucket,
+      },
+      next,
+      {
+        ResultSelector: {
+          'output_key.$': '$.Payload.output_key',
+        },
+        ResultPath: '$.extracted',
+        ...additionalParameters,
+      },
+    );
+  }
+
+  writeStatus(body: Record<string, string | Record<string, string>>, next: string): asl.State {
+    return {
+      Type: 'Task',
+      Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
+      Parameters: {
+        Body: body,
+        Bucket: this.outputsBucket.bucket,
+        'Key.$': `States.Format('${this.appId}/{}/status.json', $$.Execution.Input.job_id)`,
+      },
+      ResultPath: null,
+      Next: next,
+    };
+  }
+
+  writeProcessingStatus(): asl.State {
+    return this.writeStatus({ status: 'PROCESSING' }, 'Initialize');
+  }
+
+  writeFailureStatus(): asl.State {
+    return this.writeStatus(
+      {
+        status: 'FAILURE',
+        'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
+      },
+      'Failure',
+    );
+  }
+
+  writeSuccessStatus(resultPath?: string): asl.State {
+    return this.writeStatus(
+      {
+        status: 'SUCCESS',
+        'result.$': resultPath ?? '$',
+      },
+      'Success',
+    );
   }
 
   protected setupJobs(): void {
@@ -319,4 +454,11 @@ export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiG
 
 export interface AppSpecificBaseNumaAppProps extends BaseNumaAppProps {
   appId: string;
+}
+
+export interface AdditionalLambdaParameters {
+  Catch?: Array<Record<string, string>>;
+  OutputPath?: string;
+  ResultPath?: string;
+  ResultSelector?: Record<string, string>;
 }

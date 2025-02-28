@@ -1,4 +1,3 @@
-import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import {
   AppCategory,
@@ -105,26 +104,7 @@ export class PolicyReviewer extends BaseNumaApp {
       ],
     };
 
-    const extractContentLambdaPolicyStatements = [
-      {
-        actions: ['s3:GetObject', 's3:PutObject'],
-        effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
-      },
-      {
-        actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
-      },
-      {
-        actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
-        resources: ['*'],
-      },
-    ];
-    const extractContentLambda = this.addLambdaFunction(this, 'extract', {
-      additionalPolicyStatements: extractContentLambdaPolicyStatements,
-      lambdaDirectory: 'python/extract-content-from-file',
-      timeout: 900,
-    });
+    const extractContentLambda = this.addExtractContentLambda();
 
     const policyReviewerLambdaPolicyStatements = [
       {
@@ -148,24 +128,10 @@ export class PolicyReviewer extends BaseNumaApp {
       timeout: 900,
     });
 
-    const writeStatus = (body: Record<string, string | Record<string, string>>, next: string): asl.State => {
-      return {
-        Type: 'Task',
-        Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
-        Parameters: {
-          Body: body,
-          Bucket: props.outputsBucket.bucket,
-          'Key.$': `States.Format('${this.appId}/{}/status.json', $$.Execution.Input.job_id)`,
-        },
-        ResultPath: null,
-        Next: next,
-      };
-    };
-
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
       States: {
-        WriteProcessingStatus: writeStatus({ status: 'PROCESSING' }, 'Initialize'),
+        WriteProcessingStatus: this.writeProcessingStatus(),
         Initialize: {
           Type: 'Pass',
           Parameters: {
@@ -176,95 +142,22 @@ export class PolicyReviewer extends BaseNumaApp {
           },
           Next: 'ExtractContent',
         },
-        ExtractContent: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: extractContentLambda.arn,
-            Payload: {
-              'input_key.$': '$.policy_key',
-              'output_key.$': `States.Format('${this.appId}/{}/extracted.json', $$.Execution.Input.job_id)`,
-              input_bucket: props.outputsBucket.bucket,
-            },
-          },
-          Retry: [
-            {
-              BackoffRate: 2,
-              ErrorEquals: [
-                'Lambda.ServiceException',
-                'Lambda.AWSLambdaException',
-                'Lambda.SdkClientException',
-                'Lambda.TooManyRequestsException',
-              ],
-              IntervalSeconds: 1,
-              JitterStrategy: 'FULL',
-              MaxAttempts: 3,
-            },
-          ],
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              Next: 'WriteFailureStatus',
-              ResultPath: '$.CatcherOutput',
-            },
-          ],
-          // we only need what's in Payload, but can't assign it to the root
-          ResultSelector: {
-            'output_key.$': '$.Payload.output_key',
-          },
-          ResultPath: '$.extracted',
-          Next: 'PolicyReviewer',
-        },
-        PolicyReviewer: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: policyReviewerLambda.arn,
-            Payload: {
-              app_id: this.appId,
-              'input_key.$': '$.extracted.output_key',
-              'policy_context.$': '$.policy_context',
-              'legislation_content.$': '$.legislation_content',
-            },
-          },
-          Retry: [
-            {
-              BackoffRate: 2,
-              ErrorEquals: [
-                'Lambda.ServiceException',
-                'Lambda.AWSLambdaException',
-                'Lambda.SdkClientException',
-                'Lambda.TooManyRequestsException',
-              ],
-              IntervalSeconds: 1,
-              JitterStrategy: 'FULL',
-              MaxAttempts: 3,
-            },
-          ],
-          OutputPath: '$.Payload',
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              Next: 'WriteFailureStatus',
-              ResultPath: '$.CatcherOutput',
-            },
-          ],
-          Next: 'WriteSuccessStatus',
-        },
-        WriteFailureStatus: writeStatus(
+        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.policy_key', 'PolicyReviewer'),
+        PolicyReviewer: this.addLambdaTask(
+          policyReviewerLambda.arn,
           {
-            status: 'FAILURE',
-            'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
+            app_id: this.appId,
+            'input_key.$': '$.extracted.output_key',
+            'policy_context.$': '$.policy_context',
+            'legislation_content.$': '$.legislation_content',
           },
-          'Failure',
-        ),
-        WriteSuccessStatus: writeStatus(
+          'WriteSuccessStatus',
           {
-            status: 'SUCCESS',
-            'result.$': '$',
+            OutputPath: '$.Payload',
           },
-          'Success',
         ),
+        WriteFailureStatus: this.writeFailureStatus(),
+        WriteSuccessStatus: this.writeSuccessStatus(),
         Success: {
           Type: 'Succeed',
         },

@@ -1,4 +1,3 @@
-import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import {
   AppCategory,
@@ -77,27 +76,7 @@ export class CompanyProfile extends BaseNumaApp {
       ],
     };
 
-    const extractContentLambdaPolicyStatements = [
-      {
-        actions: ['s3:GetObject', 's3:PutObject'],
-        effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
-      },
-      {
-        actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
-      },
-      {
-        actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
-        resources: ['*'],
-      },
-    ];
-
-    const extractContentLambda = this.addLambdaFunction(this, 'extract', {
-      additionalPolicyStatements: extractContentLambdaPolicyStatements,
-      lambdaDirectory: 'python/extract-content-from-file',
-      timeout: 900,
-    });
+    const extractContentLambda = this.addExtractContentLambda();
 
     const companyProfileLambdaPolicyStatements = [
       {
@@ -122,24 +101,10 @@ export class CompanyProfile extends BaseNumaApp {
       timeout: 900,
     });
 
-    const writeStatus = (body: Record<string, string | Record<string, string>>, next: string): asl.State => {
-      return {
-        Type: 'Task',
-        Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
-        Parameters: {
-          Body: body,
-          Bucket: props.outputsBucket.bucket,
-          'Key.$': `States.Format('${this.appId}/{}/status.json', $$.Execution.Input.job_id)`,
-        },
-        ResultPath: null,
-        Next: next,
-      };
-    };
-
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
       States: {
-        WriteProcessingStatus: writeStatus({ status: 'PROCESSING' }, 'Initialize'),
+        WriteProcessingStatus: this.writeProcessingStatus(),
         Initialize: {
           Type: 'Pass',
           Parameters: {
@@ -150,98 +115,26 @@ export class CompanyProfile extends BaseNumaApp {
           },
           Next: 'ExtractContent',
         },
-        ExtractContent: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: extractContentLambda.arn,
-            Payload: {
-              'input_key.$': '$.documentation_key',
-              'output_key.$': `States.Format('${this.appId}/{}/extracted.json', $$.Execution.Input.job_id)`,
-              input_bucket: props.outputsBucket.bucket,
-            },
-          },
-          Retry: [
-            {
-              BackoffRate: 2,
-              ErrorEquals: [
-                'Lambda.ServiceException',
-                'Lambda.AWSLambdaException',
-                'Lambda.SdkClientException',
-                'Lambda.TooManyRequestsException',
-              ],
-              IntervalSeconds: 1,
-              JitterStrategy: 'FULL',
-              MaxAttempts: 3,
-            },
-          ],
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              Next: 'WriteFailureStatus',
-              ResultPath: '$.CatcherOutput',
-            },
-          ],
-          ResultSelector: {
-            'output_key.$': '$.Payload.output_key',
-          },
-          ResultPath: '$.extracted',
-          Next: 'GenerateProfile',
-        },
-        GenerateProfile: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: companyProfileLambda.arn,
-            Payload: {
-              app_id: this.appId,
-              'job_id.$': '$.job_id',
-              'details.$': '$.details',
-              'about.$': '$.about',
-              'documentation_text.$': '$.extracted.output_key',
-            },
-          },
-          Retry: [
-            {
-              BackoffRate: 2,
-              ErrorEquals: [
-                'Lambda.ServiceException',
-                'Lambda.AWSLambdaException',
-                'Lambda.SdkClientException',
-                'Lambda.TooManyRequestsException',
-              ],
-              IntervalSeconds: 1,
-              JitterStrategy: 'FULL',
-              MaxAttempts: 3,
-            },
-          ],
-          ResultSelector: {
-            'output_key.$': '$.Payload.output_key',
-          },
-          OutputPath: '$.Payload',
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              Next: 'WriteFailureStatus',
-              ResultPath: '$.CatcherOutput',
-            },
-          ],
-          Next: 'WriteSuccessStatus',
-        },
-        WriteFailureStatus: writeStatus(
+        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.documentation_key', 'GenerateProfile'),
+        GenerateProfile: this.addLambdaTask(
+          companyProfileLambda.arn,
           {
-            status: 'FAILURE',
-            'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
+            app_id: this.appId,
+            'job_id.$': '$.job_id',
+            'details.$': '$.details',
+            'about.$': '$.about',
+            'documentation_text.$': '$.extracted.output_key',
           },
-          'Failure'
-        ),
-        WriteSuccessStatus: writeStatus(
+          'WriteSuccessStatus',
           {
-            status: 'SUCCESS',
-            'result.$': '$',
+            OutputPath: '$.Payload',
+            ResultSelector: {
+              'output_key.$': '$.Payload.output_key',
+            },
           },
-          'Success'
         ),
+        WriteFailureStatus: this.writeFailureStatus(),
+        WriteSuccessStatus: this.writeSuccessStatus(),
         Success: {
           Type: 'Succeed',
         },

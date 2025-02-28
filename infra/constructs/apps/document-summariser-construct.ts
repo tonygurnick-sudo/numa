@@ -1,4 +1,3 @@
-import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import {
   AppCategory,
@@ -60,26 +59,7 @@ export class DocumentSummariser extends BaseNumaApp {
       ],
     };
 
-    const extractContentLambdaPolicyStatements = [
-      {
-        actions: ['s3:GetObject', 's3:PutObject'],
-        effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
-      },
-      {
-        actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
-      },
-      {
-        actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
-        resources: ['*'],
-      },
-    ];
-    const extractContentLambda = this.addLambdaFunction(this, 'extract', {
-      additionalPolicyStatements: extractContentLambdaPolicyStatements,
-      lambdaDirectory: 'python/extract-content-from-file',
-      timeout: 900,
-    });
+    const extractContentLambda = this.addExtractContentLambda();
 
     const summariseDocumentLambdaPolicyStatements = [
       {
@@ -121,26 +101,12 @@ export class DocumentSummariser extends BaseNumaApp {
       timeout: 900,
     });
 
-    const writeStatus = (body: Record<string, string | Record<string, string>>, next: string): asl.State => {
-      return {
-        Type: 'Task',
-        Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
-        Parameters: {
-          Body: body,
-          Bucket: props.outputsBucket.bucket,
-          'Key.$': `States.Format('${this.appId}/{}/status.json', $$.Execution.Input.job_id)`,
-        },
-        ResultPath: null,
-        Next: next,
-      };
-    };
-
     const extractedSuffix = '.extracted.json';
     const summarisedSuffix = '.summarised.txt';
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
       States: {
-        WriteProcessingStatus: writeStatus({ status: 'PROCESSING' }, 'Initialize'),
+        WriteProcessingStatus: this.writeProcessingStatus(),
         Initialize: {
           Type: 'Pass',
           Parameters: {
@@ -162,70 +128,39 @@ export class DocumentSummariser extends BaseNumaApp {
             },
             StartAt: 'ExtractContent',
             States: {
-              ExtractContent: {
-                Type: 'Task',
-                Resource: 'arn:aws:states:::lambda:invoke',
-                Parameters: {
-                  FunctionName: extractContentLambda.arn,
-                  Payload: {
-                    'input_key.$': '$.key',
-                    'output_key.$': `States.Format('{}${extractedSuffix}', $.key)`,
-                    input_bucket: props.outputsBucket.bucket,
-                  },
+              ExtractContent: this.addLambdaTask(
+                extractContentLambda.arn,
+                {
+                  'input_key.$': '$.key',
+                  'output_key.$': `States.Format('{}${extractedSuffix}', $.key)`,
+                  input_bucket: props.outputsBucket.bucket,
                 },
-                Retry: [
-                  {
-                    BackoffRate: 2,
-                    ErrorEquals: [
-                      'Lambda.ServiceException',
-                      'Lambda.AWSLambdaException',
-                      'Lambda.SdkClientException',
-                      'Lambda.TooManyRequestsException',
-                    ],
-                    IntervalSeconds: 1,
-                    JitterStrategy: 'FULL',
-                    MaxAttempts: 3,
+                'SummariseDocument',
+                {
+                  Catch: [],
+                  ResultSelector: {
+                    'output_key.$': '$.Payload.output_key',
                   },
-                ],
-                // we only need what's in Payload, but can't assign it to the root
-                ResultSelector: {
-                  'output_key.$': '$.Payload.output_key',
+                  ResultPath: '$.extracted',
                 },
-                ResultPath: '$.extracted',
-                Next: 'SummariseDocument',
-              },
-              SummariseDocument: {
-                Type: 'Task',
-                Resource: 'arn:aws:states:::lambda:invoke',
-                Parameters: {
-                  FunctionName: summariseDocumentLambda.arn,
-                  Payload: {
-                    app_id: this.appId,
-                    'job_id.$': '$.job_id',
-                    'input_key.$': '$.extracted.output_key',
-                    'output_key.$': `States.Format('{}${summarisedSuffix}', $.key)`,
+              ),
+              SummariseDocument: this.addLambdaTask(
+                summariseDocumentLambda.arn,
+                {
+                  app_id: this.appId,
+                  'job_id.$': '$.job_id',
+                  'input_key.$': '$.extracted.output_key',
+                  'output_key.$': `States.Format('{}${summarisedSuffix}', $.key)`,
+                },
+                null,
+                {
+                  Catch: [],
+                  ResultSelector: {
+                    'output_key.$': '$.Payload.output_key',
                   },
+                  ResultPath: '$.summarised',
                 },
-                Retry: [
-                  {
-                    BackoffRate: 2,
-                    ErrorEquals: [
-                      'Lambda.ServiceException',
-                      'Lambda.AWSLambdaException',
-                      'Lambda.SdkClientException',
-                      'Lambda.TooManyRequestsException',
-                    ],
-                    IntervalSeconds: 1,
-                    JitterStrategy: 'FULL',
-                    MaxAttempts: 3,
-                  },
-                ],
-                ResultSelector: {
-                  'output_key.$': '$.Payload.output_key',
-                },
-                ResultPath: '$.summarised',
-                End: true,
-              },
+              ),
             },
           },
           ResultPath: '$.mapped',
@@ -238,57 +173,22 @@ export class DocumentSummariser extends BaseNumaApp {
           ],
           Next: 'AggregateResults',
         },
-        AggregateResults: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: aggregatorLambda.arn,
-            Payload: {
-              app_id: this.appId,
-              'job_id.$': '$.job_id',
-              'input_keys.$': '$.mapped[*].summarised.output_key',
-              key_suffix: summarisedSuffix,
-              'output_key.$': `States.Format('${this.appId}/{}/aggregated.md', $$.Execution.Input.job_id)`,
-            },
-          },
-          Retry: [
-            {
-              BackoffRate: 2,
-              ErrorEquals: [
-                'Lambda.ServiceException',
-                'Lambda.AWSLambdaException',
-                'Lambda.SdkClientException',
-                'Lambda.TooManyRequestsException',
-              ],
-              IntervalSeconds: 1,
-              JitterStrategy: 'FULL',
-              MaxAttempts: 3,
-            },
-          ],
-          OutputPath: '$.Payload',
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              Next: 'WriteFailureStatus',
-              ResultPath: '$.CatcherOutput',
-            },
-          ],
-          Next: 'WriteSuccessStatus',
-        },
-        WriteFailureStatus: writeStatus(
+        AggregateResults: this.addLambdaTask(
+          aggregatorLambda.arn,
           {
-            status: 'FAILURE',
-            'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
+            app_id: this.appId,
+            'job_id.$': '$.job_id',
+            'input_keys.$': '$.mapped[*].summarised.output_key',
+            key_suffix: summarisedSuffix,
+            'output_key.$': `States.Format('${this.appId}/{}/aggregated.md', $$.Execution.Input.job_id)`,
           },
-          'Failure',
-        ),
-        WriteSuccessStatus: writeStatus(
+          'WriteSuccessStatus',
           {
-            status: 'SUCCESS',
-            'result.$': '$',
+            OutputPath: '$.Payload',
           },
-          'Success',
         ),
+        WriteFailureStatus: this.writeFailureStatus(),
+        WriteSuccessStatus: this.writeSuccessStatus(),
         Success: {
           Type: 'Succeed',
         },

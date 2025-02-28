@@ -1,4 +1,3 @@
-import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import {
   AppCategory,
@@ -134,31 +133,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       ],
     };
 
-    const extractContentLambdaPolicyStatements = [
-      {
-        actions: ['s3:GetObject', 's3:PutObject'],
-        effect: 'Allow',
-        resources: [`${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
-      },
-      {
-        actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
-      },
-      {
-        actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
-        resources: ['*'],
-      },
-      {
-        actions: ['transcribe:StartTranscriptionJob', 'transcribe:GetTranscriptionJob'],
-        effect: 'Allow',
-        resources: ['*'],
-      },
-    ];
-    const extractContentLambda = this.addLambdaFunction(this, 'extract', {
-      additionalPolicyStatements: extractContentLambdaPolicyStatements,
-      lambdaDirectory: 'python/extract-content-from-file',
-      timeout: 900,
-    });
+    const extractContentLambda = this.addExtractContentLambda();
 
     const analyserLambdaPolicyStatements = [
       {
@@ -182,25 +157,10 @@ export class MeetingAnalyser extends BaseNumaApp {
       timeout: 900,
     });
 
-    // TODO: push down, create success and failure function
-    const writeStatus = (body: Record<string, string | Record<string, string>>, next: string): asl.State => {
-      return {
-        Type: 'Task',
-        Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
-        Parameters: {
-          Body: body,
-          Bucket: props.outputsBucket.bucket,
-          'Key.$': `States.Format('${this.appId}/{}/status.json', $$.Execution.Input.job_id)`,
-        },
-        ResultPath: null,
-        Next: next,
-      };
-    };
-
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
       States: {
-        WriteProcessingStatus: writeStatus({ status: 'PROCESSING' }, 'Initialize'),
+        WriteProcessingStatus: this.writeProcessingStatus(),
         Initialize: {
           Type: 'Pass',
           Parameters: {
@@ -218,33 +178,18 @@ export class MeetingAnalyser extends BaseNumaApp {
             },
             StartAt: 'ExtractContent',
             States: {
-              ExtractContent: {
-                Type: 'Task',
-                Resource: 'arn:aws:states:::lambda:invoke',
-                Parameters: {
-                  FunctionName: extractContentLambda.arn,
-                  Payload: {
-                    input_bucket: props.outputsBucket.bucket,
-                    'input_key.$': '$',
-                    return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
-                  },
+              ExtractContent: this.addLambdaTask(
+                extractContentLambda.arn,
+                {
+                  'input_key.$': '$',
+                  input_bucket: props.outputsBucket.bucket,
+                  return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
                 },
-                Retry: [
-                  {
-                    BackoffRate: 2,
-                    ErrorEquals: [
-                      'Lambda.ServiceException',
-                      'Lambda.AWSLambdaException',
-                      'Lambda.SdkClientException',
-                      'Lambda.TooManyRequestsException',
-                    ],
-                    IntervalSeconds: 1,
-                    JitterStrategy: 'FULL',
-                    MaxAttempts: 3,
-                  },
-                ],
-                End: true,
-              },
+                null,
+                {
+                  Catch: [],
+                },
+              ),
             },
           },
           ResultPath: '$.extracted',
@@ -276,57 +221,20 @@ export class MeetingAnalyser extends BaseNumaApp {
           ],
           Next: 'Analyse',
         },
-        Analyse: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: analyserLambda.arn,
-            Payload: {
-              app_id: this.appId,
-              'job_id.$': '$.job_id',
-              'meeting_notes_and_or_transcript.$': '$.extracted[*].Payload.content',
-              'other_notes.$': '$$.Execution.Input.other_notes',
-              'output_key.$': `States.Format('${this.appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
-              'template.$': '$$.Execution.Input.template',
-            },
-          },
-          Retry: [
-            {
-              BackoffRate: 2,
-              ErrorEquals: [
-                'Lambda.ServiceException',
-                'Lambda.AWSLambdaException',
-                'Lambda.SdkClientException',
-                'Lambda.TooManyRequestsException',
-              ],
-              IntervalSeconds: 1,
-              JitterStrategy: 'FULL',
-              MaxAttempts: 3,
-            },
-          ],
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              Next: 'WriteFailureStatus',
-              ResultPath: '$.CatcherOutput',
-            },
-          ],
-          Next: 'WriteSuccessStatus',
-        },
-        WriteFailureStatus: writeStatus(
+        Analyse: this.addLambdaTask(
+          analyserLambda.arn,
           {
-            status: 'FAILURE',
-            'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
+            app_id: this.appId,
+            'job_id.$': '$.job_id',
+            'meeting_notes_and_or_transcript.$': '$.extracted[*].Payload.content',
+            'other_notes.$': '$$.Execution.Input.other_notes',
+            'output_key.$': `States.Format('${this.appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
+            'template.$': '$$.Execution.Input.template',
           },
-          'Failure',
+          'WriteSuccessStatus',
         ),
-        WriteSuccessStatus: writeStatus(
-          {
-            status: 'SUCCESS',
-            'result.$': '$.Payload',
-          },
-          'Success',
-        ),
+        WriteFailureStatus: this.writeFailureStatus(),
+        WriteSuccessStatus: this.writeSuccessStatus('$.Payload'),
         Success: {
           Type: 'Succeed',
         },
