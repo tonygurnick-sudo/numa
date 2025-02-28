@@ -115,84 +115,24 @@ export class CompanyProfile extends BaseNumaApp {
           },
           Next: 'ExtractContent',
         },
-        ExtractContent: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: extractContentLambda.arn,
-            Payload: {
-              'input_key.$': '$.documentation_key',
-              'output_key.$': `States.Format('${this.appId}/{}/extracted.json', $$.Execution.Input.job_id)`,
-              input_bucket: props.outputsBucket.bucket,
+        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.documentation_key', 'GenerateProfile'),
+        GenerateProfile: this.addLambdaTask(
+          companyProfileLambda.arn,
+          {
+            app_id: this.appId,
+            'job_id.$': '$.job_id',
+            'details.$': '$.details',
+            'about.$': '$.about',
+            'documentation_text.$': '$.extracted.output_key',
+          },
+          'WriteSuccessStatus',
+          {
+            OutputPath: '$.Payload',
+            ResultSelector: {
+              'output_key.$': '$.Payload.output_key',
             },
           },
-          Retry: [
-            {
-              BackoffRate: 2,
-              ErrorEquals: [
-                'Lambda.ServiceException',
-                'Lambda.AWSLambdaException',
-                'Lambda.SdkClientException',
-                'Lambda.TooManyRequestsException',
-              ],
-              IntervalSeconds: 1,
-              JitterStrategy: 'FULL',
-              MaxAttempts: 3,
-            },
-          ],
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              Next: 'WriteFailureStatus',
-              ResultPath: '$.CatcherOutput',
-            },
-          ],
-          ResultSelector: {
-            'output_key.$': '$.Payload.output_key',
-          },
-          ResultPath: '$.extracted',
-          Next: 'GenerateProfile',
-        },
-        GenerateProfile: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: companyProfileLambda.arn,
-            Payload: {
-              app_id: this.appId,
-              'job_id.$': '$.job_id',
-              'details.$': '$.details',
-              'about.$': '$.about',
-              'documentation_text.$': '$.extracted.output_key',
-            },
-          },
-          Retry: [
-            {
-              BackoffRate: 2,
-              ErrorEquals: [
-                'Lambda.ServiceException',
-                'Lambda.AWSLambdaException',
-                'Lambda.SdkClientException',
-                'Lambda.TooManyRequestsException',
-              ],
-              IntervalSeconds: 1,
-              JitterStrategy: 'FULL',
-              MaxAttempts: 3,
-            },
-          ],
-          ResultSelector: {
-            'output_key.$': '$.Payload.output_key',
-          },
-          OutputPath: '$.Payload',
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              Next: 'WriteFailureStatus',
-              ResultPath: '$.CatcherOutput',
-            },
-          ],
-          Next: 'WriteSuccessStatus',
-        },
+        ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),
         Success: {

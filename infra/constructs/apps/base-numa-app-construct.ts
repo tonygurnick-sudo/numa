@@ -138,6 +138,45 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     });
   }
 
+  addLambdaTask(
+    lambdaArn: string,
+    payload: Record<string, string | boolean>,
+    next: string | null,
+    additionalParameters?: AdditionalLambdaParameters,
+  ): asl.State {
+    return {
+      Type: 'Task',
+      Resource: 'arn:aws:states:::lambda:invoke',
+      Parameters: {
+        FunctionName: lambdaArn,
+        Payload: payload,
+      },
+      Retry: [
+        {
+          BackoffRate: 2,
+          ErrorEquals: [
+            'Lambda.ServiceException',
+            'Lambda.AWSLambdaException',
+            'Lambda.SdkClientException',
+            'Lambda.TooManyRequestsException',
+          ],
+          IntervalSeconds: 1,
+          JitterStrategy: 'FULL',
+          MaxAttempts: 3,
+        },
+      ],
+      Catch: [
+        {
+          ErrorEquals: ['States.ALL'],
+          Next: 'WriteFailureStatus',
+          ResultPath: '$.CatcherOutput',
+        },
+      ],
+      ...additionalParameters,
+      ...(next ? { Next: next } : { End: true }),
+    };
+  }
+
   addExtractContentLambda(): LambdaFunction {
     const extractContentLambdaPolicyStatements = [
       {
@@ -165,6 +204,30 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       lambdaDirectory: 'python/extract-content-from-file',
       timeout: 900,
     });
+  }
+
+  addExtractContentTask(
+    extractContentLambda: LambdaFunction,
+    input_key: string,
+    next: string,
+    additionalParameters?: AdditionalLambdaParameters,
+  ): asl.State {
+    return this.addLambdaTask(
+      extractContentLambda.arn,
+      {
+        'input_key.$': input_key,
+        'output_key.$': `States.Format('${this.appId}/{}/extracted.json', $$.Execution.Input.job_id)`,
+        input_bucket: this.outputsBucket.bucket,
+      },
+      next,
+      {
+        ResultSelector: {
+          'output_key.$': '$.Payload.output_key',
+        },
+        ResultPath: '$.extracted',
+        ...additionalParameters,
+      },
+    );
   }
 
   writeStatus(body: Record<string, string | Record<string, string>>, next: string): asl.State {
@@ -391,4 +454,11 @@ export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiG
 
 export interface AppSpecificBaseNumaAppProps extends BaseNumaAppProps {
   appId: string;
+}
+
+export interface AdditionalLambdaParameters {
+  Catch?: Array<Record<string, string>>;
+  OutputPath?: string;
+  ResultPath?: string;
+  ResultSelector?: Record<string, string>;
 }

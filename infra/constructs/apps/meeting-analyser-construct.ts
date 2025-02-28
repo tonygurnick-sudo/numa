@@ -178,33 +178,18 @@ export class MeetingAnalyser extends BaseNumaApp {
             },
             StartAt: 'ExtractContent',
             States: {
-              ExtractContent: {
-                Type: 'Task',
-                Resource: 'arn:aws:states:::lambda:invoke',
-                Parameters: {
-                  FunctionName: extractContentLambda.arn,
-                  Payload: {
-                    input_bucket: props.outputsBucket.bucket,
-                    'input_key.$': '$',
-                    return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
-                  },
+              ExtractContent: this.addLambdaTask(
+                extractContentLambda.arn,
+                {
+                  'input_key.$': '$',
+                  input_bucket: props.outputsBucket.bucket,
+                  return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
                 },
-                Retry: [
-                  {
-                    BackoffRate: 2,
-                    ErrorEquals: [
-                      'Lambda.ServiceException',
-                      'Lambda.AWSLambdaException',
-                      'Lambda.SdkClientException',
-                      'Lambda.TooManyRequestsException',
-                    ],
-                    IntervalSeconds: 1,
-                    JitterStrategy: 'FULL',
-                    MaxAttempts: 3,
-                  },
-                ],
-                End: true,
-              },
+                null,
+                {
+                  Catch: [],
+                },
+              ),
             },
           },
           ResultPath: '$.extracted',
@@ -236,43 +221,18 @@ export class MeetingAnalyser extends BaseNumaApp {
           ],
           Next: 'Analyse',
         },
-        Analyse: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: analyserLambda.arn,
-            Payload: {
-              app_id: this.appId,
-              'job_id.$': '$.job_id',
-              'meeting_notes_and_or_transcript.$': '$.extracted[*].Payload.content',
-              'other_notes.$': '$$.Execution.Input.other_notes',
-              'output_key.$': `States.Format('${this.appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
-              'template.$': '$$.Execution.Input.template',
-            },
+        Analyse: this.addLambdaTask(
+          analyserLambda.arn,
+          {
+            app_id: this.appId,
+            'job_id.$': '$.job_id',
+            'meeting_notes_and_or_transcript.$': '$.extracted[*].Payload.content',
+            'other_notes.$': '$$.Execution.Input.other_notes',
+            'output_key.$': `States.Format('${this.appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
+            'template.$': '$$.Execution.Input.template',
           },
-          Retry: [
-            {
-              BackoffRate: 2,
-              ErrorEquals: [
-                'Lambda.ServiceException',
-                'Lambda.AWSLambdaException',
-                'Lambda.SdkClientException',
-                'Lambda.TooManyRequestsException',
-              ],
-              IntervalSeconds: 1,
-              JitterStrategy: 'FULL',
-              MaxAttempts: 3,
-            },
-          ],
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              Next: 'WriteFailureStatus',
-              ResultPath: '$.CatcherOutput',
-            },
-          ],
-          Next: 'WriteSuccessStatus',
-        },
+          'WriteSuccessStatus',
+        ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus('$.Payload'),
         Success: {
