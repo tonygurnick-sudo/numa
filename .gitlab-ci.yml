@@ -101,8 +101,8 @@ infra-lint:
   rules:
     - changes:
         paths:
-          - infra
-          - style
+          - infra/**/*
+          - style/**/*
 
 python-lint:
   extends: .poetry-job
@@ -115,7 +115,7 @@ python-lint:
   rules:
     - changes:
         paths:
-          - $PYTHON_WORKING_DIRECTORY
+          - $PYTHON_WORKING_DIRECTORY/**/*
 
 python-test:
   parallel: !reference [.python-matrix]
@@ -125,8 +125,8 @@ node-lint:
   rules:
     - changes:
         paths:
-          - $BUILD_DIR
-          - style
+          - $BUILD_DIR/**/*
+          - style/**/*
 
 node-test:
   parallel: !reference [.node-matrix]
