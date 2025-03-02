@@ -41,6 +41,12 @@
     "allApps": true,
     "devInstance": true
   },
+  "arcanum-demo-nathan": {
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "allApps": true,
+    "devInstance": true
+  },
   "arcanum-demo-nick": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
@@ -65,12 +71,18 @@
         "s3KeyPrefix": "/arcanum-demo-sebastian-nzsba-policy-builder"
       },
       "policy-reviewer": {}
+      "nzsba-policy-builder": {
+        "s3KeyPrefix": "/arcanum-demo-sebastian-nzsba-policy-builder"
+      },
+      "policy-reviewer": {}
     },
     "devInstance": true
   },
   "arcanum-dave": {
+  "arcanum-dave": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
+    "apps": {},
     "apps": {},
     "devInstance": true
   },
@@ -83,6 +95,21 @@
     "clientAccountId": "060795909741"
   },
   "align-me": {
+    "clientAccountId": "390403893889",
+    "teamsConfigs": [
+      {
+        "tenantId": "ebac7c22-df8c-4c82-9e2b-38f1690f6f5a",
+        "configuration": {
+          "isCrawlChatMessages": false,
+          "isCrawlChatAttachment": false
+        }
+      }
+    ],
+    "boxConfigs": [
+      {
+        "enterpriseId": "511773"
+      }
+    ]
     "clientAccountId": "390403893889",
     "teamsConfigs": [
       {
@@ -388,6 +415,11 @@
         "s3KeyPrefix": "/nzsba-nzsba-policy-builder"
       }
     },
+    "apps": {
+      "nzsba-policy-builder": {
+        "s3KeyPrefix": "/nzsba-nzsba-policy-builder"
+      }
+    },
     "uploadFrontend": false,
     "webCrawlerConfigs": [
       {
@@ -407,7 +439,19 @@
         "siteUrls": [
           "https://nzsta.sharepoint.com/sites/Company"
         ],
+        "siteUrls": [
+          "https://nzsta.sharepoint.com/sites/Company"
+        ],
         "configuration": {
+          "linkTitleFilterRegEx": [
+            "^.*(?:PLD ?2021).*$"
+          ],
+          "pageTitleFilterRegEx": [
+            "^.*(?:PLD ?2021).*$"
+          ],
+          "inclusionFilePath": [
+            "^.*(?:PLD ?2021).*$"
+          ]
           "linkTitleFilterRegEx": [
             "^.*(?:PLD ?2021).*$"
           ],

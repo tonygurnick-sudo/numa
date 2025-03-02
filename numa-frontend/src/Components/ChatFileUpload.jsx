@@ -1,214 +1,151 @@
-import { useState } from 'react';
-import { Modal, Button } from 'react-bootstrap';
+// ChatFileUpload.jsx
+import React, { useState } from 'react';
+import { Modal } from 'react-bootstrap';
+import { S3UploadModule } from '../Modules/S3UploadModule';
+import { processFile } from '../utils/fileProcessing';
+import { fetchFileFromS3, uploadFileToS3 } from '../utils/s3Utils';
+import { useAuth } from '../Providers/AuthProvider';
 
-// Supported file extensions and MIME types
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
-const SUPPORTED_EXTENSIONS = ['.txt', '.csv', '.md', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'];
-const SUPPORTED_MIME_TYPES = {
-  'text/plain': '.txt',
-  'application/pdf': '.pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
-  'text/csv': '.csv',
-  'text/markdown': '.md',
-  'application/msword': '.doc',
-  'application/vnd.ms-excel': '.xls',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
-  'application/vnd.ms-powerpoint': '.ppt',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
-};
+const ChatFileUpload = ({
+  show,
+  onHide,
+  onUploadSuccess,
+  setMessages,
+  conversationId,
+  sub,
+  refreshSidebar,
+  setIsFileProcessing,
+  createNewConversationIfNeeded,
+}) => {
+  const { getIdentityPoolCredentials, bedrockRuntimeClient, numaChatDynamoUtils, numaChatBedrockUtils } = useAuth();
+  const [uploadedFiles, setUploadedFiles] = useState([]);
 
-const getFileExtension = (filename) => {
-  const lastDotIndex = filename.lastIndexOf('.');
-  return lastDotIndex > -1 ? filename.slice(lastDotIndex).toLowerCase() : '';
-};
+  const handleUploadComplete = async (fileArray) => {
+    setIsFileProcessing(true);
+    onHide();
 
-const ChatFileUpload = ({ show, onHide, onUploadSuccess }) => {
-  const [files, setFiles] = useState([]);
-  const [error, setError] = useState(null);
+    // We'll store ephemeral message IDs per file
+    const ephemeralMessageIds = [];
 
-  const validateFile = (file) => {
-    // Check file size
-    if (file.size > MAX_FILE_SIZE) {
-      throw new Error(
-        `File size exceeds 10MB limit. File "${file.name}" is ${(file.size / (1024 * 1024)).toFixed(2)}MB`,
-      );
-    }
-
-    // Check file type by both extension and MIME type
-    const extension = getFileExtension(file.name);
-    const mimeType = file.type;
-
-    const isValidExtension = SUPPORTED_EXTENSIONS.includes(extension);
-    const isValidMimeType = Object.keys(SUPPORTED_MIME_TYPES).includes(mimeType);
-
-    if (!isValidExtension && !isValidMimeType) {
-      throw new Error(`Invalid file type: "${file.name}". Please upload PDF, DOCX, or TXT files only.`);
-    }
-
-    return true;
-  };
-
-  const handleFileChange = (event) => {
     try {
-      const selectedFiles = Array.from(event.target.files);
-
-      // Validate each file
-      const validationErrors = [];
-      const validFiles = [];
-
-      selectedFiles.forEach((file) => {
-        try {
-          validateFile(file);
-          validFiles.push(file);
-        } catch (error) {
-          validationErrors.push(error.message);
-        }
-      });
-
-      if (validationErrors.length > 0) {
-        setError(validationErrors.join('\n'));
-        return;
+      let cid = conversationId;
+      if (!cid) {
+        cid = await createNewConversationIfNeeded();
       }
 
-      // Append new files to existing ones
-      setFiles((prevFiles) => [
-        ...prevFiles,
-        ...validFiles.map((file) => ({
-          name: file.name,
-          size: file.size,
-          type: file.type || 'text/plain',
-          file: file,
-        })),
-      ]);
-      setError(null);
-    } catch (error) {
-      console.error('Error selecting files:', error);
-      setError('Failed to select files. Please try again.');
-    }
-  };
+      for (let i = 0; i < fileArray.length; i++) {
+        const { filePath, fileName, fileType, s3Bucket, file } = fileArray[i];
 
-  const handleRemoveFile = (index) => {
-    const newFiles = [...files];
-    newFiles.splice(index, 1);
-    setFiles(newFiles);
-  };
-
-  const readFileContent = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const text = reader.result;
-        // Check content size before encoding
-        const contentSize = new Blob([text]).size;
-        if (contentSize > MAX_FILE_SIZE) {
-          reject(
-            new Error(
-              `File content size exceeds 10MB limit. File "${file.name}" content is ${(
-                contentSize /
-                (1024 * 1024)
-              ).toFixed(2)}MB`,
-            ),
-          );
-          return;
-        }
-        // Convert to base64
-        try {
-          const base64Data = btoa(unescape(encodeURIComponent(text)));
-          resolve(base64Data);
-        } catch (error) {
-          reject(new Error(`Error encoding file "${file.name}": ${error.message}`));
-        }
-      };
-      reader.onerror = () => reject(new Error(`Error reading file: ${file.name}`));
-      reader.readAsText(file);
-    });
-  };
-
-  const handleSubmit = async () => {
-    if (files.length === 0) {
-      setError('Please select at least one file.');
-      return;
-    }
-
-    try {
-      // Process files and read their content
-      const processedFiles = await Promise.all(
-        files.map(async (fileInfo) => {
-          try {
-            const base64Data = await readFileContent(fileInfo.file);
-            return {
-              name: fileInfo.name,
-              size: fileInfo.size,
-              type: fileInfo.type || 'text/plain',
-              data: base64Data,
-            };
-          } catch (error) {
-            throw new Error(`Error processing file "${fileInfo.name}": ${error.message}`);
+        // Create an ephemeral message for this file
+        const ephemeralId = Date.now() + i;
+        ephemeralMessageIds.push(ephemeralId);
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `Processing file ${i + 1}/${fileArray.length}: ${fileName}...`,
+            status: 'processingFile',
+            ephemeralId
           }
-        }),
-      );
+        ]);
 
-      onUploadSuccess(processedFiles);
-      setFiles([]);
-      setError(null);
-      onHide();
+        const isImage = fileType?.startsWith('image/');
+        if (isImage) {
+          const inferredType = fileType.split('/')[1];
+          const processedFile = await processFile(file, inferredType, numaChatBedrockUtils);
+          if (numaChatDynamoUtils && cid) {
+            await numaChatDynamoUtils.addMessage({
+              conversationId: cid,
+              userId: sub,
+              messageType: "image_description",
+              role: "system",
+              content: processedFile.content,
+              fileInfo: { fileName, fileType, description: processedFile.content },
+            });
+          }
+        } else {
+          const region = window.sessionStorage.getItem('REGION');
+          let inferredFileType = fileName?.split('.').pop().toLowerCase() || fileType || '';
+          const fileContent = await fetchFileFromS3(filePath, s3Bucket, region, getIdentityPoolCredentials);
+          const processedFile = await processFile(fileContent, inferredFileType, numaChatBedrockUtils);
+          const extractedContentS3Key = `${filePath}-processed.${processedFile.inferredType}`;
+          await uploadFileToS3(processedFile, s3Bucket, extractedContentS3Key, region, getIdentityPoolCredentials);
+
+          const fileMetadata = {
+            fileName,
+            fileType: processedFile.inferredType,
+            s3Key: filePath,
+            s3Bucket,
+            extractedContentS3Key,
+            contentType: processedFile.contentType,
+          };
+          setUploadedFiles(prev => [...prev, fileMetadata]);
+          if (numaChatDynamoUtils && cid) {
+            await numaChatDynamoUtils.addFileMessage({
+              conversationId: cid,
+              userId: sub,
+              fileName: fileMetadata.fileName,
+              fileType: fileMetadata.fileType,
+              s3Key: fileMetadata.s3Key,
+              s3Bucket: fileMetadata.s3Bucket,
+              extractedContentS3Key: fileMetadata.extractedContentS3Key,
+              contentType: fileMetadata.contentType,
+            });
+          }
+          if (onUploadSuccess) {
+            onUploadSuccess([fileMetadata]);
+          }
+        }
+
+        // Remove ephemeral message for this file and add success message
+        setMessages(prev => prev.filter(msg => msg.ephemeralId !== ephemeralId));
+        setMessages(prev => [
+          ...prev,
+          { role: 'assistant', content: `File “${fileName}” uploaded and processed.` },
+        ]);
+      }
+
+      refreshSidebar();
     } catch (error) {
-      console.error('Error submitting files:', error);
-      setError(error.message || 'Failed to upload files. Please try again.');
+      console.error('Error processing uploaded files:', error);
+      ephemeralMessageIds.forEach(eid => {
+        setMessages(prev => prev.filter(msg => msg.ephemeralId !== eid));
+      });
+      setMessages(prev => [
+        ...prev,
+        { role: 'system', content: `Error while processing files: ${error.message}` },
+      ]);
+    } finally {
+      setIsFileProcessing(false);
     }
   };
 
   return (
-    <Modal show={show} onHide={onHide}>
+    <Modal show={show} onHide={onHide} size="lg">
       <Modal.Header closeButton>
-        <Modal.Title>Upload Files for Chat</Modal.Title>
+        <Modal.Title>Upload Files</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <div className="chat-file-upload">
-          <input
-            type="file"
-            className="form-control"
-            multiple
-            accept={SUPPORTED_EXTENSIONS.join(',')}
-            onChange={handleFileChange}
-            data-testid="file-input"
-          />
-          <p className="text-muted small mt-2">
-            Accepts {SUPPORTED_EXTENSIONS.join(', ').replace(/\./g, '').toUpperCase()} files up to 10MB each
-          </p>
-          {files.length > 0 && (
-            <div className="uploaded-files mt-3">
-              <h6>Selected Files:</h6>
-              <ul className="file-list list-unstyled">
-                {files.map((file, index) => (
-                  <li key={index} className="file-item">
-                    <span className="file-name">{file.name}</span>
-                    <span className="file-size text-muted ms-2">({(file.size / 1024).toFixed(1)} KB)</span>
-                    <button
-                      type="button"
-                      className="btn btn-sm ms-2 remove-file-btn"
-                      onClick={() => handleRemoveFile(index)}
-                      aria-label={`Remove ${file.name}`}
-                      data-testid={`remove-file-${file.name}`}
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {error && <div className="alert alert-danger mt-2">{error}</div>}
+        <S3UploadModule
+          task={{ id: 'chatFileUpload' }}
+          onComplete={handleUploadComplete}
+          onNotComplete={() => {}}
+          onChange={() => {}}
+        />
+                <div className="supported-file-types">
+          <h6>Supported File Types:</h6>
+          <ul>
+            <li>PDF (pdf)</li>
+            <li>Documents (docx, txt)</li>
+            <li>Spreadsheets (csv, xlsx)</li>
+            <li>Images (jpg, jpeg, png, gif, webp)</li>
+            <li>Presentations (pptx)</li>
+            <li>JSON (json)</li>
+            <li>HTML (html)</li>
+            <li>Markdown (md)</li>
+          </ul>
         </div>
       </Modal.Body>
-      <Modal.Footer>
-        <Button variant="secondary" onClick={onHide}>
-          Cancel
-        </Button>
-        <Button variant="primary" onClick={handleSubmit}>
-          Upload
-        </Button>
-      </Modal.Footer>
     </Modal>
   );
 };

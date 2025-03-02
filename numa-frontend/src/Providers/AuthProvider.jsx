@@ -1,10 +1,14 @@
 import { createContext, useState, useContext, useRef, useEffect, useCallback } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import { QBusinessClient } from '@aws-sdk/client-qbusiness';
+import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { QAppsClient } from '@aws-sdk/client-qapps';
 import { fromWebToken, fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
 import { generatePolicy } from '../Modules/QPolicyGenerator';
+import { generateBedrockPolicy } from '../Modules/BedrockPolicyGenerator';
+import { generateDynamoDBPolicy } from '../Modules/DynamoDBPolicyGenerator';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
 import {
   CognitoIdentityProviderClient,
@@ -13,6 +17,9 @@ import {
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
+import { fetchConfigAddtoSession } from '../Components/ConfigSetup';
+import { NumaChatDynamoUtils } from '../utils/DynamoDBUtils';
+import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
 
 const AuthContext = createContext(null);
 
@@ -23,6 +30,9 @@ const API_ENDPOINT = window.sessionStorage.getItem('API_ENDPOINT');
 const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
 const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
 const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+const client = window.sessionStorage.getItem('CLIENT_NAME'); // e.g. "arcanum-demo"
+const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod'; // default to "prod" if not set
+const NUMA_CHAT_HISTORY_TABLE_NAME = `numa-${client}${environment !== 'prod' ? `-${environment}` : ''}-chat-history`;
 
 export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const [user, setUser] = useState(null);
@@ -73,9 +83,13 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     decodeTokens();
   };
 
+  const [qAppsClient, setQAppsClient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [qBusinessClient, setQBusinessClient] = useState(null);
-  const [qAppsClient, setQAppsClient] = useState(null);
+  const [bedrockRuntimeClient, setBedrockRuntimeClient] = useState(null);
+  const [numaChatBedrockUtils, setNumaChatBedrockUtils] = useState(null);
+  const [dynamoDBClient, setDynamoDBClient] = useState(null);
+  const [numaChatDynamoUtils, setNumaChatDynamoUtils] = useState(null);
   const [tokenValidationComplete, setTokenValidationComplete] = useState(false);
 
   const isTokenExpired = (decodedToken) => {
@@ -176,6 +190,80 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     }
   }, [user]);
 
+  const initializeBedrockRuntimeClient = useCallback(async () => {
+    if (!user) return;
+
+    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+
+    try {
+      const idToken = user.tokens.idToken;
+
+      const accountId = ROLE_ARN.split(':')[4];
+      const policy = generateBedrockPolicy({
+        Region: REGION,
+        AccountId: accountId,
+      });
+
+      const credentials = fromWebToken({
+        client: cognitoIdentity,
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: 'numa-frontend-bedrock',
+        roleArn: ROLE_ARN,
+        policy: JSON.stringify(policy),
+        durationSeconds: 3600,
+        webIdentityToken: idToken,
+      });
+
+      const newClient = new BedrockRuntimeClient({
+        region: REGION,
+        credentials: await credentials(),
+      });
+
+      setBedrockRuntimeClient(newClient);
+      const utils = new NumaBedrockUtils(newClient);
+      setNumaChatBedrockUtils(utils);
+    } catch (error) {
+      console.error('Error in BedrockRuntimeClient initialization:', error);
+    }
+  }, [user]);
+
+  const initializeDynamoDBClient = useCallback(async () => {
+    if (!user) return;
+
+    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+
+    try {
+      const idToken = user.tokens.idToken;
+
+      const accountId = ROLE_ARN.split(':')[4];
+      const policy = generateDynamoDBPolicy({
+        Region: REGION,
+        AccountId: accountId,
+        NumaChatHistoryTableName: NUMA_CHAT_HISTORY_TABLE_NAME,
+      });
+
+      const credentials = fromWebToken({
+        client: cognitoIdentity,
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: 'numa-frontend-chat',
+        roleArn: ROLE_ARN,
+        policy: JSON.stringify(policy),
+        durationSeconds: 3600,
+        webIdentityToken: idToken,
+      });
+
+      const newClient = new DynamoDBClient({
+        region: REGION,
+        credentials: await credentials(),
+      });
+      setDynamoDBClient(newClient);
+      const utils = new NumaChatDynamoUtils(newClient);
+      setNumaChatDynamoUtils(utils);
+    } catch (error) {
+      console.error('Error in DynamoDBClient initialization:', error);
+    }
+  }, [user]);
+
   const initializeQAppsClient = useCallback(async () => {
     if (!user) return;
 
@@ -215,11 +303,23 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     if (user) {
       initializeQBusinessClient();
       initializeQAppsClient();
+      initializeBedrockRuntimeClient();
+      initializeDynamoDBClient();
     } else {
       setQBusinessClient(null);
       setQAppsClient(null);
+      setBedrockRuntimeClient(null);
+      setNumaChatBedrockUtils(null);
+      setDynamoDBClient(null);
+      setNumaChatDynamoUtils(null);
     }
-  }, [user, initializeQBusinessClient, initializeQAppsClient]);
+  }, [
+    user,
+    initializeQBusinessClient,
+    initializeQAppsClient,
+    initializeBedrockRuntimeClient,
+    initializeDynamoDBClient,
+  ]);
 
   const checkAndRefreshTokens = async () => {
     // Ensure tokens are decoded
@@ -625,6 +725,10 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     checkAndRefreshTokens,
     qBusinessClient,
     qAppsClient,
+    bedrockRuntimeClient,
+    numaChatBedrockUtils,
+    dynamoDBClient,
+    numaChatDynamoUtils,
     requestPasswordReset,
     confirmPasswordReset,
     getIdentityPoolCredentials,
