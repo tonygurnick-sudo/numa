@@ -702,7 +702,7 @@ export class CoreNumaInfra extends Construct {
       {
         model_id: 'anthropic.claude-3-haiku-20240307-v1:0',
         regions: [process.env['AWS_REGION']],
-      }
+      },
     ];
     for (const model of models) {
       for (const region of model.regions) {

@@ -28,8 +28,8 @@ export interface QInstanceDetails {
   qDataSourceId: string;
   qUserPool: string;
   qRetrieverId: string;
-
 }
+
 export async function getQInstanceDetails(credentials, customerName?: string): Promise<QInstanceDetails> {
   const applicationId = await getQApplicationId(credentials, customerName);
   const indexId = await getQIndexId(credentials, applicationId);
@@ -135,10 +135,10 @@ async function getRetrieverId(credentials, appId: string): Promise<string> {
       throw new Error(`No retrievers found for application ${appId}`);
     }
     // If multiple retrievers exist, pick the one that's ACTIVE
-    const activeRetriever = retrievers.find(r => r.status === "ACTIVE") || retrievers[0];
-    return activeRetriever.retrieverId!;  // non-null assertion (!) since we know it exists
+    const activeRetriever = retrievers.find((r) => r.status === 'ACTIVE') || retrievers[0];
+    return activeRetriever.retrieverId!;
   } catch (error) {
-    console.error("Error retrieving retriever ID:", error);
+    console.error('Error retrieving retriever ID:', error);
     throw error;
   }
 }
