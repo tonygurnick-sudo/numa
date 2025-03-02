@@ -29,7 +29,23 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
 
   useEffect(() => {
     if (value) {
-      setSelectedFiles([{ name: value.split('/').pop() }]);
+      // Add support for single file and multiple files
+
+      if (Array.isArray(value)) {
+        // Check if the array is length 1
+        console.log('value is an array', value);
+        if (value.length === 1) {
+          console.log('value is an array of length 1', value[0]);
+          setSelectedFiles({ name: value[0].fileName || value[0].name });
+        } else {
+          console.log('value is an array of length 2', value);
+          setSelectedFiles(value.map((file) => ({ name: file.fileName || file.name })));
+        }
+      } else {
+        setSelectedFiles([{ name: value.split('/').pop() }]);
+      }
+
+      console.log('value', value);
       setUploadStatus('Upload successful!');
     }
   }, [value]);
@@ -44,47 +60,54 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
     fetchConfig();
   }, [fetchConfig]);
 
-  const validateFiles = (files) => {
-    const errors = [];
-    const validFiles = [];
-
-    Array.from(files).forEach((file) => {
-      // Check file type if acceptedFileTypes is specified
-      if (acceptedFileTypes && acceptedFileTypes.length > 0) {
-        if (!acceptedFileTypes.includes(file.type)) {
-          errors.push(`${file.name}: Invalid file type. Accepted types: ${acceptedFileTypes.join(', ')}`);
-          return;
-        }
+  const validateFile = (file) => {
+    // Check file type if acceptedFileTypes is specified
+    if (acceptedFileTypes && acceptedFileTypes.length > 0) {
+      if (!acceptedFileTypes.includes(file.type)) {
+        return {
+          validFile: null,
+          error: `${file.name}: Invalid file type. Accepted types: ${acceptedFileTypes.join(', ')}`,
+        };
       }
+    }
 
-      // Check file size if maxFileSize is specified (convert MB to bytes)
-      if (maxFileSize && file.size > maxFileSize * 1024 * 1024) {
-        errors.push(`${file.name}: File is too large. Maximum size allowed is ${maxFileSize.toFixed(2)} MB`);
-        return;
-      }
+    // Check file size if maxFileSize is specified (convert MB to bytes)
+    if (maxFileSize && file.size > maxFileSize * 1024 * 1024) {
+      return {
+        validFile: null,
+        error: `${file.name}: File is too large. Maximum size allowed is ${maxFileSize.toFixed(2)} MB`,
+      };
+    }
 
-      validFiles.push(file);
-    });
-
-    return { validFiles, errors };
+    return { validFile: file, error: null };
   };
 
   const handleFileSelection = (fileList) => {
-    if (fileList && fileList.length > 0) {
-      const { validFiles, errors } = validateFiles(fileList);
+    const files = Array.from(fileList);
+    const validFiles = [];
+    const errors = [];
 
-      if (errors.length > 0) {
-        setError(errors.join('\n'));
-        return;
+    files.forEach((file) => {
+      const { validFile, error: fileError } = validateFile(file);
+      if (validFile) {
+        validFiles.push(validFile);
       }
+      if (fileError) {
+        errors.push(fileError);
+      }
+    });
 
-      setSelectedFiles(validFiles);
-      setUploadStatus(null);
-      setUploadProgress(0);
-      setError(null);
-      onNotComplete();
-      onChange(null);
+    if (errors.length > 0) {
+      setError(errors.join('\n'));
+      return;
     }
+
+    setSelectedFiles(validFiles);
+    setUploadStatus(null);
+    setUploadProgress(0);
+    setError(null);
+    onNotComplete();
+    onChange(null);
   };
 
   const handleFileChange = (e) => {
@@ -141,6 +164,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
         setUploadProgress(0);
 
         const relativePath = file.name;
+        console.log('relativePath', relativePath);
         const encodedPath = relativePath
           .split('/')
           .map((segment) => encodeURIComponent(segment))
@@ -238,7 +262,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
           {selectedFiles.length > 0 && (
             <div className="selected-file mt-3" style={{ textAlign: 'left' }}>
               <p className="mb-2">Selected {selectedFiles.length === 1 ? 'file:' : 'files:'}</p>
-              <ul style={{ listStylePosition: 'inside' }}>
+              <ul style={{ listStyleType: 'none', listStylePosition: 'inside' }}>
                 {selectedFiles.map((f) => (
                   <li key={f.name}>{f.name}</li>
                 ))}
