@@ -129,32 +129,8 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
         aria-controls="chat-history-content"
       >
         <i className="bi bi-clock-history"></i>
-    <div className="chat-history-sidebar">
-      <Button
-        variant="outline-secondary"
-        className="chat-history-toggle"
-        onClick={handleShow}
-        aria-controls="chat-history-content"
-      >
-        <i className="bi bi-clock-history"></i>
       </Button>
 
-      <div
-        ref={sidebarRef}
-        className={`chat-history-content ${show ? 'show' : ''}`}
-        style={{
-          position: 'fixed',
-          right: show ? '0' : '-320px',
-          top: '0',
-          width: '320px',
-          height: '100vh',
-          backgroundColor: 'white',
-          boxShadow: '-2px 0 5px rgba(0,0,0,0.1)',
-          transition: 'right 0.3s ease-in-out',
-          zIndex: 1000,
-          padding: '1rem',
-        }}
-      >
       <div
         ref={sidebarRef}
         className={`chat-history-content ${show ? 'show' : ''}`}
@@ -253,7 +229,6 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
           )}
         </div>
       </div>
-    </div>
     </div>
   );
 });
