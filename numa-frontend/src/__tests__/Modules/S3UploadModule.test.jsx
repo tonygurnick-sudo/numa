@@ -10,6 +10,11 @@ import { S3UploadModule } from '../../Modules/S3UploadModule';
 describe('S3UploadModule Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        json: () => Promise.resolve({ CLIENT_NAME: 'test-client', REGION: 'us-east-1' }),
+      }),
+    );
   });
 
   it('should accept valid file types', async () => {
@@ -62,7 +67,11 @@ describe('S3UploadModule Component', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(validFile.name)).toBeInTheDocument();
+      expect(
+        screen.getByText((content, element) => {
+          return element.tagName.toLowerCase() === 'li' && content.includes(validFile.name);
+        }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -91,7 +100,13 @@ describe('S3UploadModule Component', () => {
   });
 
   it('should handle multiple file uploads', async () => {
-    renderWithProviders(<S3UploadModule />);
+    const mockOnComplete = vi.fn();
+    const mockOnNotComplete = vi.fn();
+    const mockOnChange = vi.fn();
+
+    renderWithProviders(
+      <S3UploadModule onComplete={mockOnComplete} onNotComplete={mockOnNotComplete} onChange={mockOnChange} />,
+    );
 
     const fileInput = screen.getByTestId('file-upload-input');
 
@@ -112,5 +127,7 @@ describe('S3UploadModule Component', () => {
         expect(screen.getByText(file.name)).toBeInTheDocument();
       });
     });
+
+    expect(mockOnNotComplete).toHaveBeenCalled();
   });
 });

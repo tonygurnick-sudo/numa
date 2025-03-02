@@ -79,16 +79,13 @@ const AppWizard = ({ manifest }) => {
 
   const handleRunApp = async () => {
     try {
-      // Reset task completion status
       const updatedStatus = {};
       visibleTasks.forEach((task) => {
         updatedStatus[task.id] = false;
       });
       setTaskCompletionStatus(updatedStatus);
 
-      // Find and set the first output task as active immediately
       const firstOutputTask = visibleTasks.find((task) => task.type.includes('output'));
-
       if (firstOutputTask) {
         const outputIndex = visibleTasks.indexOf(firstOutputTask);
         setActiveStep(outputIndex);
@@ -122,8 +119,17 @@ const AppWizard = ({ manifest }) => {
     [visibleTasks, taskCompletionStatus, activeStep],
   );
 
-  const handleTaskCompletion = (taskId, success = true) => {
+  const handleTaskCompletion = (taskId, success = true, results = null) => {
+    console.log('handleTaskCompletion', taskId, success, results);
     updateTaskCompletionStatus(taskId, success);
+    if (results) {
+      console.log('results', results);
+      if (results.length === 1) {
+        updateTaskInputValue(taskId, results[0].filePath);
+      } else {
+        updateTaskInputValue(taskId, results);
+      }
+    }
   };
 
   const handleTaskInputChange = useCallback(
@@ -133,7 +139,6 @@ const AppWizard = ({ manifest }) => {
         [taskId]: value,
       }));
       updateTaskCompletionStatus(taskId, Boolean(value));
-      // Call updateTaskInputValue to ensure proper state management
       updateTaskInputValue(taskId, value);
     },
     [setTaskInputValues, updateTaskCompletionStatus, updateTaskInputValue],
@@ -162,7 +167,7 @@ const AppWizard = ({ manifest }) => {
   const isCurrentStepIncomplete = !taskCompletionStatus[visibleTasks[activeStep]?.id];
 
   const renderTask = (task) => {
-    const handleComplete = () => handleTaskCompletion(task.id, true);
+    const handleComplete = (results) => handleTaskCompletion(task.id, true, results);
     const handleNotComplete = () => handleTaskCompletion(task.id, false);
 
     const commonProps = {
