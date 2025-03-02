@@ -11,7 +11,11 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
   const { loading, numaAppId, appRunning, numaTaskResponses } = useNumaApp();
   const { getIdentityPoolCredentials } = useAuth();
 
-  const [selectedFile, setSelectedFile] = useState(null);
+  // Extract parameters from task with defaults
+  const acceptedFileTypes = task?.parameters?.allowedFileTypes ?? [];
+  const maxFileSize = task?.parameters?.maximumFileSize ?? null;
+
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState(null);
@@ -25,7 +29,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
 
   useEffect(() => {
     if (value) {
-      setSelectedFile({ name: value.split('/').pop() });
+      setSelectedFiles([{ name: value.split('/').pop() }]);
       setUploadStatus('Upload successful!');
     }
   }, [value]);
@@ -40,20 +44,51 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
     fetchConfig();
   }, [fetchConfig]);
 
-  const handleFileSelection = (file) => {
-    if (file) {
-      setSelectedFile(file);
+  const validateFiles = (files) => {
+    const errors = [];
+    const validFiles = [];
+
+    Array.from(files).forEach((file) => {
+      // Check file type if acceptedFileTypes is specified
+      if (acceptedFileTypes && acceptedFileTypes.length > 0) {
+        if (!acceptedFileTypes.includes(file.type)) {
+          errors.push(`${file.name}: Invalid file type. Accepted types: ${acceptedFileTypes.join(', ')}`);
+          return;
+        }
+      }
+
+      // Check file size if maxFileSize is specified (convert MB to bytes)
+      if (maxFileSize && file.size > maxFileSize * 1024 * 1024) {
+        errors.push(`${file.name}: File is too large. Maximum size allowed is ${maxFileSize.toFixed(2)} MB`);
+        return;
+      }
+
+      validFiles.push(file);
+    });
+
+    return { validFiles, errors };
+  };
+
+  const handleFileSelection = (fileList) => {
+    if (fileList && fileList.length > 0) {
+      const { validFiles, errors } = validateFiles(fileList);
+
+      if (errors.length > 0) {
+        setError(errors.join('\n'));
+        return;
+      }
+
+      setSelectedFiles(validFiles);
       setUploadStatus(null);
       setUploadProgress(0);
       setError(null);
       onNotComplete();
-      // Just store the file path initially
       onChange(null);
     }
   };
 
   const handleFileChange = (e) => {
-    handleFileSelection(e.target.files[0]);
+    handleFileSelection(e.target.files);
   };
 
   const handleDragEnter = (e) => {
@@ -77,67 +112,72 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    handleFileSelection(e.dataTransfer.files[0]);
+    handleFileSelection(e.dataTransfer.files);
   };
 
   const handleZoneClick = (e) => {
-    // Only trigger file input if clicking directly on the upload zone or button
-    if (!selectedFile && e.target === e.currentTarget) {
+    if (!selectedFiles.length && e.target === e.currentTarget) {
       fileInputRef.current.click();
     }
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) {
-      setError('Please select a file first');
+    if (!selectedFiles.length) {
+      setError('Please select at least one file');
       return;
     }
 
     try {
-      setUploadStatus('Uploading...');
       setError(null);
-
-      const relativePath = selectedFile.name;
-      const encodedPath = relativePath
-        .split('/')
-        .map((segment) => encodeURIComponent(segment))
-        .join('/');
-
       const s3Client = new S3Client({
         region,
         credentials: await getIdentityPoolCredentials(),
       });
 
-      const command = new PutObjectCommand({
-        Bucket: bucketName,
-        Key: `${numaAppId}/${encodedPath}`,
-      });
+      const results = [];
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        setUploadStatus(`Uploading file ${i + 1} of ${selectedFiles.length}: ${file.name}`);
+        setUploadProgress(0);
 
-      const presignedUrl = await getSignedUrl(s3Client, command, {
-        expiresIn: 3600,
-      });
+        const relativePath = file.name;
+        const encodedPath = relativePath
+          .split('/')
+          .map((segment) => encodeURIComponent(segment))
+          .join('/');
 
-      const filePath = command.input.Key;
+        const command = new PutObjectCommand({
+          Bucket: bucketName,
+          Key: `${numaAppId}/${encodedPath}`,
+        });
 
-      await axios.put(presignedUrl, selectedFile, {
-        headers: {
-          'Content-Type': selectedFile.type || 'application/octet-stream',
-        },
-        onUploadProgress: (progressEvent) => {
-          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(progress);
-        },
-      });
+        const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+        const filePath = command.input.Key;
 
-      setUploadStatus('Upload successful!');
+        await axios.put(presignedUrl, file, {
+          headers: {
+            'Content-Type': file.type || 'application/octet-stream',
+          },
+          onUploadProgress: (progressEvent) => {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(progress);
+          },
+        });
 
-      // After successful upload, store the S3 path
-      onChange(filePath);
-      onComplete();
+        results.push({
+          filePath,
+          fileName: file.name,
+          fileType: file.type,
+          s3Bucket: bucketName,
+          file,
+        });
+      }
+
+      setUploadStatus('All files uploaded successfully!');
+      onComplete(results);
     } catch (error) {
       console.error('Error during file upload:', error);
 
-      // Determine user-friendly error message
       let errorMessage;
       if (error.response?.status === 403) {
         errorMessage = 'Permission denied - please check your access rights';
@@ -178,7 +218,10 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
           onChange={handleFileChange}
           ref={fileInputRef}
           id={`file-upload-${task?.id}`}
+          data-testid="file-upload-input"
           style={{ display: 'none' }}
+          multiple
+          accept={acceptedFileTypes?.join(',')}
         />
         <div className="text-center">
           <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
@@ -192,12 +235,17 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
           >
             Select Files
           </Button>
-          {selectedFile && (
-            <div className="selected-file mt-3">
-              <p className="mb-2">Selected file: {selectedFile.name}</p>
+          {selectedFiles.length > 0 && (
+            <div className="selected-file mt-3" style={{ textAlign: 'left' }}>
+              <p className="mb-2">Selected {selectedFiles.length === 1 ? 'file:' : 'files:'}</p>
+              <ul style={{ listStylePosition: 'inside' }}>
+                {selectedFiles.map((f) => (
+                  <li key={f.name}>{f.name}</li>
+                ))}
+              </ul>
             </div>
           )}
-          {selectedFile && !uploadStatus && (
+          {selectedFiles.length > 0 && !uploadStatus && (
             <Button variant="primary" onClick={handleUpload} className="mt-3" disabled={loading}>
               Upload
             </Button>

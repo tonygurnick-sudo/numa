@@ -2,6 +2,7 @@ import { render } from '@testing-library/react';
 import { MockMemoryRouter, clearNavigationMocks } from './NavigationMock';
 import { MockAuthProvider, clearAuthMocks } from './AuthMock';
 import { NumaAppProvider } from '../../Providers/NumaAppProvider';
+import { NumaRequestProvider } from '../../Providers/RequestProvider';
 import { vi } from 'vitest';
 
 export const clearAllMocks = () => {
@@ -12,11 +13,13 @@ export const clearAllMocks = () => {
 
 export const renderWithProviders = (ui, options = {}) => {
   const Wrapper = ({ children }) => (
-    <MockAuthProvider>
-      <NumaAppProvider>
-        <MockMemoryRouter>{children}</MockMemoryRouter>
-      </NumaAppProvider>
-    </MockAuthProvider>
+    <NumaRequestProvider>
+      <MockAuthProvider>
+        <NumaAppProvider>
+          <MockMemoryRouter>{children}</MockMemoryRouter>
+        </NumaAppProvider>
+      </MockAuthProvider>
+    </NumaRequestProvider>
   );
 
   return render(ui, { wrapper: Wrapper, ...options });

@@ -5,7 +5,7 @@ export const NumaRequestContext = createContext();
 export const useNumaRequest = () => {
   const context = useContext(NumaRequestContext);
   if (!context) {
-    throw new Error('useRequest must be used within a RequestProvider');
+    throw new Error('useRequest must be used within a NumaRequestProvider');
   }
   return context;
 };
