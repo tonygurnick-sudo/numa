@@ -281,7 +281,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
             <div className="mt-3">
               <p>{uploadStatus}</p>
               {/* Show progress bar if between 0 and 100 */}
-              {uploadProgress >= 0 && uploadProgress < 100 && (
+              {uploadProgress > 0 && uploadProgress < 100 && (
                 <div className="progress">
                   <div
                     className="progress-bar"

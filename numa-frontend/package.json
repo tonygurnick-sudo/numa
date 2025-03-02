@@ -1,11 +1,9 @@
 {
   "name": "@arcanumai/numa-frontend",
-  "name": "@arcanumai/numa-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
     "dev": "vite --host",
     "build": "vite build",
     "lint": "eslint .",
@@ -62,14 +60,12 @@
   },
   "devDependencies": {
     "@arcanumai/style": "workspace:*",
-    "@arcanumai/style": "workspace:*",
     "@eslint/js": "^9.0.0",
     "@testing-library/dom": "^10.4.0",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "2.1.4",
-    "eslint": "^9.20.1",
     "eslint": "^9.20.1",
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-react": "^7.37.1",
