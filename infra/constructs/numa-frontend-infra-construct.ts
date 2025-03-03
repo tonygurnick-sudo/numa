@@ -85,6 +85,7 @@ export class NumaFrontendInfra extends Construct {
     });
 
     const apiGatewayLogGroup = new NumaLogGroup(this, 'api-gateway-log-group', {
+      createResourcePolicy: true,
       logGroupName: numaClient + '-access',
     }).logGroup;
 
