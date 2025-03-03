@@ -8,7 +8,6 @@ import { Apigatewayv2Stage } from '@cdktf/provider-aws/lib/apigatewayv2-stage';
 import { CloudfrontCachePolicy } from '@cdktf/provider-aws/lib/cloudfront-cache-policy';
 import { CloudfrontDistribution } from '@cdktf/provider-aws/lib/cloudfront-distribution';
 import { CloudfrontOriginAccessIdentity } from '@cdktf/provider-aws/lib/cloudfront-origin-access-identity';
-import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { DataAwsRoute53Zone } from '@cdktf/provider-aws/lib/data-aws-route53-zone';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
@@ -26,6 +25,7 @@ import { Construct } from 'constructs';
 import * as path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
+import { NumaLogGroup } from './numa-log-group';
 
 export class NumaFrontendInfra extends Construct {
   readonly apiGateway: Apigatewayv2Api;
@@ -84,9 +84,9 @@ export class NumaFrontendInfra extends Construct {
       protocolType: 'HTTP',
     });
 
-    const apiGatewayLogGroup = new CloudwatchLogGroup(this, 'api-gateway-log-group', {
-      name: this.apiGateway.name + '-access',
-    });
+    const apiGatewayLogGroup = new NumaLogGroup(this, 'api-gateway-log-group', {
+      logGroupName: numaClient + '-access',
+    }).logGroup;
 
     const authorizerRole = new IamRole(this, 'authorizer-lambda-role', {
       name: name + '_' + scope.node.id + '_' + 'authorizer-lambda-role',

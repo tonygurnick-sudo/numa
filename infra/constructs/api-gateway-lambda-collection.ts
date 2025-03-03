@@ -2,6 +2,10 @@ import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
 import { Apigatewayv2Integration } from '@cdktf/provider-aws/lib/apigatewayv2-integration';
 import { Apigatewayv2Route } from '@cdktf/provider-aws/lib/apigatewayv2-route';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
+import {
+  DataAwsIamPolicyDocument,
+  DataAwsIamPolicyDocumentStatement,
+} from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
@@ -10,10 +14,7 @@ import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
 import path from 'node:path';
-import {
-  DataAwsIamPolicyDocument,
-  DataAwsIamPolicyDocumentStatement,
-} from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import { NumaLogGroup } from './numa-log-group';
 
 export abstract class ApiGatewayLambdaCollection extends Construct {
   private apiGatewayAuthorizerId: string;
@@ -27,9 +28,9 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
     this.apiGatewayAuthorizerId = props.apiGatewayAuthorizerId;
     this.apiGatewayId = props.apiGatewayId;
     this.urlPathPrefix = '/api';
-    this.logGroup = new CloudwatchLogGroup(this, 'log-group', {
-      name: '/numa/' + this.node.id,
-    });
+    this.logGroup = new NumaLogGroup(this, 'lambda-log-group', {
+      logGroupName: this.node.id,
+    }).logGroup;
   }
 
   protected prepPathPart(part: string): string {
