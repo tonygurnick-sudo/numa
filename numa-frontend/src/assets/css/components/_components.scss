@@ -1522,19 +1522,6 @@ label {
     margin-bottom: 0.5rem;
   }
 
-  // Added textarea styling:
-  textarea {
-    flex-grow: 1;
-    border: none;
-    outline: none;
-    resize: vertical;
-    height: 40px;
-    min-height: 40px;
-    max-height: 100px;
-    padding: 0.5rem;
-    font-size: 1rem;
-  }
-
   .chat-input-container {
     position: relative;
     display: flex;
@@ -1650,9 +1637,9 @@ label {
       align-items: center;
       justify-content: center;
       transition: background 0.2s ease-in-out, transform 0.1s ease-in-out;
-      bottom: 20px; /* Adjust this to fine-tune position */
-      right: 20px; /* Keeps it in the corner */
-      box-shadow: none !important; /* Ensures no unwanted shadow */
+      bottom: 20px;
+      right: 20px;
+      box-shadow: none !important;
 
       &:hover {
         transform: scale(1.1);
@@ -1666,9 +1653,9 @@ label {
 
     // Spinner Button (shown during loading)
     .spinner-button {
-      background: none !important; /* Ensures full transparency */
-      border: none !important; /* Removes any potential border */
-      border-radius: 50%; /* Circular */
+      background: none !important;
+      border: none !important;
+      border-radius: 50%;
       width: 50px;
       height: 50px;
       display: flex;
@@ -1683,11 +1670,11 @@ label {
 
     // Stop Button (Purple Square with Box Icon)
     .stop-button {
-      background: none !important; /* Ensures full transparency */
-      border: none !important; /* Removes any potential border */
+      background: none !important;
+      border: none !important;
       color: white;
       padding: 12px;
-      border-radius: 50px; // A square with slightly rounded edges
+      border-radius: 50px;
       width: 50px;
       height: 50px;
       display: flex;
