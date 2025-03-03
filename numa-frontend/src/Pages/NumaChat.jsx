@@ -105,11 +105,33 @@ const NumaChat = () => {
 
   // Attempt to restore last conversation from localStorage
   useEffect(() => {
-    const savedConvoId = localStorage.getItem('currentConversationId');
-    if (savedConvoId && numaChatDynamoUtils) {
-      handleLoadConversation(savedConvoId);
+    async function initializeConversation() {
+      if (numaChatDynamoUtils && sub) {
+        try {
+          // Fetch the conversation meta items for this user
+          const metaItems = await numaChatDynamoUtils.getUserConversationsMeta(sub);
+          if (metaItems.length === 0) {
+            // No conversation exists, so simulate "New Chat"
+            console.log("No conversation history found; initializing new conversation...");
+            handleNewChat();
+          } else {
+            // If there is a saved conversation and it exists in the meta, load it.
+            const savedConvoId = localStorage.getItem('currentConversationId');
+            if (savedConvoId && metaItems.some(item => item.conversation_id === savedConvoId)) {
+              handleLoadConversation(savedConvoId);
+            } else {
+              // Otherwise, load the most recent conversation (or choose one as needed)
+              console.log("Loading the most recent conversation from history.");
+              handleLoadConversation(metaItems[0].conversation_id);
+            }
+          }
+        } catch (err) {
+          console.error("Error initializing conversation:", err);
+        }
+      }
     }
-  }, [numaChatDynamoUtils]); // eslint-disable-line
+    initializeConversation();
+  }, [numaChatDynamoUtils, sub]);
 
   // Helper to refresh sidebar
   const refreshSidebar = () => {
@@ -132,6 +154,7 @@ const NumaChat = () => {
 
   // 1) A function that ensures we have a conversation (creates one if needed).
   const createNewConversationIfNeeded = async (initialText = '') => {
+    console.log('Creating new conversation with initial text:', initialText);
     if (conversationId) return conversationId; // Already have one
 
     const newId = `${sub || 'anonymous'}_${Date.now()}`;
@@ -142,7 +165,6 @@ const NumaChat = () => {
     // Create a meta item in Dynamo
     if (numaChatDynamoUtils) {
       const defaultName = initialText.length > 60 ? initialText.slice(0, 57) + '...' : initialText || 'Untitled Chat';
-
       await numaChatDynamoUtils.addMessage({
         conversationId: newId,
         userId: sub,
