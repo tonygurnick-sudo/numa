@@ -15,6 +15,7 @@ class TestLambdaFunction(unittest.TestCase):
     def test_handler(self, write_mock, _read_mock):
         test_event = {
             "app_id": "test-app",
+            "job_id": "test-job",
             "output_key": "test-key",
             "key_suffix": ".foobar.json",
             "input_keys": [

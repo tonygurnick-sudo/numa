@@ -1,6 +1,5 @@
 import json
 import os
-import uuid
 
 import boto3
 import structlog
@@ -23,10 +22,6 @@ def remove_backticks(text: str) -> str:
     return text.replace("`", "")
 
 
-def __get_job_id(event: dict):
-    return event.get("job_id", str(uuid.uuid4()))
-
-
 def __run_model(prompt: str) -> str:
     model = bedrock.BedrockClaude3Model(
         model_args={
@@ -42,16 +37,7 @@ def __run_model(prompt: str) -> str:
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
-    # TODO: extract to helper function
-    app_id = event["app_id"]
-    job_id = __get_job_id(event)
-    helpers.setup_logging()
-    structlog.contextvars.bind_contextvars(
-        function_name=context.function_name,
-        app_id=app_id,
-        job_id=job_id,
-    )
-    logger.info("Execute lambda", lambda_event=event)
+    helpers.setup_step_function_lambda_logging(event, context)
 
     meeting_notes_and_or_transcript = event["meeting_notes_and_or_transcript"]
     other_notes = event["other_notes"]

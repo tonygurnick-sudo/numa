@@ -11,6 +11,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "~3.13.0"
 
+aws-lambda-powertools = "3.7.0"
 structlog = "25.1.0"
 
 [tool.poetry.group.dev.dependencies]

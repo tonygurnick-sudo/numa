@@ -1,5 +1,4 @@
 import os
-import uuid
 
 import boto3
 import structlog
@@ -13,10 +12,6 @@ import helpers
 logger = structlog.get_logger()
 
 s3_client = boto3.client("s3")
-
-
-def __get_job_id(event: dict):
-    return event.get("job_id", str(uuid.uuid4()))
 
 
 def __key(app_id: str, job_id: str, name: str, area: str = "") -> str:
@@ -38,15 +33,7 @@ def __write_string_to_s3(string: str, key: str):
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
-    app_id = event["app_id"]
-    job_id = __get_job_id(event)
-    helpers.setup_logging()
-    structlog.contextvars.bind_contextvars(
-        function_name=context.function_name,
-        app_id=app_id,
-        job_id=job_id,
-    )
-    logger.info("Execute lambda", lambda_event=event)
+    helpers.setup_step_function_lambda_logging(event, context)
 
     additional_comments = event["additional_comments"]
     area = event["data_single_area"]["policy_area"]
@@ -97,6 +84,9 @@ def handler(event: dict, context: LambdaContext) -> dict:
     output = legal_review_result.response[0]["input"]
     legal_review = output["legal_policy_review"]
     legal_references = output["legal_references"]
+
+    app_id = event["app_id"]
+    job_id = event["job_id"]
 
     legal_review_feedback_key = __key(app_id, job_id, "legal_review_feedback", area)
     __write_string_to_s3(legal_review, legal_review_feedback_key)

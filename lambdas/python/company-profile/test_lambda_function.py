@@ -31,6 +31,7 @@ class TestLambdaFunction(unittest.TestCase):
     def test_handler(self, _create_profile_mock, write_mock, _read_mock):
         test_event = {
             "app_id": "company-profile",
+            "job_id": "test-job",
             "details": "Name: John Doe\nEmail: john@example.com",
             "about": "Senior Software Engineer",
             "documentation_text": "Technical resume content...",
