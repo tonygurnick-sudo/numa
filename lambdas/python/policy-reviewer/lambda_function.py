@@ -22,6 +22,11 @@ def __get_job_id(event: dict):
     return event.get("job_id", str(uuid.uuid4()))
 
 
+def remove_backticks(text: str) -> str:
+    """Remove all backticks from a string."""
+    return text.replace("`", "")
+
+
 def handler(event: dict, context: LambdaContext) -> dict:
     app_id = event["app_id"]
     job_id = __get_job_id(event)
@@ -100,5 +105,6 @@ def get_model_response(prompt: str, input_data: dict) -> str:
 
     if isinstance(response.response, list) and response.response:
         if isinstance(response.response[0], dict):
-            return response.response[0].get("text", "")
-    return str(response.response)
+            markdown_text = response.response[0].get("text", "")
+            return remove_backticks(markdown_text)
+    return remove_backticks(str(response.response))

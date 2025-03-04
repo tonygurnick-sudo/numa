@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../Providers/AuthProvider';
+import { manifestService } from '../Services/manifestService';
 import {
   startQappGetSession,
   getSessionQApp,
@@ -232,8 +233,7 @@ export const NumaAppProvider = ({ children }) => {
 
     const fetchData = async () => {
       try {
-        const appsData = JSON.parse(sessionStorage.getItem('appsData'));
-        const app = appsData.find((app) => app.id === numaAppId);
+        const app = await manifestService.fetchAppById(numaAppId);
         setNumaAppData(app);
         setLoading(false);
       } catch (error) {
@@ -451,8 +451,6 @@ export const NumaAppProvider = ({ children }) => {
     try {
       while (true) {
         const polling_endpoint = `/api/${numaAppData.id}/main?job_id=${jobID}`;
-        console.log('Polling with app ID:', numaAppData.id);
-        console.log('Full polling URL:', polling_endpoint);
         console.log('Polling job:', polling_endpoint);
 
         const pollResponse = await numaPollStatus(polling_endpoint);
@@ -890,16 +888,18 @@ export const NumaAppProvider = ({ children }) => {
   // Load and display historical job results
   const loadJobResults = async (jobId) => {
     try {
-      console.log('Loading job results for ID:', jobId);
-      console.log('Current numaAppId:', numaAppId);
-      console.log('Current numaAppData:', numaAppData);
-
       let job = await jobsApi.getJobById(numaAppId, jobId);
       if (!job) {
         throw new Error('Job not found');
       }
 
       console.log('Initial job:', job);
+
+      // Try to poll for updates if job is incomplete
+      if (job.status !== 'completed') {
+        job = await pollIncompleteHistoryJob(job);
+        console.log('Job after polling:', job);
+      }
 
       // Reset states before polling
       setNumaTaskResponses([]);

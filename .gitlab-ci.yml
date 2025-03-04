@@ -28,14 +28,14 @@ variables:
     - BUILD_DIR:
         - lambdas/node/api-gateway-authorizer
         - lambdas/node/q-business-chat-control-configurer
-        - lambdas/node/srp-proxy
+        - lambdas/node/srp-hasher
 
 .node-matrix:
   matrix:
     - BUILD_DIR:
         - lambdas/node/api-gateway-authorizer
         - lambdas/node/q-business-chat-control-configurer
-        - lambdas/node/srp-proxy
+        - lambdas/node/srp-hasher
         - numa-management
         - tools
 
@@ -178,6 +178,11 @@ node-package:
   variables:
     TF_ENVIRONMENT: prod
     AWS_REGION: us-east-1
+  before_script:
+    - !reference [infra-build, before_script]
+    - cd bin
+    - poetry install
+    - cd ..
   script:
     - yarn exec cdktf deploy --auto-approve numa-${CLIENT_NAME}
   needs:

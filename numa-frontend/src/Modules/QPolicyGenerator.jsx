@@ -12,6 +12,7 @@ export function generatePolicy({ Region, AccountId, ApplicationId }) {
           'qbusiness:StartDataSourceSyncJob',
           'qapps:*',
           'qbusiness:Get*',
+          'qbusiness:SearchRelevantContent',
         ],
         Resource: [
           `arn:aws:qbusiness:${Region}:${AccountId}:application/${ApplicationId}`,

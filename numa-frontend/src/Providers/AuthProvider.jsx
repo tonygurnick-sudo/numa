@@ -1,10 +1,14 @@
 import { createContext, useState, useContext, useRef, useEffect, useCallback } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import { QBusinessClient } from '@aws-sdk/client-qbusiness';
+import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { QAppsClient } from '@aws-sdk/client-qapps';
 import { fromWebToken, fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
 import { generatePolicy } from '../Modules/QPolicyGenerator';
+import { generateBedrockPolicy } from '../Modules/BedrockPolicyGenerator';
+import { generateDynamoDBPolicy } from '../Modules/DynamoDBPolicyGenerator';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
 import {
   CognitoIdentityProviderClient,
@@ -13,7 +17,8 @@ import {
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
-import { fetchConfigAddtoSession } from '../Components/ConfigSetup';
+import { NumaChatDynamoUtils } from '../utils/DynamoDBUtils';
+import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
 
 const AuthContext = createContext(null);
 
@@ -24,8 +29,11 @@ const API_ENDPOINT = window.sessionStorage.getItem('API_ENDPOINT');
 const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
 const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
 const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+const client = window.sessionStorage.getItem('CLIENT_NAME'); // e.g. "arcanum-demo"
+const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod'; // default to "prod" if not set
+const NUMA_CHAT_HISTORY_TABLE_NAME = `numa-${client}${environment !== 'prod' ? `-${environment}` : ''}-chat-history`;
 
-export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
+export const AuthProvider = ({ children, initialTokens }) => {
   const [user, setUser] = useState(null);
   const tokensRef = useRef(
     initialTokens || {
@@ -74,9 +82,13 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     decodeTokens();
   };
 
+  const [qAppsClient, setQAppsClient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [qBusinessClient, setQBusinessClient] = useState(null);
-  const [qAppsClient, setQAppsClient] = useState(null);
+  const [bedrockRuntimeClient, setBedrockRuntimeClient] = useState(null);
+  const [numaChatBedrockUtils, setNumaChatBedrockUtils] = useState(null);
+  const [dynamoDBClient, setDynamoDBClient] = useState(null);
+  const [numaChatDynamoUtils, setNumaChatDynamoUtils] = useState(null);
   const [tokenValidationComplete, setTokenValidationComplete] = useState(false);
 
   const isTokenExpired = (decodedToken) => {
@@ -85,11 +97,53 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     return decodedToken.exp <= currentTime + 300;
   };
 
+  const isValidEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const fetchSecretHash = async (identifier) => {
+    try {
+      // Check if identifier is provided
+      if (!identifier) {
+        throw new Error('No identifier provided');
+      }
+
+      // Determine if identifier is email or userSub
+      const isEmail = isValidEmail(identifier);
+      const payload = isEmail ? { email: identifier } : { userSub: identifier };
+
+      const secretHashResponse = await fetch(`${API_ENDPOINT}/srp-hasher`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!secretHashResponse.ok) {
+        throw new Error(`HTTP error! status: ${secretHashResponse.status}`);
+      }
+
+      const data = await secretHashResponse.json();
+
+      if (!data.hash) {
+        throw new Error('Secret hash not received from server');
+      }
+
+      return data.hash;
+    } catch (error) {
+      console.error('Failed to fetch secret hash:', {
+        error: error.message,
+        identifierType: isValidEmail(identifier) ? 'email' : 'userSub',
+        endpoint: `${API_ENDPOINT}/srp-hasher`,
+      });
+      throw new Error(`Failed to fetch secret hash: ${error.message}`);
+    }
+  };
+
   const refreshTokens = async () => {
     try {
       console.log('🔄 Attempting to refresh tokens...');
       const refreshToken = tokensRef.current.refreshToken;
-      const tokens = initialTokens || getUserInfo();
 
       if (!refreshToken) {
         console.error('No refresh token available');
@@ -97,32 +151,43 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         return false;
       }
 
-      let result;
-      if (refreshHandler) {
-        result = await refreshHandler({
-          refreshToken,
-          username: tokens.decoded_tokens.idToken.sub,
-        });
-      } else {
-        const response = await fetch(`${API_ENDPOINT}/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            refreshToken: refreshToken,
-            username: tokens.decoded_tokens.idToken.sub,
-          }),
-        });
-        result = await response.json();
+      const idToken = tokensRef.current.idToken;
+      const decodedIdToken = jwtDecode(idToken);
+      const username = decodedIdToken.sub;
+      if (!username) {
+        console.error('No username available');
+        logout();
+        return false;
       }
 
-      if (!result.AuthenticationResult) throw new Error('Token refresh failed');
+      const SECRET_HASH = await fetchSecretHash(username);
 
-      const { AccessToken, IdToken } = result.AuthenticationResult;
+      const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
 
-      // Update localStorage and tokensRef
-      localStorage.setItem('accessToken', AccessToken);
-      localStorage.setItem('idToken', IdToken);
+      const params = {
+        AuthFlow: 'REFRESH_TOKEN_AUTH',
+        ClientId: CLIENT_ID,
+        AuthParameters: {
+          REFRESH_TOKEN: refreshToken,
+          SECRET_HASH: SECRET_HASH,
+        },
+      };
 
+      const command = new InitiateAuthCommand(params);
+      const response = await cognitoClient.send(command);
+
+      if (!response.AuthenticationResult) throw new Error('Token refresh failed');
+
+      const { AccessToken, IdToken } = response.AuthenticationResult;
+
+      // Update tokensRef directly
+      tokensRef.current = {
+        ...tokensRef.current,
+        accessToken: AccessToken,
+        idToken: IdToken,
+      };
+
+      // Update localStorage and decode tokens
       updateTokens({
         accessToken: AccessToken,
         idToken: IdToken,
@@ -186,6 +251,80 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     }
   }, [user]);
 
+  const initializeBedrockRuntimeClient = useCallback(async () => {
+    if (!user) return;
+
+    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+
+    try {
+      const idToken = user.tokens.idToken;
+
+      const accountId = ROLE_ARN.split(':')[4];
+      const policy = generateBedrockPolicy({
+        Region: REGION,
+        AccountId: accountId,
+      });
+
+      const credentials = fromWebToken({
+        client: cognitoIdentity,
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: 'numa-frontend-bedrock',
+        roleArn: ROLE_ARN,
+        policy: JSON.stringify(policy),
+        durationSeconds: 3600,
+        webIdentityToken: idToken,
+      });
+
+      const newClient = new BedrockRuntimeClient({
+        region: REGION,
+        credentials: await credentials(),
+      });
+
+      setBedrockRuntimeClient(newClient);
+      const utils = new NumaBedrockUtils(newClient);
+      setNumaChatBedrockUtils(utils);
+    } catch (error) {
+      console.error('Error in BedrockRuntimeClient initialization:', error);
+    }
+  }, [user]);
+
+  const initializeDynamoDBClient = useCallback(async () => {
+    if (!user) return;
+
+    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+
+    try {
+      const idToken = user.tokens.idToken;
+
+      const accountId = ROLE_ARN.split(':')[4];
+      const policy = generateDynamoDBPolicy({
+        Region: REGION,
+        AccountId: accountId,
+        NumaChatHistoryTableName: NUMA_CHAT_HISTORY_TABLE_NAME,
+      });
+
+      const credentials = fromWebToken({
+        client: cognitoIdentity,
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: 'numa-frontend-chat',
+        roleArn: ROLE_ARN,
+        policy: JSON.stringify(policy),
+        durationSeconds: 3600,
+        webIdentityToken: idToken,
+      });
+
+      const newClient = new DynamoDBClient({
+        region: REGION,
+        credentials: await credentials(),
+      });
+      setDynamoDBClient(newClient);
+      const utils = new NumaChatDynamoUtils(newClient);
+      setNumaChatDynamoUtils(utils);
+    } catch (error) {
+      console.error('Error in DynamoDBClient initialization:', error);
+    }
+  }, [user]);
+
   const initializeQAppsClient = useCallback(async () => {
     if (!user) return;
 
@@ -225,33 +364,49 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     if (user) {
       initializeQBusinessClient();
       initializeQAppsClient();
+      initializeBedrockRuntimeClient();
+      initializeDynamoDBClient();
     } else {
       setQBusinessClient(null);
       setQAppsClient(null);
+      setBedrockRuntimeClient(null);
+      setNumaChatBedrockUtils(null);
+      setDynamoDBClient(null);
+      setNumaChatDynamoUtils(null);
     }
-  }, [user, initializeQBusinessClient, initializeQAppsClient]);
+  }, [
+    user,
+    initializeQBusinessClient,
+    initializeQAppsClient,
+    initializeBedrockRuntimeClient,
+    initializeDynamoDBClient,
+  ]);
 
   const checkAndRefreshTokens = async () => {
-    // Ensure tokens are decoded
-    decodeTokens();
-
-    if (!decodedTokensRef.current.accessToken) {
-      console.log('No decoded tokens available');
+    const { accessToken } = tokensRef.current;
+    if (!accessToken) {
+      console.log('No access token available');
       return false;
     }
 
-    if (isTokenExpired(decodedTokensRef.current.accessToken)) {
-      console.log('🕒 Token check: Token expired, attempting refresh...');
-      const refreshed = await refreshTokens();
-      if (!refreshed) {
-        logout();
-        return false;
+    try {
+      const decodedAccessToken = jwtDecode(accessToken);
+      if (isTokenExpired(decodedAccessToken)) {
+        console.log('🕒 Token check: Token expired, attempting refresh...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          logout();
+          return false;
+        }
+        return true;
       }
-      return true;
-    }
 
-    console.log('🕒 Token check: Token still valid');
-    return true;
+      console.log('🕒 Token check: Token still valid');
+      return true;
+    } catch (error) {
+      console.error('Error decoding token during check:', error);
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -332,93 +487,143 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   };
 
   const login = async (username, password) => {
-    // Fetch the config.json file so the sessionStorage is populated with the correct values
-    await fetchConfigAddtoSession();
+    try {
+      const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
+      const SECRET_HASH = await fetchSecretHash(username);
 
-    // Step 1: Create the SRP session
-    const srpSession = createSrpSession(username, password, USER_POOL_ID, false);
+      // Step 1: Create SRP session
+      const srpSession = createSrpSession(username, password, USER_POOL_ID, false); // false for not hashed already
 
-    // Step 2: Send SRP-A to initiate SRP flow
-    const initiateAuthRes = await fetch(`${API_ENDPOINT}/initiate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: username,
-        srpA: srpSession.largeA,
-      }),
-    });
+      // Step 2: Initiate authentication
+      const initiateAuthParams = {
+        AuthFlow: 'USER_SRP_AUTH',
+        ClientId: CLIENT_ID,
+        AuthParameters: {
+          USERNAME: username,
+          SRP_A: srpSession.largeA,
+          SECRET_HASH: SECRET_HASH,
+        },
+      };
 
-    const initiateData = await initiateAuthRes.json();
-    if (initiateData.error) {
-      throw new Error(initiateData.error);
-    }
+      const initiateAuthCommand = new InitiateAuthCommand(initiateAuthParams);
+      const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
 
-    // Step 3: Sign SRP session
-    const signedSrpSession = signSrpSession(srpSession, initiateData);
+      if (!initiateAuthResponse.ChallengeParameters) {
+        throw new Error('Missing ChallengeParameters in InitiateAuthResponse');
+      }
+      // Step 3: Sign SRP session
+      const signedSrpSession = signSrpSession(srpSession, initiateAuthResponse);
 
-    // Step 4: Respond to challenge
-    const respondToAuthChallengeRes = await fetch(`${API_ENDPOINT}/respond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: initiateData.ChallengeParameters.USERNAME,
-        challengeResponses: {
+      // Step 4: Respond to the password verifier challenge
+      const respondToAuthChallengeParams = {
+        ChallengeName: 'PASSWORD_VERIFIER',
+        ClientId: CLIENT_ID,
+        ChallengeResponses: {
+          USERNAME: username,
           PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
           PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
+          SECRET_HASH: SECRET_HASH,
+          TIMESTAMP: signedSrpSession.timestamp,
         },
-        timestamp: srpSession.timestamp,
-      }),
-    });
+      };
 
-    const finalResponse = await respondToAuthChallengeRes.json();
-    if (finalResponse.error) {
-      throw new Error(finalResponse.error);
+      const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand(respondToAuthChallengeParams);
+      const respondToAuthChallengeResponse = await cognitoClient.send(respondToAuthChallengeCommand);
+
+      if (respondToAuthChallengeResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+        return { requiresNewPassword: true, session: respondToAuthChallengeResponse.AuthenticationResult };
+      }
+
+      await handleLoginSuccess(respondToAuthChallengeResponse.AuthenticationResult);
+      return { success: true };
+    } catch (error) {
+      console.error('Error during authentication:', error);
+      throw error;
     }
-
-    if (finalResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
-      return { requiresNewPassword: true, session: finalResponse.Session };
-    }
-
-    await handleLoginSuccess(finalResponse.AuthenticationResult);
-    return { success: true };
   };
 
   const setNewPassword = async (username, oldPassword, newPassword) => {
-    const cognitoClient = new CognitoIdentityProviderClient({
-      region: REGION,
-    });
+    try {
+      const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
+      const SECRET_HASH = await fetchSecretHash(username);
 
-    const initiateAuthCommand = new InitiateAuthCommand({
-      AuthFlow: 'USER_PASSWORD_AUTH',
-      ClientId: CLIENT_ID,
-      AuthParameters: {
-        USERNAME: username,
-        PASSWORD: oldPassword,
-      },
-    });
+      // Step 1: Create SRP session for old password
+      const srpSession = createSrpSession(username, oldPassword, USER_POOL_ID, false);
 
-    const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
-    if (initiateAuthResponse.ChallengeName !== 'NEW_PASSWORD_REQUIRED') {
-      throw new Error('Unexpected authentication response');
+      // Step 2: Initiate authentication with SRP
+      const initiateAuthParams = {
+        AuthFlow: 'USER_SRP_AUTH',
+        ClientId: CLIENT_ID,
+        AuthParameters: {
+          USERNAME: username,
+          SRP_A: srpSession.largeA,
+          SECRET_HASH: SECRET_HASH,
+        },
+      };
+
+      const initiateAuthCommand = new InitiateAuthCommand(initiateAuthParams);
+      const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
+
+      if (initiateAuthResponse.ChallengeName === 'PASSWORD_VERIFIER') {
+        // Step 3: Sign SRP session
+        const signedSrpSession = signSrpSession(srpSession, initiateAuthResponse);
+
+        // Step 4: Respond to the password verifier challenge
+        const respondToAuthChallengeParams = {
+          ChallengeName: 'PASSWORD_VERIFIER',
+          ClientId: CLIENT_ID,
+          Session: initiateAuthResponse.Session,
+          ChallengeResponses: {
+            USERNAME: username,
+            PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
+            PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
+            SECRET_HASH: SECRET_HASH,
+            TIMESTAMP: signedSrpSession.timestamp,
+          },
+        };
+
+        const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand(respondToAuthChallengeParams);
+        const respondToAuthChallengeResponse = await cognitoClient.send(respondToAuthChallengeCommand);
+
+        if (respondToAuthChallengeResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+          // Step 5: Respond to the new password required challenge
+          const newPasswordChallengeParams = {
+            ClientId: CLIENT_ID,
+            ChallengeName: 'NEW_PASSWORD_REQUIRED',
+            Session: respondToAuthChallengeResponse.Session,
+            ChallengeResponses: {
+              USERNAME: username,
+              NEW_PASSWORD: newPassword,
+              SECRET_HASH: SECRET_HASH,
+            },
+          };
+
+          const newPasswordChallengeCommand = new RespondToAuthChallengeCommand(newPasswordChallengeParams);
+          await cognitoClient.send(newPasswordChallengeCommand);
+
+          // Login with new password
+          return await login(username, newPassword);
+        } else {
+          throw new Error('Unexpected authentication response');
+        }
+      } else {
+        throw new Error('Unexpected authentication response');
+      }
+    } catch (error) {
+      console.error('Error during setNewPassword:', error);
+      throw error;
     }
-
-    const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand({
-      ClientId: CLIENT_ID,
-      ChallengeName: 'NEW_PASSWORD_REQUIRED',
-      Session: initiateAuthResponse.Session,
-      ChallengeResponses: {
-        USERNAME: username,
-        NEW_PASSWORD: newPassword,
-      },
-    });
-
-    await cognitoClient.send(respondToAuthChallengeCommand);
-
-    // Login with new password
-    return await login(username, newPassword);
   };
 
   const handleLoginSuccess = async (tokens) => {
+    // Update tokensRef directly
+    tokensRef.current = {
+      accessToken: tokens.AccessToken,
+      idToken: tokens.IdToken,
+      refreshToken: tokens.RefreshToken,
+    };
+
+    // Update localStorage
     localStorage.setItem('accessToken', tokens.AccessToken);
     localStorage.setItem('refreshToken', tokens.RefreshToken);
     localStorage.setItem('idToken', tokens.IdToken);
@@ -448,9 +653,12 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
   const requestPasswordReset = async (email) => {
     try {
+      const SECRET_HASH = await fetchSecretHash(email);
+
       const command = new ForgotPasswordCommand({
         Username: email,
         ClientId: CLIENT_ID,
+        SecretHash: SECRET_HASH,
       });
 
       const cognitoClient = new CognitoIdentityProviderClient({
@@ -465,11 +673,14 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
   const confirmPasswordReset = async (email, code, newPassword) => {
     try {
+      const SECRET_HASH = await fetchSecretHash(email);
+
       const command = new ConfirmForgotPasswordCommand({
         Username: email,
         ClientId: CLIENT_ID,
         ConfirmationCode: code,
         Password: newPassword,
+        SecretHash: SECRET_HASH,
       });
 
       const cognitoClient = new CognitoIdentityProviderClient({
@@ -546,6 +757,10 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     checkAndRefreshTokens,
     qBusinessClient,
     qAppsClient,
+    bedrockRuntimeClient,
+    numaChatBedrockUtils,
+    dynamoDBClient,
+    numaChatDynamoUtils,
     requestPasswordReset,
     confirmPasswordReset,
     getIdentityPoolCredentials,

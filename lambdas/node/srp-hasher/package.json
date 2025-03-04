@@ -1,5 +1,5 @@
 {
-  "name": "srp-proxy",
+  "name": "srp-hasher",
   "packageManager": "yarn@4.6.0",
   "type": "module",
   "main": "index.ts",

@@ -23,6 +23,7 @@ export const fetchConfigAddtoSession = async () => {
     'Q_APPLICATION_ID',
     'Q_INDEX_ID',
     'Q_DATASOURCE_ID',
+    'Q_RETRIEVER_ID',
     'IDENTITY_POOL_ID',
     'IDENTITY_POOL_ROLE_ARN',
     'ROLE_ARN',

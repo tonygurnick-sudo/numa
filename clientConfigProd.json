@@ -47,6 +47,12 @@
     "allApps": true,
     "devInstance": true
   },
+  "arcanum-demo-nathan": {
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "allApps": true,
+    "devInstance": true
+  },
   "arcanum-demo-nick": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,

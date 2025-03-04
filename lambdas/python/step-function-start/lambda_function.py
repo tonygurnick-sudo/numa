@@ -29,7 +29,13 @@ def handler(
     context: LambdaContext,
 ) -> helpers.ApiGatewayProxyIntegrationResponse:
     helpers.setup_logging()
-    job_id = str(uuid.uuid4())
+
+    job_id = event.json_body.get("jobId")
+    if job_id:
+        del event.json_body["jobId"]
+    else:
+        job_id = event.json_body.get("job_id") or str(uuid.uuid4())
+
     structlog.contextvars.bind_contextvars(
         job_id=job_id,
         function_name=context.function_name,
