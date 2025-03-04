@@ -25,13 +25,8 @@ export const useJobsApi = () => {
   const createJob = async (numaAppData, taskInputs) => {
     try {
       const jobData = createJobData(numaAppData, taskInputs);
-      console.log('Creating job with data:', jobData);
-      console.log('Using app ID:', numaAppData.id);
       const endpoint_call = `/api/${numaAppData.id}/jobs`;
-      console.log('Endpoint call:', endpoint_call);
       const response = await numaPost(endpoint_call, jobData);
-
-      console.log('Job creation response:', response);
 
       // Check if the response is an object
       if (typeof response !== 'object') {
@@ -62,15 +57,9 @@ export const useJobsApi = () => {
         lastUpdated: isoDate,
         name: `Run ${displayDate}`,
       };
-      console.log('Updating job with data:', updateData);
-      console.log('Using app ID:', numaAppData.id);
-      console.log('Job ID:', jobId);
 
       const endpoint = `/api/${numaAppData.id}/jobs/${jobId}`;
-      console.log('Using endpoint:', endpoint);
-
       const response = await numaPut(endpoint, updateData);
-      console.log('Job update response:', response);
 
       return response;
     } catch (error) {
@@ -87,7 +76,6 @@ export const useJobsApi = () => {
         params.append('next_token', nextToken);
       }
       const endpoint_call = `/api/${appId}/jobs?${params.toString()}`;
-      console.log('Getting jobs with endpoint:', endpoint_call);
       const response = await numaGet(endpoint_call);
       return {
         items: response.items || [],
@@ -102,13 +90,8 @@ export const useJobsApi = () => {
 
   const getJobById = async (numaAppId, jobId) => {
     try {
-      console.log('Getting job with app ID:', numaAppId);
-      console.log('Job ID:', jobId);
-
       const endpoint = `/api/${numaAppId}/jobs/${jobId}`;
-      console.log('Getting job from:', endpoint);
       const response = await numaGet(endpoint);
-      console.log('Job response:', response);
       return response;
     } catch (error) {
       console.error('API Error fetching job:', error);

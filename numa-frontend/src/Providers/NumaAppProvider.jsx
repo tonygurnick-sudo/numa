@@ -934,19 +934,7 @@ export const NumaAppProvider = ({ children }) => {
 
       // Try to poll for updates if job is incomplete
       if (job.status === 'running') {
-        // Use main endpoint for polling running jobs
-        const pollEndpoint = `/api/${numaAppData.id}/main?job_id=${jobId}`;
-        console.log('Polling running job at:', pollEndpoint);
-        const pollResponse = await numaPollStatus(pollEndpoint);
-        console.log('Poll response:', pollResponse);
-
-        if (pollResponse.status === 'SUCCESS' || pollResponse.status === 'FAILURE') {
-          job = {
-            ...job,
-            status: pollResponse.status === 'SUCCESS' ? 'completed' : 'failed',
-            results: pollResponse.result || job.results,
-          };
-        }
+        job = await pollIncompleteHistoryJob(job);
         console.log('Job after polling:', job);
       }
 
