@@ -29,7 +29,6 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
     this.apiGatewayId = props.apiGatewayId;
     this.urlPathPrefix = '/api';
     this.logGroup = new NumaLogGroup(this, 'lambda-log-group', {
-      createResourcePolicy: false,
       logGroupName: this.node.id,
     }).logGroup;
   }
