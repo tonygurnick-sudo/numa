@@ -15509,9 +15509,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"srp-proxy@workspace:lambdas/node/srp-proxy":
+"srp-hasher@workspace:lambdas/node/srp-hasher":
   version: 0.0.0-use.local
-  resolution: "srp-proxy@workspace:lambdas/node/srp-proxy"
+  resolution: "srp-hasher@workspace:lambdas/node/srp-hasher"
   dependencies:
     "@arcanumai/style": "workspace:*"
     "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"

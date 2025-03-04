@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { copyFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 import config from './public/config.json';
+
 // Custom plugin to copy build output to @numa-frontend
 const copyBuildPlugin = () => ({
   name: 'copy-build',

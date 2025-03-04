@@ -15,47 +15,14 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       },
     };
 
-    this.addLambdaFunction(this, 'cors', {
+    this.addLambdaFunction(this, 'srp-hasher', {
       addAuthorizer: false,
-      lambdaDirectory: 'node/srp-proxy',
-      runtime: 'nodejs22.x',
-      handler: 'index.handler',
-      route: {
-        verb: 'OPTIONS',
-        path: '{PROXY+}',
-      },
-      environment,
-    });
-    this.addLambdaFunction(this, 'initiate', {
-      addAuthorizer: false,
-      lambdaDirectory: 'node/srp-proxy',
+      lambdaDirectory: 'node/srp-hasher',
       runtime: 'nodejs22.x',
       handler: 'index.handler',
       route: {
         verb: 'POST',
-        path: 'initiate',
-      },
-      environment,
-    });
-    this.addLambdaFunction(this, 'refresh', {
-      addAuthorizer: false,
-      lambdaDirectory: 'node/srp-proxy',
-      runtime: 'nodejs22.x',
-      handler: 'index.handler',
-      route: {
-        verb: 'POST',
-        path: 'refresh',
-      },
-      environment,
-    });
-    this.addLambdaFunction(this, 'respond', {
-      addAuthorizer: false,
-      lambdaDirectory: 'node/srp-proxy',
-      runtime: 'nodejs22.x',
-      handler: 'index.handler',
-      route: {
-        verb: 'POST',
-        path: 'respond',
+        path: 'srp-hasher',
       },
       environment,
     });

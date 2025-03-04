@@ -33,8 +33,20 @@ const NumaLogin = () => {
     setSuccess(null);
     setLoading(true);
 
-    const enteredUsername = providedUsername || usernameRef.current.value;
-    const enteredPassword = providedPassword || passwordRef.current.value;
+    const enteredUsername = (providedUsername || usernameRef.current?.value || '').trim();
+    const enteredPassword = (providedPassword || passwordRef.current?.value || '').trim();
+
+    if (!enteredUsername || !enteredPassword) {
+      setError('Username and password are required');
+      setLoading(false);
+      return;
+    }
+
+    if (enteredUsername.includes(' ') || enteredPassword.includes(' ')) {
+      setError('Username and password cannot contain spaces');
+      setLoading(false);
+      return;
+    }
 
     try {
       const result = await login(enteredUsername, enteredPassword);
@@ -52,7 +64,7 @@ const NumaLogin = () => {
       }
     } catch (error) {
       console.error('Error during authentication:', error);
-      setError(error.message);
+      setError(error.message || 'An error occurred during login');
     } finally {
       setLoading(false);
     }
