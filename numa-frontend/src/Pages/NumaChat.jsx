@@ -80,7 +80,7 @@ const NumaChat = () => {
   // Constants
   const MODEL_ID = 'anthropic.claude-3-5-sonnet-20240620-v1:0';
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
-  const Q_RETREIVER_ID = window.sessionStorage.getItem('Q_RETREIVER_ID');
+  const Q_RETRIEVER_ID = window.sessionStorage.getItem('Q_RETRIEVER_ID');
   const MAX_DATA_SOURCE_ITEMS = 6;
   const TODAY = new Date();
   const SYSTEM_MESSAGE = `You are an artifical intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data soures, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorate other bold and italic styling within your outputs when approprate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with makdown formatting.\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like “Could you provide more details?” or “What specific aspect would you like to focus on?”\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
@@ -231,7 +231,7 @@ const NumaChat = () => {
           applicationId: Q_APPLICATION_ID,
           queryText: inputMessage,
           contentSource: {
-            retriever: { retrieverId: Q_RETREIVER_ID },
+            retriever: { retrieverId: Q_RETRIEVER_ID },
           },
           maxResults: MAX_DATA_SOURCE_ITEMS,
         };
