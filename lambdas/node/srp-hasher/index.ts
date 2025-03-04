@@ -13,8 +13,8 @@ const headers = {
   'Content-Type': 'application/json',
 };
 
-function calculateSecretHash(email: string): string {
-  const message = email + CLIENT_ID;
+function calculateSecretHash(username: string): string {
+  const message = username + CLIENT_ID;
   const hmac = crypto.createHmac('sha256', CLIENT_SECRET);
   return hmac.update(message).digest('base64');
 }
@@ -25,7 +25,14 @@ function isValidEmail(email: string): boolean {
 }
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+  console.log('Request received:', {
+    method: event.requestContext.http.method,
+    path: event.requestContext.http.path,
+    requestId: event.requestContext.requestId,
+  });
+
   if (event.requestContext.http.method === 'OPTIONS') {
+    console.log('Handling OPTIONS request');
     return {
       statusCode: 200,
       headers,
@@ -35,19 +42,40 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
   try {
     const body = JSON.parse(event.body || '{}');
+    const { email, userSub } = body;
 
-    const { email } = body;
+    console.log('Request body:', {
+      email: email ? '***@' + email.split('@')[1] : undefined, // Mask email for privacy
+      hasUserSub: !!userSub,
+    });
 
-    if (!email || !isValidEmail(email)) {
-      console.warn('Invalid or missing email:', email);
+    if (!email && !userSub) {
+      console.warn('Validation failed: Missing required fields', {
+        hasEmail: !!email,
+        hasUserSub: !!userSub,
+      });
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'Invalid or missing email' }),
+        body: JSON.stringify({ error: 'Either email or userSub must be provided' }),
       };
     }
 
-    const hash = calculateSecretHash(email);
+    if (email && !isValidEmail(email)) {
+      console.warn('Validation failed: Invalid email format', {
+        emailLength: email.length,
+        emailDomain: email.split('@')[1],
+      });
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Invalid email format' }),
+      };
+    }
+
+    const username = email || userSub;
+    console.log('Generating hash for username');
+    const hash = calculateSecretHash(username);
 
     return {
       statusCode: 200,
@@ -55,8 +83,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       body: JSON.stringify({ hash }),
     };
   } catch (error) {
-    console.error('Error:', error);
-    console.error('Error stack:', (error as Error).stack);
+    console.error('Error processing request:', {
+      errorName: (error as Error).name,
+      errorMessage: (error as Error).message,
+      stackTrace: (error as Error).stack,
+      eventBody: event.body,
+    });
     return {
       statusCode: 500,
       headers,
