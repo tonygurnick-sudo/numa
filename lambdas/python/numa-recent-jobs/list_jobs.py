@@ -9,12 +9,12 @@ dynamodb = boto3.resource("dynamodb")
 
 
 class DecimalEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            return float(obj)
-        elif isinstance(obj, datetime):
-            return obj.isoformat()
-        return super().default(obj)
+    def default(self, o):
+        if isinstance(o, Decimal):
+            return float(o)
+        elif isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
 
 
 def handler(event, _context):
