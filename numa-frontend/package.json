@@ -20,7 +20,7 @@
     "@aws-sdk/client-s3": "^3.738.0",
     "@aws-sdk/credential-providers": "^3.670.0",
     "@aws-sdk/s3-request-presigner": "^3.738.0",
-    "@aws-sdk/util-dynamodb": "3.751.0",
+    "@aws-sdk/util-dynamodb": "3.758.0",
     "@mdxeditor/editor": "^3.19.3",
     "@popperjs/core": "^2.11.8",
     "@testing-library/jest-dom": "^6.6.3",

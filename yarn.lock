@@ -52,7 +52,7 @@ __metadata:
     "@aws-sdk/client-s3": "npm:^3.738.0"
     "@aws-sdk/credential-providers": "npm:^3.670.0"
     "@aws-sdk/s3-request-presigner": "npm:^3.738.0"
-    "@aws-sdk/util-dynamodb": "npm:3.751.0"
+    "@aws-sdk/util-dynamodb": "npm:3.758.0"
     "@eslint/js": "npm:^9.0.0"
     "@mdxeditor/editor": "npm:^3.19.3"
     "@popperjs/core": "npm:^2.11.8"
@@ -1467,14 +1467,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aws-sdk/util-dynamodb@npm:3.751.0":
-  version: 3.751.0
-  resolution: "@aws-sdk/util-dynamodb@npm:3.751.0"
+"@aws-sdk/util-dynamodb@npm:3.758.0":
+  version: 3.758.0
+  resolution: "@aws-sdk/util-dynamodb@npm:3.758.0"
   dependencies:
     tslib: "npm:^2.6.2"
   peerDependencies:
-    "@aws-sdk/client-dynamodb": ^3.751.0
-  checksum: 10c0/f70bf189326ba1ee28236ff57f87084795a03c80ad332e9c3ee729464e8355123d757e46539442564b8a1864256f7b771b69271c513430d7ec070fc28cbb943a
+    "@aws-sdk/client-dynamodb": ^3.758.0
+  checksum: 10c0/6ba50366ca054d7a0264dc1dbf814249df35131221c0fb82a051891bce476cfcc8f19f009c27e80fd3511d4c89068ba24223757e67879a6d6d7a02247d2ac2d8
   languageName: node
   linkType: hard
 
