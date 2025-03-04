@@ -1,9 +1,9 @@
-INITIAL_ANALYSIS_PROMPT = """You are an expert at understanding policy documents and running an initial analysis to understand the context of a document.
+INITIAL_ANALYSIS_PROMPT = """You are an expert in understanding policy documents and in conducting an initial analysis to determine the context of a document.
 
 Here is a policy document uploaded by our user:
 {policy_content}
 
-Based on the keywords, structure, content and additional context here:
+Based on the keywords, structure, content, and additional context provided here:
 {policy_context}
 
 ## Markdown Formatting Guidelines:
@@ -19,12 +19,12 @@ Please analyse the document and return the following in markdown format:
 - Description
 - Considerations for review"""
 
-POLICY_REVIEW_PROMPT = """You are an expert at reviewing policy documents.
+POLICY_REVIEW_PROMPT = """You are an expert in reviewing policy documents.
 
 Here is a policy document:
 {policy_content}
 
-Our team has also provided following for your consideration when reviewing the document:
+Our team has also provided the following for your consideration when reviewing the document:
 Classification and description:
 {initial_analysis}
 
@@ -45,22 +45,23 @@ Review the policy document and provide a detailed analysis and recommendations i
 Your review should cover:
 
 ## Analysis:
-1. Summary of the key points and objectives of the policy
-2. Evaluation of the clarity, comprehensiveness and enforceability of the policy
-3. Identification of any potential gaps, ambiguities or areas that need improvement
+1. A summary of the key points and objectives of the policy
+2. An evaluation of the clarity, comprehensiveness, and enforceability of the policy
+3. Identification of any potential gaps, ambiguities, or areas that need improvement
 
 ## Recommendations:
 A list of specific recommendations for enhancing or revising the policy to make it more effective
 
 ## Legislative Compliance and Recommendations (if applicable):
-The user may have also uploaded relevant legislation to review against here as well:
+The user may have also uploaded relevant legislation to review alongside the policy:
 {legislation_content}
 
 If legislation is provided, please review the policy document and give feedback on:
 - Compliance: Does the policy comply with all relevant legal obligations and legislative requirements?
-- Recommendations: Are there any recommendations for improving or strengthening the policy to ensure legal compliance?
+- Recommendations: Are there any suggestions for improving or strengthening the policy to ensure legal compliance?
 
-Please highlight specific sections of the policy document where necessary. If not legislation is provided to review against the policy, state 'Not Applicable'."""
+Please highlight specific sections of the policy document where necessary. If no legislation is provided to review against the policy, state 'Not Applicable'."""
+
 
 RECOMMENDED_UPDATES_PROMPT = """Here is a policy document:
 {policy_content}
@@ -75,22 +76,22 @@ Here is a review of the policy that contains the recommended changes for enhance
 - Use numbered lists (`1.`, `2.`, etc.) for each distinct update recommendation
 - Use **bold** to highlight section names being referenced
 - Use `>` for quoting existing policy text
-- Use `**CURRENT:**` and `**PROPOSED:**` to clearly differentiate current vs. recommended text
+- Use **CURRENT:** and **PROPOSED:** to clearly differentiate current versus recommended text
 
 Based on the recommended changes from the policy review, please generate specific updates for the policy document. For each update:
-1. Specify which section to update or if creating a new section
-2. Provide the current text (when applicable)
-3. Provide the recommended new/modified text
+1. Specify which section to update or indicate if a new section is being created
+2. Provide the current text (where applicable)
+3. Provide the recommended new or modified text
 4. Include a brief explanation for the change
 
-Please don't re-generate the entire policy, but instead output a structured list of specific updates. If Legislative Compliance recommendations are provided, present these as a separate section."""
+Please do not re-generate the entire policy, but instead output a structured list of specific updates. If legislative compliance recommendations are provided, present these as a separate section."""
 
 UPDATED_POLICY_PROMPT = """You are an expert policy writer specialising in policy revision and documentation.
 
 Below is the current policy document:
 {policy_content}
 
-Our review team has provided these recommended updates:
+Our review team has provided the following recommended updates:
 {recommended_updates}
 
 ## Markdown Formatting Guidelines:
@@ -107,11 +108,11 @@ Our review team has provided these recommended updates:
 - Use blockquotes with `>` for special notes or callouts
 - Maintain proper indentation for nested lists and content
 
-Please generate a complete, revised version of the policy that incorporates all recommended changes. The updated policy should:
+Please generate a complete, revised version of the policy that incorporates all the recommended changes. The updated policy should:
 
-1. Include ALL sections of the original policy (even unchanged sections)
+1. Include ALL sections of the original policy (even those that remain unchanged)
 2. Seamlessly integrate the recommended updates into the appropriate sections
-3. Maintain consistent tone, formatting, and organisational structure throughout
+3. Maintain a consistent tone, formatting, and organisational structure throughout
 4. Be formatted in clean, well-structured markdown
 5. Preserve the document's original section numbering and hierarchy
 6. Ensure all hyperlinks, references, and cross-references remain functional
