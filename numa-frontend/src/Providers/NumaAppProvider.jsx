@@ -141,13 +141,34 @@ export const NumaAppProvider = ({ children }) => {
   };
 
   // Load jobs for the current app
-  const loadAppJobs = async () => {
+  const loadAppJobs = async ({ page = 1, limit = 50, append = false } = {}) => {
     if (!numaAppId) return;
     try {
-      const appJobs = await jobsApi.getJobsByAppId(numaAppId);
-      setJobs(appJobs);
+      const appJobs = await jobsApi.getJobsByAppId(numaAppId, { page, limit });
+
+      // Sort jobs by date before setting/appending
+      const sortedJobs = appJobs.sort((a, b) => {
+        const dateA = new Date(a.startedAt || a.dateTime);
+        const dateB = new Date(b.startedAt || b.dateTime);
+        return dateB - dateA;
+      });
+
+      // If append is true, add to existing jobs, otherwise replace
+      setJobs((prevJobs) => {
+        if (append) {
+          // Filter out any duplicates when appending
+          const newJobs = sortedJobs.filter(
+            (newJob) => !prevJobs.some((existingJob) => existingJob.jobID === newJob.jobID),
+          );
+          return [...prevJobs, ...newJobs];
+        }
+        return sortedJobs;
+      });
+
+      return appJobs; // Return for pagination check
     } catch (error) {
       console.error('Failed to load jobs:', error);
+      throw error;
     }
   };
 

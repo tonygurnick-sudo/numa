@@ -80,9 +80,9 @@ export const useJobsApi = () => {
     }
   };
 
-  const getJobsByAppId = async (appId) => {
+  const getJobsByAppId = async (appId, { page = 1, limit = 25 } = {}) => {
     try {
-      const endpoint_call = `/api/${appId}/jobs`;
+      const endpoint_call = `/api/${appId}/jobs?page=${page}&limit=${limit}`;
       console.log('Getting jobs with endpoint:', endpoint_call);
       return await numaGet(endpoint_call);
     } catch (error) {
