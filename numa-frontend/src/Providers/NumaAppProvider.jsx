@@ -268,32 +268,17 @@ export const NumaAppProvider = ({ children }) => {
       }
 
       // Poll for results
-      const maxAttempts = 24;
-      const pollInterval = 10000;
-      let attempts = 0;
-      const polling_endpoint = `/api/${numaAppData.id}/main?job_id=${response.job_id}`;
-      console.log('Starting polling with endpoint:', polling_endpoint);
+      const { status, result } = await pollJobStatus({
+        jobID: response.job_id,
+        pollInterval: 10000,
+        maxPollingTime: 24 * 10000, // 24 attempts * 10 seconds
+      });
 
-      while (attempts < maxAttempts) {
-        const pollResponse = await numaPollStatus(polling_endpoint);
-        console.log('Poll status response:', pollResponse);
-        console.log('attempts:', attempts);
-
-        if (pollResponse.status === 'SUCCESS') {
-          console.log('Task completed successfully');
-          if (pollResponse.result) {
-            console.log('Task result:', pollResponse.result);
-            currentResults[task.id] = pollResponse.result;
-            return currentResults;
-          }
-          throw new Error('No result data in successful response');
-        } else if (pollResponse.status === 'FAILURE') {
-          throw new Error(pollResponse.message || 'Task failed');
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
-        attempts++;
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      if (status === 'completed' && result) {
+        console.log('Task completed successfully');
+        console.log('Task result:', result);
+        currentResults[task.id] = result;
+        return currentResults;
       }
 
       throw new Error('The process is taking longer than expected. Please try again.');
@@ -426,6 +411,120 @@ export const NumaAppProvider = ({ children }) => {
     } catch (error) {
       console.error('Error in processTextOutputTask:', error);
       throw error;
+    }
+  };
+
+  // Shared polling function for both initial tasks and history jobs
+  const pollJobStatus = async ({
+    jobID,
+    pollInterval = 5000,
+    maxPollingTime = 5 * 60 * 1000,
+    initialState = null,
+    onPollSuccess = null,
+    shouldContinuePolling = null,
+  }) => {
+    const startTime = Date.now();
+    let currentState = initialState ? { ...initialState } : null;
+
+    try {
+      while (true) {
+        const polling_endpoint = `/api/${numaAppData.id}/main?job_id=${jobID}`;
+        console.log('Polling job:', polling_endpoint);
+
+        const pollResponse = await numaPollStatus(polling_endpoint);
+        console.log('Poll response:', pollResponse);
+
+        // For history jobs, check for changes
+        if (currentState) {
+          const hasChanges =
+            pollResponse.status !== currentState.status ||
+            JSON.stringify(pollResponse.result) !== JSON.stringify(currentState.results);
+
+          if (hasChanges) {
+            // Update the state with new data
+            currentState = {
+              ...currentState,
+              status: pollResponse.status,
+              lastUpdated: new Date().toISOString(),
+              results: pollResponse.result || currentState.results,
+            };
+
+            // Call success handler if provided
+            if (onPollSuccess) {
+              await onPollSuccess(currentState, pollResponse);
+            }
+          }
+        }
+
+        // Check completion status
+        if (pollResponse.status === 'SUCCESS') {
+          if (pollResponse.result) {
+            return { status: 'completed', result: pollResponse.result, state: currentState };
+          }
+          throw new Error('No result data in successful response');
+        } else if (pollResponse.status === 'FAILURE' || pollResponse.status === 'error') {
+          throw new Error(pollResponse.message || 'Task failed');
+        }
+
+        // Check if we should continue polling
+        if (shouldContinuePolling) {
+          const shouldContinue = shouldContinuePolling(currentState, startTime);
+          if (!shouldContinue) {
+            console.log('Stopping poll: Custom condition met');
+            break;
+          }
+        } else {
+          // Default polling time check
+          const elapsedTime = Date.now() - startTime;
+          if (elapsedTime > maxPollingTime) {
+            console.log('Stopping poll: Max time reached');
+            break;
+          }
+        }
+
+        // Wait before next poll
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      }
+
+      return { status: 'incomplete', state: currentState };
+    } catch (error) {
+      console.error('Error polling job:', error);
+      throw error;
+    }
+  };
+
+  // Function to poll an incomplete job when loading from history
+  const pollIncompleteHistoryJob = async (jobHistoryItem) => {
+    if (!jobHistoryItem || jobHistoryItem.status === 'completed' || jobHistoryItem.status === 'error') {
+      return jobHistoryItem;
+    }
+
+    if (!jobHistoryItem.jobID) {
+      console.log('No jobId available for polling incomplete job');
+      return jobHistoryItem;
+    }
+
+    try {
+      const { state } = await pollJobStatus({
+        jobID: jobHistoryItem.jobID,
+        initialState: jobHistoryItem,
+        onPollSuccess: async (currentState, pollResponse) => {
+          if (pollResponse.result) {
+            await jobsApi.updateJob(numaAppData, currentState.jobID, pollResponse.result);
+            await loadAppJobs();
+          }
+        },
+        shouldContinuePolling: (currentState, startTime) => {
+          const lastUpdatedTime = currentState.lastUpdated ? new Date(currentState.lastUpdated).getTime() : startTime;
+          const timeSinceLastUpdate = Date.now() - lastUpdatedTime;
+          return timeSinceLastUpdate <= 5 * 60 * 1000; // Continue if last update was within 5 minutes
+        },
+      });
+
+      return state || jobHistoryItem;
+    } catch (error) {
+      console.error('Error in history job polling:', error);
+      return jobHistoryItem;
     }
   };
 
@@ -767,12 +866,18 @@ export const NumaAppProvider = ({ children }) => {
   // Load and display historical job results
   const loadJobResults = async (jobId) => {
     try {
-      const job = await jobsApi.getJobById(numaAppId, jobId);
+      let job = await jobsApi.getJobById(numaAppId, jobId);
       if (!job) {
         throw new Error('Job not found');
       }
 
-      console.log('Job:', job);
+      console.log('Initial job:', job);
+
+      // Try to poll for updates if job is incomplete
+      if (job.status !== 'completed') {
+        job = await pollIncompleteHistoryJob(job);
+        console.log('Job after polling:', job);
+      }
 
       // Reset states
       setNumaTaskResponses([]);
@@ -897,26 +1002,6 @@ export const NumaAppProvider = ({ children }) => {
   };
 
   const numaPollStatus = async (polling_endpoint) => {
-    // Mock implementation - keep until api proxy in place
-    // return new Promise((resolve) => {
-    //   setTimeout(() => {
-    //     // Simulate success after 2 calls
-    //     const mockData = 'http://localhost:5173/example-meeting-transcript.txt';
-    //     const pollCount = window.pollCount = (window.pollCount || 0) + 1;
-
-    //     if (pollCount >= 2) {
-    //       resolve({
-    //         status: 'SUCCESS',
-    //         result: mockData
-    //       });
-    //     } else {
-    //       resolve({
-    //         status: 'PROCESSING'
-    //       });
-    //     }
-    //   }, 500);
-    // });
-
     try {
       const response = await numaGet(polling_endpoint);
       console.log('Poll response:', response);
