@@ -17,7 +17,6 @@ import {
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
-import { fetchConfigAddtoSession } from '../Components/ConfigSetup';
 import { NumaChatDynamoUtils } from '../utils/DynamoDBUtils';
 import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
 
@@ -34,7 +33,7 @@ const client = window.sessionStorage.getItem('CLIENT_NAME'); // e.g. "arcanum-de
 const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod'; // default to "prod" if not set
 const NUMA_CHAT_HISTORY_TABLE_NAME = `numa-${client}${environment !== 'prod' ? `-${environment}` : ''}-chat-history`;
 
-export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
+export const AuthProvider = ({ children, initialTokens }) => {
   const [user, setUser] = useState(null);
   const tokensRef = useRef(
     initialTokens || {
@@ -98,6 +97,49 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
     return decodedToken.exp <= currentTime + 300;
   };
 
+  const isValidEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const fetchSecretHash = async (identifier) => {
+    try {
+      // Check if identifier is provided
+      if (!identifier) {
+        throw new Error('No identifier provided');
+      }
+
+      // Determine if identifier is email or userSub
+      const isEmail = isValidEmail(identifier);
+      const payload = isEmail ? { email: identifier } : { userSub: identifier };
+
+      const secretHashResponse = await fetch(`${API_ENDPOINT}/srp-hasher`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!secretHashResponse.ok) {
+        throw new Error(`HTTP error! status: ${secretHashResponse.status}`);
+      }
+
+      const data = await secretHashResponse.json();
+
+      if (!data.hash) {
+        throw new Error('Secret hash not received from server');
+      }
+
+      return data.hash;
+    } catch (error) {
+      console.error('Failed to fetch secret hash:', {
+        error: error.message,
+        identifierType: isValidEmail(identifier) ? 'email' : 'userSub',
+        endpoint: `${API_ENDPOINT}/srp-hasher`,
+      });
+      throw new Error(`Failed to fetch secret hash: ${error.message}`);
+    }
+  };
+
   const refreshTokens = async () => {
     try {
       console.log('🔄 Attempting to refresh tokens...');
@@ -109,6 +151,17 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         return false;
       }
 
+      const idToken = tokensRef.current.idToken;
+      const decodedIdToken = jwtDecode(idToken);
+      const username = decodedIdToken.sub;
+      if (!username) {
+        console.error('No username available');
+        logout();
+        return false;
+      }
+
+      const SECRET_HASH = await fetchSecretHash(username);
+
       const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
 
       const params = {
@@ -116,6 +169,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
         ClientId: CLIENT_ID,
         AuthParameters: {
           REFRESH_TOKEN: refreshToken,
+          SECRET_HASH: SECRET_HASH,
         },
       };
 
@@ -126,7 +180,14 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
       const { AccessToken, IdToken } = response.AuthenticationResult;
 
-      // Update localStorage and tokensRef
+      // Update tokensRef directly
+      tokensRef.current = {
+        ...tokensRef.current,
+        accessToken: AccessToken,
+        idToken: IdToken,
+      };
+
+      // Update localStorage and decode tokens
       updateTokens({
         accessToken: AccessToken,
         idToken: IdToken,
@@ -322,26 +383,30 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   ]);
 
   const checkAndRefreshTokens = async () => {
-    // Ensure tokens are decoded
-    decodeTokens();
-
-    if (!decodedTokensRef.current.accessToken) {
-      console.log('No decoded tokens available');
+    const { accessToken } = tokensRef.current;
+    if (!accessToken) {
+      console.log('No access token available');
       return false;
     }
 
-    if (isTokenExpired(decodedTokensRef.current.accessToken)) {
-      console.log('🕒 Token check: Token expired, attempting refresh...');
-      const refreshed = await refreshTokens();
-      if (!refreshed) {
-        logout();
-        return false;
+    try {
+      const decodedAccessToken = jwtDecode(accessToken);
+      if (isTokenExpired(decodedAccessToken)) {
+        console.log('🕒 Token check: Token expired, attempting refresh...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          logout();
+          return false;
+        }
+        return true;
       }
-      return true;
-    }
 
-    console.log('🕒 Token check: Token still valid');
-    return true;
+      console.log('🕒 Token check: Token still valid');
+      return true;
+    } catch (error) {
+      console.error('Error decoding token during check:', error);
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -424,15 +489,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const login = async (username, password) => {
     try {
       const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
-
-      // Fetch the secret hash from your backend
-      const secretHashResponse = await fetch(`${API_ENDPOINT}/srp-hasher`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: username }),
-      });
-
-      const { hash: SECRET_HASH } = await secretHashResponse.json();
+      const SECRET_HASH = await fetchSecretHash(username);
 
       // Step 1: Create SRP session
       const srpSession = createSrpSession(username, password, USER_POOL_ID, false); // false for not hashed already
@@ -488,15 +545,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   const setNewPassword = async (username, oldPassword, newPassword) => {
     try {
       const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
-
-      // Fetch the secret hash from your backend
-      const secretHashResponse = await fetch(`${API_ENDPOINT}/srp-hasher`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: username }),
-      });
-
-      const { hash: SECRET_HASH } = await secretHashResponse.json();
+      const SECRET_HASH = await fetchSecretHash(username);
 
       // Step 1: Create SRP session for old password
       const srpSession = createSrpSession(username, oldPassword, USER_POOL_ID, false);
@@ -567,6 +616,14 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
   };
 
   const handleLoginSuccess = async (tokens) => {
+    // Update tokensRef directly
+    tokensRef.current = {
+      accessToken: tokens.AccessToken,
+      idToken: tokens.IdToken,
+      refreshToken: tokens.RefreshToken,
+    };
+
+    // Update localStorage
     localStorage.setItem('accessToken', tokens.AccessToken);
     localStorage.setItem('refreshToken', tokens.RefreshToken);
     localStorage.setItem('idToken', tokens.IdToken);
@@ -596,14 +653,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
   const requestPasswordReset = async (email) => {
     try {
-      // Fetch the secret hash from your backend
-      const secretHashResponse = await fetch(`${API_ENDPOINT}/srp-hasher`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email }),
-      });
-
-      const { hash: SECRET_HASH } = await secretHashResponse.json();
+      const SECRET_HASH = await fetchSecretHash(email);
 
       const command = new ForgotPasswordCommand({
         Username: email,
@@ -623,14 +673,7 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
   const confirmPasswordReset = async (email, code, newPassword) => {
     try {
-      // Fetch the secret hash from your backend
-      const secretHashResponse = await fetch(`${API_ENDPOINT}/srp-hasher`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email }),
-      });
-
-      const { hash: SECRET_HASH } = await secretHashResponse.json();
+      const SECRET_HASH = await fetchSecretHash(email);
 
       const command = new ConfirmForgotPasswordCommand({
         Username: email,
