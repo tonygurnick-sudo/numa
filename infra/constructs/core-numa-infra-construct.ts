@@ -32,6 +32,7 @@ import {
 import { SetCallbackUrl } from './set-callback-url-construct';
 import { BedrockQuotaChecker } from './bedrock-quota-checker-construct';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
+import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -42,6 +43,7 @@ export class CoreNumaInfra extends Construct {
   readonly webExperienceRoleArn: string;
   readonly qBusinessApplicationId: string;
   readonly qBusinessIndexId: string;
+  readonly qBusinessRetrieverId: string;
   readonly outputsBucket: NumaCorsEnabledBucket;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
@@ -219,6 +221,23 @@ export class CoreNumaInfra extends Construct {
     });
     this.outputsBucket.bucket.moveFromId('aws_s3_bucket.outputs-bucket_1F269801');
 
+    const numaChatDynamoTable = new DynamodbTable(this, 'numa-chat-history-table', {
+      name: `${numaClient}-chat-history`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'user_id',
+      rangeKey: 'sk',
+      attribute: [
+        {
+          name: 'user_id',
+          type: 'S',
+        },
+        {
+          name: 'sk',
+          type: 'S',
+        },
+      ],
+    });
+
     const identityPoolRolePolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-policy', {
       statement: [
         {
@@ -240,6 +259,24 @@ export class CoreNumaInfra extends Construct {
           effect: 'Allow',
           actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject'],
           resources: [`${dataBucket.bucket.arn}/*`, dataBucket.bucket.arn],
+        },
+        {
+          effect: 'Allow',
+          actions: [
+            'dynamodb:PutItem',
+            'dynamodb:GetItem',
+            'dynamodb:Query',
+            'dynamodb:UpdateItem',
+            'dynamodb:DeleteItem',
+          ],
+          resources: [numaChatDynamoTable.arn],
+          condition: [
+            {
+              test: 'StringEquals',
+              values: ['$${cognito-identity.amazonaws.com:sub}'],
+              variable: 'dynamodb:LeadingKeys',
+            },
+          ],
         },
       ],
     });
@@ -477,7 +514,7 @@ export class CoreNumaInfra extends Construct {
     });
     this.qBusinessIndexId = Fn.lookup(Fn.jsondecode(index.properties), 'IndexId');
 
-    new CloudcontrolapiResource(this, 'retriever', {
+    const retriever = new CloudcontrolapiResource(this, 'retriever', {
       typeName: 'AWS::QBusiness::Retriever',
       desiredState: Fn.jsonencode({
         ApplicationId: this.qBusinessApplicationId,
@@ -490,6 +527,7 @@ export class CoreNumaInfra extends Construct {
         Type: 'NATIVE_INDEX',
       }),
     });
+    this.qBusinessRetrieverId = Fn.lookup(Fn.jsondecode(retriever.properties), 'RetrieverId');
 
     if (props.loadSampleFile) {
       const sampleFile = 'numa-one-pager.pdf';
@@ -650,6 +688,7 @@ export class CoreNumaInfra extends Construct {
     new TerraformOutput(this, 'application-id', { value: this.qBusinessApplicationId });
     new TerraformOutput(this, 'data-source-id', { value: dataSourceId });
     new TerraformOutput(this, 'index-id', { value: this.qBusinessIndexId });
+    new TerraformOutput(this, 'retriever-id', { value: this.qBusinessRetrieverId });
 
     const quotaChecker = new BedrockQuotaChecker(this, 'bedrock-quota-checker', {
       client: props.client,
@@ -658,6 +697,10 @@ export class CoreNumaInfra extends Construct {
     const models = [
       {
         model_id: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
+        regions: [process.env['AWS_REGION']],
+      },
+      {
+        model_id: 'anthropic.claude-3-haiku-20240307-v1:0',
         regions: [process.env['AWS_REGION']],
       },
     ];

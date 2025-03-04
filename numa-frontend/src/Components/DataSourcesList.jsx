@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Alert, Button } from 'react-bootstrap';
 import { ListDataSourcesCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
+import { Spinner } from 'react-bootstrap';
 
 const formatDate = (dateString) => {
   if (!dateString) return 'Unknown';
@@ -72,7 +73,7 @@ export const DataSourcesList = () => {
     setUploadedFiles(uploadedFiles.filter((file, i) => i !== index));
   };
 
-  if (loading) return <div className="text-muted small">Loading sources...</div>;
+  if (loading) return <div className="text-muted small">Loading datasources...</div>;
   if (error)
     return (
       <Alert variant="danger" className="py-1 mb-1">
@@ -121,9 +122,11 @@ export const DataSourcesList = () => {
           )}
         </div>
         <hr />
-        <Button variant="outline-primary" onClick={() => setShowUploadModal(true)} className="upload-button">
+
+        {/* Commented out to remove the upload button - Does not work yet */}
+        {/* <Button variant="outline-primary" onClick={() => setShowUploadModal(true)} className="upload-button">
           Upload Files
-        </Button>
+        </Button> */}
 
         {uploadedFiles.length > 0 && (
           <div className="uploaded-files-section">

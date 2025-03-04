@@ -1,90 +1,124 @@
-import { useState, useEffect, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  forwardRef,
+  useImperativeHandle
+} from 'react';
 import { Button } from 'react-bootstrap';
-import { ListConversationsCommand, ListMessagesCommand } from '@aws-sdk/client-qbusiness';
+import { useAuth } from '../Providers/AuthProvider';
 
-export const ChatHistorySidebar = ({ qBusinessClient, APPLICATION_ID, onSelectConversation, setError }) => {
+export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
+  { onSelectConversation, setError, currentConversationId },
+  ref
+) {
   const [isLoading, setIsLoading] = useState(false);
   const [show, setShow] = useState(false);
   const [conversations, setConversations] = useState([]);
+  const [localError, setLocalError] = useState(null); // local error state
   const sidebarRef = useRef(null);
+  const { user, numaChatDynamoUtils } = useAuth();
 
+  // Grab user info from token
+  const idToken = user?.decoded_tokens?.idToken ?? {};
+  const sub = idToken.sub;
+
+  // Toggle the sidebar open/closed
   const handleShow = () => setShow(!show);
 
-  const fetchConversationHistory = async (conversationId) => {
+  /**
+   * Fetch conversation metadata. Just metadata, not the full conversation.
+   * Sort them by latestTimestamp descending.
+   */
+  const fetchConversations = async () => {
+    if (!numaChatDynamoUtils || !user) return;
     setIsLoading(true);
     try {
-      const input = {
-        applicationId: APPLICATION_ID,
-        conversationId: conversationId,
-        maxResults: 50,
-      };
-
-      const command = new ListMessagesCommand(input);
-      const response = await qBusinessClient.send(command);
-
-      if (!response.messages || response.messages.length === 0) {
-        setError('No messages found in this conversation');
-        return;
-      }
-
-      const sortedMessages = [...response.messages].sort((a, b) => new Date(a.time) - new Date(b.time));
-      const formattedMessages = sortedMessages.map((message) => ({
-        role: message.type === 'USER' ? 'user' : 'assistant',
-        content: message.body,
-        id: message.messageId,
-        sources: message.sourceAttributions || [],
-      }));
-
-      onSelectConversation(formattedMessages, conversationId);
-      setShow(false);
+      const userId = sub || 'anonymous';
+      const metaItems = await numaChatDynamoUtils.getUserConversationsMeta(userId);
+      metaItems.sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+      setConversations(metaItems);
+      setLocalError(null);
     } catch (error) {
-      console.error('Error fetching conversation history:', error);
+      console.error('Error fetching conversations:', error);
+      setLocalError('Failed to load conversation history');
+      // Optionally pass error to parent:
       setError('Failed to load conversation history');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Expose refreshConversations() via ref for parent components
+  useImperativeHandle(ref, () => ({
+    refreshConversations: () => {
+      fetchConversations();
+    }
+  }));
+
+  // Fetch conversations on mount or when currentConversationId changes
   useEffect(() => {
-    const fetchConversations = async () => {
-      if (!qBusinessClient) return;
-
-      setIsLoading(true);
-      try {
-        const input = {
-          applicationId: APPLICATION_ID,
-          maxResults: 10,
-        };
-
-        const command = new ListConversationsCommand(input);
-        const response = await qBusinessClient.send(command);
-        setConversations(response.conversations || []);
-      } catch (error) {
-        console.error('Error fetching conversations:', error);
-        setError('Failed to load conversations');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchConversations();
-  }, [qBusinessClient, APPLICATION_ID, setError]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numaChatDynamoUtils, currentConversationId]);
 
+  // Hide sidebar if user clicks outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (sidebarRef.current && !sidebarRef.current.contains(event.target)) {
         setShow(false);
       }
     };
-
     if (show) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [show]);
+
+  /**
+   * Handle renaming a conversation.
+   * Prompts for a new name, calls the DynamoDB client, and refreshes the list.
+   */
+  const handleRename = async (conversationId, currentName) => {
+    const newName = prompt('Enter new name for this conversation:', currentName);
+    if (newName === null) return; // user cancelled
+    if (!numaChatDynamoUtils) {
+      console.error('DynamoDB client not initialized');
+      return;
+    }
+    try {
+      await numaChatDynamoUtils.updateConversationName(conversationId, sub, newName);
+      fetchConversations();
+    } catch (error) {
+      console.error('Error renaming conversation:', error);
+      setLocalError('Failed to rename conversation');
+      setError('Failed to rename conversation');
+    }
+  };
+
+  /**
+   * Handle deleting a conversation.
+   * Prompts for confirmation, calls the DynamoDB client, and refreshes the list.
+   */
+  const handleDelete = async (conversationIdToDelete) => {
+    if (!numaChatDynamoUtils) return;
+    // Confirm deletion with the user
+    if (!window.confirm("Are you sure you want to delete this conversation?")) {
+      return;
+    }
+    try {
+      // Assuming your DynamoDB client has a deleteConversation or similar method.
+      await numaChatDynamoUtils.deleteConversation(conversationIdToDelete, sub);
+      // Refresh the conversation list after deletion.
+      fetchConversations();
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      setLocalError('Failed to delete conversation');
+      setError('Failed to delete conversation');
+    }
+  };
 
   return (
     <div className="chat-history-sidebar">
@@ -120,47 +154,81 @@ export const ChatHistorySidebar = ({ qBusinessClient, APPLICATION_ID, onSelectCo
           </Button>
         </div>
 
-        <div className="chat-history-list">
+        <div className="chat-history-list"
+          style={{
+            maxHeight: 'calc(100vh - 100px)',
+            overflowY: 'auto'
+          }}
+        >
           {isLoading ? (
             <div className="text-muted small">Loading conversations...</div>
+          ) : localError ? (
+            <div className="error-message text-muted small">
+              {localError}
+              <Button
+                variant="link"
+                size="sm"
+                onClick={() => {
+                  setLocalError(null);
+                  fetchConversations();
+                }}
+              >
+                Retry
+              </Button>
+            </div>
           ) : conversations.length === 0 ? (
             <p className="small text-muted">No conversations available</p>
           ) : (
             <div className="conversations-container small">
-              {conversations.map((conversation) => {
-                // Extract a concise title from the conversation
-                let title = conversation.title || 'Untitled Chat';
-                if (title.length > 60) {
-                  // If it's a long message, try to get the first meaningful line
-                  const firstLine = title.split('\n')[0].trim();
-                  // If the first line is still too long, truncate it
-                  title = firstLine.length > 60 ? firstLine.substring(0, 57) + '...' : firstLine;
-                }
-
-                return (
-                  <div
-                    key={conversation.conversationId}
-                    className="conversation-item mb-2 p-2 rounded"
-                    onClick={() => fetchConversationHistory(conversation.conversationId)}
-                    role="button"
-                  >
-                    <div className="conversation-title fw-bold">{title}</div>
-                    <div className="conversation-time text-muted mt-1" style={{ fontSize: '0.75rem' }}>
-                      {new Date(conversation.startTime || conversation.creationTime).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </div>
+              {conversations.map((convo) => (
+              <div
+                key={convo.conversation_id}
+                className={`conversation-item mb-2 p-2 rounded ${
+                  convo.conversation_id === currentConversationId ? 'active' : ''
+                }`}
+                onClick={() => onSelectConversation(convo.conversation_id)}
+                role="button"
+              >
+                {/* Left: Title + Timestamp | Right: Actions */}
+                <div className="d-flex align-items-center justify-content-between">
+                  {/* Left: Conversation details */}
+                  <div className="conversation-details">
+                    <div className="conversation-title fw-bold">{convo.conversationName || "Untitled Chat"}</div>
+                    <div className="conversation-time text-muted mt-1">{new Date(convo.latestTimestamp).toLocaleString()}</div>
                   </div>
-                );
-              })}
+                {/* Right: Edit & Delete stacked */}
+                <div className="conversation-actions d-flex flex-column align-items-center">
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="p-0 text-secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRename(convo.conversation_id, convo.conversationName);
+                      }}
+                    >
+                      <i className="bi bi-pencil"></i>
+                    </Button>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="p-0 text-danger"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(convo.conversation_id);
+                      }}
+                    >
+                      <i className="bi bi-trash"></i>
+
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
             </div>
           )}
         </div>
       </div>
     </div>
   );
-};
+});

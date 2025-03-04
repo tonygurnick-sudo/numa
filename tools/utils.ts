@@ -4,6 +4,7 @@ import {
   ListDataSourcesCommand,
   ListIndicesCommand,
   QBusinessClient,
+  ListRetrieversCommand,
 } from '@aws-sdk/client-qbusiness';
 import { ListBucketsCommand, S3Client } from '@aws-sdk/client-s3';
 import { AwsCredentialIdentityProvider } from '@smithy/types';
@@ -26,18 +27,22 @@ export interface QInstanceDetails {
   qIndexId: string;
   qDataSourceId: string;
   qUserPool: string;
+  qRetrieverId: string;
 }
+
 export async function getQInstanceDetails(credentials, customerName?: string): Promise<QInstanceDetails> {
   const applicationId = await getQApplicationId(credentials, customerName);
   const indexId = await getQIndexId(credentials, applicationId);
   const dataSourceId = await getQDataSourceId(credentials, applicationId, indexId);
   const qUserPool = await getQUserPool(credentials, customerName);
+  const qRetrieverId = await getRetrieverId(credentials, applicationId);
   return {
     qDataBucket: await getQDataBucket(credentials, customerName),
     qApplicationId: applicationId,
     qIndexId: indexId,
     qDataSourceId: dataSourceId,
     qUserPool,
+    qRetrieverId: qRetrieverId,
   };
 }
 
@@ -117,6 +122,25 @@ export async function getQUserPool(credentials, customerName?: string): Promise<
       nameName: 'Name',
     })
   ).Id;
+}
+
+async function getRetrieverId(credentials, appId: string): Promise<string> {
+  // Initialize the QBusinessClient with region and credentials
+  const client = new QBusinessClient({ region, credentials });
+  try {
+    // List retrievers for the specified Amazon Q Business application
+    const result = await client.send(new ListRetrieversCommand({ applicationId: appId }));
+    const retrievers = result.retrievers ?? [];
+    if (retrievers.length === 0) {
+      throw new Error(`No retrievers found for application ${appId}`);
+    }
+    // If multiple retrievers exist, pick the one that's ACTIVE
+    const activeRetriever = retrievers.find((r) => r.status === 'ACTIVE') || retrievers[0];
+    return activeRetriever.retrieverId!;
+  } catch (error) {
+    console.error('Error retrieving retriever ID:', error);
+    throw error;
+  }
 }
 
 interface FilterProps<T> {
