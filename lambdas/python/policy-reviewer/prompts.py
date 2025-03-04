@@ -1,46 +1,67 @@
-INITIAL_ANALYSIS_PROMPT = """You are an expert at understanding policy documents and running an initial analysis to understand the context of a document.
+INITIAL_ANALYSIS_PROMPT = """You are an expert in understanding policy documents and in conducting an initial analysis to determine the context of a document.
+
 Here is a policy document uploaded by our user:
 {policy_content}
 
-Based on the keywords, structure, content and additional context here:
+Based on the keywords, structure, content, and additional context provided here:
 {policy_context}
 
-Please return the following:
-- title
-- classification
-- description
-- considerations for review
+## Markdown Formatting Guidelines:
+- Use `# Title` for the document title
+- Use `## Classification` for the classification section
+- Use `## Description` for the description section
+- Use `## Considerations for Review` for the considerations section
+- Use bullet points with `-` for listing multiple items under each section
 
-Please just return the title, classification, description and considerations for review:"""
+Please analyse the document and return the following in markdown format:
+- Title
+- Classification
+- Description
+- Considerations for review"""
 
-POLICY_REVIEW_PROMPT = """You are an expert at reviewing policy documents.
+POLICY_REVIEW_PROMPT = """You are an expert in reviewing policy documents.
 
 Here is a policy document:
 {policy_content}
 
-Our team has also provided following for your consideration when reviewing the document:
+Our team has also provided the following for your consideration when reviewing the document:
 Classification and description:
 {initial_analysis}
 
-Review the policy document and provide a detailed analysis and recommendations covering the following aspects:
+Review the policy document and provide a detailed analysis and recommendations in markdown format.
 
-Analysis:
-1. Summary of the key points and objectives of the policy
-2. Evaluation of the clarity, comprehensiveness and enforceability of the policy
-3. Identification of any potential gaps, ambiguities or areas that need improvement
+## Markdown Formatting Guidelines:
+- Use `# Policy Review` as the main title
+- Use `## Analysis` for the analysis section
+- Use `### Key Points and Objectives` for the first analysis subsection
+- Use `### Clarity and Comprehensiveness` for the second analysis subsection
+- Use `### Gaps and Areas for Improvement` for the third analysis subsection
+- Use `## Recommendations` for the recommendations section
+- Use `## Legislative Compliance and Recommendations` for the legislative section (if applicable)
+- Use bullet points with `-` for listing multiple items under each section
+- Use blockquotes with `>` for referencing specific policy text
+- Use **bold** for emphasis on important points
 
-Recommendations
-A list of recommendations for enhancing or revising the policy to make it more effective
+Your review should cover:
 
-Legislative Compliance and Recommendations Review (if applicable):
-The user may have also uploaded relevant legislation to review against here as well
+## Analysis:
+1. A summary of the key points and objectives of the policy
+2. An evaluation of the clarity, comprehensiveness, and enforceability of the policy
+3. Identification of any potential gaps, ambiguities, or areas that need improvement
+
+## Recommendations:
+A list of specific recommendations for enhancing or revising the policy to make it more effective
+
+## Legislative Compliance and Recommendations (if applicable):
+The user may have also uploaded relevant legislation to review alongside the policy:
 {legislation_content}
-If legislation is provided, please review the policy document and give feedback on the following aspects:
-- Compliance: Does the policy comply with all relevant legal obligations and legislative requirements?
-- Recommendations: Are there any recommendations for improving or strengthening the policy to ensure legal compliance? Please highlight specific sections of the policy document where necessary and what change you would recommend instead of the current wording. If you believe the policy to be satisfactory, please state that it is.
-Provide detailed feedback and recommendations on each aspect, highlighting specific sections of the policy document where necessary. If not legislation provided to review against the policy, say 'Not Applicable'.
 
-Please output your review with clear headings and dot points for the analysis and recommendations. If the policy is satisfactory, please indicate that no further changes are needed."""
+If legislation is provided, please review the policy document and give feedback on:
+- Compliance: Does the policy comply with all relevant legal obligations and legislative requirements?
+- Recommendations: Are there any suggestions for improving or strengthening the policy to ensure legal compliance?
+
+Please highlight specific sections of the policy document where necessary. If no legislation is provided to review against the policy, state 'Not Applicable'."""
+
 
 RECOMMENDED_UPDATES_PROMPT = """Here is a policy document:
 {policy_content}
@@ -48,14 +69,53 @@ RECOMMENDED_UPDATES_PROMPT = """Here is a policy document:
 Here is a review of the policy that contains the recommended changes for enhancement:
 {policy_review}
 
-Based on the recommended changes from the policy review, please generate some updates for the policy document based on the recommendation. This could be either updating/changing an existing section/point or adding a new section point. Please be specific when necessary, and also specify which section to update, or if creating a new section, whether that is under an existing subsection or not. Please don't re-generate the policy, but instead output a list of updates to the policy. If Legislative Compliance and Recommendations Review is provided, output this as a seperate list of recommendations."""
+## Markdown Formatting Guidelines:
+- Use `# Recommended Policy Updates` as the main title
+- Use `## General Updates` for the main updates section
+- Use `## Legislative Compliance Updates` for the legislative-specific updates (if applicable)
+- Use numbered lists (`1.`, `2.`, etc.) for each distinct update recommendation
+- Use **bold** to highlight section names being referenced
+- Use `>` for quoting existing policy text
+- Use **CURRENT:** and **PROPOSED:** to clearly differentiate current versus recommended text
 
-UPDATED_POLICY_PROMPT = """You are an expert at writing policies and updating policies based on feedback.
+Based on the recommended changes from the policy review, please generate specific updates for the policy document. For each update:
+1. Specify which section to update or indicate if a new section is being created
+2. Provide the current text (where applicable)
+3. Provide the recommended new or modified text
+4. Include a brief explanation for the change
 
-Here is a policy document:
+Please do not re-generate the entire policy, but instead output a structured list of specific updates. If legislative compliance recommendations are provided, present these as a separate section."""
+
+UPDATED_POLICY_PROMPT = """You are an expert policy writer specialising in policy revision and documentation.
+
+Below is the current policy document:
 {policy_content}
 
-Here are the recommended updates for the policy based on a review from our team:
+Our review team has provided the following recommended updates:
 {recommended_updates}
 
-The user has requested us to update their policy based on the recommendations. Please regenerate the entire policy with the policy updates implemented. Please output your changes in markdown format, and try to maintain the original format and styling of the policy document. If a section/sub section contains no changes or updates, just return '<no updates>' for that section to save time."""
+## Markdown Formatting Guidelines:
+- Maintain the original document's heading hierarchy using markdown syntax:
+  - `# ` for main titles
+  - `## ` for section headings
+  - `### ` for subsection headings
+  - `#### ` for further subsections
+- Use **bold** for emphasis and important terms
+- Use *italics* for definitions or citations
+- Use bullet points with `-` for lists
+- Use numbered lists (`1.`, `2.`, etc.) for sequential steps or prioritised items
+- Use tables with pipe syntax `|` for tabular data
+- Use blockquotes with `>` for special notes or callouts
+- Maintain proper indentation for nested lists and content
+
+Please generate a complete, revised version of the policy that incorporates all the recommended changes. The updated policy should:
+
+1. Include ALL sections of the original policy (even those that remain unchanged)
+2. Seamlessly integrate the recommended updates into the appropriate sections
+3. Maintain a consistent tone, formatting, and organisational structure throughout
+4. Be formatted in clean, well-structured markdown
+5. Preserve the document's original section numbering and hierarchy
+6. Ensure all hyperlinks, references, and cross-references remain functional
+
+Return the complete, revised policy as a single markdown document that could immediately replace the original.
+"""
