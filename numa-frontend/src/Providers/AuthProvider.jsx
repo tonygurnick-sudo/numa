@@ -451,17 +451,11 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       const initiateAuthCommand = new InitiateAuthCommand(initiateAuthParams);
       const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
 
-      console.log('InitiateAuthResponse:', initiateAuthResponse);
-
-      // Log the response to check for ChallengeParameters
-      console.log('InitiateAuthResponse:', initiateAuthResponse);
-
       if (!initiateAuthResponse.ChallengeParameters) {
         throw new Error('Missing ChallengeParameters in InitiateAuthResponse');
       }
       // Step 3: Sign SRP session
       const signedSrpSession = signSrpSession(srpSession, initiateAuthResponse);
-      console.log('Signed SRP session:', signedSrpSession);
 
       // Step 4: Respond to the password verifier challenge
       const respondToAuthChallengeParams = {
@@ -478,7 +472,6 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
       const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand(respondToAuthChallengeParams);
       const respondToAuthChallengeResponse = await cognitoClient.send(respondToAuthChallengeCommand);
-      console.log('RespondToAuthChallengeResponse:', respondToAuthChallengeResponse);
 
       if (respondToAuthChallengeResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
         return { requiresNewPassword: true, session: respondToAuthChallengeResponse.AuthenticationResult };
@@ -522,8 +515,6 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
       const initiateAuthCommand = new InitiateAuthCommand(initiateAuthParams);
       const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
 
-      console.log('InitiateAuthResponse:', initiateAuthResponse);
-
       if (initiateAuthResponse.ChallengeName === 'PASSWORD_VERIFIER') {
         // Step 3: Sign SRP session
         const signedSrpSession = signSrpSession(srpSession, initiateAuthResponse);
@@ -544,8 +535,6 @@ export const AuthProvider = ({ children, refreshHandler, initialTokens }) => {
 
         const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand(respondToAuthChallengeParams);
         const respondToAuthChallengeResponse = await cognitoClient.send(respondToAuthChallengeCommand);
-
-        console.log('RespondToAuthChallengeResponse:', respondToAuthChallengeResponse);
 
         if (respondToAuthChallengeResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
           // Step 5: Respond to the new password required challenge
