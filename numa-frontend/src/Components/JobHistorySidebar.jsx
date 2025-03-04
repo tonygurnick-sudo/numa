@@ -9,7 +9,7 @@ const JobHistorySidebar = () => {
     useNumaApp();
   const [isLoading, setIsLoading] = useState(false);
   const [loadingJobId, setLoadingJobId] = useState(null);
-  const [page, setPage] = useState(1);
+  const [nextToken, setNextToken] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const loaderRef = useRef(null);
@@ -20,9 +20,9 @@ const JobHistorySidebar = () => {
     setIsLoading(true);
     try {
       // Reset pagination when opening sidebar
-      setPage(1);
+      setNextToken(null);
       setHasMore(true);
-      await loadAppJobs({ page: 1 });
+      await loadAppJobs();
     } finally {
       setIsLoading(false);
     }
@@ -44,21 +44,18 @@ const JobHistorySidebar = () => {
 
     setLoadingMore(true);
     try {
-      const nextPage = page + 1;
-      const response = await loadAppJobs({ page: nextPage, append: true });
+      const response = await loadAppJobs({ nextToken, append: true });
 
-      // Check if we got fewer items than the limit (default 10)
-      if (!response || response.length < 10) {
-        setHasMore(false);
-      }
-      setPage(nextPage);
+      // Update next token and check if we have more results
+      setNextToken(response.nextToken);
+      setHasMore(!!response.nextToken);
     } catch (error) {
       console.error('Error loading more jobs:', error);
       setHasMore(false);
     } finally {
       setLoadingMore(false);
     }
-  }, [page, loadingMore, hasMore, jobHistorySidebarOpen]);
+  }, [nextToken, loadingMore, hasMore, jobHistorySidebarOpen]);
 
   // Intersection Observer setup
   useEffect(() => {

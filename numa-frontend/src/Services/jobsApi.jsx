@@ -80,11 +80,20 @@ export const useJobsApi = () => {
     }
   };
 
-  const getJobsByAppId = async (appId, { page = 1, limit = 25 } = {}) => {
+  const getJobsByAppId = async (appId, { limit = 25, nextToken = null } = {}) => {
     try {
-      const endpoint_call = `/api/${appId}/jobs?page=${page}&limit=${limit}`;
+      const params = new URLSearchParams({ limit: limit.toString() });
+      if (nextToken) {
+        params.append('next_token', nextToken);
+      }
+      const endpoint_call = `/api/${appId}/jobs?${params.toString()}`;
       console.log('Getting jobs with endpoint:', endpoint_call);
-      return await numaGet(endpoint_call);
+      const response = await numaGet(endpoint_call);
+      return {
+        items: response.items || [],
+        nextToken: response.next_token,
+        count: response.count || 0,
+      };
     } catch (error) {
       console.error('API Error fetching jobs:', error);
       throw error;

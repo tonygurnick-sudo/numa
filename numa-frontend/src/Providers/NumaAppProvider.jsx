@@ -141,10 +141,11 @@ export const NumaAppProvider = ({ children }) => {
   };
 
   // Load jobs for the current app
-  const loadAppJobs = async ({ page = 1, limit = 50, append = false } = {}) => {
+  const loadAppJobs = async ({ limit = 50, nextToken = null, append = false } = {}) => {
     if (!numaAppId) return;
     try {
-      const appJobs = await jobsApi.getJobsByAppId(numaAppId, { page, limit });
+      const response = await jobsApi.getJobsByAppId(numaAppId, { limit, nextToken });
+      const { items: appJobs, nextToken: newNextToken } = response;
 
       // Sort jobs by date before setting/appending
       const sortedJobs = appJobs.sort((a, b) => {
@@ -165,7 +166,7 @@ export const NumaAppProvider = ({ children }) => {
         return sortedJobs;
       });
 
-      return appJobs; // Return for pagination check
+      return { items: sortedJobs, nextToken: newNextToken }; // Return for pagination check
     } catch (error) {
       console.error('Failed to load jobs:', error);
       throw error;
