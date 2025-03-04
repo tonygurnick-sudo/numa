@@ -145,7 +145,7 @@ const JobHistorySidebar = () => {
                       variant="outline-secondary"
                       size="sm"
                       onClick={() => handleViewResults(job.jobID)}
-                      disabled={job.status === 'running' || loadingJobId === job.jobID}
+                      disabled={loadingJobId === job.jobID}
                     >
                       {loadingJobId === job.jobID ? (
                         <div className="d-flex align-items-center">

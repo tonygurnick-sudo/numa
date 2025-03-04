@@ -451,6 +451,8 @@ export const NumaAppProvider = ({ children }) => {
     try {
       while (true) {
         const polling_endpoint = `/api/${numaAppData.id}/main?job_id=${jobID}`;
+        console.log('Polling with app ID:', numaAppData.id);
+        console.log('Full polling URL:', polling_endpoint);
         console.log('Polling job:', polling_endpoint);
 
         const pollResponse = await numaPollStatus(polling_endpoint);
@@ -888,6 +890,10 @@ export const NumaAppProvider = ({ children }) => {
   // Load and display historical job results
   const loadJobResults = async (jobId) => {
     try {
+      console.log('Loading job results for ID:', jobId);
+      console.log('Current numaAppId:', numaAppId);
+      console.log('Current numaAppData:', numaAppData);
+
       let job = await jobsApi.getJobById(numaAppId, jobId);
       if (!job) {
         throw new Error('Job not found');
@@ -895,13 +901,7 @@ export const NumaAppProvider = ({ children }) => {
 
       console.log('Initial job:', job);
 
-      // Try to poll for updates if job is incomplete
-      if (job.status !== 'completed') {
-        job = await pollIncompleteHistoryJob(job);
-        console.log('Job after polling:', job);
-      }
-
-      // Reset states
+      // Reset states before polling
       setNumaTaskResponses([]);
       setTaskCompletionStatus({});
       setTaskInputValues({});
@@ -915,17 +915,53 @@ export const NumaAppProvider = ({ children }) => {
         setTaskInputValues(job.inputs);
       }
 
-      // Use the stored manifest if available, otherwise fall back to current manifest
-      const manifestToUse = job.manifest || numaAppData;
+      // Parse stored manifest if available, otherwise fall back to current manifest
+      let manifestToUse;
+      if (job.manifest) {
+        try {
+          manifestToUse = typeof job.manifest === 'string' ? JSON.parse(job.manifest) : job.manifest;
+        } catch (e) {
+          console.error('Failed to parse job manifest:', e);
+          manifestToUse = numaAppData;
+        }
+      } else {
+        manifestToUse = numaAppData;
+      }
+
+      if (!manifestToUse) {
+        throw new Error('No manifest available for job');
+      }
+
+      // Try to poll for updates if job is incomplete
+      if (job.status === 'running') {
+        // Use main endpoint for polling running jobs
+        const pollEndpoint = `/api/${numaAppData.id}/main?job_id=${jobId}`;
+        console.log('Polling running job at:', pollEndpoint);
+        const pollResponse = await numaPollStatus(pollEndpoint);
+        console.log('Poll response:', pollResponse);
+
+        if (pollResponse.status === 'SUCCESS' || pollResponse.status === 'FAILURE') {
+          job = {
+            ...job,
+            status: pollResponse.status === 'SUCCESS' ? 'completed' : 'failed',
+            results: pollResponse.result || job.results,
+          };
+        }
+        console.log('Job after polling:', job);
+      }
 
       // Mark all input tasks as complete
       const updatedStatus = {};
-      manifestToUse.tasks.forEach((task) => {
-        //  this is a finished job
-        if (!task.type.includes('output')) {
-          updatedStatus[task.id] = true;
-        }
-      });
+      if (manifestToUse.tasks) {
+        manifestToUse.tasks.forEach((task) => {
+          //  this is a finished job
+          if (!task.type.includes('output')) {
+            updatedStatus[task.id] = true;
+          }
+        });
+      } else {
+        console.warn('No tasks found in manifest');
+      }
       setTaskCompletionStatus(updatedStatus);
 
       // Process results into task responses

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import boto3
-from boto3.dynamodb.conditions import Key
 
 dynamodb = boto3.resource("dynamodb")
 
@@ -15,7 +14,7 @@ class DecimalEncoder(json.JSONEncoder):
             return float(obj)
         elif isinstance(obj, datetime):
             return obj.isoformat()
-        return super(DecimalEncoder, self).default(obj)
+        return super().default(obj)
 
 
 def handler(event, _context):
