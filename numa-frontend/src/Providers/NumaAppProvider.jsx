@@ -901,7 +901,7 @@ export const NumaAppProvider = ({ children }) => {
         console.log('Job after polling:', job);
       }
 
-      // Reset states
+      // Reset states before polling
       setNumaTaskResponses([]);
       setTaskCompletionStatus({});
       setTaskInputValues({});
@@ -915,17 +915,41 @@ export const NumaAppProvider = ({ children }) => {
         setTaskInputValues(job.inputs);
       }
 
-      // Use the stored manifest if available, otherwise fall back to current manifest
-      const manifestToUse = job.manifest || numaAppData;
+      // Parse stored manifest if available, otherwise fall back to current manifest
+      let manifestToUse;
+      if (job.manifest) {
+        try {
+          manifestToUse = typeof job.manifest === 'string' ? JSON.parse(job.manifest) : job.manifest;
+        } catch (e) {
+          console.error('Failed to parse job manifest:', e);
+          manifestToUse = numaAppData;
+        }
+      } else {
+        manifestToUse = numaAppData;
+      }
+
+      if (!manifestToUse) {
+        throw new Error('No manifest available for job');
+      }
+
+      // Try to poll for updates if job is incomplete
+      if (job.status === 'running') {
+        job = await pollIncompleteHistoryJob(job);
+        console.log('Job after polling:', job);
+      }
 
       // Mark all input tasks as complete
       const updatedStatus = {};
-      manifestToUse.tasks.forEach((task) => {
-        //  this is a finished job
-        if (!task.type.includes('output')) {
-          updatedStatus[task.id] = true;
-        }
-      });
+      if (manifestToUse.tasks) {
+        manifestToUse.tasks.forEach((task) => {
+          //  this is a finished job
+          if (!task.type.includes('output')) {
+            updatedStatus[task.id] = true;
+          }
+        });
+      } else {
+        console.warn('No tasks found in manifest');
+      }
       setTaskCompletionStatus(updatedStatus);
 
       // Process results into task responses

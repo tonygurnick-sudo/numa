@@ -41,6 +41,12 @@
     "allApps": true,
     "devInstance": true
   },
+  "arcanum-hams": {
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "allApps": true,
+    "devInstance": true
+  },
   "arcanum-demo-nathan": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
@@ -410,19 +416,11 @@
       {
         "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29",
         "domain": "nzsta.sharepoint.com",
-        "siteUrls": [
-          "https://nzsta.sharepoint.com/sites/Company"
-        ],
+        "siteUrls": ["https://nzsta.sharepoint.com/sites/Company"],
         "configuration": {
-          "linkTitleFilterRegEx": [
-            "^.*(?:PLD ?2021).*$"
-          ],
-          "pageTitleFilterRegEx": [
-            "^.*(?:PLD ?2021).*$"
-          ],
-          "inclusionFilePath": [
-            "^.*(?:PLD ?2021).*$"
-          ]
+          "linkTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"],
+          "pageTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"],
+          "inclusionFilePath": ["^.*(?:PLD ?2021).*$"]
         }
       }
     ]
@@ -490,9 +488,7 @@
       {
         "tenantId": "91ff374c-03ff-4eed-9628-d89e52352b55",
         "domain": "teachersrcc.sharepoint.com",
-        "siteUrls": [
-          "https://teachersrcc.sharepoint.com/sites/Company"
-        ],
+        "siteUrls": ["https://teachersrcc.sharepoint.com/sites/Company"],
         "configuration": {}
       }
     ]

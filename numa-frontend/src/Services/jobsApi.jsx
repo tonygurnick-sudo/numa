@@ -25,13 +25,8 @@ export const useJobsApi = () => {
   const createJob = async (numaAppData, taskInputs) => {
     try {
       const jobData = createJobData(numaAppData, taskInputs);
-      console.log('Creating job with data:', jobData);
-      console.log('Using app ID:', numaAppData.id);
       const endpoint_call = `/api/${numaAppData.id}/jobs`;
-      console.log('Endpoint call:', endpoint_call);
       const response = await numaPost(endpoint_call, jobData);
-
-      console.log('Job creation response:', response);
 
       // Check if the response is an object
       if (typeof response !== 'object') {
@@ -62,15 +57,9 @@ export const useJobsApi = () => {
         lastUpdated: isoDate,
         name: `Run ${displayDate}`,
       };
-      console.log('Updating job with data:', updateData);
-      console.log('Using app ID:', numaAppData.id);
-      console.log('Job ID:', jobId);
 
       const endpoint = `/api/${numaAppData.id}/jobs/${jobId}`;
-      console.log('Using endpoint:', endpoint);
-
       const response = await numaPut(endpoint, updateData);
-      console.log('Job update response:', response);
 
       return response;
     } catch (error) {
@@ -80,11 +69,19 @@ export const useJobsApi = () => {
     }
   };
 
-  const getJobsByAppId = async (appId) => {
+  const getJobsByAppId = async (appId, { limit = 25, nextToken = null } = {}) => {
     try {
-      const endpoint_call = `/api/${appId}/jobs`;
-      console.log('Getting jobs with endpoint:', endpoint_call);
-      return await numaGet(endpoint_call);
+      const params = new URLSearchParams({ limit: limit.toString() });
+      if (nextToken) {
+        params.append('next_token', nextToken);
+      }
+      const endpoint_call = `/api/${appId}/jobs?${params.toString()}`;
+      const response = await numaGet(endpoint_call);
+      return {
+        items: response.items || [],
+        nextToken: response.next_token,
+        count: response.count || 0,
+      };
     } catch (error) {
       console.error('API Error fetching jobs:', error);
       throw error;
@@ -93,11 +90,13 @@ export const useJobsApi = () => {
 
   const getJobById = async (numaAppId, jobId) => {
     try {
-      const endpoint_call = `/api/${numaAppId}/jobs/${jobId}`;
-      console.log('Getting job with endpoint:', endpoint_call);
-      return await numaGet(endpoint_call);
+      const endpoint = `/api/${numaAppId}/jobs/${jobId}`;
+      const response = await numaGet(endpoint);
+      return response;
     } catch (error) {
       console.error('API Error fetching job:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
       throw error;
     }
   };

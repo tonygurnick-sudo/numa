@@ -61,8 +61,9 @@ class TestLambdaFunction(unittest.TestCase):
 
         self.assertEqual(response["statusCode"], 200, response["body"])
         body = json.loads(response["body"])
-        self.assertEqual(len(body), 1)
-        self.assertEqual(body[0]["jobID"], "job1")
+        self.assertEqual(len(body["items"]), 1)
+        self.assertEqual(body["count"], 1)
+        self.assertEqual(body["items"][0]["jobID"], "job1")
 
         self.table_mock.scan.assert_called_once()
 
