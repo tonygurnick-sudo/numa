@@ -13,7 +13,7 @@ Based on the keywords, structure, content and additional context here:
 - Use `## Considerations for Review` for the considerations section
 - Use bullet points with `-` for listing multiple items under each section
 
-Please analyze the document and return the following in markdown format:
+Please analyse the document and return the following in markdown format:
 - Title
 - Classification
 - Description
@@ -85,7 +85,7 @@ Based on the recommended changes from the policy review, please generate specifi
 
 Please don't re-generate the entire policy, but instead output a structured list of specific updates. If Legislative Compliance recommendations are provided, present these as a separate section."""
 
-UPDATED_POLICY_PROMPT = """You are an expert policy writer specializing in policy revision and documentation.
+UPDATED_POLICY_PROMPT = """You are an expert policy writer specialising in policy revision and documentation.
 
 Below is the current policy document:
 {policy_content}
@@ -102,7 +102,7 @@ Our review team has provided these recommended updates:
 - Use **bold** for emphasis and important terms
 - Use *italics* for definitions or citations
 - Use bullet points with `-` for lists
-- Use numbered lists (`1.`, `2.`, etc.) for sequential steps or prioritized items
+- Use numbered lists (`1.`, `2.`, etc.) for sequential steps or prioritised items
 - Use tables with pipe syntax `|` for tabular data
 - Use blockquotes with `>` for special notes or callouts
 - Maintain proper indentation for nested lists and content
@@ -111,7 +111,7 @@ Please generate a complete, revised version of the policy that incorporates all 
 
 1. Include ALL sections of the original policy (even unchanged sections)
 2. Seamlessly integrate the recommended updates into the appropriate sections
-3. Maintain consistent tone, formatting, and organizational structure throughout
+3. Maintain consistent tone, formatting, and organisational structure throughout
 4. Be formatted in clean, well-structured markdown
 5. Preserve the document's original section numbering and hierarchy
 6. Ensure all hyperlinks, references, and cross-references remain functional
