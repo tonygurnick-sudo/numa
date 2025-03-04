@@ -9,7 +9,7 @@ import { Construct } from 'constructs';
 
 export class NumaLogGroup extends Construct {
   readonly logGroup: CloudwatchLogGroup;
-  static cloudwatchResourcePolicy: CloudwatchLogResourcePolicy;
+  static cloudwatchResourcePolicies: Record<string, CloudwatchLogResourcePolicy>;
 
   constructor(scope: Construct, name: string, props: LogGroupProps) {
     super(scope, name);
@@ -30,7 +30,11 @@ export class NumaLogGroup extends Construct {
      * 10 resource policies, so wildcarding is necessary and one policy per log
      * group is not an option.
      */
-    if (!NumaLogGroup.cloudwatchResourcePolicy) {
+    if (!NumaLogGroup.cloudwatchResourcePolicies) {
+      NumaLogGroup.cloudwatchResourcePolicies = {};
+    }
+    const cloudwatchResourcePolicyKey = TerraformStack.of(this).node.id;
+    if (!NumaLogGroup.cloudwatchResourcePolicies[cloudwatchResourcePolicyKey]) {
       const logPublishingPolicy = new DataAwsIamPolicyDocument(this, 'log-delivery', {
         statement: [
           {
@@ -57,10 +61,14 @@ export class NumaLogGroup extends Construct {
           },
         ],
       });
-      NumaLogGroup.cloudwatchResourcePolicy = new CloudwatchLogResourcePolicy(this, 'numa-resource-policy', {
-        policyDocument: Token.asString(logPublishingPolicy.json),
-        policyName: `${TerraformStack.of(this).node.id}_numa-cloudwatchlogs-resource-policy`,
-      });
+      NumaLogGroup.cloudwatchResourcePolicies[cloudwatchResourcePolicyKey] = new CloudwatchLogResourcePolicy(
+        this,
+        'numa-resource-policy',
+        {
+          policyDocument: Token.asString(logPublishingPolicy.json),
+          policyName: `numa-cloudwatchlogs-resource-policy_${cloudwatchResourcePolicyKey}`,
+        },
+      );
     }
   }
 }
