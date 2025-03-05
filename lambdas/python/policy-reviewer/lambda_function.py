@@ -1,5 +1,3 @@
-import uuid
-
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
@@ -18,25 +16,13 @@ MAX_TOKENS = 4096
 logger = structlog.get_logger()
 
 
-def __get_job_id(event: dict):
-    return event.get("job_id", str(uuid.uuid4()))
-
-
 def remove_backticks(text: str) -> str:
     """Remove all backticks from a string."""
     return text.replace("`", "")
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
-    app_id = event["app_id"]
-    job_id = __get_job_id(event)
-    helpers.setup_logging()
-    structlog.contextvars.bind_contextvars(
-        function_name=context.function_name,
-        app_id=app_id,
-        job_id=job_id,
-    )
-    logger.info("Execute lambda", lambda_event=event)
+    helpers.setup_step_function_lambda_logging(event, context)
     try:
         input_key = event["input_key"]
         legislation_content = event["legislation_content"]

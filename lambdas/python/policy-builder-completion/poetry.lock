@@ -924,6 +924,7 @@ files = []
 develop = true
 
 [package.dependencies]
+aws-lambda-powertools = "3.7.0"
 structlog = "25.1.0"
 
 [package.source]

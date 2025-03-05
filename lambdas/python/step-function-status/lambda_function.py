@@ -20,17 +20,13 @@ def handler(
     event: APIGatewayProxyEvent,
     context: LambdaContext,
 ) -> helpers.ApiGatewayProxyIntegrationResponse:
-    helpers.setup_logging()
-    job_id = event.query_string_parameters.get("job_id")
-    structlog.contextvars.bind_contextvars(
-        job_id=job_id,
-        function_name=context.function_name,
-    )
 
-    app_id = os.environ["APP_ID"]
-    bucket = os.environ["BUCKET"]
-    logger.info("Get step function status")
+    app_id, job_id, payload = helpers.get_api_gateway_parameters(event)
+    helpers.setup_api_gateway_lambda_logging(context, app_id, job_id, payload)
+
     try:
+        bucket = os.environ["BUCKET"]
+        logger.info("Get step function status")
         s3_file_object = s3_client.get_object(
             Bucket=bucket,
             Key=f"{app_id}/{job_id}/status.json",

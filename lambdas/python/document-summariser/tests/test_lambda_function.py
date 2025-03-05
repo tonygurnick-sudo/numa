@@ -20,6 +20,7 @@ class TestLambdaFunction(unittest.TestCase):
         test_event = {
             "app_id": "test-app",
             "input_key": "test-in-key",
+            "job_id": "test-job",
             "output_key": "test-out-key",
         }
 

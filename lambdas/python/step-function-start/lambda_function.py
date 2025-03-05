@@ -2,7 +2,6 @@ import datetime
 import json
 import os
 import typing
-import uuid
 
 import boto3
 import structlog
@@ -28,34 +27,23 @@ def handler(
     event: APIGatewayProxyEvent,
     context: LambdaContext,
 ) -> helpers.ApiGatewayProxyIntegrationResponse:
-    helpers.setup_logging()
 
-    job_id = event.json_body.get("jobId")
-    if job_id:
-        del event.json_body["jobId"]
-    else:
-        job_id = event.json_body.get("job_id") or str(uuid.uuid4())
+    app_id, job_id, payload = helpers.get_api_gateway_parameters(event)
+    helpers.setup_api_gateway_lambda_logging(context, app_id, job_id, payload)
 
-    structlog.contextvars.bind_contextvars(
-        job_id=job_id,
-        function_name=context.function_name,
-    )
-
-    app_id = os.environ["APP_ID"]
-    step_function_arn = os.environ["STEP_FUNCTION_ARN"]
-
-    logger.info(
-        "Start step function",
-        **event.json_body,
-        step_function_arn=step_function_arn,
-    )
     try:
+        step_function_arn = os.environ["STEP_FUNCTION_ARN"]
+        logger.info(
+            "Start step function",
+            payload=payload,
+            step_function_arn=step_function_arn,
+        )
         response: StartExecutionResponse = step_function_client.start_execution(
             stateMachineArn=step_function_arn,
             name=job_id,
             input=json.dumps(
                 {
-                    **event.json_body,
+                    **payload,
                     "app_id": app_id,
                     "job_id": job_id,
                 }

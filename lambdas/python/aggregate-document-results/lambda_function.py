@@ -1,5 +1,3 @@
-import uuid
-
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
@@ -9,20 +7,9 @@ import s3_helpers
 logger = structlog.get_logger()
 
 
-def __get_job_id(event: dict):
-    return event.get("job_id", str(uuid.uuid4()))
-
-
 def handler(event: dict, context: LambdaContext) -> dict:
-    app_id = event["app_id"]
-    job_id = __get_job_id(event)
-    helpers.setup_logging()
-    structlog.contextvars.bind_contextvars(
-        function_name=context.function_name,
-        app_id=app_id,
-        job_id=job_id,
-    )
-    logger.info("Execute lambda", lambda_event=event)
+    helpers.setup_step_function_lambda_logging(event, context)
+
     try:
         input_keys = event["input_keys"]
         key_suffix = event["key_suffix"]

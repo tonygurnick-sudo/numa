@@ -1,9 +1,16 @@
-import enum
 import logging
 import os
 import typing
+import uuid
 
 import structlog
+from aws_lambda_powertools.utilities.data_classes import (
+    APIGatewayProxyEvent,
+    event_source,
+)
+from aws_lambda_powertools.utilities.typing import LambdaContext
+
+logger = structlog.get_logger()
 
 
 # see https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html#api-gateway-simple-proxy-for-lambda-output-format
@@ -74,3 +81,52 @@ def setup_logging():
         logger_factory=structlog.WriteLoggerFactory(),
         cache_logger_on_first_use=True,
     )
+
+
+def get_api_gateway_parameters(event: APIGatewayProxyEvent) -> tuple[str, str, dict]:
+    try:
+        payload = dict(event.json_body or event.query_string_parameters)
+
+        app_id = os.environ["APP_ID"]
+
+        job_id = payload.get("jobId")
+        if job_id:
+            del payload["jobId"]
+        else:
+            job_id = payload.get("job_id") or str(uuid.uuid4())
+    except Exception:
+        logger.exception("Error getting parameters from event")
+        raise
+
+    return app_id, job_id, payload
+
+
+def setup_api_gateway_lambda_logging(
+    context: LambdaContext,
+    app_id: str,
+    job_id: str,
+    payload: dict,
+):
+    setup_logging()
+
+    structlog.contextvars.bind_contextvars(
+        app_id=app_id,
+        function_name=context.function_name,
+        job_id=job_id,
+    )
+
+    logger.info("Execute lambda", payload=payload)
+
+
+def setup_step_function_lambda_logging(event: dict, context: LambdaContext):
+    setup_logging()
+
+    app_id = event["app_id"]
+    job_id = event["job_id"]
+
+    structlog.contextvars.bind_contextvars(
+        app_id=app_id,
+        function_name=context.function_name,
+        job_id=job_id,
+    )
+    logger.info("Execute lambda", lambda_event=event)
