@@ -1,7 +1,7 @@
 USER_PROFILE_PROMPT = (
     "You are an expert in building structured profiles. Based on the following inputs, generate a detailed JSON profile.\n\n"
-    "Details: {details}\n\n"
     "About: {about}\n\n"
+    "Contact Information: {contact_information}\n\n"
     "Accompanying Documentation: {file_content}\n\n"
     "The resulting JSON must adhere to the following schema:\n"
     "- profile_summary: A concise summary capturing the key aspects of the profile.\n"

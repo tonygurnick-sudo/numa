@@ -8,7 +8,6 @@ import {
   HTTP_REQUEST_TASK,
   S3_UPLOAD_TASK,
   TEXT_INPUT_TASK,
-  TEXT_OUTPUT_TASK,
 } from './base-numa-app-construct';
 
 const description = `Generate a structured company profile from information and documents`;
@@ -29,23 +28,24 @@ export class CompanyProfile extends BaseNumaApp {
       appDescription: description,
       tasks: [
         {
-          id: 'company-details',
-          title: 'Company Details',
-          description: 'Enter basic information about the company',
+          id: 'company-about',
+          title: 'About the Company',
+          description: 'Enter a description of the company',
+          required: true,
           type: TEXT_INPUT_TASK,
           order: 1,
         },
         {
-          id: 'company-about',
-          title: 'About the Company',
-          description: 'Enter a description of the company',
+          id: 'contact-information',
+          title: 'Company Contact Information',
+          description: "Enter company's contact information",
           type: TEXT_INPUT_TASK,
           order: 2,
         },
         {
           id: 'upload-supporting-docs',
           title: 'Upload Supporting Documents',
-          description: 'Upload any additional documents about the company (optional)',
+          description: 'Upload any additional documents about the company',
           type: S3_UPLOAD_TASK,
           order: 3,
         },
@@ -56,22 +56,12 @@ export class CompanyProfile extends BaseNumaApp {
           endpoint: 'company-profile',
           params: {
             payload: {
-              app_id: this.appId,
-              details: '@company-details',
               about: '@company-about',
-              documentation_text: '@call-profile-generator/documentation_text',
+              contact_information: '@contact-information',
+              uploaded_files: '@upload-supporting-docs',
             },
           },
-          order: 5,
-        },
-        {
-          id: 'profile-output',
-          title: 'Company Profile',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-profile-generator/output_key',
-          },
-          order: 6,
+          order: 4,
         },
       ],
     };
@@ -108,29 +98,68 @@ export class CompanyProfile extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'job_id.$': '$.job_id',
-            'details.$': '$.details',
             'about.$': '$.about',
-            'documentation_key.$': '$.uploaded_files[0]',
+            'contact_information.$': '$.contact_information',
+            'job_id.$': '$.job_id',
+            'uploaded_files.$': '$.uploaded_files',
           },
-          Next: 'ExtractContent',
+          Next: 'ExtractMap',
         },
-        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.documentation_key', 'GenerateProfile'),
+        ExtractMap: {
+          Type: 'Map',
+          ItemsPath: '$.uploaded_files',
+          Parameters: {
+            'job_id.$': '$.job_id',
+            'key.$': '$$.Map.Item.Value',
+          },
+          ItemProcessor: {
+            ProcessorConfig: {
+              Mode: 'INLINE',
+            },
+            StartAt: 'ExtractContent',
+            States: {
+              ExtractContent: this.addLambdaTask(
+                extractContentLambda.arn,
+                {
+                  'input_key.$': '$.key',
+                  'output_key.$': `States.Format('{}.extracted', $.key)`,
+                  app_id: this.appId,
+                  input_bucket: props.outputsBucket.bucket,
+                },
+                null,
+                {
+                  Catch: [],
+                  ResultSelector: {
+                    'output_key.$': '$.Payload.output_key',
+                  },
+                  ResultPath: '$.extracted',
+                },
+              ),
+            },
+          },
+          ResultPath: '$.mapped',
+          Catch: [
+            {
+              ErrorEquals: ['States.ALL'],
+              Next: 'WriteFailureStatus',
+              ResultPath: '$.CatcherOutput',
+            },
+          ],
+          Next: 'GenerateProfile',
+        },
         GenerateProfile: this.addLambdaTask(
           companyProfileLambda.arn,
           {
-            app_id: this.appId,
-            'job_id.$': '$.job_id',
-            'details.$': '$.details',
             'about.$': '$.about',
-            'documentation_text.$': '$.extracted.output_key',
+            'contact_information.$': '$.contact_information',
+            'input_keys.$': '$.mapped[*].extracted.output_key',
+            'job_id.$': '$.job_id',
+            'output_key.$': `States.Format('${this.appId}/{}/profile.json', $$.Execution.Input.job_id)`,
+            app_id: this.appId,
           },
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-            ResultSelector: {
-              'output_key.$': '$.Payload.output_key',
-            },
           },
         ),
         WriteFailureStatus: this.writeFailureStatus(),
