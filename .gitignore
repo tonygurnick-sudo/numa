@@ -128,3 +128,5 @@ numa-frontend/coverage
 # Frontend
 /numa-frontend/public/config.json
 /numa-frontend/public/manifest.json
+
+test-reports
