@@ -42,6 +42,41 @@ StepFunctionStatus = (
 )
 
 
+class AppOutputResultOutput(typing.TypedDict):
+    # see https://www.iana.org/assignments/media-types/media-types.xhtml
+    content_type: typing.Literal[
+        "application/json",
+        "application/pdf",
+        "text/markdown",
+    ]
+    title: str
+
+
+class AppOutputResultInlineOutput(AppOutputResultOutput):
+    data: str
+    location: typing.Literal["inline"]
+
+
+class AppOutputResulS3OutputData(typing.TypedDict):
+    bucket: str
+    key: str
+
+
+class AppOutputResulS3Output(AppOutputResultOutput):
+    data: AppOutputResulS3OutputData
+    location: typing.Literal["S3"]
+
+
+class AppOutputResult(typing.TypedDict):
+    input_reference: str | None
+    outputs: list[AppOutputResultInlineOutput | AppOutputResulS3Output]
+
+
+# see Numa Output Schema Notion page
+class AppOutput(typing.TypedDict):
+    results: list[AppOutputResult]
+
+
 def setup_logging():
     # make sure we still get errors from libraries that don't use structlog
     logging.basicConfig(
