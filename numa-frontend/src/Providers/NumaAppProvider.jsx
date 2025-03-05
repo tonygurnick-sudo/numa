@@ -527,6 +527,12 @@ export const NumaAppProvider = ({ children }) => {
     }
 
     try {
+      // Set UI states to show loading
+      setAppRunning(true);
+      setJobHistorySidebarOpen(false); // Close sidebar
+      setProcessingStatus('Processing...');
+      setProcessingProgress(50); // Set to 50% to indicate ongoing work
+
       const { state } = await pollJobStatus({
         jobID: jobHistoryItem.jobID,
         initialState: jobHistoryItem,
@@ -534,6 +540,27 @@ export const NumaAppProvider = ({ children }) => {
           if (pollResponse.result) {
             await jobsApi.updateJob(numaAppData, currentState.jobID, pollResponse.result);
             await loadAppJobs();
+
+            // Update task responses if results are available
+            if (pollResponse.result && numaAppData?.tasks) {
+              const outputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
+              const responses = outputTasks
+                .map((task) => ({
+                  taskId: task.id,
+                  result: pollResponse.result[task.id],
+                }))
+                .filter((r) => r.result !== undefined);
+
+              setNumaTaskResponses(responses);
+            }
+          }
+
+          // Update progress based on status
+          if (currentState.status === 'running') {
+            setProcessingProgress(75); // Increase progress to show advancement
+          } else if (currentState.status === 'completed') {
+            setProcessingProgress(100);
+            setProcessingStatus('Complete!');
           }
         },
         shouldContinuePolling: (currentState, startTime) => {
@@ -543,9 +570,17 @@ export const NumaAppProvider = ({ children }) => {
         },
       });
 
+      // If we got a completed state, ensure UI reflects completion
+      if (state?.status === 'completed') {
+        setProcessingProgress(100);
+        setProcessingStatus('Complete!');
+      }
+
       return state || jobHistoryItem;
     } catch (error) {
       console.error('Error in history job polling:', error);
+      setProcessingStatus('Error');
+      setProcessingProgress(0);
       return jobHistoryItem;
     }
   };
