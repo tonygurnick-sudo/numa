@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Alert, Button } from 'react-bootstrap';
+import { useState, useEffect, useRef } from 'react';
+import { Alert, Button, Spinner } from 'react-bootstrap';
 import { ListDataSourcesCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
-import { Spinner } from 'react-bootstrap';
 
 const formatDate = (dateString) => {
   if (!dateString) return 'Unknown';
@@ -25,14 +24,15 @@ export const DataSourcesList = () => {
   const [error, setError] = useState(null);
   const [show, setShow] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [, setShowUploadModal] = useState(false);
   const { qBusinessClient } = useAuth();
+  const fetchInProgress = useRef(false);
 
   const handleShow = () => setShow(!show);
 
   const fetchSources = async () => {
-    if (!qBusinessClient) return;
+    if (!qBusinessClient || fetchInProgress.current) return;
 
+    fetchInProgress.current = true;
     setLoading(true);
     try {
       if (!Q_APPLICATION_ID || Q_APPLICATION_ID === 'undefined') {
@@ -62,6 +62,7 @@ export const DataSourcesList = () => {
       setError('Failed to fetch data sources');
     } finally {
       setLoading(false);
+      fetchInProgress.current = false;
     }
   };
 
@@ -73,14 +74,6 @@ export const DataSourcesList = () => {
     setUploadedFiles(uploadedFiles.filter((file, i) => i !== index));
   };
 
-  if (loading) return <div className="text-muted small">Loading datasources...</div>;
-  if (error)
-    return (
-      <Alert variant="danger" className="py-1 mb-1">
-        {error}
-      </Alert>
-    );
-
   return (
     <>
       <div className={`sources-sidebar ${show ? 'show' : ''}`}>
@@ -91,7 +84,16 @@ export const DataSourcesList = () => {
           </Button>
         </div>
         <div className="data-sources-list">
-          {dataSources.length === 0 ? (
+          {loading ? (
+            <div className="text-muted small">
+              <Spinner animation="border" size="sm" className="me-2" />
+              Loading datasources...
+            </div>
+          ) : error ? (
+            <Alert variant="danger" className="py-1 mb-1">
+              {error}
+            </Alert>
+          ) : dataSources.length === 0 ? (
             <p className="small text-muted">No data sources available</p>
           ) : (
             <div className="sources-container small">
