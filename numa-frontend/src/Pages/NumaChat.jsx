@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Button, Form, Container, Row, Col, Spinner, Collapse } from 'react-bootstrap';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Button, Container, Row, Col, Spinner, Collapse } from 'react-bootstrap';
 import { ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import { SearchRelevantContentCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
@@ -13,7 +13,6 @@ import { MarkdownContent } from '../Components/MarkdownContent';
 import { prepareConversationHistoryForBedrock, MAX_DYNAMO_MESSAGES } from '../utils/bedrockMessageHistoryUtils';
 import { ChatInput } from '../Components/ChatInput';
 import numaIcon from '../assets/images/numa-logo.svg';
-import { basePlacements } from '@popperjs/core';
 
 /** Helper component to display a collapsible references panel */
 function ReferencesDropdown({ references }) {
@@ -21,23 +20,23 @@ function ReferencesDropdown({ references }) {
   if (!references || references.length === 0) return null;
 
   return (
-    <div className='references-dropdown mt-2'>
+    <div className="references-dropdown mt-2">
       <Button
-        variant='link'
-        size='sm'
+        variant="link"
+        size="sm"
         onClick={() => setOpen(!open)}
-        aria-controls='references-collapse'
+        aria-controls="references-collapse"
         aria-expanded={open}
         style={{ color: '#4b007d' }}
       >
         {open ? 'Hide References' : 'Show References'}
       </Button>
       <Collapse in={open}>
-        <div id='references-collapse' className='ms-3'>
-          <ul className='list-unstyled'>
+        <div id="references-collapse" className="ms-3">
+          <ul className="list-unstyled">
             {references.map((ref, idx) => (
               <li key={idx}>
-                <a href={ref} target='_blank' rel='noopener noreferrer'>
+                <a href={ref} target="_blank" rel="noopener noreferrer">
                   {ref}
                 </a>
               </li>
@@ -65,8 +64,14 @@ const NumaChat = () => {
   // Refs & contexts
   const stopGenerationRef = useRef(false);
   const messageEndRef = useRef(null);
-  const { user, qBusinessClient, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getIdentityPoolCredentials } =
-    useAuth();
+  const {
+    user,
+    qBusinessClient,
+    bedrockRuntimeClient,
+    numaChatDynamoUtils,
+    getAccessToken,
+    getIdentityPoolCredentials,
+  } = useAuth();
   const chatHistoryRef = useRef(null);
 
   // For responsiveness
@@ -83,7 +88,7 @@ const NumaChat = () => {
   const Q_RETRIEVER_ID = window.sessionStorage.getItem('Q_RETRIEVER_ID');
   const MAX_DATA_SOURCE_ITEMS = 6;
   const TODAY = new Date();
-  const SYSTEM_MESSAGE = `You are an artifical intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data soures, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorate other bold and italic styling within your outputs when approprate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with makdown formatting.\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like “Could you provide more details?” or “What specific aspect would you like to focus on?”\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
+  const SYSTEM_MESSAGE = `You are an artifical intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data soures, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorate other bold and italic styling within your outputs when approprate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with makdown formatting.\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like "Could you provide more details?" or "What specific aspect would you like to focus on?"\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
 
   // Ref for input textarea
   const inputRef = useRef(null);
@@ -112,21 +117,21 @@ const NumaChat = () => {
           const metaItems = await numaChatDynamoUtils.getUserConversationsMeta(sub);
           if (metaItems.length === 0) {
             // No conversation exists, so simulate "New Chat"
-            console.log("No conversation history found; initializing new conversation...");
+            console.log('No conversation history found; initializing new conversation...');
             handleNewChat();
           } else {
             // If there is a saved conversation and it exists in the meta, load it.
             const savedConvoId = localStorage.getItem('currentConversationId');
-            if (savedConvoId && metaItems.some(item => item.conversation_id === savedConvoId)) {
+            if (savedConvoId && metaItems.some((item) => item.conversation_id === savedConvoId)) {
               handleLoadConversation(savedConvoId);
             } else {
               // Otherwise, load the most recent conversation (or choose one as needed)
-              console.log("Loading the most recent conversation from history.");
+              console.log('Loading the most recent conversation from history.');
               handleLoadConversation(metaItems[0].conversation_id);
             }
           }
         } catch (err) {
-          console.error("Error initializing conversation:", err);
+          console.error('Error initializing conversation:', err);
         }
       }
     }
@@ -174,7 +179,7 @@ const NumaChat = () => {
         content: 'New conversation started',
       });
 
-      // Optionally store an “assistant greeting”
+      // Optionally store an "assistant greeting"
       await numaChatDynamoUtils.addMessage({
         conversationId: newId,
         userId: sub,
@@ -225,7 +230,7 @@ const NumaChat = () => {
       stopGenerationRef.current = false;
       if (queryDataSources && qBusinessClient) {
         // Insert ephemeral bubble for 'querying'
-        setMessages(prev => [...prev, { role: 'assistant', content: '', status: 'querying' }]);
+        setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'querying' }]);
 
         const dsInput = {
           applicationId: Q_APPLICATION_ID,
@@ -254,9 +259,7 @@ const NumaChat = () => {
               .join('\n\n');
 
             // Store references in an array
-            dsReferences = dsResponse.relevantContent
-              .filter((ds) => ds.documentUri)
-              .map((ds) => ds.documentUri);
+            dsReferences = dsResponse.relevantContent.filter((ds) => ds.documentUri).map((ds) => ds.documentUri);
 
             finalInputText += '**Relevant Data Source Content:**\n';
             finalInputText += knowledgeText;
@@ -285,25 +288,28 @@ const NumaChat = () => {
         // Remove ephemeral 'querying' bubble
         setMessages((prev) => {
           const updated = [...prev];
-          const idx = updated.findIndex(msg => msg.status === 'querying');
+          const idx = updated.findIndex((msg) => msg.status === 'querying');
           if (idx >= 0) updated.splice(idx, 1);
           return updated;
         });
       }
 
       // Insert ephemeral bubble for 'thinking'
-      setMessages(prev => [...prev, { role: 'assistant', content: '', status: 'thinking' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'thinking' }]);
 
       // Wait for the UI to update
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       // 4) Retrieve conversation history
       const conversationHistory = await numaChatDynamoUtils.queryConversations(cid, MAX_DYNAMO_MESSAGES, sub);
-      const bedrockMessages = await prepareConversationHistoryForBedrock(conversationHistory, getIdentityPoolCredentials);
+      const bedrockMessages = await prepareConversationHistoryForBedrock(
+        conversationHistory,
+        getIdentityPoolCredentials,
+      );
       console.log('bedrockMessages:', JSON.stringify(bedrockMessages, null, 2));
 
       // Validate message format
-      const validatedMessages = bedrockMessages.map(msg => {
+      const validatedMessages = bedrockMessages.map((msg) => {
         if (!Array.isArray(msg.content)) {
           return {
             ...msg,
@@ -366,7 +372,7 @@ const NumaChat = () => {
           // Remove 'thinking'
           setMessages((prev) => {
             const updated = [...prev];
-            const idx = updated.findIndex(m => m.status === 'thinking');
+            const idx = updated.findIndex((m) => m.status === 'thinking');
             if (idx >= 0) updated[idx].status = null;
             return updated;
           });
@@ -405,14 +411,17 @@ const NumaChat = () => {
 
       if (numaChatDynamoUtils) {
         // Asynchronous store
-        numaChatDynamoUtils.addMessage(assistantMessagePayload)
-          .catch(err => console.error('Error storing assistant message:', err));
+        numaChatDynamoUtils
+          .addMessage(assistantMessagePayload)
+          .catch((err) => console.error('Error storing assistant message:', err));
 
         // Update the conversation meta item
-        numaChatDynamoUtils.updateMetaItem(cid, sub, {
-          latestTimestamp: Date.now(),
-          latestMessage: inputMessage,
-        }).catch(err => console.error('Error updating meta item:', err));
+        numaChatDynamoUtils
+          .updateMetaItem(cid, sub, {
+            latestTimestamp: Date.now(),
+            latestMessage: inputMessage,
+          })
+          .catch((err) => console.error('Error updating meta item:', err));
       }
 
       // After streaming, attach references to local state for immediate display
@@ -436,7 +445,6 @@ const NumaChat = () => {
       setTimeout(() => {
         inputRef.current?.focus();
       }, 0);
-
     } catch (err) {
       console.error('Error invoking Bedrock:', err);
       console.error('Full error details:', JSON.stringify(err, null, 2));
@@ -459,7 +467,11 @@ const NumaChat = () => {
 
       while (retryCount < 2) {
         try {
-          conversationHistory = await numaChatDynamoUtils.queryConversations(selectedConversationId, MAX_DYNAMO_MESSAGES, sub);
+          conversationHistory = await numaChatDynamoUtils.queryConversations(
+            selectedConversationId,
+            MAX_DYNAMO_MESSAGES,
+            sub,
+          );
           break;
         } catch (error) {
           if (error.message.includes('ExpiredTokenException') && retryCount === 0) {
@@ -476,7 +488,7 @@ const NumaChat = () => {
       conversationHistory.sort((a, b) => a.timestamp - b.timestamp);
 
       // Convert to chat messages (now we also attach .references if present)
-      const chatMessages = conversationHistory.map(item => {
+      const chatMessages = conversationHistory.map((item) => {
         const baseMsg = {
           role: item.role,
           content: item.content,
@@ -533,24 +545,31 @@ const NumaChat = () => {
     refreshSidebar();
   };
 
+  // Add a CSS class for the loading indicator
+  const loadingIndicatorStyle = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    height: '24px', // Set a fixed height to prevent layout shifts
+  };
+
   return (
-    <div className='dashboard'>
+    <div className="dashboard">
       <Nav />
-      <header className='mb-1'>
+      <header className="mb-1">
         <Container fluid>
           <Row>
             <Col lg={12}>
               <Breadcrumbs label={'Chat'} clearStack={true} />
-              <h1 className='mb-0 fs-3'>Numa Chat</h1>
+              <h1 className="mb-0 fs-3">Numa Chat</h1>
             </Col>
           </Row>
         </Container>
       </header>
 
       {/* Main content */}
-      <LayoutDashboard className='flex-grow-1'>
+      <LayoutDashboard className="flex-grow-1">
         {/* Chat layout */}
-        <div className='chat-layout d-flex'>
+        <div className="chat-layout d-flex">
           {/* Chat history sidebar */}
           <ChatHistorySidebar
             ref={chatHistoryRef}
@@ -560,15 +579,13 @@ const NumaChat = () => {
           />
           {/* Data sources list */}
           <DataSourcesList />
-          <div className='flex-grow-1 d-flex'>
-            <div className='chat-content flex-grow-1 d-flex flex-column'>
+          <div className="flex-grow-1 d-flex">
+            <div className="chat-content flex-grow-1 d-flex flex-column">
               {/* Header with chat instructions and New Chat button on the right */}
-              <div className='chat-header d-flex justify-content-between align-items-center mb-3'>
-                <p className='mb-0 small text-muted'>
-                  Chat with your documents using Numa.
-                </p>
+              <div className="chat-header d-flex justify-content-between align-items-center mb-3">
+                <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
                 <Button
-                  className='btn btn-primary'
+                  className="btn btn-primary"
                   onClick={handleNewChat}
                   style={{ color: '#4b007d', marginRight: '15px' }}
                 >
@@ -577,9 +594,9 @@ const NumaChat = () => {
               </div>
 
               {/* Chat messages */}
-              <div className='chat-container'>
+              <div className="chat-container">
                 <div
-                  className='chat-messages'
+                  className="chat-messages"
                   style={{ maxWidth: '100%', overflowX: 'hidden', wordWrap: 'break-word' }}
                 >
                   {messages.map((message, index) => {
@@ -587,77 +604,68 @@ const NumaChat = () => {
                     if (message.role === 'assistant' && message.status) {
                       if (message.status === 'initializing') {
                         return (
-                          <div key={index} className='message assistant ephemeral'>
-                            <strong className='message-role' style={{ display: 'inline-flex', alignItems: 'center' }}>
+                          <div key={index} className="message assistant ephemeral">
+                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
                               <img
                                 src={numaIcon}
-                                alt='Numa'
+                                alt="Numa"
                                 style={{ width: '20px', height: '20px', marginRight: '7px' }}
                               />
                               Numa:
                             </strong>
-                            <div className='message-content d-flex align-items-center'>
-                              <Spinner animation='border' size='sm' className='me-2' />
+                            <div className="message-content d-flex align-items-center">
+                              <Spinner animation="border" size="sm" className="me-2" />
                               Initializing chat...
                             </div>
                           </div>
                         );
                       } else if (message.status === 'processingFile') {
                         return (
-                          <div key={index} className='message assistant ephemeral'>
-                            <strong
-                              className='message-role'
-                              style={{ display: 'inline-flex', alignItems: 'center' }}
-                            >
+                          <div key={index} className="message assistant ephemeral">
+                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
                               <img
                                 src={numaIcon}
-                                alt='Numa'
+                                alt="Numa"
                                 style={{ width: '20px', height: '20px', marginRight: '7px' }}
                               />
                               Numa:
                             </strong>
-                            <div className='message-content d-flex align-items-center'>
-                              <Spinner animation='border' size='sm' className='me-2' />
+                            <div className="message-content d-flex align-items-center">
+                              <Spinner animation="border" size="sm" className="me-2" />
                               Processing Upload...
                             </div>
                           </div>
                         );
                       } else if (message.status === 'querying') {
                         return (
-                          <div key={index} className='message assistant ephemeral'>
-                            <strong
-                              className='message-role'
-                              style={{ display: 'inline-flex', alignItems: 'center' }}
-                            >
+                          <div key={index} className="message assistant ephemeral">
+                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
                               <img
                                 src={numaIcon}
-                                alt='Numa'
+                                alt="Numa"
                                 style={{ width: '20px', height: '20px', marginRight: '7px' }}
                               />
                               Numa:
                             </strong>
-                            <div className='message-content d-flex align-items-center'>
-                              <Spinner animation='border' size='sm' className='me-2' />
+                            <div className="message-content d-flex align-items-center" style={loadingIndicatorStyle}>
+                              <Spinner animation="border" size="sm" className="me-2" />
                               Querying data sources...
                             </div>
                           </div>
                         );
                       } else if (message.status === 'thinking') {
                         return (
-                          <div key={index} className='message assistant ephemeral'>
-                            <strong
-                              className='message-role'
-                              style={{ display: 'inline-flex', alignItems: 'center' }}
-                            >
+                          <div key={index} className="message assistant ephemeral">
+                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
                               <img
                                 src={numaIcon}
-                                alt='Numa'
+                                alt="Numa"
                                 style={{ width: '20px', height: '20px', marginRight: '7px' }}
                               />
                               Numa:
                             </strong>
-                            <div className='message-content d-flex align-items-center'>
-                              <Spinner animation='border' size='sm' className='me-2' />
+                            <div className="message-content d-flex align-items-center" style={loadingIndicatorStyle}>
+                              <Spinner animation="border" size="sm" className="me-2" />
                               Thinking...
                             </div>
                           </div>
@@ -668,15 +676,12 @@ const NumaChat = () => {
                     // Otherwise, normal message
                     return (
                       <div key={index} className={`message ${message.role}`}>
-                        <strong
-                          className='message-role'
-                          style={{ display: 'inline-flex', alignItems: 'center' }}
-                        >
+                        <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
                           {message.role === 'assistant' ? (
                             <>
                               <img
                                 src={numaIcon}
-                                alt='Numa'
+                                alt="Numa"
                                 style={{
                                   width: '20px',
                                   height: '20px',
@@ -693,7 +698,7 @@ const NumaChat = () => {
                             'System:'
                           )}
                         </strong>
-                        <div className='message-content markdown-content'>
+                        <div className="message-content markdown-content">
                           <MarkdownContent content={message.content} />
                           {/* If there are references, show a dropdown */}
                           {message.role === 'assistant' && message.references?.length > 0 && (
@@ -720,8 +725,8 @@ const NumaChat = () => {
                   disabled={isFileProcessing}
                 />
                 {/* Datasource Tip Message */}
-                <p className='datasource-tip text-center small text-muted'>
-                  Click the <i className='bi bi-database'></i> to chat against your data sources.
+                <p className="datasource-tip text-center small text-muted">
+                  Click the <i className="bi bi-database"></i> to chat against your data sources.
                 </p>
               </div>
             </div>

@@ -399,6 +399,11 @@ export interface NumaAppManifestTextInputTask extends NumaAppManifestBaseTask {
 
 export interface NumaAppManifestS3UploadTask extends NumaAppManifestBaseTask {
   type: typeof S3_UPLOAD_TASK;
+  parameters?: {
+    // Accepts either MIME types (e.g., 'image/jpeg') or file extensions (e.g., '.pdf')
+    allowedFileTypes?: string[];
+    maximumFileSize?: number; // Maximum file size in MB
+  };
 }
 
 export interface NumaAppManifestTextOutputTask extends NumaAppManifestBaseTask {
