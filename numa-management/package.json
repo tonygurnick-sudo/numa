@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "echo NYI",
+    "test": "mkdir -p test-reports; node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml",
     "preview": "vite preview"
   },
   "dependencies": {

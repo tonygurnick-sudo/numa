@@ -25,7 +25,7 @@
     "build": "yarn clean && esbuild --bundle --format=esm --platform=node --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" index.ts",
     "bundle": "yarn build",
     "lint": "eslint && tsc --noEmit",
-    "test": "echo NYI"
+    "test": "mkdir -p test-reports; node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml"
   },
   "dependencies": {
     "@aws-sdk/client-qbusiness": "^3.699.0"
