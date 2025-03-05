@@ -17,7 +17,10 @@ Please analyse the document and return the following in markdown format:
 - Title
 - Classification
 - Description
-- Considerations for review"""
+- Considerations for review
+
+Do not include any introductory text like 'Here's the analysis of the document in markdown format' - start directly with the markdown content.
+"""
 
 POLICY_REVIEW_PROMPT = """You are an expert in reviewing policy documents.
 
@@ -60,7 +63,10 @@ If legislation is provided, please review the policy document and give feedback 
 - Compliance: Does the policy comply with all relevant legal obligations and legislative requirements?
 - Recommendations: Are there any suggestions for improving or strengthening the policy to ensure legal compliance?
 
-Please highlight specific sections of the policy document where necessary. If no legislation is provided to review against the policy, state 'Not Applicable'."""
+Please highlight specific sections of the policy document where necessary. If no legislation is provided to review against the policy, state 'Not Applicable'.
+
+Do not include any introductory text like 'Here's the analysis of the document in markdown format' - start directly with the markdown content.
+"""
 
 
 RECOMMENDED_UPDATES_PROMPT = """Here is a policy document:
@@ -84,7 +90,10 @@ Based on the recommended changes from the policy review, please generate specifi
 3. Provide the recommended new or modified text
 4. Include a brief explanation for the change
 
-Please do not re-generate the entire policy, but instead output a structured list of specific updates. If legislative compliance recommendations are provided, present these as a separate section."""
+Please do not re-generate the entire policy, but instead output a structured list of specific updates. If legislative compliance recommendations are provided, present these as a separate section.
+
+Do not include any introductory text like 'Here's the analysis of the document in markdown format' - start directly with the markdown content.
+"""
 
 UPDATED_POLICY_PROMPT = """You are an expert policy writer specialising in policy revision and documentation.
 
@@ -118,4 +127,6 @@ Please generate a complete, revised version of the policy that incorporates all 
 6. Ensure all hyperlinks, references, and cross-references remain functional
 
 Return the complete, revised policy as a single markdown document that could immediately replace the original.
+
+Do not include any introductory text like 'Here's the analysis of the document in markdown format' - start directly with the markdown content.
 """
