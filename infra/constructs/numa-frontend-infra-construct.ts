@@ -85,7 +85,7 @@ export class NumaFrontendInfra extends Construct {
     });
 
     const apiGatewayLogGroup = new NumaLogGroup(this, 'api-gateway-log-group', {
-      logGroupName: numaClient + '-access',
+      logGroupName: `${props.client}-access`,
     }).logGroup;
 
     const authorizerRole = new IamRole(this, 'authorizer-lambda-role', {
