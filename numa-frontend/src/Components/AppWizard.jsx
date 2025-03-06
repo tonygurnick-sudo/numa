@@ -113,10 +113,15 @@ const AppWizard = ({ manifest }) => {
 
   const isStepDisabled = useCallback(
     (index) => {
-      const maxAllowedStep = visibleTasks.findIndex((task, i) => !taskCompletionStatus[task.id] && i !== activeStep);
-      return maxAllowedStep !== -1 && index > maxAllowedStep;
+      const task = visibleTasks[index];
+      // For output tasks, only disable if we haven't run yet
+      if (task?.type.includes('output')) {
+        return !hasRun;
+      }
+      // For input tasks, allow if complete or active
+      return false;
     },
-    [visibleTasks, taskCompletionStatus, activeStep],
+    [visibleTasks, hasRun],
   );
 
   const handleTaskCompletion = (taskId, success = true, results = null) => {
