@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { setupAuthMocks } from '../Mocks/AuthMock';
+import { setupAuthMocks } from '../Mocks/AuthMockHandlers';
 import { clearAllMocks, renderWithProviders } from '../Mocks/ProviderWrapper';
 
 import { screen, waitFor, fireEvent } from '@testing-library/react';

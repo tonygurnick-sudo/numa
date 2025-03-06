@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { navigationHandlers } from '../Mocks/NavigationMock';
+import { navigationHandlers } from '../Mocks/NavigationMockHandlers';
 import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
 
 import { screen, fireEvent, waitFor } from '@testing-library/react';
