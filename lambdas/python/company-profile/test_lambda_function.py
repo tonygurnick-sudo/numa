@@ -11,6 +11,7 @@ CONTEXT._function_name = "test_function_name"
 
 
 class TestLambdaFunction(unittest.TestCase):
+    @patch.dict("os.environ", {"BUCKET": "test-bucket"})
     @patch(
         "lambda_function.s3_helpers.read", return_value="Technical resume content..."
     )
@@ -32,14 +33,28 @@ class TestLambdaFunction(unittest.TestCase):
         test_event = {
             "app_id": "company-profile",
             "job_id": "test-job",
-            "details": "Name: John Doe\nEmail: john@example.com",
             "about": "Senior Software Engineer",
-            "documentation_text": "Technical resume content...",
+            "contact_information": "Name: John Doe\nEmail: john@example.com",
+            "input_keys": [],
+            "output_key": "some/key/on/s3",
         }
 
         result = lambda_function.handler(test_event, CONTEXT)
 
-        self.assertEqual(result, {"output_key": "profiles/john_doe_profile.json"})
+        self.assertEqual(
+            result["results"][0],
+            {
+                "input_reference": None,
+                "outputs": [
+                    {
+                        "content_type": "application/json",
+                        "data": {"bucket": "test-bucket", "key": "some/key/on/s3"},
+                        "location": "S3",
+                        "title": "Company Profile",
+                    }
+                ],
+            },
+        )
         write_mock.assert_called_once()
 
     def test_create_profile(self):
@@ -64,13 +79,11 @@ class TestLambdaFunction(unittest.TestCase):
         with patch(
             "lambda_function.bedrock.BedrockClaude3Model", return_value=mock_model
         ):
-            input_data = {
-                "details": "Name: John Doe\nEmail: john@example.com",
-                "about": "Senior Software Engineer",
-                "file_content": "Technical resume content...",
-            }
-
-            result = lambda_function._create_profile(input_data)
+            result = lambda_function._create_profile(
+                about="Senior Software Engineer",
+                contact_information="Name: John Doe\nEmail: john@example.com",
+                file_content="Technical resume content...",
+            )
 
             self.assertIn("profile_summary", result)
             self.assertIn("profile_details", result)
