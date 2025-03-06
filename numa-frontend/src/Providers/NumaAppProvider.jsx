@@ -481,7 +481,13 @@ export const NumaAppProvider = ({ children }) => {
         // Check completion status
         if (pollResponse.status === 'SUCCESS') {
           if (pollResponse.result) {
-            return { status: 'completed', result: pollResponse.result, state: currentState };
+            // Convert underscore keys to hyphen keys in poll response
+            const formattedResult = {};
+            Object.entries(pollResponse.result).forEach(([key, value]) => {
+              const hyphenKey = key.replace(/_/g, '-');
+              formattedResult[hyphenKey] = value;
+            });
+            return { status: 'completed', result: formattedResult, state: currentState };
           }
           throw new Error('No result data in successful response');
         } else if (pollResponse.status === 'FAILURE' || pollResponse.status === 'error') {
@@ -527,61 +533,95 @@ export const NumaAppProvider = ({ children }) => {
     }
 
     try {
-      // Set UI states to show loading
+      // Set UI states to match initial app run
       setAppRunning(true);
-      setJobHistorySidebarOpen(false); // Close sidebar
+      setJobHistorySidebarOpen(false);
       setProcessingStatus('Processing...');
-      setProcessingProgress(50); // Set to 50% to indicate ongoing work
+      setProcessingProgress(30);
 
-      const { state } = await pollJobStatus({
-        jobID: jobHistoryItem.jobID,
-        initialState: jobHistoryItem,
-        onPollSuccess: async (currentState, pollResponse) => {
-          if (pollResponse.result) {
-            await jobsApi.updateJob(numaAppData, currentState.jobID, pollResponse.result);
-            await loadAppJobs();
+      // Load input values and mark tasks as complete
+      const taskCompletions = {};
 
-            // Update task responses if results are available
-            if (pollResponse.result && numaAppData?.tasks) {
-              const outputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
-              const responses = outputTasks
-                .map((task) => ({
-                  taskId: task.id,
-                  result: pollResponse.result[task.id],
-                }))
-                .filter((r) => r.result !== undefined);
-
-              setNumaTaskResponses(responses);
-            }
+      // Mark input tasks complete if they have values
+      if (jobHistoryItem.inputs) {
+        setTaskInputValues(jobHistoryItem.inputs);
+        numaAppData.tasks.forEach((task) => {
+          if ((task.type === 'text-input' || task.type === 's3-upload') && jobHistoryItem.inputs[task.id]) {
+            taskCompletions[task.id] = true;
           }
-
-          // Update progress based on status
-          if (currentState.status === 'running') {
-            setProcessingProgress(75); // Increase progress to show advancement
-          } else if (currentState.status === 'completed') {
-            setProcessingProgress(100);
-            setProcessingStatus('Complete!');
-          }
-        },
-        shouldContinuePolling: (currentState, startTime) => {
-          const lastUpdatedTime = currentState.lastUpdated ? new Date(currentState.lastUpdated).getTime() : startTime;
-          const timeSinceLastUpdate = Date.now() - lastUpdatedTime;
-          return timeSinceLastUpdate <= 5 * 60 * 1000; // Continue if last update was within 5 minutes
-        },
-      });
-
-      // If we got a completed state, ensure UI reflects completion
-      if (state?.status === 'completed') {
-        setProcessingProgress(100);
-        setProcessingStatus('Complete!');
+        });
       }
 
-      return state || jobHistoryItem;
+      // Mark output tasks complete if they have results
+      if (jobHistoryItem.results) {
+        numaAppData.tasks.forEach((task) => {
+          if (task.type === 'text-output' && jobHistoryItem.results[task.id]) {
+            taskCompletions[task.id] = true;
+          }
+        });
+      }
+
+      setTaskCompletionStatus(taskCompletions);
+
+      // Use the same polling logic as initial app run
+      const { status, result } = await pollJobStatus({
+        jobID: jobHistoryItem.jobID,
+        pollInterval: 5000,
+        maxPollingTime: 5 * 60 * 1000,
+      });
+
+      if (status === 'completed' && result) {
+        // Convert underscore keys to hyphen keys
+        const formattedResult = {};
+        Object.entries(result).forEach(([key, value]) => {
+          const hyphenKey = key.replace(/_/g, '-');
+          formattedResult[hyphenKey] = value;
+        });
+
+        // Update job in history
+        await jobsApi.updateJob(numaAppData, jobHistoryItem.jobID, formattedResult);
+        await loadAppJobs();
+
+        // Update UI same as initial app run
+        setProcessingProgress(100);
+        setProcessingStatus('Complete!');
+        setHasRun(true);
+
+        // Set task responses
+        if (formattedResult && numaAppData?.tasks) {
+          const outputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
+
+          const responses = outputTasks
+            .map((task) => ({
+              taskId: task.id,
+              result: formattedResult[task.id],
+            }))
+            .filter((r) => r.result !== undefined);
+          setNumaTaskResponses(responses);
+
+          // Mark all tasks as complete since we have results
+          const allTaskCompletions = {};
+          numaAppData.tasks.forEach((task) => {
+            if (task.type === 'text-input' || task.type === 's3-upload') {
+              allTaskCompletions[task.id] = Boolean(jobHistoryItem.inputs?.[task.id]);
+            } else if (task.type === 'text-output') {
+              allTaskCompletions[task.id] = Boolean(formattedResult[task.id]);
+            }
+          });
+          setTaskCompletionStatus(allTaskCompletions);
+        }
+
+        return { ...jobHistoryItem, status: 'completed', results: result };
+      }
+
+      return jobHistoryItem;
     } catch (error) {
       console.error('Error in history job polling:', error);
       setProcessingStatus('Error');
       setProcessingProgress(0);
       return jobHistoryItem;
+    } finally {
+      setAppRunning(false);
     }
   };
 
