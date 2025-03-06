@@ -14,6 +14,36 @@ import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NumaAppContext } from './NumaAppContext';
 
+// Utility function to find a value in an object using both hyphen and underscore formats of the key
+export const findValueWithFormatFlexibility = (obj, key) => {
+  // Try the original key first
+  let value = obj[key];
+  if (value !== undefined) {
+    return value;
+  }
+
+  // Try hyphen version if the key contains underscores
+  if (key.includes('_')) {
+    const hyphenKey = key.replace(/_/g, '-');
+    value = obj[hyphenKey];
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  // Try underscore version if the key contains hyphens
+  if (key.includes('-')) {
+    const underscoreKey = key.replace(/-/g, '_');
+    value = obj[underscoreKey];
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  // Return undefined if not found with any format
+  return undefined;
+};
+
 // Global helper function to resolve references like @taskId or @taskId/subPath
 const resolveReference = (key, taskResults) => {
   if (!key?.startsWith('@')) {
@@ -23,17 +53,11 @@ const resolveReference = (key, taskResults) => {
   // Split the reference into taskId and subPath
   const [fullTaskId, ...subPaths] = key.slice(1).split('/');
 
-  // Try both hyphen and underscore versions of the task ID
-  const hyphenTaskId = fullTaskId.replace(/_/g, '-');
-  const underscoreTaskId = fullTaskId.replace(/-/g, '_');
+  // Get the base result using format flexibility
+  const baseResult = findValueWithFormatFlexibility(taskResults, fullTaskId);
 
-  // Get the base result, trying both versions of the task ID
-  let baseResult = taskResults[hyphenTaskId];
   if (baseResult === undefined) {
-    baseResult = taskResults[underscoreTaskId];
-  }
-  if (baseResult === undefined) {
-    console.warn(`Could not find task result for either ${hyphenTaskId} or ${underscoreTaskId}`);
+    console.warn(`Could not find task result for ${fullTaskId}`);
     return '';
   }
 
@@ -481,11 +505,10 @@ export const NumaAppProvider = ({ children }) => {
         // Check completion status
         if (pollResponse.status === 'SUCCESS') {
           if (pollResponse.result) {
-            // Convert underscore keys to hyphen keys in poll response
+            // Just store the original keys, we'll use findValueWithFormatFlexibility for lookups
             const formattedResult = {};
             Object.entries(pollResponse.result).forEach(([key, value]) => {
-              const hyphenKey = key.replace(/_/g, '-');
-              formattedResult[hyphenKey] = value;
+              formattedResult[key] = value;
             });
             return { status: 'completed', result: formattedResult, state: currentState };
           }
@@ -571,11 +594,10 @@ export const NumaAppProvider = ({ children }) => {
       });
 
       if (status === 'completed' && result) {
-        // Convert underscore keys to hyphen keys
+        // Just store the original keys, we'll use findValueWithFormatFlexibility for lookups
         const formattedResult = {};
         Object.entries(result).forEach(([key, value]) => {
-          const hyphenKey = key.replace(/_/g, '-');
-          formattedResult[hyphenKey] = value;
+          formattedResult[key] = value;
         });
 
         // Update job in history
@@ -592,10 +614,15 @@ export const NumaAppProvider = ({ children }) => {
           const outputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
 
           const responses = outputTasks
-            .map((task) => ({
-              taskId: task.id,
-              result: formattedResult[task.id],
-            }))
+            .map((task) => {
+              // Find the result using format flexibility
+              const result = findValueWithFormatFlexibility(formattedResult, task.id);
+
+              return {
+                taskId: task.id,
+                result: result,
+              };
+            })
             .filter((r) => r.result !== undefined);
           setNumaTaskResponses(responses);
 
@@ -605,7 +632,10 @@ export const NumaAppProvider = ({ children }) => {
             if (task.type === 'text-input' || task.type === 's3-upload') {
               allTaskCompletions[task.id] = Boolean(jobHistoryItem.inputs?.[task.id]);
             } else if (task.type === 'text-output') {
-              allTaskCompletions[task.id] = Boolean(formattedResult[task.id]);
+              // Find the result using format flexibility
+              const result = findValueWithFormatFlexibility(formattedResult, task.id);
+
+              allTaskCompletions[task.id] = Boolean(result);
             }
           });
           setTaskCompletionStatus(allTaskCompletions);
@@ -1033,7 +1063,8 @@ export const NumaAppProvider = ({ children }) => {
         const responses = [];
 
         outputTasks.forEach((task) => {
-          const result = job.results[task.id];
+          // Find the result using format flexibility
+          const result = findValueWithFormatFlexibility(job.results, task.id);
           if (result !== undefined) {
             let formattedResult = result;
 
