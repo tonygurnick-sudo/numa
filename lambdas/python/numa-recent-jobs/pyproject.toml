@@ -1,3 +1,15 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
 [tool.poetry]
 name = "numa-recent-jobs"
 version = "0.1.0"
@@ -25,7 +37,3 @@ poetry-plugin-lambda-build = ">=1.0.7"
 [tool.poetry-plugin-lambda-build]
 package-artifact-path = "lambda_function.zip"
 without = "dev"
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
