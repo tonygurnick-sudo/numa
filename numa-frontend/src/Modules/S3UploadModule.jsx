@@ -6,8 +6,12 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
 import { Preloader } from '../Components/Preloader';
+import PropTypes from 'prop-types';
 
-function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
+// Default no-op functions
+const noop = () => {};
+
+function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChange = noop, value }) {
   const { loading, numaAppId, appRunning, numaTaskResponses } = useNumaApp();
   const { getIdentityPoolCredentials } = useAuth();
 
@@ -99,6 +103,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
 
     if (errors.length > 0) {
       setError(errors.join('\n'));
+      onNotComplete();
       return;
     }
 
@@ -220,7 +225,7 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
 
       setError(errorMessage);
       setUploadStatus('Upload failed');
-      onNotComplete?.();
+      onNotComplete();
     }
   };
 
@@ -302,5 +307,20 @@ function S3UploadModule({ task, onComplete, onNotComplete, onChange, value }) {
     </div>
   );
 }
+
+S3UploadModule.propTypes = {
+  task: PropTypes.shape({
+    id: PropTypes.string,
+    title: PropTypes.string,
+    parameters: PropTypes.shape({
+      allowedFileTypes: PropTypes.arrayOf(PropTypes.string),
+      maximumFileSize: PropTypes.number,
+    }),
+  }),
+  onComplete: PropTypes.func,
+  onNotComplete: PropTypes.func,
+  onChange: PropTypes.func,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.array, PropTypes.object]),
+};
 
 export { S3UploadModule };

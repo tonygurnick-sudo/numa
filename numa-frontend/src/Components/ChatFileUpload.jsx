@@ -39,14 +39,14 @@ const ChatFileUpload = ({
         // Create an ephemeral message for this file
         const ephemeralId = Date.now() + i;
         ephemeralMessageIds.push(ephemeralId);
-        setMessages(prev => [
+        setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
             content: `Processing file ${i + 1}/${fileArray.length}: ${fileName}...`,
             status: 'processingFile',
-            ephemeralId
-          }
+            ephemeralId,
+          },
         ]);
 
         const isImage = fileType?.startsWith('image/');
@@ -57,8 +57,8 @@ const ChatFileUpload = ({
             await numaChatDynamoUtils.addMessage({
               conversationId: cid,
               userId: sub,
-              messageType: "image_description",
-              role: "system",
+              messageType: 'image_description',
+              role: 'system',
               content: processedFile.content,
               fileInfo: { fileName, fileType, description: processedFile.content },
             });
@@ -79,7 +79,7 @@ const ChatFileUpload = ({
             extractedContentS3Key,
             contentType: processedFile.contentType,
           };
-          setUploadedFiles(prev => [...prev, fileMetadata]);
+          setUploadedFiles((prev) => [...prev, fileMetadata]);
           if (numaChatDynamoUtils && cid) {
             await numaChatDynamoUtils.addFileMessage({
               conversationId: cid,
@@ -98,23 +98,17 @@ const ChatFileUpload = ({
         }
 
         // Remove ephemeral message for this file and add success message
-        setMessages(prev => prev.filter(msg => msg.ephemeralId !== ephemeralId));
-        setMessages(prev => [
-          ...prev,
-          { role: 'assistant', content: `File “${fileName}” uploaded and processed.` },
-        ]);
+        setMessages((prev) => prev.filter((msg) => msg.ephemeralId !== ephemeralId));
+        setMessages((prev) => [...prev, { role: 'assistant', content: `File "${fileName}" uploaded and processed.` }]);
       }
 
       refreshSidebar();
     } catch (error) {
       console.error('Error processing uploaded files:', error);
-      ephemeralMessageIds.forEach(eid => {
-        setMessages(prev => prev.filter(msg => msg.ephemeralId !== eid));
+      ephemeralMessageIds.forEach((eid) => {
+        setMessages((prev) => prev.filter((msg) => msg.ephemeralId !== eid));
       });
-      setMessages(prev => [
-        ...prev,
-        { role: 'system', content: `Error while processing files: ${error.message}` },
-      ]);
+      setMessages((prev) => [...prev, { role: 'system', content: `Error while processing files: ${error.message}` }]);
     } finally {
       setIsFileProcessing(false);
     }
@@ -125,14 +119,14 @@ const ChatFileUpload = ({
       <Modal.Header closeButton>
         <Modal.Title>Upload Files</Modal.Title>
       </Modal.Header>
-      <Modal.Body>
+      <Modal.Body data-testid="upload-modal-body">
         <S3UploadModule
           task={{ id: 'chatFileUpload' }}
           onComplete={handleUploadComplete}
           onNotComplete={() => {}}
           onChange={() => {}}
         />
-                <div className="supported-file-types">
+        <div className="supported-file-types">
           <h6>Supported File Types:</h6>
           <ul>
             <li>PDF (pdf)</li>

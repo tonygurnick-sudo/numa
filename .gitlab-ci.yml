@@ -134,6 +134,12 @@ node-test:
 node-build:
   parallel: !reference [.node-matrix]
 
+frontend-test:
+  extends: node-test
+  parallel:
+    matrix:
+      - BUILD_DIR: [numa-frontend]
+
 frontend-build:
   extends: node-build
   parallel:

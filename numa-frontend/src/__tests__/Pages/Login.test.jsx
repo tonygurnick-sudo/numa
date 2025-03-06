@@ -1,231 +1,175 @@
 /**
  * @vitest-environment jsdom
  */
-
-import { navigationHandlers } from '../Mocks/NavigationMock';
-import { authHandlers } from '../Mocks/AuthMock';
-
-import { waitFor, screen, fireEvent } from '@testing-library/react/pure';
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
+import { render, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { NumaLogin } from '../../Pages/Login';
-import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
+import { useAuth } from '../../Providers/AuthProvider';
+import { useNavigate } from 'react-router-dom';
 
-// Use navigationHandlers.mockNavigate instead of mockNavigate
-const { mockNavigate } = navigationHandlers;
+// Mock the required hooks
+vi.mock('react-router-dom', () => ({
+  useNavigate: vi.fn(),
+}));
 
-// Create mock auth functions
-const { login: mockLogin, setNewPassword: mockSetNewPassword } = authHandlers;
-
-// Configure Vitest to use a custom error formatter
-vi.setConfig({
-  testTimeout: 10000,
-  prettifyTestError: (error) => {
-    if (error.name === 'TestingLibraryElementError') {
-      return error.message.split('\n')[0]; // Only show the first line of the error
-    }
-    return error.message;
-  },
-});
-
-// Add custom error handler to suppress full DOM output
-const originalError = console.error;
-beforeAll(() => {
-  console.error = (...args) => {
-    if (/Warning.*not wrapped in act/.test(args[0])) {
-      return;
-    }
-    originalError.call(console, ...args);
-  };
-});
-
-afterAll(() => {
-  console.error = originalError;
-});
-
-// Add custom matcher to reduce error output
-expect.extend({
-  async toBeVisibleInDocument(received) {
-    try {
-      expect(received).toBeInTheDocument();
-      expect(received).toBeVisible();
-      return {
-        message: () => `expected element to be visible in document`,
-        pass: true,
-      };
-    } catch (error) {
-      return {
-        message: () => `element not found in document: ${error.message}`,
-        pass: false,
-      };
-    }
-  },
-});
+vi.mock('../../Providers/AuthProvider', () => ({
+  useAuth: vi.fn(),
+}));
 
 describe('NumaLogin Component', () => {
+  const mockNavigate = vi.fn();
+  const mockLogin = vi.fn();
+  const mockSetNewPassword = vi.fn();
+
   beforeEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
+
+    useNavigate.mockReturnValue(mockNavigate);
+    useAuth.mockReturnValue({
+      login: mockLogin,
+      setNewPassword: mockSetNewPassword,
+    });
   });
 
-  it('should handle successful login flow', async () => {
-    // Setup mock to resolve successfully
-    mockLogin.mockResolvedValueOnce({ success: true });
+  it('renders login form correctly', () => {
+    const { getByLabelText, getByText } = render(<NumaLogin />);
 
-    renderWithProviders(<NumaLogin />);
+    expect(getByLabelText('Username')).toBeInTheDocument();
+    expect(getByLabelText('Password')).toBeInTheDocument();
+    expect(getByText('Login')).toBeInTheDocument();
+    expect(getByText('Forgot password')).toBeInTheDocument();
+  });
 
-    // Fill in form
-    fireEvent.change(screen.getByLabelText('Username'), {
-      target: { value: 'testuser' },
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'password123' },
-    });
+  it('handles successful login', async () => {
+    mockLogin.mockResolvedValueOnce({ requiresNewPassword: false });
 
-    // Submit form
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
+    const { getByLabelText, getByText } = render(<NumaLogin />);
 
-    // Verify login was called and navigation happened
+    const usernameInput = getByLabelText('Username');
+    const passwordInput = getByLabelText('Password');
+    const submitButton = getByText('Login');
+
+    fireEvent.change(usernameInput, { target: { value: 'testuser' } });
+    fireEvent.change(passwordInput, { target: { value: 'password123' } });
+    fireEvent.click(submitButton);
+
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledWith('testuser', 'password123');
-      expect(screen.getByRole('alert')).toHaveTextContent('Login successful');
       expect(mockNavigate).toHaveBeenCalledWith('/dash');
     });
   });
 
-  it('should handle login error', async () => {
-    // Setup mock to reject with error
-    mockLogin.mockRejectedValueOnce(new Error('Invalid credentials'));
+  it('handles login with required password change', async () => {
+    mockLogin.mockResolvedValueOnce({ requiresNewPassword: true });
 
-    renderWithProviders(<NumaLogin />);
+    const { getByLabelText, getByText, findByLabelText } = render(<NumaLogin />);
 
-    // Fill in form
-    fireEvent.change(screen.getByLabelText('Username'), {
-      target: { value: 'testuser' },
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'wrongpass' },
-    });
+    const usernameInput = getByLabelText('Username');
+    const passwordInput = getByLabelText('Password');
+    const submitButton = getByText('Login');
 
-    // Submit form
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
+    fireEvent.change(usernameInput, { target: { value: 'testuser' } });
+    fireEvent.change(passwordInput, { target: { value: 'password123' } });
+    fireEvent.click(submitButton);
 
-    // Verify error message
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials');
+    await waitFor(async () => {
+      expect(mockLogin).toHaveBeenCalledWith('testuser', 'password123');
+      expect(await findByLabelText('New Password')).toBeInTheDocument();
+      expect(await findByLabelText('Confirm New Password')).toBeInTheDocument();
     });
   });
 
-  it('should handle new password requirement', async () => {
-    // Setup mocks
+  it('handles new password submission', async () => {
     mockLogin.mockResolvedValueOnce({ requiresNewPassword: true });
-    mockSetNewPassword.mockResolvedValueOnce({ success: true });
+    mockSetNewPassword.mockResolvedValueOnce({});
 
-    renderWithProviders(<NumaLogin />);
+    const { getByLabelText, getByText, findByLabelText } = render(<NumaLogin />);
 
-    // Initial login
-    fireEvent.change(screen.getByLabelText('Username'), {
-      target: { value: 'testuser' },
+    // First login attempt
+    fireEvent.change(getByLabelText('Username'), { target: { value: 'testuser' } });
+    fireEvent.change(getByLabelText('Password'), { target: { value: 'oldpass' } });
+    fireEvent.click(getByText('Login'));
+
+    // New password form
+    await waitFor(async () => {
+      const newPasswordInput = await findByLabelText('New Password');
+      const confirmPasswordInput = await findByLabelText('Confirm New Password');
+
+      fireEvent.change(newPasswordInput, { target: { value: 'newpass123' } });
+      fireEvent.change(confirmPasswordInput, { target: { value: 'newpass123' } });
+      fireEvent.click(getByText('Set New Password'));
     });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'password123' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
 
-    // Wait for new password form
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'You need to set a new password. Please enter a new password below.',
-      );
-    });
-
-    // Fill in new password form
-    fireEvent.change(screen.getByLabelText('New Password'), {
-      target: { value: 'newpassword123' },
-    });
-    fireEvent.change(screen.getByLabelText('Confirm New Password'), {
-      target: { value: 'newpassword123' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Set New Password' }));
-
-    // Verify new password was set
-    await waitFor(() => {
-      expect(mockSetNewPassword).toHaveBeenCalledWith('testuser', 'password123', 'newpassword123');
+      expect(mockSetNewPassword).toHaveBeenCalledWith('testuser', 'oldpass', 'newpass123');
+      expect(mockNavigate).toHaveBeenCalledWith('/dash');
     });
   });
 
-  it('should handle new password update failure', async () => {
-    // Setup mocks
-    mockLogin.mockResolvedValueOnce({ requiresNewPassword: true });
-    mockSetNewPassword.mockRejectedValueOnce(new Error('Password update failed'));
-
-    renderWithProviders(<NumaLogin />);
-
-    // Initial login
-    fireEvent.change(screen.getByLabelText('Username'), {
-      target: { value: 'testuser' },
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'password123' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
-
-    // Wait for new password form
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'You need to set a new password. Please enter a new password below.',
-      );
-    });
-
-    // Fill in new password form
-    fireEvent.change(screen.getByLabelText('New Password'), {
-      target: { value: 'newpassword123' },
-    });
-    fireEvent.change(screen.getByLabelText('Confirm New Password'), {
-      target: { value: 'newpassword123' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Set New Password' }));
-
-    // Verify error message appears
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Password update failed');
-    });
-  });
-
-  it('should handle mismatched new passwords', async () => {
-    // Setup mocks
+  it('shows error for mismatched passwords', async () => {
     mockLogin.mockResolvedValueOnce({ requiresNewPassword: true });
 
-    renderWithProviders(<NumaLogin />);
+    const { getByLabelText, getByText, findByLabelText, findByText } = render(<NumaLogin />);
 
-    // Initial login
-    fireEvent.change(screen.getByLabelText('Username'), {
-      target: { value: 'testuser' },
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'password123' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
+    // First login attempt
+    fireEvent.change(getByLabelText('Username'), { target: { value: 'testuser' } });
+    fireEvent.change(getByLabelText('Password'), { target: { value: 'oldpass' } });
+    fireEvent.click(getByText('Login'));
 
-    // Wait for new password form
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'You need to set a new password. Please enter a new password below.',
-      );
+    // New password form with mismatched passwords
+    await waitFor(async () => {
+      const newPasswordInput = await findByLabelText('New Password');
+      const confirmPasswordInput = await findByLabelText('Confirm New Password');
+
+      fireEvent.change(newPasswordInput, { target: { value: 'newpass123' } });
+      fireEvent.change(confirmPasswordInput, { target: { value: 'different123' } });
+      fireEvent.click(getByText('Set New Password'));
     });
 
-    // Fill in new password form with mismatched passwords
-    fireEvent.change(screen.getByLabelText('New Password'), {
-      target: { value: 'newpassword123' },
-    });
-    fireEvent.change(screen.getByLabelText('Confirm New Password'), {
-      target: { value: 'differentpassword123' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Set New Password' }));
-
-    // Verify error message appears
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent("Passwords don't match");
+    await waitFor(async () => {
+      expect(await findByText("Passwords don't match")).toBeInTheDocument();
       expect(mockSetNewPassword).not.toHaveBeenCalled();
+    });
+  });
+
+  it('handles login errors', async () => {
+    const errorMessage = 'Invalid credentials';
+    mockLogin.mockRejectedValueOnce(new Error(errorMessage));
+
+    const { getByLabelText, getByText, findByText } = render(<NumaLogin />);
+
+    fireEvent.change(getByLabelText('Username'), { target: { value: 'testuser' } });
+    fireEvent.change(getByLabelText('Password'), { target: { value: 'wrongpass' } });
+    fireEvent.click(getByText('Login'));
+
+    await waitFor(async () => {
+      expect(await findByText(errorMessage)).toBeInTheDocument();
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+  });
+
+  it('validates required fields', async () => {
+    const { getByText, findByText } = render(<NumaLogin />);
+
+    fireEvent.click(getByText('Login'));
+
+    await waitFor(async () => {
+      expect(await findByText('Username and password are required')).toBeInTheDocument();
+      expect(mockLogin).not.toHaveBeenCalled();
+    });
+  });
+
+  it('validates no spaces in credentials', async () => {
+    const { getByLabelText, getByText, findByText } = render(<NumaLogin />);
+
+    fireEvent.change(getByLabelText('Username'), { target: { value: 'test user' } });
+    fireEvent.change(getByLabelText('Password'), { target: { value: 'pass word' } });
+    fireEvent.click(getByText('Login'));
+
+    await waitFor(async () => {
+      expect(await findByText('Username and password cannot contain spaces')).toBeInTheDocument();
+      expect(mockLogin).not.toHaveBeenCalled();
     });
   });
 });

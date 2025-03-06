@@ -1,10 +1,6 @@
 import { vi } from 'vitest';
 import React from 'react';
-
-const navigationHandlers = {
-  mockNavigate: vi.fn(),
-  currentRoute: '/dash',
-};
+import { navigationHandlers } from './NavigationMockHandlers';
 
 // Create Router context
 const RouterContext = React.createContext(null);

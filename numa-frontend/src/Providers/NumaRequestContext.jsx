@@ -1,6 +1,11 @@
 import { createContext, useContext } from 'react';
 
-export const NumaRequestContext = createContext();
+export const NumaRequestContext = createContext({
+  numaGet: async () => {},
+  numaPost: async () => {},
+  numaPut: async () => {},
+  numaDelete: async () => {},
+});
 
 export const useNumaRequest = () => {
   const context = useContext(NumaRequestContext);

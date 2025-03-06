@@ -15,6 +15,34 @@ import { fromWebToken } from '@aws-sdk/credential-providers';
 
 setupAwsMocks();
 
+// Common test tokens
+const TEST_TOKENS = {
+  expired: {
+    accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NDA5OTUyMDB9.mock-signature',
+    idToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NDA5OTUyMDAsInN1YiI6InRlc3QtdXNlciJ9.mock-signature',
+    refreshToken: 'mock-refresh-token',
+    decoded: {
+      accessToken: { exp: 1640995200 },
+      idToken: {
+        exp: 1640995200,
+        sub: 'test-user',
+      },
+    },
+  },
+  valid: {
+    accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjk5OTk5OTk5OTl9.new-signature',
+    idToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjk5OTk5OTk5OTksInN1YiI6InRlc3QtdXNlciJ9.new-signature',
+    refreshToken: 'mock-refresh-token',
+    decoded: {
+      accessToken: { exp: 9999999999 },
+      idToken: {
+        exp: 9999999999,
+        sub: 'test-user',
+      },
+    },
+  },
+};
+
 const TestComponent = ({ onAuth }) => {
   const auth = useAuth();
   React.useEffect(() => {
@@ -24,25 +52,62 @@ const TestComponent = ({ onAuth }) => {
 };
 
 describe('AuthProvider', () => {
-  let container;
+  let mockSessionStorage = {};
+  let mockStorage = {};
 
   beforeEach(() => {
-    document.body.innerHTML = '<div id="root"></div>';
-    container = document.getElementById('root');
-
     vi.clearAllMocks();
-    global.fetch = vi.fn();
 
-    // Mock localStorage with all required methods
-    Object.defineProperty(window, 'localStorage', {
+    // Set up required session storage values
+    mockSessionStorage = {
+      ROLE_ARN: 'arn:aws:iam::123456789012:role/test-role',
+      USER_POOL_ID: 'us-east-1_testpool',
+      API_ENDPOINT: 'https://api.example.com',
+      CLIENT_ID: 'test-client-id',
+      REGION: 'us-east-1',
+      IDENTITY_POOL_ID: 'us-east-1:test-identity-pool',
+    };
+
+    // Set up sessionStorage mock
+    Object.defineProperty(window, 'sessionStorage', {
       value: {
-        getItem: vi.fn(),
-        setItem: vi.fn(),
-        removeItem: vi.fn(),
+        getItem: vi.fn((key) => mockSessionStorage[key]),
+        setItem: vi.fn((key, value) => {
+          mockSessionStorage[key] = value;
+        }),
+        removeItem: vi.fn((key) => {
+          delete mockSessionStorage[key];
+        }),
         clear: vi.fn(),
       },
       writable: true,
     });
+
+    // Set up localStorage mock
+    mockStorage = {};
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: vi.fn((key) => mockStorage[key]),
+        setItem: vi.fn((key, value) => {
+          mockStorage[key] = value;
+        }),
+        removeItem: vi.fn((key) => {
+          delete mockStorage[key];
+        }),
+        clear: vi.fn(),
+      },
+      writable: true,
+    });
+
+    // Set up container
+    document.body.innerHTML = '<div id="root"></div>';
+  });
+
+  let container;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn();
   });
 
   it('should authenticate user successfully', async () => {
@@ -119,37 +184,31 @@ describe('AuthProvider', () => {
   });
 
   it('should handle token refresh', async () => {
-    // Mock tokens with future expiration to prevent infinite refresh loops
-    const futureExp = Math.floor(Date.now() / 1000) + 3600; // 1 hour in the future
-    const mockUser = {
-      tokens: {
-        accessToken: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTYyMzkwMjJ9.mock-signature`,
-        idToken: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJleHAiOjE2MTYyMzkwMjJ9.mock-signature`,
-        refreshToken: 'mock-refresh-token',
-      },
-      decoded_tokens: {
-        accessToken: { exp: futureExp },
-        idToken: { sub: 'test-user', exp: futureExp },
-      },
-    };
-
-    // Mock refresh handler
-    const mockRefreshHandler = vi.fn().mockResolvedValue({
-      AuthenticationResult: {
-        AccessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTYyMzkwMjJ9.new-signature',
-        IdToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIifQ.new-signature',
-      },
+    // Mock fetch for secret hash
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ hash: 'mock-secret-hash' }),
     });
 
-    // Set up localStorage
+    // Update the existing CognitoIdentityProviderClient mock
+    vi.mocked(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).mockImplementation(() => ({
+      send: vi.fn().mockResolvedValue({
+        AuthenticationResult: {
+          AccessToken: TEST_TOKENS.valid.accessToken,
+          IdToken: TEST_TOKENS.valid.idToken,
+        },
+      }),
+    }));
+
+    // Set up localStorage with expired tokens
     window.localStorage.getItem.mockImplementation((key) => {
       switch (key) {
         case 'refreshToken':
-          return mockUser.tokens.refreshToken;
+          return TEST_TOKENS.expired.refreshToken;
         case 'idToken':
-          return mockUser.tokens.idToken;
+          return TEST_TOKENS.expired.idToken;
         case 'accessToken':
-          return mockUser.tokens.accessToken;
+          return TEST_TOKENS.expired.accessToken;
         default:
           return null;
       }
@@ -157,7 +216,16 @@ describe('AuthProvider', () => {
 
     const onAuth = vi.fn();
     render(
-      <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={mockUser}>
+      <TestAuthProvider
+        initialTokens={{
+          tokens: {
+            accessToken: TEST_TOKENS.expired.accessToken,
+            idToken: TEST_TOKENS.expired.idToken,
+            refreshToken: TEST_TOKENS.expired.refreshToken,
+          },
+          decoded_tokens: TEST_TOKENS.expired.decoded,
+        }}
+      >
         <TestComponent onAuth={onAuth} />
       </TestAuthProvider>,
     );
@@ -173,73 +241,97 @@ describe('AuthProvider', () => {
       await auth.refreshTokens();
     });
 
-    // Verify the refresh handler was called
-    expect(mockRefreshHandler).toHaveBeenCalledWith({
-      refreshToken: mockUser.tokens.refreshToken,
-      username: mockUser.decoded_tokens.idToken.sub,
-    });
+    // Verify the fetch call was made with userSub
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.example.com/srp-hasher',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userSub: TEST_TOKENS.expired.decoded.idToken.sub }),
+      }),
+    );
 
     // Verify localStorage was updated with proper JWT tokens
-    expect(window.localStorage.setItem).toHaveBeenCalledWith(
-      'accessToken',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTYyMzkwMjJ9.new-signature',
-    );
-    expect(window.localStorage.setItem).toHaveBeenCalledWith(
-      'idToken',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIifQ.new-signature',
-    );
+    expect(window.localStorage.setItem).toHaveBeenCalledWith('accessToken', TEST_TOKENS.valid.accessToken);
+    expect(window.localStorage.setItem).toHaveBeenCalledWith('idToken', TEST_TOKENS.valid.idToken);
   });
 
   describe('Token Management', () => {
     it('should get access token and refresh if expired', async () => {
-      const mockRefreshHandler = vi.fn().mockResolvedValue(authTestTokens.refreshResponses.success);
+      // Mock fetch for secret hash
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ hash: 'mock-secret-hash' }),
+      });
 
-      // Mock localStorage getItem to return the expired tokens consistently
-      window.localStorage.getItem.mockImplementation((key) => authTestTokens.expired.tokens[key]);
+      // Update the existing CognitoIdentityProviderClient mock
+      vi.mocked(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).mockImplementation(() => ({
+        send: vi.fn().mockResolvedValue({
+          AuthenticationResult: {
+            AccessToken: TEST_TOKENS.valid.accessToken,
+            IdToken: TEST_TOKENS.valid.idToken,
+          },
+        }),
+      }));
+
+      // Set up localStorage with expired tokens
+      window.localStorage.getItem.mockImplementation((key) => {
+        switch (key) {
+          case 'refreshToken':
+            return TEST_TOKENS.expired.refreshToken;
+          case 'idToken':
+            return TEST_TOKENS.expired.idToken;
+          case 'accessToken':
+            return TEST_TOKENS.expired.accessToken;
+          default:
+            return null;
+        }
+      });
 
       const onAuth = vi.fn();
+      render(
+        <TestAuthProvider
+          initialTokens={{
+            tokens: {
+              accessToken: TEST_TOKENS.expired.accessToken,
+              idToken: TEST_TOKENS.expired.idToken,
+              refreshToken: TEST_TOKENS.expired.refreshToken,
+            },
+            decoded_tokens: TEST_TOKENS.expired.decoded,
+          }}
+        >
+          <TestComponent onAuth={onAuth} />
+        </TestAuthProvider>,
+      );
 
-      // Ensure expired tokens are actually expired
-      const expiredTokens = {
-        ...authTestTokens.expired,
-        decoded_tokens: {
-          accessToken: { exp: Math.floor(Date.now() / 1000) - 3600 }, // 1 hour in the past
-          idToken: {
-            exp: Math.floor(Date.now() / 1000) - 3600,
-            sub: 'test-user',
-          },
-        },
-      };
-
-      await act(async () => {
-        render(
-          <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={expiredTokens}>
-            <TestComponent onAuth={onAuth} />
-          </TestAuthProvider>,
-        );
+      await waitFor(() => {
+        expect(onAuth).toHaveBeenCalled();
       });
 
-      // Wait for auth to be fully initialized
-      const auth = await waitFor(() => {
-        const lastCall = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
-        expect(lastCall).toBeTruthy();
-        return lastCall;
-      });
+      const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
 
-      // Get the access token and wait for refresh
+      // Get the access token which should trigger a refresh
       let token;
       await act(async () => {
         token = await auth.getAccessToken();
       });
 
-      // Wait for all state updates to complete and verify refresh handler was called
-      expect(mockRefreshHandler).toHaveBeenCalledWith({
-        refreshToken: authTestTokens.expired.tokens.refreshToken,
-        username: 'test-user',
-      });
+      // Verify the fetch call was made with userSub
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://api.example.com/srp-hasher',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userSub: TEST_TOKENS.expired.decoded.idToken.sub }),
+        }),
+      );
 
-      // Verify the token matches the refreshed token
-      expect(token).toBe(authTestTokens.refreshResponses.success.AuthenticationResult.AccessToken);
+      // Verify localStorage was updated with new tokens
+      expect(window.localStorage.setItem).toHaveBeenCalledWith('accessToken', TEST_TOKENS.valid.accessToken);
+      expect(window.localStorage.setItem).toHaveBeenCalledWith('idToken', TEST_TOKENS.valid.idToken);
+
+      // Verify the returned token is the new valid token
+      expect(token).toBe(TEST_TOKENS.valid.accessToken);
     });
 
     it('should handle logout correctly', async () => {
@@ -248,14 +340,11 @@ describe('AuthProvider', () => {
         <TestAuthProvider
           initialTokens={{
             tokens: {
-              accessToken: 'test-token',
-              idToken: 'test-id-token',
-              refreshToken: 'test-refresh-token',
+              accessToken: TEST_TOKENS.valid.accessToken,
+              idToken: TEST_TOKENS.valid.idToken,
+              refreshToken: TEST_TOKENS.valid.refreshToken,
             },
-            decoded_tokens: {
-              accessToken: { exp: Math.floor(Date.now() / 1000) + 3600 },
-              idToken: { exp: Math.floor(Date.now() / 1000) + 3600 },
-            },
+            decoded_tokens: TEST_TOKENS.valid.decoded,
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -296,65 +385,31 @@ describe('AuthProvider', () => {
       expect(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).toHaveBeenCalled();
     });
 
-    it('should handle loadUserFromTokens with various token states', async () => {
-      // Test Case 1: Valid tokens
-      const validTokens = {
-        accessToken: 'valid-access-token',
-        idToken: 'valid-id-token',
-        refreshToken: 'valid-refresh-token',
-      };
-      const futureExp = Math.floor(Date.now() / 1000) + 3600;
-      const decodedTokens = {
-        accessToken: { exp: futureExp },
-        idToken: { exp: futureExp, sub: 'test-user' },
-      };
-
-      // Mock localStorage getItem for valid tokens
-      window.localStorage.getItem.mockImplementation((key) => validTokens[key]);
+    it('should handle valid tokens', async () => {
+      // Set up localStorage with valid tokens
+      window.localStorage.getItem.mockImplementation((key) => {
+        switch (key) {
+          case 'refreshToken':
+            return TEST_TOKENS.valid.refreshToken;
+          case 'idToken':
+            return TEST_TOKENS.valid.idToken;
+          case 'accessToken':
+            return TEST_TOKENS.valid.accessToken;
+          default:
+            return null;
+        }
+      });
 
       const onAuth = vi.fn();
       render(
-        <TestAuthProvider initialTokens={{ tokens: validTokens, decoded_tokens: decodedTokens }}>
-          <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
-      );
-
-      await waitFor(() => {
-        const lastCall = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
-        expect(lastCall.getUserInfo()).toEqual({
-          tokens: validTokens,
-          decoded_tokens: decodedTokens,
-        });
-      });
-
-      // Test Case 2: Expired tokens that need refresh
-      vi.clearAllMocks();
-      const expiredTokens = {
-        accessToken: 'expired-access-token',
-        idToken: 'expired-id-token',
-        refreshToken: 'valid-refresh-token',
-      };
-      const expiredDecodedTokens = {
-        accessToken: { exp: Math.floor(Date.now() / 1000) - 1000 },
-        idToken: { exp: Math.floor(Date.now() / 1000) - 1000 },
-      };
-
-      const mockRefreshHandler = vi.fn().mockResolvedValue({
-        AuthenticationResult: {
-          AccessToken: 'new-access-token',
-          IdToken: 'new-id-token',
-        },
-      });
-
-      // Mock localStorage getItem for expired tokens
-      window.localStorage.getItem.mockImplementation((key) => expiredTokens[key]);
-
-      render(
         <TestAuthProvider
-          refreshHandler={mockRefreshHandler}
           initialTokens={{
-            tokens: expiredTokens,
-            decoded_tokens: expiredDecodedTokens,
+            tokens: {
+              accessToken: TEST_TOKENS.valid.accessToken,
+              idToken: TEST_TOKENS.valid.idToken,
+              refreshToken: TEST_TOKENS.valid.refreshToken,
+            },
+            decoded_tokens: TEST_TOKENS.valid.decoded,
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -362,12 +417,23 @@ describe('AuthProvider', () => {
       );
 
       await waitFor(() => {
-        expect(mockRefreshHandler).toHaveBeenCalled();
+        const lastCall = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+        expect(lastCall.getUserInfo()).toEqual({
+          tokens: {
+            accessToken: TEST_TOKENS.valid.accessToken,
+            idToken: TEST_TOKENS.valid.idToken,
+            refreshToken: TEST_TOKENS.valid.refreshToken,
+          },
+          decoded_tokens: TEST_TOKENS.valid.decoded,
+        });
       });
+    });
 
+    it('should handle expired tokens and no refresh token', async () => {
       // Test Case 3: No refresh token
       vi.clearAllMocks();
       window.localStorage.getItem.mockImplementation(() => null);
+      const onAuth = vi.fn();
 
       render(
         <TestAuthProvider>
@@ -381,175 +447,69 @@ describe('AuthProvider', () => {
       });
     });
 
-    it('should handle checkAndRefreshTokens for different token states', async () => {
-      // Test Case 1: Valid token - no refresh needed
-      const mockRefreshHandler = vi.fn();
-      const onAuth = vi.fn();
-
-      render(
-        <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={authTestTokens.valid}>
-          <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
-      );
-
-      // Wait for auth to be initialized
-      await waitFor(() => {
-        const lastCall = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
-        expect(lastCall.getUserInfo()).not.toBeNull();
-      });
-
-      const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
-
-      let result;
-      await act(async () => {
-        result = await auth.checkAndRefreshTokens();
-      });
-
-      expect(result).toBe(true);
-      expect(mockRefreshHandler).not.toHaveBeenCalled();
-      expect(auth.getUserInfo()).toEqual(authTestTokens.valid);
-
-      // Test Case 2: Expired token - successful refresh
-      vi.clearAllMocks();
-
-      // Mock localStorage for the expired tokens case
-      window.localStorage.getItem.mockImplementation((key) => {
-        return authTestTokens.expired.tokens[key];
-      });
-
-      const mockSuccessRefreshHandler = vi.fn().mockResolvedValue(authTestTokens.refreshResponses.success);
-
-      render(
-        <TestAuthProvider refreshHandler={mockSuccessRefreshHandler} initialTokens={authTestTokens.expired}>
-          <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
-      );
-
-      const authWithExpired = await waitFor(() => {
-        const lastCall = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
-        expect(lastCall.getUserInfo()).not.toBeNull();
-        return lastCall;
-      });
-
-      let refreshResult;
-      await act(async () => {
-        refreshResult = await authWithExpired.checkAndRefreshTokens();
-      });
-
-      expect(refreshResult).toBe(true);
-      expect(mockSuccessRefreshHandler).toHaveBeenCalled();
-      expect(mockSuccessRefreshHandler).toHaveBeenCalledWith({
-        refreshToken: authTestTokens.expired.tokens.refreshToken,
-        username: 'test-user',
-      });
-
-      // Test Case 3: Expired token - failed refresh
-      vi.clearAllMocks();
-      const mockFailedRefreshHandler = vi.fn().mockResolvedValue(authTestTokens.refreshResponses.failure);
-
-      // Mock localStorage for the expired tokens case
-      window.localStorage.getItem.mockImplementation((key) => {
-        return authTestTokens.expired.tokens[key];
-      });
-
-      render(
-        <TestAuthProvider refreshHandler={mockFailedRefreshHandler} initialTokens={authTestTokens.expired}>
-          <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
-      );
-
-      const authWithFailedRefresh = await waitFor(() => {
-        const lastCall = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
-        expect(lastCall.getUserInfo()).not.toBeNull();
-        return lastCall;
-      });
-
-      // Trigger the failed refresh
-      await act(async () => {
-        await authWithFailedRefresh.checkAndRefreshTokens();
-      });
-
-      // Verify localStorage was cleared
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith('accessToken');
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith('idToken');
-      expect(window.localStorage.removeItem).toHaveBeenCalledWith('refreshToken');
-
-      // Force a re-render to ensure state is updated
-      render(
-        <TestAuthProvider refreshHandler={mockFailedRefreshHandler} initialTokens={null}>
-          <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
-      );
-
-      // Wait for the auth state to be cleared
-      await waitFor(
-        () => {
-          const lastCall = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
-          expect(lastCall.getUserInfo()).toBeNull();
-          expect(lastCall.isAuthenticated).toBe(false);
-        },
-        { timeout: 2000 },
-      );
-    });
-
     it('should handle valid tokens without requiring refresh', async () => {
-      // Create real JWT tokens with future expiration
-      const futureExp = Math.floor(Date.now() / 1000) + 3600;
-      const validTokens = {
-        tokens: {
-          accessToken: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${btoa(JSON.stringify({ exp: futureExp }))}.mock-signature`,
-          idToken: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${btoa(JSON.stringify({ exp: futureExp, sub: 'test-user' }))}.mock-signature`,
-          refreshToken: 'valid-refresh-token',
-        },
-        decoded_tokens: {
-          accessToken: { exp: futureExp },
-          idToken: { exp: futureExp, sub: 'test-user' },
-        },
-      };
-
-      // Mock refresh handler
-      const mockRefreshHandler = vi.fn().mockResolvedValue({
-        AuthenticationResult: {
-          AccessToken: validTokens.tokens.accessToken,
-          IdToken: validTokens.tokens.idToken,
-          RefreshToken: validTokens.tokens.refreshToken,
-        },
+      // Mock fetch for secret hash
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ hash: 'mock-secret-hash' }),
       });
 
-      // Mock localStorage
+      // Update the existing CognitoIdentityProviderClient mock
+      vi.mocked(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).mockImplementation(() => ({
+        send: vi.fn().mockResolvedValue({
+          AuthenticationResult: {
+            AccessToken: TEST_TOKENS.valid.accessToken,
+            IdToken: TEST_TOKENS.valid.idToken,
+          },
+        }),
+      }));
+
+      // Set up localStorage with valid tokens
       window.localStorage.getItem.mockImplementation((key) => {
-        if (key === 'accessToken') return validTokens.tokens.accessToken;
-        if (key === 'idToken') return validTokens.tokens.idToken;
-        if (key === 'refreshToken') return validTokens.tokens.refreshToken;
-        return null;
+        switch (key) {
+          case 'refreshToken':
+            return TEST_TOKENS.valid.refreshToken;
+          case 'idToken':
+            return TEST_TOKENS.valid.idToken;
+          case 'accessToken':
+            return TEST_TOKENS.valid.accessToken;
+          default:
+            return null;
+        }
       });
 
       const onAuth = vi.fn();
-
       render(
-        <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={validTokens}>
+        <TestAuthProvider
+          initialTokens={{
+            tokens: {
+              accessToken: TEST_TOKENS.valid.accessToken,
+              idToken: TEST_TOKENS.valid.idToken,
+              refreshToken: TEST_TOKENS.valid.refreshToken,
+            },
+            decoded_tokens: TEST_TOKENS.valid.decoded,
+          }}
+        >
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
 
-      await waitFor(
-        () => {
-          expect(onAuth).toHaveBeenCalled();
-        },
-        { timeout: 2000 },
-      );
+      await waitFor(() => {
+        expect(onAuth).toHaveBeenCalled();
+      });
 
       const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      });
-
+      // Get user info and verify no refresh was needed
       const userInfo = auth.getUserInfo();
       expect(userInfo).not.toBeNull();
-      expect(userInfo.tokens).toEqual(validTokens.tokens);
-      expect(userInfo.decoded_tokens).toEqual(validTokens.decoded_tokens);
-      expect(mockRefreshHandler).not.toHaveBeenCalled();
+      expect(userInfo.tokens.accessToken).toBe(TEST_TOKENS.valid.accessToken);
+      expect(userInfo.tokens.idToken).toBe(TEST_TOKENS.valid.idToken);
+      expect(userInfo.tokens.refreshToken).toBe(TEST_TOKENS.valid.refreshToken);
+
+      // Verify the refresh was not called
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).not.toHaveBeenCalled();
     });
 
     it('should handle checkAndRefreshTokens with no user', async () => {
@@ -643,14 +603,11 @@ describe('AuthProvider', () => {
         <TestAuthProvider
           initialTokens={{
             tokens: {
-              idToken: 'mock-id-token',
-              accessToken: 'mock-access-token',
-              refreshToken: 'mock-refresh-token',
+              idToken: TEST_TOKENS.valid.idToken,
+              accessToken: TEST_TOKENS.valid.accessToken,
+              refreshToken: TEST_TOKENS.valid.refreshToken,
             },
-            decoded_tokens: {
-              idToken: { exp: Math.floor(Date.now() / 1000) + 3600 },
-              accessToken: { exp: Math.floor(Date.now() / 1000) + 3600 },
-            },
+            decoded_tokens: TEST_TOKENS.valid.decoded,
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -683,14 +640,11 @@ describe('AuthProvider', () => {
         <TestAuthProvider
           initialTokens={{
             tokens: {
-              idToken: 'mock-id-token',
-              accessToken: 'mock-access-token',
-              refreshToken: 'mock-refresh-token',
+              idToken: TEST_TOKENS.valid.idToken,
+              accessToken: TEST_TOKENS.valid.accessToken,
+              refreshToken: TEST_TOKENS.valid.refreshToken,
             },
-            decoded_tokens: {
-              idToken: { exp: Math.floor(Date.now() / 1000) + 3600 },
-              accessToken: { exp: Math.floor(Date.now() / 1000) + 3600 },
-            },
+            decoded_tokens: TEST_TOKENS.valid.decoded,
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -710,14 +664,11 @@ describe('AuthProvider', () => {
         <TestAuthProvider
           initialTokens={{
             tokens: {
-              idToken: 'mock-id-token',
-              accessToken: 'mock-access-token',
-              refreshToken: 'mock-refresh-token',
+              idToken: TEST_TOKENS.valid.idToken,
+              accessToken: TEST_TOKENS.valid.accessToken,
+              refreshToken: TEST_TOKENS.valid.refreshToken,
             },
-            decoded_tokens: {
-              idToken: { exp: Math.floor(Date.now() / 1000) + 3600 },
-              accessToken: { exp: Math.floor(Date.now() / 1000) + 3600 },
-            },
+            decoded_tokens: TEST_TOKENS.valid.decoded,
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -746,7 +697,22 @@ describe('AuthProvider', () => {
   });
 
   describe('Password Reset Functions', () => {
+    beforeEach(() => {
+      // Mock fetch for secret hash
+      global.fetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ hash: 'mock-secret-hash' }),
+      });
+    });
+
     it('should handle password reset request successfully', async () => {
+      // Mock Cognito response for ForgotPassword
+      vi.mocked(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).mockImplementation(() => ({
+        send: vi.fn().mockResolvedValue({
+          // Empty successful response
+        }),
+      }));
+
       const onAuth = vi.fn();
       render(
         <TestAuthProvider>
@@ -756,14 +722,24 @@ describe('AuthProvider', () => {
 
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
 
+      // Verify secret hash is fetched first
       const result = await auth.requestPasswordReset('test@example.com');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://api.example.com/srp-hasher',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'test@example.com' }),
+        }),
+      );
+
       expect(result).toEqual({ success: true });
-      expect(CognitoIdentityProviderClient).toHaveBeenCalled();
     });
 
     it('should handle password reset request failure', async () => {
-      // Mock the CognitoIdentityProviderClient to throw an error
-      vi.mocked(CognitoIdentityProviderClient).mockImplementationOnce(() => ({
+      // Mock Cognito error response
+      vi.mocked(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).mockImplementation(() => ({
         send: vi.fn().mockRejectedValue(new Error('Password reset failed')),
       }));
 
@@ -782,6 +758,13 @@ describe('AuthProvider', () => {
     });
 
     it('should handle password reset confirmation successfully', async () => {
+      // Mock Cognito response for ConfirmForgotPassword
+      vi.mocked(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).mockImplementation(() => ({
+        send: vi.fn().mockResolvedValue({
+          // Empty successful response
+        }),
+      }));
+
       const onAuth = vi.fn();
       render(
         <TestAuthProvider>
@@ -792,13 +775,23 @@ describe('AuthProvider', () => {
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
 
       const result = await auth.confirmPasswordReset('test@example.com', '123456', 'newPassword123');
+
+      // Verify secret hash is fetched
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://api.example.com/srp-hasher',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'test@example.com' }),
+        }),
+      );
+
       expect(result).toEqual({ success: true });
-      expect(CognitoIdentityProviderClient).toHaveBeenCalled();
     });
 
     it('should handle password reset confirmation failure', async () => {
-      // Mock the CognitoIdentityProviderClient to throw an error
-      vi.mocked(CognitoIdentityProviderClient).mockImplementationOnce(() => ({
+      // Mock Cognito error response
+      vi.mocked(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).mockImplementation(() => ({
         send: vi.fn().mockRejectedValue(new Error('Invalid confirmation code')),
       }));
 

@@ -1,6 +1,8 @@
 import { render } from '@testing-library/react';
-import { MockMemoryRouter, clearNavigationMocks } from './NavigationMock';
-import { MockAuthProvider, clearAuthMocks } from './AuthMock';
+import { clearNavigationMocks } from './NavigationMockHandlers';
+import { MockMemoryRouter } from './NavigationMock';
+import { clearAuthMocks } from './AuthMockHandlers';
+import { MockAuthProvider } from './AuthMock';
 import { NumaAppProvider } from '../../Providers/NumaAppProvider';
 import { NumaRequestProvider } from '../../Providers/RequestProvider';
 import { vi } from 'vitest';

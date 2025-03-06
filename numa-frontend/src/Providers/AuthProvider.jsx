@@ -22,17 +22,6 @@ import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
 
 const AuthContext = createContext(null);
 
-const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
-const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
-const REGION = window.sessionStorage.getItem('REGION');
-const API_ENDPOINT = window.sessionStorage.getItem('API_ENDPOINT');
-const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
-const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
-const client = window.sessionStorage.getItem('CLIENT_NAME'); // e.g. "arcanum-demo"
-const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod'; // default to "prod" if not set
-const NUMA_CHAT_HISTORY_TABLE_NAME = `numa-${client}${environment !== 'prod' ? `-${environment}` : ''}-chat-history`;
-
 export const AuthProvider = ({ children, initialTokens }) => {
   const [user, setUser] = useState(null);
   const tokensRef = useRef(
@@ -52,14 +41,37 @@ export const AuthProvider = ({ children, initialTokens }) => {
   // Decode tokens without triggering re-renders
   const decodeTokens = () => {
     try {
-      if (tokensRef.current.accessToken) {
-        decodedTokensRef.current.accessToken = jwtDecode(tokensRef.current.accessToken);
+      const { accessToken, idToken } = tokensRef.current;
+
+      // Reset decoded tokens first
+      decodedTokensRef.current = { accessToken: null, idToken: null };
+
+      // Only attempt to decode if tokens exist
+      if (accessToken) {
+        try {
+          decodedTokensRef.current.accessToken = jwtDecode(accessToken);
+        } catch (e) {
+          console.warn('Failed to decode access token:', e);
+        }
       }
-      if (tokensRef.current.idToken) {
-        decodedTokensRef.current.idToken = jwtDecode(tokensRef.current.idToken);
+
+      if (idToken) {
+        try {
+          decodedTokensRef.current.idToken = jwtDecode(idToken);
+        } catch (e) {
+          console.warn('Failed to decode ID token:', e);
+        }
       }
+
+      // Log the actual tokens for debugging
+      console.debug('Token status:', {
+        hasAccessToken: !!accessToken,
+        hasIdToken: !!idToken,
+        decodedAccess: !!decodedTokensRef.current.accessToken,
+        decodedId: !!decodedTokensRef.current.idToken,
+      });
     } catch (error) {
-      console.error('Error decoding tokens:', error);
+      console.error('Error in decodeTokens:', error);
       decodedTokensRef.current = { accessToken: null, idToken: null };
     }
   };
@@ -103,6 +115,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   const fetchSecretHash = async (identifier) => {
+    const API_ENDPOINT = window.sessionStorage.getItem('API_ENDPOINT');
     try {
       // Check if identifier is provided
       if (!identifier) {
@@ -144,6 +157,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     try {
       console.log('🔄 Attempting to refresh tokens...');
       const refreshToken = tokensRef.current.refreshToken;
+      const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
+      const REGION = window.sessionStorage.getItem('REGION');
 
       if (!refreshToken) {
         console.error('No refresh token available');
@@ -212,16 +227,22 @@ export const AuthProvider = ({ children, initialTokens }) => {
       if (!refreshed) return null;
     }
 
-    return user.tokens.accessToken;
+    // Return the current access token from tokensRef instead of user.tokens
+    return tokensRef.current.accessToken;
   };
 
   const initializeQBusinessClient = useCallback(async () => {
     if (!user) return;
 
+    const REGION = window.sessionStorage.getItem('REGION');
+    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+    const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
 
     try {
       const idToken = user.tokens.idToken;
+
+      const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
 
       const accountId = ROLE_ARN.split(':')[4];
       const policy = generatePolicy({
@@ -254,10 +275,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const initializeBedrockRuntimeClient = useCallback(async () => {
     if (!user) return;
 
+    const REGION = window.sessionStorage.getItem('REGION');
+    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
 
     try {
       const idToken = user.tokens.idToken;
+      const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
 
       const accountId = ROLE_ARN.split(':')[4];
       const policy = generateBedrockPolicy({
@@ -291,10 +315,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const initializeDynamoDBClient = useCallback(async () => {
     if (!user) return;
 
+    const REGION = window.sessionStorage.getItem('REGION');
+    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+    const client = window.sessionStorage.getItem('CLIENT_NAME');
+    const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod';
+    const NUMA_CHAT_HISTORY_TABLE_NAME = `numa-${client}${environment !== 'prod' ? `-${environment}` : ''}-chat-history`;
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
 
     try {
       const idToken = user.tokens.idToken;
+      const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
 
       const accountId = ROLE_ARN.split(':')[4];
       const policy = generateDynamoDBPolicy({
@@ -328,7 +358,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const initializeQAppsClient = useCallback(async () => {
     if (!user) return;
 
+    const REGION = window.sessionStorage.getItem('REGION');
+    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+    const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+
+    const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
 
     const accountId = ROLE_ARN.split(':')[4];
     const policy = generatePolicy({
@@ -428,6 +464,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const idToken = localStorage.getItem('idToken');
     const refreshToken = localStorage.getItem('refreshToken');
 
+    // Update tokensRef before decoding
+    tokensRef.current = {
+      accessToken,
+      idToken,
+      refreshToken,
+    };
+
+    // Decode tokens after updating tokensRef
+    decodeTokens();
+
     if (refreshToken) {
       if (
         !accessToken ||
@@ -488,6 +534,9 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
   const login = async (username, password) => {
     try {
+      const REGION = window.sessionStorage.getItem('REGION');
+      const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
+      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
       const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
       const SECRET_HASH = await fetchSecretHash(username);
 
@@ -544,6 +593,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
   const setNewPassword = async (username, oldPassword, newPassword) => {
     try {
+      const REGION = window.sessionStorage.getItem('REGION');
+      const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
+      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+
       const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
       const SECRET_HASH = await fetchSecretHash(username);
 
@@ -655,6 +708,9 @@ export const AuthProvider = ({ children, initialTokens }) => {
     try {
       const SECRET_HASH = await fetchSecretHash(email);
 
+      const REGION = window.sessionStorage.getItem('REGION');
+      const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
+
       const command = new ForgotPasswordCommand({
         Username: email,
         ClientId: CLIENT_ID,
@@ -674,6 +730,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const confirmPasswordReset = async (email, code, newPassword) => {
     try {
       const SECRET_HASH = await fetchSecretHash(email);
+      const REGION = window.sessionStorage.getItem('REGION');
+      const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
 
       const command = new ConfirmForgotPasswordCommand({
         Username: email,
@@ -694,7 +752,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   const getWebTokenCredentials = async () => {
+    const REGION = window.sessionStorage.getItem('REGION');
+    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+    const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+
+    const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
 
     const accountId = ROLE_ARN.split(':')[4];
 
@@ -723,10 +787,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
     if (!user) return null;
 
     try {
+      const REGION = window.sessionStorage.getItem('REGION');
+      const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+
       const cognitoIdentity = new CognitoIdentityClient({
         region: REGION,
       });
 
+      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
       const credentials = await fromCognitoIdentityPool({
         client: cognitoIdentity,
         identityPoolId: IDENTITY_POOL_ID,
