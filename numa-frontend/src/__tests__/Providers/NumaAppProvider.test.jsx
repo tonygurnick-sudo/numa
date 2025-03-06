@@ -80,9 +80,49 @@ const TestComponent = ({ onMount }) => {
   );
 };
 
+// Import the findValueWithFormatFlexibility function directly from NumaAppProvider.jsx
+import { findValueWithFormatFlexibility } from '../../Providers/NumaAppProvider';
+
 describe('NumaAppProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('findValueWithFormatFlexibility', () => {
+    it('should find values with original key format', () => {
+      const obj = {
+        'test-key': 'test-value',
+        another_key: 'another-value',
+      };
+
+      expect(findValueWithFormatFlexibility(obj, 'test-key')).toBe('test-value');
+      expect(findValueWithFormatFlexibility(obj, 'another_key')).toBe('another-value');
+    });
+
+    it('should find values with hyphen format when key has underscores', () => {
+      const obj = {
+        'test-key': 'test-value',
+      };
+
+      expect(findValueWithFormatFlexibility(obj, 'test_key')).toBe('test-value');
+    });
+
+    it('should find values with underscore format when key has hyphens', () => {
+      const obj = {
+        another_key: 'another-value',
+      };
+
+      expect(findValueWithFormatFlexibility(obj, 'another-key')).toBe('another-value');
+    });
+
+    it('should return undefined when key is not found in any format', () => {
+      const obj = {
+        'test-key': 'test-value',
+        another_key: 'another-value',
+      };
+
+      expect(findValueWithFormatFlexibility(obj, 'missing-key')).toBeUndefined();
+    });
   });
 
   it('provides initial state', () => {

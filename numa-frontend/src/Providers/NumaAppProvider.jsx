@@ -15,7 +15,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NumaAppContext } from './NumaAppContext';
 
 // Utility function to find a value in an object using both hyphen and underscore formats of the key
-const findValueWithFormatFlexibility = (obj, key) => {
+export const findValueWithFormatFlexibility = (obj, key) => {
   // Try the original key first
   let value = obj[key];
   if (value !== undefined) {
