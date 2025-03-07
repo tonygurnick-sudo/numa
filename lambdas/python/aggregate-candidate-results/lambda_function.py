@@ -1,29 +1,32 @@
 import csv
 import json
-import logging
+import os
 from io import StringIO
-from typing import Dict, List
 
-import boto3
+import structlog
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+import helpers
+import s3_helpers
 
-s3_client = boto3.client("s3")
+logger = structlog.get_logger()
 
 
-def handler(event: dict, _context) -> dict:
-    """Main handler function for the lambda."""
+def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
+    """
+    Lambda function to aggregate candidate screening results and generate a CSV summary.
+    """
+    helpers.setup_step_function_lambda_logging(event, context)
+
     try:
-        output_bucket = event["output_bucket"]
-        execution_id = event["execution_id"]
+        app_id = event["app_id"]
+        job_id = event["job_id"]
 
-        results_prefix = f"candidate_screening_and_matching/{execution_id}/results/"
-        csv_output_key = f"candidate_screening_and_matching/{execution_id}/summary/candidate_rankings.csv"
+        results_prefix = f"{app_id}/{job_id}/results/"
+        csv_output_key = f"{app_id}/{job_id}/summary/candidate_rankings.csv"
 
-        screening_results = get_all_screening_results(output_bucket, results_prefix)
+        screening_results = get_all_screening_results(results_prefix)
 
-        # Logical column ordering
         candidate_summaries = []
         for result in screening_results:
             candidate_data = result["screening_results"]
@@ -73,7 +76,6 @@ def handler(event: dict, _context) -> dict:
             }
             candidate_summaries.append(summary)
 
-        # Overall score in descending order
         candidate_summaries.sort(key=lambda x: x["Overall Score"], reverse=True)
 
         csv_buffer = StringIO()
@@ -84,39 +86,46 @@ def handler(event: dict, _context) -> dict:
             writer.writeheader()
             writer.writerows(candidate_summaries)
 
-        s3_client.put_object(
-            Bucket=output_bucket,
-            Key=csv_output_key,
-            Body=csv_buffer.getvalue(),
-            ContentType="text/csv",
+        s3_helpers.write(
+            csv_output_key,
+            csv_buffer.getvalue().encode("utf-8"),
+            content_type="text/csv",
         )
 
         return {
-            "csv_location": {"bucket": output_bucket, "key": csv_output_key},
-            "candidates_processed": len(candidate_summaries),
-            "execution_id": execution_id,
+            "results": [
+                {
+                    "input_reference": None,
+                    "outputs": [
+                        {
+                            "content_type": "text/csv",
+                            "data": {
+                                "bucket": os.environ["BUCKET"],
+                                "key": csv_output_key,
+                            },
+                            "location": "S3",
+                            "title": "Candidate Rankings",
+                        }
+                    ],
+                }
+            ]
         }
 
-    except Exception as e:
-        logger.error(f"Error in lambda execution: {str(e)}")
+    except Exception:
+        logger.exception("Error in lambda execution")
         raise
 
 
-def get_all_screening_results(bucket: str, prefix: str) -> List[Dict]:
-    """Get all screening results from S3 for the given execution."""
+def get_all_screening_results(prefix: str) -> list[dict]:
     try:
-        paginator = s3_client.get_paginator("list_objects_v2")
         results = []
 
-        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-            if "Contents" in page:
-                for obj in page["Contents"]:
-                    response = s3_client.get_object(Bucket=bucket, Key=obj["Key"])
-                    content = json.loads(response["Body"].read().decode("utf-8"))
-                    results.append(content)
-
+        keys = s3_helpers.list_objects(prefix)
+        for key in keys:
+            content = json.loads(s3_helpers.read(key).decode("utf-8"))
+            results.append(content)
         return results
 
-    except Exception as e:
-        logger.error(f"Error reading screening results from S3: {str(e)}")
+    except Exception:
+        logger.exception("Error reading screening results from S3")
         raise
