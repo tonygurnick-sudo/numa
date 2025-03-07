@@ -67,6 +67,18 @@
     ],
     "devInstance": true
   },
+  "arcanum-demo-sam": {
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "apps": {
+      "document-summariser": {},
+      "meeting-analyser": {},
+      "policy-reviewer": {},
+      "company-profile": {},
+      "candidate-screening": {}
+    },
+    "devInstance": true
+  },
   "arcanum-demo-sebastian": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,

@@ -48,6 +48,7 @@ class AppOutputResultOutput(typing.TypedDict):
         "application/json",
         "application/pdf",
         "text/markdown",
+        "text/csv",
     ]
     title: str
 
