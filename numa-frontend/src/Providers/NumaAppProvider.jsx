@@ -551,7 +551,13 @@ export const NumaAppProvider = ({ children }) => {
 
   // Function to poll an incomplete job when loading from history
   const pollIncompleteHistoryJob = async (jobHistoryItem) => {
-    if (!jobHistoryItem || jobHistoryItem.status === 'completed' || jobHistoryItem.status === 'error') {
+    if (
+      !jobHistoryItem ||
+      jobHistoryItem.status === 'completed' ||
+      jobHistoryItem.status === 'error' ||
+      jobHistoryItem.status === 'files-uploaded'
+    ) {
+      // Skip polling for 'files-uploaded' jobs
       return jobHistoryItem;
     }
 
@@ -571,13 +577,18 @@ export const NumaAppProvider = ({ children }) => {
       const taskCompletions = {};
 
       // Mark input tasks complete if they have values
+      console.log('Loading job inputs:', jobHistoryItem.inputs);
       if (jobHistoryItem.inputs) {
+        console.log('Setting taskInputValues from job inputs');
         setTaskInputValues(jobHistoryItem.inputs);
         numaAppData.tasks.forEach((task) => {
+          console.log(`Checking task ${task.id} in inputs:`, !!jobHistoryItem.inputs[task.id]);
           if ((task.type === 'text-input' || task.type === 's3-upload') && jobHistoryItem.inputs[task.id]) {
             taskCompletions[task.id] = true;
           }
         });
+      } else {
+        console.log('No inputs found in job history item');
       }
 
       // Mark output tasks complete if they have results
@@ -605,8 +616,8 @@ export const NumaAppProvider = ({ children }) => {
           formattedResult[key] = value;
         });
 
-        // Update job in history
-        await jobsApi.updateJob(numaAppData, jobHistoryItem.jobID, formattedResult);
+        // Update job in history with results and completed status, but don't modify inputs
+        await jobsApi.updateJob(numaAppData, jobHistoryItem.jobID, formattedResult, undefined, 'completed');
         await loadAppJobs();
 
         // Update UI same as initial app run
@@ -765,7 +776,7 @@ export const NumaAppProvider = ({ children }) => {
         console.log(`Using existing job ID: ${currentJobId}`);
         // We already have a job from file uploads, so we need to update its status to 'running'
         try {
-          await jobsApi.updateJobStatus(numaAppData, currentJobId, 'running');
+          await jobsApi.updateJob(numaAppData, currentJobId, null, taskInputValues, 'running');
           console.log(`Updated job ${currentJobId} status to 'running'`);
         } catch (updateError) {
           console.error('Failed to update job status:', updateError);
@@ -808,8 +819,8 @@ export const NumaAppProvider = ({ children }) => {
       }, {});
 
       console.log('Text-output results to be saved:', textOutputResults);
-      // Update the job using jobsApi
-      await jobsApi.updateJob(numaAppData, jobID, textOutputResults);
+      // Update the job with results and completed status, but don't modify inputs
+      await jobsApi.updateJob(numaAppData, jobID, textOutputResults, undefined, 'completed');
 
       // Refresh the jobs list
       await loadAppJobs();
@@ -1037,12 +1048,45 @@ export const NumaAppProvider = ({ children }) => {
       setTaskInputValues({});
       setActiveStep(0);
       setSelectedTaskId(null);
-      setAppRunning(true); // Set to true to show post-run navigation
-      setHasRun(true); // Set hasRun to true to show post-run navigation
+
+      // Set app state based on job status
+      if (job.status === 'files-uploaded') {
+        // For 'files-uploaded' jobs, the app wasn't run, so don't show post-run navigation
+        setAppRunning(false);
+        setHasRun(false);
+        setJobHistorySidebarOpen(false); // Close the sidebar for files-uploaded jobs
+        console.log('Setting app state for files-uploaded job');
+      } else {
+        // For completed or running jobs, show post-run navigation
+        setAppRunning(true);
+        setHasRun(true);
+        setJobHistorySidebarOpen(false); // Close the sidebar for all jobs
+      }
 
       // Set inputs if available
-      if (job.inputs) {
-        setTaskInputValues(job.inputs);
+      const jobInputs = job.inputs || {};
+
+      if (Object.keys(jobInputs).length > 0) {
+        // Process inputs to ensure file uploads are properly formatted
+        const processedInputs = { ...jobInputs };
+
+        // Look for s3-upload tasks and ensure their values are properly formatted
+        if (numaAppData && numaAppData.tasks) {
+          numaAppData.tasks.forEach((task) => {
+            if (task.type === 's3-upload' && processedInputs[task.id]) {
+              const fileValue = processedInputs[task.id];
+              // Keep the file value as is - don't modify the format
+              // The S3UploadModule will handle different formats appropriately
+            }
+          });
+        }
+
+        setTaskInputValues(processedInputs);
+      }
+
+      // Set the current job ID so we can use it when running the app
+      if (job.jobID) {
+        setCurrentJobId(job.jobID);
       }
 
       // Parse stored manifest if available, otherwise fall back to current manifest
@@ -1062,19 +1106,76 @@ export const NumaAppProvider = ({ children }) => {
         throw new Error('No manifest available for job');
       }
 
-      // Try to poll for updates if job is incomplete
+      // Try to poll for updates if job is incomplete and was actually running
+      // If status is 'files-uploaded', we don't need to poll as the app was never run
       if (job.status === 'running') {
         job = await pollIncompleteHistoryJob(job);
         console.log('Job after polling:', job);
+      } else if (job.status === 'files-uploaded') {
+        console.log('Job has files uploaded but was never run, skipping polling');
+        // Set app as not running since we're just loading files
+        setAppRunning(false);
+        setHasRun(false);
       }
 
-      // Mark all input tasks as complete
+      // Function to trigger task value updates for s3-upload tasks
+      // This is needed to ensure the S3UploadModule displays the file name
+      const triggerFileUploadValueUpdates = () => {
+        // Find all s3-upload tasks with values
+        const fileUploadTasks = [];
+        if (manifestToUse.tasks && job.inputs) {
+          manifestToUse.tasks.forEach((task) => {
+            if (task.type === 's3-upload' && job.inputs[task.id]) {
+              fileUploadTasks.push({
+                taskId: task.id,
+                value: job.inputs[task.id],
+              });
+            }
+          });
+        }
+
+        // Schedule updates to be applied after the component has rendered
+        if (fileUploadTasks.length > 0) {
+          console.log('Scheduling file upload value updates for tasks:', fileUploadTasks);
+          setTimeout(() => {
+            fileUploadTasks.forEach(({ taskId, value }) => {
+              // Force a re-render of the task value to trigger the useEffect in S3UploadModule
+              const currentInputs = { ...taskInputValues };
+              // First remove the value to force a change
+              delete currentInputs[taskId];
+              setTaskInputValues(currentInputs);
+
+              // Then add it back in the next tick
+              setTimeout(() => {
+                setTaskInputValues((prev) => ({
+                  ...prev,
+                  [taskId]: value,
+                }));
+                console.log(`Triggered value update for s3-upload task ${taskId} with value:`, value);
+              }, 50);
+            });
+          }, 100);
+        }
+      };
+
+      // Mark tasks as complete based on job status
       const updatedStatus = {};
       if (manifestToUse.tasks) {
         manifestToUse.tasks.forEach((task) => {
-          //  this is a finished job
-          if (!task.type.includes('output')) {
-            updatedStatus[task.id] = true;
+          if (job.status === 'files-uploaded') {
+            // For 'files-uploaded' jobs, only mark input tasks as complete if they have values
+            if (task.type === 'text-input' && job.inputs && job.inputs[task.id]) {
+              console.log(`Marking text-input task ${task.id} as complete`);
+              updatedStatus[task.id] = true;
+            } else if (task.type === 's3-upload' && job.inputs && job.inputs[task.id]) {
+              console.log(`Marking s3-upload task ${task.id} as complete with value:`, job.inputs[task.id]);
+              updatedStatus[task.id] = true;
+            }
+          } else {
+            // For completed or running jobs, mark all input tasks as complete
+            if (!task.type.includes('output')) {
+              updatedStatus[task.id] = true;
+            }
           }
         });
       } else {
@@ -1152,6 +1253,9 @@ export const NumaAppProvider = ({ children }) => {
 
       // Set appRunning to false after all results are processed
       setAppRunning(false);
+
+      // Trigger file upload value updates to ensure file names are displayed
+      triggerFileUploadValueUpdates();
     } catch (error) {
       console.error('Error loading job results:', error);
       throw error;

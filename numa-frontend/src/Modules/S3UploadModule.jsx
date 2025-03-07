@@ -42,27 +42,43 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
 
+  // Handle value prop changes - extract file names from various input formats
   useEffect(() => {
-    if (value) {
-      // Add support for single file and multiple files
+    if (!value) return;
 
-      if (Array.isArray(value)) {
-        // Check if the array is length 1
-        console.log('value is an array', value);
-        if (value.length === 1) {
-          console.log('value is an array of length 1', value[0]);
-          setSelectedFiles({ name: value[0].fileName || value[0].name });
-        } else {
-          console.log('value is an array of length 2', value);
-          setSelectedFiles(value.map((file) => ({ name: file.fileName || file.name })));
-        }
-      } else {
-        setSelectedFiles([{ name: value.split('/').pop() }]);
-      }
-
-      console.log('value', value);
-      setUploadStatus('Upload successful!');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('S3UploadModule received value:', value);
     }
+
+    // Add support for single file and multiple files
+    if (Array.isArray(value)) {
+      // Check if the array is length 1
+      console.log('value is an array', value);
+      if (value.length === 1) {
+        console.log('value is an array of length 1', value[0]);
+        setSelectedFiles([
+          { name: typeof value[0] === 'string' ? value[0].split('/').pop() : value[0].fileName || value[0].name },
+        ]);
+      } else {
+        console.log('value is an array of length > 1', value);
+        setSelectedFiles(
+          value.map((file) => ({
+            name: typeof file === 'string' ? file.split('/').pop() : file.fileName || file.name,
+          })),
+        );
+      }
+    } else if (typeof value === 'string') {
+      // Handle string file path
+      console.log('value is a string', value);
+      setSelectedFiles([{ name: value.split('/').pop() }]);
+    } else if (typeof value === 'object') {
+      // Handle object with fileName or name
+      console.log('value is an object', value);
+      setSelectedFiles([{ name: value.fileName || value.name || 'Unknown file' }]);
+    }
+
+    // Mark as uploaded since we have a value
+    setUploadStatus('Upload successful!');
   }, [value]);
 
   const fetchConfig = useCallback(async () => {
@@ -175,11 +191,11 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       if (!jobId && numaAppData) {
         setUploadStatus('Creating job for file uploads...');
         try {
-          // Create job with 'files-uploaded' status to indicate files are uploaded but app hasn't run yet
-          const jobResponse = await jobsApi.createJob(numaAppData, taskInputValues, 'files-uploaded');
+          // First create a job to get a job ID
+          // We'll upload the files using this job ID, then update the job with the file paths
+          const jobResponse = await jobsApi.createJob(numaAppData, {}, 'files-uploaded');
           jobId = jobResponse.jobID;
           setCurrentJobId(jobId);
-          console.log(`Created job for file uploads with status 'files-uploaded': ${jobId}`);
         } catch (error) {
           console.error('Failed to create job for file uploads:', error);
           setError('Failed to create job for file uploads. Please try again.');
@@ -199,7 +215,6 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         setUploadProgress(0);
 
         const relativePath = file.name;
-        console.log('relativePath', relativePath);
         const encodedPath = relativePath
           .split('/')
           .map((segment) => encodeURIComponent(segment))
@@ -233,9 +248,28 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       }
 
       // Format the results for the task input value
+      // For single file, use the file path directly (not in array)
+      // For multiple files, use array of file paths
       const finalResults = results.length === 1 ? results[0].filePath : results.map((r) => r.filePath);
 
-      setUploadStatus(`All files uploaded successfully!`);
+      // Update the job with the final file paths
+      try {
+        // Create an object with just this task's input
+        const fileInputs = {
+          [task.id]: finalResults,
+        };
+
+        // Merge with existing task input values
+        const mergedInputs = { ...taskInputValues, ...fileInputs };
+
+        // Update the job with the final file paths and status, but don't modify results
+        await jobsApi.updateJob(numaAppData, jobId, undefined, mergedInputs, 'files-uploaded');
+      } catch (updateError) {
+        console.error('Failed to save file paths to job:', updateError);
+        // Continue with the upload process even if the update fails
+      }
+
+      setUploadStatus(`Upload successful!`);
       onChange(finalResults); // Update the task input value
       onComplete(); // Mark the task as complete
 
@@ -265,6 +299,13 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       onNotComplete();
     }
   };
+
+  // Ensure selectedFiles is always an array
+  useEffect(() => {
+    if (selectedFiles && !Array.isArray(selectedFiles)) {
+      setSelectedFiles([selectedFiles]);
+    }
+  }, [selectedFiles]);
 
   return (
     <div className="task-container">
@@ -305,8 +346,10 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
             <div className="selected-file mt-3" style={{ textAlign: 'left' }}>
               <p className="mb-2">Selected {selectedFiles.length === 1 ? 'file:' : 'files:'}</p>
               <ul style={{ listStyleType: 'none', listStylePosition: 'inside' }}>
-                {selectedFiles.map((f) => (
-                  <li key={f.name}>{f.name}</li>
+                {selectedFiles.map((f, index) => (
+                  <li key={index}>
+                    {f.name || f.fileName || (f.filePath ? f.filePath.split('/').pop() : 'Unknown file')}
+                  </li>
                 ))}
               </ul>
             </div>

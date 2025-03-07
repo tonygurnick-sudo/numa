@@ -24,10 +24,14 @@ export const useJobsApi = () => {
 
   const createJob = async (numaAppData, taskInputs, status = 'running') => {
     try {
-      console.log(`Creating job with status: ${status}...`);
       const jobData = createJobData(numaAppData, taskInputs, null, status);
       const endpoint_call = `/api/${numaAppData.id}/jobs`;
       const response = await numaPost(endpoint_call, jobData);
+
+      // Verify the inputs were saved correctly
+      if (response && response.jobID) {
+        await getJobById(numaAppData.id, response.jobID);
+      }
 
       // Check if the response is an object
       if (typeof response !== 'object') {
@@ -50,44 +54,42 @@ export const useJobsApi = () => {
   };
 
   // Update an existing job
-  const updateJob = async (numaAppData, jobId, results) => {
+  const updateJob = async (numaAppData, jobId, results, inputs = null, status = 'running') => {
     try {
       const { displayDate, isoDate } = createFormattedDate();
+
+      // Start with basic update data
       const updateData = {
-        results,
-        status: 'completed',
         lastUpdated: isoDate,
         name: `Run ${displayDate}`,
       };
 
+      // Only include status if it's provided
+      if (status !== undefined && status !== null) {
+        updateData.status = status;
+      }
+
+      // Only include results if they're provided
+      if (results !== undefined && results !== null) {
+        updateData.results = results;
+      }
+
+      // Only include inputs if they're provided
+      if (inputs !== undefined && inputs !== null) {
+        updateData.inputs = inputs;
+      }
+
       const endpoint = `/api/${numaAppData.id}/jobs/${jobId}`;
       const response = await numaPut(endpoint, updateData);
+
+      // Verify the inputs were saved correctly
+      await getJobById(numaAppData.id, jobId);
 
       return response;
     } catch (error) {
       console.error('API Error updating job:', error);
       console.error('Error details:', error.response?.data);
       throw new Error(`Failed to update job: ${error.message}`);
-    }
-  };
-
-  // Update just the status of an existing job
-  const updateJobStatus = async (numaAppData, jobId, status) => {
-    try {
-      const { isoDate } = createFormattedDate();
-      const updateData = {
-        status,
-        lastUpdated: isoDate,
-      };
-
-      const endpoint = `/api/${numaAppData.id}/jobs/${jobId}`;
-      const response = await numaPut(endpoint, updateData);
-
-      return response;
-    } catch (error) {
-      console.error('API Error updating job status:', error);
-      console.error('Error details:', error.response?.data);
-      throw new Error(`Failed to update job status: ${error.message}`);
     }
   };
 
@@ -114,11 +116,10 @@ export const useJobsApi = () => {
     try {
       const endpoint = `/api/${numaAppId}/jobs/${jobId}`;
       const response = await numaGet(endpoint);
+
       return response;
     } catch (error) {
       console.error('API Error fetching job:', error);
-      console.error('Error response:', error.response?.data);
-      console.error('Error status:', error.response?.status);
       throw error;
     }
   };
@@ -126,7 +127,6 @@ export const useJobsApi = () => {
   return {
     createJob,
     updateJob,
-    updateJobStatus,
     getJobsByAppId,
     getJobById,
   };

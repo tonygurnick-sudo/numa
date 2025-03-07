@@ -3,6 +3,7 @@ import { useNumaApp } from '../Providers/NumaAppContext';
 import { Button, ListGroup, Offcanvas } from 'react-bootstrap';
 import { formatDistanceToNow } from 'date-fns';
 import { Preloader } from './Preloader';
+import { CheckCircleFill, ArrowClockwise, ExclamationCircleFill, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 
 const JobHistorySidebar = () => {
   const { getAppJobs, loadAppJobs, loadJobResults, numaAppData, jobHistorySidebarOpen, setJobHistorySidebarOpen } =
@@ -139,13 +140,60 @@ const JobHistorySidebar = () => {
                           }
                         })()}
                       </small>
-                      <div className="text-muted small">Status: {job.status || 'completed'}</div>
+                      <div className="text-muted small d-flex align-items-center job-status-icon">
+                        {(() => {
+                          const status = job.status || 'completed';
+
+                          // Check if job has file uploads
+                          const hasFileUploads =
+                            job.fileUploads || job.files || (job.input && (job.input.files || job.input.fileUploads));
+
+                          switch (status) {
+                            case 'completed':
+                              return (
+                                <>
+                                  <CheckCircleFill className="text-success me-1" />
+                                  <span>Completed</span>
+                                  {hasFileUploads && (
+                                    <FileEarmarkArrowUp className="ms-2 text-primary" title="Contains file uploads" />
+                                  )}
+                                </>
+                              );
+                            case 'running':
+                            case 'in-progress':
+                              return (
+                                <>
+                                  <ArrowClockwise className="text-primary me-1 spin" />
+                                  <span>Running</span>
+                                </>
+                              );
+                            case 'failed':
+                            case 'error':
+                              return (
+                                <>
+                                  <ExclamationCircleFill className="text-danger me-1" />
+                                  <span>Failed</span>
+                                </>
+                              );
+                            case 'files-uploaded':
+                              return (
+                                <>
+                                  <FileEarmarkArrowUp className="text-primary me-1" />
+                                  <span>Files Uploaded</span>
+                                </>
+                              );
+                            default:
+                              return <span>{status}</span>;
+                          }
+                        })()}
+                      </div>
                     </div>
                     <Button
                       variant="outline-secondary"
                       size="sm"
                       onClick={() => handleViewResults(job.jobID)}
                       disabled={loadingJobId === job.jobID}
+                      title={`Job ID: ${job.jobID}`}
                     >
                       {loadingJobId === job.jobID ? (
                         <div className="d-flex align-items-center">

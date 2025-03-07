@@ -1,0 +1,266 @@
+/**
+ * @vitest-environment jsdom
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import '@testing-library/jest-dom';
+import { useJobsApi } from '../../Services/jobsApi';
+import { NumaRequestContext } from '../../Providers/NumaRequestContext';
+import { renderHook, act } from '@testing-library/react';
+import React from 'react';
+
+// Mock the NumaRequestContext
+const mockNumaGet = vi.fn();
+const mockNumaPost = vi.fn();
+const mockNumaPut = vi.fn();
+
+// Wrapper component for the hooks
+const wrapper = ({ children }) => (
+  <NumaRequestContext.Provider value={{ numaGet: mockNumaGet, numaPost: mockNumaPost, numaPut: mockNumaPut }}>
+    {children}
+  </NumaRequestContext.Provider>
+);
+
+describe('jobsApi', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('createJob', () => {
+    it('should create a job with the correct data', async () => {
+      // Mock the numaPost response
+      const mockJobId = 'new-job-id';
+      mockNumaPost.mockResolvedValueOnce({ jobID: mockJobId, status: 'running' });
+
+      // Mock the getJobById call that happens after create
+      mockNumaGet.mockResolvedValueOnce({ jobID: mockJobId, status: 'running' });
+
+      // Render the hook
+      const { result } = renderHook(() => useJobsApi(), { wrapper });
+
+      // Test data
+      const numaAppData = { id: 'test-app', appName: 'Test App', type: 'test-type' };
+      const taskInputs = { file: 'test.pdf' };
+
+      // Call createJob
+      await act(async () => {
+        const response = await result.current.createJob(numaAppData, taskInputs);
+        expect(response).toEqual({ jobID: mockJobId, status: 'running' });
+      });
+
+      // Check that numaPost was called with the correct parameters
+      expect(mockNumaPost).toHaveBeenCalledTimes(1);
+      expect(mockNumaPost).toHaveBeenCalledWith(
+        `/api/${numaAppData.id}/jobs`,
+        expect.objectContaining({
+          appName: numaAppData.appName,
+          appType: numaAppData.type,
+          inputs: taskInputs,
+          status: 'running',
+        })
+      );
+    });
+  });
+
+  describe('getJobById', () => {
+    it('should fetch a job by ID', async () => {
+      // Mock the numaGet response
+      const mockJob = { jobID: 'test-job-id', status: 'completed', results: { output: 'test' } };
+      mockNumaGet.mockResolvedValueOnce(mockJob);
+
+      // Render the hook
+      const { result } = renderHook(() => useJobsApi(), { wrapper });
+
+      // Test data
+      const numaAppId = 'test-app';
+      const jobId = 'test-job-id';
+
+      // Call getJobById
+      await act(async () => {
+        const response = await result.current.getJobById(numaAppId, jobId);
+        expect(response).toEqual(mockJob);
+      });
+
+      // Check that numaGet was called with the correct parameters
+      expect(mockNumaGet).toHaveBeenCalledTimes(1);
+      expect(mockNumaGet).toHaveBeenCalledWith(`/api/${numaAppId}/jobs/${jobId}`);
+    });
+  });
+
+  describe('getJobsByAppId', () => {
+    it('should fetch jobs by app ID with default parameters', async () => {
+      // Mock the numaGet response
+      const mockJobs = {
+        items: [
+          { jobID: 'job-1', status: 'completed' },
+          { jobID: 'job-2', status: 'running' }
+        ],
+        next_token: null,
+        count: 2
+      };
+      mockNumaGet.mockResolvedValueOnce(mockJobs);
+
+      // Render the hook
+      const { result } = renderHook(() => useJobsApi(), { wrapper });
+
+      // Test data
+      const numaAppId = 'test-app';
+
+      // Call getJobsByAppId with default options
+      await act(async () => {
+        const response = await result.current.getJobsByAppId(numaAppId, {});
+        expect(response).toEqual({
+          items: mockJobs.items,
+          nextToken: mockJobs.next_token,
+          count: mockJobs.count
+        });
+      });
+
+      // Check that numaGet was called with the correct parameters
+      expect(mockNumaGet).toHaveBeenCalledTimes(1);
+      expect(mockNumaGet).toHaveBeenCalledWith(`/api/${numaAppId}/jobs?limit=25`);
+    });
+
+    it('should fetch jobs by app ID with custom parameters', async () => {
+      // Mock the numaGet response
+      const mockJobs = {
+        items: [{ jobID: 'job-1', status: 'completed' }],
+        next_token: 'next-token-value',
+        count: 1
+      };
+      mockNumaGet.mockResolvedValueOnce(mockJobs);
+
+      // Render the hook
+      const { result } = renderHook(() => useJobsApi(), { wrapper });
+
+      // Test data
+      const numaAppId = 'test-app';
+      const options = { limit: 10, nextToken: 'current-token' };
+
+      // Call getJobsByAppId with custom options
+      await act(async () => {
+        const response = await result.current.getJobsByAppId(numaAppId, options);
+        expect(response).toEqual({
+          items: mockJobs.items,
+          nextToken: mockJobs.next_token,
+          count: mockJobs.count
+        });
+      });
+
+      // Check that numaGet was called with the correct parameters
+      expect(mockNumaGet).toHaveBeenCalledTimes(1);
+      expect(mockNumaGet).toHaveBeenCalledWith(`/api/${numaAppId}/jobs?limit=10&next_token=current-token`);
+    });
+  });
+
+  describe('updateJob', () => {
+    it('should only update provided fields', async () => {
+      // Mock the numaPut response
+      mockNumaPut.mockResolvedValueOnce({ success: true });
+
+      // Mock the getJobById call that happens after update
+      mockNumaGet.mockResolvedValueOnce({ jobID: 'test-job-id', status: 'completed' });
+
+      // Render the hook
+      const { result } = renderHook(() => useJobsApi(), { wrapper });
+
+      // Test data
+      const numaAppData = { id: 'test-app' };
+      const jobId = 'test-job-id';
+      const results = { output: 'test-output' };
+
+      // Call updateJob with only results and status
+      await act(async () => {
+        await result.current.updateJob(numaAppData, jobId, results, undefined, 'completed');
+      });
+
+      // Check that numaPut was called with the correct parameters
+      expect(mockNumaPut).toHaveBeenCalledTimes(1);
+      expect(mockNumaPut).toHaveBeenCalledWith(
+        `/api/${numaAppData.id}/jobs/${jobId}`,
+        expect.objectContaining({
+          status: 'completed',
+          results: results,
+          // inputs should not be present
+        })
+      );
+
+      // Verify inputs is not in the update data
+      const updateData = mockNumaPut.mock.calls[0][1];
+      expect(updateData).not.toHaveProperty('inputs');
+    });
+
+    it('should update only status when only status is provided', async () => {
+      // Mock the numaPut response
+      mockNumaPut.mockResolvedValueOnce({ success: true });
+
+      // Mock the getJobById call that happens after update
+      mockNumaGet.mockResolvedValueOnce({ jobID: 'test-job-id', status: 'completed' });
+
+      // Render the hook
+      const { result } = renderHook(() => useJobsApi(), { wrapper });
+
+      // Test data
+      const numaAppData = { id: 'test-app' };
+      const jobId = 'test-job-id';
+
+      // Call updateJob with only status
+      await act(async () => {
+        await result.current.updateJob(numaAppData, jobId, undefined, undefined, 'completed');
+      });
+
+      // Check that numaPut was called with the correct parameters
+      expect(mockNumaPut).toHaveBeenCalledTimes(1);
+      expect(mockNumaPut).toHaveBeenCalledWith(
+        `/api/${numaAppData.id}/jobs/${jobId}`,
+        expect.objectContaining({
+          status: 'completed',
+          // results and inputs should not be present
+        })
+      );
+
+      // Verify results and inputs are not in the update data
+      const updateData = mockNumaPut.mock.calls[0][1];
+      expect(updateData).not.toHaveProperty('results');
+      expect(updateData).not.toHaveProperty('inputs');
+    });
+
+    it('should update only inputs when only inputs is provided', async () => {
+      // Mock the numaPut response
+      mockNumaPut.mockResolvedValueOnce({ success: true });
+
+      // Mock the getJobById call that happens after update
+      mockNumaGet.mockResolvedValueOnce({ jobID: 'test-job-id', inputs: { file: 'test.pdf' } });
+
+      // Render the hook
+      const { result } = renderHook(() => useJobsApi(), { wrapper });
+
+      // Test data
+      const numaAppData = { id: 'test-app' };
+      const jobId = 'test-job-id';
+      const inputs = { file: 'test.pdf' };
+
+      // Call updateJob with only inputs
+      await act(async () => {
+        await result.current.updateJob(numaAppData, jobId, undefined, inputs, undefined);
+      });
+
+      // Check that numaPut was called with the correct parameters
+      expect(mockNumaPut).toHaveBeenCalledTimes(1);
+      expect(mockNumaPut).toHaveBeenCalledWith(
+        `/api/${numaAppData.id}/jobs/${jobId}`,
+        expect.objectContaining({
+          inputs: inputs,
+        })
+      );
+
+      // Verify results is not in the update data
+      const updateData = mockNumaPut.mock.calls[0][1];
+      expect(updateData).not.toHaveProperty('results');
+
+      // Note: status will be 'running' because it's the default parameter value
+      // in the updateJob function when undefined is passed
+      expect(updateData.status).toBe('running');
+    });
+  });
+});
