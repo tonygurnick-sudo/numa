@@ -31,7 +31,7 @@
     "test": "mkdir -p test-reports; node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml",
     "upload-files": "node --import tsx upload-files.ts"
   },
-  "packageManager": "yarn@4.6.0",
+  "packageManager": "yarn@4.7.0",
   "devDependencies": {
     "@arcanumai/style": "workspace:*",
     "@types/adm-zip": "^0.5.5",
