@@ -28,7 +28,7 @@ poetry build-lambda
 
 - **Text Files**: `.txt`
 - **Image Files**: `.png`, `.jpg`, `.jpeg`
-- **Document Files**: `.pdf`, `.tiff`
+- **Document Files**: `.pdf`, `.tiff`, `.docx`
 
 ## Input
 
