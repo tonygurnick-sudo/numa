@@ -17,7 +17,7 @@ import { manifestService } from '../Services/manifestService';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, setNumaAppId, numaAppData, resetAppState, setError, setNumaAppData } = useNumaApp();
+  const { error, setNumaAppId, numaAppData, resetAppState, setError, setNumaAppData, setCurrentJobId } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
   const navigate = useNavigate();
@@ -39,6 +39,9 @@ const AppDetail = () => {
         // Set both ID and data together to prevent multiple rerenders
         setNumaAppId(appId);
         setNumaAppData(app);
+
+        // We'll create a job when files are uploaded instead of using a session ID
+        // This ensures we have a real job ID from the beginning
       } catch (error) {
         setError(`Failed to load app: ${error.message}`);
       } finally {
@@ -47,7 +50,7 @@ const AppDetail = () => {
     };
 
     loadApp();
-  }, [appId, numaAppData?.id]); // Only depend on appId and current app ID
+  }, [appId, numaAppData?.id, setNumaAppId, setNumaAppData, setError, setCurrentJobId]); // Include all dependencies
 
   const handleFavoriteClick = (e) => {
     e.preventDefault();

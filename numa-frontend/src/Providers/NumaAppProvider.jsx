@@ -123,6 +123,7 @@ export const NumaAppProvider = ({ children }) => {
   const [progress, setProgress] = useState(0);
   const [isPolling, setIsPolling] = useState(false);
   const [appRunning, setAppRunning] = useState(false);
+  const [currentJobId, setCurrentJobId] = useState(null);
 
   // New states for processing progress
   const [processingProgress, setProcessingProgress] = useState(0);
@@ -163,7 +164,10 @@ export const NumaAppProvider = ({ children }) => {
     setSelectedTaskId(null);
     setActiveStep(0);
     setHasRun(false);
+    setCurrentJobId(null);
   };
+
+  // We now create a job directly when uploading files instead of using a session ID
 
   // Load jobs for the current app
   const loadAppJobs = async ({ limit = 50, nextToken = null, append = false } = {}) => {
@@ -277,7 +281,7 @@ export const NumaAppProvider = ({ children }) => {
     return currentResults;
   };
 
-  const processS3UploadTask = (task, currentResults) => {
+  const processS3UploadTask = (task, currentResults, jobID) => {
     const uploadedFilePath = taskInputValues[task.id];
 
     // Only consider the task complete if we have a valid upload path
@@ -285,9 +289,10 @@ export const NumaAppProvider = ({ children }) => {
       throw new Error('No file uploaded');
     }
 
-    // Preserve array structure from taskInputValues
+    // We're using the session ID consistently throughout, so no path modification is needed
+    // Just pass the uploaded file path directly to the results
     currentResults[task.id] = uploadedFilePath;
-    console.log(`S3 upload result: ${currentResults[task.id]}`);
+    console.log(`S3 upload result: ${JSON.stringify(currentResults[task.id])}`);
     return currentResults;
   };
 
@@ -753,7 +758,27 @@ export const NumaAppProvider = ({ children }) => {
     setLoading(true);
 
     try {
-      const jobResponse = await jobsApi.createJob(numaAppData, taskInputValues);
+      // If we already have a job ID (from file uploads), use it
+      // Otherwise, create a new job
+      let jobResponse;
+      if (currentJobId) {
+        console.log(`Using existing job ID: ${currentJobId}`);
+        // We already have a job from file uploads, so we need to update its status to 'running'
+        try {
+          await jobsApi.updateJobStatus(numaAppData, currentJobId, 'running');
+          console.log(`Updated job ${currentJobId} status to 'running'`);
+        } catch (updateError) {
+          console.error('Failed to update job status:', updateError);
+          // Continue even if the update fails - we'll still try to use the job
+        }
+        jobResponse = { jobID: currentJobId, startedAt: new Date().toISOString() };
+      } else {
+        // No job exists yet, create one with 'running' status
+        jobResponse = await jobsApi.createJob(numaAppData, taskInputValues);
+        setCurrentJobId(jobResponse.jobID);
+        console.log(`Created new job with ID: ${jobResponse.jobID}`);
+      }
+
       return {
         jobID: jobResponse.jobID,
         dateTime: jobResponse.startedAt,
@@ -940,7 +965,7 @@ export const NumaAppProvider = ({ children }) => {
             break;
 
           case 's3-upload':
-            currentResults = processS3UploadTask(task, currentResults);
+            currentResults = processS3UploadTask(task, currentResults, jobID);
             completedWeight += taskWeight;
             break;
           case 'http-request':
@@ -1237,6 +1262,8 @@ export const NumaAppProvider = ({ children }) => {
     hasRun,
     setHasRun,
     resetAppState,
+    currentJobId,
+    setCurrentJobId,
   };
 
   return <NumaAppContext.Provider value={contextValue}>{children}</NumaAppContext.Provider>;

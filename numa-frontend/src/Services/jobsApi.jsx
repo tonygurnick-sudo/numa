@@ -2,7 +2,7 @@
 import { createFormattedDate } from '../utils/dateUtils';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 
-const createJobData = (numaAppData, taskInputs, jobID = null) => {
+const createJobData = (numaAppData, taskInputs, jobID = null, status = 'running') => {
   const { displayDate, isoDate } = createFormattedDate();
 
   return {
@@ -13,7 +13,7 @@ const createJobData = (numaAppData, taskInputs, jobID = null) => {
     name: `Run ${displayDate}`,
     inputs: taskInputs || {},
     results: null,
-    status: 'running',
+    status: status,
     lastUpdated: null,
     manifest: JSON.stringify(numaAppData), // Store the full manifest
   };
@@ -22,9 +22,10 @@ const createJobData = (numaAppData, taskInputs, jobID = null) => {
 export const useJobsApi = () => {
   const { numaGet, numaPost, numaPut } = useNumaRequest();
 
-  const createJob = async (numaAppData, taskInputs) => {
+  const createJob = async (numaAppData, taskInputs, status = 'running') => {
     try {
-      const jobData = createJobData(numaAppData, taskInputs);
+      console.log(`Creating job with status: ${status}...`);
+      const jobData = createJobData(numaAppData, taskInputs, null, status);
       const endpoint_call = `/api/${numaAppData.id}/jobs`;
       const response = await numaPost(endpoint_call, jobData);
 
@@ -33,7 +34,8 @@ export const useJobsApi = () => {
         throw new Error('Invalid job creation response from API');
       }
 
-      if (response.status !== 'running') {
+      // Check if the response status matches what we expect
+      if (response.status !== status) {
         const errorMessage = response.error || 'Failed to create job';
         console.error('Job creation failed:', errorMessage);
         throw new Error(errorMessage);
@@ -66,6 +68,26 @@ export const useJobsApi = () => {
       console.error('API Error updating job:', error);
       console.error('Error details:', error.response?.data);
       throw new Error(`Failed to update job: ${error.message}`);
+    }
+  };
+
+  // Update just the status of an existing job
+  const updateJobStatus = async (numaAppData, jobId, status) => {
+    try {
+      const { isoDate } = createFormattedDate();
+      const updateData = {
+        status,
+        lastUpdated: isoDate,
+      };
+
+      const endpoint = `/api/${numaAppData.id}/jobs/${jobId}`;
+      const response = await numaPut(endpoint, updateData);
+
+      return response;
+    } catch (error) {
+      console.error('API Error updating job status:', error);
+      console.error('Error details:', error.response?.data);
+      throw new Error(`Failed to update job status: ${error.message}`);
     }
   };
 
@@ -104,6 +126,7 @@ export const useJobsApi = () => {
   return {
     createJob,
     updateJob,
+    updateJobStatus,
     getJobsByAppId,
     getJobById,
   };

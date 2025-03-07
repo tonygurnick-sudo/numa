@@ -7,12 +7,23 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
 import { Preloader } from '../Components/Preloader';
 import PropTypes from 'prop-types';
+import { useJobsApi } from '../Services/jobsApi';
 
 // Default no-op functions
 const noop = () => {};
 
 function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChange = noop, value }) {
-  const { loading, numaAppId, appRunning, numaTaskResponses } = useNumaApp();
+  const {
+    loading,
+    numaAppId,
+    appRunning,
+    numaTaskResponses,
+    currentJobId,
+    setCurrentJobId,
+    numaAppData,
+    taskInputValues,
+  } = useNumaApp();
+  const jobsApi = useJobsApi();
   const { getIdentityPoolCredentials } = useAuth();
 
   // Extract parameters from task with defaults
@@ -157,6 +168,25 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
     try {
       setError(null);
+
+      // Create a job if we don't have a job ID yet
+      // This ensures we have a consistent job ID for all uploads
+      let jobId = currentJobId;
+      if (!jobId && numaAppData) {
+        setUploadStatus('Creating job for file uploads...');
+        try {
+          // Create job with 'files-uploaded' status to indicate files are uploaded but app hasn't run yet
+          const jobResponse = await jobsApi.createJob(numaAppData, taskInputValues, 'files-uploaded');
+          jobId = jobResponse.jobID;
+          setCurrentJobId(jobId);
+          console.log(`Created job for file uploads with status 'files-uploaded': ${jobId}`);
+        } catch (error) {
+          console.error('Failed to create job for file uploads:', error);
+          setError('Failed to create job for file uploads. Please try again.');
+          return;
+        }
+      }
+
       const s3Client = new S3Client({
         region,
         credentials: await getIdentityPoolCredentials(),
@@ -177,7 +207,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
         const command = new PutObjectCommand({
           Bucket: bucketName,
-          Key: `${numaAppId}/${encodedPath}`,
+          Key: `${numaAppId}/${jobId}/${encodedPath}`,
         });
 
         const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
@@ -202,8 +232,15 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         });
       }
 
-      setUploadStatus('All files uploaded successfully!');
-      onComplete(results);
+      // Format the results for the task input value
+      const finalResults = results.length === 1 ? results[0].filePath : results.map((r) => r.filePath);
+
+      setUploadStatus(`All files uploaded successfully!`);
+      onChange(finalResults); // Update the task input value
+      onComplete(); // Mark the task as complete
+
+      // Indicate that files are uploaded and ready for processing
+      console.log(`Files uploaded successfully to job ${jobId}`);
     } catch (error) {
       console.error('Error during file upload:', error);
 
