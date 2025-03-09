@@ -108,6 +108,25 @@
     },
     "devInstance": true
   },
+  "arcanum-prod-trial": {
+    "clientAccountId": "619071323471",
+    "createServiceLinkedRole": false,
+    "apps": {
+      "document-summariser": {},
+      "meeting-analyser": {},
+      "nzsba-policy-builder": {},
+      "policy-reviewer": {}
+    },
+    "webCrawlerConfigs": [
+      {
+        "url": "https://arcanum.ai/"
+      },
+      {
+        "url": "https://orionhealth.com/global/"
+      }
+    ],
+    "devInstance": true
+  },
   "autoshoppe": {
     "clientAccountId": "060795909741"
   },
