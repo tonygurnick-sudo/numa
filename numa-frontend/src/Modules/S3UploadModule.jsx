@@ -271,7 +271,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
       setUploadStatus(`Upload successful!`);
       onChange(finalResults); // Update the task input value
-      onComplete(); // Mark the task as complete
+      onComplete(results);
 
       // Indicate that files are uploaded and ready for processing
       console.log(`Files uploaded successfully to job ${jobId}`);
