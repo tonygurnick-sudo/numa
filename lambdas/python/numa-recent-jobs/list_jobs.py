@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from decimal import Decimal
 
 import boto3
