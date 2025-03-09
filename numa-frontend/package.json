@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest --coverage --reporter=junit --output-file=test-reports/test-report.xml"
+    "test": "vitest --coverage --reporter=basic --reporter=junit --output-file=test-reports/test-report.xml"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.751.0",
