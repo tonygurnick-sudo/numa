@@ -6,6 +6,7 @@ import { StarFill, Star } from 'react-bootstrap-icons';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { JobHistorySidebar } from '../Components/JobHistorySidebar';
+import { JobIdSidebar } from '../Components/JobIdSidebar';
 
 import { QAppDetail } from '../Components/QAppDetail';
 import { useNumaApp } from '../Providers/NumaAppContext';
@@ -17,7 +18,8 @@ import { manifestService } from '../Services/manifestService';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, setNumaAppId, numaAppData, resetAppState, setError, setNumaAppData } = useNumaApp();
+  const { error, setNumaAppId, numaAppData, resetAppState, setError, setNumaAppData, setCurrentJobId, currentJobId } =
+    useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
   const navigate = useNavigate();
@@ -39,6 +41,9 @@ const AppDetail = () => {
         // Set both ID and data together to prevent multiple rerenders
         setNumaAppId(appId);
         setNumaAppData(app);
+
+        // We'll create a job when files are uploaded instead of using a session ID
+        // This ensures we have a real job ID from the beginning
       } catch (error) {
         setError(`Failed to load app: ${error.message}`);
       } finally {
@@ -47,7 +52,7 @@ const AppDetail = () => {
     };
 
     loadApp();
-  }, [appId, numaAppData?.id]); // Only depend on appId and current app ID
+  }, [appId, numaAppData?.id, setNumaAppId, setNumaAppData, setError, setCurrentJobId]); // Include all dependencies
 
   const handleFavoriteClick = (e) => {
     e.preventDefault();
@@ -57,13 +62,14 @@ const AppDetail = () => {
   return (
     <div className="dashboard">
       {error && (
-        <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1000 }}>
+        <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1001 }}>
           <Alert variant="danger" dismissible className="mb-0 shadow" onClose={() => setError(null)}>
             {typeof error === 'string' ? error : 'An error occurred while loading the app'}
           </Alert>
         </div>
       )}
       <JobHistorySidebar />
+      <JobIdSidebar />
       <header>
         <Container fluid>
           <Breadcrumbs label={numaAppData?.appName} />

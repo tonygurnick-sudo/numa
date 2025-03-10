@@ -2,7 +2,7 @@
 import { createFormattedDate } from '../utils/dateUtils';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 
-const createJobData = (numaAppData, taskInputs, jobID = null) => {
+const createJobData = (numaAppData, taskInputs, jobID = null, status = 'running') => {
   const { displayDate, isoDate } = createFormattedDate();
 
   return {
@@ -13,7 +13,7 @@ const createJobData = (numaAppData, taskInputs, jobID = null) => {
     name: `Run ${displayDate}`,
     inputs: taskInputs || {},
     results: null,
-    status: 'running',
+    status: status,
     lastUpdated: null,
     manifest: JSON.stringify(numaAppData), // Store the full manifest
   };
@@ -22,18 +22,24 @@ const createJobData = (numaAppData, taskInputs, jobID = null) => {
 export const useJobsApi = () => {
   const { numaGet, numaPost, numaPut } = useNumaRequest();
 
-  const createJob = async (numaAppData, taskInputs) => {
+  const createJob = async (numaAppData, taskInputs, status = 'running') => {
     try {
-      const jobData = createJobData(numaAppData, taskInputs);
+      const jobData = createJobData(numaAppData, taskInputs, null, status);
       const endpoint_call = `/api/${numaAppData.id}/jobs`;
       const response = await numaPost(endpoint_call, jobData);
+
+      // Verify the inputs were saved correctly
+      if (response && response.jobID) {
+        await getJobById(numaAppData.id, response.jobID);
+      }
 
       // Check if the response is an object
       if (typeof response !== 'object') {
         throw new Error('Invalid job creation response from API');
       }
 
-      if (response.status !== 'running') {
+      // Check if the response status matches what we expect
+      if (response.status !== status) {
         const errorMessage = response.error || 'Failed to create job';
         console.error('Job creation failed:', errorMessage);
         throw new Error(errorMessage);
@@ -48,18 +54,36 @@ export const useJobsApi = () => {
   };
 
   // Update an existing job
-  const updateJob = async (numaAppData, jobId, results) => {
+  const updateJob = async (numaAppData, jobId, results, inputs = null, status = 'running') => {
     try {
       const { displayDate, isoDate } = createFormattedDate();
+
+      // Start with basic update data
       const updateData = {
-        results,
-        status: 'completed',
         lastUpdated: isoDate,
         name: `Run ${displayDate}`,
       };
 
+      // Only include status if it's provided
+      if (status !== undefined && status !== null) {
+        updateData.status = status;
+      }
+
+      // Only include results if they're provided
+      if (results !== undefined && results !== null) {
+        updateData.results = results;
+      }
+
+      // Only include inputs if they're provided
+      if (inputs !== undefined && inputs !== null) {
+        updateData.inputs = inputs;
+      }
+
       const endpoint = `/api/${numaAppData.id}/jobs/${jobId}`;
       const response = await numaPut(endpoint, updateData);
+
+      // Verify the inputs were saved correctly
+      await getJobById(numaAppData.id, jobId);
 
       return response;
     } catch (error) {
@@ -92,11 +116,10 @@ export const useJobsApi = () => {
     try {
       const endpoint = `/api/${numaAppId}/jobs/${jobId}`;
       const response = await numaGet(endpoint);
+
       return response;
     } catch (error) {
       console.error('API Error fetching job:', error);
-      console.error('Error response:', error.response?.data);
-      console.error('Error status:', error.response?.status);
       throw error;
     }
   };

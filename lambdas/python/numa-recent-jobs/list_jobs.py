@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from decimal import Decimal
 
 import boto3
@@ -29,12 +29,8 @@ def handler(event, _context):
         next_token = query_params.get("next_token")
 
         # Base scan parameters
-        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         scan_params = {
             "IndexName": "date-time-index",
-            "FilterExpression": "#dt >= :yesterday",
-            "ExpressionAttributeNames": {"#dt": "dateTime"},
-            "ExpressionAttributeValues": {":yesterday": yesterday},
             "Limit": limit,
         }
 

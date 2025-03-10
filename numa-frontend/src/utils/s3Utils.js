@@ -2,8 +2,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getIdentityPoolCredentials) => {
-
-  const credentials = await getIdentityPoolCredentials();  // Fetch credentials from AuthProvider
+  const credentials = await getIdentityPoolCredentials(); // Fetch credentials from AuthProvider
 
   if (!credentials?.accessKeyId) {
     throw new Error('AWS Credentials are missing.');
@@ -27,9 +26,8 @@ export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getIdentityPoolCr
   }
 
   const blob = await response.blob();
-  return new Blob([blob], { type: response.headers.get("content-type") });
+  return new Blob([blob], { type: response.headers.get('content-type') });
 };
-
 
 export const uploadFileToS3 = async (processedFile, s3Bucket, s3Key, region, getIdentityPoolCredentials) => {
   const credentials = await getIdentityPoolCredentials();
@@ -39,14 +37,14 @@ export const uploadFileToS3 = async (processedFile, s3Bucket, s3Key, region, get
   const { content, contentType, inferredType } = processedFile; // Destructure the processed file
 
   // Determine correct MIME type
-  let mimeType = "text/plain"; // Default to text
+  let mimeType = 'text/plain'; // Default to text
 
   // Check if the file is an image (jpg, jpeg, png, gif, webp)
   const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
   if (imageExtensions.includes(inferredType)) {
     mimeType = `image/${inferredType}`;
-  } else if (contentType === "text") {
-    mimeType = "text/plain"; // Explicitly ensure text files are marked correctly
+  } else if (contentType === 'text') {
+    mimeType = 'text/plain'; // Explicitly ensure text files are marked correctly
   }
 
   // For images, use the original content

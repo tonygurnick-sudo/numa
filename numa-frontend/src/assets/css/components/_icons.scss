@@ -1,0 +1,44 @@
+// Icon animations and styles
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Job history item styling
+.job-history-list {
+  .list-group-item {
+    border-radius: 8px;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.03);
+    }
+
+    .job-status-icon {
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+
+      svg {
+        margin-right: 0.5rem;
+      }
+    }
+
+    .job-id {
+      font-size: 0.8rem;
+      color: #888;
+      margin-top: -2px;
+      margin-bottom: 3px;
+      font-family: monospace;
+    }
+  }
+}
