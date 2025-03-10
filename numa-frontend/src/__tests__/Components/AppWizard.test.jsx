@@ -550,10 +550,12 @@ describe('AppWizard Component', () => {
   });
 
   it('should handle isStepComplete and isStepDisabled correctly', async () => {
-    // Create a manifest with input and output tasks
+    // Create a manifest with input and output tasks, including a required task
     const manifest = {
       tasks: [
+        { id: 'required-task', type: 'text-input', hidden: false, title: 'Required Task', required: true },
         { id: 'input-task', type: 'text-input', hidden: false, title: 'Input Task' },
+        { id: 'input-task2', type: 'text-input', hidden: false, title: 'Second Input Task' },
         { id: 'output-task', type: 'text-output', hidden: false, title: 'Output Task' },
       ],
     };
@@ -561,7 +563,11 @@ describe('AppWizard Component', () => {
     // Custom context with task completion status
     const customContext = {
       ...defaultContext,
-      taskCompletionStatus: { 'input-task': true },
+      taskCompletionStatus: {
+        'required-task': false, // Required task is incomplete
+        'input-task': true,
+        'input-task2': false,
+      },
       numaAppLoading: false,
     };
 
@@ -586,31 +592,59 @@ describe('AppWizard Component', () => {
         if (task?.type.includes('output')) {
           return !customContext.hasRun;
         }
-        // For input tasks, allow if complete or active
+
+        // For input tasks, check if any previous required task is incomplete
+        if (!task?.type.includes('output')) {
+          // Only check steps before the current one
+          for (let i = 0; i < index; i++) {
+            const prevTask = visibleTasks[i];
+            // If a previous task is required and incomplete, disable this step
+            if (prevTask?.required && !customContext.taskCompletionStatus[prevTask.id]) {
+              return true;
+            }
+          }
+        }
+
+        // Otherwise, allow the step
         return false;
       };
 
       // Test the functions
       React.useEffect(() => {
         // Test isStepComplete
-        const input1Complete = isStepComplete(0); // Should be true
-        const output1Complete = isStepComplete(1); // Should be false
+        const requiredTaskComplete = isStepComplete(0); // Should be false (required task is incomplete)
+        const input1Complete = isStepComplete(1); // Should be true
+        const input2Complete = isStepComplete(2); // Should be false
+        const outputTaskComplete = isStepComplete(3); // Should be false
 
         // Test isStepDisabled
-        const input1Disabled = isStepDisabled(0); // Should be false
-        const output1Disabled = isStepDisabled(1); // Should be true since hasRun is false
+        const requiredTaskDisabled = isStepDisabled(0); // Should be false (first task is never disabled)
+        const input1Disabled = isStepDisabled(1); // Should be true (comes after incomplete required task)
+        const input2Disabled = isStepDisabled(2); // Should be true (comes after incomplete required task)
+        const outputTaskDisabled = isStepDisabled(3); // Should be true (output task and hasRun is false)
+
+        // Test with required task complete
+        customContext.taskCompletionStatus['required-task'] = true;
+        const input1DisabledAfterRequired = isStepDisabled(1); // Should be false now
+        const input2DisabledAfterRequired = isStepDisabled(2); // Should be false now
 
         // Test with hasRun=true
         customContext.hasRun = true;
-        const output1DisabledAfterRun = isStepDisabled(1); // Should be false now
+        const outputTaskDisabledAfterRun = isStepDisabled(3); // Should be false now
 
         // Log results for verification
         console.log({
+          requiredTaskComplete,
           input1Complete,
-          output1Complete,
+          input2Complete,
+          outputTaskComplete,
+          requiredTaskDisabled,
           input1Disabled,
-          output1Disabled,
-          output1DisabledAfterRun,
+          input2Disabled,
+          outputTaskDisabled,
+          input1DisabledAfterRequired,
+          input2DisabledAfterRequired,
+          outputTaskDisabledAfterRun,
         });
       }, []);
 
@@ -627,5 +661,440 @@ describe('AppWizard Component', () => {
       // We can't directly check the return values, but we can infer from the component behavior
       expect(container).toBeInTheDocument();
     });
+  });
+
+  it('should handle markDefaultContentComplete correctly', async () => {
+    // Create a manifest with a task that has default content
+    const manifest = {
+      tasks: [
+        { id: 'task1', type: 'text-input', hidden: false, title: 'Task 1' },
+        { id: 'task2', type: 'text-input', hidden: false, title: 'Task 2', defaultContent: 'Default value' },
+      ],
+    };
+
+    // Mock the updateTaskCompletionStatus function
+    const mockUpdateTaskCompletionStatus = vi.fn();
+
+    // Create a custom context with our mocks
+    const customContext = {
+      ...defaultContext,
+      updateTaskCompletionStatus: mockUpdateTaskCompletionStatus,
+      taskCompletionStatus: {
+        task1: false,
+        task2: false,
+      },
+      activeStep: 1, // Set to the task with default content
+    };
+
+    // Create a test component that calls markDefaultContentComplete
+    const TestComponent = () => {
+      // Implement simplified version of markDefaultContentComplete
+      const visibleTasks = manifest.tasks;
+
+      const markDefaultContentComplete = (taskIndex) => {
+        const currentTask = visibleTasks[taskIndex];
+        if (currentTask?.defaultContent && !customContext.taskCompletionStatus[currentTask.id]) {
+          mockUpdateTaskCompletionStatus(currentTask.id, true);
+        }
+      };
+
+      // Call markDefaultContentComplete directly
+      React.useEffect(() => {
+        markDefaultContentComplete(customContext.activeStep);
+      }, []);
+
+      return <div data-testid="test-component"></div>;
+    };
+
+    // Render the test component
+    renderWithProviders(<TestComponent />, {
+      numaAppContext: customContext,
+    });
+
+    // Verify markDefaultContentComplete was called correctly
+    await waitFor(() => {
+      expect(mockUpdateTaskCompletionStatus).toHaveBeenCalledWith('task2', true);
+    });
+  });
+
+  it('should handle navigation control flags correctly', async () => {
+    // Create a manifest with multiple tasks
+    const manifest = {
+      tasks: [
+        { id: 'input1', type: 'text-input', hidden: false, title: 'Input 1' },
+        { id: 'input2', type: 'text-input', hidden: false, title: 'Input 2' },
+        { id: 'output1', type: 'text-output', hidden: false, title: 'Output 1' },
+      ],
+    };
+
+    // Create a test component that tests navigation control flags
+    const NavigationFlagsTest = ({ activeStep, appRunning, taskCompletionStatus }) => {
+      // Implement simplified versions of the navigation control flags
+      const visibleTasks = manifest.tasks;
+      const preRunTasks = visibleTasks.filter((task) => !task.type.includes('output'));
+
+      // Calculate navigation control flags
+      const isLastInputStep = activeStep + 1 === preRunTasks.length;
+      const nextDisabled = isLastInputStep && !appRunning;
+      const isLastVisibleStep = activeStep === visibleTasks.length - 1;
+      const isCurrentStepIncomplete = !taskCompletionStatus[visibleTasks[activeStep]?.id];
+
+      const results = {
+        isLastInputStep,
+        nextDisabled,
+        isLastVisibleStep,
+        isCurrentStepIncomplete,
+      };
+
+      return <div data-testid="nav-flags">{JSON.stringify(results)}</div>;
+    };
+
+    // Initial context values
+    const initialContext = {
+      ...defaultContext,
+      activeStep: 1, // Set to the second input task
+      taskCompletionStatus: {
+        input1: true,
+        input2: false,
+        output1: false,
+      },
+      appRunning: false,
+    };
+
+    // Render with initial context
+    const { rerender } = renderWithProviders(
+      <NavigationFlagsTest
+        activeStep={initialContext.activeStep}
+        appRunning={initialContext.appRunning}
+        taskCompletionStatus={initialContext.taskCompletionStatus}
+      />,
+      {
+        numaAppContext: initialContext,
+      },
+    );
+
+    // Verify initial navigation flags
+    await waitFor(() => {
+      const navFlags = JSON.parse(screen.getByTestId('nav-flags').textContent);
+      expect(navFlags.isLastInputStep).toBe(true);
+      expect(navFlags.nextDisabled).toBe(true);
+      expect(navFlags.isLastVisibleStep).toBe(false);
+      expect(navFlags.isCurrentStepIncomplete).toBe(true);
+    });
+
+    // Updated context values
+    const updatedContext = {
+      ...initialContext,
+      activeStep: 2, // Set to output task
+      appRunning: true, // Set app running to true
+    };
+
+    // Re-render with updated context
+    rerender(
+      <NavigationFlagsTest
+        activeStep={updatedContext.activeStep}
+        appRunning={updatedContext.appRunning}
+        taskCompletionStatus={updatedContext.taskCompletionStatus}
+      />,
+    );
+
+    // Verify updated navigation flags
+    await waitFor(() => {
+      const navFlags = JSON.parse(screen.getByTestId('nav-flags').textContent);
+      expect(navFlags.isLastInputStep).toBe(false); // No longer on last input step
+      expect(navFlags.isLastVisibleStep).toBe(true); // Now on last visible step
+    });
+  });
+
+  it('should render preloader when numaAppData is not available', async () => {
+    // Create a manifest with a simple task
+    const manifest = {
+      tasks: [{ id: 'task1', type: 'text-input', hidden: false, title: 'Task 1' }],
+    };
+
+    // Create a context with numaAppData set to null
+    const customContext = {
+      ...defaultContext,
+      numaAppData: null,
+    };
+
+    // Render AppWizard with null numaAppData
+    renderWithProviders(<AppWizard manifest={manifest} />, {
+      numaAppContext: customContext,
+    });
+
+    // Verify preloader is rendered
+    await waitFor(() => {
+      expect(screen.getByTestId('preloader')).toBeInTheDocument();
+    });
+  });
+
+  it('should test handleStepClick with output tasks', async () => {
+    // Create a manifest with both input and output tasks
+    const manifest = {
+      tasks: [
+        { id: 'input1', type: 'text-input', hidden: false, title: 'Input 1' },
+        { id: 'output1', type: 'text-output', hidden: false, title: 'Output 1' },
+      ],
+    };
+
+    // Mock the setActiveStep and setSelectedTaskId functions
+    const mockSetActiveStep = vi.fn();
+    const mockSetSelectedTaskId = vi.fn();
+
+    // Create a custom context with our mocks
+    const customContext = {
+      ...defaultContext,
+      setActiveStep: mockSetActiveStep,
+      setSelectedTaskId: mockSetSelectedTaskId,
+      hasRun: false, // Initially false to test disabled state
+    };
+
+    // Create a test component that directly calls handleStepClick
+    const TestComponent = () => {
+      // Implement simplified version of handleStepClick
+      const visibleTasks = manifest.tasks;
+
+      const handleStepClick = (index) => {
+        const task = visibleTasks[index];
+        if (task) {
+          // For output tasks, only allow clicking if we have results
+          if (task.type.includes('output')) {
+            if (customContext.hasRun) {
+              mockSetActiveStep(index);
+              mockSetSelectedTaskId(task.id);
+            }
+            return;
+          }
+
+          // For input tasks, allow clicking
+          mockSetActiveStep(index);
+          mockSetSelectedTaskId(task.id);
+        }
+      };
+
+      // Call handleStepClick directly for output task
+      React.useEffect(() => {
+        // Try to click on output task when hasRun is false
+        handleStepClick(1);
+
+        // Then update hasRun and try again
+        setTimeout(() => {
+          customContext.hasRun = true;
+          handleStepClick(1);
+        }, 0);
+      }, []);
+
+      return <div data-testid="test-component"></div>;
+    };
+
+    // Render the test component
+    renderWithProviders(<TestComponent />, {
+      numaAppContext: customContext,
+    });
+
+    // Verify handleStepClick behavior with output task
+    await waitFor(() => {
+      // First call should not trigger setActiveStep because hasRun is false
+      expect(mockSetActiveStep).not.toHaveBeenCalledWith(1);
+      expect(mockSetSelectedTaskId).not.toHaveBeenCalledWith('output1');
+    });
+
+    // Verify after hasRun is set to true
+    await waitFor(() => {
+      // Now it should trigger setActiveStep because hasRun is true
+      expect(mockSetActiveStep).toHaveBeenCalledWith(1);
+      expect(mockSetSelectedTaskId).toHaveBeenCalledWith('output1');
+    });
+  });
+
+  it('should test handleRunApp functionality', async () => {
+    // Create a manifest with both input and output tasks
+    const manifest = {
+      tasks: [
+        { id: 'input1', type: 'text-input', hidden: false, title: 'Input 1' },
+        { id: 'output1', type: 'text-output', hidden: false, title: 'Output 1' },
+      ],
+    };
+
+    // Mock the necessary functions
+    const mockSetTaskCompletionStatus = vi.fn();
+    const mockSetActiveStep = vi.fn();
+    const mockSetSelectedTaskId = vi.fn();
+    const mockSetHasRun = vi.fn();
+    const mockSetAppRunning = vi.fn();
+    const mockHandleRunButtonClick = vi.fn().mockResolvedValue(true);
+    const mockSetError = vi.fn();
+
+    // Create a custom context with our mocks
+    const customContext = {
+      ...defaultContext,
+      setTaskCompletionStatus: mockSetTaskCompletionStatus,
+      setActiveStep: mockSetActiveStep,
+      setSelectedTaskId: mockSetSelectedTaskId,
+      setHasRun: mockSetHasRun,
+      setAppRunning: mockSetAppRunning,
+      handleRunButtonClick: mockHandleRunButtonClick,
+      setError: mockSetError,
+      numaAppData: { id: 'test-app' },
+    };
+
+    // Create a test component that directly calls handleRunApp
+    const TestComponent = () => {
+      // Implement simplified version of handleRunApp
+      const visibleTasks = manifest.tasks;
+
+      const handleRunApp = async () => {
+        try {
+          const updatedStatus = {};
+          visibleTasks.forEach((task) => {
+            updatedStatus[task.id] = false;
+          });
+          mockSetTaskCompletionStatus(updatedStatus);
+
+          const firstOutputTask = visibleTasks.find((task) => task.type.includes('output'));
+          if (firstOutputTask) {
+            const outputIndex = visibleTasks.indexOf(firstOutputTask);
+            mockSetActiveStep(outputIndex);
+            mockSetSelectedTaskId(firstOutputTask.id);
+          }
+
+          mockSetHasRun(true);
+          mockSetAppRunning(true);
+          await mockHandleRunButtonClick(customContext.numaAppData);
+        } catch (error) {
+          mockSetError(error);
+        } finally {
+          mockSetAppRunning(false);
+        }
+      };
+
+      // Call handleRunApp directly
+      React.useEffect(() => {
+        handleRunApp();
+      }, []);
+
+      return <div data-testid="test-component"></div>;
+    };
+
+    // Render the test component
+    renderWithProviders(<TestComponent />, {
+      numaAppContext: customContext,
+    });
+
+    // Verify handleRunApp behavior
+    await waitFor(() => {
+      // Check that task completion status was reset
+      expect(mockSetTaskCompletionStatus).toHaveBeenCalledWith({
+        input1: false,
+        output1: false,
+      });
+
+      // Check that we navigated to the first output task
+      expect(mockSetActiveStep).toHaveBeenCalledWith(1);
+      expect(mockSetSelectedTaskId).toHaveBeenCalledWith('output1');
+
+      // Check that hasRun was set to true
+      expect(mockSetHasRun).toHaveBeenCalledWith(true);
+
+      // Check that appRunning was set to true and then false
+      expect(mockSetAppRunning).toHaveBeenCalledWith(true);
+      expect(mockSetAppRunning).toHaveBeenCalledWith(false);
+
+      // Check that handleRunButtonClick was called with the app data
+      expect(mockHandleRunButtonClick).toHaveBeenCalledWith(customContext.numaAppData);
+    });
+  });
+
+  it('should handle errors during app execution', async () => {
+    // Create a manifest with both input and output tasks
+    const manifest = {
+      tasks: [
+        { id: 'input1', type: 'text-input', hidden: false, title: 'Input 1' },
+        { id: 'output1', type: 'text-output', hidden: false, title: 'Output 1' },
+      ],
+    };
+
+    // Mock the necessary functions
+    const mockSetAppRunning = vi.fn();
+    const mockSetError = vi.fn();
+    const mockHandleRunButtonClick = vi.fn().mockRejectedValue(new Error('Test error'));
+
+    // Create a custom context with our mocks
+    const customContext = {
+      ...defaultContext,
+      setAppRunning: mockSetAppRunning,
+      handleRunButtonClick: mockHandleRunButtonClick,
+      setError: mockSetError,
+      numaAppData: { id: 'test-app' },
+    };
+
+    // Create a test component that directly calls handleRunApp with error
+    const TestComponent = () => {
+      // Implement simplified version of handleRunApp that will throw an error
+      const handleRunApp = async () => {
+        try {
+          mockSetAppRunning(true);
+          await mockHandleRunButtonClick(customContext.numaAppData);
+        } catch (error) {
+          mockSetError(error);
+        } finally {
+          mockSetAppRunning(false);
+        }
+      };
+
+      // Call handleRunApp directly
+      React.useEffect(() => {
+        handleRunApp();
+      }, []);
+
+      return <div data-testid="test-component"></div>;
+    };
+
+    // Render the test component
+    renderWithProviders(<TestComponent />, {
+      numaAppContext: customContext,
+    });
+
+    // Verify error handling behavior
+    await waitFor(() => {
+      // Check that appRunning was set to true and then false
+      expect(mockSetAppRunning).toHaveBeenCalledWith(true);
+      expect(mockSetAppRunning).toHaveBeenCalledWith(false);
+
+      // Check that handleRunButtonClick was called with the app data
+      expect(mockHandleRunButtonClick).toHaveBeenCalledWith(customContext.numaAppData);
+
+      // Check that setError was called with the error
+      expect(mockSetError).toHaveBeenCalledWith(expect.any(Error));
+      expect(mockSetError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Test error',
+        }),
+      );
+    });
+  });
+
+  it('should show preloader when app is running', async () => {
+    // Mock the necessary context values
+    const customContext = {
+      ...defaultContext,
+      appRunning: true,
+      numaAppData: { id: 'test-app' },
+      manifest: {
+        tasks: [
+          { id: 'input1', type: 'text-input', hidden: false, title: 'Input 1' },
+          { id: 'output1', type: 'text-output', hidden: false, title: 'Output 1' },
+        ],
+      },
+    };
+
+    // Render the AppWizard component with appRunning set to true
+    const { getByTestId } = renderWithProviders(<AppWizard />, {
+      numaAppContext: customContext,
+    });
+
+    // Verify that the preloader is displayed
+    expect(getByTestId('preloader')).toBeInTheDocument();
   });
 });

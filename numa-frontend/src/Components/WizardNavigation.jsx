@@ -41,8 +41,8 @@ const WizardNavigation = ({
                 <div
                   className={`step-indicator ${
                     activeStep === index ? 'active' : ''
-                  } ${isStepComplete?.(index) ? 'completed' : ''}`}
-                  onClick={() => onStepClick(index)}
+                  } ${isStepComplete?.(index) ? 'completed' : ''} ${isStepDisabled?.(index) ? 'disabled' : ''}`}
+                  onClick={() => !isStepDisabled?.(index) && onStepClick(index)}
                 >
                   <span className="step-number">{index + 1}</span>
                   <div className="step-label-container">

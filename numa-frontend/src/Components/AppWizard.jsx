@@ -53,6 +53,42 @@ const AppWizard = ({ manifest }) => {
     [visibleTasks, taskCompletionStatus, updateTaskCompletionStatus],
   );
 
+  // Define isStepComplete and isStepDisabled first, before they're used in handleStepClick
+  const isStepComplete = useCallback(
+    (index) => {
+      const task = visibleTasks[index];
+      return task ? taskCompletionStatus[task.id] || false : false;
+    },
+    [visibleTasks, taskCompletionStatus],
+  );
+
+  const isStepDisabled = useCallback(
+    (index) => {
+      const task = visibleTasks[index];
+      // For output tasks, only disable if we haven't run yet
+      if (task?.type.includes('output')) {
+        return !hasRun;
+      }
+
+      // For input tasks, check if any previous required task is incomplete
+      if (!task?.type.includes('output')) {
+        // Only check steps before the current one
+        for (let i = 0; i < index; i++) {
+          const prevTask = visibleTasks[i];
+          // If a previous task is required and incomplete, disable this step
+          if (prevTask?.required && !taskCompletionStatus[prevTask.id]) {
+            return true;
+          }
+        }
+      }
+
+      // Otherwise, allow the step
+      return false;
+    },
+    [visibleTasks, hasRun, taskCompletionStatus],
+  );
+
+  // Now we can use isStepDisabled in handleStepClick
   const handleStepClick = useCallback(
     (index) => {
       const task = visibleTasks[index];
@@ -66,15 +102,22 @@ const AppWizard = ({ manifest }) => {
           return;
         }
 
-        // For input tasks, allow clicking any input step
+        // For input tasks, check if any previous required task is incomplete
         if (!task.type.includes('output')) {
+          // Check if this step should be disabled
+          const isDisabled = isStepDisabled(index);
+          if (isDisabled) {
+            // Don't allow clicking on disabled steps
+            return;
+          }
+
           markDefaultContentComplete(activeStep); // Mark current task if it has default content
           setActiveStep(index);
           setSelectedTaskId(task.id);
         }
       }
     },
-    [visibleTasks, activeStep, markDefaultContentComplete, setSelectedTaskId, hasRun],
+    [visibleTasks, activeStep, markDefaultContentComplete, setSelectedTaskId, hasRun, isStepDisabled],
   );
 
   const handleRunApp = async () => {
@@ -103,29 +146,7 @@ const AppWizard = ({ manifest }) => {
     }
   };
 
-  const isStepComplete = useCallback(
-    (index) => {
-      const task = visibleTasks[index];
-      return task ? taskCompletionStatus[task.id] || false : false;
-    },
-    [visibleTasks, taskCompletionStatus],
-  );
-
-  const isStepDisabled = useCallback(
-    (index) => {
-      const task = visibleTasks[index];
-      // For output tasks, only disable if we haven't run yet
-      if (task?.type.includes('output')) {
-        return !hasRun;
-      }
-      // For input tasks, allow if complete or active
-      return false;
-    },
-    [visibleTasks, hasRun],
-  );
-
   const handleTaskCompletion = (taskId, success = true, results = null) => {
-    console.log('handleTaskCompletion', taskId, success, results);
     updateTaskCompletionStatus(taskId, success);
     if (results) {
       console.log('results', results);
@@ -143,10 +164,12 @@ const AppWizard = ({ manifest }) => {
         ...prev,
         [taskId]: value,
       }));
-      updateTaskCompletionStatus(taskId, Boolean(value));
+      // We don't update completion status here anymore
+      // Let the module handle it based on required status
+      // updateTaskCompletionStatus(taskId, Boolean(value));
       updateTaskInputValue(taskId, value);
     },
-    [setTaskInputValues, updateTaskCompletionStatus, updateTaskInputValue],
+    [setTaskInputValues, updateTaskInputValue],
   );
 
   const handlePrevStep = () => {
