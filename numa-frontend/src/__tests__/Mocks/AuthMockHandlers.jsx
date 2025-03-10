@@ -1,12 +1,10 @@
 import { ListDataSourcesCommand, ListDataSourceSyncJobsCommand } from '@aws-sdk/client-qbusiness';
 
-const Q_DATASOURCE_ID = window.sessionStorage.getItem('Q_DATASOURCE_ID');
-
 // Mock data for QBusiness responses
 const mockDataSource = {
   dataSources: [
     {
-      dataSourceId: Q_DATASOURCE_ID,
+      dataSourceId: 'mock-data-source-id',
       status: 'ACTIVE',
       updatedAt: new Date(),
     },
