@@ -4,6 +4,8 @@ import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
 
 function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
+  // Check if the task is required (default to true for backward compatibility)
+  const isRequired = task.required !== undefined ? task.required : true;
   const { numaTaskResponses, appRunning, taskInputValues } = useNumaApp();
   const [inputValue, setInputValue] = useState('');
 
@@ -21,26 +23,44 @@ function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
     }
   }, [task.id, taskInputValues, task.default, onChange]);
 
-  // Update the input value locally
-  const handleInputChange = (e) => {
-    setInputValue(e.target.value);
-  };
-
-  // Commit the input value to the global state on blur or Enter
-  const handleCommit = () => {
-    onChange(inputValue);
-
-    // Call the appropriate callback based on whether the input has content
-    if (inputValue.trim() !== '') {
+  // Handle initial completion status in a separate effect that runs only once
+  useEffect(() => {
+    // Set initial completion status based on whether the field is required
+    if (!isRequired) {
+      // If not required, always mark as complete regardless of content
       onComplete();
     } else {
-      onNotComplete();
+      // For required fields, check if there's content
+      const initialValue = taskInputValues[task.id] || task.default || '';
+      if (initialValue.trim() !== '') {
+        onComplete();
+      } else {
+        onNotComplete();
+      }
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleCommit();
+  // Update the input value locally and check completion status on each keystroke
+  const handleInputChange = (e) => {
+    const newValue = e.target.value;
+    setInputValue(newValue);
+
+    // Update the global state
+    onChange(newValue);
+
+    // If the field is required, check for content
+    if (isRequired) {
+      // Call the appropriate callback based on whether the input has content
+      if (newValue.trim() !== '') {
+        onComplete();
+      } else {
+        onNotComplete();
+      }
+    } else {
+      // If the field is not required, always mark it as complete
+      // This allows the Next button to be clickable even when the field is empty
+      onComplete();
     }
   };
 
@@ -56,8 +76,6 @@ function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
           placeholder="Enter text here..."
           value={inputValue}
           onChange={handleInputChange}
-          onBlur={handleCommit}
-          onKeyPress={handleKeyPress}
         />
       </Form.Group>
     </>
