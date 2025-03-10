@@ -16,11 +16,6 @@ MAX_TOKENS = 4096
 logger = structlog.get_logger()
 
 
-def remove_backticks(text: str) -> str:
-    """Remove all backticks from a string."""
-    return text.replace("`", "")
-
-
 def handler(event: dict, context: LambdaContext) -> dict:
     helpers.setup_step_function_lambda_logging(event, context)
     try:
@@ -92,5 +87,5 @@ def get_model_response(prompt: str, input_data: dict) -> str:
     if isinstance(response.response, list) and response.response:
         if isinstance(response.response[0], dict):
             markdown_text = response.response[0].get("text", "")
-            return remove_backticks(markdown_text)
-    return remove_backticks(str(response.response))
+            return markdown_text.replace("`", "")
+    return str(response.response).replace("`", "")
