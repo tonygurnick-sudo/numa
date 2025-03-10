@@ -445,6 +445,11 @@ const FileUploader = ({ onUploadSuccess }) => {
           </>
         )}
       </div>
+      {success && (
+        <Alert variant="success" className="mt-3">
+          Your files have been uploaded successfully!
+        </Alert>
+      )}
     </div>
   );
 };

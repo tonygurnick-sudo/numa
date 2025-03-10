@@ -609,7 +609,7 @@ export class CoreNumaInfra extends Construct {
         DisplayName: numaClient,
         IndexId: this.qBusinessIndexId,
         RoleArn: dataRole.arn,
-        SyncSchedule: 'cron(0 * ? * * *)',
+        SyncSchedule: 'cron(0/30 * ? * * *)',
       }),
     });
     const dataSourceId = Fn.lookup(Fn.jsondecode(s3DataSource.properties), 'DataSourceId');
