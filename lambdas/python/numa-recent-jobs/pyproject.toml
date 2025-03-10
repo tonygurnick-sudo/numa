@@ -15,8 +15,8 @@ boto3 = "^1.34.0"
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.36.13"
 mypy = "1.15.0"
-pylint = "3.3.4"
-pyright = "1.1.393"
+pylint = "3.3.5"
+pyright = "1.1.396"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.9.0"
