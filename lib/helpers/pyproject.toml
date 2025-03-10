@@ -16,8 +16,8 @@ structlog = "25.1.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.15.0"
-pylint = "3.3.4"
-pyright = "1.1.393"
+pylint = "3.3.5"
+pyright = "1.1.396"
 
 [build-system]
 requires = ["poetry-core"]
