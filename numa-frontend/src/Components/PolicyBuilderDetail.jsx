@@ -123,9 +123,15 @@ export const PolicyBuilderDetail = () => {
   ];
 
   // Updated status mappings
-  const getBadgeColor = (status) => {
+  const getBadgeColor = (status, jobDetails) => {
+    // Check if completed but has error in results
+    if (status === 'completed' && jobDetails?.results?.error) {
+      return 'danger';
+    }
+
     switch (status) {
       case 'SUCCESS':
+      case 'completed':
         return 'success';
       case 'FAILED':
         return 'danger';
@@ -136,7 +142,13 @@ export const PolicyBuilderDetail = () => {
     }
   };
 
-  const formatStatus = (status) => {
+  const formatStatus = (status, jobDetails) => {
+    // Check if completed but has error in results
+    if (status === 'completed' && jobDetails?.results?.error) {
+      return 'Failed';
+    }
+
+    if (status === 'SUCCESS' || status === 'completed') return 'Success';
     return status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
@@ -602,7 +614,7 @@ export const PolicyBuilderDetail = () => {
                 <td className="text-break">{policy.name}</td>
                 <td className="d-none d-md-table-cell">{formatDate(policy.jobDetails.dateTime)}</td>
                 <td>
-                  <Badge bg={getBadgeColor(policy.status)}>
+                  <Badge bg={getBadgeColor(policy.status, policy.jobDetails)}>
                     {policy.status === 'PROCESSING' && (
                       <span
                         className="spinner-border spinner-border-sm me-1"
@@ -612,7 +624,7 @@ export const PolicyBuilderDetail = () => {
                         <span className="visually-hidden">Processing...</span>
                       </span>
                     )}
-                    {formatStatus(policy.status)}
+                    {formatStatus(policy.status, policy.jobDetails)}
                   </Badge>
                 </td>
                 <td>
@@ -623,7 +635,9 @@ export const PolicyBuilderDetail = () => {
                           variant="outline-secondary"
                           size="sm"
                           disabled={
-                            policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId
+                            (policy.status !== 'SUCCESS' && policy.status !== 'completed') ||
+                            (policy.status === 'completed' && policy.jobDetails?.results?.error) ||
+                            isDownloading === policy.jobDetails.stepFunctionJobId
                           }
                           className="d-md-none"
                           id={`dropdown-toggle-${policy.id}`}
@@ -642,7 +656,9 @@ export const PolicyBuilderDetail = () => {
                           variant="outline-secondary"
                           size="sm"
                           disabled={
-                            policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId
+                            (policy.status !== 'SUCCESS' && policy.status !== 'completed') ||
+                            (policy.status === 'completed' && policy.jobDetails?.results?.error) ||
+                            isDownloading === policy.jobDetails.stepFunctionJobId
                           }
                           className="d-none d-md-inline-flex align-items-center"
                           id={`dropdown-toggle-${policy.id}`}
