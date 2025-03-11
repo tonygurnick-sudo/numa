@@ -188,8 +188,13 @@ export const PolicyBuilderDetail = () => {
         return;
       }
 
-      // Direct browser download using the signed URL
-      window.location.href = signedUrl;
+      // Create an invisible anchor element to trigger the download
+      const link = document.createElement('a');
+      link.href = signedUrl;
+      link.download = fileName; // Set the download attribute
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (error) {
       console.error('Download failed:', error);
       setErrorMessage(error.message || 'Failed to download file');
