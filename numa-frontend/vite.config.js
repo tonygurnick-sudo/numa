@@ -50,7 +50,7 @@ const copyBuildPlugin = () => ({
 export default defineConfig({
   plugins: [react(), copyBuildPlugin()],
   build: {
-    sourcemap: 'hidden',
+    sourcemap: false,
   },
   server: {
     proxy: {
