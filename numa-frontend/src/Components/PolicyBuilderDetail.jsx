@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Container, Table, Badge, Button, Tabs, Tab, OverlayTrigger, Tooltip, Toast, Dropdown } from 'react-bootstrap';
-import { Download as DownloadIcon, Plus as PlusIcon, PencilSquare, ThreeDots as ThreeDotsIcon } from 'react-bootstrap-icons';
+import {
+  Download as DownloadIcon,
+  Plus as PlusIcon,
+  PencilSquare,
+  ThreeDots as ThreeDotsIcon,
+} from 'react-bootstrap-icons';
 import PolicyEditor from './PolicyEditor';
 import { CreatePolicyModal } from './PolicyBuilderModal';
 import { useAuth } from '../Providers/AuthProvider';
@@ -8,6 +13,7 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import MdToDocx from '../hooks/MdToDocx';
+import { useJobsApi } from '../Services/jobsApi';
 
 export const PolicyBuilderDetail = () => {
   const [activeTab, setActiveTab] = useState('policies');
@@ -38,6 +44,7 @@ export const PolicyBuilderDetail = () => {
   const { loading, isAuthenticated, getIdentityPoolCredentials } = useAuth();
   const { numaPost, numaPut, numaGet } = useNumaRequest();
   const { convertMarkdownToDocx } = MdToDocx();
+  const jobsApi = useJobsApi();
 
   useEffect(() => {
     const handleResize = () => {
@@ -340,18 +347,22 @@ export const PolicyBuilderDetail = () => {
   }, []);
 
   const pollProcessingPolicy = async (job) => {
-    console.log(`Polling status for job ${job.jobID}`);
+    // Extract job ID based on the format (jobID for custom endpoint, id for standard jobs API)
+    const jobID = job.jobID || job.id;
+    const stepFunctionJobId = job.stepFunctionJobId || jobID;
+
+    console.log(`Polling status for job ${jobID}`);
 
     try {
       const stepFunctionResponse = await numaGet(
-        `${config.API_ENDPOINT}/policy-builder/main?job_id=${job.stepFunctionJobId}`,
+        `${config.API_ENDPOINT}/policy-builder/main?job_id=${stepFunctionJobId}`,
       );
 
       console.log('Step Function Response:', stepFunctionResponse);
 
-      if (stepFunctionResponse.status === 'FAILURE') {
-        console.error(`Step Function request failed with status: ${stepFunctionResponse.status}`);
-        clearPollingForJob(job.jobID);
+      if (!stepFunctionResponse || stepFunctionResponse.status === 'FAILURE') {
+        console.error(`Step Function request failed with status: ${stepFunctionResponse?.status || 'unknown'}`);
+        clearPollingForJob(jobID);
         return true;
       }
 
@@ -360,24 +371,29 @@ export const PolicyBuilderDetail = () => {
 
       // Stop polling if the status is not PROCESSING
       if (stepFunctionStatus !== 'PROCESSING') {
-        console.log(`Job ${job.jobID} status changed from PROCESSING to ${stepFunctionStatus}`);
+        console.log(`Job ${jobID} status changed from PROCESSING to ${stepFunctionStatus}`);
 
-        // Update job manager with new status
-        const updateResponse = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${job.jobID}`, {
-          ...job,
-          status: stepFunctionStatus,
-        });
+        // Use jobsApi but maintain same functionality
+        const appData = { id: 'policy-builder' };
+        const updateData = { ...job, status: stepFunctionStatus };
+        const updateResponse = await jobsApi.updateJob(
+          appData,
+          jobID,
+          updateData.results,
+          updateData.inputs,
+          updateData.status,
+        );
 
         console.log('Update Response:', updateResponse);
 
-        if (updateResponse.error) {
+        if (updateResponse && updateResponse.error) {
           console.error(`Failed to update job status in job manager: ${updateResponse.error}`);
-          clearPollingForJob(job.jobID);
+          clearPollingForJob(jobID);
           return true;
         }
 
-        console.log(`Successfully updated job ${job.jobID} in job manager`);
-        clearPollingForJob(job.jobID);
+        console.log(`Successfully updated job ${jobID} in job manager`);
+        clearPollingForJob(jobID);
 
         // Only trigger a fetch if the status has actually changed
         if (job.status !== stepFunctionStatus) {
@@ -390,8 +406,8 @@ export const PolicyBuilderDetail = () => {
         console.log('Fetch aborted');
         return false;
       }
-      console.error(`Error polling job ${job.jobID}:`, error);
-      clearPollingForJob(job.jobID);
+      console.error(`Error polling job ${jobID}:`, error);
+      clearPollingForJob(jobID);
       return true;
     }
 
@@ -399,25 +415,28 @@ export const PolicyBuilderDetail = () => {
   };
 
   const startPollingForJob = (job) => {
+    // Extract job ID based on the format (jobID for custom endpoint, id for standard jobs API)
+    const jobID = job.jobID || job.id;
+
     // Check if we're already polling this job
-    if (pollingPolicies.has(job.jobID)) {
-      console.log(`Already polling job ${job.jobID}, skipping`);
+    if (pollingPolicies.has(jobID)) {
+      console.log(`Already polling job ${jobID}, skipping`);
       return;
     }
 
-    console.log(`Starting polling for job ${job.jobID}`);
+    console.log(`Starting polling for job ${jobID}`);
 
     // Add this job to the set of polling jobs
-    setPollingPolicies((prev) => new Set(prev).add(job.jobID));
+    setPollingPolicies((prev) => new Set(prev).add(jobID));
 
     // Clear any existing interval for this job
-    if (pollingIntervalsRef.current[job.jobID]) {
-      clearInterval(pollingIntervalsRef.current[job.jobID]);
+    if (pollingIntervalsRef.current[jobID]) {
+      clearInterval(pollingIntervalsRef.current[jobID]);
     }
 
     const poll = async () => {
       const statusChanged = await pollProcessingPolicy(job);
-      if (!statusChanged && pollingIntervalsRef.current[job.jobID]) {
+      if (!statusChanged && pollingIntervalsRef.current[jobID]) {
         setTimeout(() => {
           requestAnimationFrame(poll);
         }, 10000);
@@ -425,20 +444,24 @@ export const PolicyBuilderDetail = () => {
         // Remove from polling set when complete
         setPollingPolicies((prev) => {
           const newSet = new Set(prev);
-          newSet.delete(job.jobID);
+          newSet.delete(jobID);
           return newSet;
         });
       }
     };
 
-    pollingIntervalsRef.current[job.jobID] = true;
+    pollingIntervalsRef.current[jobID] = true;
     requestAnimationFrame(poll);
   };
 
   const fetchPolicies = async () => {
     setIsLoadingPolicies(true);
     try {
-      const response = await numaGet(`${config.API_ENDPOINT}/policy-builder/jobs`);
+      // Create a minimal app data object needed for the API call
+      const appData = { id: 'policy-builder' };
+
+      // Use jobsApi to get jobs instead of direct numaGet
+      const response = await jobsApi.getJobsByAppId(appData.id, { limit: 50 });
 
       console.log('Response:', response);
 
@@ -446,7 +469,11 @@ export const PolicyBuilderDetail = () => {
         throw new Error(`HTTP error! status: ${response.error}`);
       }
 
-      const transformedPolicies = response
+      // Extract items from the response - handle both formats (array or {items: []})
+      const jobs = Array.isArray(response) ? response : response.items || [];
+
+      // Filter to only show POLICY_GENERATION jobs
+      const transformedPolicies = jobs
         .filter((job) => job.type === 'POLICY_GENERATION')
         .map((job) => {
           // Only start polling if job is processing and not already being polled
@@ -590,7 +617,9 @@ export const PolicyBuilderDetail = () => {
                         <Dropdown.Toggle
                           variant="outline-secondary"
                           size="sm"
-                          disabled={policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId}
+                          disabled={
+                            policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId
+                          }
                           className="d-md-none"
                           id={`dropdown-toggle-${policy.id}`}
                         >
@@ -607,7 +636,9 @@ export const PolicyBuilderDetail = () => {
                         <Dropdown.Toggle
                           variant="outline-secondary"
                           size="sm"
-                          disabled={policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId}
+                          disabled={
+                            policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId
+                          }
                           className="d-none d-md-inline-flex align-items-center"
                           id={`dropdown-toggle-${policy.id}`}
                         >
@@ -638,9 +669,9 @@ export const PolicyBuilderDetail = () => {
                               options: {
                                 boundary: 'clippingParents',
                                 altAxis: true,
-                                padding: 8
+                                padding: 8,
                               },
-                            }
+                            },
                           ],
                         }}
                       >

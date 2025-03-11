@@ -202,9 +202,12 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
-  // Reload jobs whenever the app changes
+  // Reload jobs whenever the app changes, but skip for policy apps
   useEffect(() => {
-    loadAppJobs();
+    // Don't automatically load jobs for policy apps
+    if (numaAppId && numaAppId !== 'policy-builder-app' && numaAppId !== 'policy-reviewer-app') {
+      loadAppJobs();
+    }
   }, [numaAppId]);
 
   const getAppJobs = () => jobs;
