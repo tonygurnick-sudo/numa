@@ -26,7 +26,7 @@ def handler(
     app_id, job_id, payload = helpers.get_api_gateway_parameters(event)
     helpers.setup_api_gateway_lambda_logging(context, app_id, job_id, payload)
 
-    key = f"/{app_id}/{job_id}/status.json"
+    key = f"{app_id}/{job_id}/status.json"
     try:
         bucket = os.environ["BUCKET"]
         logger.info("Get step function status")
