@@ -787,6 +787,21 @@ export const AuthProvider = ({ children, initialTokens }) => {
     if (!user) return null;
 
     try {
+      // Check if tokens are expired or will expire in the next 20 seconds
+      const decodedIdToken = decodedTokensRef.current.idToken;
+      const currentTime = Math.floor(Date.now() / 1000);
+      const willExpireSoon = decodedIdToken?.exp && decodedIdToken.exp <= currentTime + 20;
+
+      if (!decodedIdToken || willExpireSoon) {
+        console.log('Token expired or will expire soon, token time is:', decodedIdToken?.exp);
+        console.log('🔄 Refreshing tokens before getting identity pool credentials...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          console.error('Failed to refresh tokens for identity pool credentials');
+          return null;
+        }
+      }
+
       const REGION = window.sessionStorage.getItem('REGION');
       const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
 
@@ -800,7 +815,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         identityPoolId: IDENTITY_POOL_ID,
         roleSessionName: 'numa-frontend-file-uploader',
         logins: {
-          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: user.tokens.idToken,
+          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: tokensRef.current.idToken,
         },
       })();
 
