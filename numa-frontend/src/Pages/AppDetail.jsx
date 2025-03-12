@@ -68,7 +68,8 @@ const AppDetail = () => {
           </Alert>
         </div>
       )}
-      <JobHistorySidebar />
+      {/* Hide JobHistorySidebar for policy apps */}
+      {numaAppData?.id !== 'policy-builder-app' && <JobHistorySidebar />}
       <JobIdSidebar />
       <header>
         <Container fluid>

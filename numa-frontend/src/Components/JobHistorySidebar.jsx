@@ -38,7 +38,8 @@ const JobHistorySidebar = () => {
     }
   };
 
-  const jobs = getAppJobs() || [];
+  // Don't load jobs for policy-builder-app
+  const jobs = numaAppData?.id === 'policy-builder-app' ? [] : getAppJobs() || [];
 
   const loadMoreJobs = useCallback(async () => {
     if (loadingMore || !hasMore || !jobHistorySidebarOpen) return;
@@ -80,6 +81,11 @@ const JobHistorySidebar = () => {
       }
     };
   }, [loadMoreJobs]);
+
+  // Don't render anything for policy-builder-app
+  if (numaAppData?.id === 'policy-builder-app') {
+    return null;
+  }
 
   return (
     <>
