@@ -5,8 +5,7 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import './assets/css/Main.scss';
 
 import { NumaRoutes } from './Routes';
-import { fetchConfigAddtoSession } from './Components/ConfigSetup';
-fetchConfigAddtoSession();
+
 function App() {
   return <NumaRoutes />;
 }

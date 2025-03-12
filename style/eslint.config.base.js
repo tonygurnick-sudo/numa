@@ -2,7 +2,7 @@ import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended'
 
 export const eslintBase = [
   {
-    ignores: ['build/**', 'dist/**', '**/*.d.ts', '**/.venv/**', '.vite'],
+    ignores: ['build/**', 'dist/**', '**/*.d.ts', '**/.venv/**', '.vite', 'cdktf.out', '.gen'],
   },
   eslintPluginPrettierRecommended,
 ];

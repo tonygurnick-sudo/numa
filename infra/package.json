@@ -12,7 +12,7 @@
     "lint": "eslint . && tsc --noEmit",
     "synth": "cdktf synth",
     "compile": "tsc --pretty",
-    "test": "mkdir -p test-reports; node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml",
+    "test": "mkdir -p test-reports; tsx --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml",
     "cdktf": "mkdir -p cdktf.out && AWS_PROFILE=default AWS_CLIENT_PROFILE=arcanum-q-deployer-${TF_ENVIRONMENT} CDKTF_OUTPUT=cdktf.out/${TF_ENVIRONMENT} cdktf"
   },
   "engines": {

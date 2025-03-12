@@ -26,6 +26,12 @@ yarn install
 
 If you receive error messages about dependencies not being found, see [the setup instructions for yarn >= 2](https://gitlab.com/arcanumai/cdktf-resources/-/blob/main/README.md#accessing-the-packages).
 
+Then install any additional CDKTF providers:
+
+```bash
+yarn get
+```
+
 There are also some Python dependencies that need to be installed:
 
 ```bash
@@ -51,7 +57,11 @@ Most stacks require the lambdas to be build, just run `package.sh` in the lambda
 
 The main command to give to `yarn cdktf` is `plan`. This will produce a plan of the changes that the infracode will make to the infrastructure.
 
+Note: The Honeycomb Key must be a management key. This can be created [here](https://ui.honeycomb.io/teams/arcanum-ai/api_keys).
+
 ```bash
+export HONEYCOMB_KEY_ID=hcamk_your_key_id_here
+export HONEYCOMB_KEY_SECRET=your_key_secret_here
 export TF_ENVIRONMENT=dev # Only need to do this once per shell.
 export AWS_REGION=us-east-1
 yarn cdktf plan
@@ -70,6 +80,8 @@ Customer accounts grant access to our production deployer account.
 To run the deploy of Numa to a customer account, do the following:
 
 ```bash
+export HONEYCOMB_KEY_ID=hcamk_your_key_id_here
+export HONEYCOMB_KEY_SECRET=your_key_secret_here
 export TF_ENVIRONMENT=prod # All customer deployments are prod.
 export AWS_REGION=us-east-1 # Important: These stacks can only be deployed in us-east-1.
 yarn cdktf deploy --auto-approve numa-{client-id}
