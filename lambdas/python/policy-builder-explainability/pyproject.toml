@@ -23,7 +23,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "~3.13.0"
 
-aws-lambda-powertools = "3.7.0"
+aws-lambda-powertools = "3.8.0"
 bedrock = {path = "../../../lib/bedrock", develop = true}
 boto3 = "1.36.13"
 helpers = {path = "../../../lib/helpers", develop = true}
