@@ -315,7 +315,55 @@ describe('ChatFileUpload Component', () => {
       const result = setMessagesCall([]);
       expect(result[0]).toMatchObject({
         role: 'system',
-        content: `Error while processing files: ${error.message}`,
+        content: `Error processing file "test.jpg": ${error.message}`,
+      });
+      expect(mockSetIsFileProcessing).toHaveBeenCalledWith(false);
+    });
+  });
+
+  it('handles token limit exceeded errors correctly', async () => {
+    vi.mocked(S3UploadModule).mockImplementation(({ onComplete }) => (
+      <button
+        data-testid="upload-button"
+        onClick={() =>
+          onComplete([
+            {
+              filePath: 'test/path',
+              fileName: 'large-document.txt',
+              fileType: 'text/plain',
+              s3Bucket: 'test-bucket',
+              file: new Blob(['test']),
+            },
+          ])
+        }
+      >
+        Upload Files
+      </button>
+    ));
+
+    const tokenLimitError = new Error('File is too large (estimated 150,000 tokens). Maximum allowed is 100,000 tokens.');
+    vi.mocked(processFile).mockRejectedValueOnce(tokenLimitError);
+
+    const { getByTestId } = render(<ChatFileUpload {...defaultProps} />);
+
+    fireEvent.click(getByTestId('upload-button'));
+
+    await waitFor(() => {
+      const setMessagesCall = mockSetMessages.mock.calls[0][0];
+      const result = setMessagesCall([]);
+      expect(result[0]).toMatchObject({
+        role: 'assistant',
+        content: 'Processing file 1/1: large-document.txt...',
+        status: 'processingFile',
+      });
+    });
+
+    await waitFor(() => {
+      const setMessagesCall = mockSetMessages.mock.calls[mockSetMessages.mock.calls.length - 1][0];
+      const result = setMessagesCall([]);
+      expect(result[0]).toMatchObject({
+        role: 'system',
+        content: `Error processing file "large-document.txt": ${tokenLimitError.message}`,
       });
       expect(mockSetIsFileProcessing).toHaveBeenCalledWith(false);
     });
