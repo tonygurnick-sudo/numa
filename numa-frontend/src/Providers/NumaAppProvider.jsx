@@ -96,8 +96,19 @@ function createPayloadFromTemplate(template, inputValues, taskResults) {
     // Handle case for objects (recursively apply transformation)
     return Object.entries(template).reduce((acc, [key, value]) => {
       const processedValue = createPayloadFromTemplate(value, inputValues, taskResults);
-      // Always include the key in the accumulator, even if the value is empty
-      acc[key] = [processedValue];
+
+      // Handle null values and empty arrays to prevent backend errors
+      if (processedValue === null) {
+        // Use empty string instead of null
+        acc[key] = '';
+      } else if (Array.isArray(processedValue) && processedValue.length === 0) {
+        // Use empty array as is
+        acc[key] = [];
+      } else {
+        // Use the processed value directly without wrapping in an array
+        acc[key] = processedValue;
+      }
+
       return acc;
     }, {});
   }
@@ -286,15 +297,36 @@ export const NumaAppProvider = ({ children }) => {
 
   const processS3UploadTask = (task, currentResults, jobID) => {
     const uploadedFilePath = taskInputValues[task.id];
+    // Check if the task is required (default to false for better user experience)
+    const isRequired = task.required !== undefined ? task.required : false;
 
-    // Only consider the task complete if we have a valid upload path
-    if (!uploadedFilePath || (Array.isArray(uploadedFilePath) && uploadedFilePath.length === 0)) {
+    console.log('Uploaded isRequired:', isRequired);
+
+    // Check if we have a valid upload path
+    const isValidUpload = uploadedFilePath && !(Array.isArray(uploadedFilePath) && uploadedFilePath.length === 0);
+
+    // If the upload is required and we don't have a valid file, throw an error
+    if (isRequired && !isValidUpload) {
       throw new Error('No file uploaded');
     }
 
     // We're using the session ID consistently throughout, so no path modification is needed
-    // Just pass the uploaded file path directly to the results
-    currentResults[task.id] = uploadedFilePath;
+    // For non-required uploads with no file or invalid uploads, handle appropriately
+    if (!isValidUpload) {
+      // If we're expecting an array (multiple files), return an empty array
+      // If we're expecting a single value, return an empty string instead of null
+      // This prevents backend errors when trying to call methods on null values
+      currentResults[task.id] = Array.isArray(uploadedFilePath) ? [] : '';
+    } else {
+      // We have a valid upload, use it
+      // If it's an array, filter out any null values to prevent backend errors
+      if (Array.isArray(uploadedFilePath)) {
+        currentResults[task.id] = uploadedFilePath.filter((item) => item !== null);
+      } else {
+        currentResults[task.id] = uploadedFilePath;
+      }
+    }
+
     console.log(`S3 upload result: ${JSON.stringify(currentResults[task.id])}`);
     return currentResults;
   };
