@@ -300,4 +300,54 @@ describe('S3UploadModule Component', () => {
     // Verify createJob was NOT called since we already have a job ID
     expect(createJobMock).not.toHaveBeenCalled();
   });
+
+  it('should mark as complete when upload is not required', async () => {
+    // Create a task prop with required set to false
+    const task = { id: 'test-task-id', title: 'Test Task', required: false };
+    const mockOnComplete = vi.fn();
+    const mockOnNotComplete = vi.fn();
+    const mockOnChange = vi.fn();
+
+    renderWithProviders(
+      <S3UploadModule
+        task={task}
+        onComplete={mockOnComplete}
+        onNotComplete={mockOnNotComplete}
+        onChange={mockOnChange}
+      />,
+    );
+
+    // Verify onComplete was called during initial render since upload is not required
+    await waitFor(() => {
+      expect(mockOnComplete).toHaveBeenCalled();
+    });
+
+    // We don't need to test the handleUpload function here since it would require selecting files first
+    // The important part is that onComplete is called on initial render for non-required uploads
+  });
+
+  it('should not mark as complete when upload is required', async () => {
+    // Create a task prop with required set to true
+    const task = { id: 'test-task-id', title: 'Test Task', required: true };
+    const mockOnComplete = vi.fn();
+    const mockOnNotComplete = vi.fn();
+    const mockOnChange = vi.fn();
+
+    renderWithProviders(
+      <S3UploadModule
+        task={task}
+        onComplete={mockOnComplete}
+        onNotComplete={mockOnNotComplete}
+        onChange={mockOnChange}
+      />,
+    );
+
+    // Verify onNotComplete was called during initial render since upload is required
+    await waitFor(() => {
+      expect(mockOnNotComplete).toHaveBeenCalled();
+    });
+
+    // Verify onComplete was not called
+    expect(mockOnComplete).not.toHaveBeenCalled();
+  });
 });

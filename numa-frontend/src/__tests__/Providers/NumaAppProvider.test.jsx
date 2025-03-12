@@ -226,4 +226,6 @@ describe('NumaAppProvider', () => {
       expect(mockNumaGet).toHaveBeenCalledWith('/api/test-app/main?job_id=error-job-id');
     });
   });
+
+  // Note: We'll test the S3UploadModule component directly instead of the processS3UploadTask function
 });

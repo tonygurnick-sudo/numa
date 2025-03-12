@@ -91,6 +91,25 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     fetchConfig();
   }, [fetchConfig]);
 
+  // Handle initial completion status based on whether the upload is required
+  useEffect(() => {
+    // Check if the task is required (default to false for better user experience)
+    const isRequired = task?.required !== undefined ? task.required : false;
+
+    // If the upload is not required, mark as complete by default
+    if (!isRequired) {
+      onComplete();
+    } else {
+      // For required uploads, check if there's already a value
+      if (value) {
+        onComplete();
+      } else {
+        onNotComplete();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const validateFile = (file) => {
     // Check file type if acceptedFileTypes is specified
     if (acceptedFileTypes && acceptedFileTypes.length > 0) {
@@ -177,9 +196,20 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   };
 
   const handleUpload = async () => {
+    // Check if the task is required (default to false for better user experience)
+    const isRequired = task?.required !== undefined ? task.required : false;
+
     if (!selectedFiles.length) {
-      setError('Please select at least one file');
-      return;
+      if (isRequired) {
+        setError('Please select at least one file');
+        return;
+      } else {
+        // If upload is not required and no file is selected, mark as complete and return
+        setUploadStatus('No file uploaded');
+        onChange('');
+        onComplete();
+        return;
+      }
     }
 
     try {
@@ -392,6 +422,7 @@ S3UploadModule.propTypes = {
   task: PropTypes.shape({
     id: PropTypes.string,
     title: PropTypes.string,
+    required: PropTypes.bool,
     parameters: PropTypes.shape({
       allowedFileTypes: PropTypes.arrayOf(PropTypes.string),
       maximumFileSize: PropTypes.number,
