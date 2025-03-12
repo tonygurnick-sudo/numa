@@ -12,10 +12,20 @@ GlobalWorkerOptions.workerSrc = pdfWorker;
 import PPTXParser from "pptx-parser";
 import { marked } from "marked";
 
+// Token estimation
+const MAX_TOKEN_LIMIT = 100000;
+const CHARS_PER_TOKEN = 4;
+
 /**
- * Attempt to infer file type from magic bytes.
- * If unknown, returns "unknown".
+ * @param {string} text - The text content
+ * @returns {number} - Estimated token count
  */
+export const estimateTokenCount = (text) => {
+  if (!text) return 0;
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
+};
+
+
 const detectFileType = async (file) => {
   const buffer = await file.arrayBuffer();
   const detectedType = await fromBuffer(buffer);
@@ -26,6 +36,8 @@ const detectFileType = async (file) => {
  * Process a file and return { content, contentType, inferredType }.
  * This covers:
  * - pdf, docx, txt, csv, xlsx, images (jpg, jpeg, png, gif, webp), pptx, json, html, md
+ *
+ * Will throw an error if the estimated token count exceeds the maximum limit.
  */
 export const processFile = async (file, fileType, numaChatBedrockUtils) => {
   let inferredType = fileType?.toLowerCase() || '';
@@ -35,26 +47,33 @@ export const processFile = async (file, fileType, numaChatBedrockUtils) => {
   }
 
   try {
+    let result;
+
     switch (inferredType) {
       case 'pdf':
         const pdfText = await processPDF(file);
-        return { content: pdfText, contentType: 'text', inferredType: 'pdf' };
+        result = { content: pdfText, contentType: 'text', inferredType: 'pdf' };
+        break;
 
       case 'docx':
         const docxText = await processDocx(file);
-        return { content: docxText, contentType: 'text', inferredType: 'docx' };
+        result = { content: docxText, contentType: 'text', inferredType: 'docx' };
+        break;
 
       case 'txt':
         const textContent = await processText(file);
-        return { content: textContent, contentType: 'text', inferredType: 'txt' };
+        result = { content: textContent, contentType: 'text', inferredType: 'txt' };
+        break;
 
       case 'csv':
         const csvText = await processCSV(file);
-        return { content: csvText, contentType: 'text', inferredType: 'csv' };
+        result = { content: csvText, contentType: 'text', inferredType: 'csv' };
+        break;
 
       case 'xlsx':
         const xlsxData = await processXLSX(file);
-        return { content: xlsxData, contentType: 'text', inferredType: 'xlsx' };
+        result = { content: xlsxData, contentType: 'text', inferredType: 'xlsx' };
+        break;
 
       case 'jpg':
       case 'jpeg':
@@ -70,23 +89,39 @@ export const processFile = async (file, fileType, numaChatBedrockUtils) => {
 
       case 'pptx':
         const pptxData = await processPPTX(file);
-        return { content: pptxData, contentType: 'text', inferredType: 'pptx' };
+        result = { content: pptxData, contentType: 'text', inferredType: 'pptx' };
+        break;
 
       case 'json':
         const jsonData = await processJSON(file);
-        return { content: jsonData, contentType: 'application/json', inferredType: 'json' };
+        result = { content: jsonData, contentType: 'application/json', inferredType: 'json' };
+        break;
 
       case 'html':
         const htmlText = await processHTML(file);
-        return { content: htmlText, contentType: 'text', inferredType: 'html' };
+        result = { content: htmlText, contentType: 'text', inferredType: 'html' };
+        break;
 
       case 'md':
         const markdownRendered = await processMarkdown(file);
-        return { content: markdownRendered, contentType: 'text', inferredType: 'md' };
+        result = { content: markdownRendered, contentType: 'text', inferredType: 'md' };
+        break;
 
       default:
         throw new Error(`Unsupported file type: ${inferredType}`);
     }
+
+    // For text-based content, check token count
+    if (result.contentType === 'text' || result.contentType === 'application/json') {
+      const tokenCount = estimateTokenCount(result.content);
+      console.log(`Estimated token count for ${file.name}: ${tokenCount}`);
+
+      if (tokenCount > MAX_TOKEN_LIMIT) {
+        throw new Error(`File is too large (estimated ${tokenCount.toLocaleString()} tokens). Maximum allowed is ${MAX_TOKEN_LIMIT.toLocaleString()} tokens.`);
+      }
+    }
+
+    return result;
   } catch (error) {
     console.error('Error processing file:', error);
     throw error;
