@@ -23,6 +23,7 @@ import { PolicyReviewer } from '../constructs/apps/policy-reviewer-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
+import { Honeycomb } from '../constructs/honeycomb-construct';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -56,6 +57,10 @@ export class NumaClientStack extends ArcanumStack {
     const core = new CoreNumaInfra(this, 'numa', {
       ...props.config,
       environmentName: props.environmentName,
+    });
+
+    const honeycomb = new Honeycomb(this, 'honeycomb', {
+      name: props.config.client,
     });
 
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
@@ -140,6 +145,7 @@ export class NumaClientStack extends ArcanumStack {
           Q_RETRIEVER_ID: core.qBusinessRetrieverId,
           API_ENDPOINT: '/api',
           CLIENT_NAME: props.client,
+          HONEYCOMB_KEY: honeycomb.frontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
         }),
         contentType: 'application/json',
       });

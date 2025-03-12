@@ -131,3 +131,5 @@ numa-frontend/coverage
 /numa-frontend/src/Data/example-manifest.json
 
 test-reports
+
+infra/.gen
