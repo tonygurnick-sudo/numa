@@ -46,7 +46,7 @@
     "marked": "^15.0.7",
     "micromark": "^4.0.1",
     "papaparse": "^5.5.0",
-    "pdfjs-dist": "2.15.349",
+    "pdfjs-dist": "2.16.105",
     "pptx-parser": "^1.0.0",
     "react": "^18.2.0",
     "react-bootstrap": "^2.10.5",
