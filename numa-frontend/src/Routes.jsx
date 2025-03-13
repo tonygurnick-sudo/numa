@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './Providers/AuthProvider';
 import { NumaAppProvider } from './Providers/NumaAppProvider';
 import { NumaChat } from './Pages/NumaChat';
 import { S3Uploader } from './Pages/S3Uploader';
+import { CompanyInfo } from './Pages/CompanyInfo';
 import { NumaRequestProvider } from './Providers/RequestProvider';
 
 const NumaRoutes = () => {
@@ -99,6 +100,15 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <NumaChat />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/company-info"
+        element={
+          <ProtectedRoute>
+            <CompanyInfo />
           </ProtectedRoute>
         }
       />

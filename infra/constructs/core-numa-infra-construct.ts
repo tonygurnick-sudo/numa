@@ -211,6 +211,15 @@ export class CoreNumaInfra extends Construct {
       allowLocalhostOrigin: props.devInstance,
     });
 
+    const companyBucket = new NumaCorsEnabledBucket(this, 'company-data-bucket', {
+      bucketName: 'company',
+      client: props.client,
+      environmentName: props.environmentName,
+      clientAccountId: props.clientAccountId,
+      allowedMethods: ['GET', 'PUT', 'DELETE'],
+      allowLocalhostOrigin: props.devInstance,
+    });
+
     this.outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
       client: props.client,
       clientAccountId: props.clientAccountId,
@@ -259,6 +268,11 @@ export class CoreNumaInfra extends Construct {
           effect: 'Allow',
           actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject'],
           resources: [`${dataBucket.bucket.arn}/*`, dataBucket.bucket.arn],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+          resources: [`${companyBucket.bucket.arn}/*`, companyBucket.bucket.arn],
         },
         {
           effect: 'Allow',
@@ -685,6 +699,7 @@ export class CoreNumaInfra extends Construct {
     });
 
     new TerraformOutput(this, 'data-bucket', { value: dataBucket.bucket.bucket });
+    new TerraformOutput(this, 'company-bucket', { value: companyBucket.bucket.bucket });
     new TerraformOutput(this, 'application-id', { value: this.qBusinessApplicationId });
     new TerraformOutput(this, 'data-source-id', { value: dataSourceId });
     new TerraformOutput(this, 'index-id', { value: this.qBusinessIndexId });
