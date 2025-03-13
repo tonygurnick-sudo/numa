@@ -1,4 +1,4 @@
-TEMPLATE_GENERATION_PROMPT = """Create a professional, well-structured policy template based on the following input provided by the user: {policy_area}
+TEMPLATE_GENERATION_PROMPT = """Create a professional, well-structured policy template based on the following input provided by the user: {policy_context}
 {additional_instructions}
 
 The policy should adhere to best practices in the relevant field and include the following sections, where applicable:
@@ -12,7 +12,7 @@ The policy should adhere to best practices in the relevant field and include the
 
 Ensure the tone is clear, professional, and accessible, making it easy to understand and apply. Use examples or illustrative content where relevant to enhance understanding.
 
-If the input is too general or lacks specificity, infer common themes or requirements associated with the policy area and draft a generic version based on industry-standard templates. Highlight sections where the user should add tailored details for their specific context.
+If the input is too general or lacks specificity, infer common themes or requirements associated with the policy context and draft a generic version based on industry-standard templates. Highlight sections where the user should add tailored details for their specific context.
 
 Return your response in markdown format using the following:
 - # for main headings
@@ -22,7 +22,7 @@ Return your response in markdown format using the following:
 - > for important notes or callouts
 """
 
-DRAFT_POLICY_PROMPT = """You are an expert at writing policy documents in the domain of {policy_area}. Generate a draft policy for the area {policy_area} based on the additional instructions {additional_instructions}
+DRAFT_POLICY_PROMPT = """You are an expert at writing policy documents in the domain of {policy_context}. Generate a draft policy for the context {policy_context} based on the additional instructions {additional_instructions}
 
 Use the example 'what good looks like' document (if provided) as well as the generated example/template to base your structure off. If a user provides a 'what good looks like' document, show preference to that over our own generated one.
 "What good looks like" document:
@@ -43,7 +43,7 @@ Return your response in markdown format using:
 """
 
 LEGISLATIVE_REVIEW_PROMPT = """You are an expert in reviewing the legislative aspects of policy documents created by our team, and you have over 30 years experience providing legal advice.
-One of our team has created a draft policy for {policy_area}.
+One of our team has created a draft policy for {policy_context}.
 
 We need your legal expertise to review the document against legislative requirements to ensure that the policy is legally compliant and meets all relevant legal obligations.
 

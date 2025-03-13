@@ -11,18 +11,18 @@ packages = [
 [tool.poetry.dependencies]
 python = "~3.13.0"
 
+aws-lambda-powertools = "3.7.0"
 bedrock = {path = "../../../lib/bedrock", develop = true}
-boto3 = "1.36.13"
-structlog = "25.1.0"
+helpers = {path = "../../../lib/helpers", develop = true}
+s3_helpers = {path = "../../../lib/s3_helpers", develop = true}
 
 [tool.poetry.group.dev.dependencies]
+boto3 = "1.36.13"
+boto3-stubs = "1.36.13"
+moto = "5.1.1"
 mypy = "1.15.0"
 pylint = "3.3.5"
 pyright = "1.1.396"
-pre-commit = "^4.1.0"
-poetry-plugin-lambda-build = "^1.0.7"
-pytest = "^8.3.4"
-boto3-stubs = "^1.36.3"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.9.0"
