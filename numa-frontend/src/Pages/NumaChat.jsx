@@ -57,10 +57,6 @@ const NumaChat = () => {
   const [conversationId, setConversationId] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
 
-  // Debug showUploadModal state changes
-  useEffect(() => {
-    console.log('showUploadModal changed:', showUploadModal);
-  }, [showUploadModal]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [queryDataSources, setQueryDataSources] = useState(false);
   const [buttonStatus, setButtonStatus] = useState('idle');
