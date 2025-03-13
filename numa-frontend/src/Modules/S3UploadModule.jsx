@@ -43,6 +43,9 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
 
   // Handle value prop changes - extract file names from various input formats
+  // This useEffect handles the value prop which can come in different formats
+  // We support both the new standardized format (array of objects with name, key, id)
+  // and legacy formats (string, single object, array of strings) for backward compatibility
   useEffect(() => {
     if (!value) return;
 
@@ -50,31 +53,34 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       console.log('S3UploadModule received value:', value);
     }
 
-    // Add support for single file and multiple files
+    // Process the value based on its format
     if (Array.isArray(value)) {
-      // Check if the array is length 1
       console.log('value is an array', value);
-      if (value.length === 1) {
-        console.log('value is an array of length 1', value[0]);
-        setSelectedFiles([
-          { name: typeof value[0] === 'string' ? value[0].split('/').pop() : value[0].fileName || value[0].name },
-        ]);
+      // Handle the standardized format (array of maps with name, key, id)
+      if (value.length > 0 && typeof value[0] === 'object' && value[0].name && value[0].key) {
+        // Already in the correct format
+        setSelectedFiles(value.map((file) => ({ name: file.name })));
       } else {
-        console.log('value is an array of length > 1', value);
+        // Legacy format: array of strings or other objects
         setSelectedFiles(
           value.map((file) => ({
-            name: typeof file === 'string' ? file.split('/').pop() : file.fileName || file.name,
+            name: typeof file === 'string' ? file.split('/').pop() : file.fileName || file.name || 'Unknown file',
           })),
         );
       }
     } else if (typeof value === 'string') {
-      // Handle string file path
+      // Legacy format: string file path
       console.log('value is a string', value);
       setSelectedFiles([{ name: value.split('/').pop() }]);
-    } else if (typeof value === 'object') {
-      // Handle object with fileName or name
+    } else if (typeof value === 'object' && value !== null) {
+      // Legacy format: single object
       console.log('value is an object', value);
-      setSelectedFiles([{ name: value.fileName || value.name || 'Unknown file' }]);
+      // Check if it's already in the new format
+      if (value.name && value.key) {
+        setSelectedFiles([{ name: value.name }]);
+      } else {
+        setSelectedFiles([{ name: value.fileName || value.name || 'Unknown file' }]);
+      }
     }
 
     // Mark as uploaded since we have a value
@@ -278,15 +284,30 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       }
 
       // Format the results for the task input value
-      // For single file, use the file path directly (not in array)
-      // For multiple files, use array of file paths
-      const finalResults = results.length === 1 ? results[0].filePath : results.map((r) => r.filePath);
+      // IMPORTANT: For backend compatibility, we need to follow the original format:
+      // - For single file uploads: use the file path as a string (not in an array)
+      // - For multiple file uploads: use an array of file paths
+      // This is required by the state machine which expects $.uploaded_files to be an array of strings
+
+      // For backend compatibility
+      // ALWAYS use an array of file paths for the meeting analyzer app
+      // This ensures the state machine receives $.uploaded_files as an array
+      const finalResults = results.map((r) => r.filePath);
+
+      // For UI display and future use, we also create a standardized format
+      // This isn't used by the backend but is useful for the frontend
+      const fileObjects = results.map((r) => ({
+        name: r.fileName,
+        key: r.filePath,
+        id: null, // Currently unused, but added for future compatibility
+      }));
 
       // Update the job with the final file paths
       try {
         // Create an object with just this task's input
+        // ALWAYS store as an array in the job history for consistency
         const fileInputs = {
-          [task.id]: finalResults,
+          [task.id]: Array.isArray(finalResults) ? finalResults : [finalResults],
         };
 
         // Merge with existing task input values
@@ -300,7 +321,14 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       }
 
       setUploadStatus(`Upload successful!`);
-      onChange(finalResults); // Update the task input value
+
+      // Pass the array of file paths to the backend (for state machine compatibility)
+      onChange(finalResults);
+
+      // Store the file objects in the component state for UI display
+      setSelectedFiles(fileObjects.map((obj) => ({ name: obj.name })));
+
+      // Pass the complete file info to the onComplete callback
       onComplete(results); // needed for numa chat
 
       // Indicate that files are uploaded and ready for processing
@@ -377,9 +405,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
               <p className="mb-2">Selected {selectedFiles.length === 1 ? 'file:' : 'files:'}</p>
               <ul style={{ listStyleType: 'none', listStylePosition: 'inside' }}>
                 {selectedFiles.map((f, index) => (
-                  <li key={index}>
-                    {f.name || f.fileName || (f.filePath ? f.filePath.split('/').pop() : 'Unknown file')}
-                  </li>
+                  <li key={index}>{f.name || 'Unknown file'}</li>
                 ))}
               </ul>
             </div>

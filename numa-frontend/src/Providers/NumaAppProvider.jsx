@@ -313,17 +313,17 @@ export const NumaAppProvider = ({ children }) => {
     // We're using the session ID consistently throughout, so no path modification is needed
     // For non-required uploads with no file or invalid uploads, handle appropriately
     if (!isValidUpload) {
-      // If we're expecting an array (multiple files), return an empty array
-      // If we're expecting a single value, return an empty string instead of null
-      // This prevents backend errors when trying to call methods on null values
-      currentResults[task.id] = Array.isArray(uploadedFilePath) ? [] : '';
+      // Always return an empty array for consistency with the state machine expectations
+      currentResults[task.id] = [];
     } else {
       // We have a valid upload, use it
-      // If it's an array, filter out any null values to prevent backend errors
+      // ALWAYS convert to an array for consistency with state machine expectations
+      // This ensures $.uploaded_files is always an array, even for single file uploads
       if (Array.isArray(uploadedFilePath)) {
         currentResults[task.id] = uploadedFilePath.filter((item) => item !== null);
       } else {
-        currentResults[task.id] = uploadedFilePath;
+        // Convert single string to array with one element
+        currentResults[task.id] = [uploadedFilePath];
       }
     }
 
@@ -1110,8 +1110,11 @@ export const NumaAppProvider = ({ children }) => {
           numaAppData.tasks.forEach((task) => {
             if (task.type === 's3-upload' && processedInputs[task.id]) {
               const fileValue = processedInputs[task.id];
-              // Keep the file value as is - don't modify the format
-              // The S3UploadModule will handle different formats appropriately
+              // ALWAYS ensure file uploads are loaded as arrays for consistency
+              // This ensures compatibility with the state machine expectations
+              if (!Array.isArray(fileValue)) {
+                processedInputs[task.id] = [fileValue];
+              }
             }
           });
         }
