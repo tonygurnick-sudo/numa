@@ -1,3 +1,15 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
 [tool.poetry]
 name = "bedrock"
 version = "0.1.0"
@@ -20,7 +32,3 @@ boto3-stubs = "1.36.13"
 mypy = "1.15.0"
 pylint = "3.3.5"
 pyright = "1.1.396"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

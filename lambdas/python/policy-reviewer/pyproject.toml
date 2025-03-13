@@ -1,6 +1,19 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
 [tool.poetry]
 name = "policy-reviewer"
 version = "0.1.0"
+
 description = ""
 authors = ["Sam Bentley <sam@arcanum.ai>"]
 readme = "README.md"
@@ -28,7 +41,3 @@ poetry-plugin-lambda-build = ">=1.0.7"
 [tool.poetry-plugin-lambda-build]
 package-artifact-path = "lambda_function.zip"
 without = "dev"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
