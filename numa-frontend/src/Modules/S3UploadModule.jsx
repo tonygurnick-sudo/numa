@@ -39,7 +39,6 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   const [region, setRegion] = useState();
 
   const fileInputRef = useRef(null);
-
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
 
   // Handle value prop changes - extract file names from various input formats
@@ -99,16 +98,27 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
   // Handle initial completion status based on whether the upload is required
   useEffect(() => {
+    // Check if this is a chat file upload (special case)
+    const isChatFileUpload = task?.id === 'chatFileUpload';
+
+    // For chat file uploads, don't automatically call onComplete
+    if (isChatFileUpload) {
+      return;
+    }
+
+    // For other cases, proceed with normal behavior
     // Check if the task is required (default to false for better user experience)
     const isRequired = task?.required !== undefined ? task.required : false;
 
     // If the upload is not required, mark as complete by default
     if (!isRequired) {
-      onComplete();
+      // Always pass an empty array to onComplete to avoid undefined errors
+      onComplete([]);
     } else {
       // For required uploads, check if there's already a value
       if (value) {
-        onComplete();
+        // Pass the value as an array to onComplete
+        onComplete(Array.isArray(value) ? value : [value]);
       } else {
         onNotComplete();
       }
@@ -218,6 +228,9 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       }
     }
 
+    // Initialize results array at the beginning to ensure it's always available
+    const results = [];
+
     try {
       setError(null);
 
@@ -235,6 +248,11 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         } catch (error) {
           console.error('Failed to create job for file uploads:', error);
           setError('Failed to create job for file uploads. Please try again.');
+
+          // Call onComplete with empty array in case of error
+          if (onComplete) {
+            onComplete(results);
+          }
           return;
         }
       }
@@ -243,8 +261,6 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         region,
         credentials: await getIdentityPoolCredentials(),
       });
-
-      const results = [];
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i];
         setUploadStatus(`Uploading file ${i + 1} of ${selectedFiles.length}: ${file.name}`);
@@ -329,7 +345,8 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       setSelectedFiles(fileObjects.map((obj) => ({ name: obj.name })));
 
       // Pass the complete file info to the onComplete callback
-      onComplete(results); // needed for numa chat
+      // ALWAYS ensure we pass a valid array, even if results is undefined
+      onComplete(results || []); // needed for numa chat
 
       // Indicate that files are uploaded and ready for processing
       console.log(`Files uploaded successfully to job ${jobId}`);
@@ -355,6 +372,12 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       setError(errorMessage);
       setUploadStatus('Upload failed');
       onNotComplete();
+
+      // Ensure onComplete is called with an empty array in case of errors
+      // This prevents 'Cannot read properties of undefined (reading \'length\')' errors
+      if (onComplete) {
+        onComplete([]);
+      }
     }
   };
 

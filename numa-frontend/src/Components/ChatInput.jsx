@@ -64,7 +64,10 @@ const ChatInput = ({
             <Button
               variant="link"
               className="attachment-icon"
-              onClick={() => setShowUploadModal(true)}
+              onClick={() => {
+                console.log('Paperclip button clicked');
+                setShowUploadModal(true);
+              }}
               aria-label="Upload Files"
               disabled={disabled} // Optionally disable if needed
             >
