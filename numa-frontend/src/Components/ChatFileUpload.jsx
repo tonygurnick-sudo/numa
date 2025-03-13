@@ -1,5 +1,5 @@
 // ChatFileUpload.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from 'react-bootstrap';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { processFile } from '../utils/fileProcessing';
@@ -28,12 +28,26 @@ const ChatFileUpload = ({
     const ephemeralMessageIds = [];
 
     try {
+      // Check if fileArray is undefined or empty
+      if (!fileArray || !Array.isArray(fileArray) || fileArray.length === 0) {
+        // Instead of throwing an error, just log a message and return early
+        console.log('No files were selected for upload');
+        setIsFileProcessing(false);
+        return;
+      }
+
       let cid = conversationId;
       if (!cid) {
         cid = await createNewConversationIfNeeded();
       }
 
       for (let i = 0; i < fileArray.length; i++) {
+        // Ensure the file object exists and has required properties
+        if (!fileArray[i]) {
+          console.error('File object is undefined at index', i);
+          continue; // Skip this file and continue with the next one
+        }
+
         const { filePath, fileName, fileType, s3Bucket, file } = fileArray[i];
 
         // Create an ephemeral message for this file
@@ -100,7 +114,10 @@ const ChatFileUpload = ({
 
           // Remove ephemeral message for this file and add success message
           setMessages((prev) => prev.filter((msg) => msg.ephemeralId !== ephemeralId));
-          setMessages((prev) => [...prev, { role: 'assistant', content: `File "${fileName}" uploaded and processed.` }]);
+          setMessages((prev) => [
+            ...prev,
+            { role: 'assistant', content: `File "${fileName}" uploaded and processed.` },
+          ]);
         } catch (fileError) {
           // Handle error for individual file
           console.error(`Error processing file ${fileName}:`, fileError);
@@ -109,10 +126,13 @@ const ChatFileUpload = ({
           setMessages((prev) => prev.filter((msg) => msg.ephemeralId !== ephemeralId));
 
           // Then add a single error message
-          setMessages((prev) => [...prev, {
-            role: 'system',
-            content: `Error processing file "${fileName}": ${fileError.message}`
-          }]);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'system',
+              content: `Error processing file "${fileName}": ${fileError.message}`,
+            },
+          ]);
         }
       }
 
@@ -128,15 +148,28 @@ const ChatFileUpload = ({
     }
   };
 
+  // Wrapper function to ensure handleUploadComplete always receives a valid array
+  const safeUploadComplete = (fileArray) => {
+    try {
+      // Ensure fileArray is always a valid array
+      const safeArray = Array.isArray(fileArray) ? fileArray : [];
+      handleUploadComplete(safeArray);
+    } catch (error) {
+      console.error('Error in safeUploadComplete:', error);
+      setMessages((prev) => [...prev, { role: 'system', content: `Error processing files: ${error.message}` }]);
+      setIsFileProcessing(false);
+    }
+  };
+
   return (
-    <Modal show={show} onHide={onHide} size="lg">
+    <Modal show={show} onHide={onHide} size="lg" animation={false}>
       <Modal.Header closeButton>
         <Modal.Title>Upload Files</Modal.Title>
       </Modal.Header>
       <Modal.Body data-testid="upload-modal-body">
         <S3UploadModule
           task={{ id: 'chatFileUpload' }}
-          onComplete={handleUploadComplete}
+          onComplete={safeUploadComplete}
           onNotComplete={() => {}}
           onChange={() => {}}
         />
