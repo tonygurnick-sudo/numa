@@ -1355,6 +1355,10 @@ label {
   &.active {
     color: white;
 
+    &[data-category='legal'] {
+      background: #f9d400;
+    }
+
     &[data-category='productivity'] {
       background: #9d64b5;
     }

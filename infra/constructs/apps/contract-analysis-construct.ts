@@ -39,8 +39,7 @@ export class ContractAnalysis extends BaseNumaApp {
         {
           id: 'contract-context',
           title: 'Contract Context',
-          description:
-            'Provide any relevant details about this contract that might help with the analysis (optional)',
+          description: 'Provide any relevant details about this contract that might help with the analysis (optional)',
           type: TEXT_INPUT_TASK,
           order: 2,
         },
@@ -143,6 +142,7 @@ export class ContractAnalysis extends BaseNumaApp {
           contractAnalysisLambda.arn,
           {
             app_id: this.appId,
+            'job_id.$': '$.job_id',
             'input_key.$': '$.extracted.output_key',
             'contract_context.$': '$.contract_context',
           },
