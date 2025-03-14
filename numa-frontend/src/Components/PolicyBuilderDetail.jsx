@@ -383,18 +383,8 @@ export const PolicyBuilderDetail = () => {
     inFlightRequestsRef.current[jobID] = true;
 
     try {
-      const response = await numaGet(`${config.API_ENDPOINT}/policy-builder/main?job_id=${jobID}`);
-
-      // Check if the response is JSON
-      const contentType = response?.headers?.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        // If the response is not JSON, return false and clear the polling
-        clearPollingForJob(jobID);
-        return false;
-      }
-
-      const stepFunctionResponse = await response.json();
-      console.log('Step Function Response:', stepFunctionResponse);
+      const response = await numaGet(`${config.API_ENDPOINT}/policy-builder/main?job_id=${job.stepFunctionJobId}`);
+      console.log('Step Function Response:', response);
 
       // Check for unauthorized error
       if (response.status === 401) {
@@ -404,14 +394,14 @@ export const PolicyBuilderDetail = () => {
         return true;
       }
 
-      if (stepFunctionResponse.status === 'FAILURE') {
-        console.error(`Step Function request failed with status: ${stepFunctionResponse.status}`);
+      if (response.status === 'FAILURE') {
+        console.error(`Step Function request failed with status: ${response.status}`);
 
         // Update job manager with FAILED status
         const updateResponse = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${jobID}`, {
           ...job,
           status: 'FAILED',
-          error: stepFunctionResponse.message || 'Step function execution failed',
+          error: response.message || 'Step function execution failed',
         });
 
         console.log('Update Response for failed job:', updateResponse);
@@ -421,7 +411,7 @@ export const PolicyBuilderDetail = () => {
         return true;
       }
 
-      const stepFunctionStatus = stepFunctionResponse.status;
+      const stepFunctionStatus = response.status;
 
       // Stop polling if the status is not PROCESSING
       if (stepFunctionStatus !== 'PROCESSING') {
