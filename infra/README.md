@@ -51,7 +51,7 @@ Usage of this project is facilitated via the `yarn cdktf` helper script. This re
 
 **Note**
 
-Most stacks require the lambdas to be build, just run `package.sh` in the lambdas directory.
+Most stacks require the lambdas to be build, just run `package-all.sh` (requires GNU parallel, not the one from moreutils) in the lambdas directory. There is package-python-lambda.sh to build only one lambda (to be run from the lambda directory or passing in the path the directory)
 
 ---
 
