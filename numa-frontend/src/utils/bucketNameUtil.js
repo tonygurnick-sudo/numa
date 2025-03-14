@@ -4,19 +4,26 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
  * Generates policy builder specific bucket paths
  * @param {Object} config - Application config object
  * @param {string} jobId - The job ID for the policy
+ * @param {string} stepFunctionJobId - The job ID for the step function
  * @param {S3Client} s3Client - The S3 client instance
  * @param {string} fileExtension - The file extension, default is '.pdf'
  * @returns {Promise<Object>} - An object containing the bucket name and key
  */
-export const getPolicyBuilderBucketInfo = async (config, jobId, s3Client, fileExtension = '.pdf') => {
+export const getPolicyBuilderBucketInfo = async (
+  config,
+  jobId,
+  stepFunctionJobId,
+  s3Client,
+  fileExtension = '.pdf',
+) => {
   // Check if CLIENT_NAME is defined
   if (config.CLIENT_NAME === undefined) {
     console.warn('CLIENT_NAME is not defined in the config');
   }
 
-  // Check if CLIENT_NAME is defined
-  if (config.CLIENT_NAME === undefined) {
-    console.warn('CLIENT_NAME is not defined in the config');
+  // Check if STEP_FUNCTION_JOB_ID is defined
+  if (stepFunctionJobId === undefined) {
+    console.warn('STEP_FUNCTION_JOB_ID is not defined in the config');
   }
 
   // Check if JOB_ID is defined
@@ -37,7 +44,9 @@ export const getPolicyBuilderBucketInfo = async (config, jobId, s3Client, fileEx
 
   // Define new and legacy key paths
   const newKeyPath = `policy-builder/${jobId}/final_policy${fileExtension}`;
-  const legacyKeyPath = `${config.CLIENT_NAME}-nzsba-policy-builder/${jobId}/final_policy${fileExtension}`;
+
+  // The old key path is the step function job ID
+  const legacyKeyPath = `${config.CLIENT_NAME}-nzsba-policy-builder/${stepFunctionJobId}/final_policy${fileExtension}`;
 
   console.log('newKeyPath', newKeyPath);
   console.log('legacyKeyPath', legacyKeyPath);
