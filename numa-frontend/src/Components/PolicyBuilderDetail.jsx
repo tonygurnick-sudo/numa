@@ -44,7 +44,7 @@ export const PolicyBuilderDetail = () => {
   const inFlightRequestsRef = useRef({});
 
   const { loading, isAuthenticated, getIdentityPoolCredentials } = useAuth();
-  const { numaPost, numaPut } = useNumaRequest();
+  const { numaPost, numaPut, numaGet } = useNumaRequest();
   const { convertMarkdownToDocx } = MdToDocx();
   const jobsApi = useJobsApi();
 
@@ -181,6 +181,7 @@ export const PolicyBuilderDetail = () => {
         const { bucketName: bucket, key: fileKey } = await getPolicyBuilderBucketInfo(
           config,
           policyId,
+          policy.jobDetails.stepFunctionJobId,
           s3Client,
           '.pdf',
         );
@@ -382,10 +383,10 @@ export const PolicyBuilderDetail = () => {
     inFlightRequestsRef.current[jobID] = true;
 
     try {
-      const response = await fetch(`${config.API_ENDPOINT}/policy-builder/main?job_id=${jobID}`);
+      const response = await numaGet(`${config.API_ENDPOINT}/policy-builder/main?job_id=${jobID}`);
 
       // Check if the response is JSON
-      const contentType = response.headers.get('content-type');
+      const contentType = response?.headers?.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         // If the response is not JSON, return false and clear the polling
         clearPollingForJob(jobID);
@@ -394,6 +395,14 @@ export const PolicyBuilderDetail = () => {
 
       const stepFunctionResponse = await response.json();
       console.log('Step Function Response:', stepFunctionResponse);
+
+      // Check for unauthorized error
+      if (response.status === 401) {
+        console.error(`Unauthorized access for job ${jobID}. Stopping polling.`);
+        clearPollingForJob(jobID);
+        setErrorMessage('Unauthorized access. Please check your credentials.');
+        return true;
+      }
 
       if (stepFunctionResponse.status === 'FAILURE') {
         console.error(`Step Function request failed with status: ${stepFunctionResponse.status}`);

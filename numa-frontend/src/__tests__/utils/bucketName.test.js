@@ -35,6 +35,7 @@ describe('bucketNameUtil', () => {
       // Test data
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const jobId = 'job123';
+      const stepFunctionJobId = 'step123';
 
       // Expected result
       const expected = {
@@ -43,7 +44,7 @@ describe('bucketNameUtil', () => {
       };
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
 
       // Verify the result
       expect(result).toEqual(expected);
@@ -56,9 +57,10 @@ describe('bucketNameUtil', () => {
       // Test with missing bucket name
       const config = { CLIENT_NAME: 'testclient' };
       const jobId = 'job123';
+      const stepFunctionJobId = 'step123';
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
 
       // Verify the result has undefined bucketName but still has paths
       expect(result).toEqual({
@@ -77,9 +79,10 @@ describe('bucketNameUtil', () => {
       // Test with missing client name
       const config = { OUTPUTS_BUCKET_NAME: 'numa-outputs' };
       const jobId = 'job123';
+      const stepFunctionJobId = 'step123';
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
 
       // Verify the result
       expect(result).toEqual({
@@ -98,9 +101,10 @@ describe('bucketNameUtil', () => {
       // Test with empty job ID
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const jobId = '';
+      const stepFunctionJobId = 'step123';
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
 
       // Verify the result
       expect(result).toEqual({
@@ -115,9 +119,10 @@ describe('bucketNameUtil', () => {
 
       // Test with null job ID
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
+      const stepFunctionJobId = 'step123';
 
       // Call with null
-      const resultNull = await getPolicyBuilderBucketInfo(config, null, s3Client);
+      const resultNull = await getPolicyBuilderBucketInfo(config, null, stepFunctionJobId, s3Client);
 
       // Verify the result
       expect(resultNull).toEqual({
@@ -126,7 +131,7 @@ describe('bucketNameUtil', () => {
       });
 
       // Call with undefined
-      const resultUndefined = await getPolicyBuilderBucketInfo(config, undefined, s3Client);
+      const resultUndefined = await getPolicyBuilderBucketInfo(config, undefined, stepFunctionJobId, s3Client);
 
       // Verify the result
       expect(resultUndefined).toEqual({
@@ -144,15 +149,16 @@ describe('bucketNameUtil', () => {
       // Test data
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const jobId = 'job123';
+      const stepFunctionJobId = 'step123';
 
       // Expected result
       const expected = {
         bucketName: 'numa-testclient-outputs',
-        key: 'testclient-nzsba-policy-builder/job123/final_policy.pdf',
+        key: 'testclient-nzsba-policy-builder/step123/final_policy.pdf',
       };
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
 
       // Verify the result
       expect(result).toEqual(expected);
@@ -165,6 +171,7 @@ describe('bucketNameUtil', () => {
       // Test data
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const jobId = 'job123';
+      const stepFunctionJobId = 'step123';
 
       // Expected result with default file name
       const expected = {
@@ -173,7 +180,7 @@ describe('bucketNameUtil', () => {
       };
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
 
       // Verify the result
       expect(result).toEqual(expected);
