@@ -13,6 +13,7 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import MdToDocx from '../hooks/MdToDocx';
+import { getPolicyBuilderBucketInfo } from '../utils/bucketNameUtil';
 import { useJobsApi } from '../Services/jobsApi';
 
 export const PolicyBuilderDetail = () => {
@@ -40,9 +41,10 @@ export const PolicyBuilderDetail = () => {
   const [isDownloading, setIsDownloading] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const inFlightRequestsRef = useRef({});
 
   const { loading, isAuthenticated, getIdentityPoolCredentials } = useAuth();
-  const { numaPost, numaPut, numaGet } = useNumaRequest();
+  const { numaPost, numaPut } = useNumaRequest();
   const { convertMarkdownToDocx } = MdToDocx();
   const jobsApi = useJobsApi();
 
@@ -148,7 +150,7 @@ export const PolicyBuilderDetail = () => {
       return 'Failed';
     }
 
-    if (status === 'SUCCESS' || status === 'completed') return 'Success';
+    if (status === 'SUCCESS' || status === 'completed') return 'SUCCESS';
     return status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
@@ -157,36 +159,41 @@ export const PolicyBuilderDetail = () => {
     try {
       // Find the policy to get the school name
       const policy = policies.find((p) => p.jobDetails.stepFunctionJobId === policyId);
-      const schoolName = policy?.name || 'policy';
+      const schoolName = policy?.name || 'final_policy';
       // Create a sanitized filename
       const sanitizedFileName = schoolName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
       const credentials = await getIdentityPoolCredentials();
 
-      // Create S3 client
       const s3Client = new S3Client({
         region: 'us-east-1', // replace with your region
         credentials,
       });
 
-      // Construct the file path and key
-      let bucketName = `numa-${config.CLIENT_NAME}-outputs`;
-      let key;
+      // Use the utility function to get bucket info
+      let bucketName, key;
+
       if (policyId === 'test.txt') {
+        bucketName = config.OUTPUTS_BUCKET_NAME;
         key = 'test.txt';
       } else {
-        key = `${config.CLIENT_NAME}-nzsba-policy-builder/${policyId}/final_policy.pdf`;
+        // Get bucket info and the correct key from utility
+        const { bucketName: bucket, key: fileKey } = await getPolicyBuilderBucketInfo(
+          config,
+          policyId,
+          s3Client,
+          '.pdf',
+        );
+        bucketName = bucket;
+        key = fileKey;
       }
 
       // Create the command to get a signed URL with specific parameters
       const fileName = policyId === 'test.txt' ? 'test.txt' : `${sanitizedFileName}.pdf`;
-      const contentType = policyId === 'test.txt' ? 'text/plain' : 'application/pdf';
 
       const command = new GetObjectCommand({
         Bucket: bucketName,
         Key: key,
-        ResponseContentDisposition: `attachment; filename="${fileName}"`,
-        ResponseContentType: contentType,
       });
 
       let signedUrl;
@@ -200,15 +207,24 @@ export const PolicyBuilderDetail = () => {
         return;
       }
 
-      // Create an invisible anchor element to trigger the download
+      // Fetch the file content using the signed URL
+      const response = await fetch(signedUrl);
+      if (!response.ok) {
+        throw new Error('Failed to download file');
+      }
+      const blob = await response.blob();
+
+      // Create a URL for the blob and trigger the download
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = signedUrl;
-      link.download = fileName; // Set the download attribute
+      link.href = url;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Download failed:', error);
+      console.error('Error downloading file:', error);
       setErrorMessage(error.message || 'Failed to download file');
     } finally {
       setIsDownloading(null);
@@ -346,17 +362,6 @@ export const PolicyBuilderDetail = () => {
   }, [config, isAuthenticated, loading]);
 
   useEffect(() => {
-    // Cleanup function to clear all intervals when component unmounts
-    return () => {
-      Object.values(pollingIntervalsRef.current).forEach((interval) => {
-        clearInterval(interval);
-      });
-      pollingIntervalsRef.current = {};
-      setPollingPolicies(new Set()); // Clear polling set
-    };
-  }, []);
-
-  useEffect(() => {
     fetch('/config.json')
       .then((response) => response.json())
       .then((data) => setConfig(data))
@@ -364,42 +369,60 @@ export const PolicyBuilderDetail = () => {
   }, []);
 
   const pollProcessingPolicy = async (job) => {
-    // Extract job ID based on the format (jobID for custom endpoint, id for standard jobs API)
-    const jobID = job.jobID || job.id;
-    const stepFunctionJobId = job.stepFunctionJobId || jobID;
-
+    const { jobID } = job;
     console.log(`Polling status for job ${jobID}`);
 
-    try {
-      const stepFunctionResponse = await numaGet(
-        `${config.API_ENDPOINT}/policy-builder/main?job_id=${stepFunctionJobId}`,
-      );
+    // Check if there's already a polling request in progress for this job
+    if (inFlightRequestsRef.current[jobID]) {
+      console.log(`Polling request already in progress for job ${jobID}, skipping`);
+      return false;
+    }
 
+    // Set a flag indicating this job has a request in progress
+    inFlightRequestsRef.current[jobID] = true;
+
+    try {
+      const response = await fetch(`${config.API_ENDPOINT}/policy-builder/main?job_id=${jobID}`);
+
+      // Check if the response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        // If the response is not JSON, return false and clear the polling
+        clearPollingForJob(jobID);
+        return false;
+      }
+
+      const stepFunctionResponse = await response.json();
       console.log('Step Function Response:', stepFunctionResponse);
 
-      if (!stepFunctionResponse || stepFunctionResponse.status === 'FAILURE') {
-        console.error(`Step Function request failed with status: ${stepFunctionResponse?.status || 'unknown'}`);
+      if (stepFunctionResponse.status === 'FAILURE') {
+        console.error(`Step Function request failed with status: ${stepFunctionResponse.status}`);
+
+        // Update job manager with FAILED status
+        const updateResponse = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${jobID}`, {
+          ...job,
+          status: 'FAILED',
+          error: stepFunctionResponse.message || 'Step function execution failed',
+        });
+
+        console.log('Update Response for failed job:', updateResponse);
+
         clearPollingForJob(jobID);
+        fetchPolicies(); // Refresh the policies list
         return true;
       }
 
       const stepFunctionStatus = stepFunctionResponse.status;
-      console.log('Step Function Status:', stepFunctionStatus);
 
       // Stop polling if the status is not PROCESSING
       if (stepFunctionStatus !== 'PROCESSING') {
         console.log(`Job ${jobID} status changed from PROCESSING to ${stepFunctionStatus}`);
 
-        // Use jobsApi but maintain same functionality
-        const appData = { id: 'policy-builder' };
-        const updateData = { ...job, status: stepFunctionStatus };
-        const updateResponse = await jobsApi.updateJob(
-          appData,
-          jobID,
-          updateData.results,
-          updateData.inputs,
-          updateData.status,
-        );
+        // Update job manager with new status
+        const updateResponse = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${jobID}`, {
+          ...job,
+          status: stepFunctionStatus,
+        });
 
         console.log('Update Response:', updateResponse);
 
@@ -426,14 +449,16 @@ export const PolicyBuilderDetail = () => {
       console.error(`Error polling job ${jobID}:`, error);
       clearPollingForJob(jobID);
       return true;
+    } finally {
+      // Clear the in-flight flag for this job
+      delete inFlightRequestsRef.current[jobID];
     }
 
     return false;
   };
 
   const startPollingForJob = (job) => {
-    // Extract job ID based on the format (jobID for custom endpoint, id for standard jobs API)
-    const jobID = job.jobID || job.id;
+    const { jobID } = job;
 
     // Check if we're already polling this job
     if (pollingPolicies.has(jobID)) {
@@ -452,18 +477,26 @@ export const PolicyBuilderDetail = () => {
     }
 
     const poll = async () => {
-      const statusChanged = await pollProcessingPolicy(job);
-      if (!statusChanged && pollingIntervalsRef.current[jobID]) {
+      // Only proceed if there's no in-flight request for this job
+      if (!inFlightRequestsRef.current[jobID]) {
+        const statusChanged = await pollProcessingPolicy(job);
+        if (!statusChanged && pollingIntervalsRef.current[jobID]) {
+          setTimeout(() => {
+            requestAnimationFrame(poll);
+          }, 10000);
+        } else {
+          // Remove from polling set when complete
+          setPollingPolicies((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(jobID);
+            return newSet;
+          });
+        }
+      } else {
+        // If there's an in-flight request, just schedule the next poll
         setTimeout(() => {
           requestAnimationFrame(poll);
         }, 10000);
-      } else {
-        // Remove from polling set when complete
-        setPollingPolicies((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(jobID);
-          return newSet;
-        });
       }
     };
 
@@ -486,19 +519,9 @@ export const PolicyBuilderDetail = () => {
         throw new Error(`HTTP error! status: ${response.error}`);
       }
 
-      // Extract items from the response - handle both formats (array or {items: []})
-      const jobs = Array.isArray(response) ? response : response.items || [];
-
-      // Filter to only show POLICY_GENERATION jobs
-      const transformedPolicies = jobs
-        .filter((job) => job.type === 'POLICY_GENERATION')
+      const transformedPolicies = response?.items
+        ?.filter((job) => job.type === 'POLICY_GENERATION')
         .map((job) => {
-          // Only start polling if job is processing and not already being polled
-          if (job.status === 'PROCESSING' && job.jobID && !pollingPolicies.has(job.jobID)) {
-            console.log('Starting polling for job:', job);
-            startPollingForJob(job);
-          }
-
           return {
             id: job.jobID,
             name: job.inputs?.schoolName || 'Unnamed Policy',
@@ -514,6 +537,15 @@ export const PolicyBuilderDetail = () => {
       console.log('Transformed policies:', transformedPolicies);
 
       setPolicies(transformedPolicies);
+
+      // Start polling for any processing policies immediately after setting the policies
+      transformedPolicies.forEach((policy) => {
+        // Check for both 'PROCESSING' and 'running' status to be consistent with the removed useEffect
+        if ((policy.status === 'PROCESSING' || policy.status === 'running') && !pollingPolicies.has(policy.id)) {
+          console.log('Starting polling for processing policy:', policy);
+          startPollingForJob(policy.jobDetails);
+        }
+      });
     } catch (error) {
       console.error('Error fetching policies:', error);
     } finally {
@@ -521,46 +553,51 @@ export const PolicyBuilderDetail = () => {
     }
   };
 
-  // Add a helper function to clear polling
   const clearPollingForJob = (jobId) => {
     if (pollingIntervalsRef.current[jobId]) {
       clearInterval(pollingIntervalsRef.current[jobId]);
       delete pollingIntervalsRef.current[jobId];
     }
+
+    // Clear from polling policies set
     setPollingPolicies((prev) => {
       const newSet = new Set(prev);
       newSet.delete(jobId);
       return newSet;
     });
+
+    // Clear the in-flight flag
+    delete inFlightRequestsRef.current[jobId];
   };
 
-  const handleDownloadDocx = async (policyId) => {
-    setIsDownloading(policyId);
+  const handleDownloadDocx = async (jobId) => {
+    setIsDownloading(jobId);
     try {
       // Find the policy to get the school name
-      const policy = policies.find((p) => p.jobDetails.stepFunctionJobId === policyId);
+      const policy = policies.find((p) => p.jobDetails.stepFunctionJobId === jobId);
       const schoolName = policy?.name || 'policy';
       // Create a sanitized filename
       const sanitizedFileName = schoolName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
+      // Get fresh credentials each time instead of caching
       const credentials = await getIdentityPoolCredentials();
 
-      // Create S3 client
+      // Create S3 client with fresh credentials
       const s3Client = new S3Client({
         region: 'us-east-1', // replace with your region
         credentials,
       });
 
-      // Construct the file path and key for the Markdown file
-      const bucketName = `numa-${config.CLIENT_NAME}-outputs`;
-      const key = `${config.CLIENT_NAME}-nzsba-policy-builder/${policyId}/final_policy.md`;
+      // Use the utility function to get bucket info and the correct key
+      const { bucketName, key } = await getPolicyBuilderBucketInfo(config, jobId, s3Client, '.md');
 
-      // Create the command to get a signed URL for the Markdown file
+      // Create the command to get the markdown content
       const command = new GetObjectCommand({
         Bucket: bucketName,
         Key: key,
       });
 
+      // Get a signed URL for the markdown file
       let signedUrl;
       try {
         signedUrl = await getSignedUrl(s3Client, command, {
@@ -572,8 +609,11 @@ export const PolicyBuilderDetail = () => {
         return;
       }
 
-      // Fetch the Markdown content
+      // Fetch the Markdown content using the signed URL
       const response = await fetch(signedUrl);
+      if (!response.ok) {
+        throw new Error('Failed to download file');
+      }
       const markdownContent = await response.text();
 
       // Convert the Markdown content to DOCX with the specified filename
@@ -587,19 +627,19 @@ export const PolicyBuilderDetail = () => {
   };
 
   const renderPoliciesTab = () => (
-    <div className="table-responsive">
+    <div className="table-responsive" data-testid="policies-tab-content">
       {isLoadingPolicies && !policies.length ? (
-        <div className="text-center py-4">
+        <div className="text-center py-4" data-testid="policies-loading">
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Loading...</span>
           </div>
         </div>
       ) : policies.length === 0 ? (
-        <div className="text-center py-4">
+        <div className="text-center py-4" data-testid="policies-empty-state">
           <p className="text-muted">No policies found. Create a new policy to get started.</p>
         </div>
       ) : (
-        <Table responsive striped bordered hover>
+        <Table responsive striped bordered hover data-testid="policies-table">
           <thead>
             <tr className="table-light">
               <th className="align-middle">Policy Name</th>
@@ -610,11 +650,13 @@ export const PolicyBuilderDetail = () => {
           </thead>
           <tbody>
             {policies.map((policy) => (
-              <tr key={policy.id}>
-                <td className="text-break">{policy.name}</td>
+              <tr key={policy.id} data-testid={`policy-row-${policy.id}`}>
+                <td className="text-break" data-testid={`policy-name-${policy.id}`}>
+                  {policy.name}
+                </td>
                 <td className="d-none d-md-table-cell">{formatDate(policy.jobDetails.dateTime)}</td>
                 <td>
-                  <Badge bg={getBadgeColor(policy.status, policy.jobDetails)}>
+                  <Badge bg={getBadgeColor(policy.status)} data-testid={`policy-status-${policy.id}`}>
                     {policy.status === 'PROCESSING' && (
                       <span
                         className="spinner-border spinner-border-sm me-1"
@@ -635,9 +677,7 @@ export const PolicyBuilderDetail = () => {
                           variant="outline-secondary"
                           size="sm"
                           disabled={
-                            (policy.status !== 'SUCCESS' && policy.status !== 'completed') ||
-                            (policy.status === 'completed' && policy.jobDetails?.results?.error) ||
-                            isDownloading === policy.jobDetails.stepFunctionJobId
+                            policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId
                           }
                           className="d-md-none"
                           id={`dropdown-toggle-${policy.id}`}
@@ -656,9 +696,7 @@ export const PolicyBuilderDetail = () => {
                           variant="outline-secondary"
                           size="sm"
                           disabled={
-                            (policy.status !== 'SUCCESS' && policy.status !== 'completed') ||
-                            (policy.status === 'completed' && policy.jobDetails?.results?.error) ||
-                            isDownloading === policy.jobDetails.stepFunctionJobId
+                            policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId
                           }
                           className="d-none d-md-inline-flex align-items-center"
                           id={`dropdown-toggle-${policy.id}`}
@@ -732,7 +770,7 @@ export const PolicyBuilderDetail = () => {
 
   const renderGenerateTab = () => (
     <>
-      <div className="p-2 p-sm-4">
+      <div className="p-2 p-sm-4" data-testid="generate-tab-content">
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h5 className="mb-0">Create New School Policy</h5>
 
@@ -744,6 +782,7 @@ export const PolicyBuilderDetail = () => {
                   onClick={() => setShowCustomScenarioModal(true)}
                   className="btn-numa-outline d-flex align-items-center gap-2"
                   disabled
+                  data-testid="create-new-scenario-button"
                 >
                   <PlusIcon />
                   Create New Scenario
@@ -754,6 +793,7 @@ export const PolicyBuilderDetail = () => {
               variant="outline-primary"
               className="btn-numa-outline d-flex align-items-center gap-2"
               onClick={handleBlankScenario}
+              data-testid="blank-scenario-button"
             >
               <PencilSquare />
               Blank Scenario
@@ -766,12 +806,13 @@ export const PolicyBuilderDetail = () => {
               key={template.id}
               className="card policy-template-card"
               style={{
-                flex: '1 1 300px', // Allow flex grow/shrink with a base width
+                flex: '1 1 300px',
                 height: '250px',
                 cursor: 'pointer',
-                margin: '10px', // Add some margin for spacing
+                margin: '10px',
               }}
               onClick={() => handleTemplateSelect(template)}
+              data-testid={`template-card-${template.id}`}
             >
               <div className="card-body d-flex flex-column h-100 p-3">
                 <div>
@@ -807,7 +848,6 @@ export const PolicyBuilderDetail = () => {
       <CreatePolicyModal
         visible={showNewPolicyModal}
         onClose={() => {
-          // Only allow closing if not generating
           if (!isGenerating) {
             setShowNewPolicyModal(false);
           }
@@ -822,13 +862,18 @@ export const PolicyBuilderDetail = () => {
   );
 
   return (
-    <Container fluid className="px-0">
+    <Container fluid className="px-0" data-testid="policy-builder-container">
       <div style={{ backgroundColor: '#f8f7fa' }} className="border-bottom">
-        <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="mb-0">
-          <Tab eventKey="policies" title="School Policies">
+        <Tabs
+          activeKey={activeTab}
+          onSelect={(k) => setActiveTab(k)}
+          className="mb-0"
+          data-testid="policy-builder-tabs"
+        >
+          <Tab eventKey="policies" title="School Policies" data-testid="policies-tab">
             {renderPoliciesTab()}
           </Tab>
-          <Tab eventKey="generate" title="Create New Policy">
+          <Tab eventKey="generate" title="Create New Policy" data-testid="generate-tab">
             {renderGenerateTab()}
           </Tab>
         </Tabs>

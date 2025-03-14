@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { estimateTokenCount, processFile } from '../fileProcessing';
+import { estimateTokenCount } from '../../utils/fileProcessing';
 
 const CHARS_PER_TOKEN = 4.0;
 const MAX_TOKEN_LIMIT = 100000;
@@ -34,7 +34,7 @@ describe('fileProcessing - Token Estimation and Size Limits', () => {
 
     vi.spyOn(global, 'fetch').mockImplementation(() => {
       return Promise.resolve({
-        text: () => Promise.resolve('Mocked text content')
+        text: () => Promise.resolve('Mocked text content'),
       });
     });
   });
@@ -77,7 +77,7 @@ describe('fileProcessing - Token Estimation and Size Limits', () => {
       const exactLimitContent = 'A'.repeat(MAX_TOKEN_LIMIT * CHARS_PER_TOKEN);
       expect(estimateTokenCount(exactLimitContent)).toBe(MAX_TOKEN_LIMIT);
 
-      const justOverContent = 'A'.repeat((MAX_TOKEN_LIMIT * CHARS_PER_TOKEN) + 1);
+      const justOverContent = 'A'.repeat(MAX_TOKEN_LIMIT * CHARS_PER_TOKEN + 1);
       expect(estimateTokenCount(justOverContent)).toBe(MAX_TOKEN_LIMIT + 1);
     });
   });
