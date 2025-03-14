@@ -3,6 +3,9 @@ CLAUSE_IDENTIFICATION_PROMPT = """You are an expert in contract analysis with de
 Here is a contract document uploaded by our user:
 {contract_content}
 
+Context provided by the user about this contract:
+{contract_context}
+
 ## Task:
 Identify and classify all key clauses in this contract. Focus on standard and non-standard clauses that are important for understanding the contract's terms, obligations, and potential risks.
 
@@ -25,6 +28,9 @@ HIGHLIGHTING_EXPLANATION_PROMPT = """You are an expert in contract analysis with
 
 Here is a contract document:
 {contract_content}
+
+Context provided by the user about this contract:
+{contract_context}
 
 I've also identified the key clauses in this contract:
 {identified_clauses}
@@ -52,6 +58,9 @@ RISK_ASSESSMENT_PROMPT = """You are an expert in contract risk assessment with d
 
 Here is a contract document:
 {contract_content}
+
+Context provided by the user about this contract:
+{contract_context}
 
 I've also identified and explained the key clauses in this contract:
 {highlighted_explanations}
@@ -97,6 +106,9 @@ IMPROVEMENT_SUGGESTIONS_PROMPT = """You are an expert contract negotiator with d
 
 Here is the original contract:
 {contract_content}
+
+Context provided by the user about this contract:
+{contract_context}
 
 Here is a comprehensive risk assessment of the contract:
 {risk_assessment}

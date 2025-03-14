@@ -34,6 +34,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
             prompt=CLAUSE_IDENTIFICATION_PROMPT,
             input_data={
                 "contract_content": contract_content,
+                "contract_context": contract_context,
             },
         )
 
@@ -42,6 +43,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
             prompt=HIGHLIGHTING_EXPLANATION_PROMPT,
             input_data={
                 "contract_content": contract_content,
+                "contract_context": contract_context,
                 "identified_clauses": identified_clauses,
             },
         )
@@ -51,6 +53,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
             prompt=RISK_ASSESSMENT_PROMPT,
             input_data={
                 "contract_content": contract_content,
+                "contract_context": contract_context,
                 "highlighted_explanations": highlighted_explanations,
             },
         )
@@ -60,6 +63,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
             prompt=IMPROVEMENT_SUGGESTIONS_PROMPT,
             input_data={
                 "contract_content": contract_content,
+                "contract_context": contract_context,
                 "risk_assessment": risk_assessment,
             },
         )
