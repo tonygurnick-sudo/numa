@@ -146,6 +146,7 @@ export class NumaClientStack extends ArcanumStack {
           Q_RETRIEVER_ID: core.qBusinessRetrieverId,
           API_ENDPOINT: '/api',
           CLIENT_NAME: props.client,
+          OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
           HONEYCOMB_KEY: honeycomb.frontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
         }),
         contentType: 'application/json',

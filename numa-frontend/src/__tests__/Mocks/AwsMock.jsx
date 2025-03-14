@@ -1,5 +1,15 @@
 import { vi } from 'vitest';
 
+// Mock S3 Client
+export const sendMock = vi.fn().mockResolvedValue({});
+
+export const mockS3Client = {
+  S3Client: vi.fn(() => ({
+    send: sendMock,
+  })),
+  GetObjectCommand: vi.fn(),
+};
+
 // Mock STS Client
 export const mockSTSClient = {
   STSClient: vi.fn().mockImplementation(() => ({
@@ -99,6 +109,7 @@ export const mockCognitoIdentityProviderClient = {
 
 // Setup all mocks
 export const setupAwsMocks = () => {
+  vi.mock('@aws-sdk/client-s3', () => mockS3Client);
   vi.mock('@aws-sdk/client-sts', () => mockSTSClient);
   vi.mock('@aws-sdk/client-cognito-identity', () => mockCognitoIdentityClient);
   vi.mock('@aws-sdk/client-qbusiness', () => mockQBusinessClient);

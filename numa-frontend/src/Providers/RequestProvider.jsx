@@ -53,16 +53,12 @@ export const NumaRequestProvider = ({ children }) => {
   // Common request methods
   const numaGet = async (url, params, headers = {}) => {
     console.log('Making GET request to:', url);
-    console.log('With params:', params);
-    console.log('With headers:', { ...defaultHeaders, ...headers });
     try {
       const response = await axios.get(url, {
         ...axiosConfig,
         params,
         headers: { ...defaultHeaders, ...headers },
       });
-      console.log('Response status:', response.status);
-      console.log('Response data:', response.data);
       return response.data;
     } catch (error) {
       console.error('Request failed:', error.message);
