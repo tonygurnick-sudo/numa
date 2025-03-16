@@ -518,6 +518,16 @@
     "clientAccountId": "851725285135",
     "loadSampleFile": false
   },
+  "symphony": {
+    "clientAccountId": "557690588490",
+    "createServiceLinkedRole": false,
+    "loadSampleFile": false,
+    "apps": {
+      "document-summariser": {},
+      "meeting-analyser": {},
+      "policy-reviewer": {}
+    }
+  },
   "tda": {
     "clientAccountId": "575108948290",
     "sharePointConfigs": [
