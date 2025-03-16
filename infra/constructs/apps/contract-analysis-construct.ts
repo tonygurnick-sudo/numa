@@ -8,7 +8,6 @@ import {
   HTTP_REQUEST_TASK,
   S3_UPLOAD_TASK,
   TEXT_INPUT_TASK,
-  TEXT_OUTPUT_TASK,
 } from './base-numa-app-construct';
 
 const description = 'Analyze contracts for clauses, risks, and improvement opportunities';
@@ -55,46 +54,6 @@ export class ContractAnalysis extends BaseNumaApp {
             },
           },
           order: 3,
-        },
-        {
-          id: 'identified-clauses',
-          title: 'Clause Identification',
-          description: 'Key clauses detected in your contract',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/identified_clauses',
-          },
-          order: 4,
-        },
-        {
-          id: 'highlighted-explanations',
-          title: 'Contract Explanation',
-          description: 'Your contract with explanations of important terms and clauses',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/highlighted_explanations',
-          },
-          order: 5,
-        },
-        {
-          id: 'risk-assessment',
-          title: 'Risk Assessment',
-          description: 'Comprehensive risk analysis with integrated risk scoring table',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/risk_assessment',
-          },
-          order: 6,
-        },
-        {
-          id: 'improvement-suggestions',
-          title: 'Suggested Improvements',
-          description: 'Recommended changes to improve your contract',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/improvement_suggestions',
-          },
-          order: 7,
         },
       ],
     };
@@ -145,6 +104,7 @@ export class ContractAnalysis extends BaseNumaApp {
             'job_id.$': '$.job_id',
             'input_key.$': '$.extracted.output_key',
             'contract_context.$': '$.contract_context',
+            'output_key.$': `States.Format('${this.appId}/{}/contract-analysis.json', $$.Execution.Input.job_id)`,
           },
           'WriteSuccessStatus',
           {

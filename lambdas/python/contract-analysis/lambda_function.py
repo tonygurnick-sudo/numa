@@ -1,3 +1,6 @@
+import json
+import os
+
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
@@ -21,10 +24,11 @@ def remove_backticks(text: str) -> str:
     return text.replace("`", "")
 
 
-def handler(event: dict, context: LambdaContext) -> dict:
+def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
     helpers.setup_step_function_lambda_logging(event, context)
     try:
         input_key = event["input_key"]
+        output_key = event["output_key"]
         contract_context = event.get("contract_context", "")
 
         contract_content = s3_helpers.read(input_key)
@@ -75,7 +79,27 @@ def handler(event: dict, context: LambdaContext) -> dict:
             "improvement_suggestions": improvement_suggestions,
         }
 
-        return results
+        results_json = json.dumps(results, indent=2).encode("utf-8")
+        s3_helpers.write(output_key, results_json, content_type="application/json")
+
+        return {
+            "results": [
+                {
+                    "input_reference": None,
+                    "outputs": [
+                        {
+                            "content_type": "application/json",
+                            "data": {
+                                "bucket": os.environ["BUCKET"],
+                                "key": output_key,
+                            },
+                            "location": "S3",
+                            "title": "Contract Analysis",
+                        },
+                    ],
+                },
+            ]
+        }
 
     except Exception:
         logger.exception("Error in lambda execution")
