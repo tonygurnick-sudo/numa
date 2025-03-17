@@ -75,7 +75,8 @@
       "meeting-analyser": {},
       "policy-reviewer": {},
       "company-profile": {},
-      "candidate-screening": {}
+      "candidate-screening": {},
+      "contract-analysis": {}
     },
     "devInstance": true
   },

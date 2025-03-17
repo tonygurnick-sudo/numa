@@ -419,6 +419,7 @@ export enum AppCategory {
   COMPLIANCE = 'compliance',
   HR = 'hr',
   GENERAL = 'general',
+  LEGAL = 'legal',
 }
 
 export type NumaAppManifestTask =
