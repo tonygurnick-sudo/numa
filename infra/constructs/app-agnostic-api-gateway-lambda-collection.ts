@@ -26,6 +26,26 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       },
       environment,
     });
+
+    // Web Search Proxy
+    this.addLambdaFunction(this, 'web-search-proxy', {
+      addAuthorizer: false, // Public endpoint
+      lambdaDirectory: 'python/web-search-proxy',
+      handler: 'lambda_function.lambda_handler',
+      // Ensure the path includes OPTIONS method for CORS
+      route: {
+        verb: 'GET', // Support GET
+        path: 'web-search',
+      },
+      environment: {
+        variables: {
+          LOG_LEVEL: 'DEBUG', // Increase logging level for debugging
+          ALLOWED_ORIGIN: '*', // Explicitly set CORS
+        },
+      },
+      // Increase timeout to handle potential DuckDuckGo API latency
+      timeout: 30, // 30 seconds
+    });
   }
 }
 

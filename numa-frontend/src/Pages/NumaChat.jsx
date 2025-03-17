@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Button, Container, Row, Col } from 'react-bootstrap';
+import { Button, Container, Row, Col, Spinner, Collapse } from 'react-bootstrap';
 import { ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import { SearchRelevantContentCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
@@ -9,24 +9,58 @@ import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
 import { DataSourcesList } from '../Components/DataSourcesList';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
+import { MarkdownContent } from '../Components/MarkdownContent';
 import { prepareConversationHistoryForBedrock, MAX_DYNAMO_MESSAGES } from '../utils/bedrockMessageHistoryUtils';
 import { ChatInput } from '../Components/ChatInput';
-import { DocumentPanel } from '../Components/DocumentPanel';
-import { ChatMessages } from '../Components/ChatMessages';
-import ResizableSplitView from '../Components/ResizableSplitView';
+import numaIcon from '../assets/images/numa-logo.svg';
+
+/** Helper component to display a collapsible references panel */
+function ReferencesDropdown({ references }) {
+  const [open, setOpen] = useState(false);
+  if (!references || references.length === 0) return null;
+
+  return (
+    <div className="references-dropdown mt-2">
+      <Button
+        variant="link"
+        size="sm"
+        onClick={() => setOpen(!open)}
+        aria-controls="references-collapse"
+        aria-expanded={open}
+        style={{ color: '#4b007d' }}
+      >
+        {open ? 'Hide References' : 'Show References'}
+      </Button>
+      <Collapse in={open}>
+        <div id="references-collapse" className="ms-3">
+          <ul className="list-unstyled">
+            {references.map((ref, idx) => (
+              <li key={idx}>
+                <a href={ref} target="_blank" rel="noopener noreferrer">
+                  {ref}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Collapse>
+    </div>
+  );
+}
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [conversationId, setConversationId] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
+
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [queryDataSources, setQueryDataSources] = useState(false);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [buttonStatus, setButtonStatus] = useState('idle');
   const [isFileProcessing, setIsFileProcessing] = useState(false);
-  const [inlineDocument, setInlineDocument] = useState(null);
-  const [showSplitView, setShowSplitView] = useState(false);
 
+  // Refs & contexts
   const stopGenerationRef = useRef(false);
   const messageEndRef = useRef(null);
   const {
@@ -53,69 +87,8 @@ const NumaChat = () => {
   const Q_RETRIEVER_ID = window.sessionStorage.getItem('Q_RETRIEVER_ID');
   const MAX_DATA_SOURCE_ITEMS = 6;
   const TODAY = new Date();
-  const SYSTEM_MESSAGE = `You are an artificial intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data sources, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorporate other bold and italic styling within your outputs when appropriate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with markdown formatting.\n- Similarly, For any document, report, email, analysis, or other exportable content you generate that a user may want to download or copy (except code), please start it with the following '<!--BEGIN_DOC title="SOME TITLE HERE"-->' (where you infer the title when writing the document), and end it with '<!--END_DOC-->'. This will help me identify documents in post processing using regex looking for the opening '<--' and closing '-->'\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like "Could you provide more details?" or "What specific aspect would you like to focus on?"\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
+  const SYSTEM_MESSAGE = `You are an artificial intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data sources, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorporate other bold and italic styling within your outputs when appropriate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with markdown formatting.\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like "Could you provide more details?" or "What specific aspect would you like to focus on?"\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
 
-  /**
-   * parseChunkWithoutDocComments(chunk, docStripState)
-   * - This function is used to strip comments from the assistant response.
-   * - Removes everything from <!-- ... --> while preserving newlines/other text.
-   * - Replace the comment with '---' for nicer display of the document.
-   * - Returns the stripped text.
-   * - If a comment tag is split across chunk boundaries, it uses docStripState.leftover
-   *   to handle partial tags in the next chunk.
-   */
-  function parseChunkWithoutDocComments(chunk, docStripState) {
-    // Combine leftover from previous chunk with the current chunk
-    let text = docStripState.leftover + chunk;
-    let output = '';
-    let i = 0;
-
-    while (i < text.length) {
-      // Find the start of a comment
-      const startIndex = text.indexOf('<!--', i);
-      if (startIndex === -1) {
-        // No more comments in this chunk
-        output += text.slice(i);
-        i = text.length;
-      } else {
-        // Add text before the comment to output
-        output += text.slice(i, startIndex);
-
-        // Find the end of the comment
-        const closeIndex = text.indexOf('-->', startIndex);
-        if (closeIndex === -1) {
-          // Comment is incomplete in this chunk, save it for the next chunk
-          docStripState.leftover = text.slice(startIndex);
-          return output;
-        } else {
-          // Replace the comment with '---'
-          output += '---';
-          // Skip past the end of the comment
-          i = closeIndex + 3; // jump past -->
-        }
-      }
-    }
-
-    // Clear leftover since all comments are processed
-    docStripState.leftover = '';
-    return output;
-  }
-
-  /**
-   * Extract doc info from raw text. If a doc block is found, returns an object:
-   * { docTitle, docContent }, else null.
-   */
-  function extractSingleDocBlock(rawText) {
-    const docRegex = /<!--BEGIN_DOC title="(.*?)"-->([\s\S]*?)<!--END_DOC-->/;
-    const match = rawText.match(docRegex);
-    if (match) {
-      return {
-        docTitle: match[1],
-        docContent: match[2].trim(),
-      };
-    }
-    return null;
-  }
   // Ref for input textarea
   const inputRef = useRef(null);
 
@@ -172,15 +145,63 @@ const NumaChat = () => {
     setUploadedFiles([]);
     setInputMessage('');
     setConversationId(null);
-    setInlineDocument(null);
 
     // Add an initial greeting from the assistant
     const greeting = { role: 'assistant', content: 'How can I help you today?' };
     setMessages([greeting]);
   };
 
-  // A function that ensures we have a conversation (creates one if needed).
+  // Test the web search Lambda directly
+  const testWebSearchLambda = async () => {
+    // Expose the function to the window for testing
+    window.testWebSearchLambda = testWebSearchLambda;
+    try {
+      // Use a configuration variable if available, otherwise build a URL
+      const API_GATEWAY_URL = window.sessionStorage.getItem('API_ENDPOINT') || '/api';
+
+      // Remove /api prefix if it's already included in API_GATEWAY_URL
+      const basePath = API_GATEWAY_URL.endsWith('/api')
+        ? API_GATEWAY_URL
+        : `${API_GATEWAY_URL}/api`;
+
+      // Build the test search URL (using a simple test query)
+      const testQuery = "melbourne weather";
+      const testSearchUrl = `${basePath}/web-search?query=${encodeURIComponent(testQuery)}&max_results=2`;
+      console.log('[TEST] Calling web search Lambda at URL:', testSearchUrl);
+
+      // Make a test request
+      const testResponse = await fetch(testSearchUrl, {
+        method: 'GET',
+        cache: 'no-cache'
+      });
+
+      console.log('[TEST] Web search response status:', testResponse.status);
+      console.log('[TEST] Web search response headers:', [...testResponse.headers.entries()]);
+
+      if (!testResponse.ok) {
+        // Try to get error details
+        let errorText = '';
+        try {
+          errorText = await testResponse.text();
+        } catch(e) {
+          errorText = 'Could not read error response';
+        }
+        console.error('[TEST] Web search test failed:', errorText);
+        alert(`Web search test failed with status ${testResponse.status}. Check console for details.`);
+      } else {
+        const searchData = await testResponse.json();
+        console.log('[TEST] Web search test successful:', searchData);
+        alert(`Web search test successful! Found ${searchData.results_count} results for "${testQuery}"`);
+      }
+    } catch (error) {
+      console.error('[TEST] Web search test error:', error);
+      alert(`Web search test failed with error: ${error.message}. Check console for details.`);
+    }
+  };
+
+  // 1) A function that ensures we have a conversation (creates one if needed).
   const createNewConversationIfNeeded = async (initialText = '') => {
+    console.log('Creating new conversation with initial text:', initialText);
     if (conversationId) return conversationId; // Already have one
 
     const newId = `${sub || 'anonymous'}_${Date.now()}`;
@@ -199,6 +220,7 @@ const NumaChat = () => {
         content: 'New conversation started',
       });
 
+      // Optionally store an "assistant greeting"
       await numaChatDynamoUtils.addMessage({
         conversationId: newId,
         userId: sub,
@@ -224,11 +246,97 @@ const NumaChat = () => {
     try {
       const cid = await createNewConversationIfNeeded(inputMessage);
 
-      // 1) Add user message to local state
-      const userMsg = { role: 'user', content: inputMessage };
+      // Original user message to store
+      const originalUserMessage = inputMessage;
+      // Message to display to Claude (may include search results)
+      let enhancedUserMessage = originalUserMessage;
+
+      // We'll store references from data source queries
+      let dsReferences = [];
+      let finalInputText = '';
+
+      // If web search is enabled, perform search first and enhance user message
+      if (webSearchEnabled) {
+        // Show searching indicator
+        setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'searching' }]);
+
+        try {
+          // Get recent conversation context
+          const recentMessages = messages.slice(-6); // Get last 6 messages
+          const contextString = recentMessages
+            .map(msg => `${msg.role}: ${msg.content}`)
+            .join('\n');
+            
+          // Call web search Lambda with context
+          const API_GATEWAY_URL = window.sessionStorage.getItem('API_ENDPOINT') || '/api';
+          const basePath = API_GATEWAY_URL.endsWith('/api') ? API_GATEWAY_URL : `${API_GATEWAY_URL}/api`;
+          const searchUrl = `${basePath}/web-search?query=${encodeURIComponent(originalUserMessage)}&max_results=5&context=${encodeURIComponent(contextString)}`;
+
+          console.log('Automatically searching for:', originalUserMessage, 'with context');
+          const searchResponse = await fetch(searchUrl, {
+            method: 'GET',
+            cache: 'no-cache'
+          });
+
+          if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            console.log('Search results:', searchData);
+
+            if (searchData.results && searchData.results.length > 0) {
+              // Format search results
+              let formattedResults = `\n\nWeb search results for "${originalUserMessage}":\n\n`;
+
+              searchData.results.forEach((result, index) => {
+                formattedResults += `[${index + 1}] ${result.title}\n`;
+                formattedResults += `URL: ${result.url}\n`;
+                formattedResults += `${result.snippet}\n\n`;
+
+                // Add URLs to references for display
+                if (result.url) {
+                  dsReferences.push(result.url);
+                }
+              });
+
+              // Enhance the user message with search results
+              enhancedUserMessage = `${originalUserMessage}${formattedResults}`;
+
+              // Log the enhanced message
+              console.log('Enhanced user message with search results');
+
+              // Store search results in DynamoDB for reference
+              if (numaChatDynamoUtils) {
+                await numaChatDynamoUtils
+                  .addMessage({
+                    conversationId: cid,
+                    userId: sub,
+                    messageType: 'knowledge',
+                    role: 'assistant',
+                    content: formattedResults,
+                  })
+                  .catch((err) => console.error('Error storing web search knowledge:', err));
+              }
+            }
+          } else {
+            console.error('Search failed:', searchResponse.status);
+          }
+        } catch (error) {
+          console.error('Error performing web search:', error);
+        } finally {
+          // Remove searching indicator
+          setMessages((prev) => {
+            const updated = [...prev];
+            const idx = updated.findIndex((msg) => msg.status === 'searching');
+            if (idx >= 0) updated.splice(idx, 1);
+            return updated;
+          });
+        }
+      }
+
+      // 1) Add user message to local state (original message, not enhanced)
+      const userMsg = { role: 'user', content: originalUserMessage };
       setMessages((prev) => [...prev, userMsg]);
 
-      // 2) Store user message in DynamoDB as structured
+      // 2) Store original user message in DynamoDB as structured
       if (numaChatDynamoUtils) {
         await numaChatDynamoUtils
           .addMessage({
@@ -236,13 +344,10 @@ const NumaChat = () => {
             userId: sub,
             messageType: 'text',
             role: 'user',
-            content: inputMessage,
+            content: originalUserMessage,
           })
           .catch((err) => console.error('Error storing user message:', err));
       }
-
-      // We'll store references from data source queries
-      let dsReferences = [];
 
       // 3) Potentially retrieve data from Q if queryDataSources is on
       stopGenerationRef.current = false;
@@ -260,7 +365,7 @@ const NumaChat = () => {
         };
         const dsCommand = new SearchRelevantContentCommand(dsInput);
 
-        let finalInputText = 'Retrieving knowledge from the users data source...\n';
+        finalInputText = 'Retrieving knowledge from the users data source...\n';
 
         try {
           const dsResponse = await qBusinessClient.send(dsCommand);
@@ -320,10 +425,25 @@ const NumaChat = () => {
 
       // 4) Retrieve conversation history
       const conversationHistory = await numaChatDynamoUtils.queryConversations(cid, MAX_DYNAMO_MESSAGES, sub);
+
+      // Modify the last user message in the history (which is our message) to include search results if available
+      if (webSearchEnabled && enhancedUserMessage !== originalUserMessage) {
+        // Find and replace the last user message with the enhanced version
+        for (let i = conversationHistory.length - 1; i >= 0; i--) {
+          if (conversationHistory[i].role === 'user' &&
+              conversationHistory[i].content === originalUserMessage) {
+            console.log('Replacing user message with enhanced version containing search results');
+            conversationHistory[i].content = enhancedUserMessage;
+            break;
+          }
+        }
+      }
+
       const bedrockMessages = await prepareConversationHistoryForBedrock(
         conversationHistory,
         getIdentityPoolCredentials,
       );
+      console.log('bedrockMessages:', JSON.stringify(bedrockMessages, null, 2));
 
       // Validate message format
       const validatedMessages = bedrockMessages.map((msg) => {
@@ -335,7 +455,6 @@ const NumaChat = () => {
         }
         return msg;
       });
-
       const validateMessage = (message) => {
         if (!message.role || !Array.isArray(message.content) || message.content.length === 0) {
           console.error('Invalid message format:', message);
@@ -347,13 +466,20 @@ const NumaChat = () => {
         throw new Error('Invalid message format detected');
       }
 
-      // 5) Send to Bedrock
-      const converseInput = {
+      // 5) Send to Bedrock - no need for search tools since we've injected search results
+      let converseInput;
+
+      // Always use standard format without tools, since we've injected search results when needed
+      converseInput = {
         modelId: MODEL_ID,
         messages: validatedMessages,
         system: [{ text: SYSTEM_MESSAGE }],
         inferenceConfig: { maxTokens: 4000, temperature: 0.1 },
       };
+
+      if (webSearchEnabled) {
+        console.log('Web search results injected directly into prompt, not using Claude tools');
+      }
       console.log('Converse Input:', JSON.stringify(converseInput, null, 2));
 
       const converseCommand = new ConverseStreamCommand(converseInput);
@@ -377,14 +503,12 @@ const NumaChat = () => {
         }
       }
 
-      // 6) Accumulate the raw text and a “display text” that strips comment tags
-      // This let's us retrieve doc references and display the message without tags
-      // e.g. <!--BEGIN_DOC title="Some Title"-->...<!--END_DOC-->
-      let rawAssistantText = '';
-      let displayAssistantText = '';
+      // 6) Stream assistant's response
+      let agentResponseText = '';
       let firstChunk = true;
-      const docStripState = { leftover: '' };
-      let tokenUsage = null;
+
+      // Standard debug logging
+      console.log('Response stream initiated');
 
       for await (const event of response.stream) {
         if (stopGenerationRef.current) {
@@ -392,54 +516,35 @@ const NumaChat = () => {
           break;
         }
 
-        // Look for token usage metadata
-        if (event.metadata?.usage) {
-          tokenUsage = event.metadata.usage;
-        }
-
         if (firstChunk) {
-          // Remove 'thinking', set 'streaming' status
+          // Remove 'thinking' ephemeral message
           setMessages((prev) => {
             const updated = [...prev];
             const idx = updated.findIndex((m) => m.status === 'thinking');
-            if (idx >= 0) updated[idx].status = null;
+            if (idx >= 0) updated.splice(idx, 1);
+            // Add a real message for Claude's response
+            updated.push({ role: 'assistant', content: '' });
             return updated;
           });
           setButtonStatus('streaming');
           firstChunk = false;
         }
 
-        const chunk = event.contentBlockDelta?.delta?.text || '';
-        if (!chunk) continue;
-
-        // Keep raw text with doc tags
-        rawAssistantText += chunk;
-        // Remove doc comment tags from chunk
-        // e.g. <!--BEGIN_DOC title="Some Title"-->...<!--END_DOC-->
-        const sanitized = parseChunkWithoutDocComments(chunk, docStripState);
-
-        // Update the display text with sanitized content (no doc tags)
-        if (sanitized) {
-          displayAssistantText += sanitized;
-          // Update the last assistant message
-          setMessages((prev) => {
-            const updated = [...prev];
-            if (updated.length > 0) {
-              updated[updated.length - 1].content = displayAssistantText;
-            }
-            return updated;
-          });
+        // Process content delta
+        if (event.contentBlockDelta) {
+          const delta = event.contentBlockDelta.delta;
+          if (delta.text) {
+            agentResponseText += delta.text;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1].content = agentResponseText;
+              return updated;
+            });
+          }
         }
       }
-      // Log the raw assistant text
-      console.log('Bedrock Response:', rawAssistantText);
 
-      // Log token usage
-      if (tokenUsage) {
-        console.log('Token Usage:', tokenUsage);
-      }
-
-      // Remove 'streaming' status
+      console.log('Bedrock response complete');
       setButtonStatus('idle');
 
       // 7) Store the final assistant response WITH references in Dynamo
@@ -448,10 +553,10 @@ const NumaChat = () => {
         userId: sub,
         messageType: 'text',
         role: 'assistant',
-        content: rawAssistantText,
+        content: agentResponseText,
       };
 
-      // 8) If we have references, attach them before storing in Dynamo
+      // If we found references, attach them (assuming your DynamoDB schema supports an extra field 'references')
       if (dsReferences.length > 0) {
         assistantMessagePayload.references = dsReferences;
       }
@@ -483,27 +588,8 @@ const NumaChat = () => {
         });
       }
 
-      // 9) Extract doc from raw text
-      const docBlock = extractSingleDocBlock(rawAssistantText);
-      if (docBlock) {
-        // Always update the inlineDocument so it displays the latest generated doc if opened
-        setInlineDocument({ title: docBlock.docTitle, content: docBlock.docContent });
-
-        // attach doc to the last assistant message
-        setMessages((prev) => {
-          const updated = [...prev];
-          const lastIdx = updated.length - 1;
-          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-            updated[lastIdx].docTitle = docBlock.docTitle;
-            updated[lastIdx].docContent = docBlock.docContent;
-          }
-          return updated;
-        });
-      }
-
       // Refresh the sidebar
       refreshSidebar();
-      setButtonStatus('idle');
 
       // Clear user input
       setUploadedFiles([]);
@@ -528,7 +614,8 @@ const NumaChat = () => {
     if (!numaChatDynamoUtils) return;
     try {
       let retryCount = 0;
-      let conversationHistory = [];
+      let conversationHistory;
+
       while (retryCount < 2) {
         try {
           conversationHistory = await numaChatDynamoUtils.queryConversations(
@@ -539,6 +626,7 @@ const NumaChat = () => {
           break;
         } catch (error) {
           if (error.message.includes('ExpiredTokenException') && retryCount === 0) {
+            console.log('Token expired while loading conversation. Refreshing credentials...');
             await getAccessToken(true);
             retryCount++;
           } else {
@@ -554,20 +642,10 @@ const NumaChat = () => {
       const chatMessages = conversationHistory.map((item) => {
         const baseMsg = {
           role: item.role,
-          content: item.content || '',
+          content: item.content,
+          // If your DB item has a 'references' field, pull it in
           references: item.references || [],
         };
-
-        // Replace doc tags when loading conversation history
-        if (baseMsg.content) {
-          baseMsg.content = baseMsg.content.replace(/<!--[\s\S]*?-->/g, '---');
-        }
-        // If there's a doc block, parse it
-        const docBlock = extractSingleDocBlock(item.content || '');
-        if (docBlock && baseMsg.role === 'assistant') {
-          baseMsg.docTitle = docBlock.docTitle;
-          baseMsg.docContent = docBlock.docContent;
-        }
 
         if (item.message_type === 'file') {
           baseMsg.content = `File '${item.fileInfo.fileName}' uploaded and processed successfully.`;
@@ -611,14 +689,6 @@ const NumaChat = () => {
     height: '24px', // Set a fixed height to prevent layout shifts
   };
 
-  // Split view state
-  const [leftFraction, setLeftFraction] = useState(0.99);
-  function handleDocClose() {
-    setShowSplitView(false); // Hide the document panel
-    setLeftFraction(0.99); // Reset the split view to fully collapsed
-    setInlineDocument(null); // Clear the document content
-  }
-
   return (
     <div className="dashboard">
       <Nav />
@@ -645,8 +715,6 @@ const NumaChat = () => {
           />
           {/* Data sources list */}
           <DataSourcesList />
-
-          {/* Main chat content */}
           <div className="flex-grow-1 d-flex">
             <div className="chat-content flex-grow-1 d-flex flex-column">
               {/* Header with chat instructions and New Chat button on the right */}
@@ -661,58 +729,166 @@ const NumaChat = () => {
                 </Button>
               </div>
 
-              <div className="chat-container position-relative" style={{ flex: '1 1 auto' }}>
-                <ResizableSplitView
-                  left={
-                    /* LEFT PANE: chat messages + input */
-                    <div className="chat-left-pane d-flex flex-column h-100">
-                      <div className="chat-messages flex-grow-1 overflow-auto" style={{ overflowY: 'auto' }}>
-                        <ChatMessages
-                          messages={messages}
-                          messageEndRef={messageEndRef}
-                          loadingIndicatorStyle={loadingIndicatorStyle}
-                          onOpenDocument={(docTitle, docContent) => {
-                            setLeftFraction(0.45);
-                            setInlineDocument({ title: docTitle, content: docContent });
-                            setShowSplitView(true);
-                          }}
-                        />
-                      </div>
+              {/* Chat messages */}
+              <div className="chat-container">
+                <div
+                  className="chat-messages"
+                  style={{ maxWidth: '100%', overflowX: 'hidden', wordWrap: 'break-word' }}
+                >
+                  {messages.map((message, index) => {
+                    // If assistant with ephemeral status
+                    if (message.role === 'assistant' && message.status) {
+                      if (message.status === 'initializing') {
+                        return (
+                          <div key={index} className="message assistant ephemeral">
+                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                              <img
+                                src={numaIcon}
+                                alt="Numa"
+                                style={{ width: '20px', height: '20px', marginRight: '7px' }}
+                              />
+                              Numa:
+                            </strong>
+                            <div className="message-content d-flex align-items-center">
+                              <Spinner animation="border" size="sm" className="me-2" />
+                              Initializing chat...
+                            </div>
+                          </div>
+                        );
+                      } else if (message.status === 'processingFile') {
+                        return (
+                          <div key={index} className="message assistant ephemeral">
+                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                              <img
+                                src={numaIcon}
+                                alt="Numa"
+                                style={{ width: '20px', height: '20px', marginRight: '7px' }}
+                              />
+                              Numa:
+                            </strong>
+                            <div className="message-content d-flex align-items-center">
+                              <Spinner animation="border" size="sm" className="me-2" />
+                              Processing Upload...
+                            </div>
+                          </div>
+                        );
+                      } else if (message.status === 'querying') {
+                        return (
+                          <div key={index} className="message assistant ephemeral">
+                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                              <img
+                                src={numaIcon}
+                                alt="Numa"
+                                style={{ width: '20px', height: '20px', marginRight: '7px' }}
+                              />
+                              Numa:
+                            </strong>
+                            <div className="message-content d-flex align-items-center" style={loadingIndicatorStyle}>
+                              <Spinner animation="border" size="sm" className="me-2" />
+                              Querying data sources...
+                            </div>
+                          </div>
+                        );
+                      } else if (message.status === 'thinking') {
+                        return (
+                          <div key={index} className="message assistant ephemeral">
+                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                              <img
+                                src={numaIcon}
+                                alt="Numa"
+                                style={{ width: '20px', height: '20px', marginRight: '7px' }}
+                              />
+                              Numa:
+                            </strong>
+                            <div className="message-content d-flex align-items-center" style={loadingIndicatorStyle}>
+                              <Spinner animation="border" size="sm" className="me-2" />
+                              Thinking...
+                            </div>
+                          </div>
+                        );
+                      } else if (message.status === 'searching') {
+                        return (
+                          <div key={index} className="message assistant ephemeral searching">
+                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                              <img
+                                src={numaIcon}
+                                alt="Numa"
+                                style={{ width: '20px', height: '20px', marginRight: '7px' }}
+                              />
+                              Numa:
+                            </strong>
+                            <div className="message-content d-flex align-items-center" style={loadingIndicatorStyle}>
+                              <Spinner animation="border" size="sm" className="me-2" />
+                              Searching the web...
+                            </div>
+                          </div>
+                        );
+                      }
+                    }
 
-                      {/* pinned input at bottom */}
-                      <div style={{ flexShrink: 0, padding: '0.5rem' }}>
-                        <ChatInput
-                          inputMessage={inputMessage}
-                          setInputMessage={setInputMessage}
-                          handleSubmit={handleSubmit}
-                          setShowUploadModal={setShowUploadModal}
-                          buttonStatus={buttonStatus}
-                          handleStopGeneration={handleStopGeneration}
-                          isMobile={isMobile}
-                          queryDataSources={queryDataSources}
-                          setQueryDataSources={setQueryDataSources}
-                          disabled={isFileProcessing}
-                        />
+                    // Otherwise, normal message
+                    return (
+                      <div key={index} className={`message ${message.role}`}>
+                        <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                          {message.role === 'assistant' ? (
+                            <>
+                              <img
+                                src={numaIcon}
+                                alt="Numa"
+                                style={{
+                                  width: '20px',
+                                  height: '20px',
+                                  marginRight: '7px',
+                                  marginBottom: '2px',
+                                  verticalAlign: 'middle',
+                                }}
+                              />
+                              Numa:
+                            </>
+                          ) : message.role === 'user' ? (
+                            'You:'
+                          ) : (
+                            'System:'
+                          )}
+                        </strong>
+                        <div className="message-content markdown-content">
+                          <MarkdownContent content={message.content} />
+                          {/* If there are references, show a dropdown */}
+                          {message.role === 'assistant' && message.references?.length > 0 && (
+                            <ReferencesDropdown references={message.references} />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  }
-                  right={
-                    /* RIGHT PANE: document panel */
-                    showSplitView && inlineDocument ? (
-                      <DocumentPanel documentContent={inlineDocument} onClose={handleDocClose} />
-                    ) : null
-                  }
-                  showRight={inlineDocument && showSplitView}
-                  leftFraction={leftFraction}
-                  onLeftFractionChange={setLeftFraction}
-                  minLeft={200}
-                  minRight={200}
+                    );
+                  })}
+                  <div ref={messageEndRef} />
+                </div>
+
+                {/* Chat input */}
+                <ChatInput
+                  inputMessage={inputMessage}
+                  setInputMessage={setInputMessage}
+                  handleSubmit={handleSubmit}
+                  setShowUploadModal={setShowUploadModal}
+                  buttonStatus={buttonStatus}
+                  handleStopGeneration={handleStopGeneration}
+                  isMobile={isMobile}
+                  queryDataSources={queryDataSources}
+                  setQueryDataSources={setQueryDataSources}
+                  webSearchEnabled={webSearchEnabled}
+                  setWebSearchEnabled={setWebSearchEnabled}
+                  disabled={isFileProcessing}
                 />
+                {/* Tips Messages */}
+                <div className="tips-container">
+                  <p className="datasource-tip text-center small text-muted">
+                    Click the <i className="bi bi-database"></i> to chat against your data sources.
+                  </p>
+                  <p className="websearch-tip text-center small text-muted">
+                    Click the <i className="bi bi-search"></i> to search the web.
+                  </p>
+                </div>
               </div>
-              {/* Datasource Tip Message */}
-              <p className="datasource-tip text-center small text-muted">
-                Click the <i className="bi bi-database"></i> to chat against your data sources.
-              </p>
             </div>
           </div>
         </div>
