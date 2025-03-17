@@ -6,7 +6,6 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CompanyInfo } from '../../Pages/CompanyInfo';
 import { saveCompanyInfo, fetchCompanyInfo, getProfileText } from '../../utils/companyInfoUtils';
-import React from 'react';
 
 // Mock the companyInfoUtils functions
 vi.mock('../../utils/companyInfoUtils', () => ({
@@ -255,7 +254,7 @@ describe('CompanyInfo Component', () => {
     customRender(<CompanyInfo />);
 
     // Wait for the alert to appear
-    const alert = await waitFor(() =>
+    await waitFor(() =>
       screen.getByText('No company information exists yet. Enter your company information and click Save.'),
     );
 
