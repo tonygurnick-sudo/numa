@@ -1,5 +1,5 @@
 // ChatFileUpload.jsx
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { processFile } from '../utils/fileProcessing';
@@ -17,8 +17,8 @@ const ChatFileUpload = ({
   setIsFileProcessing,
   createNewConversationIfNeeded,
 }) => {
-  const { getIdentityPoolCredentials, bedrockRuntimeClient, numaChatDynamoUtils, numaChatBedrockUtils } = useAuth();
-  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const { getIdentityPoolCredentials, numaChatDynamoUtils, numaChatBedrockUtils } = useAuth();
+  const [, setUploadedFiles] = useState([]);
 
   const handleUploadComplete = async (fileArray) => {
     setIsFileProcessing(true);

@@ -64,11 +64,7 @@ const CopyButton = ({ copied, onClick, style }) => (
     }}
   >
     {copied ? 'Copied!' : 'Copy'}
-    {copied ? (
-      <i className="bi bi-check-circle" />
-    ) : (
-      <i className="bi bi-clipboard" />
-    )}
+    {copied ? <i className="bi bi-check-circle" /> : <i className="bi bi-clipboard" />}
   </button>
 );
 
@@ -130,7 +126,7 @@ const MarkdownDocument = ({ textContent, copied, handleCopy }) => (
         padding: '0.5rem 1rem',
         fontWeight: 'bold',
         display: 'flex',
-        alignItems: 'center'
+        alignItems: 'center',
       }}
     >
       <i className="bi bi-file-earmark-text" style={{ marginRight: '0.5rem' }} />
@@ -185,11 +181,7 @@ const MarkdownDocument = ({ textContent, copied, handleCopy }) => (
 
 const CodeBlock = ({ textContent, language, copied, handleCopy }) => (
   <div style={CODE_CONTAINER_STYLES}>
-    <CopyButton
-      copied={copied}
-      onClick={() => handleCopy(textContent)}
-      style={{ top: '12px', right: '10px' }}
-    />
+    <CopyButton copied={copied} onClick={() => handleCopy(textContent)} style={{ top: '12px', right: '10px' }} />
     <SyntaxHighlighter
       style={oneDark}
       language={language || 'plaintext'}
@@ -255,13 +247,7 @@ const MarkdownContent = React.memo(({ content }) => {
         }
 
         if (match?.[1] === 'markdown') {
-          return (
-            <MarkdownDocument
-              textContent={textContent}
-              copied={copied}
-              handleCopy={handleCopy}
-            />
-          );
+          return <MarkdownDocument textContent={textContent} copied={copied} handleCopy={handleCopy} />;
         }
 
         return (
@@ -282,7 +268,7 @@ const MarkdownContent = React.memo(({ content }) => {
       h5: createHeaderComponent('h5', HEADER_STYLES.h5),
       h6: createHeaderComponent('h6', HEADER_STYLES.h6),
     }),
-    [copied]
+    [copied],
   );
 
   return (

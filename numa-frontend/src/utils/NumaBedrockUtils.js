@@ -1,5 +1,5 @@
 // NumaBedrockUtils.js
-import { InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
+import { InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
 class NumaBedrockUtils {
   constructor(bedrockClient) {
@@ -14,35 +14,31 @@ class NumaBedrockUtils {
    * @param {string} [modelId] - The Bedrock model ID, defaults to "anthropic.claude-3-haiku-20240307-v1:0".
    * @returns {string} - The text description of the image.
    */
-  async getImageDescription(
-    base64Image,
-    mimeType,
-    modelId = "anthropic.claude-3-haiku-20240307-v1:0"
-  ) {
+  async getImageDescription(base64Image, mimeType, modelId = 'anthropic.claude-3-haiku-20240307-v1:0') {
     if (!this.bedrockClient) {
-      throw new Error("Bedrock client not initialized in NumaBedrockUtils");
+      throw new Error('Bedrock client not initialized in NumaBedrockUtils');
     }
 
     const question_text =
-      "Please describe this image in detail, including any relevant objects, people, text, colors, and context.";
+      'Please describe this image in detail, including any relevant objects, people, text, colors, and context.';
 
     const requestBody = {
-      anthropic_version: "bedrock-2023-05-31",
+      anthropic_version: 'bedrock-2023-05-31',
       max_tokens: 1000,
       messages: [
         {
-          role: "user",
+          role: 'user',
           content: [
             {
-              type: "image",
+              type: 'image',
               source: {
-                type: "base64",
+                type: 'base64',
                 media_type: mimeType, // e.g. "image/png"
                 data: base64Image, // your base64 string
               },
             },
             {
-              type: "text",
+              type: 'text',
               text: question_text,
             },
           ],
@@ -57,8 +53,8 @@ class NumaBedrockUtils {
     const command = new InvokeModelCommand({
       modelId,
       body: encodedBody,
-      contentType: "application/json", // Telling Bedrock that we are sending JSON
-      accept: "application/json", // Expect JSON back
+      contentType: 'application/json', // Telling Bedrock that we are sending JSON
+      accept: 'application/json', // Expect JSON back
     });
 
     // Send the request
@@ -68,12 +64,12 @@ class NumaBedrockUtils {
     const decodedBody = new TextDecoder().decode(response.body);
     const responseJson = JSON.parse(decodedBody);
 
-    console.log("Bedrock response JSON:", responseJson);
+    console.log('Bedrock response JSON:', responseJson);
 
     // Extract the final text from responseJson
-    let finalText = "";
+    let finalText = '';
     const firstBlock = responseJson?.content?.[0];
-    if (firstBlock?.type === "text") {
+    if (firstBlock?.type === 'text') {
       finalText = firstBlock.text;
     } else {
       // Fallback if no text block found

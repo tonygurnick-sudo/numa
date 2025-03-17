@@ -38,7 +38,6 @@ function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
         onNotComplete();
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update the input value locally and check completion status on each keystroke

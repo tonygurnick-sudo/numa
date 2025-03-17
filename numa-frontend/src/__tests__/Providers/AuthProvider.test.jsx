@@ -9,7 +9,6 @@ import { waitFor } from '@testing-library/react/pure';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { AuthProvider, useAuth, TestAuthProvider } from '../../Providers/AuthProvider';
-import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
 import { authTestTokens } from '../Fixtures/AuthTestTokens';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 

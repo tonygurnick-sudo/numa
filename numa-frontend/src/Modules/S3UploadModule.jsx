@@ -123,7 +123,6 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         onNotComplete();
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const validateFile = (file) => {

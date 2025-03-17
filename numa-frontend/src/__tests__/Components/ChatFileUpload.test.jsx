@@ -341,7 +341,9 @@ describe('ChatFileUpload Component', () => {
       </button>
     ));
 
-    const tokenLimitError = new Error('File is too large (estimated 150,000 tokens). Maximum allowed is 100,000 tokens.');
+    const tokenLimitError = new Error(
+      'File is too large (estimated 150,000 tokens). Maximum allowed is 100,000 tokens.',
+    );
     vi.mocked(processFile).mockRejectedValueOnce(tokenLimitError);
 
     const { getByTestId } = render(<ChatFileUpload {...defaultProps} />);

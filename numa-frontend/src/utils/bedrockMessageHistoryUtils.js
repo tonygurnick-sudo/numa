@@ -1,10 +1,8 @@
 import { fetchFileFromS3 } from '../utils/s3Utils';
 
-
-const MAX_WORDS = 7500;  // Maximum number of words to use in prompt
-const MAX_MESSAGES = 30;  // Maximum number of messages to use in prompt
-const MAX_DYNAMO_MESSAGES = 30;  // Maximum number of messages to fetch from DynamoDB to use in this module. Doesn't need to be above 30 for now as we aren't doing any advanced processing on the messages.
-
+const MAX_WORDS = 7500; // Maximum number of words to use in prompt
+const MAX_MESSAGES = 30; // Maximum number of messages to use in prompt
+const MAX_DYNAMO_MESSAGES = 30; // Maximum number of messages to fetch from DynamoDB to use in this module. Doesn't need to be above 30 for now as we aren't doing any advanced processing on the messages.
 
 const wordCount = (str) => str.split(/\s+/).length;
 
@@ -33,7 +31,6 @@ const truncateConversationHistory = (messages) => {
   return truncatedMessages;
 };
 
-
 const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) => {
   return Promise.all(
     messages.map(async (item) => {
@@ -42,15 +39,15 @@ const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) =>
         // The "description" is in item.content
         const { fileName } = item.fileInfo || {};
         return {
-          role: "assistant",
+          role: 'assistant',
           content: [
             {
-              type: "text",
+              type: 'text',
               text: `User has uploaded file: ${fileName}. Extracting image content...`,
             },
             {
-              type: "text",
-              text: "Image content:" + item.content || "No content found",
+              type: 'text',
+              text: 'Image content:' + item.content || 'No content found',
             },
           ],
         };
@@ -64,7 +61,7 @@ const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) =>
             extractedContentS3Key,
             s3Bucket,
             region,
-            getIdentityPoolCredentials
+            getIdentityPoolCredentials,
           );
 
           // Convert that to text
@@ -72,19 +69,18 @@ const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) =>
           // Check if there is content besides whitespaces or new lines
           // Let textbody be an error message if there is no content
           if (!textBody.trim()) {
-            textBody = "No content found in file";
+            textBody = 'No content found in file';
           }
 
-
           return {
-            role: "assistant",
+            role: 'assistant',
             content: [
               {
-                type: "text",
+                type: 'text',
                 text: `User has uploaded file:: ${fileName} (${fileType}). Extracting content...`,
               },
               {
-                type: "text",
+                type: 'text',
                 text: textBody,
               },
             ],
@@ -95,7 +91,7 @@ const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) =>
             role: item.role,
             content: [
               {
-                type: "text",
+                type: 'text',
                 text: `Error processing file ${fileName}: ${error.message}`,
               },
             ],
@@ -105,12 +101,10 @@ const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) =>
         // Normal text or meta or knowledge messages
         return {
           role: item.role,
-          content: [
-            { type: "text", text: item.content || "" }
-          ],
+          content: [{ type: 'text', text: item.content || '' }],
         };
       }
-    })
+    }),
   );
 };
 
@@ -133,7 +127,4 @@ const prepareConversationHistoryForBedrock = async (conversationHistory, getIden
   return formattedMessages;
 };
 
-  export {
-    MAX_DYNAMO_MESSAGES,
-    prepareConversationHistoryForBedrock
-  };
+export { MAX_DYNAMO_MESSAGES, prepareConversationHistoryForBedrock };

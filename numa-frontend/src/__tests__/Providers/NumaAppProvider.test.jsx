@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { render, act, screen } from '@testing-library/react';
 import { NumaAppProvider } from '../../Providers/NumaAppProvider';
-import { useNumaApp } from '../../Providers/NumaAppContext';
+import { findValueWithFormatFlexibility, useNumaApp } from '../../Providers/NumaAppContext';
 import { NumaRequestContext } from '../../Providers/NumaRequestContext';
 
 // Mock the auth context
@@ -79,9 +79,6 @@ const TestComponent = ({ onMount }) => {
     </div>
   );
 };
-
-// Import the findValueWithFormatFlexibility function directly from NumaAppProvider.jsx
-import { findValueWithFormatFlexibility } from '../../Providers/NumaAppProvider';
 
 describe('NumaAppProvider', () => {
   beforeEach(() => {

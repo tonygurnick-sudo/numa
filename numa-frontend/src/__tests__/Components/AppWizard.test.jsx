@@ -197,17 +197,6 @@ describe('AppWizard Component', () => {
     const TestTaskRenderer = () => {
       // Mock the renderTask function from AppWizard
       const renderTask = (task) => {
-        const handleComplete = () => {};
-        const handleNotComplete = () => {};
-
-        const commonProps = {
-          task: task,
-          onComplete: handleComplete,
-          onNotComplete: handleNotComplete,
-          value: '',
-          onChange: () => {},
-        };
-
         switch (task.type) {
           case 'text-input':
             return <div data-testid="text-input-component">{task.title}</div>;
@@ -1007,14 +996,6 @@ describe('AppWizard Component', () => {
   });
 
   it('should handle errors during app execution', async () => {
-    // Create a manifest with both input and output tasks
-    const manifest = {
-      tasks: [
-        { id: 'input1', type: 'text-input', hidden: false, title: 'Input 1' },
-        { id: 'output1', type: 'text-output', hidden: false, title: 'Output 1' },
-      ],
-    };
-
     // Mock the necessary functions
     const mockSetAppRunning = vi.fn();
     const mockSetError = vi.fn();

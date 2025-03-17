@@ -283,10 +283,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
       const idToken = user.tokens.idToken;
       const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
 
-      const accountId = ROLE_ARN.split(':')[4];
       const policy = generateBedrockPolicy({
         Region: REGION,
-        AccountId: accountId,
       });
 
       const credentials = fromWebToken({

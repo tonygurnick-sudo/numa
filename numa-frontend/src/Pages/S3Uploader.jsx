@@ -1,21 +1,7 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import {
-  Container,
-  Row,
-  Col,
-  Card,
-  Button,
-  Form,
-  Alert,
-  Table,
-  Toast,
-  ToastContainer,
-} from 'react-bootstrap';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Container, Row, Col, Card, Button, Form, Alert, Table, Toast, ToastContainer } from 'react-bootstrap';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
-import {
-  ListDataSourcesCommand,
-  ListDataSourceSyncJobsCommand,
-} from '@aws-sdk/client-qbusiness';
+import { ListDataSourcesCommand, ListDataSourceSyncJobsCommand } from '@aws-sdk/client-qbusiness';
 
 import { useAuth } from '../Providers/AuthProvider';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
@@ -65,17 +51,13 @@ function filterTree(node, searchTerm) {
   };
 
   // Filter files
-  filtered.files = node.files.filter((f) =>
-    f.Key.split('/').pop().toLowerCase().includes(lower)
-  );
+  filtered.files = node.files.filter((f) => f.Key.split('/').pop().toLowerCase().includes(lower));
 
   // Recurse into subfolders
   for (const [folderName, folderNode] of Object.entries(node.children)) {
     const childFiltered = filterTree(folderNode, searchTerm);
     const folderNameMatches = folderName.toLowerCase().includes(lower);
-    const childHasContents =
-      childFiltered.files.length > 0 ||
-      Object.keys(childFiltered.children).length > 0;
+    const childHasContents = childFiltered.files.length > 0 || Object.keys(childFiltered.children).length > 0;
     if (folderNameMatches || childHasContents) {
       filtered.children[folderName] = childFiltered;
     }
@@ -192,7 +174,7 @@ export function S3Uploader() {
   const [syncJobStatus, setSyncJobStatus] = useState(null);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState(null);
 
-  const [pendingSearch, setPendingSearch] = useState('');
+  const [pendingSearch] = useState('');
   const [indexedSearch, setIndexedSearch] = useState('');
 
   const [expandedFoldersPending, setExpandedFoldersPending] = useState(new Set());
@@ -247,9 +229,7 @@ export function S3Uploader() {
       });
       const dsResp = await qBusinessClient.send(dsCmd);
 
-      const s3DataSource = dsResp.dataSources?.find(
-        (ds) => ds.displayName === `numa-${CLIENT_NAME}`
-      );
+      const s3DataSource = dsResp.dataSources?.find((ds) => ds.displayName === `numa-${CLIENT_NAME}`);
       if (!s3DataSource) {
         console.warn('S3 data source not found');
         return;
@@ -309,16 +289,12 @@ export function S3Uploader() {
    */
   const pendingFiles = useMemo(() => {
     if (!lastSuccessfulSync) return files;
-    return files.filter(
-      (f) => new Date(f.LastModified) > new Date(lastSuccessfulSync)
-    );
+    return files.filter((f) => new Date(f.LastModified) > new Date(lastSuccessfulSync));
   }, [files, lastSuccessfulSync]);
 
   const indexedFiles = useMemo(() => {
     if (!lastSuccessfulSync) return [];
-    return files.filter(
-      (f) => new Date(f.LastModified) <= new Date(lastSuccessfulSync)
-    );
+    return files.filter((f) => new Date(f.LastModified) <= new Date(lastSuccessfulSync));
   }, [files, lastSuccessfulSync]);
 
   /**
@@ -341,22 +317,16 @@ export function S3Uploader() {
   /**
    * Convert each tree to nested row objects, then flatten them
    */
-  const pendingRowsNested = useMemo(
-    () => buildRowsForTree(pendingTree, 0, ''),
-    [pendingTree]
-  );
-  const indexedRowsNested = useMemo(
-    () => buildRowsForTree(indexedTree, 0, ''),
-    [indexedTree]
-  );
+  const pendingRowsNested = useMemo(() => buildRowsForTree(pendingTree, 0, ''), [pendingTree]);
+  const indexedRowsNested = useMemo(() => buildRowsForTree(indexedTree, 0, ''), [indexedTree]);
 
   const pendingRows = useMemo(
     () => flattenRows(pendingRowsNested, expandedFoldersPending),
-    [pendingRowsNested, expandedFoldersPending]
+    [pendingRowsNested, expandedFoldersPending],
   );
   const indexedRows = useMemo(
     () => flattenRows(indexedRowsNested, expandedFoldersIndexed),
-    [indexedRowsNested, expandedFoldersIndexed]
+    [indexedRowsNested, expandedFoldersIndexed],
   );
 
   /**
@@ -402,9 +372,7 @@ export function S3Uploader() {
     return (
       <Card className="mb-4">
         <Card.Header>
-          <Card.Title className="mb-0">
-            {title}
-          </Card.Title>
+          <Card.Title className="mb-0">{title}</Card.Title>
         </Card.Header>
         <Card.Body>
           {showSearch && (
@@ -426,10 +394,7 @@ export function S3Uploader() {
               </div>
             </div>
           ) : rows.length === 0 ? (
-            <div
-              className="text-center bg-light rounded"
-              style={{ padding: '1rem' }}
-            >
+            <div className="text-center bg-light rounded" style={{ padding: '1rem' }}>
               <p className="mt-2 text-muted mb-0">{noItemsMsg}</p>
             </div>
           ) : (
@@ -454,9 +419,7 @@ export function S3Uploader() {
                         <div style={{ marginLeft: indentPx, whiteSpace: 'nowrap' }}>
                           {isFolder ? (
                             <i
-                              className={`bi bi-chevron-${
-                                isExpanded ? 'down' : 'right'
-                              } me-1`}
+                              className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1`}
                               style={{ cursor: 'pointer' }}
                               onClick={() => toggleFolderFn(id)}
                             />
@@ -465,18 +428,12 @@ export function S3Uploader() {
                           )}
                           {isFolder ? (
                             <>
-                              <i
-                                className="bi bi-folder me-2"
-                                style={{ color: '#4b007d' }}
-                              />
+                              <i className="bi bi-folder me-2" style={{ color: '#4b007d' }} />
                               <strong>{name}</strong>
                             </>
                           ) : (
                             <>
-                              <i
-                                className="bi bi-file-earmark me-2"
-                                style={{ color: '#000' }}
-                              />
+                              <i className="bi bi-file-earmark me-2" style={{ color: '#000' }} />
                               {name}
                             </>
                           )}
@@ -504,19 +461,12 @@ export function S3Uploader() {
 
       {/* Toast for after-upload success */}
       <ToastContainer className="p-3" position="top-end">
-        <Toast
-          onClose={() => setShowUploadToast(false)}
-          show={showUploadToast}
-          delay={5000}
-          autohide
-          bg="info"
-        >
+        <Toast onClose={() => setShowUploadToast(false)} show={showUploadToast} delay={5000} autohide bg="info">
           <Toast.Header>
             <strong className="me-auto">Upload Complete</strong>
           </Toast.Header>
           <Toast.Body className="text-white">
-            Your files will be indexed at about{' '}
-            <strong>{getNextSyncTime().toLocaleTimeString()}</strong>.
+            Your files will be indexed at about <strong>{getNextSyncTime().toLocaleTimeString()}</strong>.
           </Toast.Body>
         </Toast>
       </ToastContainer>
@@ -559,25 +509,19 @@ export function S3Uploader() {
                   {syncStatus === 'ACTIVE' ? (
                     <span className="badge bg-success ms-1">Active</span>
                   ) : (
-                    <span className="badge bg-secondary ms-1">
-                      {syncStatus || 'Unknown'}
-                    </span>
+                    <span className="badge bg-secondary ms-1">{syncStatus || 'Unknown'}</span>
                   )}
                 </div>
                 {lastSuccessfulSync ? (
                   <p className="text-muted small mb-2">
-                    <strong>Last indexed at:</strong>{' '}
-                    {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
+                    <strong>Last indexed at:</strong> {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
                   </p>
                 ) : (
-                  <p className="text-muted small mb-2">
-                    No successful sync yet.
-                  </p>
+                  <p className="text-muted small mb-2">No successful sync yet.</p>
                 )}
 
                 <p className="text-muted small mb-3">
-                  <strong>Next scheduled sync:</strong>{' '}
-                  {getNextSyncTime().toLocaleTimeString()}
+                  <strong>Next scheduled sync:</strong> {getNextSyncTime().toLocaleTimeString()}
                 </p>
 
                 {syncJobStatus === 'SYNCING' && (
@@ -586,13 +530,18 @@ export function S3Uploader() {
                     <strong>Indexing in progress…</strong>
                   </Alert>
                 )}
-                <Button variant="outline-secondary" size="sm" onClick={handleRefreshStatus} style={{ marginBottom: '0rem', marginTop: '0rem' }}>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={handleRefreshStatus}
+                  style={{ marginBottom: '0rem', marginTop: '0rem' }}
+                >
                   <i className="bi bi-arrow-repeat me-1" />
                   Refresh
                 </Button>
                 <Alert variant="light" className="small mt-3" style={{ marginBottom: '0.7rem' }}>
-                  Once uploaded, files are automatically indexed
-                  every 30 minutes where they will be available for quering in Numa Chat.
+                  Once uploaded, files are automatically indexed every 30 minutes where they will be available for
+                  quering in Numa Chat.
                 </Alert>
               </Card.Body>
             </Card>

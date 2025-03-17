@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button, Container, Row, Col, Spinner, Collapse } from 'react-bootstrap';
 import { ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import { SearchRelevantContentCommand } from '@aws-sdk/client-qbusiness';
@@ -51,9 +51,6 @@ function ReferencesDropdown({ references }) {
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [error, setError] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [conversationStartTime, setConversationStartTime] = useState(null);
   const [conversationId, setConversationId] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
 
@@ -93,9 +90,6 @@ const NumaChat = () => {
 
   // Ref for input textarea
   const inputRef = useRef(null);
-  const handleInputChange = useCallback(() => {
-    setInputMessage(inputRef.current.value);
-  }, []);
 
   // Auto-scroll to bottom on messages or ephemeral changes
   useEffect(() => {
@@ -149,9 +143,7 @@ const NumaChat = () => {
     setMessages([]);
     setUploadedFiles([]);
     setInputMessage('');
-    setError(null);
     setConversationId(null);
-    setConversationStartTime(null);
 
     // Add an initial greeting from the assistant
     const greeting = { role: 'assistant', content: 'How can I help you today?' };
@@ -165,7 +157,6 @@ const NumaChat = () => {
 
     const newId = `${sub || 'anonymous'}_${Date.now()}`;
     setConversationId(newId);
-    setConversationStartTime(Date.now().toString());
     localStorage.setItem('currentConversationId', newId);
 
     // Create a meta item in Dynamo
@@ -202,7 +193,6 @@ const NumaChat = () => {
       inputRef.current.style.height = '40px';
     }
     setButtonStatus('loading');
-    setError(null);
 
     try {
       const cid = await createNewConversationIfNeeded(inputMessage);
@@ -449,7 +439,6 @@ const NumaChat = () => {
     } catch (err) {
       console.error('Error invoking Bedrock:', err);
       console.error('Full error details:', JSON.stringify(err, null, 2));
-      setError('Failed to send message. Please try again or refresh the page.');
       const errorMsg = {
         role: 'system',
         content: `Error: ${err.message || 'Failed to send message'}. Please try again or refresh page.`,
@@ -516,22 +505,8 @@ const NumaChat = () => {
       setMessages(chatMessages);
       setConversationId(selectedConversationId);
       localStorage.setItem('currentConversationId', selectedConversationId);
-
-      const parsed = selectedConversationId.split('_');
-      if (parsed.length > 1) {
-        setConversationStartTime(parsed[1]);
-      }
     } catch (error) {
       console.error('Error loading conversation:', error);
-      setError('Failed to load conversation');
-    }
-  };
-
-  // Press Enter to send
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e);
     }
   };
 
@@ -575,7 +550,6 @@ const NumaChat = () => {
           <ChatHistorySidebar
             ref={chatHistoryRef}
             onSelectConversation={handleLoadConversation}
-            setError={setError}
             currentConversationId={conversationId}
           />
           {/* Data sources list */}

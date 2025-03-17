@@ -217,11 +217,6 @@ describe('S3UploadModule Component', () => {
       }),
     }));
 
-    // Create a task prop
-    const task = { id: 'test-task-id', title: 'Test Task' };
-    const mockOnComplete = vi.fn();
-    const mockOnChange = vi.fn();
-
     // We need to skip actually rendering the component since we can't easily mock
     // all the required dependencies in this test environment
 
@@ -269,9 +264,6 @@ describe('S3UploadModule Component', () => {
       setCurrentJobId: vi.fn(),
       taskInputValues: mockTaskInputValues,
     });
-
-    // Create a task prop
-    const task = { id: 'test-task-id', title: 'Test Task' };
 
     // Test the key functionality with an existing job
     // This simulates what would happen after a successful file upload
