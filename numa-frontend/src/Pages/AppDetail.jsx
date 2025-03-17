@@ -18,8 +18,7 @@ import { manifestService } from '../Services/manifestService';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, setNumaAppId, numaAppData, resetAppState, setError, setNumaAppData, setCurrentJobId, currentJobId } =
-    useNumaApp();
+  const { error, setNumaAppId, numaAppData, resetAppState, setError, setNumaAppData, setCurrentJobId } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
   const navigate = useNavigate();

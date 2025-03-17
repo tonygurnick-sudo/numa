@@ -8,7 +8,7 @@ const MdToDocx = () => {
       // Convert Markdown to HTML with proper styling
       const htmlString = marked.parse(markdownString, {
         headerIds: false,
-        mangle: false
+        mangle: false,
       });
 
       const documentOptions = {
@@ -33,26 +33,26 @@ const MdToDocx = () => {
         pageNumber: true,
         table: {
           row: {
-            cantSplit: true
-          }
+            cantSplit: true,
+          },
         },
         lineNumber: false,
         lang: 'en-NZ',
         complexScriptFontSize: 22,
-        skipFirstHeaderFooter: false
+        skipFirstHeaderFooter: false,
       };
 
       // Convert HTML to DOCX with styling options
       const docxBuffer = await HTMLtoDOCX(
         htmlString,
-        null,  // header HTML string
+        null, // header HTML string
         documentOptions,
-        '<p></p>'  // footer HTML string (required when footer is true)
+        '<p></p>', // footer HTML string (required when footer is true)
       );
 
       // Create a Blob from the DOCX buffer
       const blob = new Blob([docxBuffer], {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       });
 
       // Create a link element to download the file

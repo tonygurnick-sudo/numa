@@ -7,7 +7,6 @@ import '@testing-library/jest-dom';
 import { useJobsApi } from '../../Services/jobsApi';
 import { NumaRequestContext } from '../../Providers/NumaRequestContext';
 import { renderHook, act } from '@testing-library/react';
-import React from 'react';
 
 // Mock the NumaRequestContext
 const mockNumaGet = vi.fn();

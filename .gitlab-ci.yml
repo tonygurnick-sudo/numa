@@ -121,12 +121,8 @@ python-test:
   parallel: !reference [.python-matrix]
 
 node-lint:
-  parallel: !reference [.node-matrix]
-  rules:
-    - changes:
-        paths:
-          - $BUILD_DIR/**/*
-          - style/**/*
+  script:
+    - yarn workspaces foreach --parallel --all --exclude infra run lint
 
 node-test:
   parallel: !reference [.node-matrix]

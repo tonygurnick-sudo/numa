@@ -2,7 +2,6 @@
  * @vitest-environment jsdom
  */
 
-import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { screen, waitFor, fireEvent } from '@testing-library/react';
@@ -255,7 +254,7 @@ describe('PolicyBuilderDetail Component', () => {
 
   it('should handle policy generation', async () => {
     // Mock the step function response
-    numaRequestContextValues.numaPost.mockImplementation((url, data) => {
+    numaRequestContextValues.numaPost.mockImplementation((url) => {
       if (url.includes('/policy-builder/main')) {
         return Promise.resolve({ job_id: 'test-step-function-id' });
       }
@@ -434,7 +433,7 @@ describe('PolicyBuilderDetail Component', () => {
 
     // Spy on setInterval to detect polling
     const originalSetInterval = global.setInterval;
-    const setIntervalSpy = vi.fn().mockImplementation((callback, delay) => {
+    const setIntervalSpy = vi.fn().mockImplementation((callback) => {
       // Call the callback once to simulate polling
       setTimeout(callback, 0);
       return 123; // Return a dummy interval ID

@@ -1,16 +1,16 @@
 import mammoth from 'mammoth';
-import Papa from "papaparse";
+import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { fromBuffer } from 'file-type';
 
 // PDF.js
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/build/pdf";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.js?url";
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/build/pdf';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.js';
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
 // Additional libs for new file types
-import PPTXParser from "pptx-parser";
-import { marked } from "marked";
+import PPTXParser from 'pptx-parser';
+import { marked } from 'marked';
 
 // Token estimation
 const MAX_TOKEN_LIMIT = 100000;
@@ -24,7 +24,6 @@ export const estimateTokenCount = (text) => {
   if (!text) return 0;
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 };
-
 
 const detectFileType = async (file) => {
   const buffer = await file.arrayBuffer();
@@ -50,62 +49,72 @@ export const processFile = async (file, fileType, numaChatBedrockUtils) => {
     let result;
 
     switch (inferredType) {
-      case 'pdf':
+      case 'pdf': {
         const pdfText = await processPDF(file);
         result = { content: pdfText, contentType: 'text', inferredType: 'pdf' };
         break;
+      }
 
-      case 'docx':
+      case 'docx': {
         const docxText = await processDocx(file);
         result = { content: docxText, contentType: 'text', inferredType: 'docx' };
         break;
+      }
 
-      case 'txt':
+      case 'txt': {
         const textContent = await processText(file);
         result = { content: textContent, contentType: 'text', inferredType: 'txt' };
         break;
+      }
 
-      case 'csv':
+      case 'csv': {
         const csvText = await processCSV(file);
         result = { content: csvText, contentType: 'text', inferredType: 'csv' };
         break;
+      }
 
-      case 'xlsx':
+      case 'xlsx': {
         const xlsxData = await processXLSX(file);
         result = { content: xlsxData, contentType: 'text', inferredType: 'xlsx' };
         break;
+      }
 
       case 'jpg':
       case 'jpeg':
       case 'png':
       case 'gif':
-      case 'webp':
+      case 'webp': {
         const imageDescription = await processImage(file, inferredType, numaChatBedrockUtils);
         return {
           content: imageDescription,
           contentType: 'image',
-          inferredType: inferredType
+          inferredType: inferredType,
         };
+      }
 
-      case 'pptx':
+      case 'pptx': {
         const pptxData = await processPPTX(file);
         result = { content: pptxData, contentType: 'text', inferredType: 'pptx' };
         break;
+      }
 
-      case 'json':
+      case 'json': {
         const jsonData = await processJSON(file);
         result = { content: jsonData, contentType: 'application/json', inferredType: 'json' };
         break;
+      }
 
-      case 'html':
+      case 'html': {
         const htmlText = await processHTML(file);
         result = { content: htmlText, contentType: 'text', inferredType: 'html' };
         break;
+      }
 
-      case 'md':
+      case 'md': {
         const markdownRendered = await processMarkdown(file);
         result = { content: markdownRendered, contentType: 'text', inferredType: 'md' };
         break;
+      }
 
       default:
         throw new Error(`Unsupported file type: ${inferredType}`);
@@ -117,7 +126,9 @@ export const processFile = async (file, fileType, numaChatBedrockUtils) => {
       console.log(`Estimated token count for ${file.name}: ${tokenCount}`);
 
       if (tokenCount > MAX_TOKEN_LIMIT) {
-        throw new Error(`File is too large (estimated ${tokenCount.toLocaleString()} tokens). Maximum allowed is ${MAX_TOKEN_LIMIT.toLocaleString()} tokens.`);
+        throw new Error(
+          `File is too large (estimated ${tokenCount.toLocaleString()} tokens). Maximum allowed is ${MAX_TOKEN_LIMIT.toLocaleString()} tokens.`,
+        );
       }
     }
 
@@ -139,13 +150,13 @@ const processPDF = async (file) => {
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
     const page = await pdf.getPage(pageNumber);
     const textContent = await page.getTextContent();
-    const pageText = textContent.items.map(item => item.str).join(' ');
+    const pageText = textContent.items.map((item) => item.str).join(' ');
     allText += `\n${pageText}`;
   }
   /// Check if there is content besides whitespaces or new lines
   /// Let allText be a message "No content found in file, possibly a scanned/image based pdf" if there is no content
   if (!allText.trim()) {
-    allText = "No content found in file, possibly a scanned/image based pdf.";
+    allText = 'No content found in file, possibly a scanned/image based pdf.';
   }
   return allText;
 };
@@ -199,10 +210,7 @@ const processImage = async (file, inferredType, numaChatBedrockUtils) => {
   try {
     const base64Image = await convertImageToBase64(file);
     const mimeType = `image/${inferredType}`;
-    const description = await numaChatBedrockUtils.getImageDescription(
-      base64Image,
-      mimeType
-    );
+    const description = await numaChatBedrockUtils.getImageDescription(base64Image, mimeType);
     return description;
   } catch (error) {
     console.error('Error processing image:', error);
@@ -230,8 +238,8 @@ const processJSON = async (file) => {
 const processHTML = async (file) => {
   const text = await file.text();
   const parser = new DOMParser();
-  const doc = parser.parseFromString(text, "text/html");
-  return doc.body ? doc.body.innerText : "";
+  const doc = parser.parseFromString(text, 'text/html');
+  return doc.body ? doc.body.innerText : '';
 };
 
 // -------- Markdown --------

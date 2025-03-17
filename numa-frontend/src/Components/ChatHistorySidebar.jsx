@@ -1,16 +1,10 @@
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  forwardRef,
-  useImperativeHandle
-} from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Button } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
 
 export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
   { onSelectConversation, setError, currentConversationId },
-  ref
+  ref,
 ) {
   const [isLoading, setIsLoading] = useState(false);
   const [show, setShow] = useState(false);
@@ -53,13 +47,12 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
   useImperativeHandle(ref, () => ({
     refreshConversations: () => {
       fetchConversations();
-    }
+    },
   }));
 
   // Fetch conversations on mount or when currentConversationId changes
   useEffect(() => {
     fetchConversations();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [numaChatDynamoUtils, currentConversationId]);
 
   // Hide sidebar if user clicks outside
@@ -105,7 +98,7 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
   const handleDelete = async (conversationIdToDelete) => {
     if (!numaChatDynamoUtils) return;
     // Confirm deletion with the user
-    if (!window.confirm("Are you sure you want to delete this conversation?")) {
+    if (!window.confirm('Are you sure you want to delete this conversation?')) {
       return;
     }
     try {
@@ -154,10 +147,11 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
           </Button>
         </div>
 
-        <div className="chat-history-list"
+        <div
+          className="chat-history-list"
           style={{
             maxHeight: 'calc(100vh - 100px)',
-            overflowY: 'auto'
+            overflowY: 'auto',
           }}
         >
           {isLoading ? (
@@ -181,50 +175,51 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
           ) : (
             <div className="conversations-container small">
               {conversations.map((convo) => (
-              <div
-                key={convo.conversation_id}
-                className={`conversation-item mb-2 p-2 rounded ${
-                  convo.conversation_id === currentConversationId ? 'active' : ''
-                }`}
-                onClick={() => onSelectConversation(convo.conversation_id)}
-                role="button"
-              >
-                {/* Left: Title + Timestamp | Right: Actions */}
-                <div className="d-flex align-items-center justify-content-between">
-                  {/* Left: Conversation details */}
-                  <div className="conversation-details">
-                    <div className="conversation-title fw-bold">{convo.conversationName || "Untitled Chat"}</div>
-                    <div className="conversation-time text-muted mt-1">{new Date(convo.latestTimestamp).toLocaleString()}</div>
-                  </div>
-                {/* Right: Edit & Delete stacked */}
-                <div className="conversation-actions d-flex flex-column align-items-center">
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="p-0 text-secondary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRename(convo.conversation_id, convo.conversationName);
-                      }}
-                    >
-                      <i className="bi bi-pencil"></i>
-                    </Button>
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="p-0 text-danger"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(convo.conversation_id);
-                      }}
-                    >
-                      <i className="bi bi-trash"></i>
-
-                    </Button>
+                <div
+                  key={convo.conversation_id}
+                  className={`conversation-item mb-2 p-2 rounded ${
+                    convo.conversation_id === currentConversationId ? 'active' : ''
+                  }`}
+                  onClick={() => onSelectConversation(convo.conversation_id)}
+                  role="button"
+                >
+                  {/* Left: Title + Timestamp | Right: Actions */}
+                  <div className="d-flex align-items-center justify-content-between">
+                    {/* Left: Conversation details */}
+                    <div className="conversation-details">
+                      <div className="conversation-title fw-bold">{convo.conversationName || 'Untitled Chat'}</div>
+                      <div className="conversation-time text-muted mt-1">
+                        {new Date(convo.latestTimestamp).toLocaleString()}
+                      </div>
+                    </div>
+                    {/* Right: Edit & Delete stacked */}
+                    <div className="conversation-actions d-flex flex-column align-items-center">
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRename(convo.conversation_id, convo.conversationName);
+                        }}
+                      >
+                        <i className="bi bi-pencil"></i>
+                      </Button>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-danger"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(convo.conversation_id);
+                        }}
+                      >
+                        <i className="bi bi-trash"></i>
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
             </div>
           )}
         </div>

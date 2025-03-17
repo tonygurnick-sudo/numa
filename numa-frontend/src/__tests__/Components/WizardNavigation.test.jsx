@@ -2,10 +2,9 @@
  * @vitest-environment jsdom
  */
 
-import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, fireEvent, act } from '@testing-library/react';
 import { WizardNavigation } from '../../Components/WizardNavigation';
 
 describe('WizardNavigation Component', () => {

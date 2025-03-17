@@ -17,17 +17,6 @@ vi.mock('pdfjs-dist/build/pdf', () => ({
   GlobalWorkerOptions: { workerSrc: null },
 }));
 
-const createMockFile = (content = 'test content') => {
-  return {
-    text: vi.fn().mockResolvedValue(content),
-    arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
-  };
-};
-
-const mockNumaChatBedrockUtils = {
-  getImageDescription: vi.fn().mockResolvedValue('Image description'),
-};
-
 describe('fileProcessing - Token Estimation and Size Limits', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -57,7 +46,6 @@ describe('fileProcessing - Token Estimation and Size Limits', () => {
   describe('processFile - size limits', () => {
     it('rejects files exceeding token limit', async () => {
       const excessiveCharCount = (MAX_TOKEN_LIMIT + 1) * CHARS_PER_TOKEN;
-      const file = createMockFile('A'.repeat(excessiveCharCount));
 
       const largeContent = 'A'.repeat(excessiveCharCount);
       expect(estimateTokenCount(largeContent)).toBeGreaterThan(MAX_TOKEN_LIMIT);
