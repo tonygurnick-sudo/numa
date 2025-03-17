@@ -1,18 +1,27 @@
-import { Dropdown } from 'react-bootstrap';
-import html2pdf from 'html2pdf.js';
+import { useState } from 'react';
+import { Dropdown, Button, Modal, Form, Spinner } from 'react-bootstrap';
 import { saveAs } from 'file-saver';
+import html2pdf from 'html2pdf.js';
 import ReactDOMServer from 'react-dom/server';
 import { MarkdownContent } from './MarkdownContent';
+import { useAuth } from '../Providers/AuthProvider';
+import { uploadFileToS3 } from '../utils/s3Utils';
+import { createDocxBlob } from '../Services/fileConverter';
 
 const ResultActions = ({ content, title = 'Result' }) => {
-  const handleDownloadPDF = async () => {
-    // Create a styled container for the PDF content
+  const { getIdentityPoolCredentials } = useAuth();
+
+  // Modal states
+  const [showModal, setShowModal] = useState(false);
+  const [modalStep, setModalStep] = useState('confirm');
+  const [docName, setDocName] = useState(title);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // ─────────────────────────────────────────────────────────────
+  // PDF Creation
+  const createStyledPdfBlob = async (markdownString, title) => {
     const element = document.createElement('div');
-
-    // Render the markdown content using our MarkdownContent component
-    const markdownHtml = ReactDOMServer.renderToString(<MarkdownContent content={content} />);
-
-    // Add the HTML content with proper styling
+    const markdownHtml = ReactDOMServer.renderToString(<MarkdownContent content={markdownString} />);
     element.innerHTML = `
       <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
         <div style="border-bottom: 2px solid #8e50a7; margin-bottom: 20px;">
@@ -43,16 +52,23 @@ const ResultActions = ({ content, title = 'Result' }) => {
       },
       pagebreak: { mode: 'avoid-all' },
     };
+    const worker = html2pdf().set(opt).from(element);
+    const pdfBlob = await worker.outputPdf('blob');
+    return pdfBlob;
+  };
 
+  // ─────────────────────────────────────────────────────────────
+  // DOWNLOAD Handlers (PDF, CSV, JSON, DOCX)
+  const handleDownloadPDF = async () => {
     try {
-      await html2pdf().set(opt).from(element).save();
+      const pdfBlob = await createStyledPdfBlob(content, title);
+      saveAs(pdfBlob, `${title}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
     }
   };
 
   const handleDownloadCSV = () => {
-    // Convert content to CSV format
     const plainText = content.replace(/<[^>]+>/g, '');
     const csv = plainText
       .split('\n')
@@ -72,13 +88,67 @@ const ResultActions = ({ content, title = 'Result' }) => {
     saveAs(blob, `${title}.json`);
   };
 
+  const handleDownloadDocx = async () => {
+    try {
+      const docxBlob = await createDocxBlob(content, title);
+      saveAs(docxBlob, `${title}.docx`);
+    } catch (err) {
+      console.error('Error generating DOCX:', err);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // SINGLE Button -> Upload as TEXT file to Knowledge Base
+  const handleShowModal = () => {
+    setDocName(title);
+    setModalStep('confirm');
+    setShowModal(true);
+  };
+
+  const doUploadToS3 = async () => {
+    try {
+      setModalStep('uploading');
+      const plainText = content.replace(/<[^>]+>/g, '');
+      const blob = new Blob([plainText], { type: 'text/plain' });
+      const contentType = 'text/plain';
+      const extension = 'txt';
+
+      const bucketName = window.sessionStorage.getItem('DATA_BUCKET');
+      const fileName = `${docName}-${new Date()
+        .toLocaleDateString()
+        .replace(/\//g, '-')}-${new Date().toLocaleTimeString()}.${extension}`;
+      const region = window.sessionStorage.getItem('REGION');
+
+      const arrayBuffer = await blob.arrayBuffer();
+
+      await uploadFileToS3(arrayBuffer, contentType, bucketName, fileName, region, getIdentityPoolCredentials);
+
+      setSuccessMessage(
+        `Text file "${fileName}" has been added and will be searchable in your Company Knowledge after the next scheduled sync.`,
+      );
+      setModalStep('success');
+    } catch (err) {
+      console.error('Failed to upload file:', err);
+      setSuccessMessage(`Failed to upload: ${err.message}`);
+      setModalStep('success');
+    }
+  };
+
+  const handleModalYes = async () => {
+    await doUploadToS3();
+  };
+
+  const handleModalCancel = () => {
+    setShowModal(false);
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // 5) SHARE Handlers (Email, Copy, Print)
   const handleEmailShare = () => {
     const plainText = content.replace(/<[^>]+>/g, '');
     const emailSubject = encodeURIComponent(title);
     const emailBody = encodeURIComponent(plainText);
     const mailtoUrl = `mailto:?subject=${emailSubject}&body=${emailBody}`;
-
-    // Open in a new window
     window.open(mailtoUrl, '_blank', 'noopener,noreferrer');
   };
 
@@ -86,7 +156,6 @@ const ResultActions = ({ content, title = 'Result' }) => {
     try {
       const plainText = content.replace(/<[^>]+>/g, '');
       await navigator.clipboard.writeText(plainText);
-      // You might want to add a toast notification here
     } catch (err) {
       console.error('Failed to copy text:', err);
     }
@@ -94,10 +163,7 @@ const ResultActions = ({ content, title = 'Result' }) => {
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
-
-    // Render the markdown content using our MarkdownContent component
     const markdownHtml = ReactDOMServer.renderToString(<MarkdownContent content={content} />);
-
     printWindow.document.write(`
       <html>
         <head>
@@ -112,7 +178,7 @@ const ResultActions = ({ content, title = 'Result' }) => {
               font-family: Arial, sans-serif;
               color: #333;
               line-height: 1.6;
-              max-width: 210mm; /* A4 width */
+              max-width: 210mm;
               margin: 0 auto;
               padding: 20px;
             }
@@ -151,7 +217,6 @@ const ResultActions = ({ content, title = 'Result' }) => {
               font-size: 12px;
               color: #666;
             }
-            /* Hide footer when printing */
             @media print {
               .no-print {
                 display: none;
@@ -185,6 +250,8 @@ const ResultActions = ({ content, title = 'Result' }) => {
     printWindow.document.close();
   };
 
+  // ─────────────────────────────────────────────────────────────
+  // Render
   return (
     <div className="result-actions d-flex gap-2 mt-3">
       <Dropdown>
@@ -192,7 +259,6 @@ const ResultActions = ({ content, title = 'Result' }) => {
           <i className="bi bi-download me-2"></i>
           Download
         </Dropdown.Toggle>
-
         <Dropdown.Menu>
           <Dropdown.Item onClick={handleDownloadPDF}>
             <i className="bi bi-file-pdf me-2"></i>
@@ -206,6 +272,10 @@ const ResultActions = ({ content, title = 'Result' }) => {
             <i className="bi bi-file-code me-2"></i>
             JSON
           </Dropdown.Item>
+          <Dropdown.Item onClick={handleDownloadDocx}>
+            <i className="bi bi-file-earmark-word me-2"></i>
+            DOCX
+          </Dropdown.Item>
         </Dropdown.Menu>
       </Dropdown>
 
@@ -214,7 +284,6 @@ const ResultActions = ({ content, title = 'Result' }) => {
           <i className="bi bi-share me-2"></i>
           Share
         </Dropdown.Toggle>
-
         <Dropdown.Menu>
           <Dropdown.Item onClick={handleEmailShare}>
             <i className="bi bi-envelope me-2"></i>
@@ -230,6 +299,78 @@ const ResultActions = ({ content, title = 'Result' }) => {
           </Dropdown.Item>
         </Dropdown.Menu>
       </Dropdown>
+
+      <Button variant="btn btn-secondary" onClick={handleShowModal}>
+        <i className="bi bi-database me-2"></i>
+        Add to Company Knowledge
+      </Button>
+
+      <Modal show={showModal} onHide={handleModalCancel} backdrop="static" centered>
+        {modalStep === 'confirm' && (
+          <>
+            <Modal.Header closeButton>
+              <Modal.Title>Add to Company Knowledge</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <p>
+                You are about to add this to your <strong>company knowledge</strong>. It will be searchable after the
+                next scheduled sync.
+              </p>
+              <p>Please confirm and/or edit the title:</p>
+              <Form.Group className="mb-3">
+                <Form.Label>Document Title</Form.Label>
+                <Form.Control type="text" value={docName} onChange={(e) => setDocName(e.target.value)} />
+              </Form.Group>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={handleModalCancel}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleModalYes}>
+                Add to Company Knowledge
+              </Button>
+            </Modal.Footer>
+          </>
+        )}
+
+        {modalStep === 'uploading' && (
+          <>
+            <Modal.Header>
+              <Modal.Title>Processing...</Modal.Title>
+            </Modal.Header>
+            <Modal.Body className="text-center">
+              <Spinner animation="border" role="status">
+                <span className="visually-hidden">Uploading...</span>
+              </Spinner>
+              <p style={{ marginTop: '1rem' }}>Uploading to your company knowledge, please wait...</p>
+            </Modal.Body>
+          </>
+        )}
+
+        {modalStep === 'success' && (
+          <>
+            <Modal.Header>
+              <Modal.Title>Success</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <p>{successMessage}</p>
+              <p>
+                <a href="/upload" target="_blank" rel="noreferrer">
+                  Go to File Upload Page
+                </a>
+              </p>
+              <p className="text-muted" style={{ fontSize: '0.9rem' }}>
+                * We add a timestamp to the filename to ensure uniqueness
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="primary" onClick={handleModalCancel}>
+                Close
+              </Button>
+            </Modal.Footer>
+          </>
+        )}
+      </Modal>
     </div>
   );
 };

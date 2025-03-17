@@ -45,6 +45,7 @@ export class CoreNumaInfra extends Construct {
   readonly qBusinessIndexId: string;
   readonly qBusinessRetrieverId: string;
   readonly outputsBucket: NumaCorsEnabledBucket;
+  readonly dataBucket: NumaCorsEnabledBucket;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -202,7 +203,7 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
-    const dataBucket = new NumaCorsEnabledBucket(this, 'data-source-bucket', {
+    this.dataBucket = new NumaCorsEnabledBucket(this, 'data-source-bucket', {
       bucketName: 'data',
       client: props.client,
       environmentName: props.environmentName,
@@ -210,6 +211,7 @@ export class CoreNumaInfra extends Construct {
       allowedMethods: ['GET', 'PUT', 'DELETE'],
       allowLocalhostOrigin: props.devInstance,
     });
+    this.dataBucket.bucket.moveFromId('aws_s3_bucket.data-source-bucket_1F269801');
 
     const companyBucket = new NumaCorsEnabledBucket(this, 'company-data-bucket', {
       bucketName: 'company',
@@ -267,7 +269,7 @@ export class CoreNumaInfra extends Construct {
         {
           effect: 'Allow',
           actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject'],
-          resources: [`${dataBucket.bucket.arn}/*`, dataBucket.bucket.arn],
+          resources: [`${this.dataBucket.bucket.arn}/*`, this.dataBucket.bucket.arn],
         },
         {
           effect: 'Allow',
@@ -546,7 +548,7 @@ export class CoreNumaInfra extends Construct {
     if (props.loadSampleFile) {
       const sampleFile = 'numa-one-pager.pdf';
       new S3Object(this, 'sample-file', {
-        bucket: dataBucket.bucket.bucket,
+        bucket: this.dataBucket.bucket.bucket,
         key: sampleFile,
         source: path.join(import.meta.dirname, '..', 'assets', sampleFile),
       });
@@ -605,7 +607,7 @@ export class CoreNumaInfra extends Construct {
           syncMode: 'FULL_CRAWL',
           connectionConfiguration: {
             repositoryEndpointMetadata: {
-              BucketName: dataBucket.bucket.bucket,
+              BucketName: this.dataBucket.bucket.bucket,
             },
           },
           repositoryConfigurations: {
@@ -698,7 +700,7 @@ export class CoreNumaInfra extends Construct {
       value: this.webExUrl,
     });
 
-    new TerraformOutput(this, 'data-bucket', { value: dataBucket.bucket.bucket });
+    new TerraformOutput(this, 'data-bucket', { value: this.dataBucket.bucket.bucket });
     new TerraformOutput(this, 'company-bucket', { value: companyBucket.bucket.bucket });
     new TerraformOutput(this, 'application-id', { value: this.qBusinessApplicationId });
     new TerraformOutput(this, 'data-source-id', { value: dataSourceId });

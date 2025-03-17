@@ -51,31 +51,31 @@ export const processFile = async (file, fileType, numaChatBedrockUtils) => {
     switch (inferredType) {
       case 'pdf': {
         const pdfText = await processPDF(file);
-        result = { content: pdfText, contentType: 'text', inferredType: 'pdf' };
+        result = { content: pdfText, contentType: 'text/plain', inferredType: 'pdf' };
         break;
       }
 
       case 'docx': {
         const docxText = await processDocx(file);
-        result = { content: docxText, contentType: 'text', inferredType: 'docx' };
+        result = { content: docxText, contentType: 'text/plain', inferredType: 'docx' };
         break;
       }
 
       case 'txt': {
         const textContent = await processText(file);
-        result = { content: textContent, contentType: 'text', inferredType: 'txt' };
+        result = { content: textContent, contentType: 'text/plain', inferredType: 'txt' };
         break;
       }
 
       case 'csv': {
         const csvText = await processCSV(file);
-        result = { content: csvText, contentType: 'text', inferredType: 'csv' };
+        result = { content: csvText, contentType: 'text/plain', inferredType: 'csv' };
         break;
       }
 
       case 'xlsx': {
         const xlsxData = await processXLSX(file);
-        result = { content: xlsxData, contentType: 'text', inferredType: 'xlsx' };
+        result = { content: xlsxData, contentType: 'text/plain', inferredType: 'xlsx' };
         break;
       }
 
@@ -87,14 +87,14 @@ export const processFile = async (file, fileType, numaChatBedrockUtils) => {
         const imageDescription = await processImage(file, inferredType, numaChatBedrockUtils);
         return {
           content: imageDescription,
-          contentType: 'image',
+          contentType: `image/${inferredType}`,
           inferredType: inferredType,
         };
       }
 
       case 'pptx': {
         const pptxData = await processPPTX(file);
-        result = { content: pptxData, contentType: 'text', inferredType: 'pptx' };
+        result = { content: pptxData, contentType: 'text/plain', inferredType: 'pptx' };
         break;
       }
 
@@ -106,13 +106,13 @@ export const processFile = async (file, fileType, numaChatBedrockUtils) => {
 
       case 'html': {
         const htmlText = await processHTML(file);
-        result = { content: htmlText, contentType: 'text', inferredType: 'html' };
+        result = { content: htmlText, contentType: 'text/plain', inferredType: 'html' };
         break;
       }
 
       case 'md': {
         const markdownRendered = await processMarkdown(file);
-        result = { content: markdownRendered, contentType: 'text', inferredType: 'md' };
+        result = { content: markdownRendered, contentType: 'text/plain', inferredType: 'md' };
         break;
       }
 
@@ -121,7 +121,7 @@ export const processFile = async (file, fileType, numaChatBedrockUtils) => {
     }
 
     // For text-based content, check token count
-    if (result.contentType === 'text' || result.contentType === 'application/json') {
+    if (result.contentType === 'text/plain' || result.contentType === 'application/json') {
       const tokenCount = estimateTokenCount(result.content);
       console.log(`Estimated token count for ${file.name}: ${tokenCount}`);
 
