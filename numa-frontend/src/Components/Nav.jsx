@@ -51,6 +51,10 @@ const Nav = () => {
               <i className="bi bi-chat-dots-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Chat
             </Dropdown.Item>
+            <Dropdown.Item onClick={() => navigate('/company-info')}>
+              <i className="bi bi-building-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
+              Company Info
+            </Dropdown.Item>
             <Dropdown.Item onClick={() => navigate('/upload')}>
               <i className="bi bi-cloud-upload-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Upload Files
@@ -103,6 +107,17 @@ const Nav = () => {
             <div className="nav-link nav-item" onClick={() => navigate('/chat')} title="Chat" role="button">
               <i className="bi bi-chat-dots-fill icon" style={{ color: 'var(--color-icon)' }}></i>
               <span className="icon-label">Chat</span>
+            </div>
+          </li>
+          <li>
+            <div
+              className="nav-link nav-item"
+              onClick={() => navigate('/company-info')}
+              title="Company Info"
+              role="button"
+            >
+              <i className="bi bi-building-fill icon" style={{ color: 'var(--color-icon)' }}></i>
+              <span className="icon-label">Company</span>
             </div>
           </li>
           <li>
