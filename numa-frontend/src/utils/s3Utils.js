@@ -29,33 +29,16 @@ export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getIdentityPoolCr
   return new Blob([blob], { type: response.headers.get('content-type') });
 };
 
-export const uploadFileToS3 = async (processedFile, s3Bucket, s3Key, region, getIdentityPoolCredentials) => {
+export const uploadFileToS3 = async (content, contentType, s3Bucket, s3Key, region, getIdentityPoolCredentials) => {
   const credentials = await getIdentityPoolCredentials();
   const s3Client = new S3Client({ region, credentials });
-
-  // Extract file details
-  const { content, contentType, inferredType } = processedFile; // Destructure the processed file
-
-  // Determine correct MIME type
-  let mimeType = 'text/plain'; // Default to text
-
-  // Check if the file is an image (jpg, jpeg, png, gif, webp)
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-  if (imageExtensions.includes(inferredType)) {
-    mimeType = `image/${inferredType}`;
-  } else if (contentType === 'text') {
-    mimeType = 'text/plain'; // Explicitly ensure text files are marked correctly
-  }
-
-  // For images, use the original content
-  const uploadContent = content instanceof Blob ? content : content;
 
   // Upload file to S3
   const command = new PutObjectCommand({
     Bucket: s3Bucket,
     Key: s3Key,
-    Body: uploadContent, // Use processed content
-    ContentType: mimeType, // Correctly inferred MIME type
+    Body: content,
+    ContentType: contentType,
   });
 
   await s3Client.send(command);

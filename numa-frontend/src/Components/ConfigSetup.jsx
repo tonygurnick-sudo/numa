@@ -33,6 +33,7 @@ export const fetchConfigAddtoSession = async () => {
     'CLIENT_NAME',
     'HONEYCOMB_KEY',
     'OUTPUTS_BUCKET_NAME',
+    'DATA_BUCKET',
   ];
 
   // Check if all required properties exist

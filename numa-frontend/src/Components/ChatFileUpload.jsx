@@ -84,7 +84,15 @@ const ChatFileUpload = ({
             const fileContent = await fetchFileFromS3(filePath, s3Bucket, region, getIdentityPoolCredentials);
             const processedFile = await processFile(fileContent, inferredFileType, numaChatBedrockUtils);
             const extractedContentS3Key = `${filePath}-processed.${processedFile.inferredType}`;
-            await uploadFileToS3(processedFile, s3Bucket, extractedContentS3Key, region, getIdentityPoolCredentials);
+
+            await uploadFileToS3(
+              processedFile.content,
+              processedFile.contentType,
+              s3Bucket,
+              extractedContentS3Key,
+              region,
+              getIdentityPoolCredentials,
+            );
 
             const fileMetadata = {
               fileName,
