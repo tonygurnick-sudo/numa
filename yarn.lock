@@ -7484,7 +7484,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"axios@npm:^1.7.7, axios@npm:^1.8.1":
+"axios@npm:^1.7.7, axios@npm:^1.8.3":
   version: 1.8.3
   resolution: "axios@npm:1.8.3"
   dependencies:
@@ -17936,15 +17936,15 @@ __metadata:
   linkType: hard
 
 "vite-plugin-mkcert@npm:^1.17.6":
-  version: 1.17.7
-  resolution: "vite-plugin-mkcert@npm:1.17.7"
+  version: 1.17.8
+  resolution: "vite-plugin-mkcert@npm:1.17.8"
   dependencies:
-    axios: "npm:^1.8.1"
+    axios: "npm:^1.8.3"
     debug: "npm:^4.4.0"
     picocolors: "npm:^1.1.1"
   peerDependencies:
     vite: ">=3"
-  checksum: 10c0/791b41e2c7636c02d7cdb852819b1787bc4e412e13c37e981dac5e2cf2acd825d8222b20ac8cb715c19f4bcbb6449d1f6bd86664f40966bc1111ce64e096a144
+  checksum: 10c0/75769450dc54d756da3d0d00e005572dcdce84c12bd90f6b598fdba98be1e9fd59acea3854e30702bc198bf9c84e6235a91c0c2c521e885ada350b63d5686f68
   languageName: node
   linkType: hard
 
