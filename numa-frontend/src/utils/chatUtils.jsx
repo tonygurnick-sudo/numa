@@ -115,7 +115,7 @@ export function ReferencesDropdown({ references, getIdentityPoolCredentials }) {
       // Always use the pre-signed URL approach for all S3 documents
       // This ensures proper authentication regardless of the source
       // Generate a pre-signed URL
-      const region = 'us-east-1'; // Use the appropriate region
+      const region = window.sessionStorage.getItem('REGION') || 'us-east-1';
       const s3Key = ref.key;
       const s3Bucket = ref.bucket;
 
@@ -143,9 +143,10 @@ export function ReferencesDropdown({ references, getIdentityPoolCredentials }) {
 
       // Generate a pre-signed URL (valid for 1 hour)
       const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+      console.log('Original S3 URL:', ref.originalRef);
+      console.log('Generated Pre-signed URL:', signedUrl);
 
       // Create an invisible link element and trigger it programmatically
-      // This approach helps avoid showing the raw S3 URL in the browser
       const link = document.createElement('a');
       link.href = signedUrl;
       link.target = '_blank';

@@ -268,18 +268,13 @@ export class CoreNumaInfra extends Construct {
         },
         {
           effect: 'Allow',
-          actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject'],
+          actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject', 's3:GetObject'],
           resources: [`${this.dataBucket.bucket.arn}/*`, this.dataBucket.bucket.arn],
         },
         {
           effect: 'Allow',
           actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:DeleteObject'],
           resources: [`${companyBucket.bucket.arn}/*`, companyBucket.bucket.arn],
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:ListBucket', 's3:GetObject'],
-          resources: ['arn:aws:s3:::numa-arcanum-hams-data', 'arn:aws:s3:::numa-arcanum-hams-data/*'],
         },
         {
           effect: 'Allow',
