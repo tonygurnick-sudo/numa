@@ -24,7 +24,7 @@ packages = [
 python = "~3.13.0"
 bedrock = {path = "../../../lib/bedrock", develop = true}
 boto3 = "1.36.13"
-structlog = "25.1.0"
+structlog = "25.2.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.15.0"

@@ -27,7 +27,7 @@ bedrock = {path = "../../../lib/bedrock", develop = true}
 helpers = {path = "../../../lib/helpers", develop = true}
 s3_helpers = {path = "../../../lib/s3_helpers", develop = true}
 aws-lambda-powertools = "3.8.0"
-structlog = "25.1.0"
+structlog = "25.2.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.15.0"

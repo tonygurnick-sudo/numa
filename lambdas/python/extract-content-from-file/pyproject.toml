@@ -27,7 +27,7 @@ aws-transcribe = {path = "../../../lib/aws-transcribe", develop = true}
 bedrock = {path = "../../../lib/bedrock", develop = true}
 boto3 = "1.36.13"
 helpers = {path = "../../../lib/helpers", develop = true}
-structlog = "25.1.0"
+structlog = "25.2.0"
 openpyxl = "^3.1.5"
 python-docx = "^1.1.2"
 
