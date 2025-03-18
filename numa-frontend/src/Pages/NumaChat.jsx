@@ -151,53 +151,6 @@ const NumaChat = () => {
     setMessages([greeting]);
   };
 
-  // Test the web search Lambda directly
-  const testWebSearchLambda = async () => {
-    // Expose the function to the window for testing
-    window.testWebSearchLambda = testWebSearchLambda;
-    try {
-      // Use a configuration variable if available, otherwise build a URL
-      const API_GATEWAY_URL = window.sessionStorage.getItem('API_ENDPOINT') || '/api';
-
-      // Remove /api prefix if it's already included in API_GATEWAY_URL
-      const basePath = API_GATEWAY_URL.endsWith('/api')
-        ? API_GATEWAY_URL
-        : `${API_GATEWAY_URL}/api`;
-
-      // Build the test search URL (using a simple test query)
-      const testQuery = "melbourne weather";
-      const testSearchUrl = `${basePath}/web-search?query=${encodeURIComponent(testQuery)}&max_results=2`;
-      console.log('[TEST] Calling web search Lambda at URL:', testSearchUrl);
-
-      // Make a test request
-      const testResponse = await fetch(testSearchUrl, {
-        method: 'GET',
-        cache: 'no-cache'
-      });
-
-      console.log('[TEST] Web search response status:', testResponse.status);
-      console.log('[TEST] Web search response headers:', [...testResponse.headers.entries()]);
-
-      if (!testResponse.ok) {
-        // Try to get error details
-        let errorText = '';
-        try {
-          errorText = await testResponse.text();
-        } catch(e) {
-          errorText = 'Could not read error response';
-        }
-        console.error('[TEST] Web search test failed:', errorText);
-        alert(`Web search test failed with status ${testResponse.status}. Check console for details.`);
-      } else {
-        const searchData = await testResponse.json();
-        console.log('[TEST] Web search test successful:', searchData);
-        alert(`Web search test successful! Found ${searchData.results_count} results for "${testQuery}"`);
-      }
-    } catch (error) {
-      console.error('[TEST] Web search test error:', error);
-      alert(`Web search test failed with error: ${error.message}. Check console for details.`);
-    }
-  };
 
   // 1) A function that ensures we have a conversation (creates one if needed).
   const createNewConversationIfNeeded = async (initialText = '') => {

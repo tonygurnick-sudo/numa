@@ -100,47 +100,6 @@ const ChatInput = ({
               {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}
             </Button>
 
-            {/* Debug search test button - hidden in production */}
-            {webSearchEnabled && process.env.NODE_ENV === 'development' && (
-              <Button
-                variant="link"
-                size="sm"
-                className="test-search-button"
-                onClick={() => {
-                  // Direct test function
-                  (async () => {
-                    try {
-                      const basePath = '/api';
-                      const testQuery = "melbourne weather";
-                      const testSearchUrl = `${basePath}/web-search?query=${encodeURIComponent(testQuery)}&max_results=2`;
-
-                      console.log('[TEST] Calling web search Lambda at URL:', testSearchUrl);
-
-                      const testResponse = await fetch(testSearchUrl, {
-                        method: 'GET',
-                        cache: 'no-cache'
-                      });
-
-                      if (!testResponse.ok) {
-                        let errorText = await testResponse.text();
-                        console.error('[TEST] Web search test failed:', errorText);
-                        alert(`Search test failed: ${testResponse.status}`);
-                      } else {
-                        const searchData = await testResponse.json();
-                        console.log('[TEST] Web search test successful:', searchData);
-                        alert(`Search test success: ${searchData.results.length} results`);
-                      }
-                    } catch (error) {
-                      console.error('[TEST] Web search test error:', error);
-                      alert(`Search test error: ${error.message}`);
-                    }
-                  })();
-                }}
-                style={{ color: '#999', fontSize: '0.75rem' }}
-              >
-                Test
-              </Button>
-            )}
           </div>
           <div className="right-controls">
             {buttonStatus === 'streaming' ? (

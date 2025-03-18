@@ -39,8 +39,9 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       },
       environment: {
         variables: {
-          LOG_LEVEL: 'DEBUG', // Increase logging level for debugging
-          ALLOWED_ORIGIN: '*', // Explicitly set CORS
+          LOG_LEVEL: 'INFO',
+          ALLOWED_ORIGIN: '*',
+          SERPER_API_KEY: 'e8358540c689f5b122cdd2c51fbaee28ff3f9ece',
         },
       },
       // Increase timeout to handle potential DuckDuckGo API latency

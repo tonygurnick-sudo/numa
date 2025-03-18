@@ -1,11 +1,3 @@
-"""
-Web search proxy using Serper.dev API
-
-This Lambda fetches search results from Serper.dev (a Google Search API).
-It's used by the Numa frontend to provide search results directly in Claude's
-prompts, rather than relying on Claude's native search capability.
-"""
-
 import json
 import logging
 import os
@@ -14,12 +6,12 @@ from typing import Any, Dict, List
 
 import httpx
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, log_level))
 logger = logging.getLogger("web-search-proxy")
 
 # Constants
-SERPER_API_KEY = "e8358540c689f5b122cdd2c51fbaee28ff3f9ece"
+SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "e8358540c689f5b122cdd2c51fbaee28ff3f9ece")
 SERPER_API_URL = "https://google.serper.dev/search"
 TIMEOUT = 10
 
