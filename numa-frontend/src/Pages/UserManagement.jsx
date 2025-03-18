@@ -22,7 +22,6 @@ const UserManagement = () => {
     setLoadingUsers(true);
     setUsersError(null);
     try {
-      // TODO: Uncomment once ListUsers permission is added to the identity role
       const REGION = window.sessionStorage.getItem('REGION');
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
       const credentials = await getIdentityPoolCredentials();
