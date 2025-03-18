@@ -24,7 +24,6 @@ export class UserManagementUtils {
 
       // Generate a secure temporary password
       const tempPassword = `Welcome${Math.random().toString(36).slice(2, 8)}!`;
-      console.log('Generated temporary password:', tempPassword);
 
       const command = new AdminCreateUserCommand({
         UserPoolId: userPoolId,
