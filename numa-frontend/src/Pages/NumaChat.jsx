@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Button, Container, Row, Col, Spinner, Collapse } from 'react-bootstrap';
+import { Button, Container, Row, Col, Spinner } from 'react-bootstrap';
 import { ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import { SearchRelevantContentCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
@@ -12,41 +12,8 @@ import { ChatFileUpload } from '../Components/ChatFileUpload';
 import { MarkdownContent } from '../Components/MarkdownContent';
 import { prepareConversationHistoryForBedrock, MAX_DYNAMO_MESSAGES } from '../utils/bedrockMessageHistoryUtils';
 import { ChatInput } from '../Components/ChatInput';
+import { ReferencesDropdown } from '../utils/chatUtils';
 import numaIcon from '../assets/images/numa-logo.svg';
-
-/** Helper component to display a collapsible references panel */
-function ReferencesDropdown({ references }) {
-  const [open, setOpen] = useState(false);
-  if (!references || references.length === 0) return null;
-
-  return (
-    <div className="references-dropdown mt-2">
-      <Button
-        variant="link"
-        size="sm"
-        onClick={() => setOpen(!open)}
-        aria-controls="references-collapse"
-        aria-expanded={open}
-        style={{ color: '#4b007d' }}
-      >
-        {open ? 'Hide References' : 'Show References'}
-      </Button>
-      <Collapse in={open}>
-        <div id="references-collapse" className="ms-3">
-          <ul className="list-unstyled">
-            {references.map((ref, idx) => (
-              <li key={idx}>
-                <a href={ref} target="_blank" rel="noopener noreferrer">
-                  {ref}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Collapse>
-    </div>
-  );
-}
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
@@ -677,7 +644,10 @@ const NumaChat = () => {
                           <MarkdownContent content={message.content} />
                           {/* If there are references, show a dropdown */}
                           {message.role === 'assistant' && message.references?.length > 0 && (
-                            <ReferencesDropdown references={message.references} />
+                            <ReferencesDropdown
+                              references={message.references}
+                              getIdentityPoolCredentials={getIdentityPoolCredentials}
+                            />
                           )}
                         </div>
                       </div>
