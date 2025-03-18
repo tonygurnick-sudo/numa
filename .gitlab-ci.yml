@@ -145,7 +145,7 @@ frontend-build:
       - BUILD_DIR: [numa-frontend]
   script:
     - corepack enable
-    - NODE_OPTIONS=--max-old-space-size=4096 yarn build
+    - NODE_OPTIONS=--max-old-space-size=3072 yarn build
   artifacts:
     paths: [infra/build/numa-frontend]
 
