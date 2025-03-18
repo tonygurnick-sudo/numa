@@ -2395,6 +2395,10 @@ svg.title-star {
     display: block;
     overflow-x: auto;
   }
+  body, .markdown-body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
 .result-actions {
