@@ -278,6 +278,11 @@ export class CoreNumaInfra extends Construct {
         },
         {
           effect: 'Allow',
+          actions: ['s3:ListBucket', 's3:GetObject'],
+          resources: ['arn:aws:s3:::numa-arcanum-hams-data', 'arn:aws:s3:::numa-arcanum-hams-data/*'],
+        },
+        {
+          effect: 'Allow',
           actions: [
             'dynamodb:PutItem',
             'dynamodb:GetItem',
