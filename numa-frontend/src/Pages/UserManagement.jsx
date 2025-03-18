@@ -67,7 +67,6 @@ const UserManagement = () => {
       // Show the temporary password first
       setSuccess({ message: 'User created successfully!', user: result.user, email: email });
       setTempPassword(result.temporaryPassword);
-      console.log('Setting temp password:', result.temporaryPassword);
       setLoading(false);
       // Wait a bit before refreshing the list to ensure password is seen
       setTimeout(() => {
