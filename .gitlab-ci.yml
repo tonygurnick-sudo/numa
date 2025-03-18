@@ -189,6 +189,10 @@ node-package:
     - cd ..
   script:
     - yarn exec cdktf deploy --auto-approve numa-${CLIENT_NAME}
+  environment:
+    name: $CLIENT_NAME
+    url: https://$CLIENT_NAME.numa.arcanum.ai
+  resource_group: $CLIENT_NAME
   needs:
     - artifacts: true
       job: python-package
@@ -203,6 +207,8 @@ deploy-to-arcanum-demo:
   extends: .deploy-infra
   variables:
     CLIENT_NAME: arcanum-demo
+  environment:
+    deployment_tier: testing
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -210,6 +216,8 @@ deploy-to-arcanum-prod-numa-demo:
   extends: .deploy-infra
   variables:
     CLIENT_NAME: arcanum-prod-numa-demo
+  environment:
+    deployment_tier: production
   needs:
     - job: deploy-to-arcanum-demo
     # This needs to be duplicated as referencing .deploy-infra, needs doesn't work properly
