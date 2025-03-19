@@ -13,7 +13,7 @@ source = [
 [tool.poetry]
 name = "web-search-proxy"
 version = "0.1.0"
-description = "Web search proxy for Numa using Serper.dev API"
+description = "Web search proxy that returns content using Google search and a simple scraper"
 authors = ["Arcanum AI"]
 readme = "README.md"
 packages = [
@@ -26,6 +26,8 @@ httpx = "^0.28.1"
 structlog = "^24.1.0"
 aws-lambda-powertools = "^2.32.0"
 boto3 = "^1.29.0"
+googlesearch-python = "^1.1.0"
+beautifulsoup4 = "^4.12.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

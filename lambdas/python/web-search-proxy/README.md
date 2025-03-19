@@ -1,10 +1,10 @@
 # Web Search Proxy Lambda
 
-This Lambda function provides web search capabilities to the Numa chat interface using Serper.dev (Google Search API).
+This Lambda function provides web search capabilities to the Numa chat interface using googlesearch-python (a keyless library).
 
 ## Features
 
-- Performs web searches through Serper.dev's API
+- Performs web searches through googlesearch-python library
 - Formats search results for easy consumption by Claude
 - Handles error cases gracefully
 - Returns structured search results for integration with the chat UI

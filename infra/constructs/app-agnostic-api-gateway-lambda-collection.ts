@@ -40,11 +40,10 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: {
         variables: {
           LOG_LEVEL: 'INFO',
-          ALLOWED_ORIGIN: '*',
-          SERPER_API_KEY: 'e8358540c689f5b122cdd2c51fbaee28ff3f9ece',
+          ALLOWED_ORIGIN: '*'
         },
       },
-      // Increase timeout to handle potential DuckDuckGo API latency
+      //
       timeout: 30, // 30 seconds
     });
   }
