@@ -249,12 +249,44 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
+    const cognitoPermissionsPolicy = new DataAwsIamPolicyDocument(this, 'cognito-permissions-policy', {
+      statement: [
+        {
+          effect: 'Allow',
+          actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminCreateUser'],
+          resources: [`arn:aws:cognito-idp:${region}:${callerId.accountId}:userpool/${pool.id}`],
+        },
+      ],
+    });
+
     const identityPoolRolePolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-policy', {
       statement: [
         {
           effect: 'Allow',
           actions: ['cognito-identity:GetCredentialsForIdentity'],
           resources: ['*'],
+        },
+        {
+          effect: 'Allow',
+          actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminCreateUser'],
+          resources: [`arn:aws:cognito-idp:${region}:${callerId.accountId}:userpool/${pool.id}`],
+          condition: [
+            {
+              test: 'StringEquals',
+              variable: 'aws:RequestedRegion',
+              values: [region],
+            },
+            {
+              test: 'StringEquals',
+              variable: 'cognito-identity.amazonaws.com:aud',
+              values: [identityPool.id],
+            },
+            {
+              test: 'ForAnyValue:StringLike',
+              variable: 'cognito-identity.amazonaws.com:amr',
+              values: ['authenticated'],
+            },
+          ],
         },
         {
           actions: ['s3:ListBucket'], // this is required to get a 404 instead of a 403 if object not found
@@ -302,10 +334,18 @@ export class CoreNumaInfra extends Construct {
       assumeRolePolicy: identityPoolRoleTrustPolicy.json,
     });
 
+    // First attach the main role policy
     new IamRolePolicy(this, 'identity-role-policy', {
       name: 'policy',
       role: identityPoolRole.name,
       policy: identityPoolRolePolicy.json,
+    });
+
+    // Then attach the Cognito permissions policy
+    new IamRolePolicy(this, 'cognito-permissions-role-policy', {
+      name: 'cognito-policy',
+      role: identityPoolRole.name,
+      policy: cognitoPermissionsPolicy.json,
     });
 
     new CognitoIdentityPoolRolesAttachment(this, 'identity-pool-role-attachment', {

@@ -3,6 +3,7 @@ import { NumaLogin } from './Pages/Login';
 import { ResetPassword } from './Pages/ResetPassword';
 import { Dash } from './Pages/Dash';
 import AppDetail from './Pages/AppDetail';
+import UserManagement from './Pages/UserManagement';
 
 import { AuthProvider, useAuth } from './Providers/AuthProvider';
 import { NumaAppProvider } from './Providers/NumaAppProvider';
@@ -109,6 +110,15 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <CompanyInfo />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/user-management"
+        element={
+          <ProtectedRoute>
+            <UserManagement />
           </ProtectedRoute>
         }
       />

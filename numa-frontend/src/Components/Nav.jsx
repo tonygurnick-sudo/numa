@@ -59,10 +59,10 @@ const Nav = () => {
               <i className="bi bi-cloud-upload-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Upload Files
             </Dropdown.Item>
-            {/* <Dropdown.Item onClick={() => navigate('/my-account')}>
-              <i className="bi bi-gear-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
-              Settings
-            </Dropdown.Item> */}
+            <Dropdown.Item onClick={() => navigate('/user-management')}>
+              <i className="bi bi-people-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
+              User Management
+            </Dropdown.Item>
             <Dropdown.Divider />
             <div className="px-2">
               <Button onClick={logout} className="w-100">
@@ -129,9 +129,14 @@ const Nav = () => {
         </ul>
 
         <footer className="footer">
-          {/* <div className="nav-link nav-item" onClick={() => navigate('/my-account')} title="Settings" role="button">
-            <i className="bi bi-gear-fill icon" style={{ color: 'var(--color-icon)' }}></i>
-          </div> */}
+          <div
+            className="nav-link nav-item"
+            onClick={() => navigate('/user-management')}
+            title="User Management"
+            role="button"
+          >
+            <i className="bi bi-people-fill icon" style={{ color: 'var(--color-icon)' }}></i>
+          </div>
           <button onClick={logout} className="btn-logout" title="Logout">
             <div className="icon-with-text">
               <i className="bi bi-box-arrow-right"></i>
