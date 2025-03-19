@@ -1,11 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { getContentType } from '../utils/fileUtils';
 import { Button, Collapse } from 'react-bootstrap';
 
-/**
- * Helper component to display a collapsible references panel
- * Handles S3 URIs by generating pre-signed URLs and displaying user-friendly names
- */
-export function ReferencesDropdown({ references, getIdentityPoolCredentials }) {
+const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
   const [open, setOpen] = useState(false);
   const [processedRefs, setProcessedRefs] = useState([]);
   const [downloadingIndex, setDownloadingIndex] = useState(null);
@@ -49,7 +46,6 @@ export function ReferencesDropdown({ references, getIdentityPoolCredentials }) {
             }
           }
 
-          // Check if it's an S3 URL from Amazon Q Business (https://bucket-name.s3.amazonaws.com/...)
           if (ref.includes('.s3.amazonaws.com/')) {
             try {
               // Extract bucket and key from URL
@@ -94,7 +90,7 @@ export function ReferencesDropdown({ references, getIdentityPoolCredentials }) {
           };
         }),
       );
-
+      console.log('Processed references:', processed);
       setProcessedRefs(processed);
     };
 
@@ -104,49 +100,17 @@ export function ReferencesDropdown({ references, getIdentityPoolCredentials }) {
   // Function to handle document access using invisible link approach with pre-signed URLs
   const handleDocumentAccess = async (ref, index) => {
     if (!ref.isS3 || !ref.bucket || !ref.key) {
-      // For non-S3 URLs, just open in a new tab
       window.open(ref.url, '_blank');
       return;
     }
 
     try {
       setDownloadingIndex(index);
-
-      // Always use the pre-signed URL approach for all S3 documents
-      // This ensures proper authentication regardless of the source
-      // Generate a pre-signed URL
-      const region = window.sessionStorage.getItem('REGION') || 'us-east-1';
-      const s3Key = ref.key;
-      const s3Bucket = ref.bucket;
-
-      // Import the required S3 modules dynamically
-      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
-
-      // Get credentials from the auth provider
-      const credentials = await getIdentityPoolCredentials();
-      if (!credentials) {
-        throw new Error('Failed to get AWS credentials');
+      const signedUrl = await getPresignedUrl(ref, getIdentityPoolCredentials);
+      if (!signedUrl) {
+        return;
       }
 
-      // Create an S3 client with the credentials
-      const s3Client = new S3Client({
-        region,
-        credentials,
-      });
-
-      // Create a GetObject command
-      const command = new GetObjectCommand({
-        Bucket: s3Bucket,
-        Key: s3Key,
-      });
-
-      // Generate a pre-signed URL (valid for 1 hour)
-      const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-      console.log('Original S3 URL:', ref.originalRef);
-      console.log('Generated Pre-signed URL:', signedUrl);
-
-      // Create an invisible link element and trigger it programmatically
       const link = document.createElement('a');
       link.href = signedUrl;
       link.target = '_blank';
@@ -155,7 +119,6 @@ export function ReferencesDropdown({ references, getIdentityPoolCredentials }) {
       document.body.appendChild(link);
       link.click();
 
-      // Clean up the DOM after the link is clicked
       setTimeout(() => {
         document.body.removeChild(link);
       }, 100);
@@ -164,6 +127,45 @@ export function ReferencesDropdown({ references, getIdentityPoolCredentials }) {
       alert(`Unable to access document: ${error.message}`);
     } finally {
       setDownloadingIndex(null);
+    }
+  };
+
+  const getPresignedUrl = async (ref, getIdentityPoolCredentials) => {
+    try {
+      const region = window.sessionStorage.getItem('REGION') || 'us-east-1';
+      const s3Key = ref.key;
+      const s3Bucket = ref.bucket;
+
+      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+      const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+
+      const credentials = await getIdentityPoolCredentials();
+      if (!credentials) {
+        throw new Error('Failed to get AWS credentials');
+      }
+
+      const contentType = getContentType(s3Key);
+      console.log('Content type:', contentType);
+
+      const s3Client = new S3Client({
+        region,
+        credentials,
+        ResponseContentDisposition: `inline; filename="${s3Key}"`,
+        ResponseContentType: contentType,
+      });
+
+      const command = new GetObjectCommand({
+        Bucket: s3Bucket,
+        Key: s3Key,
+      });
+
+      const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+      console.log('Original S3 URL:', ref.originalRef);
+      console.log('Generated Pre-signed URL:', signedUrl);
+      return signedUrl;
+    } catch (error) {
+      console.error('Error getting presigned URL:', error);
+      return null;
     }
   };
 
@@ -220,4 +222,6 @@ export function ReferencesDropdown({ references, getIdentityPoolCredentials }) {
       </Collapse>
     </div>
   );
-}
+};
+
+export { ChatReferencesDropdown };

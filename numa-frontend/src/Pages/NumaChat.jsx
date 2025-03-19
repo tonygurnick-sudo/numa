@@ -12,7 +12,8 @@ import { ChatFileUpload } from '../Components/ChatFileUpload';
 import { MarkdownContent } from '../Components/MarkdownContent';
 import { prepareConversationHistoryForBedrock, MAX_DYNAMO_MESSAGES } from '../utils/bedrockMessageHistoryUtils';
 import { ChatInput } from '../Components/ChatInput';
-import { ReferencesDropdown } from '../utils/chatUtils';
+import { ChatReferencesDropdown } from '../Components/ChatReferencesDropdown';
+
 import numaIcon from '../assets/images/numa-logo.svg';
 
 const NumaChat = () => {
@@ -644,7 +645,7 @@ const NumaChat = () => {
                           <MarkdownContent content={message.content} />
                           {/* If there are references, show a dropdown */}
                           {message.role === 'assistant' && message.references?.length > 0 && (
-                            <ReferencesDropdown
+                            <ChatReferencesDropdown
                               references={message.references}
                               getIdentityPoolCredentials={getIdentityPoolCredentials}
                             />
