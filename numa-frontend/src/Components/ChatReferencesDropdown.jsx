@@ -13,8 +13,15 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
     const processReferences = async () => {
       if (!references || references.length === 0) return;
 
+      const uniqueRefs = new Set();
+
       const processed = await Promise.all(
         references.map(async (ref) => {
+          if (uniqueRefs.has(ref)) {
+            return null; // Skip duplicate references
+          }
+          uniqueRefs.add(ref);
+
           // Check if it's an S3 URI
           if (ref.startsWith('s3://')) {
             try {
@@ -90,11 +97,11 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
           };
         }),
       );
-      setProcessedRefs(processed);
+      setProcessedRefs(processed.filter(Boolean));
     };
 
     processReferences();
-  }, [references, getIdentityPoolCredentials]);
+  }, [references]);
 
   // Function to handle document access using invisible link approach with pre-signed URLs
   const handleDocumentAccess = async (ref, index) => {
