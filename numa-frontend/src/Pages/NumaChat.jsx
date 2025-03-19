@@ -56,6 +56,52 @@ const NumaChat = () => {
   const TODAY = new Date();
   const SYSTEM_MESSAGE = `You are an artificial intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data sources, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorporate other bold and italic styling within your outputs when appropriate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with markdown formatting.\n- Similarly, For any document, report, email, analysis, or other exportable content you generate that a user may want to download or copy (except code), please start it with the following <!--BEGIN_DOC title="SOME TITLE HERE"--> (where you infer the title when writing the document), and end it with<!--END_DOC-->. This will help me identify documents in post processing using regex\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like "Could you provide more details?" or "What specific aspect would you like to focus on?"\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
 
+  /**
+   * parseChunkWithoutDocComments(chunk, docStripState)
+   * - This function is used to strip comments from the assistant response.
+   * - Removes everything from <!-- ... --> while preserving newlines/other text.
+   * - Replace the comment with '---' for nicer display of the document.
+   * - Returns the stripped text.
+   * - If a comment tag is split across chunk boundaries, it uses docStripState.leftover
+   *   to handle partial tags in the next chunk.
+   */
+  function parseChunkWithoutDocComments(chunk, docStripState) {
+    // Combine leftover from previous chunk with the current chunk
+    let text = docStripState.leftover + chunk;
+    let output = '';
+    let i = 0;
+
+    while (i < text.length) {
+      // Find the start of a comment
+      const startIndex = text.indexOf('<!--', i);
+      if (startIndex === -1) {
+        // No more comments in this chunk
+        output += text.slice(i);
+        i = text.length;
+      } else {
+        // Add text before the comment to output
+        output += text.slice(i, startIndex);
+
+        // Find the end of the comment
+        const closeIndex = text.indexOf('-->', startIndex);
+        if (closeIndex === -1) {
+          // Comment is incomplete in this chunk, save it for the next chunk
+          docStripState.leftover = text.slice(startIndex);
+          return output;
+        } else {
+          // Replace the comment with '---'
+          output += '---';
+          // Skip past the end of the comment
+          i = closeIndex + 3; // jump past -->
+        }
+      }
+    }
+
+    // Clear leftover since all comments are processed
+    docStripState.leftover = '';
+    return output;
+  }
+
   // Ref for input textarea
   const inputRef = useRef(null);
 
