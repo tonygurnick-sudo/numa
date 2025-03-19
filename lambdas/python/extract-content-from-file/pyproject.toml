@@ -35,7 +35,7 @@ python-docx = "^1.1.2"
 boto3-stubs = "1.37.15"
 mypy = "1.15.0"
 pylint = "3.3.5"
-pyright = "1.1.396"
+pyright = "1.1.397"
 openpyxl-stubs = "^0.1.25"
 
 [tool.poetry.requires-plugins]
