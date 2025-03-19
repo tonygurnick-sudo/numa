@@ -120,7 +120,6 @@ const NumaChat = () => {
 
   // 1) A function that ensures we have a conversation (creates one if needed).
   const createNewConversationIfNeeded = async (initialText = '') => {
-    console.log('Creating new conversation with initial text:', initialText);
     if (conversationId) return conversationId; // Already have one
 
     const newId = `${sub || 'anonymous'}_${Date.now()}`;
@@ -205,7 +204,6 @@ const NumaChat = () => {
 
         try {
           const dsResponse = await qBusinessClient.send(dsCommand);
-          console.log('Q data sources response:', dsResponse);
 
           if (dsResponse.relevantContent && dsResponse.relevantContent.length > 0) {
             // Build knowledge text
@@ -265,7 +263,6 @@ const NumaChat = () => {
         conversationHistory,
         getIdentityPoolCredentials,
       );
-      console.log('bedrockMessages:', JSON.stringify(bedrockMessages, null, 2));
 
       // Validate message format
       const validatedMessages = bedrockMessages.map((msg) => {
@@ -295,7 +292,6 @@ const NumaChat = () => {
         system: [{ text: SYSTEM_MESSAGE }],
         inferenceConfig: { maxTokens: 4000, temperature: 0.1 },
       };
-      console.log('Converse Input:', JSON.stringify(converseInput, null, 2));
 
       const converseCommand = new ConverseStreamCommand(converseInput);
       let response;
@@ -309,7 +305,6 @@ const NumaChat = () => {
           break;
         } catch (err) {
           if (err.name === 'TypeError' && retryCount < MAX_RETRIES - 1) {
-            console.log(`Retry attempt ${retryCount + 1} after error:`, err);
             await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
             retryCount++;
             continue;
@@ -329,7 +324,6 @@ const NumaChat = () => {
 
       for await (const event of response.stream) {
         if (stopGenerationRef.current) {
-          console.log('Generation stopped by user.');
           break;
         }
 
@@ -373,10 +367,9 @@ const NumaChat = () => {
         }
       }
 
-      console.log('Bedrock Response:', rawAssistantText);
-
       // Remove 'streaming' status
       setButtonStatus('idle');
+
       if (tokenUsage) {
         console.log('Token Usage:', tokenUsage);
       }

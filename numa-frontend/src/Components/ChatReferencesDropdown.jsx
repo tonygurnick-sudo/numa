@@ -90,7 +90,6 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
           };
         }),
       );
-      console.log('Processed references:', processed);
       setProcessedRefs(processed);
     };
 
@@ -145,7 +144,6 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
       }
 
       const contentType = getContentType(s3Key);
-      console.log('Content type:', contentType);
 
       const s3Client = new S3Client({
         region,
@@ -160,8 +158,7 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
       });
 
       const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-      console.log('Original S3 URL:', ref.originalRef);
-      console.log('Generated Pre-signed URL:', signedUrl);
+
       return signedUrl;
     } catch (error) {
       console.error('Error getting presigned URL:', error);
