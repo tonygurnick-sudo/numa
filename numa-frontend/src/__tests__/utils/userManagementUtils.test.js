@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { UserManagementUtils } from '../userManagementUtils';
+import { UserManagementUtils } from '../../utils/userManagementUtils';
 
 // Create mock functions
 const mockSend = vi.fn();
