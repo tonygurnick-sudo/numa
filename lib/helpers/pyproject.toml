@@ -24,9 +24,9 @@ packages = [
 python = "~3.13.0"
 
 aws-lambda-powertools = "3.8.0"
-structlog = "25.1.0"
+structlog = "25.2.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.15.0"
 pylint = "3.3.5"
-pyright = "1.1.396"
+pyright = "1.1.397"
