@@ -1,3 +1,11 @@
+"""
+Web Search Proxy Lambda Function.
+
+This Lambda provides an API for performing web searches and retrieving content from web pages.
+It accepts a search query and optional conversation context to optimize the search,
+then returns search results with content snippets from the top matching pages.
+"""
+
 import json
 import time
 
@@ -15,6 +23,16 @@ logger = structlog.get_logger()
 
 
 def google_search(query: str, max_results: int = 5) -> list:
+    """
+    Perform a Google search and return a list of URLs.
+
+    Args:
+        query: The search query string
+        max_results: Maximum number of results to return (default: 5)
+
+    Returns:
+        List of URLs from search results
+    """
     try:
         urls = list(search(query, num_results=max_results, lang="en"))
         logger.info("Google search completed", urls_count=len(urls))
@@ -25,6 +43,15 @@ def google_search(query: str, max_results: int = 5) -> list:
 
 
 def scrape_page(url: str) -> dict:
+    """
+    Scrape content from a web page.
+
+    Args:
+        url: URL of the page to scrape
+
+    Returns:
+        Dictionary containing title, URL, and content snippet
+    """
     try:
         response = httpx.get(url, timeout=10)
         if response.status_code == 200:
@@ -35,17 +62,26 @@ def scrape_page(url: str) -> dict:
             text = soup.get_text(separator=" ", strip=True)
             snippet = text[:5000] if text else ""
             return {"title": title, "url": url, "snippet": snippet}
-        else:
-            logger.warning(
-                "Non-200 status code", url=url, status_code=response.status_code
-            )
-            return {"title": "", "url": url, "snippet": ""}
+
+        # Log warning for non-200 responses
+        logger.warning("Non-200 status code", url=url, status_code=response.status_code)
+        return {"title": "", "url": url, "snippet": ""}
     except Exception as e:
         logger.error("Error scraping page", url=url, error=str(e))
         return {"title": "", "url": url, "snippet": ""}
 
 
 def rewrite_query_with_context(query: str, context: str) -> str:
+    """
+    Rewrite a search query using conversation context to improve search relevance.
+
+    Args:
+        query: Original search query
+        context: Conversation context to use for query refinement
+
+    Returns:
+        Rewritten query, or original query if rewriting fails
+    """
     try:
         prompt = REWRITE_QUERY_PROMPT.format(context=context, query=query)
 
@@ -79,6 +115,16 @@ def rewrite_query_with_context(query: str, context: str) -> str:
 
 
 def lambda_handler(event: dict, context: LambdaContext) -> dict:
+    """
+    Lambda handler function for the web search proxy.
+
+    Args:
+        event: Lambda event object
+        context: Lambda context object
+
+    Returns:
+        API Gateway response with search results
+    """
     helpers.setup_step_function_lambda_logging(event, context)
 
     headers = {

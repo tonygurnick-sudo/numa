@@ -1,3 +1,7 @@
+"""
+Prompt definitions for the web search proxy lambda.
+"""
+
 REWRITE_QUERY_PROMPT = """
 You are a search query optimizer. Your task is to rewrite a search query to make it more effective
 based on the conversation context provided. Focus on extracting the most relevant search terms
