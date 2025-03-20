@@ -52,7 +52,7 @@ __metadata:
     "@aws-sdk/client-s3": "npm:^3.738.0"
     "@aws-sdk/credential-providers": "npm:^3.670.0"
     "@aws-sdk/s3-request-presigner": "npm:^3.738.0"
-    "@aws-sdk/util-dynamodb": "npm:3.758.0"
+    "@aws-sdk/util-dynamodb": "npm:3.767.0"
     "@eslint/js": "npm:^9.0.0"
     "@honeycombio/opentelemetry-web": "npm:^0.13.0"
     "@mdxeditor/editor": "npm:^3.19.3"
@@ -1470,14 +1470,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aws-sdk/util-dynamodb@npm:3.758.0":
-  version: 3.758.0
-  resolution: "@aws-sdk/util-dynamodb@npm:3.758.0"
+"@aws-sdk/util-dynamodb@npm:3.767.0":
+  version: 3.767.0
+  resolution: "@aws-sdk/util-dynamodb@npm:3.767.0"
   dependencies:
     tslib: "npm:^2.6.2"
   peerDependencies:
-    "@aws-sdk/client-dynamodb": ^3.758.0
-  checksum: 10c0/6ba50366ca054d7a0264dc1dbf814249df35131221c0fb82a051891bce476cfcc8f19f009c27e80fd3511d4c89068ba24223757e67879a6d6d7a02247d2ac2d8
+    "@aws-sdk/client-dynamodb": ^3.767.0
+  checksum: 10c0/cb15941b83e0249c2d191bfc4d5d85cd6761485658b3e04730353d14a742671aaf252cbce088e21bf493ac2650a75731337de1fb8257e520525e870e6e343917
   languageName: node
   linkType: hard
 
