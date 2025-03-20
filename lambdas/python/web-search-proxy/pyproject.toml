@@ -22,6 +22,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "~3.13.0"
+
 httpx = "^0.28.1"
 structlog = "^25.2.0"
 aws-lambda-powertools = "3.8.0"
@@ -32,10 +33,9 @@ bedrock = {path = "../../../lib/bedrock", develop = true}
 helpers = {path = "../../../lib/helpers", develop = true}
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
-pytest-mock = "^3.11.1"
-pytest-cov = "^4.1.0"
-pytest-env = "^1.0.1"
+mypy = "1.15.0"
+pylint = "3.3.5"
+pyright = "1.1.397"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.9.0"
@@ -44,13 +44,3 @@ poetry-plugin-lambda-build = ">=1.0.7"
 [tool.poetry-plugin-lambda-build]
 package-artifact-path = "lambda_function.zip"
 without = "dev"
-
-
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = "test_*.py"
-addopts = "--cov=. --cov-report=term-missing"
-env = [
-    "LOG_LEVEL=INFO",
-]
