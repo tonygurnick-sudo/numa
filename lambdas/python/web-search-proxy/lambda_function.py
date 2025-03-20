@@ -1,14 +1,14 @@
 import json
 import time
 
-import bedrock
-import helpers
 import httpx
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from bs4 import BeautifulSoup
 from googlesearch import search
 
+import bedrock
+import helpers
 from prompts import REWRITE_QUERY_PROMPT
 
 logger = structlog.get_logger()
@@ -29,12 +29,16 @@ def scrape_page(url: str) -> dict:
         response = httpx.get(url, timeout=10)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
-            title = soup.title.string.strip() if soup.title and soup.title.string else ""
+            title = (
+                soup.title.string.strip() if soup.title and soup.title.string else ""
+            )
             text = soup.get_text(separator=" ", strip=True)
             snippet = text[:5000] if text else ""
             return {"title": title, "url": url, "snippet": snippet}
         else:
-            logger.warning("Non-200 status code", url=url, status_code=response.status_code)
+            logger.warning(
+                "Non-200 status code", url=url, status_code=response.status_code
+            )
             return {"title": "", "url": url, "snippet": ""}
     except Exception as e:
         logger.error("Error scraping page", url=url, error=str(e))
@@ -134,7 +138,11 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
             "timestamp": int(time.time()),
         }
 
-        return {"statusCode": 200, "headers": headers, "body": json.dumps(response_body)}
+        return {
+            "statusCode": 200,
+            "headers": headers,
+            "body": json.dumps(response_body),
+        }
 
     except Exception:
         logger.exception("Error processing request")
