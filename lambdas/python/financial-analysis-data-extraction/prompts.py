@@ -14,5 +14,5 @@ Here is the document:
 {document}
 -----------------------------------------
 
-Please process and extract the financial data from the document. Please pay close attention to detail and extract as many fields as possible with as much information as you can find. If you are unsure about a field, still provide the information you can find. Fields must be numeric/number values. If you are unable to find any financial data, please provide "none" stating that response stating that no financial data was found in the document.
+Please process and extract the financial data from the document. Please pay close attention to detail and extract as many fields as possible with as much information as you can find. If you are unsure about a field, still provide the information you can find. Fields must be numeric/number values. Extract real amounts, taking into account indicators like "in thousands", if present. If you are unable to find any financial data, please provide "none" stating that response stating that no financial data was found in the document.
 """
