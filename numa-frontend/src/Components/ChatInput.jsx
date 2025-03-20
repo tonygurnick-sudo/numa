@@ -42,7 +42,7 @@ const ChatInput = ({
   };
 
   return (
-    <div className="chat-input-container" style={{ marginTop: '1px', marginBottom: '10px' }}>
+    <div className="chat-input-container" style={{ marginTop: '1px' }}>
       <Form onSubmit={handleSubmit} className="d-flex flex-column">
         {/* Row 1: Input Box */}
         <Form.Control
