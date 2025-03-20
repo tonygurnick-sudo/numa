@@ -1,30 +1,30 @@
 import json
-import logging
-import os
 import time
-from typing import Any, Dict, List
 
 import bedrock
+import helpers
 import httpx
+import structlog
+from aws_lambda_powertools.utilities.typing import LambdaContext
 from bs4 import BeautifulSoup
 from googlesearch import search
 
-log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
-logging.basicConfig(level=getattr(logging, log_level))
-logger = logging.getLogger("web-search-proxy")
+from prompts import REWRITE_QUERY_PROMPT
+
+logger = structlog.get_logger()
 
 
-def google_search(query: str, max_results: int = 5) -> List[str]:
+def google_search(query: str, max_results: int = 5) -> list:
     try:
         urls = list(search(query, num_results=max_results, lang="en"))
-        logger.info(f"Google search returned URLs: {urls}")
+        logger.info("Google search completed", urls_count=len(urls))
         return urls
     except Exception as e:
-        logger.error(f"Google search error: {str(e)}")
+        logger.error("Google search error", error=str(e))
         return []
 
 
-def scrape_page(url: str) -> Dict[str, str]:
+def scrape_page(url: str) -> dict:
     try:
         response = httpx.get(url, timeout=10)
         if response.status_code == 200:
@@ -34,28 +34,16 @@ def scrape_page(url: str) -> Dict[str, str]:
             snippet = text[:5000] if text else ""
             return {"title": title, "url": url, "snippet": snippet}
         else:
-            logger.warning(f"Non-200 status code for {url}: {response.status_code}")
+            logger.warning("Non-200 status code", url=url, status_code=response.status_code)
             return {"title": "", "url": url, "snippet": ""}
     except Exception as e:
-        logger.error(f"Error scraping {url}: {str(e)}")
+        logger.error("Error scraping page", url=url, error=str(e))
         return {"title": "", "url": url, "snippet": ""}
 
 
 def rewrite_query_with_context(query: str, context: str) -> str:
     try:
-        prompt = f"""
-        You are a search query optimizer. Your task is to rewrite a search query to make it more effective
-        based on the conversation context provided. Focus on extracting the most relevant search terms
-        and adding context that would improve search results.
-
-        Conversation context:
-        {context}
-
-        Original query:
-        {query}
-
-        Return only the rewritten query without explanation. Keep it concise (under 100 characters if possible).
-        """
+        prompt = REWRITE_QUERY_PROMPT.format(context=context, query=query)
 
         # Create model and run query
         model = bedrock.BedrockClaude3Model(
@@ -73,21 +61,21 @@ def rewrite_query_with_context(query: str, context: str) -> str:
 
             # Return original query if rewriting fails or produces empty result
             if not rewritten_query:
-                logger.warning("Query rewriting returned empty result, using original query")
+                logger.warning("Query rewriting returned empty result")
                 return query
 
-            logger.info(f"Original query: '{query}' -> Rewritten: '{rewritten_query}'")
+            logger.info("Query rewritten", original=query, rewritten=rewritten_query)
             return rewritten_query
 
         return query
 
     except Exception as e:
-        logger.error(f"Error rewriting query: {str(e)}")
+        logger.error("Error rewriting query", error=str(e))
         return query
 
 
-def lambda_handler(event, context):
-    logger.info(f"Received event: {json.dumps(event)}")
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
+    helpers.setup_step_function_lambda_logging(event, context)
 
     headers = {
         "Access-Control-Allow-Origin": "*",
@@ -103,11 +91,7 @@ def lambda_handler(event, context):
         params = event.get("queryStringParameters", {}) or {}
         query = params.get("query", "")
         max_results_str = params.get("max_results", "5")
-
-        # Get conversation context if provided
         conversation_context = params.get("context", "")
-
-        logger.info(f"Original search query: {query}")
 
         if not query:
             return {
@@ -124,9 +108,7 @@ def lambda_handler(event, context):
         # If we have context, rewrite the query
         search_query = query
         if conversation_context:
-            logger.info(f"Conversation context provided, length: {len(conversation_context)}")
             search_query = rewrite_query_with_context(query, conversation_context)
-            logger.info(f"Rewritten query: {search_query}")
 
         try:
             max_results = int(max_results_str)
@@ -152,13 +134,12 @@ def lambda_handler(event, context):
             "timestamp": int(time.time()),
         }
 
-        logger.info(f"Returning {len(results)} results")
         return {"statusCode": 200, "headers": headers, "body": json.dumps(response_body)}
 
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
+    except Exception:
+        logger.exception("Error processing request")
         return {
             "statusCode": 500,
             "headers": headers,
-            "body": json.dumps({"error": "Internal server error", "message": str(e)}),
+            "body": json.dumps({"error": "Internal server error"}),
         }
