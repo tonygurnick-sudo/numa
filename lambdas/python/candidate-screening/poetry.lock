@@ -539,14 +539,14 @@ testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
 name = "poetry-plugin-lambda-build"
-version = "1.0.8"
+version = "2.0.0"
 description = "The plugin for poetry that allows you to build zip packages suited for serverless deployment like AWS Lambda, Google App Engine, Azure App Service, and more..."
 optional = false
-python-versions = "<4.0,>=3.8"
+python-versions = "<4.0,>=3.9"
 groups = ["dev"]
 files = [
-    {file = "poetry_plugin_lambda_build-1.0.8-py3-none-any.whl", hash = "sha256:e9d12a00761d871b6371cddd181709112dd3b0e3e279c7ae8391a6ae16d722d7"},
-    {file = "poetry_plugin_lambda_build-1.0.8.tar.gz", hash = "sha256:71b47b44e56776c5a3b9015b2ced853474863da65e731bcfa37e87a0ca82b86c"},
+    {file = "poetry_plugin_lambda_build-2.0.0-py3-none-any.whl", hash = "sha256:76ffdca5191cf3b5e06af02aac75eca8868b32bbc42d78e673f58de74d29f473"},
+    {file = "poetry_plugin_lambda_build-2.0.0.tar.gz", hash = "sha256:0efe633deb35d22226f6a49dc8e70a34a9d1034243b5e3bb60e18dc0a55ad0f0"},
 ]
 
 [package.dependencies]
@@ -899,4 +899,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.13.0"
-content-hash = "2e0a15612e3365e20ab104282c314150bc068cb4e13f3708c25cc1b6a3e36d54"
+content-hash = "2e2efd8f75eec1a29abcf84e14deb353448d3cd386f17b5c33f066487a6023a0"

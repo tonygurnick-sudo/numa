@@ -33,7 +33,7 @@ structlog = "25.2.0"
 mypy = "1.15.0"
 pylint = "3.3.6"
 pyright = "1.1.397"
-poetry-plugin-lambda-build = "^1.0.7"
+poetry-plugin-lambda-build = "^2.0.0"
 pre-commit = "^4.1.0"
 pytest = "^8.3.4"
 
