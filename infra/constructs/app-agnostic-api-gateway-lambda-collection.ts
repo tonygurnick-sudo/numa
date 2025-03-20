@@ -39,16 +39,16 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: {
         variables: {
           LOG_LEVEL: 'INFO',
-          ALLOWED_ORIGIN: '*'
+          ALLOWED_ORIGIN: '*',
         },
       },
       timeout: 45,
       additionalPolicyStatements: [
         {
-          effect: "Allow",
+          effect: 'Allow',
           actions: ['bedrock:InvokeModel'],
           resources: ['*'],
-        }
+        },
       ],
     });
   }

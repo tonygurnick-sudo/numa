@@ -232,7 +232,6 @@ const NumaChat = () => {
 
       // We'll store references from data source queries
       let dsReferences = [];
-      let finalInputText = '';
 
       // If web search is enabled, perform search first and enhance user message
       if (webSearchEnabled) {
@@ -242,9 +241,7 @@ const NumaChat = () => {
         try {
           // Get recent conversation context
           const recentMessages = messages.slice(-6); // Get last 6 messages
-          const contextString = recentMessages
-            .map(msg => `${msg.role}: ${msg.content}`)
-            .join('\n');
+          const contextString = recentMessages.map((msg) => `${msg.role}: ${msg.content}`).join('\n');
 
           // Call web search Lambda with context
           const API_GATEWAY_URL = window.sessionStorage.getItem('API_ENDPOINT') || '/api';
@@ -254,7 +251,7 @@ const NumaChat = () => {
           console.log('Automatically searching for:', originalUserMessage, 'with context');
           const searchResponse = await fetch(searchUrl, {
             method: 'GET',
-            cache: 'no-cache'
+            cache: 'no-cache',
           });
 
           if (searchResponse.ok) {
@@ -409,8 +406,7 @@ const NumaChat = () => {
       if (webSearchEnabled && enhancedUserMessage !== originalUserMessage) {
         // Find and replace the last user message with the enhanced version
         for (let i = conversationHistory.length - 1; i >= 0; i--) {
-          if (conversationHistory[i].role === 'user' &&
-              conversationHistory[i].content === originalUserMessage) {
+          if (conversationHistory[i].role === 'user' && conversationHistory[i].content === originalUserMessage) {
             console.log('Replacing user message with enhanced version containing search results');
             conversationHistory[i].content = enhancedUserMessage;
             break;

@@ -99,7 +99,6 @@ const ChatInput = ({
               <Search size={25} />
               {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}
             </Button>
-
           </div>
           <div className="right-controls">
             {buttonStatus === 'streaming' ? (

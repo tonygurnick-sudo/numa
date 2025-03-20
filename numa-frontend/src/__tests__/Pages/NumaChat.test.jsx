@@ -53,11 +53,31 @@ vi.mock('../../Components/ChatMessages', () => ({
 }));
 // Updated ChatInput mock now forwards onChange events to setInputMessage.
 vi.mock('../../Components/ChatInput', () => ({
-  ChatInput: ({ inputMessage, setInputMessage, handleSubmit, isMobile }) => (
-    <div data-testid="chat-input" data-is-mobile={isMobile}>
+  ChatInput: ({
+    inputMessage,
+    setInputMessage,
+    handleSubmit,
+    isMobile,
+    queryDataSources,
+    setQueryDataSources,
+    webSearchEnabled,
+    setWebSearchEnabled,
+  }) => (
+    <div
+      data-testid="chat-input"
+      data-is-mobile={isMobile}
+      data-query-datasources={queryDataSources}
+      data-web-search-enabled={webSearchEnabled}
+    >
       <input value={inputMessage} onChange={(e) => setInputMessage(e.target.value)} data-testid="chat-input-field" />
       <button onClick={handleSubmit} data-testid="chat-submit">
         Submit
+      </button>
+      <button onClick={() => setQueryDataSources(!queryDataSources)} data-testid="toggle-datasources">
+        Toggle Data Sources
+      </button>
+      <button onClick={() => setWebSearchEnabled(!webSearchEnabled)} data-testid="toggle-websearch">
+        Toggle Web Search
       </button>
     </div>
   ),
@@ -136,7 +156,7 @@ describe('NumaChat Component', () => {
     expect(screen.getByTestId('data-sources-list')).toBeInTheDocument();
     expect(screen.getByTestId('chat-input')).toBeInTheDocument();
     expect(screen.getByTestId('resizable-split-view')).toBeInTheDocument();
-    expect(screen.getByText(/click the/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/click the/i)[0]).toBeInTheDocument(); // Get first "click the" text
   });
 
   it('clicking New Chat button resets conversation', async () => {
