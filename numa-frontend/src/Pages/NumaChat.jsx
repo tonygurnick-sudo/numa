@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Button, Container, Row, Col, Spinner } from 'react-bootstrap';
+import { Button, Container, Row, Col } from 'react-bootstrap';
 import { ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import { SearchRelevantContentCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
@@ -9,25 +9,24 @@ import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
 import { DataSourcesList } from '../Components/DataSourcesList';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
-import { MarkdownContent } from '../Components/MarkdownContent';
 import { prepareConversationHistoryForBedrock, MAX_DYNAMO_MESSAGES } from '../utils/bedrockMessageHistoryUtils';
 import { ChatInput } from '../Components/ChatInput';
-import { ChatReferencesDropdown } from '../Components/ChatReferencesDropdown';
-
-import numaIcon from '../assets/images/numa-logo.svg';
+import { DocumentPanel } from '../Components/DocumentPanel';
+import { ChatMessages } from '../Components/ChatMessages';
+import ResizableSplitView from '../Components/ResizableSplitView';
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [conversationId, setConversationId] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [queryDataSources, setQueryDataSources] = useState(false);
   const [buttonStatus, setButtonStatus] = useState('idle');
   const [isFileProcessing, setIsFileProcessing] = useState(false);
+  const [inlineDocument, setInlineDocument] = useState(null);
+  const [showSplitView, setShowSplitView] = useState(false);
 
-  // Refs & contexts
   const stopGenerationRef = useRef(false);
   const messageEndRef = useRef(null);
   const {
@@ -54,7 +53,7 @@ const NumaChat = () => {
   const Q_RETRIEVER_ID = window.sessionStorage.getItem('Q_RETRIEVER_ID');
   const MAX_DATA_SOURCE_ITEMS = 6;
   const TODAY = new Date();
-  const SYSTEM_MESSAGE = `You are an artificial intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data sources, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorporate other bold and italic styling within your outputs when appropriate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with markdown formatting.\n- Similarly, For any document, report, email, analysis, or other exportable content you generate that a user may want to download or copy (except code), please start it with the following <!--BEGIN_DOC title="SOME TITLE HERE"--> (where you infer the title when writing the document), and end it with<!--END_DOC-->. This will help me identify documents in post processing using regex\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like "Could you provide more details?" or "What specific aspect would you like to focus on?"\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
+  const SYSTEM_MESSAGE = `You are an artificial intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data sources, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorporate other bold and italic styling within your outputs when appropriate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with markdown formatting.\n- Similarly, For any document, report, email, analysis, or other exportable content you generate that a user may want to download or copy (except code), please start it with the following '<!--BEGIN_DOC title="SOME TITLE HERE"-->' (where you infer the title when writing the document), and end it with '<!--END_DOC-->'. This will help me identify documents in post processing using regex looking for the opening '<--' and closing '-->'\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like "Could you provide more details?" or "What specific aspect would you like to focus on?"\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
 
   /**
    * parseChunkWithoutDocComments(chunk, docStripState)
@@ -102,6 +101,21 @@ const NumaChat = () => {
     return output;
   }
 
+  /**
+   * Extract doc info from raw text. If a doc block is found, returns an object:
+   * { docTitle, docContent }, else null.
+   */
+  function extractSingleDocBlock(rawText) {
+    const docRegex = /<!--BEGIN_DOC title="(.*?)"-->([\s\S]*?)<!--END_DOC-->/;
+    const match = rawText.match(docRegex);
+    if (match) {
+      return {
+        docTitle: match[1],
+        docContent: match[2].trim(),
+      };
+    }
+    return null;
+  }
   // Ref for input textarea
   const inputRef = useRef(null);
 
@@ -158,13 +172,14 @@ const NumaChat = () => {
     setUploadedFiles([]);
     setInputMessage('');
     setConversationId(null);
+    setInlineDocument(null);
 
     // Add an initial greeting from the assistant
     const greeting = { role: 'assistant', content: 'How can I help you today?' };
     setMessages([greeting]);
   };
 
-  // 1) A function that ensures we have a conversation (creates one if needed).
+  // A function that ensures we have a conversation (creates one if needed).
   const createNewConversationIfNeeded = async (initialText = '') => {
     if (conversationId) return conversationId; // Already have one
 
@@ -184,7 +199,6 @@ const NumaChat = () => {
         content: 'New conversation started',
       });
 
-      // Optionally store an "assistant greeting"
       await numaChatDynamoUtils.addMessage({
         conversationId: newId,
         userId: sub,
@@ -250,6 +264,7 @@ const NumaChat = () => {
 
         try {
           const dsResponse = await qBusinessClient.send(dsCommand);
+          console.log('Q data sources response:', dsResponse);
 
           if (dsResponse.relevantContent && dsResponse.relevantContent.length > 0) {
             // Build knowledge text
@@ -320,6 +335,7 @@ const NumaChat = () => {
         }
         return msg;
       });
+
       const validateMessage = (message) => {
         if (!message.role || !Array.isArray(message.content) || message.content.length === 0) {
           console.error('Invalid message format:', message);
@@ -338,6 +354,7 @@ const NumaChat = () => {
         system: [{ text: SYSTEM_MESSAGE }],
         inferenceConfig: { maxTokens: 4000, temperature: 0.1 },
       };
+      console.log('Converse Input:', JSON.stringify(converseInput, null, 2));
 
       const converseCommand = new ConverseStreamCommand(converseInput);
       let response;
@@ -351,6 +368,7 @@ const NumaChat = () => {
           break;
         } catch (err) {
           if (err.name === 'TypeError' && retryCount < MAX_RETRIES - 1) {
+            console.log(`Retry attempt ${retryCount + 1} after error:`, err);
             await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
             retryCount++;
             continue;
@@ -370,6 +388,7 @@ const NumaChat = () => {
 
       for await (const event of response.stream) {
         if (stopGenerationRef.current) {
+          console.log('Generation stopped by user.');
           break;
         }
 
@@ -412,13 +431,16 @@ const NumaChat = () => {
           });
         }
       }
+      // Log the raw assistant text
+      console.log('Bedrock Response:', rawAssistantText);
 
-      // Remove 'streaming' status
-      setButtonStatus('idle');
-
+      // Log token usage
       if (tokenUsage) {
         console.log('Token Usage:', tokenUsage);
       }
+
+      // Remove 'streaming' status
+      setButtonStatus('idle');
 
       // 7) Store the final assistant response WITH references in Dynamo
       const assistantMessagePayload = {
@@ -429,7 +451,7 @@ const NumaChat = () => {
         content: rawAssistantText,
       };
 
-      // If we have references, attach them before storing in Dynamo
+      // 8) If we have references, attach them before storing in Dynamo
       if (dsReferences.length > 0) {
         assistantMessagePayload.references = dsReferences;
       }
@@ -461,8 +483,27 @@ const NumaChat = () => {
         });
       }
 
+      // 9) Extract doc from raw text
+      const docBlock = extractSingleDocBlock(rawAssistantText);
+      if (docBlock) {
+        // Always update the inlineDocument so it displays the latest generated doc if opened
+        setInlineDocument({ title: docBlock.docTitle, content: docBlock.docContent });
+
+        // attach doc to the last assistant message
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIdx = updated.length - 1;
+          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+            updated[lastIdx].docTitle = docBlock.docTitle;
+            updated[lastIdx].docContent = docBlock.docContent;
+          }
+          return updated;
+        });
+      }
+
       // Refresh the sidebar
       refreshSidebar();
+      setButtonStatus('idle');
 
       // Clear user input
       setUploadedFiles([]);
@@ -487,8 +528,7 @@ const NumaChat = () => {
     if (!numaChatDynamoUtils) return;
     try {
       let retryCount = 0;
-      let conversationHistory;
-
+      let conversationHistory = [];
       while (retryCount < 2) {
         try {
           conversationHistory = await numaChatDynamoUtils.queryConversations(
@@ -499,7 +539,6 @@ const NumaChat = () => {
           break;
         } catch (error) {
           if (error.message.includes('ExpiredTokenException') && retryCount === 0) {
-            console.log('Token expired while loading conversation. Refreshing credentials...');
             await getAccessToken(true);
             retryCount++;
           } else {
@@ -515,14 +554,19 @@ const NumaChat = () => {
       const chatMessages = conversationHistory.map((item) => {
         const baseMsg = {
           role: item.role,
-          content: item.content,
-          // If your DB item has a 'references' field, pull it in
+          content: item.content || '',
           references: item.references || [],
         };
 
         // Replace doc tags when loading conversation history
         if (baseMsg.content) {
           baseMsg.content = baseMsg.content.replace(/<!--[\s\S]*?-->/g, '---');
+        }
+        // If there's a doc block, parse it
+        const docBlock = extractSingleDocBlock(item.content || '');
+        if (docBlock && baseMsg.role === 'assistant') {
+          baseMsg.docTitle = docBlock.docTitle;
+          baseMsg.docContent = docBlock.docContent;
         }
 
         if (item.message_type === 'file') {
@@ -567,6 +611,14 @@ const NumaChat = () => {
     height: '24px', // Set a fixed height to prevent layout shifts
   };
 
+  // Split view state
+  const [leftFraction, setLeftFraction] = useState(0.99);
+  function handleDocClose() {
+    setShowSplitView(false); // Hide the document panel
+    setLeftFraction(0.99); // Reset the split view to fully collapsed
+    setInlineDocument(null); // Clear the document content
+  }
+
   return (
     <div className="dashboard">
       <Nav />
@@ -593,6 +645,8 @@ const NumaChat = () => {
           />
           {/* Data sources list */}
           <DataSourcesList />
+
+          {/* Main chat content */}
           <div className="flex-grow-1 d-flex">
             <div className="chat-content flex-grow-1 d-flex flex-column">
               {/* Header with chat instructions and New Chat button on the right */}
@@ -607,145 +661,58 @@ const NumaChat = () => {
                 </Button>
               </div>
 
-              {/* Chat messages */}
-              <div className="chat-container">
-                <div
-                  className="chat-messages"
-                  style={{ maxWidth: '100%', overflowX: 'hidden', wordWrap: 'break-word' }}
-                >
-                  {messages.map((message, index) => {
-                    // If assistant with ephemeral status
-                    if (message.role === 'assistant' && message.status) {
-                      if (message.status === 'initializing') {
-                        return (
-                          <div key={index} className="message assistant ephemeral">
-                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                              <img
-                                src={numaIcon}
-                                alt="Numa"
-                                style={{ width: '20px', height: '20px', marginRight: '7px' }}
-                              />
-                              Numa:
-                            </strong>
-                            <div className="message-content d-flex align-items-center">
-                              <Spinner animation="border" size="sm" className="me-2" />
-                              Initializing chat...
-                            </div>
-                          </div>
-                        );
-                      } else if (message.status === 'processingFile') {
-                        return (
-                          <div key={index} className="message assistant ephemeral">
-                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                              <img
-                                src={numaIcon}
-                                alt="Numa"
-                                style={{ width: '20px', height: '20px', marginRight: '7px' }}
-                              />
-                              Numa:
-                            </strong>
-                            <div className="message-content d-flex align-items-center">
-                              <Spinner animation="border" size="sm" className="me-2" />
-                              Processing Upload...
-                            </div>
-                          </div>
-                        );
-                      } else if (message.status === 'querying') {
-                        return (
-                          <div key={index} className="message assistant ephemeral">
-                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                              <img
-                                src={numaIcon}
-                                alt="Numa"
-                                style={{ width: '20px', height: '20px', marginRight: '7px' }}
-                              />
-                              Numa:
-                            </strong>
-                            <div className="message-content d-flex align-items-center" style={loadingIndicatorStyle}>
-                              <Spinner animation="border" size="sm" className="me-2" />
-                              Querying data sources...
-                            </div>
-                          </div>
-                        );
-                      } else if (message.status === 'thinking') {
-                        return (
-                          <div key={index} className="message assistant ephemeral">
-                            <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                              <img
-                                src={numaIcon}
-                                alt="Numa"
-                                style={{ width: '20px', height: '20px', marginRight: '7px' }}
-                              />
-                              Numa:
-                            </strong>
-                            <div className="message-content d-flex align-items-center" style={loadingIndicatorStyle}>
-                              <Spinner animation="border" size="sm" className="me-2" />
-                              Thinking...
-                            </div>
-                          </div>
-                        );
-                      }
-                    }
-
-                    // Otherwise, normal message
-                    return (
-                      <div key={index} className={`message ${message.role}`}>
-                        <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                          {message.role === 'assistant' ? (
-                            <>
-                              <img
-                                src={numaIcon}
-                                alt="Numa"
-                                style={{
-                                  width: '20px',
-                                  height: '20px',
-                                  marginRight: '7px',
-                                  marginBottom: '2px',
-                                  verticalAlign: 'middle',
-                                }}
-                              />
-                              Numa:
-                            </>
-                          ) : message.role === 'user' ? (
-                            'You:'
-                          ) : (
-                            'System:'
-                          )}
-                        </strong>
-                        <div className="message-content markdown-content">
-                          <MarkdownContent content={message.content} />
-                          {/* If there are references, show a dropdown */}
-                          {message.role === 'assistant' && message.references?.length > 0 && (
-                            <ChatReferencesDropdown
-                              references={message.references}
-                              getIdentityPoolCredentials={getIdentityPoolCredentials}
-                            />
-                          )}
-                        </div>
+              <div className="chat-container position-relative" style={{ flex: '1 1 auto' }}>
+                <ResizableSplitView
+                  left={
+                    /* LEFT PANE: chat messages + input */
+                    <div className="chat-left-pane d-flex flex-column h-100">
+                      <div className="chat-messages flex-grow-1 overflow-auto" style={{ overflowY: 'auto' }}>
+                        <ChatMessages
+                          messages={messages}
+                          messageEndRef={messageEndRef}
+                          loadingIndicatorStyle={loadingIndicatorStyle}
+                          onOpenDocument={(docTitle, docContent) => {
+                            setLeftFraction(0.45);
+                            setInlineDocument({ title: docTitle, content: docContent });
+                            setShowSplitView(true);
+                          }}
+                        />
                       </div>
-                    );
-                  })}
-                  <div ref={messageEndRef} />
-                </div>
 
-                {/* Chat input */}
-                <ChatInput
-                  inputMessage={inputMessage}
-                  setInputMessage={setInputMessage}
-                  handleSubmit={handleSubmit}
-                  setShowUploadModal={setShowUploadModal}
-                  buttonStatus={buttonStatus}
-                  handleStopGeneration={handleStopGeneration}
-                  isMobile={isMobile}
-                  queryDataSources={queryDataSources}
-                  setQueryDataSources={setQueryDataSources}
-                  disabled={isFileProcessing}
+                      {/* pinned input at bottom */}
+                      <div style={{ flexShrink: 0, padding: '0.5rem' }}>
+                        <ChatInput
+                          inputMessage={inputMessage}
+                          setInputMessage={setInputMessage}
+                          handleSubmit={handleSubmit}
+                          setShowUploadModal={setShowUploadModal}
+                          buttonStatus={buttonStatus}
+                          handleStopGeneration={handleStopGeneration}
+                          isMobile={isMobile}
+                          queryDataSources={queryDataSources}
+                          setQueryDataSources={setQueryDataSources}
+                          disabled={isFileProcessing}
+                        />
+                      </div>
+                    </div>
+                  }
+                  right={
+                    /* RIGHT PANE: document panel */
+                    showSplitView && inlineDocument ? (
+                      <DocumentPanel documentContent={inlineDocument} onClose={handleDocClose} />
+                    ) : null
+                  }
+                  showRight={inlineDocument && showSplitView}
+                  leftFraction={leftFraction}
+                  onLeftFractionChange={setLeftFraction}
+                  minLeft={200}
+                  minRight={200}
                 />
-                {/* Datasource Tip Message */}
-                <p className="datasource-tip text-center small text-muted">
-                  Click the <i className="bi bi-database"></i> to chat against your data sources.
-                </p>
               </div>
+              {/* Datasource Tip Message */}
+              <p className="datasource-tip text-center small text-muted">
+                Click the <i className="bi bi-database"></i> to chat against your data sources.
+              </p>
             </div>
           </div>
         </div>

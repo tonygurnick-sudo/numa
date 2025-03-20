@@ -330,7 +330,6 @@ label {
 .chat-layout {
   position: relative;
   display: flex;
-  flex-wrap: wrap;
   height: calc(100vh - 80px);
   overflow: hidden;
   width: 100%;
@@ -1544,15 +1543,13 @@ label {
 
   .chat-messages {
     // Added properties:
-    flex-grow: 1;
+    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     word-wrap: break-word;
     max-width: 100%;
     background-color: #f8f9fa;
-    height: 0;
-    padding: 1rem;
-    margin-bottom: 0.5rem;
+    padding: 0.5rem;
   }
 
   .chat-input-container {
@@ -1560,7 +1557,7 @@ label {
     display: flex;
     flex-direction: column;
     padding: 0.5rem;
-    border-top: 1px solid #dee2e6;
+    border: 1px solid #dee2e6;
     background: white;
     border-radius: 25px;
     box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
@@ -2452,5 +2449,103 @@ svg.title-star {
 
   h6 {
     color: var(--color-primary);
+  }
+}
+
+
+/* Document Panel Related Styling */
+.document-panel-container {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow-y: auto;
+  height: 100%;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.07);
+  background-color: #fff;
+
+  @keyframes panelFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .document-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #eaeaea;
+  }
+
+  .document-panel-title {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #333;
+    margin: 0;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .document-panel-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 1rem;
+    font-size: 0.9rem;
+    color: #444;
+    line-height: 1.2;
+  }
+}
+
+.message.assistant.message-with-doc {
+  position: relative;
+  padding-bottom: 40px;
+
+  /* Document Panel Open Bubble */
+  .doc-open-bubble {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    animation: fadeIn 0.3s ease-out;
+
+    /* The clickable button itself */
+    .doc-open-bubble-button {
+      background-color: rgba(248, 245, 251, 0.85);
+      color: #4b007d;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      padding: 6px 12px;
+      box-shadow: 0 2px 4px rgba(75, 0, 125, 0.1);
+      transition: all 0.3s ease;
+      text-align: left;
+      /* Constrain width so the text is truncated, expands on hover */
+      max-width: 150px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+
+      /* The document icon in the bubble */
+      i {
+        margin-right: 4px;
+        font-size: 0.9rem;
+      }
+
+      /* On hover/focus, slightly expand and show the text fully */
+      &:hover,
+      &:focus {
+        max-width: 600px;
+        background-color: rgba(248, 245, 251, 0.95);
+        color: #3a005f;
+        border-color: #c0a1da;
+        box-shadow: 0 3px 6px rgba(75, 0, 125, 0.15);
+      }
+    }
   }
 }
