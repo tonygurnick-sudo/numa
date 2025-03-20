@@ -71,19 +71,38 @@ html5lib = ["html5lib"]
 lxml = ["lxml"]
 
 [[package]]
+name = "bedrock"
+version = "0.1.0"
+description = ""
+optional = false
+python-versions = "~3.13.0"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+boto3 = "1.37.15"
+filetype = "1.2.0"
+structlog = "25.2.0"
+
+[package.source]
+type = "directory"
+url = "../../../lib/bedrock"
+
+[[package]]
 name = "boto3"
-version = "1.37.13"
+version = "1.37.15"
 description = "The AWS SDK for Python"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "boto3-1.37.13-py3-none-any.whl", hash = "sha256:90fa5a91d7d7456219f0b7c4a93b38335dc5cf4613d885da4d4c1d099e04c6b7"},
-    {file = "boto3-1.37.13.tar.gz", hash = "sha256:295648f887464ab74c5c301a44982df76f9ba39ebfc16be5b8f071ad1a81fe95"},
+    {file = "boto3-1.37.15-py3-none-any.whl", hash = "sha256:78cc1b483cc637e1df8e81498d66f89550d4ee92175ccab5be1a2226672fe6b9"},
+    {file = "boto3-1.37.15.tar.gz", hash = "sha256:586332456fff19328d57a88214a2ac2eda1bafab743556a836eda46a4ce613c6"},
 ]
 
 [package.dependencies]
-botocore = ">=1.37.13,<1.38.0"
+botocore = ">=1.37.15,<1.38.0"
 jmespath = ">=0.7.1,<2.0.0"
 s3transfer = ">=0.11.0,<0.12.0"
 
@@ -92,14 +111,14 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "botocore"
-version = "1.37.13"
+version = "1.37.16"
 description = "Low-level, data-driven core of boto 3."
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "botocore-1.37.13-py3-none-any.whl", hash = "sha256:aa417bac0f4d79533080e6e17c0509e149353aec83cfe7879597a7942f7f08d0"},
-    {file = "botocore-1.37.13.tar.gz", hash = "sha256:60dfb831c54eb466db9b91891a6c8a0c223626caa049969d5d42858ad1e7f8c7"},
+    {file = "botocore-1.37.16-py3-none-any.whl", hash = "sha256:d74d04830ead12933a96dc407175ae98b32a5dd0059d7d2b28fc7aa4ed9d3b48"},
+    {file = "botocore-1.37.16.tar.gz", hash = "sha256:26bdf95d5448682bdb05ff4b15b007f977d027c0d791482b43e69f098e609978"},
 ]
 
 [package.dependencies]
@@ -312,6 +331,18 @@ files = [
 
 [package.extras]
 toml = ["tomli"]
+
+[[package]]
+name = "filetype"
+version = "1.2.0"
+description = "Infer file type and MIME type of any file/buffer. No external dependencies."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "filetype-1.2.0-py2.py3-none-any.whl", hash = "sha256:7ce71b6880181241cf7ac8697a2f1eb6a8bd9b429f7ad6d27b8db9ba5f1c2d25"},
+    {file = "filetype-1.2.0.tar.gz", hash = "sha256:66b56cd6474bf41d8c54660347d37afcc3f7d1970648de365c102ef77548aadb"},
+]
 
 [[package]]
 name = "googlesearch-python"
@@ -624,14 +655,14 @@ files = [
 
 [[package]]
 name = "structlog"
-version = "24.4.0"
+version = "25.2.0"
 description = "Structured Logging for Python"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "structlog-24.4.0-py3-none-any.whl", hash = "sha256:597f61e80a91cc0749a9fd2a098ed76715a1c8a01f73e336b746504d1aad7610"},
-    {file = "structlog-24.4.0.tar.gz", hash = "sha256:b27bfecede327a6d2da5fbc96bd859f114ecc398a6389d664f62085ee7ae6fc4"},
+    {file = "structlog-25.2.0-py3-none-any.whl", hash = "sha256:0fecea2e345d5d491b72f3db2e5fcd6393abfc8cd06a4851f21fcd4d1a99f437"},
+    {file = "structlog-25.2.0.tar.gz", hash = "sha256:d9f9776944207d1035b8b26072b9b140c63702fd7aa57c2f85d28ab701bd8e92"},
 ]
 
 [package.extras]
@@ -673,4 +704,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.13.0"
-content-hash = "1d575dd77e19dcaccc9fd1d59a097b0098dee9976ebd271ca19fc27f21699eab"
+content-hash = "8a88b6d8fe4f41973d8417a175447ac683cfebc5eb48c933fa93e47955b8087f"

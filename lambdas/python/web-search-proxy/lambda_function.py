@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, List
+from typing import Dict, List
 
 import bedrock
 import httpx
