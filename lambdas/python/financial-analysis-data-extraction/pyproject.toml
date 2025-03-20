@@ -22,15 +22,17 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "~3.13.0"
+
+aws-lambda-powertools = "3.8.0"
 bedrock = {path = "../../../lib/bedrock", develop = true}
-boto3 = "1.37.16"
+helpers = {path = "../../../lib/helpers", develop = true}
+s3_helpers = {path = "../../../lib/s3_helpers", develop = true}
 structlog = "25.2.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.15.0"
 pylint = "3.3.6"
 pyright = "1.1.397"
-boto3-stubs = "^1.35.96"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.9.0"

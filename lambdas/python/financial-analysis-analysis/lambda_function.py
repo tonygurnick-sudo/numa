@@ -1,160 +1,144 @@
 import csv
 import io
 import json
+import os
+import typing
 
-import boto3
+import structlog
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import bedrock
+import helpers
+import s3_helpers
 from prompts import DOCUMENTS_SUMMARY_PROMPT, FINANCIAL_ANALYSIS_PROMPT
 
 MAX_TOKENS = 4096
 
-
-def handler(event, _context):
-    bucket = event["bucket"]
-    prefix = event["prefix"]
-
-    # Initialize AWS clients
-    s3 = boto3.client("s3")
-
-    # List and aggregate all files in the temp directory
-    files = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
-    combined_content = combine_matching_json_files(s3, bucket, files)
-
-    # Generate CSV from combined_content
-    csv_data = generate_csv_from_combined_content(combined_content)
-
-    # Write CSV to S3
-    csv_data_key = f"{prefix}/csv_data.csv"
-    s3.put_object(
-        Bucket=bucket, Key=csv_data_key, Body=csv_data, ContentType="text/csv"
-    )
-
-    # Format the content for the prompt
-    formatted_content = json.dumps(combined_content, indent=2)
-
-    model = bedrock.BedrockClaude3Model(
-        model_args={
-            "max_tokens": MAX_TOKENS,
-        },
-    )
-    # Call Bedrock for financial analysis
-    financial_analysis = model.run(
-        query=FINANCIAL_ANALYSIS_PROMPT.format(documents=formatted_content)
-    ).response[0]["text"]
-    # Call Bedrock for documents summary
-    documents_summary = model.run(
-        query=DOCUMENTS_SUMMARY_PROMPT.format(documents=formatted_content)
-    ).response[0]["text"]
-
-    # Write results to S3
-    s3.put_object(
-        Bucket=bucket,
-        Key=f"{prefix}/financial_analysis.md",
-        Body=financial_analysis,
-        ContentType="text/markdown",
-    )
-
-    s3.put_object(
-        Bucket=bucket,
-        Key=f"{prefix}/documents_summary.md",
-        Body=documents_summary,
-        ContentType="text/markdown",
-    )
-
-    return {
-        "financialAnalysisKey": f"{prefix}/financial_analysis.md",
-        "documentsSummaryKey": f"{prefix}/documents_summary.md",
-        "csvDataKey": csv_data_key,
-    }
+logger = structlog.get_logger()
 
 
-def combine_matching_json_files(s3, bucket, files):
-    """
-    Combine JSON files from S3, matching extracted text and structured data files
-    for each document in order.
-
-    :param s3: boto3 S3 client
-    :param bucket: S3 bucket name
-    :param files: List of file contents from s3.list_objects_v2()
-    :return: List of combined JSON content
-    """
-    # Sort files to ensure consistent ordering
-    sorted_files = sorted(files.get("Contents", []), key=lambda x: x["Key"])
-
-    # Dictionaries to track matched files
-    extracted_text_files = {}
-    structured_data_files = {}
-
-    # Separate files into extracted text and structured data
-    for file in sorted_files:
-        key = file["Key"]
-        if "extracted_text_" in key:
-            doc_name = key.split("extracted_text_")[1].split(".json")[0]
-            if "/" in doc_name:
-                doc_name = doc_name.split("/")[-1]
-            extracted_text_files[doc_name] = key
-        elif "structured_data_" in key:
-            doc_name = key.split("structured_data_")[1].split(".json")[0]
-            if "/" in doc_name:
-                doc_name = doc_name.split("/")[-1]
-            structured_data_files[doc_name] = key
-
-    # Combined content and size tracking
-    combined_content = []
-
-    # Match and combine files
-    for doc_name in set(
-        list(extracted_text_files.keys()) + list(structured_data_files.keys())
-    ):
-        # Combine files for each document
-        document_content = {}
-        document_content["doc_name"] = doc_name
-        # Add extracted text if exists
-        if doc_name in extracted_text_files:
-            text_file_key = extracted_text_files[doc_name]
-            text_content = s3.get_object(Bucket=bucket, Key=text_file_key)
-            text_data = json.loads(text_content["Body"].read())
-            document_content["extracted_text"] = text_data
-
-        # Add structured data if exists
-        if doc_name in structured_data_files:
-            structured_file_key = structured_data_files[doc_name]
-            structured_content = s3.get_object(Bucket=bucket, Key=structured_file_key)
-            document_content["structured_data"] = json.loads(
-                structured_content["Body"].read()
-            )
-
-        # Append combined document content
-        combined_content.append(document_content)
-
-    return combined_content
+class Output(typing.TypedDict):
+    output_key: str
 
 
-def generate_csv_from_combined_content(combined_content):
-    """
-    Convert combined_content into CSV rows. Each element in combined_content
-    looks like:
-        {
-          "extracted_text": {...},
-          "structured_data": [           # can be a list of dicts
-            {
-              "name": "No financial data found",
-              "value": "none",
-              "description": "...",
-              "classification": "other",
-              "page_number": "1"
-            },
-            ...
-          ]
+class Input(typing.TypedDict):
+    extracted: Output
+    structured: Output
+    key: str
+
+
+class FileContent(typing.TypedDict):
+    filename: str
+    extracted_text: dict
+    structured_data: list[dict]
+
+
+def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
+    helpers.setup_step_function_lambda_logging(event, context)
+
+    try:
+        output_prefix = event["output_prefix"]
+        inputs: list[Input] = event["inputs"]
+
+        combined_content = __combine_files(inputs)
+
+        csv_data = _generate_csv(combined_content)
+
+        csv_output_key = f"{output_prefix}/csv_data.csv"
+        s3_helpers.write(
+            csv_output_key,
+            csv_data.encode("utf-8"),
+            content_type="text/csv",
+        )
+
+        model = bedrock.BedrockClaude3Model(model_args={"max_tokens": MAX_TOKENS})
+        # Format the content for the prompt
+        formatted_content = json.dumps(combined_content, indent=2)
+
+        analysis_prompt = FINANCIAL_ANALYSIS_PROMPT.format(documents=formatted_content)
+        analysis_result = model.run(query=analysis_prompt).response[0]["text"]
+        analysis_output_key = f"{output_prefix}/analysis.md"
+
+        s3_helpers.write(
+            analysis_output_key,
+            analysis_result,
+            content_type="text/markdown",
+        )
+
+        summary_prompt = DOCUMENTS_SUMMARY_PROMPT.format(documents=formatted_content)
+        summary_result = model.run(query=summary_prompt).response[0]["text"]
+        summary_output_key = f"{output_prefix}/summary.md"
+
+        s3_helpers.write(
+            summary_output_key,
+            summary_result,
+            content_type="text/markdown",
+        )
+
+        return {
+            "results": [
+                {
+                    "input_reference": None,
+                    "outputs": [
+                        {
+                            "content_type": "text/markdown",
+                            "data": {
+                                "bucket": os.environ["BUCKET"],
+                                "key": summary_output_key,
+                            },
+                            "location": "S3",
+                            "title": "Documents Summary",
+                        },
+                        {
+                            "content_type": "text/markdown",
+                            "data": {
+                                "bucket": os.environ["BUCKET"],
+                                "key": analysis_output_key,
+                            },
+                            "location": "S3",
+                            "title": "Financial Analysis",
+                        },
+                        {
+                            "content_type": "text/csv",
+                            "data": {
+                                "bucket": os.environ["BUCKET"],
+                                "key": csv_output_key,
+                            },
+                            "location": "S3",
+                            "title": "CSV",
+                        },
+                    ],
+                }
+            ]
         }
+    except Exception:
+        logger.exception("Error in lambda execution")
+        raise
 
-    We also add a 'filename' or 'doc_name' column.
+
+def __combine_files(inputs: list[Input]) -> list[FileContent]:
     """
+    Combine JSON files from S3.
+    """
+
+    return [
+        {
+            "filename": input["key"].split("/")[-1],
+            "extracted_text": json.loads(
+                s3_helpers.read(input["extracted"]["output_key"])
+            ),
+            "structured_data": json.loads(
+                s3_helpers.read(input["structured"]["output_key"])
+            ),
+        }
+        for input in inputs
+    ]
+
+
+def _generate_csv(contents: list[FileContent]) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
 
-    # Define the CSV headers (add or remove columns as needed)
     headers = [
         "filename",
         "name",
@@ -165,21 +149,10 @@ def generate_csv_from_combined_content(combined_content):
     ]
     writer.writerow(headers)
 
-    # Iterate over each combined document
-    for doc in combined_content:
-        # Get doc_name from the doc
-        doc_name = doc["doc_name"]
-
-        # structured_data might be a list of dicts
-        structured_items = doc.get("structured_data", [])
-        if not isinstance(structured_items, list):
-            # If it's a single dict or None, convert to a list for uniform handling
-            structured_items = [structured_items] if structured_items else []
-
-        # Write a row for each dict in structured_data
-        for item in structured_items:
+    for content in contents:
+        for item in content.get("structured_data") or []:
             row = [
-                doc_name,
+                content["filename"],
                 item.get("name", ""),
                 item.get("value", ""),
                 item.get("classification", ""),

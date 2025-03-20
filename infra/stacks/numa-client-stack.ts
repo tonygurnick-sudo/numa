@@ -18,14 +18,15 @@ import { CandidateScreening } from '../constructs/apps/candidate-screening-const
 import { CompanyProfile } from '../constructs/apps/company-profile-construct';
 import { ContractAnalysis } from '../constructs/apps/contract-analysis-construct';
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
+import { FinancialAnalysis } from '../constructs/apps/financial-analysis-construct';
 import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
 import { PolicyDrafter } from '../constructs/apps/policy-drafter-construct';
 import { PolicyReviewer } from '../constructs/apps/policy-reviewer-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
+import { Honeycomb } from '../constructs/honeycomb-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
-import { Honeycomb } from '../constructs/honeycomb-construct';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -245,10 +246,11 @@ const appLibrary: Record<string, new (scope: Construct, name: string, props: Bas
   'company-profile': CompanyProfile,
   'contract-analysis': ContractAnalysis,
   'document-summariser': DocumentSummariser,
+  'financial-analysis': FinancialAnalysis,
   'meeting-analyser': MeetingAnalyser,
   'nzsba-policy-builder': NZSBAPolicyBuilder,
-  'policy-reviewer': PolicyReviewer,
   'policy-drafter': PolicyDrafter,
+  'policy-reviewer': PolicyReviewer,
 };
 
 function lookupAppFromId(id: string): new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp {
