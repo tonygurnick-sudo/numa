@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Button, Container, Row, Col, Spinner, Collapse } from 'react-bootstrap';
+import { Button, Container, Row, Col } from 'react-bootstrap';
 import { ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import { SearchRelevantContentCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
@@ -9,54 +9,17 @@ import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
 import { DataSourcesList } from '../Components/DataSourcesList';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
-import { MarkdownContent } from '../Components/MarkdownContent';
 import { prepareConversationHistoryForBedrock, MAX_DYNAMO_MESSAGES } from '../utils/bedrockMessageHistoryUtils';
 import { ChatInput } from '../Components/ChatInput';
 import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/ChatMessages';
 import ResizableSplitView from '../Components/ResizableSplitView';
-import numaIcon from '../assets/images/numa-logo.svg';
-
-/** Helper component to display a collapsible references panel */
-function ReferencesDropdown({ references }) {
-  const [open, setOpen] = useState(false);
-  if (!references || references.length === 0) return null;
-
-  return (
-    <div className="references-dropdown mt-2">
-      <Button
-        variant="link"
-        size="sm"
-        onClick={() => setOpen(!open)}
-        aria-controls="references-collapse"
-        aria-expanded={open}
-        style={{ color: '#4b007d' }}
-      >
-        {open ? 'Hide References' : 'Show References'}
-      </Button>
-      <Collapse in={open}>
-        <div id="references-collapse" className="ms-3">
-          <ul className="list-unstyled">
-            {references.map((ref, idx) => (
-              <li key={idx}>
-                <a href={ref} target="_blank" rel="noopener noreferrer">
-                  {ref}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Collapse>
-    </div>
-  );
-}
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [conversationId, setConversationId] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [queryDataSources, setQueryDataSources] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
@@ -64,9 +27,7 @@ const NumaChat = () => {
   const [isFileProcessing, setIsFileProcessing] = useState(false);
   const [inlineDocument, setInlineDocument] = useState(null);
   const [showSplitView, setShowSplitView] = useState(false);
-  const [leftFraction, setLeftFraction] = useState(0.99);
 
-  // Refs & contexts
   const stopGenerationRef = useRef(false);
   const messageEndRef = useRef(null);
   const {
@@ -115,46 +76,47 @@ const NumaChat = () => {
       const startIndex = text.indexOf('<!--', i);
       if (startIndex === -1) {
         // No more comments in this chunk
-        output += text.substring(i);
-        docStripState.leftover = '';
-        break;
+        output += text.slice(i);
+        i = text.length;
+      } else {
+        // Add text before the comment to output
+        output += text.slice(i, startIndex);
+
+        // Find the end of the comment
+        const closeIndex = text.indexOf('-->', startIndex);
+        if (closeIndex === -1) {
+          // Comment is incomplete in this chunk, save it for the next chunk
+          docStripState.leftover = text.slice(startIndex);
+          return output;
+        } else {
+          // Replace the comment with '---'
+          output += '---';
+          // Skip past the end of the comment
+          i = closeIndex + 3; // jump past -->
+        }
       }
-
-      // Add text up to comment start
-      output += text.substring(i, startIndex);
-
-      // Find the end of this comment
-      const endIndex = text.indexOf('-->', startIndex);
-      if (endIndex === -1) {
-        // Comment end is in next chunk, save this partial comment
-        docStripState.leftover = text.substring(startIndex);
-        break;
-      }
-
-      // Extract the comment
-      const comment = text.substring(startIndex, endIndex + 3);
-
-      // Add a visual marker that content was removed
-      if (comment.includes('BEGIN_DOC')) {
-        const titleMatch = comment.match(/title="([^"]+)"/);
-        const title = titleMatch ? titleMatch[1].trim() : 'Document';
-        // Insert document marker and capture title
-        const titleText = `\n📄 **${title}**\n`;
-        output += titleText;
-      } else if (comment.includes('END_DOC')) {
-        output += '\n';
-      }
-
-      i = endIndex + 3; // Move past this comment
     }
+
+    // Clear leftover since all comments are processed
+    docStripState.leftover = '';
     return output;
   }
 
-  function handleDocClose() {
-    setInlineDocument(null);
-    setShowSplitView(false);
+  /**
+   * Extract doc info from raw text. If a doc block is found, returns an object:
+   * { docTitle, docContent }, else null.
+   */
+  function extractSingleDocBlock(rawText) {
+    const docRegex = /<!--BEGIN_DOC title="(.*?)"-->([\s\S]*?)<!--END_DOC-->/;
+    const match = rawText.match(docRegex);
+    if (match) {
+      return {
+        docTitle: match[1],
+        docContent: match[2].trim(),
+      };
+    }
+    return null;
   }
-
   // Ref for input textarea
   const inputRef = useRef(null);
 
@@ -211,16 +173,15 @@ const NumaChat = () => {
     setUploadedFiles([]);
     setInputMessage('');
     setConversationId(null);
+    setInlineDocument(null);
 
     // Add an initial greeting from the assistant
     const greeting = { role: 'assistant', content: 'How can I help you today?' };
     setMessages([greeting]);
   };
 
-
-  // 1) A function that ensures we have a conversation (creates one if needed).
+  // A function that ensures we have a conversation (creates one if needed).
   const createNewConversationIfNeeded = async (initialText = '') => {
-    console.log('Creating new conversation with initial text:', initialText);
     if (conversationId) return conversationId; // Already have one
 
     const newId = `${sub || 'anonymous'}_${Date.now()}`;
@@ -239,7 +200,6 @@ const NumaChat = () => {
         content: 'New conversation started',
       });
 
-      // Optionally store an "assistant greeting"
       await numaChatDynamoUtils.addMessage({
         conversationId: newId,
         userId: sub,
@@ -384,7 +344,7 @@ const NumaChat = () => {
         };
         const dsCommand = new SearchRelevantContentCommand(dsInput);
 
-        finalInputText = 'Retrieving knowledge from the users data source...\n';
+        let finalInputText = 'Retrieving knowledge from the users data source...\n';
 
         try {
           const dsResponse = await qBusinessClient.send(dsCommand);
@@ -462,7 +422,6 @@ const NumaChat = () => {
         conversationHistory,
         getIdentityPoolCredentials,
       );
-      console.log('bedrockMessages:', JSON.stringify(bedrockMessages, null, 2));
 
       // Validate message format
       const validatedMessages = bedrockMessages.map((msg) => {
@@ -474,6 +433,7 @@ const NumaChat = () => {
         }
         return msg;
       });
+
       const validateMessage = (message) => {
         if (!message.role || !Array.isArray(message.content) || message.content.length === 0) {
           console.error('Invalid message format:', message);
@@ -485,11 +445,8 @@ const NumaChat = () => {
         throw new Error('Invalid message format detected');
       }
 
-      // 5) Send to Bedrock - no need for search tools since we've injected search results
-      let converseInput;
-
-      // Always use standard format without tools, since we've injected search results when needed
-      converseInput = {
+      // 5) Send to Bedrock
+      const converseInput = {
         modelId: MODEL_ID,
         messages: validatedMessages,
         system: [{ text: SYSTEM_MESSAGE }],
@@ -522,7 +479,7 @@ const NumaChat = () => {
         }
       }
 
-      // 6) Accumulate the raw text and a "display text" that strips comment tags
+      // 6) Accumulate the raw text and a “display text” that strips comment tags
       // This let's us retrieve doc references and display the message without tags
       // e.g. <!--BEGIN_DOC title="Some Title"-->...<!--END_DOC-->
       let rawAssistantText = '';
@@ -530,9 +487,6 @@ const NumaChat = () => {
       let firstChunk = true;
       const docStripState = { leftover: '' };
       let tokenUsage = null;
-
-      // Standard debug logging
-      console.log('Response stream initiated');
 
       for await (const event of response.stream) {
         if (stopGenerationRef.current) {
@@ -550,9 +504,7 @@ const NumaChat = () => {
           setMessages((prev) => {
             const updated = [...prev];
             const idx = updated.findIndex((m) => m.status === 'thinking');
-            if (idx >= 0) updated.splice(idx, 1);
-            // Add a real message for Claude's response
-            updated.push({ role: 'assistant', content: '' });
+            if (idx >= 0) updated[idx].status = null;
             return updated;
           });
           setButtonStatus('streaming');
@@ -598,10 +550,10 @@ const NumaChat = () => {
         userId: sub,
         messageType: 'text',
         role: 'assistant',
-        content: displayAssistantText || rawAssistantText,
+        content: rawAssistantText,
       };
 
-      // If we found references, attach them (assuming your DynamoDB schema supports an extra field 'references')
+      // 8) If we have references, attach them before storing in Dynamo
       if (dsReferences.length > 0) {
         assistantMessagePayload.references = dsReferences;
       }
@@ -633,8 +585,27 @@ const NumaChat = () => {
         });
       }
 
+      // 9) Extract doc from raw text
+      const docBlock = extractSingleDocBlock(rawAssistantText);
+      if (docBlock) {
+        // Always update the inlineDocument so it displays the latest generated doc if opened
+        setInlineDocument({ title: docBlock.docTitle, content: docBlock.docContent });
+
+        // attach doc to the last assistant message
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIdx = updated.length - 1;
+          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+            updated[lastIdx].docTitle = docBlock.docTitle;
+            updated[lastIdx].docContent = docBlock.docContent;
+          }
+          return updated;
+        });
+      }
+
       // Refresh the sidebar
       refreshSidebar();
+      setButtonStatus('idle');
 
       // Clear user input
       setUploadedFiles([]);
@@ -659,8 +630,7 @@ const NumaChat = () => {
     if (!numaChatDynamoUtils) return;
     try {
       let retryCount = 0;
-      let conversationHistory;
-
+      let conversationHistory = [];
       while (retryCount < 2) {
         try {
           conversationHistory = await numaChatDynamoUtils.queryConversations(
@@ -671,7 +641,6 @@ const NumaChat = () => {
           break;
         } catch (error) {
           if (error.message.includes('ExpiredTokenException') && retryCount === 0) {
-            console.log('Token expired while loading conversation. Refreshing credentials...');
             await getAccessToken(true);
             retryCount++;
           } else {
@@ -687,10 +656,20 @@ const NumaChat = () => {
       const chatMessages = conversationHistory.map((item) => {
         const baseMsg = {
           role: item.role,
-          content: item.content,
-          // If your DB item has a 'references' field, pull it in
+          content: item.content || '',
           references: item.references || [],
         };
+
+        // Replace doc tags when loading conversation history
+        if (baseMsg.content) {
+          baseMsg.content = baseMsg.content.replace(/<!--[\s\S]*?-->/g, '---');
+        }
+        // If there's a doc block, parse it
+        const docBlock = extractSingleDocBlock(item.content || '');
+        if (docBlock && baseMsg.role === 'assistant') {
+          baseMsg.docTitle = docBlock.docTitle;
+          baseMsg.docContent = docBlock.docContent;
+        }
 
         if (item.message_type === 'file') {
           baseMsg.content = `File '${item.fileInfo.fileName}' uploaded and processed successfully.`;
@@ -734,39 +713,13 @@ const NumaChat = () => {
     height: '24px', // Set a fixed height to prevent layout shifts
   };
 
-  // Define the ephemeral message components that ChatMessages will render
-  const ephemeralMessages = {
-    thinking: (
-      <div className="d-flex align-items-center" style={loadingIndicatorStyle}>
-        <Spinner animation="border" size="sm" className="me-2" />
-        Thinking...
-      </div>
-    ),
-    querying: (
-      <div className="d-flex align-items-center" style={loadingIndicatorStyle}>
-        <Spinner animation="border" size="sm" className="me-2" />
-        Querying data sources...
-      </div>
-    ),
-    searching: (
-      <div className="d-flex align-items-center" style={loadingIndicatorStyle}>
-        <Spinner animation="border" size="sm" className="me-2" />
-        Searching the web...
-      </div>
-    ),
-    processingFile: (
-      <div className="d-flex align-items-center">
-        <Spinner animation="border" size="sm" className="me-2" />
-        Processing Upload...
-      </div>
-    ),
-    initializing: (
-      <div className="d-flex align-items-center">
-        <Spinner animation="border" size="sm" className="me-2" />
-        Initializing chat...
-      </div>
-    ),
-  };
+  // Split view state
+  const [leftFraction, setLeftFraction] = useState(0.99);
+  function handleDocClose() {
+    setShowSplitView(false); // Hide the document panel
+    setLeftFraction(0.99); // Reset the split view to fully collapsed
+    setInlineDocument(null); // Clear the document content
+  }
 
   return (
     <div className="dashboard">
@@ -794,6 +747,8 @@ const NumaChat = () => {
           />
           {/* Data sources list */}
           <DataSourcesList />
+
+          {/* Main chat content */}
           <div className="flex-grow-1 d-flex">
             <div className="chat-content flex-grow-1 d-flex flex-column">
               {/* Header with chat instructions and New Chat button on the right */}
@@ -808,7 +763,6 @@ const NumaChat = () => {
                 </Button>
               </div>
 
-              {/* Chat messages */}
               <div className="chat-container position-relative" style={{ flex: '1 1 auto' }}>
                 <ResizableSplitView
                   left={
@@ -819,8 +773,6 @@ const NumaChat = () => {
                           messages={messages}
                           messageEndRef={messageEndRef}
                           loadingIndicatorStyle={loadingIndicatorStyle}
-                          ephemeralMessages={ephemeralMessages}
-                          numaIcon={numaIcon}
                           onOpenDocument={(docTitle, docContent) => {
                             setLeftFraction(0.45);
                             setInlineDocument({ title: docTitle, content: docContent });
@@ -860,15 +812,15 @@ const NumaChat = () => {
                   minLeft={200}
                   minRight={200}
                 />
-                {/* Tips Messages */}
-                <div className="tips-container">
-                  <p className="datasource-tip text-center small text-muted">
-                    Click the <i className="bi bi-database"></i> to chat against your data sources.
-                  </p>
-                  <p className="websearch-tip text-center small text-muted">
-                    Click the <i className="bi bi-search"></i> to search the web.
-                  </p>
-                </div>
+              </div>
+              {/* Tips Messages */}
+              <div className="tips-container">
+                <p className="datasource-tip text-center small text-muted">
+                  Click the <i className="bi bi-database"></i> to chat against your data sources.
+                </p>
+                <p className="websearch-tip text-center small text-muted">
+                  Click the <i className="bi bi-search"></i> to search the web.
+                </p>
               </div>
             </div>
           </div>
