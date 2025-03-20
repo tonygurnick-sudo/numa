@@ -29,12 +29,11 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
 
     // Web Search Proxy
     this.addLambdaFunction(this, 'web-search-proxy', {
-      addAuthorizer: false, // Public endpoint
+      addAuthorizer: false,
       lambdaDirectory: 'python/web-search-proxy',
       handler: 'lambda_function.lambda_handler',
-      // Ensure the path includes OPTIONS method for CORS
       route: {
-        verb: 'GET', // Support GET
+        verb: 'GET',
         path: 'web-search',
       },
       environment: {
@@ -43,12 +42,12 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           ALLOWED_ORIGIN: '*'
         },
       },
-      timeout: 45, // 45 seconds to account for Bedrock call
+      timeout: 45,
       additionalPolicyStatements: [
         {
           effect: "Allow",
           actions: ['bedrock:InvokeModel'],
-          resources: ['*'], // In production, should be scoped to specific model ARNs
+          resources: ['*'],
         }
       ],
     });

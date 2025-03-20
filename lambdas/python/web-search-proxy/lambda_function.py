@@ -15,9 +15,6 @@ logger = logging.getLogger("web-search-proxy")
 
 
 def google_search(query: str, max_results: int = 5) -> List[str]:
-    """
-    Uses googlesearch-python to perform a Google search and return a list of URLs.
-    """
     try:
         urls = list(search(query, num_results=max_results, lang="en"))
         logger.info(f"Google search returned URLs: {urls}")
@@ -28,9 +25,6 @@ def google_search(query: str, max_results: int = 5) -> List[str]:
 
 
 def scrape_page(url: str) -> Dict[str, str]:
-    """
-    Fetches page content from the URL using httpx and extracts the title and up to 1000 characters of text content.
-    """
     try:
         response = httpx.get(url, timeout=10)
         if response.status_code == 200:
@@ -48,11 +42,7 @@ def scrape_page(url: str) -> Dict[str, str]:
 
 
 def rewrite_query_with_context(query: str, context: str) -> str:
-    """
-    Use bedrock library to rewrite the search query based on conversation context
-    """
     try:
-        # Create prompt for query rewriting
         prompt = f"""
         You are a search query optimizer. Your task is to rewrite a search query to make it more effective
         based on the conversation context provided. Focus on extracting the most relevant search terms
@@ -93,7 +83,6 @@ def rewrite_query_with_context(query: str, context: str) -> str:
 
     except Exception as e:
         logger.error(f"Error rewriting query: {str(e)}")
-        # Fall back to original query on failure
         return query
 
 
@@ -153,12 +142,11 @@ def lambda_handler(event, context):
         for url in urls:
             result = scrape_page(url)
             results.append(result)
-            # Small delay to avoid overloading target servers
             time.sleep(0.5)
 
         response_body = {
-            "query": search_query,  # Return the query used for search
-            "original_query": query,  # Include the original query for reference
+            "query": search_query,
+            "original_query": query,
             "results_count": len(results),
             "results": results,
             "timestamp": int(time.time()),
