@@ -399,11 +399,16 @@ export function S3Uploader() {
             </div>
           ) : (
             <div style={{ overflowX: 'auto', width: '100%' }}>
-              <Table hover size="sm" className="mb-0" style={{ backgroundColor: '#fff', minWidth: '100%' }}>
+              <Table
+                hover
+                size="sm"
+                className="mb-0"
+                style={{ tableLayout: 'fixed', backgroundColor: '#fff', minWidth: '100%' }}
+              >
                 <thead>
                   <tr>
-                    <th style={{ width: '50%', cursor: 'default' }}>Name</th>
-                    <th style={{ width: '25%', cursor: 'default' }}>Upload Date</th>
+                    <th style={{ width: '70%', cursor: 'default' }}>Name</th>
+                    <th style={{ width: '20%', cursor: 'default' }}>Upload Date</th>
                     <th style={{ width: '10%', cursor: 'default' }}>Size (KB)</th>
                   </tr>
                 </thead>
