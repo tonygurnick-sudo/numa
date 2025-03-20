@@ -43,8 +43,14 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           ALLOWED_ORIGIN: '*'
         },
       },
-      //
-      timeout: 30, // 30 seconds
+      timeout: 45, // 45 seconds to account for Bedrock call
+      additionalPolicyStatements: [
+        {
+          effect: "Allow",
+          actions: ['bedrock:InvokeModel'],
+          resources: ['*'], // In production, should be scoped to specific model ARNs
+        }
+      ],
     });
   }
 }

@@ -4,6 +4,7 @@ import os
 import time
 from typing import Any, Dict, List
 
+import bedrock
 import httpx
 from bs4 import BeautifulSoup
 from googlesearch import search
@@ -46,6 +47,56 @@ def scrape_page(url: str) -> Dict[str, str]:
         return {"title": "", "url": url, "snippet": ""}
 
 
+def rewrite_query_with_context(query: str, context: str) -> str:
+    """
+    Use bedrock library to rewrite the search query based on conversation context
+    """
+    try:
+        # Create prompt for query rewriting
+        prompt = f"""
+        You are a search query optimizer. Your task is to rewrite a search query to make it more effective
+        based on the conversation context provided. Focus on extracting the most relevant search terms
+        and adding context that would improve search results.
+
+        Conversation context:
+        {context}
+
+        Original query:
+        {query}
+
+        Return only the rewritten query without explanation. Keep it concise (under 100 characters if possible).
+        """
+
+        # Create model and run query
+        model = bedrock.BedrockClaude3Model(
+            model_args={
+                "max_tokens": 100,
+                "temperature": 0.1,
+            }
+        )
+
+        response = model.run(prompt, name_for_logging="search_query_rewrite")
+
+        # Extract the rewritten query from the response
+        if response and response.response:
+            rewritten_query = response.response[0].get("text", "").strip()
+
+            # Return original query if rewriting fails or produces empty result
+            if not rewritten_query:
+                logger.warning("Query rewriting returned empty result, using original query")
+                return query
+
+            logger.info(f"Original query: '{query}' -> Rewritten: '{rewritten_query}'")
+            return rewritten_query
+
+        return query
+
+    except Exception as e:
+        logger.error(f"Error rewriting query: {str(e)}")
+        # Fall back to original query on failure
+        return query
+
+
 def lambda_handler(event, context):
     logger.info(f"Received event: {json.dumps(event)}")
 
@@ -64,7 +115,10 @@ def lambda_handler(event, context):
         query = params.get("query", "")
         max_results_str = params.get("max_results", "5")
 
-        logger.info(f"Search query: {query}")
+        # Get conversation context if provided
+        conversation_context = params.get("context", "")
+
+        logger.info(f"Original search query: {query}")
 
         if not query:
             return {
@@ -78,14 +132,21 @@ def lambda_handler(event, context):
                 ),
             }
 
+        # If we have context, rewrite the query
+        search_query = query
+        if conversation_context:
+            logger.info(f"Conversation context provided, length: {len(conversation_context)}")
+            search_query = rewrite_query_with_context(query, conversation_context)
+            logger.info(f"Rewritten query: {search_query}")
+
         try:
             max_results = int(max_results_str)
             max_results = min(max(1, max_results), 10)
         except ValueError:
             max_results = 5
 
-        # Step 1: Get URLs from Google search
-        urls = google_search(query, max_results)
+        # Step 1: Get URLs from Google search with rewritten query
+        urls = google_search(search_query, max_results)
 
         # Step 2: Scrape content from each URL
         results = []
@@ -96,7 +157,8 @@ def lambda_handler(event, context):
             time.sleep(0.5)
 
         response_body = {
-            "query": query,
+            "query": search_query,  # Return the query used for search
+            "original_query": query,  # Include the original query for reference
             "results_count": len(results),
             "results": results,
             "timestamp": int(time.time()),
