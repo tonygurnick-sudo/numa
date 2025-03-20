@@ -80,14 +80,7 @@
   "arcanum-demo-sebastian": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "apps": {
-      "document-summariser": {},
-      "meeting-analyser": {},
-      "nzsba-policy-builder": {
-        "s3KeyPrefix": "/arcanum-demo-sebastian-nzsba-policy-builder"
-      },
-      "policy-reviewer": {}
-    },
+    "allApps": true,
     "devInstance": true
   },
   "arcanum-dave": {
