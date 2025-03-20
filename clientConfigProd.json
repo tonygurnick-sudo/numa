@@ -673,5 +673,13 @@
         "url": "https://content.legislation.vic.gov.au/sites/default/files/2023-11/66-7405aa142-authorised.pdf"
       }
     ]
+  },
+  "asper": {
+    "clientAccountId": "913524922624",
+    "webCrawlerConfigs": [
+      {
+        "url": "https://apser.es/en/"
+      }
+    ]
   }
 }
