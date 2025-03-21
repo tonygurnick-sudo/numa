@@ -285,7 +285,7 @@ const NumaChat = () => {
             const formattedResults = formatWebSearchResults(searchData.results, originalUserMessage);
 
             // Add URLs to references for display
-            searchData.results.forEach(result => {
+            searchData.results.forEach((result) => {
               if (result.url) {
                 dsReferences.push(result.url);
               }
@@ -308,7 +308,7 @@ const NumaChat = () => {
                   content: formattedResults,
                 })
                 .catch((err) => console.error('Error storing web search knowledge:', err));
-              }
+            }
           }
         } catch (error) {
           console.error('Error performing web search:', error);

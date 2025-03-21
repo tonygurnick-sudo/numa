@@ -114,7 +114,9 @@ def rewrite_query_with_context(query: str, context: str) -> str:
         return query
 
 
-def lambda_handler(event: dict, context: LambdaContext) -> dict:
+def lambda_handler(
+    event: dict, context: LambdaContext
+) -> helpers.ApiGatewayProxyIntegrationResponse:
     """
     Lambda handler function for the web search proxy.
 
@@ -135,7 +137,9 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
     }
 
     if event.get("httpMethod") == "OPTIONS":
-        return {"statusCode": 200, "headers": headers, "body": ""}
+        return helpers.ApiGatewayProxyIntegrationResponse(
+            statusCode=200, headers=headers, body=""
+        )
 
     try:
         params = event.get("queryStringParameters", {}) or {}
@@ -144,16 +148,16 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         conversation_context = params.get("context", "")
 
         if not query:
-            return {
-                "statusCode": 400,
-                "headers": headers,
-                "body": json.dumps(
+            return helpers.ApiGatewayProxyIntegrationResponse(
+                statusCode=400,
+                headers=headers,
+                body=json.dumps(
                     {
                         "error": "Missing query parameter",
                         "message": "The 'query' parameter is required",
                     }
                 ),
-            }
+            )
 
         # If we have context, rewrite the query
         search_query = query
@@ -184,16 +188,14 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
             "timestamp": int(time.time()),
         }
 
-        return {
-            "statusCode": 200,
-            "headers": headers,
-            "body": json.dumps(response_body),
-        }
+        return helpers.ApiGatewayProxyIntegrationResponse(
+            statusCode=200, headers=headers, body=json.dumps(response_body)
+        )
 
     except Exception:
         logger.exception("Error processing request")
-        return {
-            "statusCode": 500,
-            "headers": headers,
-            "body": json.dumps({"error": "Internal server error"}),
-        }
+        return helpers.ApiGatewayProxyIntegrationResponse(
+            statusCode=500,
+            headers=headers,
+            body=json.dumps({"error": "Internal server error"}),
+        )
