@@ -11,7 +11,15 @@
     "clientAccountId": "593793032721",
     "apps": {
       "meeting-analyser": {}
-    }
+    },
+    "sharePointConfigs": [
+      {
+        "tenantId": "a2275cde-9164-4712-8c15-47ab712f1766",
+        "domain": "30secondsnz",
+        "siteUrls": ["https://30secondsnz.sharepoint.com/sites/QBusinessintegration"],
+        "configuration": {}
+      }
+    ]
   },
   "accumen": {
     "clientAccountId": "677276116117",
