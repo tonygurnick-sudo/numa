@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { S3Uploader } from '../../Pages/S3Uploader';
 import { setupAwsMocks } from '../Mocks/AwsMock';
+import * as AuthProvider from '../../Providers/AuthProvider';
 
 // Mock the FileUploader component so we can control the upload success event
 vi.mock('../../Components/FileUploader', () => ({
@@ -98,5 +99,58 @@ describe('S3Uploader', () => {
     fireEvent.click(refreshButton);
     // Just ensuring no errors are thrown on refresh.
     expect(true).toBeTruthy();
+  });
+
+  it('renders the Failed Documents section when there are failed documents', async () => {
+    // Create a failed document mock for ListDocumentsCommand
+    const failedDoc = {
+      createdAt: new Date().toString(),
+      documentId: 's3://numa-test-data/failure%20file.txt',
+      error: { errorMessage: 'Failed processing document' },
+      status: 'DOCUMENT_FAILED_TO_INDEX',
+      updatedAt: new Date().toString(),
+    };
+
+    const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
+
+    // Override the qBusinessClient.send method for all commands.
+    const qBusinessClientMock = {
+      send: vi.fn((command) => {
+        if (command.constructor.name === 'ListDataSourcesCommand') {
+          // Return a data source matching our CLIENT_NAME
+          return Promise.resolve({
+            dataSources: [
+              {
+                dataSourceId: 'ds1',
+                displayName: `numa-${CLIENT_NAME}`,
+                status: 'ACTIVE',
+              },
+            ],
+          });
+        }
+        if (command.constructor.name === 'ListDataSourceSyncJobsCommand') {
+          return Promise.resolve({ history: [] });
+        }
+        if (command.constructor.name === 'ListDocumentsCommand') {
+          return Promise.resolve({ documentDetailList: [failedDoc] });
+        }
+        return Promise.resolve({});
+      }),
+    };
+
+    // Override useAuth hook for this test to use our mock qBusinessClient
+    vi.spyOn(AuthProvider, 'useAuth').mockReturnValue({
+      getIdentityPoolCredentials: vi.fn().mockResolvedValue({}),
+      qBusinessClient: qBusinessClientMock,
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Failed Documents/)).toBeInTheDocument();
+      expect(screen.getByText('Failed processing document')).toBeInTheDocument();
+      // Check that the file name is decoded properly (i.e. "failure file.txt" instead of "failure%20file.txt")
+      expect(screen.getByText(/failure file\.txt/)).toBeInTheDocument();
+    });
   });
 });
