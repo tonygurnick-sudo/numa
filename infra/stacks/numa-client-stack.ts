@@ -24,9 +24,9 @@ import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-cons
 import { PolicyDrafter } from '../constructs/apps/policy-drafter-construct';
 import { PolicyReviewer } from '../constructs/apps/policy-reviewer-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
-import { Honeycomb } from '../constructs/honeycomb-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
+import { Honeycomb } from '../constructs/honeycomb-construct';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -40,6 +40,7 @@ export class NumaClientStack extends ArcanumStack {
       ...props,
       assumeRoleList: [{ roleArn: deployerRole }, { roleArn: clientRole }],
     });
+    const region = 'us-east-1'; // TODO: Temporary
 
     const hostedZoneProvider = new AwsProvider(this, 'hosted-zone-provider', {
       assumeRole: [
@@ -98,6 +99,11 @@ export class NumaClientStack extends ArcanumStack {
         apiGatewayAuthorizerId: fe.authorizer.id,
         apiGatewayId: fe.apiGateway.id,
         outputsBucket: core.outputsBucket.bucket,
+        otelConfig: {
+          otelConfigPath: core.otelConfigPath,
+          honeycombIngestKey: honeycomb.backendKey,
+          region,
+        },
       });
     });
 

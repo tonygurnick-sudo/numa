@@ -16,11 +16,16 @@ import { Construct } from 'constructs';
 import path from 'node:path';
 import { NumaLogGroup } from './numa-log-group';
 
+const OTEL_COLLECTOR_LAYER_VERSION = '0_13_0';
+const OTEL_LANGUAGE_LAYER_VERSION = '0_12_0';
+const OTEL_LAYER_ACCOUNT = '184161586896'; // From: https://github.com/open-telemetry/opentelemetry-lambda/releases
+
 export abstract class ApiGatewayLambdaCollection extends Construct {
   private apiGatewayAuthorizerId: string;
   private apiGatewayId: string;
   protected logGroup: CloudwatchLogGroup;
   protected urlPathPrefix: string;
+  protected otelConfig?: OTelConfig;
 
   constructor(scope: Construct, name: string, props: ApiGatewayLambdaCollectionProps) {
     super(scope, name);
@@ -31,6 +36,7 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
     this.logGroup = new NumaLogGroup(this, 'lambda-log-group', {
       logGroupName: this.node.id,
     }).logGroup;
+    this.otelConfig = props.otelConfig;
   }
 
   protected prepPathPart(part: string): string {
@@ -42,6 +48,8 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
   }
 
   addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): LambdaFunction {
+    props.runtime ??= 'python3.13';
+
     const role = new IamRole(scope, scope.node.id + '_' + name + '_role', {
       name: scope.node.id + '_' + name,
       assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
@@ -71,20 +79,31 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       'lambda_function.zip',
     );
 
+    const honeycombConfig = otelLayersAndEnvironment(props.runtime, this.otelConfig);
+
     const lf = new LambdaFunction(this, name + '_lambda', {
       functionName: scope.node.id + '_' + name,
       role: role.arn,
       filename,
       sourceCodeHash: Fn.filebase64sha256(filename),
-      runtime: props.runtime ?? 'python3.13',
+      runtime: props.runtime,
       handler: props.handler ?? 'lambda_function.handler',
       timeout: props.timeout || 29, // API Gateway will only wait 30 seconds. Let's try to come in under that.
+      tracingConfig: {
+        mode: this.otelConfig?.honeycombIngestKey ? 'PassThrough' : 'Active', // Disable X-Ray sampling when using Honeycomb.
+      },
       loggingConfig: {
         logFormat: 'JSON',
         logGroup: this.logGroup.name,
         systemLogLevel: 'INFO',
       },
-      environment: props.environment,
+      environment: {
+        variables: {
+          ...honeycombConfig.environmentVariables,
+          ...props.environment?.variables,
+        },
+      },
+      layers: [...honeycombConfig.layers],
     });
 
     if (props.route) {
@@ -121,6 +140,46 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
   }
 }
 
+type OTelLayerLanguage = 'python' | 'nodejs';
+function otelLanguageLayer(language: OTelLayerLanguage, region: string): string {
+  return `arn:aws:lambda:${region}:${OTEL_LAYER_ACCOUNT}:layer:opentelemetry-${language}-${OTEL_LANGUAGE_LAYER_VERSION}:1`;
+}
+
+type LambdaArchitecture = 'amd64' | 'arm64';
+function otelLayersAndEnvironment(
+  runtime: string,
+  props?: OTelConfig,
+): {
+  environmentVariables: Record<string, string>;
+  layers: string[];
+} {
+  const environmentVariables: Record<string, string> = {};
+  const layers: string[] = [];
+
+  if (props) {
+    const architecture = props?.architecture ?? 'amd64';
+    const collectorLayer = `arn:aws:lambda:${props.region}:${OTEL_LAYER_ACCOUNT}:layer:opentelemetry-collector-${architecture}-${OTEL_COLLECTOR_LAYER_VERSION}:1`;
+    layers.push(collectorLayer);
+    if (runtime.match(/^python/)) {
+      layers.push(otelLanguageLayer('python', props.region));
+      environmentVariables['AWS_LAMBDA_EXEC_WRAPPER'] = '/opt/otel-instrument';
+    } else {
+      layers.push(otelLanguageLayer('nodejs', props.region));
+      environmentVariables['AWS_LAMBDA_EXEC_WRAPPER'] = '/opt/otel-handler';
+    }
+    environmentVariables['HONEYCOMB_INGEST_KEY'] = props.honeycombIngestKey;
+    environmentVariables['OPENTELEMETRY_COLLECTOR_CONFIG_URI'] = `s3://${props.otelConfigPath}`;
+  }
+  return { layers, environmentVariables };
+}
+
+export interface OTelConfig {
+  honeycombIngestKey: string;
+  otelConfigPath: string;
+  region: string;
+  architecture?: LambdaArchitecture;
+}
+
 export interface RouteDefinition {
   verb: 'GET' | 'POST' | 'HEAD' | 'PUT' | 'OPTIONS';
   path: string;
@@ -142,4 +201,5 @@ export interface AddLambdaFunctionProps {
 export interface ApiGatewayLambdaCollectionProps {
   apiGatewayAuthorizerId: string;
   apiGatewayId: string;
+  otelConfig?: OTelConfig;
 }

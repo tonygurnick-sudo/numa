@@ -33,6 +33,7 @@ import { SetCallbackUrl } from './set-callback-url-construct';
 import { BedrockQuotaChecker } from './bedrock-quota-checker-construct';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
+import { ConfigBucket } from './config-bucket-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -45,6 +46,7 @@ export class CoreNumaInfra extends Construct {
   readonly qBusinessIndexId: string;
   readonly qBusinessRetrieverId: string;
   readonly outputsBucket: NumaCorsEnabledBucket;
+  readonly otelConfigPath: string;
   readonly dataBucket: NumaCorsEnabledBucket;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
@@ -221,6 +223,21 @@ export class CoreNumaInfra extends Construct {
       allowedMethods: ['GET', 'PUT', 'DELETE'],
       allowLocalhostOrigin: props.devInstance,
     });
+
+    const otelConfigKey = 'otel-config.yaml';
+    const configBucket = new ConfigBucket(this, 'config-bucket', {
+      client: props.client,
+      clientAccountId: props.clientAccountId,
+    });
+
+    const source = path.resolve(import.meta.dirname, '..', 'assets', 'otel-config.yaml');
+    new S3Object(this, 'honeycomb-config-file', {
+      bucket: configBucket.bucket.bucket,
+      key: otelConfigKey,
+      source,
+    });
+
+    this.otelConfigPath = `${configBucket.bucket.bucketRegionalDomainName}/${otelConfigKey}`;
 
     this.outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
       client: props.client,
