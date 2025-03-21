@@ -56,10 +56,7 @@
   "arcanum-demo-nick": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "apps": {
-      "nzsba-policy-builder": {},
-      "meeting-analyser": {}
-    },
+    "allApps": true,
     "boxConfigs": [
       {
         "enterpriseId": "1235149944"
@@ -534,9 +531,15 @@
     "sharePointConfigs": [
       {
         "tenantId": "91ff374c-03ff-4eed-9628-d89e52352b55",
-        "domain": "teachersrcc.sharepoint.com",
-        "siteUrls": ["https://teachersrcc.sharepoint.com/sites/Company"],
-        "configuration": {}
+        "domain": "teachersrcc",
+        "siteUrls": [
+          "https://teachersrcc.sharepoint.com/"
+        ],
+        "configuration": {
+          "inclusionFilePath": [
+            ".*NEX[ -]?Milestone[ -]?Reports.*"
+          ]
+        }
       }
     ]
   },
