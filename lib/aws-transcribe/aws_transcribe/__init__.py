@@ -26,9 +26,9 @@ def __start_transcription_job(
     job_name: str,
     media_uri: str,
     max_speakers: int,
-    language_code: str = "en-US",
-    output_bucket: Optional[str] = None,
-    output_key: Optional[str] = None,
+    language_code: str,
+    output_bucket: str,
+    output_key: str,
 ) -> None:
     try:
         logger.info(f"Starting transcription job: {job_name}")
@@ -38,7 +38,7 @@ def __start_transcription_job(
             "Media": {"MediaFileUri": media_uri},
             "LanguageCode": language_code,
             "OutputBucketName": output_bucket,
-            "OutputKey": output_key or "transcripts/",
+            "OutputKey": output_key,
             "Settings": {
                 "ShowSpeakerLabels": True,
                 "MaxSpeakerLabels": max_speakers,
@@ -59,22 +59,23 @@ def __wait_for_completion(job_name: str, timeout: int = 900) -> dict:
             result = transcribe_client.get_transcription_job(
                 TranscriptionJobName=job_name
             )
-            status = result["TranscriptionJob"]["TranscriptionJobStatus"]
-
-            if status == "COMPLETED":
-                logger.info(f"Transcription job completed: {job_name}")
-                return result["TranscriptionJob"]
-            elif status == "FAILED":
-                reason = result["TranscriptionJob"].get(
-                    "FailureReason", "Unknown reason"
-                )
-                logger.error(f"Transcription job failed: {reason}")
-                raise TranscriptionError(f"Transcription failed: {reason}")
-
-            time.sleep(30)
         except ClientError as e:
             logger.exception("Failed to get transcription job status")
             raise TranscriptionError("Failed to get job status") from e
+
+        job = result["TranscriptionJob"]
+        status = job["TranscriptionJobStatus"]
+
+        if status == "COMPLETED":
+            logger.info(f"Transcription job completed: {job_name}")
+            return job
+
+        if status == "FAILED":
+            reason = job.get("FailureReason", "Unknown reason")
+            logger.error(f"Transcription job failed: {reason}")
+            raise TranscriptionError(f"Transcription failed: {reason}")
+
+        time.sleep(30)
 
     raise TranscriptionError("Transcription timed out")
 
@@ -111,13 +112,10 @@ def _format_transcript(items: list, speaker_segments: dict) -> str:
     return "".join(transcript).strip()
 
 
-def __get_transcript(job_info: dict) -> str:
+def __get_transcript(bucket: str, key: str) -> str:
     """
     Gets the transcript from S3 using the job info.
     """
-    bucket = job_info["OutputBucketName"]
-    key = job_info["OutputKey"]
-
     try:
         logger.info(f"Getting transcript from bucket: {bucket}, key: {key}")
 
@@ -145,12 +143,12 @@ def __get_transcript(job_info: dict) -> str:
 
 
 def transcribe(
-    bucket: str,
-    key: str,
-    job_name: str | None = None,
+    input_bucket: str,
+    input_key: str,
+    output_bucket: str,
+    output_key: str,
+    job_name: str,
     language_code: str = "en-US",
-    output_bucket: Optional[str] = None,
-    output_key: Optional[str] = None,
     name_for_logging: str = "",
     max_speakers: int = 10,
 ) -> TranscriptionResponse:
@@ -160,14 +158,9 @@ def transcribe(
     if name_for_logging:
         logger.info(f"Starting transcription for {name_for_logging}")
 
-    media_uri = f"s3://{bucket}/{key}"
-    job_name = job_name or f"transcription-{int(time.time())}"
-    output_bucket = output_bucket or bucket
-    output_key = output_key or f"transcripts/{job_name}.json"
-
     __start_transcription_job(
         job_name=job_name,
-        media_uri=media_uri,
+        media_uri=f"s3://{input_bucket}/{input_key}",
         max_speakers=max_speakers,
         language_code=language_code,
         output_bucket=output_bucket,
@@ -177,10 +170,7 @@ def transcribe(
     job_info = __wait_for_completion(job_name)
     logger.info("Job completed, getting transcript")
 
-    job_info["OutputBucketName"] = output_bucket
-    job_info["OutputKey"] = output_key
-
-    transcript_data = __get_transcript(job_info)
+    transcript_data = __get_transcript(output_bucket, output_key)
 
     metadata = {
         "job_name": job_name,

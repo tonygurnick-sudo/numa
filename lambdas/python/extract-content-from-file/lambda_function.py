@@ -5,6 +5,7 @@ import dataclasses
 import io
 import json
 import os
+import pathlib
 import time
 from typing import Generic, List, TypeVar
 
@@ -67,44 +68,7 @@ def handler(event: dict, _context) -> dict:
     # only set this to true when it's certain this will be less than 256KB
     return_content = event.get("return_content", False)
 
-    if input_key.lower().endswith(".txt"):
-        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
-        extracted_text = s3_file_object["Body"].read().decode("utf-8")
-        document = __text_to_document(extracted_text, input_key)
-    elif input_key.lower().endswith(".docx"):
-        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
-        file_content = s3_file_object["Body"].read()
-        pages = extract_docx_pages(file_content)
-        document = _textract_pages_to_document(pages, input_key)
-    elif input_key.lower().endswith(".csv"):
-        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
-        csv_content = s3_file_object["Body"].read().decode("utf-8")
-        document = __text_to_document(csv_content, input_key)
-    elif input_key.lower().endswith(".xlsx"):
-        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
-        file_content = s3_file_object["Body"].read()
-        excel_structure = extract_excel_structure(file_content)
-        document = _excel_structure_to_document(excel_structure, input_key)
-    elif input_key.lower().endswith((".png", ".jpg", ".jpeg")):
-        extracted_text = bedrock.get_text_from_image(input_bucket, input_key)
-        document = __text_to_document(extracted_text, input_key)
-    elif input_key.lower().endswith((".pdf", ".tiff")):
-        pages = textract.get_pages_from_document(input_bucket, input_key)
-        document = _textract_pages_to_document(pages, input_key)
-    elif input_key.lower().endswith(
-        (".mp3", ".mp4", ".wav", ".flac", ".ogg", ".amr", ".webm", ".m4a")
-    ):
-        response = aws_transcribe.transcribe(
-            bucket=input_bucket,
-            key=input_key,
-            job_name=f"transcribe-{int(time.time())}",
-            output_bucket=output_bucket,
-            output_key=output_key,
-            name_for_logging=f"transcribe-{input_key}",
-        )
-        document = __text_to_document(response.text, input_key)
-    else:
-        raise UnsupportedFileFormat(f"{input_key} has an unsupported file format")
+    document = __generate_document(input_bucket, input_key)
 
     content = json.dumps(dataclasses.asdict(document), indent=4).encode("utf-8")
     s3_client.put_object(Body=content, Bucket=output_bucket, Key=output_key)
@@ -118,6 +82,69 @@ def handler(event: dict, _context) -> dict:
     if return_content:
         result["content"] = __document_to_string(document)
     return result
+
+
+def __generate_document(input_bucket: str, input_key: str) -> Document:
+    suffix = pathlib.PurePosixPath(input_key.lower()).suffix
+
+    if not suffix:
+        raise UnsupportedFileFormat(f"{input_key} has an unsupported file format")
+
+    if suffix in [
+        ".csv",
+        ".txt",
+    ]:
+        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+        extracted_text = s3_file_object["Body"].read().decode("utf-8")
+        return __text_to_document(extracted_text, input_key)
+    elif suffix in [
+        ".docx",
+    ]:
+        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+        file_content = s3_file_object["Body"].read()
+        pages = extract_docx_pages(file_content)
+        return _textract_pages_to_document(pages, input_key)
+    elif suffix in [
+        ".xlsx",
+    ]:
+        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+        file_content = s3_file_object["Body"].read()
+        excel_structure = extract_excel_structure(file_content)
+        return _excel_structure_to_document(excel_structure, input_key)
+    elif suffix in [
+        ".png",
+        ".jpg",
+        ".jpeg",
+    ]:
+        extracted_text = bedrock.get_text_from_image(input_bucket, input_key)
+        return __text_to_document(extracted_text, input_key)
+    elif suffix in [
+        ".pdf",
+        ".tiff",
+    ]:
+        pages = textract.get_pages_from_document(input_bucket, input_key)
+        return _textract_pages_to_document(pages, input_key)
+    elif suffix in [
+        ".mp3",
+        ".mp4",
+        ".wav",
+        ".flac",
+        ".ogg",
+        ".amr",
+        ".webm",
+        ".m4a",
+    ]:
+        response = aws_transcribe.transcribe(
+            input_bucket=input_bucket,
+            input_key=input_key,
+            job_name=f"transcribe-{int(time.time())}",
+            output_bucket=input_bucket,
+            output_key=f"{input_key}.transcription.json",
+            name_for_logging=input_key,
+        )
+        return __text_to_document(response.text, input_key)
+    else:
+        raise UnsupportedFileFormat(f"{input_key} has an unsupported file format")
 
 
 def extract_docx_pages(file_content: bytes) -> dict[int, str]:
