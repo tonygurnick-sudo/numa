@@ -37,6 +37,7 @@ export const NumaAppProvider = ({ children }) => {
   const [progress, setProgress] = useState(0);
   const [isPolling, setIsPolling] = useState(false);
   const [appRunning, setAppRunning] = useState(false);
+  const [job, setJob] = useState(null);
   const [currentJobId, setCurrentJobId] = useState(null);
 
   // New states for processing progress
@@ -87,7 +88,10 @@ export const NumaAppProvider = ({ children }) => {
   const loadAppJobs = async ({ limit = 50, nextToken = null, append = false } = {}) => {
     if (!numaAppId) return;
     try {
-      const response = await jobsApi.getJobsByAppId(numaAppId, { limit, nextToken });
+      const response = await jobsApi.getJobsByAppId(numaAppId, {
+        limit,
+        nextToken,
+      });
       const { items: appJobs, nextToken: newNextToken } = response;
 
       // Sort jobs by date before setting/appending
@@ -307,7 +311,10 @@ export const NumaAppProvider = ({ children }) => {
 
       if (outputResult) {
         let resultToDisplay = outputResult;
-        console.log('Processing result for display:', { type: typeof resultToDisplay, value: resultToDisplay });
+        console.log('Processing result for display:', {
+          type: typeof resultToDisplay,
+          value: resultToDisplay,
+        });
 
         if (typeof outputResult === 'object') {
           if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
@@ -453,7 +460,11 @@ export const NumaAppProvider = ({ children }) => {
             Object.entries(pollResponse.result).forEach(([key, value]) => {
               formattedResult[key] = value;
             });
-            return { status: 'completed', result: formattedResult, state: currentState };
+            return {
+              status: 'completed',
+              result: formattedResult,
+              state: currentState,
+            };
           }
           throw new Error('No result data in successful response');
         } else if (pollResponse.status === 'FAILURE' || pollResponse.status === 'error') {
@@ -637,8 +648,9 @@ export const NumaAppProvider = ({ children }) => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data = await response.json();
+      const data = await response.text();
       console.log('S3 content retrieved:', data);
+
       return data;
     } catch (error) {
       console.error('Error fetching S3 content:', error);
@@ -720,7 +732,10 @@ export const NumaAppProvider = ({ children }) => {
           console.error('Failed to update job status:', updateError);
           // Continue even if the update fails - we'll still try to use the job
         }
-        jobResponse = { jobID: currentJobId, startedAt: new Date().toISOString() };
+        jobResponse = {
+          jobID: currentJobId,
+          startedAt: new Date().toISOString(),
+        };
       } else {
         // No job exists yet, create one with 'running' status
         jobResponse = await jobsApi.createJob(numaAppData, taskInputValues);
@@ -746,19 +761,64 @@ export const NumaAppProvider = ({ children }) => {
       const textOutputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
 
       console.log('Found text-output tasks to be saved:', textOutputTasks);
-      // Build results object from text-output tasks
-      const textOutputResults = textOutputTasks.reduce((acc, task) => {
-        // Get the referenced data using resolveReference
-        const resolvedValue = resolveReference(task.params.dataRef, currentResults);
-        if (resolvedValue !== '') {
-          acc[task.id] = resolvedValue;
+      console.log('Current results structure:', JSON.stringify(currentResults, null, 2));
+
+      // Check if we have the new schema format (results array)
+      // First check if results is directly in currentResults
+      let hasResults = Boolean(currentResults && currentResults.results && Array.isArray(currentResults.results));
+      let resultsArray = hasResults ? currentResults.results : null;
+
+      // If not found directly, check if it's nested in an HTTP request task result
+      if (!hasResults) {
+        // Look for HTTP request tasks that might contain results
+        const httpRequestTasks = numaAppData.tasks.filter((task) => task.type === 'http-request');
+
+        for (const task of httpRequestTasks) {
+          if (
+            currentResults[task.id] &&
+            currentResults[task.id].results &&
+            Array.isArray(currentResults[task.id].results)
+          ) {
+            hasResults = true;
+            resultsArray = currentResults[task.id].results;
+            console.log(`Found results array in task: ${task.id}`);
+            break;
+          }
         }
-        return acc;
-      }, {});
+      }
+
+      console.log('Has results array:', hasResults);
+
+      let textOutputResults;
+
+      if (hasResults) {
+        console.log('Using new schema format for results');
+        console.log('Results array:', resultsArray);
+        // For new schema, pass the results array directly without nesting
+        textOutputResults = resultsArray;
+      } else {
+        console.log('Using legacy schema format for results');
+        // Build results object from text-output tasks (legacy format)
+        textOutputResults = textOutputTasks.reduce((acc, task) => {
+          // Get the referenced data using resolveReference
+          const resolvedValue = resolveReference(task.params.dataRef, currentResults);
+          if (resolvedValue !== '') {
+            acc[task.id] = resolvedValue;
+          }
+          return acc;
+        }, {});
+      }
 
       console.log('Text-output results to be saved:', textOutputResults);
       // Update the job with results and completed status, but don't modify inputs
       await jobsApi.updateJob(numaAppData, jobID, textOutputResults, undefined, 'completed');
+
+      // Update the job in state
+      setJob((prevJob) => ({
+        ...prevJob,
+        results: textOutputResults,
+        status: 'completed',
+      }));
 
       // Refresh the jobs list
       await loadAppJobs();
@@ -973,6 +1033,8 @@ export const NumaAppProvider = ({ children }) => {
       }
 
       console.log('Initial job:', job);
+
+      setJob(job);
 
       // Try to poll for updates if job is incomplete
       if (job.status !== 'completed') {
@@ -1309,6 +1371,8 @@ export const NumaAppProvider = ({ children }) => {
     resetAppState,
     currentJobId,
     setCurrentJobId,
+    job,
+    fetchS3Content,
   };
 
   return <NumaAppContext.Provider value={contextValue}>{children}</NumaAppContext.Provider>;

@@ -12,7 +12,7 @@ import { useJobsApi } from '../Services/jobsApi';
 // Default no-op functions
 const noop = () => {};
 
-function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChange = noop, value }) {
+function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChange = noop, value, disabled = false }) {
   const {
     loading,
     numaAppId,
@@ -276,7 +276,9 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           Key: `${numaAppId}/${jobId}/${encodedPath}`,
         });
 
-        const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+        const presignedUrl = await getSignedUrl(s3Client, command, {
+          expiresIn: 3600,
+        });
         const filePath = command.input.Key;
 
         await axios.put(presignedUrl, file, {
@@ -392,7 +394,9 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       {task?.title && <h3>{task.title}</h3>}
 
       <div
-        className={`upload-container bg-light p-4 rounded ${isDragging ? 'dragging' : ''}`}
+        className={`upload-container bg-light p-4 rounded ${isDragging ? 'dragging' : ''} ${
+          disabled ? 'disabled' : ''
+        }`}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -409,6 +413,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           style={{ display: 'none' }}
           multiple
           accept={acceptedFileTypes?.join(',')}
+          disabled={disabled}
         />
         <div className="text-center">
           <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
@@ -419,6 +424,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
             htmlFor={`file-upload-${task?.id}`}
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
             onClick={(e) => e.stopPropagation()}
+            disabled={disabled}
           >
             Select Files
           </Button>
@@ -433,7 +439,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
             </div>
           )}
           {selectedFiles.length > 0 && !uploadStatus && (
-            <Button variant="primary" onClick={handleUpload} className="mt-3" disabled={loading}>
+            <Button variant="primary" onClick={handleUpload} className="mt-3" disabled={loading || disabled}>
               Upload
             </Button>
           )}

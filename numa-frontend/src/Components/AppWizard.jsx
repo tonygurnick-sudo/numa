@@ -1,11 +1,13 @@
-import { useMemo, useCallback } from 'react';
-import { Container, Row, Col, Button } from 'react-bootstrap';
+import { useMemo, useCallback, useState, useEffect } from 'react';
+import { Container, Row, Col, Button, Tabs, Tab } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
 import { TextOutputModule } from '../Modules/TextOutputModule';
 import { WizardNavigation } from './WizardNavigation';
 import { Preloader } from '../Components/Preloader';
+import { ResultsRenderer } from './ResultsRenderer';
+import ReactMarkdown from 'react-markdown';
 
 const AppWizard = ({ manifest }) => {
   const {
@@ -28,7 +30,24 @@ const AppWizard = ({ manifest }) => {
     setActiveStep,
     hasRun,
     setHasRun,
+    job,
   } = useNumaApp();
+
+  const [activeTab, setActiveTab] = useState(() => {
+    // If there are results, start on results tab
+    if (job?.results) {
+      return 'results';
+    }
+    // Otherwise start on inputs tab
+    return 'inputs';
+  });
+
+  // Update activeTab when job changes
+  useEffect(() => {
+    if (job?.results) {
+      setActiveTab('results');
+    }
+  }, [job]);
 
   // Filter out hidden tasks and system tasks (q-app and http-request)
   const visibleTasks = useMemo(
@@ -91,6 +110,17 @@ const AppWizard = ({ manifest }) => {
   // Now we can use isStepDisabled in handleStepClick
   const handleStepClick = useCallback(
     (index) => {
+      // Check if this is a result step (index >= preRunTasks.length)
+      if (index >= preRunTasks.length) {
+        if (hasRun) {
+          console.log(`Setting active step to result index: ${index}`);
+          setActiveStep(index);
+          // No need to set selectedTaskId for results
+        }
+        return;
+      }
+
+      // For traditional tasks
       const task = visibleTasks[index];
       if (task) {
         // For output tasks, only allow clicking if we have results
@@ -117,7 +147,15 @@ const AppWizard = ({ manifest }) => {
         }
       }
     },
-    [visibleTasks, activeStep, markDefaultContentComplete, setSelectedTaskId, hasRun, isStepDisabled],
+    [
+      visibleTasks,
+      activeStep,
+      markDefaultContentComplete,
+      setSelectedTaskId,
+      hasRun,
+      isStepDisabled,
+      preRunTasks.length,
+    ],
   );
 
   const handleRunApp = async () => {
@@ -137,6 +175,7 @@ const AppWizard = ({ manifest }) => {
 
       setHasRun(true);
       setAppRunning(true);
+      setActiveTab('results'); // Switch to results tab when running
       await handleRunButtonClick(numaAppData);
     } catch (error) {
       console.error('Error running app:', error);
@@ -160,16 +199,15 @@ const AppWizard = ({ manifest }) => {
 
   const handleTaskInputChange = useCallback(
     (taskId, value) => {
+      // Only allow changes if app hasn't run
+      if (hasRun) return;
       setTaskInputValues((prev) => ({
         ...prev,
         [taskId]: value,
       }));
-      // We don't update completion status here anymore
-      // Let the module handle it based on required status
-      // updateTaskCompletionStatus(taskId, Boolean(value));
       updateTaskInputValue(taskId, value);
     },
-    [setTaskInputValues, updateTaskInputValue],
+    [setTaskInputValues, updateTaskInputValue, hasRun],
   );
 
   const handlePrevStep = () => {
@@ -194,7 +232,41 @@ const AppWizard = ({ manifest }) => {
   const isLastVisibleStep = activeStep === visibleTasks.length - 1;
   const isCurrentStepIncomplete = !taskCompletionStatus[visibleTasks[activeStep]?.id];
 
-  const renderTask = (task) => {
+  const renderTask = (task, index) => {
+    // Check if this is a result step (index >= preRunTasks.length)
+    if (index >= preRunTasks.length && job?.results && job?.results.length > 0) {
+      // Find the corresponding result output
+      let outputIndex = index - preRunTasks.length;
+      let currentOutput = null;
+
+      // Find the output at the given index across all results
+      for (const result of job.results) {
+        if (outputIndex < result.outputs.length) {
+          currentOutput = result.outputs[outputIndex];
+          break;
+        }
+        outputIndex -= result.outputs.length;
+      }
+
+      if (currentOutput) {
+        return (
+          <div className="result-output">
+            <h3>{currentOutput.title || `Output ${outputIndex + 1}`}</h3>
+            <div>
+              {currentOutput.content_type === 'text/markdown' ? (
+                <ReactMarkdown>{currentOutput.data}</ReactMarkdown>
+              ) : (
+                <pre>{JSON.stringify(currentOutput.data, null, 2)}</pre>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      return <p>No output found at index {index}</p>;
+    }
+
+    // For traditional tasks
     const handleComplete = (results) => handleTaskCompletion(task.id, true, results);
     const handleNotComplete = () => handleTaskCompletion(task.id, false);
 
@@ -204,13 +276,14 @@ const AppWizard = ({ manifest }) => {
       onNotComplete: handleNotComplete,
       value: taskInputValues[task.id],
       onChange: (value) => handleTaskInputChange(task.id, value),
+      disabled: hasRun, // Add disabled prop to all input modules
     };
 
     switch (task.type) {
       case 'text-input':
-        return <TextInputModule key={task.id} {...commonProps} />;
+        return <TextInputModule hasRun={hasRun} key={task.id} {...commonProps} />;
       case 's3-upload':
-        return <S3UploadModule key={task.id} {...commonProps} />;
+        return <S3UploadModule disabled={hasRun} key={task.id} {...commonProps} />;
       case 'text-output':
         return <TextOutputModule key={task.id} task={task} />;
       default:
@@ -249,36 +322,77 @@ const AppWizard = ({ manifest }) => {
             processingProgress={processingProgress}
             processingStatus={processingStatus}
             hasRun={hasRun}
+            results={job?.results}
           />
         </Col>
       </Row>
 
       <Row>
         <Col xs={12} className="px-2 px-md-4 position-relative">
-          {activeStep < visibleTasks.length && (
-            <div className="mb-4 position-relative">
-              {renderTask(visibleTasks[activeStep])}
-              <div
-                className="task-navigation position-absolute start-0 end-0 d-flex justify-content-between"
-                style={{ bottom: '-50px' }}
-              >
-                {activeStep < visibleTasks.length && (
-                  <>
-                    <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
-                      <i className="bi bi-arrow-left me-2"></i>
-                      Previous Input
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={handleNextStep}
-                      disabled={isLastVisibleStep || isCurrentStepIncomplete || nextDisabled}
+          {/* Only show tabs if there are results */}
+          {job?.results && job?.results.length > 0 ? (
+            <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="mb-4">
+              <Tab eventKey="inputs" title="Inputs">
+                {activeStep < visibleTasks.length ? (
+                  <div className="mb-4 position-relative">
+                    {renderTask(visibleTasks[activeStep], activeStep)}
+                    <div
+                      className="task-navigation position-absolute start-0 end-0 d-flex justify-content-between"
+                      style={{ bottom: '-50px' }}
                     >
-                      Next Input
-                      <i className="bi bi-arrow-right ms-2"></i>
-                    </Button>
-                  </>
-                )}
-              </div>
+                      {activeStep < visibleTasks.length && (
+                        <>
+                          <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
+                            <i className="bi bi-arrow-left me-2"></i>
+                            Previous Input
+                          </Button>
+                          <Button
+                            variant="primary"
+                            onClick={handleNextStep}
+                            disabled={isLastVisibleStep || nextDisabled}
+                          >
+                            Next Input
+                            <i className="bi bi-arrow-right ms-2"></i>
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </Tab>
+              <Tab eventKey="results" title="Results">
+                <ResultsRenderer results={job?.results} />
+              </Tab>
+            </Tabs>
+          ) : (
+            // If no results, just show the inputs section
+            <div className="mb-4 position-relative">
+              {activeStep < visibleTasks.length && (
+                <>
+                  {renderTask(visibleTasks[activeStep], activeStep)}
+                  <div
+                    className="task-navigation position-absolute start-0 end-0 d-flex justify-content-between"
+                    style={{ bottom: '-50px' }}
+                  >
+                    {activeStep < visibleTasks.length && (
+                      <>
+                        <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
+                          <i className="bi bi-arrow-left me-2"></i>
+                          Previous Input
+                        </Button>
+                        <Button
+                          variant="primary"
+                          onClick={handleNextStep}
+                          disabled={isLastVisibleStep || isCurrentStepIncomplete || nextDisabled}
+                        >
+                          Next Input
+                          <i className="bi bi-arrow-right ms-2"></i>
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </Col>

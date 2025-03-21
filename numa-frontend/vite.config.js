@@ -54,10 +54,6 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/manifest.json': {
-        target: 'http://localhost:5173',
-        rewrite: () => '/src/Data/example-manifest.json',
-      },
       '/api': {
         target: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
         changeOrigin: true,
@@ -66,6 +62,14 @@ export default defineConfig({
           Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
         },
         rewrite: (path) => path.replace(/^\/api/, '/api'),
+      },
+      '/manifest.json': {
+        target: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
+        changeOrigin: true,
+        secure: false,
+        headers: {
+          Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
+        },
       },
     },
   },

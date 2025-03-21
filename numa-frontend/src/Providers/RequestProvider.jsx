@@ -52,7 +52,6 @@ export const NumaRequestProvider = ({ children }) => {
 
   // Common request methods
   const numaGet = async (url, params, headers = {}) => {
-    console.log('Making GET request to:', url);
     try {
       const response = await axios.get(url, {
         ...axiosConfig,
