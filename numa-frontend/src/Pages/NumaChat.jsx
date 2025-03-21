@@ -305,19 +305,6 @@ const NumaChat = () => {
 
             // Log the enhanced message
             console.log('Enhanced user message with search results');
-
-            // Store search results in DynamoDB for reference
-            if (numaChatDynamoUtils) {
-              await numaChatDynamoUtils
-                .addMessage({
-                  conversationId: cid,
-                  userId: sub,
-                  messageType: 'knowledge',
-                  role: 'assistant',
-                  content: formattedResults,
-                })
-                .catch((err) => console.error('Error storing web search knowledge:', err));
-            }
           }
         } catch (error) {
           console.error('Error performing web search:', error);
