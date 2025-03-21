@@ -65,6 +65,7 @@ variables:
         - lambdas/python/step-function-start
         - lambdas/python/step-function-status
         - lambdas/python/structured-data-extraction
+        - lambdas/python/web-search-proxy
 
 .python-matrix:
   matrix:
@@ -94,6 +95,7 @@ variables:
         - lambdas/python/step-function-start
         - lambdas/python/step-function-status
         - lambdas/python/structured-data-extraction
+        - lambdas/python/web-search-proxy
         - lib/aws-transcribe
         - lib/bedrock
         - lib/helpers

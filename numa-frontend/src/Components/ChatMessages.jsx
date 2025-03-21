@@ -39,6 +39,8 @@ const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDo
             statusText = 'Querying data sources...';
           } else if (message.status === 'thinking') {
             statusText = 'Thinking...';
+          } else if (message.status === 'searching') {
+            statusText = 'Searching the web...';
           }
           return (
             <div key={index} className="message assistant ephemeral">

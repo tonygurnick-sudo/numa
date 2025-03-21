@@ -1,0 +1,49 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+
+[tool.poetry]
+name = "web-search-proxy"
+version = "0.1.0"
+description = "Web search proxy that returns content using Google search and a simple scraper"
+authors = ["Sam Bentley <sam@arcanum.ai>"]
+readme = "README.md"
+packages = [
+    { include = "**/*.py" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+
+httpx = "^0.28.1"
+structlog = "^25.2.0"
+aws-lambda-powertools = "3.8.0"
+googlesearch-python = "^1.1.0"
+beautifulsoup4 = "^4.12.2"
+bedrock = {path = "../../../lib/bedrock", develop = true}
+helpers = {path = "../../../lib/helpers", develop = true}
+
+[tool.poetry.group.dev.dependencies]
+mypy = "1.15.0"
+pylint = "3.3.5"
+pyright = "1.1.397"
+
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.9.0"
+poetry-plugin-lambda-build = ">=1.0.7"
+
+[tool.poetry-plugin-lambda-build]
+package-artifact-path = "lambda_function.zip"
+without = "dev"

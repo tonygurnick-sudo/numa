@@ -26,6 +26,31 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       },
       environment,
     });
+
+    // Web Search Proxy
+    this.addLambdaFunction(this, 'web-search-proxy', {
+      addAuthorizer: false,
+      lambdaDirectory: 'python/web-search-proxy',
+      handler: 'lambda_function.lambda_handler',
+      route: {
+        verb: 'GET',
+        path: 'web-search',
+      },
+      environment: {
+        variables: {
+          LOG_LEVEL: 'INFO',
+          ALLOWED_ORIGIN: '*',
+        },
+      },
+      timeout: 45,
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['bedrock:InvokeModel'],
+          resources: ['*'],
+        },
+      ],
+    });
   }
 }
 

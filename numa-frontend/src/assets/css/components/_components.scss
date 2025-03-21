@@ -1706,6 +1706,45 @@ label {
         }
       }
     }
+
+    // Web search toggle button
+    .web-search-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      color: black;
+      padding: 8px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.3s ease-in-out;
+
+      &:hover {
+        background: rgba(106, 13, 173, 0.1); // Light purple hover effect
+        color: black;
+        transform: scale(1.1);
+      }
+
+      .bubble-text {
+        display: none;
+      }
+
+      &.active {
+        background: rgba(106, 13, 173, 0.1);
+        color: black;
+        padding: 8px 12px;
+        border-radius: 20px;
+        transition: all 0.3s ease-in-out;
+
+        .bubble-text {
+          display: inline-block;
+          opacity: 1;
+          transition: opacity 0.3s ease-in-out;
+        }
+      }
+    }
     // Send Button (Arrow in Circle)
     .send-button {
       background: none !important; /* Ensures full transparency */
@@ -1807,6 +1846,13 @@ label {
   .ephemeral-content {
     display: flex;
     align-items: center;
+  }
+
+  &.searching {
+    .message-content {
+      color: #4b007d;
+      font-style: italic;
+    }
   }
 }
 
@@ -1960,6 +2006,16 @@ label {
     &:hover {
       opacity: 1;
     }
+  }
+}
+
+.tips-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  p {
+    margin: 0;
   }
 }
 

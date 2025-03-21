@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { Button, Form, Spinner } from 'react-bootstrap';
-import { Database } from 'react-bootstrap-icons';
+import { Database, Search } from 'react-bootstrap-icons';
 
 const ChatInput = ({
   inputMessage,
@@ -11,6 +11,8 @@ const ChatInput = ({
   handleStopGeneration,
   queryDataSources,
   setQueryDataSources,
+  webSearchEnabled,
+  setWebSearchEnabled,
   disabled = false,
 }) => {
   const inputRef = useRef(null);
@@ -84,6 +86,18 @@ const ChatInput = ({
             >
               <Database size={25} />
               {queryDataSources && <span className="bubble-text">Data Sources Enabled</span>}
+            </Button>
+
+            {/* Web Search Toggle */}
+            <Button
+              variant="link"
+              className={`web-search-toggle ${webSearchEnabled ? 'active' : ''}`}
+              onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+              aria-label="Toggle Web Search"
+              disabled={disabled}
+            >
+              <Search size={25} />
+              {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}
             </Button>
           </div>
           <div className="right-controls">
