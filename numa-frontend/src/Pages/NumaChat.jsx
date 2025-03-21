@@ -117,6 +117,24 @@ const NumaChat = () => {
     }
     return null;
   }
+
+  /**
+   * Format web search results into a readable string
+   * @param {Array} results - Array of search result objects
+   * @param {string} query - The original user query
+   * @returns {string} Formatted results string
+   */
+  function formatWebSearchResults(results, query) {
+    let formattedResults = `\n\nWeb search results for "${query}":\n\n`;
+
+    results.forEach((result, index) => {
+      formattedResults += `[${index + 1}] ${result.title}\n`;
+      formattedResults += `URL: ${result.url}\n`;
+      formattedResults += `${result.snippet}\n\n`;
+    });
+
+    return formattedResults;
+  }
   // Ref for input textarea
   const inputRef = useRef(null);
 
@@ -254,46 +272,43 @@ const NumaChat = () => {
             cache: 'no-cache',
           });
 
-          if (searchResponse.ok) {
-            const searchData = await searchResponse.json();
-            console.log('Search results:', searchData);
-
-            if (searchData.results && searchData.results.length > 0) {
-              // Format search results
-              let formattedResults = `\n\nWeb search results for "${originalUserMessage}":\n\n`;
-
-              searchData.results.forEach((result, index) => {
-                formattedResults += `[${index + 1}] ${result.title}\n`;
-                formattedResults += `URL: ${result.url}\n`;
-                formattedResults += `${result.snippet}\n\n`;
-
-                // Add URLs to references for display
-                if (result.url) {
-                  dsReferences.push(result.url);
-                }
-              });
-
-              // Enhance the user message with search results
-              enhancedUserMessage = `${originalUserMessage}${formattedResults}`;
-
-              // Log the enhanced message
-              console.log('Enhanced user message with search results');
-
-              // Store search results in DynamoDB for reference
-              if (numaChatDynamoUtils) {
-                await numaChatDynamoUtils
-                  .addMessage({
-                    conversationId: cid,
-                    userId: sub,
-                    messageType: 'knowledge',
-                    role: 'assistant',
-                    content: formattedResults,
-                  })
-                  .catch((err) => console.error('Error storing web search knowledge:', err));
-              }
-            }
-          } else {
+          if (!searchResponse.ok) {
             console.error('Search failed:', searchResponse.status);
+            return;
+          }
+
+          const searchData = await searchResponse.json();
+          console.log('Search results:', searchData);
+
+          if (searchData.results && searchData.results.length > 0) {
+            // Format search results using the helper function
+            const formattedResults = formatWebSearchResults(searchData.results, originalUserMessage);
+
+            // Add URLs to references for display
+            searchData.results.forEach(result => {
+              if (result.url) {
+                dsReferences.push(result.url);
+              }
+            });
+
+            // Enhance the user message with search results
+            enhancedUserMessage = `${originalUserMessage}${formattedResults}`;
+
+            // Log the enhanced message
+            console.log('Enhanced user message with search results');
+
+            // Store search results in DynamoDB for reference
+            if (numaChatDynamoUtils) {
+              await numaChatDynamoUtils
+                .addMessage({
+                  conversationId: cid,
+                  userId: sub,
+                  messageType: 'knowledge',
+                  role: 'assistant',
+                  content: formattedResults,
+                })
+                .catch((err) => console.error('Error storing web search knowledge:', err));
+              }
           }
         } catch (error) {
           console.error('Error performing web search:', error);
