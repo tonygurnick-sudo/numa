@@ -53,6 +53,7 @@ const NumaChat = () => {
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
   const Q_RETRIEVER_ID = window.sessionStorage.getItem('Q_RETRIEVER_ID');
   const MAX_DATA_SOURCE_ITEMS = 6;
+  const MAX_WEB_SEARCH_RESULTS = 5;
   const TODAY = new Date();
   const SYSTEM_MESSAGE = `You are an artificial intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data sources, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorporate other bold and italic styling within your outputs when appropriate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with markdown formatting.\n- Similarly, For any document, report, email, analysis, or other exportable content you generate that a user may want to download or copy (except code), please start it with the following '<!--BEGIN_DOC title="SOME TITLE HERE"-->' (where you infer the title when writing the document), and end it with '<!--END_DOC-->'. This will help me identify documents in post processing using regex looking for the opening '<--' and closing '-->'\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like "Could you provide more details?" or "What specific aspect would you like to focus on?"\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
 
@@ -125,13 +126,16 @@ const NumaChat = () => {
    * @returns {string} Formatted results string
    */
   function formatWebSearchResults(results, query) {
-    let formattedResults = `\n\nWeb search results for "${query}":\n\n`;
+    let formattedResults = `\n\n**Web Search Results:**\n`;
+    formattedResults += `Search query: "${query}"\n\n`;
 
     results.forEach((result, index) => {
       formattedResults += `[${index + 1}] ${result.title}\n`;
       formattedResults += `URL: ${result.url}\n`;
       formattedResults += `${result.snippet}\n\n`;
     });
+
+    formattedResults += `**End of Web Search Results**`;
 
     return formattedResults;
   }
@@ -244,9 +248,9 @@ const NumaChat = () => {
       const cid = await createNewConversationIfNeeded(inputMessage);
 
       // Original user message to store
-      const originalUserMessage = inputMessage;
+      const userMsg = inputMessage;
       // Message to display to Claude (may include search results)
-      let enhancedUserMessage = originalUserMessage;
+      let webSearchEnhancedUserMessage = userMsg;
 
       // We'll store references from data source queries
       let dsReferences = [];
@@ -264,9 +268,9 @@ const NumaChat = () => {
           // Call web search Lambda with context
           const API_GATEWAY_URL = window.sessionStorage.getItem('API_ENDPOINT') || '/api';
           const basePath = API_GATEWAY_URL.endsWith('/api') ? API_GATEWAY_URL : `${API_GATEWAY_URL}/api`;
-          const searchUrl = `${basePath}/web-search?query=${encodeURIComponent(originalUserMessage)}&max_results=5&context=${encodeURIComponent(contextString)}`;
+          const searchUrl = `${basePath}/web-search?query=${encodeURIComponent(userMsg)}&max_results=${MAX_WEB_SEARCH_RESULTS}&context=${encodeURIComponent(contextString)}`;
 
-          console.log('Automatically searching for:', originalUserMessage, 'with context');
+          console.log('Automatically searching for:', userMsg, 'with context');
           const searchResponse = await fetch(searchUrl, {
             method: 'GET',
             cache: 'no-cache',
@@ -274,6 +278,11 @@ const NumaChat = () => {
 
           if (!searchResponse.ok) {
             console.error('Search failed:', searchResponse.status);
+            const errorMsg = {
+              role: 'system',
+              content: `Error: Web search failed (status: ${searchResponse.status}). Please try again or refresh page.`,
+            };
+            setMessages((prev) => [...prev, errorMsg]);
             return;
           }
 
@@ -282,7 +291,7 @@ const NumaChat = () => {
 
           if (searchData.results && searchData.results.length > 0) {
             // Format search results using the helper function
-            const formattedResults = formatWebSearchResults(searchData.results, originalUserMessage);
+            const formattedResults = formatWebSearchResults(searchData.results, userMsg);
 
             // Add URLs to references for display
             searchData.results.forEach((result) => {
@@ -292,7 +301,7 @@ const NumaChat = () => {
             });
 
             // Enhance the user message with search results
-            enhancedUserMessage = `${originalUserMessage}${formattedResults}`;
+            webSearchEnhancedUserMessage = `${userMsg}${formattedResults}`;
 
             // Log the enhanced message
             console.log('Enhanced user message with search results');
@@ -312,6 +321,11 @@ const NumaChat = () => {
           }
         } catch (error) {
           console.error('Error performing web search:', error);
+          const errorMsg = {
+            role: 'system',
+            content: `Error: Web search failed. Please try again or refresh page. Contact support if the error persists.`,
+          };
+          setMessages((prev) => [...prev, errorMsg]);
         } finally {
           // Remove searching indicator
           setMessages((prev) => {
@@ -324,8 +338,8 @@ const NumaChat = () => {
       }
 
       // 1) Add user message to local state (original message, not enhanced)
-      const userMsg = { role: 'user', content: originalUserMessage };
-      setMessages((prev) => [...prev, userMsg]);
+      const userMsgObject = { role: 'user', content: userMsg };
+      setMessages((prev) => [...prev, userMsgObject]);
 
       // 2) Store original user message in DynamoDB as structured
       if (numaChatDynamoUtils) {
@@ -335,7 +349,7 @@ const NumaChat = () => {
             userId: sub,
             messageType: 'text',
             role: 'user',
-            content: originalUserMessage,
+            content: userMsg,
           })
           .catch((err) => console.error('Error storing user message:', err));
       }
@@ -418,12 +432,12 @@ const NumaChat = () => {
       const conversationHistory = await numaChatDynamoUtils.queryConversations(cid, MAX_DYNAMO_MESSAGES, sub);
 
       // Modify the last user message in the history (which is our message) to include search results if available
-      if (webSearchEnabled && enhancedUserMessage !== originalUserMessage) {
+      if (webSearchEnabled && webSearchEnhancedUserMessage !== userMsg) {
         // Find and replace the last user message with the enhanced version
         for (let i = conversationHistory.length - 1; i >= 0; i--) {
-          if (conversationHistory[i].role === 'user' && conversationHistory[i].content === originalUserMessage) {
+          if (conversationHistory[i].role === 'user' && conversationHistory[i].content === userMsg) {
             console.log('Replacing user message with enhanced version containing search results');
-            conversationHistory[i].content = enhancedUserMessage;
+            conversationHistory[i].content = webSearchEnhancedUserMessage;
             break;
           }
         }
