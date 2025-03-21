@@ -525,13 +525,9 @@
       {
         "tenantId": "91ff374c-03ff-4eed-9628-d89e52352b55",
         "domain": "teachersrcc",
-        "siteUrls": [
-          "https://teachersrcc.sharepoint.com/"
-        ],
+        "siteUrls": ["https://teachersrcc.sharepoint.com/"],
         "configuration": {
-          "inclusionFilePath": [
-            ".*NEX[ -]?Milestone[ -]?Reports.*"
-          ]
+          "inclusionFilePath": [".*NEX[ -]?Milestone[ -]?Reports.*"]
         }
       }
     ]
