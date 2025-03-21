@@ -3,7 +3,7 @@ import { Form } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
 
-function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
+function TextInputModule({ task, onComplete, onNotComplete, onChange, hasRun }) {
   // Check if the task is required (default to true for backward compatibility)
   const isRequired = task.required !== undefined ? task.required : true;
   const { numaTaskResponses, appRunning, taskInputValues } = useNumaApp();
@@ -74,6 +74,8 @@ function TextInputModule({ task, onComplete, onNotComplete, onChange }) {
           rows={7}
           placeholder="Enter text here..."
           value={inputValue}
+          // Disable the input if the app is running or has run
+          disabled={appRunning || hasRun}
           onChange={handleInputChange}
         />
       </Form.Group>

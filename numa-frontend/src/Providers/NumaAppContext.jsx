@@ -125,6 +125,25 @@ export const resolveReference = (key, taskResults) => {
     return '';
   }
 
+  // Process file arrays - if the result is an array of file objects, extract just the paths
+  if (
+    Array.isArray(baseResult) &&
+    baseResult.length > 0 &&
+    typeof baseResult[0] === 'object' &&
+    baseResult[0].filePath
+  ) {
+    const filePaths = baseResult.map((fileObj) => fileObj.filePath);
+
+    // If there's no subPath, return the processed array
+    if (subPaths.length === 0) {
+      return filePaths;
+    }
+
+    // If there is a subPath, we can't navigate further since we've transformed the structure
+    console.warn(`Cannot navigate to subpath ${subPaths.join('/')} after file array transformation`);
+    return filePaths;
+  }
+
   // If there's no subPath or the result isn't an object, return the base result
   if (subPaths.length === 0 || typeof baseResult !== 'object') {
     return baseResult;
@@ -142,9 +161,6 @@ export const resolveReference = (key, taskResults) => {
 
 // Function to create a payload dynamically from a template
 export function createPayloadFromTemplate(template, inputValues, taskResults) {
-  console.log('inputValues', inputValues);
-  console.log('taskResults', taskResults);
-
   // Main function to recursively handle template (string, array, or object)
   if (typeof template === 'string') {
     // If the string is a direct reference (e.g. "@upload-files-to-s3"), return the resolved value directly

@@ -103,7 +103,6 @@ const WizardNavigation = ({
           </div>
         )}
 
-        <div className={`section-label step-group post-run ${hasBeenRun ? 'show' : ''}`}>Results</div>
         <div className={`step-group post-run ${hasBeenRun ? 'show' : ''}`}>
           {postRunSteps.map((step, index) => {
             const stepIndex = index + preRunSteps.length;
