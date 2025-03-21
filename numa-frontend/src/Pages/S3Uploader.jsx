@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Container, Row, Col, Card, Button, Form, Alert, Table, Toast, ToastContainer } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Form, Alert, Table } from 'react-bootstrap';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
-import { ListDataSourcesCommand, ListDataSourceSyncJobsCommand } from '@aws-sdk/client-qbusiness';
+import { ListDataSourcesCommand, ListDataSourceSyncJobsCommand, ListDocumentsCommand } from '@aws-sdk/client-qbusiness';
 
 import { useAuth } from '../Providers/AuthProvider';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav as TopNav } from '../Components/Nav';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { FileUploader } from '../Components/FileUploader';
+
 /**
  * Build a nested folder tree from S3 object keys.
  */
@@ -111,10 +112,13 @@ function buildRowsForTree(node, depth, parentPath) {
     rows.push(folderRow);
   }
 
-  // Files
+  // Process files and attach KB status if available
   node.files.forEach((f) => {
-    const fileName = f.Key.split('/').pop();
+    const fileName = f.Key.split('/').pop().replace(/%20/g, ' '); // Replace %20 with space
     const rowId = parentPath ? `${parentPath}/${fileName}` : fileName;
+    const kbStatus = f.kbDoc ? (f.kbDoc.error && Object.keys(f.kbDoc.error).length > 0 ? 'FAILED' : 'SUCCESS') : null;
+    const errorMessage = f.kbDoc ? f.kbDoc.error?.errorMessage : null;
+
     rows.push({
       id: rowId,
       type: 'file',
@@ -122,6 +126,8 @@ function buildRowsForTree(node, depth, parentPath) {
       depth,
       uploadDate: new Date(f.LastModified).toLocaleString('en-NZ'),
       size: formatKB(f.Size),
+      kbStatus,
+      errorMessage,
     });
   });
 
@@ -164,6 +170,15 @@ function getNextSyncTime() {
 }
 
 /**
+ * Helper: Convert a documentId (from KB API) to an S3 file key.
+ * E.g., "s3://numa-arcanum-demo-data/CustomerAccount.txt" => "CustomerAccount.txt"
+ */
+function documentIdToKey(documentId) {
+  const parts = documentId.split('/');
+  return parts.slice(3).join('/');
+}
+
+/**
  * Main S3Uploader component
  */
 export function S3Uploader() {
@@ -174,13 +189,15 @@ export function S3Uploader() {
   const [syncJobStatus, setSyncJobStatus] = useState(null);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState(null);
 
+  const [syncMetrics, setSyncMetrics] = useState(null);
+
   const [pendingSearch] = useState('');
   const [indexedSearch, setIndexedSearch] = useState('');
 
   const [expandedFoldersPending, setExpandedFoldersPending] = useState(new Set());
   const [expandedFoldersIndexed, setExpandedFoldersIndexed] = useState(new Set());
 
-  const [showUploadToast, setShowUploadToast] = useState(false);
+  const [kbDocuments, setKbDocuments] = useState([]);
 
   const { getIdentityPoolCredentials, qBusinessClient } = useAuth();
 
@@ -217,12 +234,13 @@ export function S3Uploader() {
   }
 
   /**
-   * Check data source & latest sync
+   * Check data source, sync status, and fetch KB documents.
    */
   async function checkDataSourceSync() {
     try {
       if (!qBusinessClient) return;
 
+      // List data sources
       const dsCmd = new ListDataSourcesCommand({
         applicationId: Q_APPLICATION_ID,
         indexId: Q_INDEX_ID,
@@ -231,11 +249,11 @@ export function S3Uploader() {
 
       const s3DataSource = dsResp.dataSources?.find((ds) => ds.displayName === `numa-${CLIENT_NAME}`);
       if (!s3DataSource) {
-        console.warn('S3 data source not found');
         return;
       }
       setSyncStatus(s3DataSource.status);
 
+      // List sync jobs
       const syncCmd = new ListDataSourceSyncJobsCommand({
         applicationId: Q_APPLICATION_ID,
         indexId: Q_INDEX_ID,
@@ -247,11 +265,29 @@ export function S3Uploader() {
       const latestJob = syncResp.history?.[0];
       if (latestJob) {
         setSyncJobStatus(latestJob.status);
+        setSyncMetrics(latestJob.metrics);
       }
-      const lastSuccess = syncResp.history?.find((job) => job.status === 'SUCCEEDED');
+      // Optionally set lastSuccessfulSync for display
+      const lastSuccess = syncResp.history?.find((job) => job.status === 'SUCCEEDED' || job.status === 'INCOMPLETE');
       if (lastSuccess) {
         setLastSuccessfulSync(lastSuccess.endTime);
       }
+
+      // List documents from the Knowledge Base using pagination.
+      let allDocuments = [];
+      let nextToken = undefined;
+      do {
+        const docCmd = new ListDocumentsCommand({
+          applicationId: Q_APPLICATION_ID,
+          indexId: Q_INDEX_ID,
+          dataSourceIds: [s3DataSource.dataSourceId],
+          ...(nextToken ? { nextToken } : {}),
+        });
+        const docResp = await qBusinessClient.send(docCmd);
+        allDocuments = allDocuments.concat(docResp.documentDetailList || []);
+        nextToken = docResp.nextToken;
+      } while (nextToken);
+      setKbDocuments(allDocuments);
     } catch (err) {
       console.error('Failed to check data source or sync jobs', err);
     }
@@ -281,21 +317,25 @@ export function S3Uploader() {
    */
   function handleUploadSuccess() {
     fetchFiles();
-    setShowUploadToast(true);
   }
 
   /**
-   * Separate pending & indexed based on lastSuccessfulSync
+   * Determine pending vs. indexed files by comparing S3 files with KB documents.
    */
   const pendingFiles = useMemo(() => {
-    if (!lastSuccessfulSync) return files;
-    return files.filter((f) => new Date(f.LastModified) > new Date(lastSuccessfulSync));
-  }, [files, lastSuccessfulSync]);
+    const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
+    return files.filter((file) => !kbFileKeys.has(file.Key));
+  }, [files, kbDocuments]);
 
   const indexedFiles = useMemo(() => {
-    if (!lastSuccessfulSync) return [];
-    return files.filter((f) => new Date(f.LastModified) <= new Date(lastSuccessfulSync));
-  }, [files, lastSuccessfulSync]);
+    const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
+    return files
+      .filter((file) => kbFileKeys.has(file.Key))
+      .map((file) => {
+        const kbDoc = kbDocuments.find((doc) => documentIdToKey(doc.documentId) === file.Key);
+        return { ...file, kbDoc };
+      });
+  }, [files, kbDocuments]);
 
   /**
    * Build & filter & sort trees
@@ -357,17 +397,16 @@ export function S3Uploader() {
     expandedSet,
     toggleFolderFn,
     isPending,
+    showErrorColumn = false,
   }) {
-    // If pending, we hide the search. If indexed, we show it.
     const showSearch = !isPending;
+    const noItemsMsg = isPending ? 'No files waiting to be indexed—everything is up to date!' : 'No files found';
 
-    // If pending, show "No files waiting to be indexed…" if empty
-    let noItemsMsg = 'No files found';
-    if (isPending) {
-      noItemsMsg = 'No files waiting to be indexed—everything is up to date!';
-    } else {
-      noItemsMsg;
-    }
+    // If there are 20 or more rows, enable vertical scrolling.
+    const containerStyle =
+      rows.length >= 20
+        ? { maxHeight: '500px', overflowY: 'auto', overflowX: 'auto', width: '100%' }
+        : { overflowX: 'auto', width: '100%' };
 
     return (
       <Card className="mb-4">
@@ -398,7 +437,7 @@ export function S3Uploader() {
               <p className="mt-2 text-muted mb-0">{noItemsMsg}</p>
             </div>
           ) : (
-            <div style={{ overflowX: 'auto', width: '100%' }}>
+            <div style={containerStyle}>
               <Table
                 hover
                 size="sm"
@@ -407,14 +446,15 @@ export function S3Uploader() {
               >
                 <thead>
                   <tr>
-                    <th style={{ width: '70%', cursor: 'default' }}>Name</th>
+                    <th style={{ width: showErrorColumn ? '60%' : '70%', cursor: 'default' }}>Name</th>
                     <th style={{ width: '20%', cursor: 'default' }}>Upload Date</th>
                     <th style={{ width: '10%', cursor: 'default' }}>Size (KB)</th>
+                    {showErrorColumn && <th style={{ width: '10%', cursor: 'default' }}>Status</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => {
-                    const { id, type, name, depth, uploadDate, size } = row;
+                    const { id, type, name, depth, uploadDate, size, kbStatus } = row;
                     const isFolder = type === 'folder';
                     const isExpanded = expandedSet.has(id);
                     const indentPx = depth * 20;
@@ -454,6 +494,15 @@ export function S3Uploader() {
                         </td>
                         <td>{uploadDate}</td>
                         <td>{size}</td>
+                        {showErrorColumn && (
+                          <td>
+                            {kbStatus === 'SUCCESS' ? (
+                              <span className="badge bg-success">SUCCESS</span>
+                            ) : kbStatus === 'FAILED' ? (
+                              <span className="badge bg-danger">FAILED</span>
+                            ) : null}
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -467,23 +516,18 @@ export function S3Uploader() {
   }
 
   /**
-   * Renders the entire S3 Uploader page
+   * Compute failed documents from KB (documents with an error).
+   */
+  const failedDocuments = useMemo(() => {
+    return kbDocuments.filter((doc) => doc.error && Object.keys(doc.error).length > 0 && doc.error.errorMessage);
+  }, [kbDocuments]);
+
+  /**
+   * Render the entire S3 Uploader page.
    */
   return (
     <div className="dashboard" style={{ paddingBottom: '3rem' }}>
       <TopNav />
-
-      {/* Toast for after-upload success */}
-      <ToastContainer className="p-3" position="top-end">
-        <Toast onClose={() => setShowUploadToast(false)} show={showUploadToast} delay={5000} autohide bg="info">
-          <Toast.Header>
-            <strong className="me-auto">Upload Complete</strong>
-          </Toast.Header>
-          <Toast.Body className="text-white">
-            Your files will be indexed at about <strong>{getNextSyncTime().toLocaleTimeString()}</strong>.
-          </Toast.Body>
-        </Toast>
-      </ToastContainer>
 
       {/* Header */}
       <header className="mb-4">
@@ -492,6 +536,10 @@ export function S3Uploader() {
             <Col className="px-3 px-lg-5">
               <Breadcrumbs label="Upload" clearStack={true} />
               <h1>File Upload</h1>
+              <p className="small mt-2">
+                Once uploaded, files are automatically indexed every 30 minutes where they will be available for
+                querying in Numa Chat.
+              </p>
             </Col>
           </Row>
         </Container>
@@ -516,8 +564,18 @@ export function S3Uploader() {
               <Card.Header>
                 <Card.Title className="mb-0">Knowledge Base Status</Card.Title>
               </Card.Header>
+              <Card.Body className="position-relative">
+                {/* Refresh button in the top-right corner (absolute) */}
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={handleRefreshStatus}
+                  className="position-absolute top-0 end-0 m-2"
+                >
+                  <i className="bi bi-arrow-repeat me-1" />
+                  Refresh
+                </Button>
 
-              <Card.Body>
                 <div className="mb-2">
                   <strong>Status:</strong>{' '}
                   {syncStatus === 'ACTIVE' ? (
@@ -526,6 +584,7 @@ export function S3Uploader() {
                     <span className="badge bg-secondary ms-1">{syncStatus || 'Unknown'}</span>
                   )}
                 </div>
+
                 {lastSuccessfulSync ? (
                   <p className="text-muted small mb-2">
                     <strong>Last indexed at:</strong> {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
@@ -534,7 +593,7 @@ export function S3Uploader() {
                   <p className="text-muted small mb-2">No successful sync yet.</p>
                 )}
 
-                <p className="text-muted small mb-3">
+                <p className="text-muted small mb-2">
                   <strong>Next scheduled sync:</strong> {getNextSyncTime().toLocaleTimeString()}
                 </p>
 
@@ -544,39 +603,42 @@ export function S3Uploader() {
                     <strong>Indexing in progress…</strong>
                   </Alert>
                 )}
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
-                  onClick={handleRefreshStatus}
-                  style={{ marginBottom: '0rem', marginTop: '0rem' }}
-                >
-                  <i className="bi bi-arrow-repeat me-1" />
-                  Refresh
-                </Button>
-                <Alert variant="light" className="small mt-3" style={{ marginBottom: '0.7rem' }}>
-                  Once uploaded, files are automatically indexed every 30 minutes where they will be available for
-                  quering in Numa Chat.
-                </Alert>
+
+                {syncMetrics && (
+                  <div className="text-muted small mb-2">
+                    <strong>Latest Sync Metrics:</strong>
+                    <ul className="list-unstyled mb-3">
+                      <li>Documents Added: {syncMetrics.documentsAdded}</li>
+                      <li>Documents Deleted: {syncMetrics.documentsDeleted}</li>
+                      <li>Documents Failed: {syncMetrics.documentsFailed}</li>
+                      <li>Documents Modified: {syncMetrics.documentsModified}</li>
+                      <li>Documents Scanned: {syncMetrics.documentsScanned}</li>
+                    </ul>
+                  </div>
+                )}
               </Card.Body>
             </Card>
           </Col>
         </Row>
 
-        {/* Pending + Indexed */}
+        {/* Pending Files */}
         <Row>
           <Col xs={12}>
             {renderTreeTableSection({
               title: `Pending Files (${pendingFiles.length})`,
               rows: pendingRows,
               isLoading: isLoadingFiles,
-              searchValue: '', // pass empty to hide search
+              searchValue: '', // no search for pending files
               setSearchValue: () => {},
               expandedSet: expandedFoldersPending,
               toggleFolderFn: toggleFolderPending,
               isPending: true,
             })}
           </Col>
+        </Row>
 
+        {/* Knowledge Base Files */}
+        <Row>
           <Col xs={12}>
             {renderTreeTableSection({
               title: `Your Knowledge Base Files (${indexedFiles.length})`,
@@ -587,9 +649,71 @@ export function S3Uploader() {
               expandedSet: expandedFoldersIndexed,
               toggleFolderFn: toggleFolderIndexed,
               isPending: false,
+              showErrorColumn: true,
             })}
           </Col>
         </Row>
+
+        {/* Failed Documents Table */}
+        {failedDocuments.length > 0 && (
+          <Row>
+            <Col xs={12}>
+              <Card className="mt-4">
+                <Card.Header>
+                  <Card.Title className="mb-0">Failed Documents</Card.Title>
+                </Card.Header>
+                <Card.Body>
+                  <div style={{ overflowX: 'auto', width: '100%' }}>
+                    <Table
+                      hover
+                      size="sm"
+                      className="mb-0"
+                      style={{ tableLayout: 'fixed', backgroundColor: '#fff', minWidth: '100%' }}
+                    >
+                      <thead>
+                        <tr>
+                          <th style={{ width: '40%' }}>Name</th>
+                          <th style={{ width: '40%' }}>Error Reason</th>
+                          <th style={{ width: '20%' }}>Last Updated</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {failedDocuments.map((doc) => {
+                          const fileName = documentIdToKey(doc.documentId).split('/').pop();
+                          return (
+                            <tr key={doc.documentId}>
+                              <td
+                                style={{
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  maxWidth: '200px',
+                                }}
+                              >
+                                {fileName.replace(/%20/g, ' ')}
+                              </td>
+                              <td>
+                                <div
+                                  style={{
+                                    whiteSpace: 'nowrap',
+                                    overflowX: 'auto',
+                                  }}
+                                >
+                                  {doc.error.errorMessage}
+                                </div>
+                              </td>
+                              <td>{new Date(doc.updatedAt).toLocaleString('en-NZ')}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </Table>
+                  </div>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        )}
       </LayoutDashboard>
     </div>
   );
