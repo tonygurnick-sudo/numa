@@ -40,7 +40,6 @@ class TestLambdaFunction(unittest.TestCase):
 
         mock_s3_helpers.read.assert_called_once_with("extracted/mydoc.json")
 
-        self.assertGreaterEqual(mock_s3_helpers.write.call_count, 1)
         mock_s3_helpers.write.assert_called_once_with(
             "structured/mydoc.json",
             b'[{"content": [{"text": "mock bedrock response"}]}]',
@@ -76,7 +75,6 @@ class TestLambdaFunction(unittest.TestCase):
 
         mock_s3_helpers.read.assert_called_once_with("extracted/mydoc.json")
 
-        self.assertGreaterEqual(mock_s3_helpers.write.call_count, 1)
         mock_s3_helpers.write.assert_called_once_with(
             "structured/mydoc.json",
             b'[{"content": [{"text": "string mock bedrock response"}]}]',
