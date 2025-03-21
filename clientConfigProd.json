@@ -103,7 +103,10 @@
       "document-summariser": {},
       "meeting-analyser": {},
       "nzsba-policy-builder": {},
-      "policy-reviewer": {}
+      "policy-reviewer": {},
+      "candidate-screening": {},
+      "contract-analysis": {},
+      "company-profile": {}
     },
     "devInstance": true
   },
