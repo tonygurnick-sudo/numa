@@ -54,7 +54,7 @@ __metadata:
     "@aws-sdk/s3-request-presigner": "npm:^3.738.0"
     "@aws-sdk/util-dynamodb": "npm:3.767.0"
     "@eslint/js": "npm:^9.0.0"
-    "@honeycombio/opentelemetry-web": "npm:^0.13.0"
+    "@honeycombio/opentelemetry-web": "npm:^0.14.0"
     "@mdxeditor/editor": "npm:^3.19.3"
     "@opentelemetry/auto-instrumentations-web": "npm:^0.46.0"
     "@popperjs/core": "npm:^2.11.8"
@@ -2868,9 +2868,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@honeycombio/opentelemetry-web@npm:^0.13.0":
-  version: 0.13.0
-  resolution: "@honeycombio/opentelemetry-web@npm:0.13.0"
+"@honeycombio/opentelemetry-web@npm:^0.14.0":
+  version: 0.14.0
+  resolution: "@honeycombio/opentelemetry-web@npm:0.14.0"
   dependencies:
     "@babel/runtime": "npm:^7.24.7"
     "@opentelemetry/api": "npm:~1.9.0"
@@ -2882,12 +2882,12 @@ __metadata:
     "@opentelemetry/resources": "npm:~1.30.0"
     "@opentelemetry/sdk-trace-base": "npm:~1.30.0"
     "@opentelemetry/sdk-trace-web": "npm:~1.30.0"
-    "@opentelemetry/semantic-conventions": "npm:~1.29.0"
+    "@opentelemetry/semantic-conventions": "npm:~1.30.0"
     shimmer: "npm:^1.2.1"
     tracekit: "npm:^0.4.7"
     ua-parser-js: "npm:^1.0.37"
     web-vitals: "npm:^4.2.3"
-  checksum: 10c0/3f167e3d9e34c0131016e12d39dd7322603f1047783ccbbe7253c2e427465d6bf388fd6b38010e799a24fff5ff9c834b5fd5aa6d9a4dc2ee27805b523fce9866
+  checksum: 10c0/4dad22d42141bacee15de4ac779a04c7ab04978fde2c97365ef8f46a28bfdef1167ed275d617610ff56bc7c02cd18de015c77b90e169b384eb3f4a3d4c6afaf4
   languageName: node
   linkType: hard
 
@@ -4496,17 +4496,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@opentelemetry/semantic-conventions@npm:^1.27.0, @opentelemetry/semantic-conventions@npm:^1.29.0":
+"@opentelemetry/semantic-conventions@npm:^1.27.0, @opentelemetry/semantic-conventions@npm:^1.29.0, @opentelemetry/semantic-conventions@npm:~1.30.0":
   version: 1.30.0
   resolution: "@opentelemetry/semantic-conventions@npm:1.30.0"
   checksum: 10c0/0bf99552e3b4b7e8b7eb504b678d52f59c6f259df88e740a2011a0d858e523d36fee86047ae1b7f45849c77f00f970c3059ba58e0a06a7d47d6f01dbe8c455bd
-  languageName: node
-  linkType: hard
-
-"@opentelemetry/semantic-conventions@npm:~1.29.0":
-  version: 1.29.0
-  resolution: "@opentelemetry/semantic-conventions@npm:1.29.0"
-  checksum: 10c0/54a4033fa1e7c31394d41f96e812b922aa406551d69361e804dc107ae9e75923328001398f78faf2dbd77cbd9df3c928223662642babc2d0e82b24f5ef0c5347
   languageName: node
   linkType: hard
 
