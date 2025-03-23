@@ -6,7 +6,10 @@ import installOpenTelemetry from './otel-config.jsx';
 import { fetchConfigAddtoSession } from './Components/ConfigSetup';
 fetchConfigAddtoSession();
 
-installOpenTelemetry(sessionStorage.getItem('HONEYCOMB_KEY'));
+// Only install OpenTelemetry if not running on localhost
+if (!window.location.hostname.includes('localhost')) {
+  installOpenTelemetry(sessionStorage.getItem('HONEYCOMB_KEY'));
+}
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
