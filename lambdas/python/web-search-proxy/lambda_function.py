@@ -127,7 +127,8 @@ def lambda_handler(
     Returns:
         API Gateway response with search results
     """
-    helpers.setup_step_function_lambda_logging(event, context)
+    helpers.setup_logging()
+    logger.info("Web search request", request_id=context.aws_request_id)
 
     headers = {
         "Access-Control-Allow-Origin": "*",
