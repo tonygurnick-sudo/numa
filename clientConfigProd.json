@@ -446,6 +446,35 @@
       }
     ]
   },
+  "ngati-kahu": {
+    "clientAccountId": "328307064241",
+    "webCrawlerConfigs": [
+      {
+        "url": "https://charities.govt.nz/"
+      },
+      {
+        "url": "https://tekāhuikāhu.govt.nz/"
+      },
+      {
+        "url": "https://www.era.govt.nz/"
+      },
+      {
+        "url": "https://www.legislation.govt.nz/act/public/1989/0024/latest/whole.html"
+      },
+      {
+        "url": "https://www.legislation.govt.nz/act/public/1993/0082/latest/DLM304212.html"
+      },
+      {
+        "url": "https://www.legislation.govt.nz/act/public/2020/0031/latest/LMS23223.html"
+      },
+      {
+        "url": "https://www.mbie.govt.nz/"
+      },
+      {
+        "url": "https://www.sspa.org.nz/"
+      }
+    ]
+  },
   "nzsba": {
     "apps": {
       "nzsba-policy-builder": {
