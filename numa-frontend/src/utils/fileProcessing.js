@@ -1,7 +1,7 @@
 import mammoth from 'mammoth';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { fromBuffer } from 'file-type';
+import { fileTypeFromBuffer } from 'file-type';
 
 import * as pdfjsLib from 'pdfjs-dist';
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -28,7 +28,7 @@ export const estimateTokenCount = (text) => {
 
 const detectFileType = async (file) => {
   const buffer = await file.arrayBuffer();
-  const detectedType = await fromBuffer(buffer);
+  const detectedType = await fileTypeFromBuffer(buffer);
   return detectedType?.ext || 'unknown';
 };
 

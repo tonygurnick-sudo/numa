@@ -9,7 +9,7 @@ const CHARS_PER_TOKEN = 4.0;
 const MAX_TOKEN_LIMIT = 100000;
 
 vi.mock('file-type', () => ({
-  fromBuffer: vi.fn().mockResolvedValue({ ext: 'txt' }),
+  fileTypeFromBuffer: vi.fn().mockResolvedValue({ ext: 'txt' }),
 }));
 
 vi.mock('pdfjs-dist/build/pdf', () => ({
