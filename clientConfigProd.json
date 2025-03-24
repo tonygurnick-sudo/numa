@@ -8,16 +8,16 @@
     ]
   },
   "30-seconds": {
-    "clientAccountId": "593793032721",
     "apps": {
       "meeting-analyser": {}
     },
+    "clientAccountId": "593793032721",
     "sharePointConfigs": [
       {
-        "tenantId": "a2275cde-9164-4712-8c15-47ab712f1766",
+        "configuration": {},
         "domain": "30secondsnz",
         "siteUrls": ["https://30secondsnz.sharepoint.com/sites/QBusinessintegration"],
-        "configuration": {}
+        "tenantId": "a2275cde-9164-4712-8c15-47ab712f1766"
       }
     ]
   },
@@ -32,95 +32,107 @@
       }
     ]
   },
-  "arcanum-demo": {
+  "align-me": {
+    "boxConfigs": [
+      {
+        "enterpriseId": "511773"
+      }
+    ],
+    "clientAccountId": "390403893889",
+    "teamsConfigs": [
+      {
+        "configuration": {
+          "isCrawlChatAttachment": false,
+          "isCrawlChatMessages": false
+        },
+        "tenantId": "ebac7c22-df8c-4c82-9e2b-38f1690f6f5a"
+      }
+    ]
+  },
+  "arcanum-dave": {
+    "apps": {},
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
+    "devInstance": true
+  },
+  "arcanum-demo": {
     "allApps": true,
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "devInstance": true,
     "webCrawlerConfigs": [
       {
         "url": "https://arcanum.ai/"
       }
-    ],
-    "devInstance": true
-  },
-  "nzsba-nick": {
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "allApps": true,
-    "devInstance": true
-  },
-  "arcanum-hams": {
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "allApps": true,
-    "devInstance": true
+    ]
   },
   "arcanum-demo-nathan": {
+    "allApps": true,
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "allApps": true,
     "devInstance": true
   },
   "arcanum-demo-nick": {
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
     "allApps": true,
     "boxConfigs": [
       {
         "enterpriseId": "1235149944"
       }
     ],
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
     "devInstance": true
   },
   "arcanum-demo-sam": {
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
     "apps": {
+      "candidate-screening": {},
+      "company-profile": {},
+      "contract-analysis": {},
       "document-summariser": {},
       "meeting-analyser": {},
-      "policy-reviewer": {},
-      "company-profile": {},
-      "candidate-screening": {},
-      "contract-analysis": {}
+      "policy-reviewer": {}
     },
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
     "devInstance": true
   },
   "arcanum-demo-sebastian": {
+    "allApps": true,
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "allApps": true,
     "devInstance": true
   },
-  "arcanum-dave": {
+  "arcanum-hams": {
+    "allApps": true,
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "apps": {},
     "devInstance": true
   },
   "arcanum-prod-numa-demo": {
-    "clientAccountId": "619071323471",
     "apps": {
+      "candidate-screening": {},
+      "company-profile": {},
+      "contract-analysis": {},
       "document-summariser": {},
+      "financial-analysis": {},
       "meeting-analyser": {},
       "nzsba-policy-builder": {},
-      "policy-reviewer": {},
-      "candidate-screening": {},
-      "contract-analysis": {},
-      "company-profile": {},
       "policy-drafter": {},
-      "financial-analysis": {}
+      "policy-reviewer": {}
     },
+    "clientAccountId": "619071323471",
     "devInstance": true
   },
   "arcanum-prod-trial": {
-    "clientAccountId": "619071323471",
-    "createServiceLinkedRole": false,
     "apps": {
       "document-summariser": {},
       "meeting-analyser": {},
       "nzsba-policy-builder": {},
       "policy-reviewer": {}
     },
+    "clientAccountId": "619071323471",
+    "createServiceLinkedRole": false,
+    "devInstance": true,
     "webCrawlerConfigs": [
       {
         "url": "https://arcanum.ai/"
@@ -128,28 +140,18 @@
       {
         "url": "https://orionhealth.com/global/"
       }
-    ],
-    "devInstance": true
+    ]
+  },
+  "asper": {
+    "clientAccountId": "913524922624",
+    "webCrawlerConfigs": [
+      {
+        "url": "https://apser.es/en/"
+      }
+    ]
   },
   "autoshoppe": {
     "clientAccountId": "060795909741"
-  },
-  "align-me": {
-    "clientAccountId": "390403893889",
-    "teamsConfigs": [
-      {
-        "tenantId": "ebac7c22-df8c-4c82-9e2b-38f1690f6f5a",
-        "configuration": {
-          "isCrawlChatMessages": false,
-          "isCrawlChatAttachment": false
-        }
-      }
-    ],
-    "boxConfigs": [
-      {
-        "enterpriseId": "511773"
-      }
-    ]
   },
   "av-media": {
     "clientAccountId": "961341552812"
@@ -255,6 +257,9 @@
   "cuttriss": {
     "clientAccountId": "850995553818"
   },
+  "debtworks": {
+    "clientAccountId": "767828739522"
+  },
   "delta-insurance": {
     "clientAccountId": "842676001293",
     "webCrawlerConfigs": [
@@ -268,9 +273,6 @@
         "url": "https://deltainsurance.co.nz/pages/brokers/"
       }
     ]
-  },
-  "debtworks": {
-    "clientAccountId": "767828739522"
   },
   "design-builders": {
     "clientAccountId": "061039773876"
@@ -341,6 +343,45 @@
       }
     ]
   },
+  "modern-sales": {
+    "clientAccountId": "228743762183"
+  },
+  "moira-shire-council": {
+    "clientAccountId": "084828600250",
+    "webCrawlerConfigs": [
+      {
+        "url": "https://data.gov.au"
+      },
+      {
+        "url": "https://mycouncilwebsite.vic.gov"
+      },
+      {
+        "url": "https://www.planning.vic.gov.au/planning-schemes"
+      },
+      {
+        "url": "https://www.legislation.vic.gov.au/"
+      },
+      {
+        "url": "https://www.localgovernment.vic.gov.au/"
+      },
+      {
+        "url": "https://www.moira.vic.gov.au/Our-Council/Our-policies"
+      },
+      {
+        "url": "https://www.vba.vic.gov.au/building/building-resource-hub"
+      },
+      {
+        "url": "https://www.legislation.vic.gov.au/in-force/acts/local-government-act-2020/021"
+      },
+      {
+        "url": "https://www.legislation.gov.au/"
+      }
+    ]
+  },
+  "momentum": {
+    "clientAccountId": "746669231307",
+    "createServiceLinkedRole": false
+  },
   "mornington-peninsula-council": {
     "clientAccountId": "672071675188",
     "webCrawlerConfigs": [
@@ -357,13 +398,6 @@
         "url": "https://www.mornpen.vic.gov.au/Home"
       }
     ]
-  },
-  "modern-sales": {
-    "clientAccountId": "228743762183"
-  },
-  "momentum": {
-    "clientAccountId": "746669231307",
-    "createServiceLinkedRole": false
   },
   "mosaic": {
     "clientAccountId": "471112582627",
@@ -400,46 +434,26 @@
       }
     ]
   },
-  "moira-shire-council": {
-    "clientAccountId": "084828600250",
-    "webCrawlerConfigs": [
-      {
-        "url": "https://data.gov.au"
-      },
-      {
-        "url": "https://mycouncilwebsite.vic.gov"
-      },
-      {
-        "url": "https://www.planning.vic.gov.au/planning-schemes"
-      },
-      {
-        "url": "https://www.legislation.vic.gov.au/"
-      },
-      {
-        "url": "https://www.localgovernment.vic.gov.au/"
-      },
-      {
-        "url": "https://www.moira.vic.gov.au/Our-Council/Our-policies"
-      },
-      {
-        "url": "https://www.vba.vic.gov.au/building/building-resource-hub"
-      },
-      {
-        "url": "https://www.legislation.vic.gov.au/in-force/acts/local-government-act-2020/021"
-      },
-      {
-        "url": "https://www.legislation.gov.au/"
-      }
-    ]
-  },
   "nzsba": {
-    "clientAccountId": "307946678276",
-    "loadSampleFile": false,
     "apps": {
       "nzsba-policy-builder": {
         "s3KeyPrefix": "/nzsba-nzsba-policy-builder"
       }
     },
+    "clientAccountId": "307946678276",
+    "loadSampleFile": false,
+    "sharePointConfigs": [
+      {
+        "configuration": {
+          "inclusionFilePath": ["^.*(?:PLD ?2021).*$"],
+          "linkTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"],
+          "pageTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"]
+        },
+        "domain": "nzsta.sharepoint.com",
+        "siteUrls": ["https://nzsta.sharepoint.com/sites/Company"],
+        "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29"
+      }
+    ],
     "uploadFrontend": false,
     "webCrawlerConfigs": [
       {
@@ -451,27 +465,13 @@
       {
         "url": "https://www.education.govt.nz/"
       }
-    ],
-    "sharePointConfigs": [
-      {
-        "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29",
-        "domain": "nzsta.sharepoint.com",
-        "siteUrls": [
-          "https://nzsta.sharepoint.com/sites/Company"
-        ],
-        "configuration": {
-          "linkTitleFilterRegEx": [
-            "^.*(?:PLD ?2021).*$"
-          ],
-          "pageTitleFilterRegEx": [
-            "^.*(?:PLD ?2021).*$"
-          ],
-          "inclusionFilePath": [
-            "^.*(?:PLD ?2021).*$"
-          ]
-        }
-      }
     ]
+  },
+  "nzsba-nick": {
+    "allApps": true,
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "devInstance": true
   },
   "rooflogic": {
     "clientAccountId": "640168445517"
@@ -531,25 +531,25 @@
     "loadSampleFile": false
   },
   "symphony": {
-    "clientAccountId": "557690588490",
-    "createServiceLinkedRole": false,
-    "loadSampleFile": false,
     "apps": {
       "document-summariser": {},
       "meeting-analyser": {},
       "policy-reviewer": {}
-    }
+    },
+    "clientAccountId": "557690588490",
+    "createServiceLinkedRole": false,
+    "loadSampleFile": false
   },
   "tda": {
     "clientAccountId": "575108948290",
     "sharePointConfigs": [
       {
-        "tenantId": "91ff374c-03ff-4eed-9628-d89e52352b55",
-        "domain": "teachersrcc",
-        "siteUrls": ["https://teachersrcc.sharepoint.com/"],
         "configuration": {
           "inclusionFilePath": [".*NEX[ -]?Milestone[ -]?Reports.*"]
-        }
+        },
+        "domain": "teachersrcc",
+        "siteUrls": ["https://teachersrcc.sharepoint.com/"],
+        "tenantId": "91ff374c-03ff-4eed-9628-d89e52352b55"
       }
     ]
   },
@@ -684,14 +684,6 @@
       },
       {
         "url": "https://content.legislation.vic.gov.au/sites/default/files/2023-11/66-7405aa142-authorised.pdf"
-      }
-    ]
-  },
-  "asper": {
-    "clientAccountId": "913524922624",
-    "webCrawlerConfigs": [
-      {
-        "url": "https://apser.es/en/"
       }
     ]
   }
