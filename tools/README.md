@@ -157,9 +157,13 @@ Checks the current Bedrock Claude quota and status of quota increase support cas
 Usage:
 
 ```bash
+# Check a single client
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-bedrock-cases <client-name> [options]
+
+# Check all clients and generate a report
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-bedrock-cases --all [options]
 
 Options:
 --include-resolved: Include resolved cases in the output
 --details: Show detailed case information including communications history
-```
+--all: Check all clients and generate a summary report
