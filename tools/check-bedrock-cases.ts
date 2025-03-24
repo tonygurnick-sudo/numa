@@ -17,7 +17,7 @@ interface ClientResult {
   currentQuota: number;
   requiredQuota: number;
   sufficientQuota: string;
-  cases: { caseId: string; status: string; created: string; subject?: string; }[];
+  cases: { caseId: string; status: string; created: string; subject?: string }[];
   error?: string;
 }
 
@@ -178,13 +178,13 @@ async function processAllClients(specificClient?: string): Promise<ReportSummary
         requiredQuota: REQUIRED_QUOTA,
         sufficientQuota: '❌',
         cases: [],
-        error: `Fatal error: ${error.message || 'Unknown error'}`
+        error: `Fatal error: ${error.message || 'Unknown error'}`,
       });
     }
   }
 
-  const clientsWithSufficientQuota = results.filter(r => r.sufficientQuota === '✅').length;
-  const clientsWithCases = results.filter(r => r.cases.length > 0).length;
+  const clientsWithSufficientQuota = results.filter((r) => r.sufficientQuota === '✅').length;
+  const clientsWithCases = results.filter((r) => r.cases.length > 0).length;
 
   return {
     timestamp: new Date().toISOString(),
@@ -193,15 +193,15 @@ async function processAllClients(specificClient?: string): Promise<ReportSummary
       processedClients: results.length,
       errorClients: errorCount,
       clientsWithSufficientQuota,
-      clientsWithCases
+      clientsWithCases,
     },
-    results
+    results,
   };
 }
 
 // Main function
 if (import.meta.filename === process?.argv[1]) {
-  const clientName = args.find(arg => !arg.startsWith('--'));
+  const clientName = args.find((arg) => !arg.startsWith('--'));
 
   // If single client specified, run original behavior
   if (clientName && !args.includes('--all')) {
@@ -267,25 +267,29 @@ if (import.meta.filename === process?.argv[1]) {
         console.log(`Summary Report (${new Date(report.timestamp).toLocaleString()})`);
         console.log(`==========================================`);
         console.log(`Total clients: ${summary.totalClients}`);
-        console.log(`Successfully processed: ${summary.processedClients - summary.errorClients}/${summary.totalClients}`);
+        console.log(
+          `Successfully processed: ${summary.processedClients - summary.errorClients}/${summary.totalClients}`,
+        );
         console.log(`Clients with sufficient quota: ${summary.clientsWithSufficientQuota}/${summary.totalClients}`);
         console.log(`Clients with active cases: ${summary.clientsWithCases}/${summary.totalClients}`);
 
         if (summary.errorClients > 0) {
           console.log(`\nClients with errors (${summary.errorClients}):`);
-          report.results
-            .filter(r => r.error)
-            .forEach(r => console.log(`- ${r.clientName}: ${r.error}`));
+          report.results.filter((r) => r.error).forEach((r) => console.log(`- ${r.clientName}: ${r.error}`));
         }
 
         if (summary.totalClients - summary.clientsWithSufficientQuota > 0) {
-          console.log(`\nClients needing quota increase (${summary.totalClients - summary.clientsWithSufficientQuota}):`);
+          console.log(
+            `\nClients needing quota increase (${summary.totalClients - summary.clientsWithSufficientQuota}):`,
+          );
           report.results
-            .filter(r => r.sufficientQuota === '❌')
-            .forEach(r => console.log(`- ${r.clientName}: Current quota ${r.currentQuota}, needed ${r.requiredQuota}`));
+            .filter((r) => r.sufficientQuota === '❌')
+            .forEach((r) =>
+              console.log(`- ${r.clientName}: Current quota ${r.currentQuota}, needed ${r.requiredQuota}`),
+            );
         }
       })
-      .catch(error => {
+      .catch((error) => {
         console.error('Fatal error:', error);
         process.exit(1);
       });

@@ -104,9 +104,9 @@ def rewrite_query_with_context(query: str, context: str) -> str:
                 logger.warning("Query rewriting returned empty result")
                 return query
 
-            MAX_QUERY_LENGTH = 60
-            if len(rewritten_query) > MAX_QUERY_LENGTH:
-                rewritten_query = rewritten_query[:MAX_QUERY_LENGTH]
+            max_query_length = 60
+            if len(rewritten_query) > max_query_length:
+                rewritten_query = rewritten_query[:max_query_length]
 
             logger.info("Query rewritten", original=query, rewritten=rewritten_query)
             return rewritten_query
