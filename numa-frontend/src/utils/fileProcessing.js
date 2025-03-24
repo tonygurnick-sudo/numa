@@ -3,10 +3,11 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { fromBuffer } from 'file-type';
 
-// PDF.js
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/build/pdf';
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.js';
-GlobalWorkerOptions.workerSrc = pdfWorker;
+import * as pdfjsLib from 'pdfjs-dist';
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString();
 
 // Additional libs for new file types
 import PPTXParser from 'pptx-parser';
@@ -144,7 +145,7 @@ export const processFile = async (file, fileType, numaChatBedrockUtils) => {
 // -------- PDF --------
 const processPDF = async (file) => {
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
   let allText = '';
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
