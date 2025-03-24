@@ -1,4 +1,5 @@
 import { argv } from 'node:process';
+import fs from 'node:fs/promises';
 import { Support, DescribeCasesCommand, DescribeCasesCommandInput, CaseDetails } from '@aws-sdk/client-support';
 import { ServiceQuotas, GetServiceQuotaCommand } from '@aws-sdk/client-service-quotas';
 import { AwsCredentialIdentityProvider } from '@aws-sdk/types';
@@ -10,6 +11,29 @@ const region = 'us-east-1';
 const CLAUDE_QUOTA_CODE = 'L-254CACF4';
 const REQUIRED_QUOTA = 50;
 
+interface ClientResult {
+  clientName: string;
+  accountId: string;
+  currentQuota: number;
+  requiredQuota: number;
+  sufficientQuota: string;
+  cases: { caseId: string; status: string; created: string; subject?: string; }[];
+  error?: string;
+}
+
+interface ReportSummary {
+  timestamp: string;
+  summary: {
+    totalClients: number;
+    processedClients: number;
+    errorClients: number;
+    clientsWithSufficientQuota: number;
+    clientsWithCases: number;
+  };
+  results: ClientResult[];
+}
+
+// Core functionality from original script
 async function getCurrentQuota(credentials: AwsCredentialIdentityProvider): Promise<number> {
   const quotasClient = new ServiceQuotas({
     region: process.env.AWS_REGION ?? region,
@@ -62,56 +86,208 @@ async function findBedrockCases(
   }
 }
 
-if (import.meta.filename === process?.argv[1]) {
-  const clientName = args[0];
-  const showDetails = args.includes('--details');
+// Main functions
+async function checkClient(clientName: string, showDetails: boolean): Promise<ClientResult> {
+  console.log(`\nChecking Bedrock quota and cases for ${clientName}...`);
 
-  if (!clientName) {
-    console.error('Please provide a client name');
-    process.exit(1);
-  }
+  const result: ClientResult = {
+    clientName,
+    accountId: '',
+    currentQuota: 0,
+    requiredQuota: REQUIRED_QUOTA,
+    sufficientQuota: '❌',
+    cases: [],
+  };
 
   if (!clientConfigProd[clientName]) {
     console.error(`Client ${clientName} not found in configuration`);
-    process.exit(1);
+    result.error = 'Client not found in configuration';
+    return result;
   }
 
   const accountId = clientConfigProd[clientName].clientAccountId;
+  if (!accountId) {
+    console.error(`Account ID for ${clientName} not found in configuration`);
+    result.error = 'Account ID not found in configuration';
+    return result;
+  }
+
+  result.accountId = accountId;
   const credentials = temporaryCredentials(accountId);
 
-  console.log(`Checking Bedrock quota and cases for ${clientName}...`);
-
   try {
+    // Check quota
     const currentQuota = await getCurrentQuota(credentials);
-    console.log('\nQuota Status:');
-    console.log(`Current quota: ${currentQuota} requests per minute`);
-    console.log(`Required quota: ${REQUIRED_QUOTA} requests per minute`);
-    console.log(`Status: ${currentQuota >= REQUIRED_QUOTA ? '✅ Sufficient' : '❌ Insufficient'}`);
+    result.currentQuota = currentQuota;
+    result.sufficientQuota = currentQuota >= REQUIRED_QUOTA ? '✅' : '❌';
 
-    console.log('\nChecking support cases...');
+    console.log(`Quota Status: ${currentQuota}/${REQUIRED_QUOTA} RPM (${result.sufficientQuota})`);
+
+    // Check cases
     const cases = await findBedrockCases(credentials, clientName);
-
     if (cases.length === 0) {
       console.log('No Bedrock quota cases found');
-      process.exit(0);
+    } else {
+      cases.forEach((c) => {
+        result.cases.push({
+          caseId: c.displayId || '',
+          status: c.status || '',
+          created: c.timeCreated || '',
+          subject: c.subject,
+        });
+
+        console.log(`Found case: ${c.displayId} (${c.status})`);
+
+        if (showDetails && c.recentCommunications?.communications) {
+          console.log(`Subject: ${c.subject}`);
+          c.recentCommunications.communications.forEach((comm) => {
+            console.log(`${comm.timeCreated}: ${comm.body}`);
+          });
+        }
+      });
     }
 
-    cases.forEach((c) => {
-      console.log('\nCase Details:');
-      console.log(`Case ID: ${c.displayId}`);
-      console.log(`Status: ${c.status}`);
-      console.log(`Created: ${c.timeCreated}`);
-
-      if (showDetails && c.recentCommunications?.communications) {
-        console.log(`Subject: ${c.subject}`);
-        console.log(`Recent Communications:`);
-        c.recentCommunications.communications.forEach((comm) => {
-          console.log(`\n${comm.timeCreated}: ${comm.body}`);
-        });
-      }
-    });
+    return result;
   } catch (error) {
-    console.error('Error:', error);
-    process.exit(1);
+    console.error(`Error processing ${clientName}:`, error);
+    result.error = `Error: ${error.message || 'Unknown error'}`;
+    return result;
+  }
+}
+
+async function processAllClients(specificClient?: string): Promise<ReportSummary> {
+  const showDetails = args.includes('--details');
+  const clientNames = specificClient ? [specificClient] : Object.keys(clientConfigProd);
+
+  console.log(`Checking Bedrock quotas for ${clientNames.length} clients...`);
+
+  const results: ClientResult[] = [];
+  let errorCount = 0;
+
+  for (const clientName of clientNames) {
+    try {
+      const result = await checkClient(clientName, showDetails);
+      results.push(result);
+      if (result.error) errorCount++;
+    } catch (error) {
+      errorCount++;
+      results.push({
+        clientName,
+        accountId: clientConfigProd[clientName]?.clientAccountId || '',
+        currentQuota: 0,
+        requiredQuota: REQUIRED_QUOTA,
+        sufficientQuota: '❌',
+        cases: [],
+        error: `Fatal error: ${error.message || 'Unknown error'}`
+      });
+    }
+  }
+
+  const clientsWithSufficientQuota = results.filter(r => r.sufficientQuota === '✅').length;
+  const clientsWithCases = results.filter(r => r.cases.length > 0).length;
+
+  return {
+    timestamp: new Date().toISOString(),
+    summary: {
+      totalClients: clientNames.length,
+      processedClients: results.length,
+      errorClients: errorCount,
+      clientsWithSufficientQuota,
+      clientsWithCases
+    },
+    results
+  };
+}
+
+// Main function
+if (import.meta.filename === process?.argv[1]) {
+  const clientName = args.find(arg => !arg.startsWith('--'));
+
+  // If single client specified, run original behavior
+  if (clientName && !args.includes('--all')) {
+    const accountId = clientConfigProd[clientName]?.clientAccountId;
+    if (!accountId) {
+      console.error(`Client ${clientName} not found in configuration`);
+      process.exit(1);
+    }
+
+    const credentials = temporaryCredentials(accountId);
+    const showDetails = args.includes('--details');
+
+    console.log(`Checking Bedrock quota and cases for ${clientName}...`);
+
+    try {
+      // Check quota
+      const currentQuota = await getCurrentQuota(credentials);
+      console.log('\nQuota Status:');
+      console.log(`Current quota: ${currentQuota} requests per minute`);
+      console.log(`Required quota: ${REQUIRED_QUOTA} requests per minute`);
+      console.log(`Status: ${currentQuota >= REQUIRED_QUOTA ? '✅ Sufficient' : '❌ Insufficient'}`);
+
+      // Check cases
+      console.log('\nChecking support cases...');
+      const cases = await findBedrockCases(credentials, clientName);
+
+      if (cases.length === 0) {
+        console.log('No Bedrock quota cases found');
+        process.exit(0);
+      }
+
+      cases.forEach((c) => {
+        console.log('\nCase Details:');
+        console.log(`Case ID: ${c.displayId}`);
+        console.log(`Status: ${c.status}`);
+        console.log(`Created: ${c.timeCreated}`);
+
+        if (showDetails && c.recentCommunications?.communications) {
+          console.log(`Subject: ${c.subject}`);
+          console.log(`Recent Communications:`);
+          c.recentCommunications.communications.forEach((comm) => {
+            console.log(`\n${comm.timeCreated}: ${comm.body}`);
+          });
+        }
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      process.exit(1);
+    }
+  }
+  // Otherwise process all clients and generate report
+  else {
+    processAllClients(args.includes('--all') ? undefined : clientName)
+      .then(async (report) => {
+        // Save JSON report
+        const jsonOutputPath = 'bedrock-quota-report.json';
+        await fs.writeFile(jsonOutputPath, JSON.stringify(report, null, 2));
+        console.log(`\nReport saved to ${jsonOutputPath}`);
+
+        // Print summary
+        const { summary } = report;
+        console.log(`\n==========================================`);
+        console.log(`Summary Report (${new Date(report.timestamp).toLocaleString()})`);
+        console.log(`==========================================`);
+        console.log(`Total clients: ${summary.totalClients}`);
+        console.log(`Successfully processed: ${summary.processedClients - summary.errorClients}/${summary.totalClients}`);
+        console.log(`Clients with sufficient quota: ${summary.clientsWithSufficientQuota}/${summary.totalClients}`);
+        console.log(`Clients with active cases: ${summary.clientsWithCases}/${summary.totalClients}`);
+
+        if (summary.errorClients > 0) {
+          console.log(`\nClients with errors (${summary.errorClients}):`);
+          report.results
+            .filter(r => r.error)
+            .forEach(r => console.log(`- ${r.clientName}: ${r.error}`));
+        }
+
+        if (summary.totalClients - summary.clientsWithSufficientQuota > 0) {
+          console.log(`\nClients needing quota increase (${summary.totalClients - summary.clientsWithSufficientQuota}):`);
+          report.results
+            .filter(r => r.sufficientQuota === '❌')
+            .forEach(r => console.log(`- ${r.clientName}: Current quota ${r.currentQuota}, needed ${r.requiredQuota}`));
+        }
+      })
+      .catch(error => {
+        console.error('Fatal error:', error);
+        process.exit(1);
+      });
   }
 }

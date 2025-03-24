@@ -22,7 +22,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "check-bedrock-cases": "node --import tsx check-bedrock-cases.mts",
+    "check-bedrock-cases": "node --import tsx check-bedrock-cases.ts",
     "check-index-progress": "node --import tsx check-index-progress.ts",
     "create-users": "node --import tsx create-users.ts",
     "delete-users": "node --import tsx delete-users.ts",
