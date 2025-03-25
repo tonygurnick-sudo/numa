@@ -1,5 +1,3 @@
-import json
-
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
@@ -9,104 +7,96 @@ import s3_helpers
 from prompts import (
     DECISION_DETERMINATION_PROMPT,
     EVIDENCE_ANALYSIS_PROMPT,
-    LEGISLATION_COMPARISON_PROMPT,
+    LEGISLATION_EVALUATION_PROMPT,
+    PARKING_LEGISLATION,
     RESPONSE_LETTER_PROMPT,
-)
-from tools import (
-    DECISION_TOOL,
-    EVIDENCE_ANALYSIS_TOOL,
-    LEGISLATION_COMPARISON_TOOL,
-    RESPONSE_LETTER_TOOL,
 )
 
 MAX_TOKENS = 4096
+
 logger = structlog.get_logger()
-
-
-PARKING_LEGISLATION = ""
 
 
 def handler(event: dict, context: LambdaContext) -> dict:
     helpers.setup_step_function_lambda_logging(event, context)
     try:
-        input_keys = event["input_keys"]  # Multiple file uploads
+        input_key = event["input_key"]
         infringement_details = event["infringement_details"]
 
-        # Process all evidence files
-        evidence_contents = []
-        for key in input_keys:
-            content = s3_helpers.read(key)
-            evidence_contents.append(content)
+        logger.info(
+            "Processing infringement review",
+            input_key=input_key,
+            infringement_details_length=len(infringement_details),
+        )
 
-        # Combine evidence with separators
-        combined_evidence = "\n\n===== NEXT EVIDENCE ITEM =====\n\n".join(
-            evidence_contents
+        # Read evidence content
+        evidence_content = s3_helpers.read(input_key)
+        logger.info(
+            "Read evidence file",
+            file_key=input_key,
+            content_length=len(evidence_content),
         )
 
         # Step 1: Evidence Analysis
-        evidence_analysis = get_model_response_with_tool(
+        logger.info("Starting evidence analysis")
+        evidence_analysis = get_model_response(
             prompt=EVIDENCE_ANALYSIS_PROMPT,
             input_data={
-                "evidence_content": combined_evidence,
+                "evidence_content": evidence_content,
                 "infringement_details": infringement_details,
             },
-            tool=EVIDENCE_ANALYSIS_TOOL,
-            tool_name="analyze_evidence",
         )
 
-        # Step 2: Legislation Comparison - use predefined legislation
-        legislation_comparison = get_model_response_with_tool(
-            prompt=LEGISLATION_COMPARISON_PROMPT,
+        # Step 2: Legislation Evaluation
+        logger.info("Starting legislation evaluation")
+        legislation_evaluation = get_model_response(
+            prompt=LEGISLATION_EVALUATION_PROMPT,
             input_data={
-                "evidence_analysis": json.dumps(evidence_analysis, indent=2),
+                "evidence_analysis": evidence_analysis,
                 "legislation_content": PARKING_LEGISLATION,
             },
-            tool=LEGISLATION_COMPARISON_TOOL,
-            tool_name="compare_with_legislation",
         )
 
         # Step 3: Decision Determination
-        decision_determination = get_model_response_with_tool(
+        logger.info("Determining decision")
+        decision_determination = get_model_response(
             prompt=DECISION_DETERMINATION_PROMPT,
             input_data={
-                "evidence_analysis": json.dumps(evidence_analysis, indent=2),
-                "legislation_comparison": json.dumps(legislation_comparison, indent=2),
+                "evidence_analysis": evidence_analysis,
+                "legislation_comparison": legislation_evaluation,
             },
-            tool=DECISION_TOOL,
-            tool_name="determine_decision",
         )
 
         # Step 4: Generate Response Letter
-        response_letter = get_model_response_with_tool(
+        logger.info("Generating response letter")
+        response_letter = get_model_response(
             prompt=RESPONSE_LETTER_PROMPT,
             input_data={
                 "infringement_details": infringement_details,
-                "decision_determination": json.dumps(decision_determination, indent=2),
-                "evidence_analysis": json.dumps(evidence_analysis, indent=2),
+                "decision_determination": decision_determination,
+                "evidence_analysis": evidence_analysis,
+                "legislation_comparison": legislation_evaluation,
             },
-            tool=RESPONSE_LETTER_TOOL,
-            tool_name="generate_response_letter",
         )
 
-        # Return all results
+        logger.info("Completed infringement review")
+
         results = {
             "evidence_analysis": evidence_analysis,
-            "legislation_comparison": legislation_comparison,
+            "legislation_evaluation": legislation_evaluation,
             "decision_determination": decision_determination,
-            "response_letter": response_letter.get("letter_content", ""),
+            "response_letter": response_letter,
         }
 
         return results
 
-    except Exception as e:
-        logger.exception("Error in lambda execution", error=str(e))
+    except Exception:
+        logger.exception("Error in lambda execution")
         raise
 
 
-def get_model_response_with_tool(
-    prompt: str, input_data: dict, tool: list, tool_name: str
-) -> dict:
-    """Get structured response from the model using a tool."""
+def get_model_response(prompt: str, input_data: dict) -> str:
+    """Get response from the model."""
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
@@ -115,16 +105,10 @@ def get_model_response_with_tool(
     )
 
     formatted_prompt = prompt.format(**input_data)
+    response = model.run(query=formatted_prompt, name_for_logging="infringement_review")
 
-    response = model.run(
-        query=formatted_prompt, tools=tool, name_for_logging="infringement_review"
-    )
-
-    # Extract tool use from response
-    if response.tool_use:
-        for tool_use in response.tool_use:
-            if tool_use.get("name") == tool_name:
-                return tool_use.get("input", {})
-
-    logger.error("No tool usage found in response", tool_name=tool_name)
-    return {}
+    if isinstance(response.response, list) and response.response:
+        if isinstance(response.response[0], dict):
+            markdown_text = response.response[0].get("text", "")
+            return markdown_text.replace("`", "")
+    return str(response.response).replace("`", "")

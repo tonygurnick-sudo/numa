@@ -29,21 +29,17 @@ export class InfringementReview extends BaseNumaApp {
       appDescription: description,
       tasks: [
         {
-          id: 'upload-evidence',
-          title: 'Upload Customer Evidence',
-          description: 'Upload all relevant evidence files (documents, photographs, PDFs, etc.)',
+          id: 'upload-files-to-s3',
+          title: 'Upload Evidence',
+          description: 'Upload the evidence file you would like reviewed',
           type: S3_UPLOAD_TASK,
           required: true,
           order: 1,
-          parameters: {
-            allowedFileTypes: ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.txt'],
-            maximumFileSize: 10, // 10MB max
-          },
         },
         {
           id: 'infringement-details',
           title: 'Infringement Details',
-          description: 'Provide details about the infringement including ticket number, date, location, and reason',
+          description: 'Provide details about the infringement including ticket number, issue date, issue time, location, and reason for the infringement.',
           type: TEXT_INPUT_TASK,
           required: true,
           order: 2,
@@ -55,7 +51,7 @@ export class InfringementReview extends BaseNumaApp {
           endpoint: 'infringement-review',
           params: {
             payload: {
-              uploaded_files: '@upload-evidence',
+              uploaded_files: '@upload-files-to-s3',
               infringement_details: '@infringement-details',
             },
           },
@@ -71,11 +67,11 @@ export class InfringementReview extends BaseNumaApp {
           order: 4,
         },
         {
-          id: 'legislation-comparison',
-          title: 'Legislation Comparison',
+          id: 'legislation-evaluation',
+          title: 'Legislation Evaluation',
           type: TEXT_OUTPUT_TASK,
           params: {
-            dataRef: '@call-step-function/legislation_comparison',
+            dataRef: '@call-step-function/legislation_evaluation',
           },
           order: 5,
         },
@@ -132,45 +128,17 @@ export class InfringementReview extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$.job_id',
-            'evidence_keys.$': '$.uploaded_files',
+            'evidence_key.$': '$.uploaded_files[0]',
             'infringement_details.$': '$.infringement_details',
           },
           Next: 'ExtractContent',
         },
-        ExtractContent: {
-          Type: 'Map',
-          ItemsPath: '$.evidence_keys',
-          Parameters: {
-            'input_key.$': '$$.Map.Item.Value',
-            'output_key.$': `States.Format('${this.appId}/{}/extracted_$.json', $$.Execution.Input.job_id)`,
-            input_bucket: this.outputsBucket.bucket,
-          },
-          Iterator: {
-            StartAt: 'ExtractFile',
-            States: {
-              ExtractFile: {
-                Type: 'Task',
-                Resource: 'arn:aws:states:::lambda:invoke',
-                Parameters: {
-                  FunctionName: extractContentLambda.arn,
-                  Payload: {
-                    'input_key.$': '$.input_key',
-                    'output_key.$': '$.output_key',
-                    input_bucket: this.outputsBucket.bucket,
-                  },
-                },
-                End: true,
-              },
-            },
-          },
-          ResultPath: '$.extracted_files',
-          Next: 'InfringementReview',
-        },
+        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.evidence_key', 'InfringementReview'),
         InfringementReview: this.addLambdaTask(
           infringementReviewLambda.arn,
           {
             app_id: this.appId,
-            'input_keys.$': '$.evidence_keys',
+            'input_key.$': '$.extracted.output_key',
             'infringement_details.$': '$.infringement_details',
           },
           'WriteSuccessStatus',
