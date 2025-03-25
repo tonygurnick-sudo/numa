@@ -1,4 +1,3 @@
-# Key parking legislation and regulations for Victoria, Australia
 PARKING_LEGISLATION = """## Parking Legislation and Regulations
 
 For matters related to parking infringements and regulations in Victoria, please refer to the following key resources:
@@ -18,8 +17,6 @@ For matters related to parking infringements and regulations in Victoria, please
 For additional or more detailed information, please consult the official Victorian government websites. Note that our current application version (0.01) does not include real-time legislative updates or detailed evaluation of legislation. Always verify with the official sources for the most accurate and up-to-date details.
 """
 
-
-# New prompt for dedicated human error analysis
 HUMAN_ERROR_ANALYSIS_PROMPT = """You are an expert in detecting human errors in parking infringement records.
 
 Here is the customer evidence that has been submitted:
