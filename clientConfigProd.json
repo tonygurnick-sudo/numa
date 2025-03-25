@@ -94,7 +94,7 @@
       "document-summariser": {},
       "meeting-analyser": {},
       "policy-reviewer": {},
-      "infringement-reviewer":{}
+      "infringement-review":{}
     },
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
