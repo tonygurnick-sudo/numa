@@ -23,6 +23,53 @@ variables:
   if-main:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+.clients:
+  matrix:
+    - CLIENT_NAME:
+      - 2gen
+      - 30-seconds
+      - accumen
+      - align-me
+      - arcanum-dave
+      - arcanum-demo-nathan
+      - arcanum-demo-nick
+      - arcanum-demo-sam
+      - arcanum-demo-sebastian
+      - arcanum-hams
+      - asper
+      - autoshoppe
+      - av-media
+      - bendigo-council
+      - beyond-expectations
+      - broken-hill-city-council
+      - classic-group
+      - corangamite
+      - cuttriss
+      - debtworks
+      - delta-insurance
+      - design-builders
+      - ema
+      - geofabrics
+      - kapiti-coast
+      - lg-pro
+      - macedon-ranges
+      - modern-sales
+      - moira-shire-council
+      - momentum
+      - mornington-peninsula-council
+      - mosaic
+      - ngati-kahu
+      - nzsba
+      - nzsba-nick
+      - rooflogic
+      - shire-of-narrogin
+      - story-box
+      - symphony
+      - tda
+      - transit
+      - w-advisory
+      - warrnambool-city-council
+
 .node-lambdas-matrix:
   matrix:
     - BUILD_DIR:
@@ -191,19 +238,11 @@ node-package:
     - cd ..
   script:
     - yarn exec cdktf deploy --auto-approve numa-${CLIENT_NAME}
+  needs:
   environment:
     name: $CLIENT_NAME
     url: https://$CLIENT_NAME.numa.arcanum.ai
   resource_group: $CLIENT_NAME
-  needs:
-    - artifacts: true
-      job: python-package
-      parallel: !reference [.python-lambdas-matrix]
-    - artifacts: true
-      job: node-package
-      parallel: !reference [.node-lambdas-matrix]
-    - artifacts: true
-      job: frontend-build
 
 deploy-to-arcanum-demo:
   extends: .deploy-infra
@@ -216,21 +255,21 @@ deploy-to-arcanum-demo:
 
 deploy-to-arcanum-prod-numa-demo:
   extends: .deploy-infra
+  stage: deploy:prod
   variables:
     CLIENT_NAME: arcanum-prod-numa-demo
   environment:
     deployment_tier: production
-  needs:
-    - job: deploy-to-arcanum-demo
-    # This needs to be duplicated as referencing .deploy-infra, needs doesn't work properly
-    - artifacts: true
-      job: python-package
-      parallel: !reference [.python-lambdas-matrix]
-    - artifacts: true
-      job: node-package
-      parallel: !reference [.node-lambdas-matrix]
-    - artifacts: true
-      job: frontend-build
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+
+deploy-to-client:
+  extends: .deploy-infra
+  stage: deploy:customer
+  parallel: !reference [.clients]
+  environment:
+    deployment_tier: production
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: manual
