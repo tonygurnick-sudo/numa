@@ -53,7 +53,9 @@
     ]
   },
   "arcanum-dave": {
-    "apps": {},
+    "apps": {
+      "meeting-analyser": {}
+    },
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "devInstance": true
