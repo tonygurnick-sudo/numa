@@ -7,6 +7,7 @@ import s3_helpers
 from prompts import (
     DECISION_DETERMINATION_PROMPT,
     EVIDENCE_ANALYSIS_PROMPT,
+    HUMAN_ERROR_ANALYSIS_PROMPT,
     LEGISLATION_EVALUATION_PROMPT,
     PARKING_LEGISLATION,
     RESPONSE_LETTER_PROMPT,
@@ -47,27 +48,39 @@ def handler(event: dict, context: LambdaContext) -> dict:
             },
         )
 
-        # Step 2: Legislation Evaluation
+        # Step 2: Human Error Analysis
+        logger.info("Starting human error analysis")
+        human_error_analysis = get_model_response(
+            prompt=HUMAN_ERROR_ANALYSIS_PROMPT,
+            input_data={
+                "evidence_content": evidence_content,
+                "infringement_details": infringement_details,
+            },
+        )
+
+        # Step 3: Legislation Evaluation
         logger.info("Starting legislation evaluation")
         legislation_evaluation = get_model_response(
             prompt=LEGISLATION_EVALUATION_PROMPT,
             input_data={
                 "evidence_analysis": evidence_analysis,
+                "human_error_analysis": human_error_analysis,
                 "legislation_content": PARKING_LEGISLATION,
             },
         )
 
-        # Step 3: Decision Determination
+        # Step 4: Decision Determination
         logger.info("Determining decision")
         decision_determination = get_model_response(
             prompt=DECISION_DETERMINATION_PROMPT,
             input_data={
                 "evidence_analysis": evidence_analysis,
+                "human_error_analysis": human_error_analysis,
                 "legislation_comparison": legislation_evaluation,
             },
         )
 
-        # Step 4: Generate Response Letter
+        # Step 5: Generate Response Letter
         logger.info("Generating response letter")
         response_letter = get_model_response(
             prompt=RESPONSE_LETTER_PROMPT,
@@ -75,6 +88,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
                 "infringement_details": infringement_details,
                 "decision_determination": decision_determination,
                 "evidence_analysis": evidence_analysis,
+                "human_error_analysis": human_error_analysis,
                 "legislation_comparison": legislation_evaluation,
             },
         )
@@ -83,6 +97,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
         results = {
             "evidence_analysis": evidence_analysis,
+            "human_error_analysis": human_error_analysis,
             "legislation_evaluation": legislation_evaluation,
             "decision_determination": decision_determination,
             "response_letter": response_letter,

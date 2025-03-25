@@ -67,13 +67,22 @@ export class InfringementReview extends BaseNumaApp {
           order: 4,
         },
         {
+          id: 'human-error-analysis',
+          title: 'Human Error Analysis',
+          type: TEXT_OUTPUT_TASK,
+          params: {
+            dataRef: '@call-step-function/human_error_analysis',
+          },
+          order: 5,
+        },
+        {
           id: 'legislation-evaluation',
           title: 'Legislation Evaluation',
           type: TEXT_OUTPUT_TASK,
           params: {
             dataRef: '@call-step-function/legislation_evaluation',
           },
-          order: 5,
+          order: 6,
         },
         {
           id: 'decision-determination',
@@ -82,7 +91,7 @@ export class InfringementReview extends BaseNumaApp {
           params: {
             dataRef: '@call-step-function/decision_determination',
           },
-          order: 6,
+          order: 7,
         },
         {
           id: 'response-letter',
@@ -91,7 +100,7 @@ export class InfringementReview extends BaseNumaApp {
           params: {
             dataRef: '@call-step-function/response_letter',
           },
-          order: 7,
+          order: 8,
         },
       ],
     };
@@ -138,6 +147,7 @@ export class InfringementReview extends BaseNumaApp {
           infringementReviewLambda.arn,
           {
             app_id: this.appId,
+            'job_id.$': '$.job_id',
             'input_key.$': '$.extracted.output_key',
             'infringement_details.$': '$.infringement_details',
           },

@@ -1,78 +1,69 @@
 # Key parking legislation and regulations for Victoria, Australia
-PARKING_LEGISLATION = """
-# Victorian Parking Legislation and Regulations
+PARKING_LEGISLATION = """## Parking Legislation and Regulations
 
-## Infringements Act 2006
-The Infringements Act 2006 establishes the framework for the enforcement of infringement notices in Victoria, including parking infringements.
+For matters related to parking infringements and regulations in Victoria, please refer to the following key resources:
 
-### Key Provisions:
-- **Section 9**: Specifies requirements for the form and content of infringement notices
-- **Section 22**: Outlines the process for internal review of infringement notices
-- **Section 23**: Establishes grounds for cancellation including:
-  - Contrary to law
-  - Mistake of identity
-  - Special circumstances
-  - Exceptional circumstances
-  - Person unaware of notice
-  - Notice is invalid or defective
-- **Section 25**: Permits withdrawal of infringement notices after review
+- **Infringements Act 2006:**
+  [Infringements Act 2006 (Current Version)](https://www.legislation.vic.gov.au/in-force/acts/infringements-act-2006/056)
 
-## Road Safety Act 1986
-The Road Safety Act 1986 contains provisions related to road usage and parking regulations.
+- **Local Laws:**
+  [Local Government – Local Laws](https://www.localgovernment.vic.gov.au/strengthening-councils/local-laws)
 
-### Key Provisions:
-- **Section 77**: Powers of councils to make local laws regarding parking
-- **Section 87**: Establishes owner onus for vehicle-related offenses, including parking
-- **Section 90D**: Requirements for service of parking infringement notices
-- **Section 90E**: Stipulates timeframes for payments and actions on parking infringements
+- **Road Safety Act 1986:**
+  [Road Safety Act 1986 (Current Version)](https://www.legislation.vic.gov.au/in-force/acts/road-safety-act-1986/026)
 
-## Road Safety Road Rules 2017
-These rules detail specific parking regulations including prohibited locations, time restrictions, and special zones.
+- **Road Safety Road Rules 2017:**
+  [Road Safety Road Rules 2017](https://www.legislation.vic.gov.au/in-force/statutory-rules/road-safety-road-rules-2017/009)
 
-### Key Parking Rules:
-- **Rule 167-170**: Stopping on clearways, transit/bus/tram lanes
-- **Rule 171-175**: Stopping at or near intersections, crossings, and clearways
-- **Rule 176-179**: Stopping on or near children's/pedestrian crossings
-- **Rule 183-185**: Stopping in loading zones or permit zones
-- **Rule 197-200**: Stopping on paths, dividing strips, and nature strips
-- **Rule 201-203**: Stopping in bicycle lanes, tram lanes, and truck lanes
-- **Rule 205-207**: Parking for longer than indicated or outside permitted hours
-- **Rule 208-209**: Parking in parallel, angle, or center-of-road arrangements
+For additional or more detailed information, please consult the official Victorian government websites. Note that our current application version (0.01) does not include real-time legislative updates or detailed evaluation of legislation. Always verify with the official sources for the most accurate and up-to-date details.
+"""
 
-## Local Government Act 1989
-This act empowers councils to create and enforce local laws, including those related to parking management.
 
-### Key Provisions:
-- **Section 111**: Power to make local laws
-- **Section 224**: Appointment of authorized officers for enforcement
-- **Section 225**: Power to issue infringement notices
+# New prompt for dedicated human error analysis
+HUMAN_ERROR_ANALYSIS_PROMPT = """You are an expert in detecting human errors in parking infringement records.
 
-## Council Local Laws
-Local councils have specific parking by-laws that may include:
-- Residential parking permit schemes
-- Time-limited parking zones
-- Paid parking areas
-- Special event parking restrictions
-- Loading zones
-- Accessible parking provisions
-- Clearways and no-stopping zones
+Here is the customer evidence that has been submitted:
+{evidence_content}
 
-## Human Error Considerations
-According to legal precedents and official guidelines:
-- Errors in vehicle registration details on the infringement notice are grounds for cancellation
-- Errors in location information that significantly misrepresent where the violation occurred may invalidate the notice
-- Illegible or obscured signage may constitute grounds for cancellation
-- Technical defects in the notice itself may render it invalid
+Here are the details of the infringement:
+{infringement_details}
 
-## Common Invalid Excuses
-The following are generally NOT considered valid grounds for cancellation:
-- Claiming ignorance of parking rules
-- Brief overstay of permitted time ("just a few minutes late")
-- Not seeing the parking sign (unless the sign was demonstrably obscured or unclear)
-- Running late for appointments
-- Inability to find other parking
-- Forgetting to display a valid permit (unless exceptional circumstances exist)
-- First-time offense (without other mitigating factors)
+Please perform a focused analysis to identify any potential human errors in the infringement record. Look specifically for:
+
+- Registration number discrepancies between the infringement and actual vehicle
+- Location description errors that don't match where the vehicle was actually parked
+- Date or time discrepancies between recorded infringement and actual events
+- Zone type or parking restriction misclassifications
+- Officer identification or equipment errors
+- Ticket issuance procedural errors
+
+For each potential error, assess:
+1. The likelihood that an error occurred (high, medium, low)
+2. The evidence supporting the existence of the error
+3. The legal implications of the error (whether it invalidates the infringement)
+4. Confidence in the determination
+
+## Markdown Formatting Guidelines:
+- Use `# Human Error Analysis` as the main title
+- Use `## Error Detection Summary` for a summary table formatted as:
+  | Error Found | Error Type | Confidence | Invalidates Infringement |
+  | ----------- | ---------- | ---------- | ------------------------ |
+  | Yes/No | [Type] | High/Medium/Low | Yes/No/Possibly |
+- Use `## Detailed Error Analysis` for the comprehensive error table:
+  | Error Type | Official Record | Customer Evidence | Discrepancy | Confidence | Legal Impact |
+  | ---------- | --------------- | ----------------- | ----------- | ---------- | ------------ |
+  | Registration | [Official] | [Customer] | [Description] | High/Medium/Low | [Impact] |
+  | Location | [Official] | [Customer] | [Description] | High/Medium/Low | [Impact] |
+  | Date/Time | [Official] | [Customer] | [Description] | High/Medium/Low | [Impact] |
+  | Zone Type | [Official] | [Customer] | [Description] | High/Medium/Low | [Impact] |
+  | Other | [Official] | [Customer] | [Description] | High/Medium/Low | [Impact] |
+- Use `## Evidence Supporting Error Claims` to list supporting evidence
+- Use `## Legal Precedents` to cite any relevant legal precedents for error invalidation
+- Use bullet points with `-` for listing items
+- Use **bold** for emphasis on important points
+- Use blockquotes with `>` to quote specific evidence or regulations
+
+Provide a focused, objective analysis of potential human errors. Do not include any introduction or conclusion - start directly with the markdown content.
 """
 
 EVIDENCE_ANALYSIS_PROMPT = """You are an expert in analyzing evidence related to parking infringement reviews.
@@ -101,10 +92,24 @@ Also identify any common excuse patterns in the customer's submission that may n
 
 ## Markdown Formatting Guidelines:
 - Use `# Evidence Analysis` as the main title
-- Use `## Key Facts` for the key facts section
+- Use `## Key Facts` for the key facts section, presented as a table:
+  | Attribute | Details | Source |
+  | --------- | ------- | ------ |
+  | Ticket Number | [Number] | [Source] |
+  | Date and Time | [Date/Time] | [Source] |
+  | Location | [Location] | [Source] |
+  | Vehicle Registration | [Registration] | [Source] |
+  | Violation Type | [Type] | [Source] |
 - Use `## Vehicle Information` for vehicle details
 - Use `## Time and Location` for chronology and location analysis
-- Use `## Potential Human Errors` if any errors are detected (otherwise omit)
+- Use `## Payment Evidence` if any payment evidence is detected, presented as a table:
+  | Payment Type | Amount | Time/Date | Reference | Relevance |
+  | ------------ | ------ | --------- | --------- | --------- |
+  | [Type] | [Amount] | [Date/Time] | [Reference] | [Relevance] |
+- Use `## Potential Human Errors` if any errors are detected (otherwise omit), presented as a table:
+  | Error Type | Issued Details | Claimed/Actual Details | Confidence | Impact |
+  | ---------- | -------------- | ---------------------- | ---------- | ------ |
+  | [Error Type] | [Issued] | [Actual] | [High/Medium/Low] | [Impact] |
 - Use `## Common Excuses` if any are identified (otherwise omit)
 - Use `## Additional Details` for any other relevant information
 - Use bullet points with `-` for listing items
@@ -118,6 +123,9 @@ LEGISLATION_EVALUATION_PROMPT = """You are an expert in evaluating parking infri
 Here is the evidence analysis:
 {evidence_analysis}
 
+Here is the human error analysis:
+{human_error_analysis}
+
 Here is the relevant parking legislation and regulations:
 {legislation_content}
 
@@ -126,16 +134,24 @@ Please carefully evaluate the evidence against the parking legislation to determ
 - If any exemptions might apply based on the evidence
 - The clarity of parking signage or restrictions based on evidence
 - Any mitigating circumstances that might be relevant
-- Potential human errors in registration numbers or parking area identification
+- Human errors in registration numbers or parking area identification
 - Common excuses that do not justify cancellation
 
 ## Markdown Formatting Guidelines:
 - Use `# Legislation Evaluation` as the main title
-- Use `## Applicable Regulations` to list relevant laws and regulations
+- Use `## Applicable Regulations` to list relevant laws and regulations as a table:
+  | Regulation | Section/Rule | Relevance | Compliance |
+  | ---------- | ------------ | --------- | ---------- |
+  | [Regulation] | [Section] | [Description] | [Compliant/Non-compliant/Unclear] |
 - Use `## Compliance Analysis` to analyze compliance with each regulation
-- Use `## Potential Exemptions` to discuss possible exemptions (if any)
-- Use `## Human Error Assessment` to evaluate any errors identified
-- Use `## Excuse Evaluation` to assess any excuse patterns found
+- Use `## Human Error Assessment` to evaluate any errors identified as a table:
+  | Error Type | Legal Implication | Precedent | Recommendation |
+  | ---------- | ----------------- | --------- | -------------- |
+  | [Error Type] | [Implication] | [Precedent] | [Recommendation] |
+- Use `## Excuse Evaluation` to assess any excuse patterns found as a table:
+  | Excuse | Legal Validity | Relevant Legislation | Recommendation |
+  | ------ | -------------- | -------------------- | -------------- |
+  | [Excuse] | [Valid/Invalid] | [Legislation] | [Recommendation] |
 - Use bullet points with `-` for listing items
 - Use **bold** for emphasis on important points
 - Use `>` for quoting specific legislation text
@@ -148,10 +164,13 @@ DECISION_DETERMINATION_PROMPT = """You are an expert in determining outcomes for
 Here is the evidence analysis:
 {evidence_analysis}
 
+Here is the human error analysis:
+{human_error_analysis}
+
 Here is the legislation evaluation:
 {legislation_comparison}
 
-Based on the evidence and legislation evaluation, you need to make a decision on whether the infringement should be upheld or cancelled, or if more information is needed.
+Based on the evidence, human error analysis, and legislation evaluation, you need to make a decision on whether the infringement should be upheld or cancelled, or if more information is needed.
 
 Consider:
 - Compliance with relevant parking regulations
@@ -170,11 +189,15 @@ Remember:
 
 ## Markdown Formatting Guidelines:
 - Use `# Decision & Rationale` as the main title
-- Use `## Decision` to clearly state the decision (UPHOLD, CANCEL, or NEED MORE INFO)
-- Use `## Confidence Level` to indicate confidence (high, medium, or low)
+- Use `## Decision` to clearly state the decision as a prominent table:
+  | Decision | Confidence | Primary Factor | Notes |
+  | -------- | ---------- | -------------- | ----- |
+  | [UPHOLD/CANCEL/NEED MORE INFO] | [High/Medium/Low] | [Primary Factor] | [Brief Notes] |
 - Use `## Rationale` to explain the reasoning behind the decision
-- Use `## Primary Factors` to list the main factors that influenced the decision
-- Use `## Secondary Factors` to list contributing factors (if any)
+- Use `## Decision Factors` to list the main factors as a weighted table:
+  | Factor | Weight | Impact | Outcome Direction |
+  | ------ | ------ | ------ | ---------------- |
+  | [Factor] | [High/Medium/Low] | [Description] | [Favors Cancel/Uphold] |
 - Use `## Key Evidence` to highlight crucial evidence
 - Use `## Applicable Legislation` to cite relevant legal references
 - Use `## Additional Information Needed` if more information is required
@@ -184,7 +207,7 @@ Remember:
 Be direct and clear in your decision. Do not include any introduction or conclusion - start directly with the markdown content.
 """
 
-RESPONSE_LETTER_PROMPT = """You are an expert in drafting professional response letters for parking infringement reviews.
+RESPONSE_LETTER_PROMPT = """You are an expert in drafting professional response letters for parking infringement reviews for Warrnambool City Council.
 
 Here are the details of the infringement:
 {infringement_details}
@@ -194,6 +217,9 @@ Here is the decision determination:
 
 Here is the evidence analysis:
 {evidence_analysis}
+
+Here is the human error analysis:
+{human_error_analysis}
 
 Here is the legislation evaluation:
 {legislation_comparison}
@@ -209,8 +235,15 @@ Draft a professional and empathetic response letter that:
 - If more information is needed, specifies exactly what the customer should provide
 - Provides clear next steps for the recipient based on the decision
 - Maintains a professional, respectful tone throughout
-- Includes contact information for further inquiries (phone and email)
+- Includes Warrnambool City Council contact information for further inquiries
 - Closes with appropriate signature block (Regards, [Officer Name], Parking Services)
+
+Always include the following Warrnambool City Council contact information in the letter:
+- Email: contact@warrnambool.vic.gov.au
+- Phone: 1300 003 280 (local call) or (03) 5559 4800
+- After hours: (03) 5559 4800 and press 1
+- Postal address: Warrnambool City Council, PO Box 198, Warrnambool 3280
+- Council Office: 25 Liebig Street, Warrnambool
 
 ## Markdown Formatting Guidelines:
 - Use `# Parking Infringement Review Response` as the main title
@@ -218,7 +251,18 @@ Draft a professional and empathetic response letter that:
 - Use `## Re: Review of Parking Infringement Notice [Number]` as a subtitle
 - Use `## Decision` to clearly state the decision
 - Use `## Reason for Decision` to explain the rationale
-- Use `## Next Steps` to outline what happens next
+- Use `## Next Steps` to outline what happens next as a table:
+  | Action | Timeline | Details | Contact |
+  | ------ | -------- | ------- | ------- |
+  | [Action Required] | [Timeline] | [Description] | [Contact Info] |
+- Use `## Contact Information` to include the Warrnambool City Council contact details in a table:
+  | Contact Method | Details |
+  | -------------- | ------- |
+  | Email | contact@warrnambool.vic.gov.au |
+  | Phone | 1300 003 280 (local call) or (03) 5559 4800 |
+  | After hours | (03) 5559 4800 and press 1 |
+  | Postal address | Warrnambool City Council, PO Box 198, Warrnambool 3280 |
+  | Council Office | 25 Liebig Street, Warrnambool |
 - Use bullet points with `-` for listing items or requirements
 - Use **bold** for emphasis on important points and the decision outcome
 - Format the letter with proper spacing between sections
