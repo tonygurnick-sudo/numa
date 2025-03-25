@@ -39,7 +39,8 @@ export class InfringementReview extends BaseNumaApp {
         {
           id: 'infringement-details',
           title: 'Infringement Details',
-          description: 'Provide details about the infringement including ticket number, issue date, issue time, location, and reason for the infringement.',
+          description:
+            'Provide details about the infringement including ticket number, issue date, issue time, location, and reason for the infringement.',
           type: TEXT_INPUT_TASK,
           required: true,
           order: 2,
