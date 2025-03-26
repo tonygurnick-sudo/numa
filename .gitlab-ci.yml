@@ -7,6 +7,7 @@ include:
     file: pipelines/node.yml
   - project: arcanumai/ci
     file: pipelines/python.yml
+  - .gitlab-ci-clients.yml
 
 workflow:
   rules:
@@ -22,53 +23,6 @@ variables:
 .rules:
   if-main:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-.clients:
-  matrix:
-    - CLIENT_NAME:
-      - 2gen
-      - 30-seconds
-      - accumen
-      - align-me
-      - arcanum-dave
-      - arcanum-demo-nathan
-      - arcanum-demo-nick
-      - arcanum-demo-sam
-      - arcanum-demo-sebastian
-      - arcanum-hams
-      - asper
-      - autoshoppe
-      - av-media
-      - bendigo-council
-      - beyond-expectations
-      - broken-hill-city-council
-      - classic-group
-      - corangamite
-      - cuttriss
-      - debtworks
-      - delta-insurance
-      - design-builders
-      - ema
-      - geofabrics
-      - kapiti-coast
-      - lg-pro
-      - macedon-ranges
-      - modern-sales
-      - moira-shire-council
-      - momentum
-      - mornington-peninsula-council
-      - mosaic
-      - ngati-kahu
-      - nzsba
-      - nzsba-nick
-      - rooflogic
-      - shire-of-narrogin
-      - story-box
-      - symphony
-      - tda
-      - transit
-      - w-advisory
-      - warrnambool-city-council
 
 .node-lambdas-matrix:
   matrix:
@@ -149,6 +103,20 @@ variables:
         - lib/bedrock
         - lib/helpers
         - lib/markdown-to-pdf
+
+client-list-lint:
+  stage: lint
+  needs: []
+  image: registry.gitlab.com/arcanumai/ci/all-inclusive
+  variables:
+    YQ_VERSION: v4.45.1
+  before_script:
+    - apt-get update
+    - apt-get install -y wget
+    - wget -O /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64
+    - chmod +x /usr/local/bin/yq
+  script:
+    - diff <(jq --raw-output keys[] clientConfigProd.json | sort | grep -v 'arcanum-demo$' | grep -v arcanum-prod-numa-demo | grep -v arcanum-prod-trial) <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
 
 infra-lint:
   rules:
