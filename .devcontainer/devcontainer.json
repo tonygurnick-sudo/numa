@@ -45,11 +45,16 @@
         "ms-python.python",
         "ms-python.black",
         "ms-python.isort",
-        "ms-python.flake8"
+        "ms-python.flake8",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
       ]
     }
   },
   "containerEnv": {
-    "POETRY_VIRTUALENVS_IN_PROJECT": "true"
+    "POETRY_VIRTUALENVS_IN_PROJECT": "true",
+    "TF_ENVIRONMENT": "prod",
+    "AWS_REGION": "us-east-1",
+    "CI_PROJECT_PATH": "arcanumai/numa"
   }
 }
