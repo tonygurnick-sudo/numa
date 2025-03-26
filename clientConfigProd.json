@@ -53,7 +53,9 @@
     ]
   },
   "arcanum-dave": {
-    "apps": {},
+    "apps": {
+      "meeting-analyser": {}
+    },
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "devInstance": true
@@ -93,8 +95,7 @@
       "contract-analysis": {},
       "document-summariser": {},
       "meeting-analyser": {},
-      "policy-reviewer": {},
-      "infringement-review":{}
+      "policy-reviewer": {}
     },
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
