@@ -1,3 +1,6 @@
+import json
+import os
+
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
@@ -18,10 +21,14 @@ MAX_TOKENS = 4096
 logger = structlog.get_logger()
 
 
-def handler(event: dict, context: LambdaContext) -> dict:
+def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
     helpers.setup_step_function_lambda_logging(event, context)
     try:
         input_key = event["input_key"]
+        output_key = event.get(
+            "output_key",
+            f"{event['app_id']}/{event['job_id']}/infringement-review.json",
+        )
         infringement_details = event["infringement_details"]
 
         logger.info(
@@ -103,7 +110,27 @@ def handler(event: dict, context: LambdaContext) -> dict:
             "response_letter": response_letter,
         }
 
-        return results
+        results_json = json.dumps(results, indent=2).encode("utf-8")
+        s3_helpers.write(output_key, results_json, content_type="application/json")
+
+        return {
+            "results": [
+                {
+                    "input_reference": None,
+                    "outputs": [
+                        {
+                            "content_type": "application/json",
+                            "data": {
+                                "bucket": os.environ["BUCKET"],
+                                "key": output_key,
+                            },
+                            "location": "S3",
+                            "title": "Infringement Review",
+                        },
+                    ],
+                },
+            ]
+        }
 
     except Exception:
         logger.exception("Error in lambda execution")

@@ -8,7 +8,6 @@ import {
   HTTP_REQUEST_TASK,
   S3_UPLOAD_TASK,
   TEXT_INPUT_TASK,
-  TEXT_OUTPUT_TASK,
 } from './base-numa-app-construct';
 
 const description = 'Review parking infringement evidence and provide recommendations';
@@ -58,51 +57,6 @@ export class InfringementReview extends BaseNumaApp {
           },
           order: 3,
         },
-        {
-          id: 'evidence-analysis',
-          title: 'Evidence Analysis',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/evidence_analysis',
-          },
-          order: 4,
-        },
-        {
-          id: 'human-error-analysis',
-          title: 'Human Error Analysis',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/human_error_analysis',
-          },
-          order: 5,
-        },
-        {
-          id: 'legislation-evaluation',
-          title: 'Legislation Evaluation',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/legislation_evaluation',
-          },
-          order: 6,
-        },
-        {
-          id: 'decision-determination',
-          title: 'Decision & Rationale',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/decision_determination',
-          },
-          order: 7,
-        },
-        {
-          id: 'response-letter',
-          title: 'Response Letter',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/response_letter',
-          },
-          order: 8,
-        },
       ],
     };
 
@@ -116,6 +70,7 @@ export class InfringementReview extends BaseNumaApp {
       },
       {
         actions: ['bedrock:InvokeModel'],
+        effect: 'Allow',
         resources: ['arn:aws:bedrock:*::foundation-model/*'],
       },
     ];
@@ -151,6 +106,7 @@ export class InfringementReview extends BaseNumaApp {
             'job_id.$': '$.job_id',
             'input_key.$': '$.extracted.output_key',
             'infringement_details.$': '$.infringement_details',
+            'output_key.$': `States.Format('${this.appId}/{}/infringement-review.json', $$.Execution.Input.job_id)`,
           },
           'WriteSuccessStatus',
           {
