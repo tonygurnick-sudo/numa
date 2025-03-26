@@ -150,6 +150,20 @@ variables:
         - lib/helpers
         - lib/markdown-to-pdf
 
+client-list-lint:
+  stage: lint
+  needs: []
+  image: registry.gitlab.com/arcanumai/ci/all-inclusive
+  variables:
+    YQ_VERSION: v4.45.1
+  before_script:
+    - apt-get update
+    - apt-get install -y wget
+    - wget -O /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64
+    - chmod +x /usr/local/bin/yq
+  script:
+    - diff <(jq --raw-output keys[] clientConfigProd.json | sort) <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci.yml | sort)
+
 infra-lint:
   rules:
     - changes:
