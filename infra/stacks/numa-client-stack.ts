@@ -19,6 +19,7 @@ import { CompanyProfile } from '../constructs/apps/company-profile-construct';
 import { ContractAnalysis } from '../constructs/apps/contract-analysis-construct';
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
 import { FinancialAnalysis } from '../constructs/apps/financial-analysis-construct';
+import { InfringementReview } from '../constructs/apps/infringement-review-construct';
 import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
 import { PolicyDrafter } from '../constructs/apps/policy-drafter-construct';
@@ -253,6 +254,7 @@ const appLibrary: Record<string, new (scope: Construct, name: string, props: Bas
   'contract-analysis': ContractAnalysis,
   'document-summariser': DocumentSummariser,
   'financial-analysis': FinancialAnalysis,
+  'infringement-review': InfringementReview,
   'meeting-analyser': MeetingAnalyser,
   'nzsba-policy-builder': NZSBAPolicyBuilder,
   'policy-drafter': PolicyDrafter,

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 
-import ReactMarkdown from 'react-markdown';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { downloadFileFromS3, downloadFileWithSignedUrl, openFileWithSignedUrl } from '../utils/s3Utils';
+import { MarkdownContent } from './MarkdownContent';
 
 // Shared tab navigation component for both JSON and CSV renderers
 const TabNavigation = ({ items, activeIndex, setActiveIndex, getLabel }) => {
@@ -96,7 +96,7 @@ const JsonRenderer = ({ data }) => {
   // Render a simple key-value pair
   const renderSimpleValue = (value) => {
     if (typeof value === 'string') {
-      return <ReactMarkdown>{value}</ReactMarkdown>;
+      return <MarkdownContent content={value} />;
     } else if (typeof value === 'number') {
       return <span className="text-dark">{value}</span>;
     } else if (typeof value === 'boolean') {
@@ -142,7 +142,7 @@ const JsonRenderer = ({ data }) => {
         <div>
           <div className="mb-3">
             {typeof obj[activeTab] === 'string' ? (
-              <ReactMarkdown>{obj[activeTab]}</ReactMarkdown>
+              <MarkdownContent content={obj[activeTab]} />
             ) : isComplexValue(obj[activeTab]) ? (
               renderObject(obj[activeTab], level + 1, activeTab, activeTab)
             ) : (
@@ -420,7 +420,7 @@ const CsvRenderer = ({ data }) => {
       if (value.trim() === '') {
         return <span className="text-muted fst-italic">Empty</span>;
       } else if (value.includes('\n')) {
-        return <ReactMarkdown>{value}</ReactMarkdown>;
+        return <MarkdownContent content={value} />;
       } else if (isLikelyFilePath(value)) {
         // Extract just the filename from the path
         const fileName = value.split('/').pop();
@@ -775,9 +775,7 @@ export const ResultsRenderer = ({ results, activeResultIndex = 0 }) => {
       ) : output.content_type === 'text/markdown' || output.content_type === 'text/plain' ? (
         <div className="mb-3">
           <div className="markdown-content p-3 bg-white rounded border">
-            <ReactMarkdown style={{ whiteSpace: 'pre-wrap' }}>
-              {typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
-            </ReactMarkdown>
+            <MarkdownContent content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)} />
           </div>
         </div>
       ) : output.content_type === 'application/json' ? (

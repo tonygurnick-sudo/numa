@@ -95,7 +95,8 @@
       "contract-analysis": {},
       "document-summariser": {},
       "meeting-analyser": {},
-      "policy-reviewer": {}
+      "policy-reviewer": {},
+      "infringement-review": {}
     },
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,

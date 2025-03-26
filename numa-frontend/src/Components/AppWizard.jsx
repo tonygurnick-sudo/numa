@@ -7,7 +7,7 @@ import { TextOutputModule } from '../Modules/TextOutputModule';
 import { WizardNavigation } from './WizardNavigation';
 import { Preloader } from '../Components/Preloader';
 import { ResultsRenderer } from './ResultsRenderer';
-import ReactMarkdown from 'react-markdown';
+import { MarkdownContent } from './MarkdownContent';
 
 const AppWizard = ({ manifest }) => {
   const {
@@ -254,7 +254,7 @@ const AppWizard = ({ manifest }) => {
             <h3>{currentOutput.title || `Output ${outputIndex + 1}`}</h3>
             <div>
               {currentOutput.content_type === 'text/markdown' ? (
-                <ReactMarkdown>{currentOutput.data}</ReactMarkdown>
+                <MarkdownContent content={currentOutput.data} />
               ) : (
                 <pre>{JSON.stringify(currentOutput.data, null, 2)}</pre>
               )}
