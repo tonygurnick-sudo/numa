@@ -12,7 +12,7 @@ The Lambda retrieves conversation context from DynamoDB using query parameters:
 
 import json
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import boto3
 import httpx
