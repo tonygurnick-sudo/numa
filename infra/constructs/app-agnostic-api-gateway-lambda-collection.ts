@@ -40,6 +40,8 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         variables: {
           LOG_LEVEL: 'INFO',
           ALLOWED_ORIGIN: '*',
+          CLIENT_NAME: props.client,
+          ENVIRONMENT_NAME: props.environment,
         },
       },
       timeout: 45,
@@ -49,6 +51,14 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           actions: ['bedrock:InvokeModel'],
           resources: ['*'],
         },
+        {
+          effect: 'Allow',
+          actions: [
+            'dynamodb:Query',
+            'dynamodb:GetItem'
+          ],
+          resources: [`*`],
+        },
       ],
     });
   }
@@ -57,4 +67,6 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
 export interface CoreNumaAppProps extends ApiGatewayLambdaCollectionProps {
   clientId: string;
   clientSecret: string;
+  client: string;
+  environment: string;
 }

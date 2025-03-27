@@ -2,13 +2,19 @@
 Web Search Proxy Lambda Function.
 
 This Lambda provides an API for performing web searches and retrieving content from web pages.
-It accepts a search query and optional conversation context to optimize the search,
+It accepts a search query and conversation ID to optimize the search,
 then returns search results with content snippets from the top matching pages.
+
+The Lambda retrieves conversation context from DynamoDB using query parameters:
+- client: The client name for constructing the DynamoDB table name
+- environment: The environment (defaults to 'prod' if not specified)
 """
 
 import json
 import time
+from typing import Any, Dict, List, Optional
 
+import boto3
 import httpx
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -20,9 +26,93 @@ import helpers
 from prompts import REWRITE_QUERY_PROMPT
 
 logger = structlog.get_logger()
+dynamodb = boto3.client("dynamodb")
 
 
-def google_search(query: str, max_results: int = 5) -> list:
+def fetch_conversation_context(
+    conversation_id: str,
+    user_id: str,
+    max_messages: int = 6,
+    event: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Fetch conversation context from DynamoDB for a specific conversation.
+
+    Args:
+        conversation_id: The unique conversation identifier
+        user_id: The user's identity ID
+        max_messages: Maximum number of messages to include in context
+        event: Lambda event object for extracting client/environment
+
+    Returns:
+        Formatted conversation context string
+    """
+    try:
+        if not event:
+            logger.warning("No event provided to fetch_conversation_context")
+            return ""
+
+        # Get client and environment from query parameters
+        params = event.get("queryStringParameters", {}) or {}
+        client = params.get("client")
+        environment = params.get("environment", "prod")
+
+        if not client:
+            logger.warning("CLIENT_NAME not available from query parameters")
+            return ""
+
+        # Construct table name
+        table_name = f"numa-{client}"
+        if environment != "prod":
+            table_name += f"-{environment}"
+        table_name += "-chat-history"
+
+        # Query DynamoDB for conversation messages
+        response = dynamodb.query(
+            TableName=table_name,
+            KeyConditionExpression="user_id = :u AND begins_with(sk, :c)",
+            ExpressionAttributeValues={
+                ":u": {"S": user_id},
+                ":c": {"S": f"{conversation_id}#"},
+            },
+            ScanIndexForward=True,  # Sort by timestamp ascending
+        )
+
+        if not response.get("Items"):
+            return ""
+
+        # Process items - extract text messages only
+        items = []
+        for item in response.get("Items", []):
+            # Extract only the fields we need directly from the DynamoDB response
+            role = item.get("role", {}).get("S", "")
+            content = item.get("content", {}).get("S", "")
+            message_type = item.get("message_type", {}).get("S", "text")
+            timestamp = int(item.get("timestamp", {}).get("N", 0))
+
+            # Skip non-text messages (files, meta, etc.)
+            if message_type != "text":
+                continue
+
+            if role and content:
+                items.append({"role": role, "content": content, "timestamp": timestamp})
+
+        # Sort by timestamp and get most recent messages
+        items.sort(key=lambda x: x.get("timestamp", 0))
+        recent = items[-max_messages:] if len(items) > max_messages else items
+
+        # Format as conversation context
+        context_lines = [f"{msg['role']}: {msg['content']}" for msg in recent]
+        context = "\n".join(context_lines)
+
+        return context
+
+    except Exception as e:
+        logger.error("Error fetching conversation context", error=str(e), exc_info=True)
+        return ""
+
+
+def google_search(query: str, max_results: int = 5) -> List[str]:
     """
     Perform a Google search and return a list of URLs.
 
@@ -35,14 +125,13 @@ def google_search(query: str, max_results: int = 5) -> list:
     """
     try:
         urls = list(search(query, num_results=max_results, lang="en"))
-        logger.info("Google search completed", urls_count=len(urls))
         return urls
     except Exception as e:
         logger.error("Google search error", error=str(e))
         return []
 
 
-def scrape_page(url: str) -> dict:
+def scrape_page(url: str) -> Dict[str, str]:
     """
     Scrape content from a web page.
 
@@ -119,7 +208,7 @@ def rewrite_query_with_context(query: str, context: str) -> str:
 
 
 def lambda_handler(
-    event: dict, context: LambdaContext
+    event: Dict[str, Any], context: LambdaContext
 ) -> helpers.ApiGatewayProxyIntegrationResponse:
     """
     Lambda handler function for the web search proxy.
@@ -150,7 +239,8 @@ def lambda_handler(
         params = event.get("queryStringParameters", {}) or {}
         query = params.get("query", "")
         max_results_str = params.get("max_results", "5")
-        conversation_context = params.get("context", "")
+        conversation_id = params.get("conversation_id", "")
+        user_id = params.get("user_id", "")
 
         if not query:
             return helpers.ApiGatewayProxyIntegrationResponse(
@@ -163,6 +253,26 @@ def lambda_handler(
                     }
                 ),
             )
+
+        # Get conversation context
+        conversation_context = ""
+        if conversation_id and user_id:
+            logger.info(
+                f"Fetching conversation context using conversation_id: {conversation_id}, user_id: {user_id}"
+            )
+            conversation_context = fetch_conversation_context(
+                conversation_id, user_id, event=event
+            )
+            if not conversation_context:
+                logger.warning(
+                    "DynamoDB conversation fetch failed, falling back to context parameter"
+                )
+                conversation_context = params.get("context", "")
+        else:
+            logger.info(
+                "Missing conversation_id or user_id, using 'context' parameter instead"
+            )
+            conversation_context = params.get("context", "")
 
         # If we have context, rewrite the query
         search_query = query
