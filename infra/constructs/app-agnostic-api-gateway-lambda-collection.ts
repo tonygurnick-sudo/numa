@@ -53,7 +53,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         {
           effect: 'Allow',
           actions: ['dynamodb:Query', 'dynamodb:GetItem'],
-          resources: [`*`],
+          resources: [`arn:aws:dynamodb:*:*:table/numa-${props.client}-chat-history`],
         },
       ],
     });
