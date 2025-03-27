@@ -41,7 +41,14 @@ export const saveCompanyInfo = async (profileText, s3Bucket, region, getIdentity
     };
 
     // Use the existing uploadFileToS3 utility function
-    return await uploadFileToS3(processedFile, s3Bucket, COMPANY_INFO_KEY, region, getIdentityPoolCredentials);
+    return await uploadFileToS3(
+      processedFile.content,
+      processedFile.contentType,
+      s3Bucket,
+      COMPANY_INFO_KEY,
+      region,
+      getIdentityPoolCredentials,
+    );
   } catch (error) {
     console.error('Error saving company information:', error);
     throw error; // Re-throw the error for the component to handle

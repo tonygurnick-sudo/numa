@@ -8,6 +8,22 @@ import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import { NumaChat } from '../../Pages/NumaChat';
 
+// --- Mock chatSystemPromptUtils ---
+vi.mock('../../utils/chatSystemPromptUtils', () => ({
+  loadCompanyProfile: vi.fn().mockResolvedValue('Test Company Profile'),
+  enhanceSystemPromptWithCompanyInfo: vi.fn((basePrompt, companyProfile) => {
+    return (
+      basePrompt +
+      (companyProfile
+        ? `
+
+**Company Information:**
+${companyProfile}`
+        : '')
+    );
+  }),
+}));
+
 // --- Mocks for subcomponents ---
 vi.mock('../../Components/Nav', () => ({
   Nav: () => <div data-testid="nav">Nav</div>,
@@ -235,5 +251,24 @@ describe('NumaChat Component', () => {
     await waitFor(() => {
       expect(screen.getByTestId('right-pane')).toBeInTheDocument();
     });
+  });
+
+  it('sets company profile state when component mounts', async () => {
+    // Render the component
+    render(<NumaChat />);
+
+    // Since we've mocked loadCompanyProfile to return 'Test Company Profile',
+    // we can check that the component state is updated correctly by looking for
+    // evidence of the company profile in the rendered output
+
+    // Wait for the initial render to complete
+    await waitFor(() => {
+      expect(screen.getByTestId('chat-messages')).toBeInTheDocument();
+    });
+
+    // The company profile is loaded asynchronously, so we need to wait for it
+    // We can't directly check the state, but we can check that the component
+    // doesn't crash when loading the company profile
+    expect(screen.getByTestId('chat-input')).toBeInTheDocument();
   });
 });

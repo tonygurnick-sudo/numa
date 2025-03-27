@@ -29,11 +29,8 @@ describe('companyInfoUtils', () => {
       // Check that uploadFileToS3 was called with the correct parameters
       expect(uploadFileToS3).toHaveBeenCalledTimes(1);
       expect(uploadFileToS3).toHaveBeenCalledWith(
-        expect.objectContaining({
-          content: expect.stringContaining(mockProfileText),
-          contentType: 'application/json',
-          inferredType: 'json',
-        }),
+        expect.stringContaining(mockProfileText), // content
+        'application/json', // contentType
         mockS3Bucket,
         'company-data.json',
         mockRegion,
