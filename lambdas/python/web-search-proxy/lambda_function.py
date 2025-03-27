@@ -149,7 +149,7 @@ def scrape_page(url: str) -> Dict[str, str]:
                 soup.title.string.strip() if soup.title and soup.title.string else ""
             )
             text = soup.get_text(separator=" ", strip=True)
-            snippet = text[:5000] if text else ""
+            snippet = text[:10000] if text else ""
             return {"title": title, "url": url, "snippet": snippet}
 
         # Log warning for non-200 responses

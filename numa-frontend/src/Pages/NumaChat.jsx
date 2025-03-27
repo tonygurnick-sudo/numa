@@ -56,7 +56,7 @@ const NumaChat = () => {
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
   const Q_RETRIEVER_ID = window.sessionStorage.getItem('Q_RETRIEVER_ID');
   const MAX_DATA_SOURCE_ITEMS = 6;
-  const MAX_WEB_SEARCH_RESULTS = 5;
+  const MAX_WEB_SEARCH_RESULTS = 2;
   const TODAY = new Date();
   // Company bucket name - this should match the bucket created in infrastructure
   const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
