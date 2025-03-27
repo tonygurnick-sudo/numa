@@ -146,10 +146,11 @@ export class PolicyReviewer extends BaseNumaApp {
         PolicyReviewer: this.addLambdaTask(
           policyReviewerLambda.arn,
           {
-            app_id: this.appId,
             'input_key.$': '$.extracted.output_key',
-            'policy_context.$': '$.policy_context',
+            'job_id.$': '$.job_id',
             'legislation_content.$': '$.legislation_content',
+            'policy_context.$': '$.policy_context',
+            app_id: this.appId,
           },
           'WriteSuccessStatus',
           {
