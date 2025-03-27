@@ -53,10 +53,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         },
         {
           effect: 'Allow',
-          actions: [
-            'dynamodb:Query',
-            'dynamodb:GetItem'
-          ],
+          actions: ['dynamodb:Query', 'dynamodb:GetItem'],
           resources: [`*`],
         },
       ],

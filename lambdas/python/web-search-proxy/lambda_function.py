@@ -112,7 +112,7 @@ def fetch_conversation_context(
         return ""
 
 
-def google_search(query: str, max_results: int = 5) -> List[str]:
+def google_search(query: str, max_results: int = 5) -> Any:
     """
     Perform a Google search and return a list of URLs.
 

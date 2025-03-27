@@ -32,6 +32,7 @@ for (const client of listNumaClients(environmentName)) {
     environmentName,
     client,
     serviceName: 'numa',
+    environment: environmentName,
     ...environmentConfig,
   });
 }
