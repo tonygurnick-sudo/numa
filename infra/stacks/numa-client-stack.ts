@@ -91,10 +91,26 @@ export class NumaClientStack extends ArcanumStack {
       client: props.client,
     });
 
-    if (props.config.allApps) {
-      props.config.apps = Object.fromEntries(Object.keys(appLibrary).map((appId) => [appId, {}]));
+    const allApps = props.config.allApps ?? false;
+    const allProdApps = props.config.allProdApps ?? false;
+
+    const appConfigs = props.config.apps ?? {};
+    let appConfigsToDeploy: Array<[string, UserConfigurableBaseNumaAppProps]> = [];
+    if (allApps || allProdApps) {
+      appConfigsToDeploy = Object.entries(appLibrary)
+        .filter((entry) => {
+          const [_appId, [_construct, isProdApp]] = entry;
+          return allApps || isProdApp;
+        })
+        .map((entry) => {
+          const [appId, [_construct, _isProdApp]] = entry;
+          return [appId, appConfigs[appId] ?? {}];
+        });
+    } else {
+      appConfigsToDeploy = Object.entries(appConfigs);
     }
-    const apps = Object.entries(props.config.apps ?? {}).map(([appId, appConfig]) => {
+
+    const apps = appConfigsToDeploy.map(([appId, appConfig]) => {
       const app = lookupAppFromId(appId);
       return new app(this, `${safeConstructId}-${appId}`, {
         ...appConfig,
@@ -202,14 +218,18 @@ interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
   customDomain?: string;
   /**
    * Whether to deploy all apps to to the environment.
-   * If true, apps will be deployed with default configs.
    *
    * @default false
    */
   allApps?: boolean;
   /**
+   * Whether to deploy all production apps to to the environment.
+   *
+   * @default false
+   */
+  allProdApps?: boolean;
+  /**
    * Object of apps and configs to deploy to the environment.
-   * Ignored if allApps is true.
    *
    * @default {}
    */
@@ -249,21 +269,24 @@ export interface NumaClientStackProps extends ArcanumStackProps {
   arcanumNumaAccount: string;
 }
 
-const appLibrary: Record<string, new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp> = {
-  'candidate-screening': CandidateScreening,
-  'company-profile': CompanyProfile,
-  'contract-analysis': ContractAnalysis,
-  'document-summariser': DocumentSummariser,
-  'financial-analysis': FinancialAnalysis,
-  'infringement-review': InfringementReview,
-  'meeting-analyser': MeetingAnalyser,
-  'nzsba-policy-builder': NZSBAPolicyBuilder,
-  'policy-drafter': PolicyDrafter,
-  'policy-reviewer': PolicyReviewer,
+const appLibrary: Record<
+  string,
+  [new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp, boolean]
+> = {
+  'candidate-screening': [CandidateScreening, true],
+  'company-profile': [CompanyProfile, false],
+  'contract-analysis': [ContractAnalysis, true],
+  'document-summariser': [DocumentSummariser, true],
+  'financial-analysis': [FinancialAnalysis, true],
+  'infringement-review': [InfringementReview, false],
+  'meeting-analyser': [MeetingAnalyser, true],
+  'nzsba-policy-builder': [NZSBAPolicyBuilder, false],
+  'policy-drafter': [PolicyDrafter, false],
+  'policy-reviewer': [PolicyReviewer, false],
 };
 
 function lookupAppFromId(id: string): new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp {
-  const app = appLibrary[id];
+  const [app, _isProdApp] = appLibrary[id];
   if (!app) throw new Error('Unknown app: ' + id);
   return app;
 }
