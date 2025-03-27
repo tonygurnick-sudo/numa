@@ -89,7 +89,6 @@ export class NumaClientStack extends ArcanumStack {
       clientId: core.userPoolClient.id,
       clientSecret: core.userPoolClient.clientSecret,
       client: props.client,
-      environment: props.environment,
     });
 
     if (props.config.allApps) {
@@ -248,7 +247,6 @@ export interface NumaClientStackProps extends ArcanumStackProps {
   domainSuffix: string;
   hostedZone: string;
   arcanumNumaAccount: string;
-  environment: string;
 }
 
 const appLibrary: Record<string, new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp> = {

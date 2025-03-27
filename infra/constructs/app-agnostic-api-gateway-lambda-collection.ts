@@ -41,7 +41,6 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           LOG_LEVEL: 'INFO',
           ALLOWED_ORIGIN: '*',
           CLIENT_NAME: props.client,
-          ENVIRONMENT_NAME: props.environment,
         },
       },
       timeout: 45,
@@ -65,5 +64,4 @@ export interface CoreNumaAppProps extends ApiGatewayLambdaCollectionProps {
   clientId: string;
   clientSecret: string;
   client: string;
-  environment: string;
 }

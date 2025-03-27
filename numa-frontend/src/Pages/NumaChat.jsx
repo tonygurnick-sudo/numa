@@ -299,8 +299,8 @@ const NumaChat = () => {
           const API_GATEWAY_URL = window.sessionStorage.getItem('API_ENDPOINT') || '/api';
           const basePath = API_GATEWAY_URL.endsWith('/api') ? API_GATEWAY_URL : `${API_GATEWAY_URL}/api`;
           const client = window.sessionStorage.getItem('CLIENT_NAME');
-          const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod';
-          const searchUrl = `${basePath}/web-search?query=${encodeURIComponent(userMsg)}&max_results=${MAX_WEB_SEARCH_RESULTS}&conversation_id=${encodeURIComponent(conversationId)}&user_id=${encodeURIComponent(userId)}&client=${encodeURIComponent(client)}&environment=${encodeURIComponent(environment)}`;
+          const tableName = `numa-${client}-chat-history`;
+          const searchUrl = `${basePath}/web-search?query=${encodeURIComponent(userMsg)}&max_results=${MAX_WEB_SEARCH_RESULTS}&conversation_id=${encodeURIComponent(conversationId)}&user_id=${encodeURIComponent(userId)}&table_name=${encodeURIComponent(tableName)}`;
           const searchResponse = await fetch(searchUrl, {
             method: 'GET',
             cache: 'no-cache',

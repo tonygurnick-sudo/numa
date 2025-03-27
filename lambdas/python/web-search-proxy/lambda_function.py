@@ -51,21 +51,12 @@ def fetch_conversation_context(
         if not event:
             logger.warning("No event provided to fetch_conversation_context")
             return ""
-
-        # Get client and environment from query parameters
         params = event.get("queryStringParameters", {}) or {}
-        client = params.get("client")
-        environment = params.get("environment", "prod")
+        table_name = params.get("table_name")
 
-        if not client:
-            logger.warning("CLIENT_NAME not available from query parameters")
+        if not table_name:
+            logger.error("table_name not provided in query parameters")
             return ""
-
-        # Construct table name
-        table_name = f"numa-{client}"
-        if environment != "prod":
-            table_name += f"-{environment}"
-        table_name += "-chat-history"
 
         # Query DynamoDB for conversation messages
         response = dynamodb.query(
@@ -241,7 +232,9 @@ def lambda_handler(
         max_results_str = params.get("max_results", "5")
         conversation_id = params.get("conversation_id", "")
         user_id = params.get("user_id", "")
+        table_name = params.get("table_name", "")
 
+        # Check required parameters
         if not query:
             return helpers.ApiGatewayProxyIntegrationResponse(
                 statusCode=400,
@@ -250,6 +243,18 @@ def lambda_handler(
                     {
                         "error": "Missing query parameter",
                         "message": "The 'query' parameter is required",
+                    }
+                ),
+            )
+
+        if not table_name:
+            return helpers.ApiGatewayProxyIntegrationResponse(
+                statusCode=400,
+                headers=headers,
+                body=json.dumps(
+                    {
+                        "error": "Missing table_name parameter",
+                        "message": "The 'table_name' parameter is required",
                     }
                 ),
             )
