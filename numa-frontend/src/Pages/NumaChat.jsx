@@ -56,7 +56,7 @@ const NumaChat = () => {
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
   const Q_RETRIEVER_ID = window.sessionStorage.getItem('Q_RETRIEVER_ID');
   const MAX_DATA_SOURCE_ITEMS = 6;
-  const MAX_WEB_SEARCH_RESULTS = 5;
+  const MAX_WEB_SEARCH_RESULTS = 2;
   const TODAY = new Date();
   // Company bucket name - this should match the bucket created in infrastructure
   const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
@@ -295,16 +295,12 @@ const NumaChat = () => {
         setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'searching' }]);
 
         try {
-          // Get recent conversation context
-          const recentMessages = messages.slice(-6); // Get last 6 messages
-          const contextString = recentMessages.map((msg) => `${msg.role}: ${msg.content}`).join('\n');
-
-          // Call web search Lambda with context
+          const userId = user?.decoded_tokens?.idToken?.sub;
           const API_GATEWAY_URL = window.sessionStorage.getItem('API_ENDPOINT') || '/api';
           const basePath = API_GATEWAY_URL.endsWith('/api') ? API_GATEWAY_URL : `${API_GATEWAY_URL}/api`;
-          const searchUrl = `${basePath}/web-search?query=${encodeURIComponent(userMsg)}&max_results=${MAX_WEB_SEARCH_RESULTS}&context=${encodeURIComponent(contextString)}`;
-
-          console.log('Automatically searching for:', userMsg, 'with context');
+          const client = window.sessionStorage.getItem('CLIENT_NAME');
+          const tableName = `numa-${client}-chat-history`;
+          const searchUrl = `${basePath}/web-search?query=${encodeURIComponent(userMsg)}&max_results=${MAX_WEB_SEARCH_RESULTS}&conversation_id=${encodeURIComponent(conversationId)}&user_id=${encodeURIComponent(userId)}&table_name=${encodeURIComponent(tableName)}`;
           const searchResponse = await fetch(searchUrl, {
             method: 'GET',
             cache: 'no-cache',

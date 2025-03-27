@@ -88,6 +88,7 @@ export class NumaClientStack extends ArcanumStack {
       apiGatewayId: fe.apiGateway.id,
       clientId: core.userPoolClient.id,
       clientSecret: core.userPoolClient.clientSecret,
+      client: props.client,
     });
 
     if (props.config.allApps) {
