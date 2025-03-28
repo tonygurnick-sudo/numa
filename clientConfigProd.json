@@ -1,5 +1,6 @@
 {
   "2gen": {
+    "allProdApps": true,
     "clientAccountId": "709771312005",
     "webCrawlerConfigs": [
       {
@@ -8,9 +9,7 @@
     ]
   },
   "30-seconds": {
-    "apps": {
-      "meeting-analyser": {}
-    },
+    "allProdApps": true,
     "clientAccountId": "593793032721",
     "sharePointConfigs": [
       {
@@ -22,9 +21,7 @@
     ]
   },
   "accumen": {
-    "apps": {
-      "meeting-analyser": {}
-    },
+    "allProdApps": true,
     "clientAccountId": "677276116117",
     "webCrawlerConfigs": [
       {
@@ -94,9 +91,9 @@
       "company-profile": {},
       "contract-analysis": {},
       "document-summariser": {},
+      "infringement-review": {},
       "meeting-analyser": {},
-      "policy-reviewer": {},
-      "infringement-review": {}
+      "policy-reviewer": {}
     },
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
@@ -149,6 +146,7 @@
     ]
   },
   "asper": {
+    "allProdApps": true,
     "clientAccountId": "913524922624",
     "webCrawlerConfigs": [
       {
@@ -157,13 +155,12 @@
     ]
   },
   "autoshoppe": {
+    "allProdApps": true,
     "clientAccountId": "060795909741"
   },
   "av-media": {
-    "clientAccountId": "961341552812",
-    "apps": {
-      "meeting-analyser": {}
-    }
+    "allProdApps": true,
+    "clientAccountId": "961341552812"
   },
   "bendigo-council": {
     "clientAccountId": "183295422459",
@@ -226,6 +223,7 @@
     ]
   },
   "classic-group": {
+    "allProdApps": true,
     "clientAccountId": "734951567821"
   },
   "corangamite": {
@@ -267,12 +265,15 @@
     ]
   },
   "cuttriss": {
+    "allProdApps": true,
     "clientAccountId": "850995553818"
   },
   "debtworks": {
+    "allProdApps": true,
     "clientAccountId": "767828739522"
   },
   "delta-insurance": {
+    "allProdApps": true,
     "clientAccountId": "842676001293",
     "webCrawlerConfigs": [
       {
@@ -287,15 +288,14 @@
     ]
   },
   "design-builders": {
-    "clientAccountId": "061039773876",
-    "apps": {
-      "meeting-analyser": {}
-    }
+    "allProdApps": true,
+    "clientAccountId": "061039773876"
   },
   "ema": {
     "clientAccountId": "209479264602"
   },
   "geofabrics": {
+    "allProdApps": true,
     "clientAccountId": "802893027097",
     "webCrawlerConfigs": [
       {
@@ -316,9 +316,11 @@
     ]
   },
   "kapiti-coast": {
+    "allProdApps": true,
     "clientAccountId": "557690588447"
   },
   "lg-pro": {
+    "allProdApps": true,
     "clientAccountId": "539247480075",
     "webCrawlerConfigs": [
       {
@@ -359,6 +361,7 @@
     ]
   },
   "modern-sales": {
+    "allProdApps": true,
     "clientAccountId": "228743762183"
   },
   "moira-shire-council": {
@@ -394,6 +397,7 @@
     ]
   },
   "momentum": {
+    "allProdApps": true,
     "clientAccountId": "746669231307",
     "createServiceLinkedRole": false
   },
@@ -415,6 +419,7 @@
     ]
   },
   "mosaic": {
+    "allProdApps": true,
     "clientAccountId": "471112582627",
     "webCrawlerConfigs": [
       {
@@ -480,6 +485,11 @@
   },
   "nzsba": {
     "apps": {
+      "candidate-screening": {},
+      "contract-analysis": {},
+      "document-summariser": {},
+      "financial-analysis": {},
+      "meeting-analyser": {},
       "nzsba-policy-builder": {
         "s3KeyPrefix": "/nzsba-nzsba-policy-builder"
       }
@@ -518,6 +528,7 @@
     "devInstance": true
   },
   "rebura": {
+    "allProdApps": true,
     "clientAccountId": "307739227996"
   },
   "rooflogic": {
@@ -578,16 +589,13 @@
     "loadSampleFile": false
   },
   "symphony": {
-    "apps": {
-      "document-summariser": {},
-      "meeting-analyser": {},
-      "policy-reviewer": {}
-    },
+    "allProdApps": true,
     "clientAccountId": "557690588490",
     "createServiceLinkedRole": false,
     "loadSampleFile": false
   },
   "tda": {
+    "allProdApps": true,
     "clientAccountId": "575108948290",
     "sharePointConfigs": [
       {
@@ -601,9 +609,11 @@
     ]
   },
   "transit": {
+    "allProdApps": true,
     "clientAccountId": "442426865055"
   },
   "w-advisory": {
+    "allProdApps": true,
     "clientAccountId": "746669235417",
     "loadSampleFile": false,
     "webCrawlerConfigs": [
