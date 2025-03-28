@@ -9,11 +9,7 @@ import * as path from 'node:path';
 import _clientConfigDev from '../../clientConfigDev.json';
 import _clientConfigProd from '../../clientConfigProd.json';
 import { AppAgnosticApiGatewayLambdaCollection } from '../constructs/app-agnostic-api-gateway-lambda-collection';
-import {
-  BaseNumaApp,
-  BaseNumaAppProps,
-  UserConfigurableBaseNumaAppProps,
-} from '../constructs/apps/base-numa-app-construct';
+import { BaseNumaAppType, UserConfigurableBaseNumaAppProps } from '../constructs/apps/base-numa-app-construct';
 import { CandidateScreening } from '../constructs/apps/candidate-screening-construct';
 import { CompanyProfile } from '../constructs/apps/company-profile-construct';
 import { ContractAnalysis } from '../constructs/apps/contract-analysis-construct';
@@ -91,25 +87,12 @@ export class NumaClientStack extends ArcanumStack {
       client: props.client,
     });
 
-    const allApps = props.config.allApps ?? false;
-    const allProdApps = props.config.allProdApps ?? false;
-
-    const appConfigs = props.config.apps ?? {};
-    let appConfigsToDeploy: Array<[string, UserConfigurableBaseNumaAppProps]> = [];
-    if (allApps || allProdApps) {
-      appConfigsToDeploy = Object.entries(appLibrary)
-        .filter((entry) => {
-          const [_appId, [_construct, isProdApp]] = entry;
-          return allApps || isProdApp;
-        })
-        .map((entry) => {
-          const [appId, [_construct, _isProdApp]] = entry;
-          return [appId, appConfigs[appId] ?? {}];
-        });
-    } else {
-      appConfigsToDeploy = Object.entries(appConfigs);
-    }
-
+    const appConfigsToDeploy = getAppConfigsToDeploy(
+      appLibrary,
+      props.config.apps ?? {},
+      props.config.allApps ?? false,
+      props.config.allProdApps ?? false,
+    );
     const apps = appConfigsToDeploy.map(([appId, appConfig]) => {
       const app = lookupAppFromId(appId);
       return new app(this, `${safeConstructId}-${appId}`, {
@@ -269,10 +252,7 @@ export interface NumaClientStackProps extends ArcanumStackProps {
   arcanumNumaAccount: string;
 }
 
-const appLibrary: Record<
-  string,
-  [new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp, boolean]
-> = {
+export const appLibrary: Record<string, [BaseNumaAppType, boolean]> = {
   'candidate-screening': [CandidateScreening, true],
   'company-profile': [CompanyProfile, false],
   'contract-analysis': [ContractAnalysis, true],
@@ -285,8 +265,31 @@ const appLibrary: Record<
   'policy-reviewer': [PolicyReviewer, false],
 };
 
-function lookupAppFromId(id: string): new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp {
+function lookupAppFromId(id: string): BaseNumaAppType {
   const [app, _isProdApp] = appLibrary[id];
   if (!app) throw new Error('Unknown app: ' + id);
   return app;
+}
+
+export function getAppConfigsToDeploy(
+  appLibrary: Record<string, [BaseNumaAppType, boolean]>,
+  appConfigs: Record<string, UserConfigurableBaseNumaAppProps>,
+  allApps: boolean,
+  allProdApps: boolean,
+): Array<[string, UserConfigurableBaseNumaAppProps]> {
+  let appConfigsToDeploy: Array<[string, UserConfigurableBaseNumaAppProps]> = [];
+  if (allApps || allProdApps) {
+    appConfigsToDeploy = Object.entries(appLibrary)
+      .filter((entry) => {
+        const [_appId, [_construct, isProdApp]] = entry;
+        return allApps || isProdApp;
+      })
+      .map((entry) => {
+        const [appId, [_construct, _isProdApp]] = entry;
+        return [appId, appConfigs[appId] ?? {}];
+      });
+  } else {
+    appConfigsToDeploy = Object.entries(appConfigs);
+  }
+  return appConfigsToDeploy;
 }
