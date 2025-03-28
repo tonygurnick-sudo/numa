@@ -252,27 +252,32 @@ export interface NumaClientStackProps extends ArcanumStackProps {
   arcanumNumaAccount: string;
 }
 
-export const appLibrary: Record<string, [BaseNumaAppType, boolean]> = {
-  'candidate-screening': [CandidateScreening, true],
-  'company-profile': [CompanyProfile, false],
-  'contract-analysis': [ContractAnalysis, true],
-  'document-summariser': [DocumentSummariser, true],
-  'financial-analysis': [FinancialAnalysis, true],
-  'infringement-review': [InfringementReview, false],
-  'meeting-analyser': [MeetingAnalyser, true],
-  'nzsba-policy-builder': [NZSBAPolicyBuilder, false],
-  'policy-drafter': [PolicyDrafter, false],
-  'policy-reviewer': [PolicyReviewer, false],
+export interface AppDefinition {
+  app: BaseNumaAppType;
+  isProdApp: boolean;
+}
+
+export const appLibrary: Record<string, AppDefinition> = {
+  'candidate-screening': { app: CandidateScreening, isProdApp: true },
+  'company-profile': { app: CompanyProfile, isProdApp: false },
+  'contract-analysis': { app: ContractAnalysis, isProdApp: true },
+  'document-summariser': { app: DocumentSummariser, isProdApp: true },
+  'financial-analysis': { app: FinancialAnalysis, isProdApp: true },
+  'infringement-review': { app: InfringementReview, isProdApp: false },
+  'meeting-analyser': { app: MeetingAnalyser, isProdApp: true },
+  'nzsba-policy-builder': { app: NZSBAPolicyBuilder, isProdApp: false },
+  'policy-drafter': { app: PolicyDrafter, isProdApp: false },
+  'policy-reviewer': { app: PolicyReviewer, isProdApp: false },
 };
 
 function lookupAppFromId(id: string): BaseNumaAppType {
-  const [app, _isProdApp] = appLibrary[id];
+  const { app } = appLibrary[id];
   if (!app) throw new Error('Unknown app: ' + id);
   return app;
 }
 
 export function getAppConfigsToDeploy(
-  appLibrary: Record<string, [BaseNumaAppType, boolean]>,
+  appLibrary: Record<string, AppDefinition>,
   appConfigs: Record<string, UserConfigurableBaseNumaAppProps>,
   allApps: boolean,
   allProdApps: boolean,
@@ -281,11 +286,11 @@ export function getAppConfigsToDeploy(
   if (allApps || allProdApps) {
     appConfigsToDeploy = Object.entries(appLibrary)
       .filter((entry) => {
-        const [_appId, [_construct, isProdApp]] = entry;
+        const [_appId, { isProdApp }] = entry;
         return allApps || isProdApp;
       })
       .map((entry) => {
-        const [appId, [_construct, _isProdApp]] = entry;
+        const [appId] = entry;
         return [appId, appConfigs[appId] ?? {}];
       });
   } else {
