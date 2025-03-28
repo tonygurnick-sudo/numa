@@ -339,6 +339,8 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   }
 }
 
+export type BaseNumaAppType = new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp;
+
 export enum AppType {
   NUMA = 'numa-app',
   NZSBA_POLICY_DESIGNER = 'policy-builder',
