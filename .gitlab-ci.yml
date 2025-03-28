@@ -116,7 +116,7 @@ client-list-lint:
     - wget -O /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64
     - chmod +x /usr/local/bin/yq
   script:
-    - diff <(jq --raw-output keys[] clientConfigProd.json | sort | grep -v 'arcanum-demo$' | grep -v arcanum-prod-numa-demo | grep -v arcanum-prod-trial) <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
+    - diff <(jq --raw-output keys[] clientConfigProd.json | sort | grep -v 'arcanum-demo$' | grep -v arcanum-prod-numa-demo) <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
 
 infra-lint:
   rules:

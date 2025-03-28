@@ -127,12 +127,7 @@
     "devInstance": true
   },
   "arcanum-prod-trial": {
-    "apps": {
-      "document-summariser": {},
-      "meeting-analyser": {},
-      "nzsba-policy-builder": {},
-      "policy-reviewer": {}
-    },
+    "allProdApps": true,
     "clientAccountId": "619071323471",
     "createServiceLinkedRole": false,
     "devInstance": true,
