@@ -33,7 +33,7 @@ const NumaLogin = () => {
     setSuccess(null);
     setLoading(true);
 
-    const enteredUsername = (providedUsername || usernameRef.current?.value || '').trim();
+    const enteredUsername = (providedUsername || usernameRef.current?.value || '').trim().toLowerCase();
     const enteredPassword = (providedPassword || passwordRef.current?.value || '').trim();
 
     if (!enteredUsername || !enteredPassword) {
