@@ -7,7 +7,7 @@ declare -r SCRIPT_DIRECTORY
 
 echo "$SCRIPT_DIRECTORY"
 
-jq 'keys[] | select(. != "arcanum-demo" and . != "arcanum-prod-numa-demo" and . != "arcanum-prod-trial")' clientConfigProd.json \
+jq 'keys[] | select(. != "arcanum-demo" and . != "arcanum-prod-numa-demo")' clientConfigProd.json \
     | jq --slurp '{".clients": {"matrix": [{"CLIENT_NAME": .}]}}' \
     | yq -P \
     > "$SCRIPT_DIRECTORY/../.gitlab-ci-clients.yml"
