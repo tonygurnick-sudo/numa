@@ -85,6 +85,7 @@ export class NumaClientStack extends ArcanumStack {
       clientId: core.userPoolClient.id,
       clientSecret: core.userPoolClient.clientSecret,
       client: props.client,
+      chatHistoryTableName: core.chatHistoryTable.name,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(

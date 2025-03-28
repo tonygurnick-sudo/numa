@@ -48,6 +48,7 @@ export class CoreNumaInfra extends Construct {
   readonly outputsBucket: NumaCorsEnabledBucket;
   readonly otelConfigPath: string;
   readonly dataBucket: NumaCorsEnabledBucket;
+  readonly chatHistoryTable: DynamodbTable;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -249,7 +250,7 @@ export class CoreNumaInfra extends Construct {
     });
     this.outputsBucket.bucket.moveFromId('aws_s3_bucket.outputs-bucket_1F269801');
 
-    const numaChatDynamoTable = new DynamodbTable(this, 'numa-chat-history-table', {
+    this.chatHistoryTable = new DynamodbTable(this, 'numa-chat-history-table', {
       name: `${numaClient}-chat-history`,
       billingMode: 'PAY_PER_REQUEST',
       hashKey: 'user_id',
@@ -334,7 +335,7 @@ export class CoreNumaInfra extends Construct {
             'dynamodb:UpdateItem',
             'dynamodb:DeleteItem',
           ],
-          resources: [numaChatDynamoTable.arn],
+          resources: [this.chatHistoryTable.arn],
           condition: [
             {
               test: 'StringEquals',
