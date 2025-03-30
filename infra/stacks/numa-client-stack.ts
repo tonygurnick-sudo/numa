@@ -9,7 +9,12 @@ import * as path from 'node:path';
 import _clientConfigDev from '../../clientConfigDev.json';
 import _clientConfigProd from '../../clientConfigProd.json';
 import { AppAgnosticApiGatewayLambdaCollection } from '../constructs/app-agnostic-api-gateway-lambda-collection';
-import { BaseNumaAppType, UserConfigurableBaseNumaAppProps } from '../constructs/apps/base-numa-app-construct';
+import {
+  BaseNumaApp,
+  BaseNumaAppProps,
+  BaseNumaAppType,
+  UserConfigurableBaseNumaAppProps,
+} from '../constructs/apps/base-numa-app-construct';
 import { CandidateScreening } from '../constructs/apps/candidate-screening-construct';
 import { CompanyProfile } from '../constructs/apps/company-profile-construct';
 import { ContractAnalysis } from '../constructs/apps/contract-analysis-construct';
@@ -24,6 +29,7 @@ import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import { Honeycomb } from '../constructs/honeycomb-construct';
+import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
 
 export class NumaClientStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -93,6 +99,7 @@ export class NumaClientStack extends ArcanumStack {
       props.config.apps ?? {},
       props.config.allApps ?? false,
       props.config.allProdApps ?? false,
+      props.config.devInstance ?? false,
     );
     const apps = appConfigsToDeploy.map(([appId, appConfig]) => {
       const app = lookupAppFromId(appId);
@@ -201,6 +208,12 @@ export class NumaClientStack extends ArcanumStack {
 interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
   customDomain?: string;
   /**
+   * Whether this is a development instance that should include dev-only apps
+   *
+   * @default false
+   */
+  devInstance?: boolean;
+  /**
    * Whether to deploy all apps to to the environment.
    *
    * @default false
@@ -271,8 +284,13 @@ export const appLibrary: Record<string, AppDefinition> = {
   'policy-reviewer': { app: PolicyReviewer, isProdApp: false },
 };
 
-function lookupAppFromId(id: string): BaseNumaAppType {
-  const { app } = appLibrary[id];
+// Include the E2E test app in a separate object
+const devAppLibrary: Record<string, new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp> = {
+  'e2e-test': E2ETestNumaApp,
+};
+
+function lookupAppFromId(id: string): new (scope: Construct, name: string, props: BaseNumaAppProps) => BaseNumaApp {
+  const app = appLibrary[id]?.app || devAppLibrary[id];
   if (!app) throw new Error('Unknown app: ' + id);
   return app;
 }
@@ -282,9 +300,12 @@ export function getAppConfigsToDeploy(
   appConfigs: Record<string, UserConfigurableBaseNumaAppProps>,
   allApps: boolean,
   allProdApps: boolean,
+  isDevInstance: boolean,
 ): Array<[string, UserConfigurableBaseNumaAppProps]> {
   let appConfigsToDeploy: Array<[string, UserConfigurableBaseNumaAppProps]> = [];
+
   if (allApps || allProdApps) {
+    // Handle production apps
     appConfigsToDeploy = Object.entries(appLibrary)
       .filter((entry) => {
         const [_appId, { isProdApp }] = entry;
@@ -294,8 +315,25 @@ export function getAppConfigsToDeploy(
         const [appId] = entry;
         return [appId, appConfigs[appId] ?? {}];
       });
+
+    // Add dev apps if this is a dev instance
+    if (isDevInstance) {
+      const devAppConfigs = Object.entries(devAppLibrary).map(([appId]): [string, UserConfigurableBaseNumaAppProps] => [
+        appId,
+        appConfigs[appId] ?? {},
+      ]);
+      appConfigsToDeploy = [...appConfigsToDeploy, ...devAppConfigs];
+    }
   } else {
+    // Use specific app configurations, including dev apps if this is a dev instance
     appConfigsToDeploy = Object.entries(appConfigs);
+    if (isDevInstance) {
+      const devAppConfigs = Object.entries(devAppLibrary)
+        .filter(([appId]) => !(appId in appConfigs))
+        .map(([appId]): [string, UserConfigurableBaseNumaAppProps] => [appId, {}]);
+      appConfigsToDeploy = [...appConfigsToDeploy, ...devAppConfigs];
+    }
   }
+
   return appConfigsToDeploy;
 }

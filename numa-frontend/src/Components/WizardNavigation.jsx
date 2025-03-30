@@ -77,10 +77,10 @@ const WizardNavigation = ({
               <span className="ms-2">Running...</span>
             </>
           ) : (
-            <>
+            <div data-testid="run-app-button">
               Run App{' '}
               <i style={{ lineHeight: '1px' }} className={`bi bi-arrow-right ${!disabled ? 'bounce-icon' : ''}`}></i>
-            </>
+            </div>
           )}
         </Button>
         <div className="run-status-text">{!isRunning && disabled && <>Complete the required inputs to run</>}</div>

@@ -15,7 +15,7 @@ describe('getAppConfigsToDeploy', () => {
     },
   };
   it('Returns all apps when allApps is set', (): void => {
-    const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, true, false);
+    const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, true, false, false);
     assert.deepEqual(
       appConfigsToDeploy.map(([appId, _]) => appId),
       ['document-summariser', 'financial-analysis', 'nzsba-policy-builder'],
@@ -24,7 +24,7 @@ describe('getAppConfigsToDeploy', () => {
     assert.deepEqual(appConfigsToDeploy[1][1], {});
   });
   it('Returns all apps when allApps is set, even when allProdApps is set', (): void => {
-    const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, true, true);
+    const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, true, true, false);
     assert.deepEqual(
       appConfigsToDeploy.map(([appId, _]) => appId),
       ['document-summariser', 'financial-analysis', 'nzsba-policy-builder'],
@@ -33,7 +33,7 @@ describe('getAppConfigsToDeploy', () => {
     assert.deepEqual(appConfigsToDeploy[1][1], {});
   });
   it('Returns only production apps', (): void => {
-    const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, false, true);
+    const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, false, true, false);
     assert.deepEqual(
       appConfigsToDeploy.map(([appId, _]) => appId),
       ['document-summariser', 'financial-analysis'],
@@ -42,11 +42,20 @@ describe('getAppConfigsToDeploy', () => {
     assert.deepEqual(appConfigsToDeploy[1][1], {});
   });
   it('Returns configured apps', (): void => {
-    const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, false, false);
+    const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, false, false, false);
     assert.deepEqual(
       appConfigsToDeploy.map(([appId, _]) => appId),
       ['document-summariser'],
     );
     assert.deepEqual(appConfigsToDeploy[0][1], { s3KeyPrefix: 'foobar' });
+  });
+  it('Includes dev-only apps when isDevInstance is true', (): void => {
+    const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, false, false, true);
+    assert.deepEqual(
+      appConfigsToDeploy.map(([appId, _]) => appId),
+      ['document-summariser', 'e2e-test'],
+    );
+    assert.deepEqual(appConfigsToDeploy[0][1], { s3KeyPrefix: 'foobar' });
+    assert.deepEqual(appConfigsToDeploy[1][1], {});
   });
 });

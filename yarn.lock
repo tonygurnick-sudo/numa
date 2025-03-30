@@ -57,10 +57,12 @@ __metadata:
     "@honeycombio/opentelemetry-web": "npm:^0.15.0"
     "@mdxeditor/editor": "npm:^3.19.3"
     "@opentelemetry/auto-instrumentations-web": "npm:^0.46.0"
+    "@playwright/test": "npm:^1.51.1"
     "@popperjs/core": "npm:^2.11.8"
     "@testing-library/dom": "npm:^10.4.0"
     "@testing-library/jest-dom": "npm:^6.6.3"
     "@testing-library/react": "npm:^16.0.1"
+    "@types/node": "npm:^22.13.10"
     "@types/react": "npm:^19.0.0"
     "@types/react-dom": "npm:^19.0.0"
     "@vitejs/plugin-react": "npm:^4.2.1"
@@ -4545,6 +4547,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@playwright/test@npm:^1.51.1":
+  version: 1.51.1
+  resolution: "@playwright/test@npm:1.51.1"
+  dependencies:
+    playwright: "npm:1.51.1"
+  bin:
+    playwright: cli.js
+  checksum: 10c0/bdb98f3df58f60b5c62e6d5c79c30910404d1855afea0803af0efd6dc63f90c473dbf92ff7dc212f1459f1d32c85dc44a60f70c2e0ea604f975b953d59523234
+  languageName: node
+  linkType: hard
+
 "@popperjs/core@npm:^2.11.8":
   version: 2.11.8
   resolution: "@popperjs/core@npm:2.11.8"
@@ -6495,7 +6508,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:*, @types/node@npm:22.13.10, @types/node@npm:>=13.7.0, @types/node@npm:^22.10.1, @types/node@npm:^22.7.5, @types/node@npm:^22.9.0":
+"@types/node@npm:*, @types/node@npm:22.13.10, @types/node@npm:>=13.7.0, @types/node@npm:^22.10.1, @types/node@npm:^22.13.10, @types/node@npm:^22.7.5, @types/node@npm:^22.9.0":
   version: 22.13.10
   resolution: "@types/node@npm:22.13.10"
   dependencies:
@@ -14647,7 +14660,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"playwright@npm:^1.48.1":
+"playwright@npm:1.51.1, playwright@npm:^1.48.1":
   version: 1.51.1
   resolution: "playwright@npm:1.51.1"
   dependencies:
