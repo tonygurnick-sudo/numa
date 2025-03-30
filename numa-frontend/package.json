@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest --coverage --reporter=basic --reporter=junit --output-file=test-reports/test-report.xml"
+    "test": "vitest --coverage --reporter=basic --reporter=junit --output-file=test-reports/test-report.xml",
+    "test:e2e": "sh -c 'CLIENT=$1 playwright test'",
+    "test:e2e:ui": "sh -c 'CLIENT=$1 playwright test --ui'"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.751.0",
@@ -64,7 +66,9 @@
   "devDependencies": {
     "@arcanumai/style": "workspace:*",
     "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.51.1",
     "@testing-library/dom": "^10.4.0",
+    "@types/node": "^22.13.10",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.2.1",

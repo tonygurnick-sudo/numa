@@ -110,18 +110,24 @@ const NumaLogin = () => {
         <Form onSubmit={(e) => handleSubmit(e)}>
           <Form.Group controlId="username">
             <Form.Label>Username</Form.Label>
-            <Form.Control type="text" ref={usernameRef} placeholder="Enter username" />
+            <Form.Control type="text" ref={usernameRef} placeholder="Enter username" data-testid="username-input" />
           </Form.Group>
 
           <Form.Group className="mb-3">
             <Form.Label htmlFor="password">Password</Form.Label>
-            <Form.Control id="password" name="password" type="password" ref={passwordRef} />
+            <Form.Control
+              id="password"
+              name="password"
+              type="password"
+              ref={passwordRef}
+              data-testid="password-input"
+            />
             <p className="mt-1">
               <a href="/reset-password">Forgot password</a>
             </p>
           </Form.Group>
 
-          <Button variant="primary" type="submit" className="mb-3">
+          <Button variant="primary" type="submit" className="mb-3" data-testid="login-button">
             {loading ? 'Logging In...' : 'Login'}
           </Button>
         </Form>
@@ -129,15 +135,27 @@ const NumaLogin = () => {
         <Form onSubmit={handleNewPasswordSubmit}>
           <Form.Group className="mb-3">
             <Form.Label htmlFor="newPassword">New Password</Form.Label>
-            <Form.Control id="newPassword" name="newPassword" type="password" ref={newPasswordRef} />
+            <Form.Control
+              id="newPassword"
+              name="newPassword"
+              type="password"
+              ref={newPasswordRef}
+              data-testid="new-password-input"
+            />
           </Form.Group>
 
           <Form.Group className="mb-3">
             <Form.Label htmlFor="confirmPassword">Confirm New Password</Form.Label>
-            <Form.Control id="confirmPassword" name="confirmPassword" type="password" ref={confirmPasswordRef} />
+            <Form.Control
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              ref={confirmPasswordRef}
+              data-testid="confirm-password-input"
+            />
           </Form.Group>
 
-          <Button variant="primary" type="submit" className="mb-3" disabled={loading}>
+          <Button variant="primary" type="submit" className="mb-3" disabled={loading} data-testid="set-password-button">
             {loading ? 'Setting New Password...' : 'Set New Password'}
           </Button>
         </Form>

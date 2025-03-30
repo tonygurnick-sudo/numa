@@ -133,7 +133,7 @@ export const Dash = ({ showFavorites }) => {
 
   return (
     <>
-      <div className="dashboard">
+      <div className="dashboard" data-testid="dashboard">
         <header>
           <Container fluid>
             <Row>

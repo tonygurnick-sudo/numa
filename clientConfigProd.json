@@ -15,7 +15,10 @@
       {
         "configuration": {},
         "domain": "30secondsnz",
-        "siteUrls": ["https://30secondsnz.sharepoint.com/sites/QBusinessintegration"],
+        "siteUrls": [
+          "https://30secondsnz.sharepoint.com/sites/AllCompany",
+          "https://30secondsnz.sharepoint.com/sites/30STeam"
+        ],
         "tenantId": "a2275cde-9164-4712-8c15-47ab712f1766"
       }
     ]
@@ -123,8 +126,7 @@
       "policy-drafter": {},
       "policy-reviewer": {}
     },
-    "clientAccountId": "619071323471",
-    "devInstance": true
+    "clientAccountId": "619071323471"
   },
   "arcanum-prod-trial": {
     "allProdApps": true,
@@ -494,12 +496,20 @@
     "sharePointConfigs": [
       {
         "configuration": {
-          "inclusionFilePath": ["^.*(?:PLD ?2021).*$"],
-          "linkTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"],
-          "pageTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"]
+          "inclusionFilePath": [
+            "^.*(?:PLD ?2021).*$"
+          ],
+          "linkTitleFilterRegEx": [
+            "^.*(?:PLD ?2021).*$"
+          ],
+          "pageTitleFilterRegEx": [
+            "^.*(?:PLD ?2021).*$"
+          ]
         },
         "domain": "nzsta.sharepoint.com",
-        "siteUrls": ["https://nzsta.sharepoint.com/sites/Company"],
+        "siteUrls": [
+          "https://nzsta.sharepoint.com/sites/Company"
+        ],
         "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29"
       }
     ],
@@ -516,14 +526,7 @@
       }
     ]
   },
-  "nzsba-nick": {
-    "allApps": true,
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "devInstance": true
-  },
   "rebura": {
-    "allProdApps": true,
     "clientAccountId": "307739227996"
   },
   "rooflogic": {
@@ -595,10 +598,14 @@
     "sharePointConfigs": [
       {
         "configuration": {
-          "inclusionFilePath": [".*NEX[ -]?Milestone[ -]?Reports.*"]
+          "inclusionFilePath": [
+            ".*NEX[ -]?Milestone[ -]?Reports.*"
+          ]
         },
         "domain": "teachersrcc",
-        "siteUrls": ["https://teachersrcc.sharepoint.com/"],
+        "siteUrls": [
+          "https://teachersrcc.sharepoint.com/"
+        ],
         "tenantId": "91ff374c-03ff-4eed-9628-d89e52352b55"
       }
     ]

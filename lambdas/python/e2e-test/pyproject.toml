@@ -1,0 +1,47 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
+[tool.poetry]
+name = "e2e-test"
+version = "0.1.0"
+description = ""
+authors = ["Nick Walton <nick@arcanum.ai>"]
+readme = "README.md"
+packages = [
+    { include = "**/*.py" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+
+aws-transcribe = {path = "../../../lib/aws-transcribe", develop = true}
+bedrock = {path = "../../../lib/bedrock", develop = true}
+boto3 = "1.37.20"
+helpers = {path = "../../../lib/helpers", develop = true}
+structlog = "25.2.0"
+openpyxl = "^3.1.5"
+python-docx = "^1.1.2"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = "1.37.20"
+mypy = "1.15.0"
+pylint = "3.3.6"
+pyright = "1.1.397"
+openpyxl-stubs = "^0.1.25"
+
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.9.0"
+poetry-plugin-lambda-build = ">=1.0.7"
+
+[tool.poetry-plugin-lambda-build]
+package-artifact-path = "lambda_function.zip"
+without = "dev"

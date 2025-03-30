@@ -97,6 +97,7 @@ export default defineConfig({
       '**/eslint.config.js',
       '**/vite.config.js',
       '**/*TestProvider.{jsx,js}',
+      'e2e-tests/**',
     ],
     coverage: {
       exclude: [
@@ -110,6 +111,7 @@ export default defineConfig({
         '**/vite.config.js',
         '**/index.{js,jsx}',
         '**/*TestProvider.{jsx,js}',
+        'e2e-tests/**',
       ],
     },
   },
