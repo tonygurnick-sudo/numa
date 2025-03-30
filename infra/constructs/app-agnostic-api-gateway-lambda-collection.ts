@@ -2,7 +2,7 @@ import { Construct } from 'constructs';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
 
 export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaCollection {
-  constructor(scope: Construct, name: string, props: CoreNumaAppProps) {
+  constructor(scope: Construct, name: string, props: AppAgnosticApiGatewayLambdaCollectionProps) {
     super(scope, name, props);
 
     // SRP Proxy
@@ -53,15 +53,16 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         {
           effect: 'Allow',
           actions: ['dynamodb:Query', 'dynamodb:GetItem'],
-          resources: [`arn:aws:dynamodb:*:*:table/numa-${props.client}-chat-history`],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.chatHistoryTableName}`],
         },
       ],
     });
   }
 }
 
-export interface CoreNumaAppProps extends ApiGatewayLambdaCollectionProps {
+export interface AppAgnosticApiGatewayLambdaCollectionProps extends ApiGatewayLambdaCollectionProps {
   clientId: string;
   clientSecret: string;
   client: string;
+  chatHistoryTableName: string;
 }
