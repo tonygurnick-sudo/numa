@@ -72,7 +72,7 @@ EXPECTED_RESPONSE_TWO = bedrock.GPTResponse(
 
 
 class TestLegalReview(unittest.TestCase):
-    @patch.dict("os.environ", {"BUCKET": "test-bucket"})
+    @patch.dict("os.environ", {"BUCKET": "test-bucket", "AWS_REGION": "us-east-1"})
     @patch(
         "bedrock.BedrockClaude3Model.run",
         side_effect=[EXPECTED_RESPONSE_ONE, EXPECTED_RESPONSE_TWO],

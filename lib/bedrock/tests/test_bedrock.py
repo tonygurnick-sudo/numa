@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -7,10 +8,12 @@ from bedrock import (
     UnsupportedFiletypeError,
     get_text_from_image,
 )
+from bedrock.bedrock_model_config import MODEL_MAP, ModelTypes, Region, get_model_id
 
 
 class TestBedrock(unittest.TestCase):
     @patch("bedrock.boto3.client")
+    @patch.dict(os.environ, {"AWS_REGION": "us-east-1"})
     def test_invoke_model_success(self, mock_boto_client):
         mock_bedrock = mock_boto_client.return_value
         mock_bedrock.invoke_model.return_value = {
@@ -29,6 +32,7 @@ class TestBedrock(unittest.TestCase):
         mock_bedrock.invoke_model.assert_called_once()
 
     @patch("bedrock.boto3.client")
+    @patch.dict(os.environ, {"AWS_REGION": "us-east-1"})
     def test_invoke_model_failure(self, mock_boto_client):
         mock_bedrock = mock_boto_client.return_value
         mock_bedrock.invoke_model.side_effect = Exception("Model invocation failed")
@@ -38,6 +42,7 @@ class TestBedrock(unittest.TestCase):
             model.run("")
 
     @patch("bedrock.boto3.client")
+    @patch.dict(os.environ, {"AWS_REGION": "us-east-1"})
     def test_run_with_messages_success(self, mock_boto_client):
         mock_bedrock = mock_boto_client.return_value
         mock_bedrock.invoke_model.return_value = {
@@ -57,6 +62,7 @@ class TestBedrock(unittest.TestCase):
         self.assertEqual(response.metadata["output_tokens"], 5)
 
     @patch("bedrock.boto3.client")
+    @patch.dict(os.environ, {"AWS_REGION": "us-east-1"})
     def test_process_response_invalid_format(self, mock_boto_client):
         # Mock invalid JSON format in response
         mock_bedrock = mock_boto_client.return_value
@@ -73,6 +79,7 @@ class TestExtractTextFromImageUsingVisionModel(unittest.TestCase):
     @patch("bedrock.s3_client.get_object")
     @patch("bedrock.filetype.guess")
     @patch("bedrock.BedrockClaude3Model.run_with_messages")
+    @patch.dict(os.environ, {"AWS_REGION": "us-east-1"})
     def test_extract_text_success(
         self, mock_run_with_messages, mock_guess, mock_get_object
     ):
@@ -97,6 +104,7 @@ class TestExtractTextFromImageUsingVisionModel(unittest.TestCase):
 
     @patch("bedrock.s3_client.get_object")
     @patch("bedrock.filetype.guess")
+    @patch.dict(os.environ, {"AWS_REGION": "us-east-1"})
     def test_extract_text_unsupported_filetype(self, mock_guess, mock_get_object):
         # Mock S3 get_object response
         mock_get_object.return_value = {
@@ -111,6 +119,34 @@ class TestExtractTextFromImageUsingVisionModel(unittest.TestCase):
 
         mock_get_object.assert_called_once_with(Bucket="test-bucket", Key="test-key")
         mock_guess.assert_called_once()
+
+
+class TestBedrockModelConfig(unittest.TestCase):
+    """Tests for the bedrock_model_config module and its functions."""
+
+    def test_model_map_completeness(self):
+        """Test get_model_id with valid enum values."""
+        # Test every combination in the MODEL_MAP
+        for region in Region:
+            for model_type in ModelTypes:
+                model_id = get_model_id(region, model_type)
+                self.assertTrue(
+                    model_id.startswith("anthropic.claude"),
+                    f"Model ID for {region.name}, {model_type.name} doesn't start with 'anthropic.claude': {model_id}",
+                )
+
+    def test_default_parameter(self):
+        """Test the default parameter behavior of get_model_id."""
+        # Should use DEFAULT if no model_type is provided
+        with_param = get_model_id(Region.US_EAST_1, ModelTypes.DEFAULT)
+        without_param = get_model_id(Region.US_EAST_1)
+
+        # Check that both calls return the same value
+        self.assertEqual(with_param, without_param)
+
+        # Also check that the actual value is correct
+        expected_model_id = MODEL_MAP[Region.US_EAST_1][ModelTypes.DEFAULT]
+        self.assertEqual(with_param, expected_model_id)
 
 
 if __name__ == "__main__":

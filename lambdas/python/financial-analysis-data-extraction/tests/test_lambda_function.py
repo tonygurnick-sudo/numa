@@ -9,6 +9,7 @@ import lambda_function
 class TestLambdaFunction(unittest.TestCase):
     @patch("lambda_function.s3_helpers")
     @patch("lambda_function.bedrock.BedrockClaude3Model.run")
+    @patch.dict("os.environ", {"AWS_REGION": "us-east-1"})
     def test_handler(self, mock_bedrock_model, mock_s3_helpers):
 
         fake_file_data = {"pages": [{"text": "First page text"}]}
@@ -50,6 +51,7 @@ class TestLambdaFunction(unittest.TestCase):
 
     @patch("lambda_function.s3_helpers")
     @patch("lambda_function.bedrock.BedrockClaude3Model.run")
+    @patch.dict("os.environ", {"AWS_REGION": "us-east-1"})
     def test_string_extracted_data(self, mock_bedrock_model, mock_s3_helpers):
 
         fake_file_data = {"pages": [{"text": "First page text"}]}

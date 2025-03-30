@@ -56,7 +56,7 @@ EXPECTED_RESPONSE = bedrock.GPTResponse(
 
 
 class TestGeneration(unittest.TestCase):
-    @patch.dict("os.environ", {"BUCKET": "test-bucket"})
+    @patch.dict("os.environ", {"BUCKET": "test-bucket", "AWS_REGION": "us-east-1"})
     @patch("bedrock.BedrockClaude3Model.run", return_value=EXPECTED_RESPONSE)
     @patch("lambda_function.s3_client")
     def test(self, s3_mock, run_mock):

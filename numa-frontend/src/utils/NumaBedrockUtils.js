@@ -1,5 +1,6 @@
 // NumaBedrockUtils.js
 import { InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import { getModelId, MODEL_TYPES } from '../utils/bedrockModelConfig';
 
 class NumaBedrockUtils {
   constructor(bedrockClient) {
@@ -14,7 +15,9 @@ class NumaBedrockUtils {
    * @param {string} [modelId] - The Bedrock model ID, defaults to "anthropic.claude-3-haiku-20240307-v1:0".
    * @returns {string} - The text description of the image.
    */
-  async getImageDescription(base64Image, mimeType, modelId = 'anthropic.claude-3-haiku-20240307-v1:0') {
+  async getImageDescription(base64Image, mimeType) {
+    const region = window.sessionStorage.getItem('REGION');
+    const modelId = getModelId(region, MODEL_TYPES.CLAUDE_HAIKU);
     if (!this.bedrockClient) {
       throw new Error('Bedrock client not initialized in NumaBedrockUtils');
     }

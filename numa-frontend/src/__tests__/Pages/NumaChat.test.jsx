@@ -152,6 +152,7 @@ Object.defineProperty(window, 'sessionStorage', {
     getItem: (key) => {
       if (key === 'Q_APPLICATION_ID') return 'dummy-app-id';
       if (key === 'Q_RETRIEVER_ID') return 'dummy-retriever-id';
+      if (key === 'REGION') return 'us-east-1';
       return null;
     },
     setItem: vi.fn(),
