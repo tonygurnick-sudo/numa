@@ -15,6 +15,7 @@ import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/ChatMessages';
 import ResizableSplitView from '../Components/ResizableSplitView';
 import { loadCompanyProfile, enhanceSystemPromptWithCompanyInfo } from '../utils/chatSystemPromptUtils';
+import { getModelId, MODEL_TYPES } from '../utils/bedrockModelConfig';
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
@@ -52,7 +53,8 @@ const NumaChat = () => {
   const email = idToken.email;
 
   // Constants
-  const MODEL_ID = 'anthropic.claude-3-5-sonnet-20240620-v1:0';
+  const REGION = window.sessionStorage.getItem('REGION');
+  const STREAMING_MODEL_ID = getModelId(REGION, MODEL_TYPES.DEFAULT);
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
   const Q_RETRIEVER_ID = window.sessionStorage.getItem('Q_RETRIEVER_ID');
   const MAX_DATA_SOURCE_ITEMS = 6;
@@ -489,7 +491,7 @@ const NumaChat = () => {
 
       // 5) Send to Bedrock
       const converseInput = {
-        modelId: MODEL_ID,
+        modelId: STREAMING_MODEL_ID,
         messages: validatedMessages,
         system: [
           {

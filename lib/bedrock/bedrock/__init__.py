@@ -9,6 +9,7 @@ import structlog
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+from .bedrock_model_config import ModelTypes, Region, get_model_id
 from .prompts import GET_TEXT_FROM_IMAGE_QUERY
 
 CLAUDE_3_5_SONNET_INPUT_PRICE = 0.003
@@ -33,23 +34,26 @@ class GPTResponse:
 class BedrockClaude3Model:
     def __init__(
         self,
-        model_id: str | None = None,
+        model_type: ModelTypes = ModelTypes.DEFAULT,
         model_args: dict | None = None,
-        bedrock_region_name: str | None = None,
     ):
+        # Convert external string to enum early at the system boundary
+        self.bedrock_region = os.environ["AWS_REGION"]
+
+        # Rest of the function uses properly typed values
+        self.model_id = get_model_id(Region(self.bedrock_region), model_type)
+
         self.model_args = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": 2048,
         }
+
         if model_args:
             self.model_args.update(model_args)
-        # NOTE: The default model id only works for particular regions
-        self.model_id = model_id or "anthropic.claude-3-5-sonnet-20240620-v1:0"
 
         self.bedrock_client = boto3.client(
             service_name="bedrock-runtime",
-            region_name=bedrock_region_name
-            or os.getenv("AWS_BEDROCK_REGION", "us-east-1"),
+            region_name=self.bedrock_region,
             config=Config(read_timeout=1000),
         )
 
@@ -140,7 +144,7 @@ def get_text_from_image(bucket: str, key: str) -> str:
         raise UnsupportedFiletypeError("Could not get media type")
     data = base64.b64encode(file_content).decode("utf-8")
 
-    model = BedrockClaude3Model(bedrock_region_name="us-east-1")
+    model = BedrockClaude3Model()
     documents = [
         {
             "type": "image",

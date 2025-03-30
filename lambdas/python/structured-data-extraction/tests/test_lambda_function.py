@@ -87,6 +87,7 @@ class TestLambdaFunction(unittest.TestCase):
             "Unknown config 'unknown_config'", str(exception_context.exception)
         )
 
+    @patch.dict("os.environ", {"AWS_REGION": "us-east-1"})
     def test_handler_invalid_extraction_type(self):
         # Test for invalid data_extraction_type
         event = {
