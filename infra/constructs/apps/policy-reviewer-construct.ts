@@ -27,6 +27,7 @@ export class PolicyReviewer extends BaseNumaApp {
       category: AppCategory.COMPLIANCE,
       createdDate: '2025-02-31',
       appDescription: description,
+      tags: ['compliance', 'policy-review', 'legal-analysis', 'governance'],
       tasks: [
         {
           id: 'upload-files-to-s3',

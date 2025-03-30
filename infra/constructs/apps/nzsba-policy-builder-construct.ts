@@ -104,6 +104,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
       createdDate: '2024-03-20T10:00:00Z',
       appDescription:
         'Create and manage organizational policies with AI assistance. This tool helps draft, review, and format policies while ensuring compliance with industry standards and regulations.',
+      tags: ['education', 'policy-design', 'governance'],
       tasks: [
         {
           id: 'policy-type-selection',

@@ -25,6 +25,7 @@ export class FinancialAnalysis extends BaseNumaApp {
       category: AppCategory.FINANCE,
       createdDate: '2025-01-31',
       appDescription: description,
+      tags: ['finance', 'data-extraction', 'reports', 'financial-insights'],
       tasks: [
         {
           id: 'upload-files-to-s3',

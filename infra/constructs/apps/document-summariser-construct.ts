@@ -26,6 +26,7 @@ export class DocumentSummariser extends BaseNumaApp {
       category: AppCategory.PRODUCTIVITY,
       createdDate: '2025-01-31',
       appDescription: description,
+      tags: ['document', 'summary', 'text-extraction', 'content-analysis'],
       tasks: [
         {
           id: 'upload-files-to-s3',

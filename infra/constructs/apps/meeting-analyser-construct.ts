@@ -32,6 +32,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       category: AppCategory.PRODUCTIVITY,
       createdDate: '2025-01-31',
       appDescription: description,
+      tags: ['meeting', 'transcription', 'action-items', 'summary'],
       tasks: [
         {
           id: 'upload-files-to-s3',

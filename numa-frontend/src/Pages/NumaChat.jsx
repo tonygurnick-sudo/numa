@@ -806,9 +806,9 @@ const NumaChat = () => {
               <div className="chat-header d-flex justify-content-between align-items-center mb-3">
                 <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
                 <Button
-                  className="btn btn-primary"
+                  className="btn btn-primary new-chat-btn"
                   onClick={handleNewChat}
-                  style={{ color: '#4b007d', marginRight: '15px' }}
+                  style={{ marginRight: '15px' }}
                 >
                   New Chat
                 </Button>

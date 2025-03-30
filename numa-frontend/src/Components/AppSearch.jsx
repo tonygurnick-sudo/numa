@@ -54,15 +54,11 @@ export const AppSearch = ({
             <i className="bi bi-search search-icon"></i>
             <input
               type="text"
-              placeholder="Search for app"
+              placeholder="Type to Filter Apps"
               value={searchTerm}
               onChange={handleSearch}
               className="search-input"
             />
-            <div className="search-indicator">
-              <span>Type to filter</span>
-              <i className="bi bi-keyboard"></i>
-            </div>
           </div>
 
           <div className="filter-controls">
@@ -86,7 +82,7 @@ export const AppSearch = ({
             </div>
 
             <Dropdown>
-              <Dropdown.Toggle variant="outline-secondary" id="sort-dropdown">
+              <Dropdown.Toggle variant="" id="sort-dropdown">
                 <i className="bi bi-sort-alpha-down me-2"></i>
                 Sort {sortOrder === 'asc' ? 'A to Z' : 'Z to A'}
               </Dropdown.Toggle>

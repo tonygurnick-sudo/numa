@@ -191,7 +191,15 @@ export const Dash = ({ showFavorites }) => {
                       sm={12}
                       className="d-flex"
                     >
-                      <AppItem app={app} />
+                      <AppItem
+                        app={app}
+                        onCategoryClick={(category) => {
+                          // If the category is already active, do nothing
+                          // If not, set it as the only active category
+                          const newCategories = activeCategories.includes(category) ? activeCategories : [category];
+                          handleCategoryFilter(newCategories);
+                        }}
+                      />
                     </Col>
                   ))}
               </Row>
