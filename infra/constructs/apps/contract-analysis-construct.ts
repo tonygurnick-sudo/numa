@@ -26,6 +26,7 @@ export class ContractAnalysis extends BaseNumaApp {
       category: AppCategory.LEGAL,
       createdDate: '2025-03-11',
       appDescription: description,
+      tags: ['legal', 'contract', 'risk-assessment', 'document-analysis'],
       tasks: [
         {
           id: 'upload-files-to-s3',

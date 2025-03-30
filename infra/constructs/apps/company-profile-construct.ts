@@ -26,6 +26,7 @@ export class CompanyProfile extends BaseNumaApp {
       category: AppCategory.PRODUCTIVITY,
       createdDate: '2025-02-26',
       appDescription: description,
+      tags: ['business', 'company-info', 'organization', 'profile-generation'],
       tasks: [
         {
           id: 'company-about',

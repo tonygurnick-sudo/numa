@@ -27,6 +27,7 @@ export class PolicyDrafter extends BaseNumaApp {
       category: AppCategory.COMPLIANCE,
       createdDate: '2025-03-10',
       appDescription: description,
+      tags: ['compliance', 'policy', 'regulations', 'documentation'],
       tasks: [
         {
           id: 'policy-context',

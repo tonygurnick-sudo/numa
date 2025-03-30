@@ -27,6 +27,7 @@ export class CandidateScreening extends BaseNumaApp {
       category: AppCategory.PRODUCTIVITY,
       createdDate: '2025-01-31',
       appDescription: description,
+      tags: ['recruitment', 'hr', 'resume-analysis', 'job-matching'],
       tasks: [
         {
           id: 'upload-candidate-documents',
