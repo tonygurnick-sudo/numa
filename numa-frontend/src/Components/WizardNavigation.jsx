@@ -1,6 +1,7 @@
 import { Button, ProgressBar } from 'react-bootstrap';
 import { CheckCircleFill } from 'react-bootstrap-icons';
 import { useEffect, useState } from 'react';
+import { useNumaApp } from '../Providers/NumaAppContext';
 
 const WizardNavigation = ({
   preRunSteps,
@@ -14,6 +15,7 @@ const WizardNavigation = ({
   processingStatus,
   hasRun,
 }) => {
+  const { resetAppState } = useNumaApp();
   const { isRunning, disabled, onClick, ...otherRunButtonProps } = runButtonProps;
   const [wasDisabled, setWasDisabled] = useState(true);
   const [showHighlight, setShowHighlight] = useState(false);
@@ -63,27 +65,39 @@ const WizardNavigation = ({
       </div>
 
       <div className="run-button-wrapper">
-        <Button
-          type="submit"
-          id="submit"
-          className={`run-app-button ${showHighlight ? 'highlight-ready' : ''}`}
-          disabled={disabled || hasRun}
-          onClick={onClick}
-          {...otherRunButtonProps}
-        >
-          {isRunning ? (
-            <>
-              <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-              <span className="ms-2">Running...</span>
-            </>
-          ) : (
-            <div data-testid="run-app-button">
-              Run App{' '}
-              <i style={{ lineHeight: '1px' }} className={`bi bi-arrow-right ${!disabled ? 'bounce-icon' : ''}`}></i>
-            </div>
-          )}
-        </Button>
-        <div className="run-status-text">{!isRunning && disabled && <>Complete the required inputs to run</>}</div>
+        {hasRun ? (
+          <Button type="submit" id="reset" className="reset-app-button" onClick={resetAppState}>
+            <i className="bi bi-arrow-counterclockwise me-2"></i>
+            Reset App
+          </Button>
+        ) : (
+          <>
+            <Button
+              type="submit"
+              id="submit"
+              className={`run-app-button ${showHighlight ? 'highlight-ready' : ''}`}
+              disabled={disabled}
+              onClick={onClick}
+              {...otherRunButtonProps}
+            >
+              {isRunning ? (
+                <>
+                  <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                  <span className="ms-2">Running...</span>
+                </>
+              ) : (
+                <div data-testid="run-app-button">
+                  Run App{' '}
+                  <i
+                    style={{ lineHeight: '1px' }}
+                    className={`bi bi-arrow-right ${!disabled ? 'bounce-icon' : ''}`}
+                  ></i>
+                </div>
+              )}
+            </Button>
+            <div className="run-status-text">{!isRunning && disabled && <>Complete the required inputs to run</>}</div>
+          </>
+        )}
       </div>
 
       <div className="step-section">

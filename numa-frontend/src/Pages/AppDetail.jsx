@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Container, Row, Col, Button } from 'react-bootstrap';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Alert, Container, Row, Col } from 'react-bootstrap';
+import { useParams } from 'react-router-dom';
 import { StarFill, Star } from 'react-bootstrap-icons';
 
 import { Breadcrumbs } from '../Components/Breadcrumbs';
@@ -18,10 +18,9 @@ import { manifestService } from '../Services/manifestService';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, setNumaAppId, numaAppData, resetAppState, setError, setNumaAppData, setCurrentJobId } = useNumaApp();
+  const { error, setNumaAppId, numaAppData, setError, setNumaAppData, setCurrentJobId } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
   // Single useEffect to handle both app loading and ID setting
@@ -77,22 +76,7 @@ const AppDetail = () => {
             <Col lg={8} className="pe-5">
               <div className="d-flex align-items-center mb-3">
                 <h1 className="h3 mb-0">{numaAppData?.appName}</h1>
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
-                  className="ms-2"
-                  onClick={() => {
-                    // Mark the app as resetting to prevent reload
-                    if (numaAppData) {
-                      numaAppData.isResetting = true;
-                    }
-                    resetAppState();
-                    navigate(`/app/${numaAppData.id}`);
-                  }}
-                >
-                  <i className="bi bi-arrow-counterclockwise me-2"></i>
-                  Reset App
-                </Button>
+
                 <button onClick={handleFavoriteClick} className="btn btn-link text-warning p-0 ms-2">
                   {favorite ? <StarFill size={20} /> : <Star size={20} />}
                 </button>
