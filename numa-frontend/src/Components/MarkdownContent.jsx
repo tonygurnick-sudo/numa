@@ -4,195 +4,94 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-const HEADER_STYLES = {
-  h1: { fontSize: '1.75em', marginTop: '1rem', marginBottom: '2rem' },
-  h2: { fontSize: '1.45em', marginTop: '2rem', marginBottom: '1rem' },
-  h3: { fontSize: '1.25em', marginTop: '1.5rem', marginBottom: '1rem' },
-  h4: { fontSize: '1.2em', marginTop: '1rem', marginBottom: '1rem' },
-  h5: { fontSize: '1em', marginTop: '1rem', marginBottom: '1rem' },
-  h6: { fontSize: '0.875em', marginTop: '1rem', marginBottom: '1rem' },
-};
+// We're now using CSS classes from _markdown.scss instead of inline styles
 
-const createHeaderComponent = (tag, style, nested = false) => {
-  const Component = ({ ...props }) => {
-    const Tag = tag;
-    const baseStyle = {
-      ...style,
-      fontWeight: 'bold',
-    };
-
-    if (nested) {
-      return (
-        <Tag
-          style={{
-            fontSize: style.fontSize,
-            fontWeight: 'bold',
-            marginBottom: '0rem',
-            marginTop: '0rem',
-          }}
-          {...props}
-        />
-      );
-    }
-
-    return <Tag style={baseStyle} {...props} />;
-  };
-  return Component;
-};
-
-const COPY_BUTTON_STYLES = {
-  position: 'absolute',
-  fontSize: '12px',
-  padding: '4px 8px',
-  border: 'none',
-  borderRadius: '4px',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '5px',
-  fontFamily: 'monospace',
-};
-
-const CopyButton = ({ copied, onClick, style }) => (
-  <button
-    onClick={onClick}
-    style={{
-      ...COPY_BUTTON_STYLES,
-      background: 'rgba(255, 255, 255, 0.2)',
-      color: 'white',
-      ...style,
-    }}
-  >
-    {copied ? 'Copied!' : 'Copy'}
-    {copied ? <i className="bi bi-check-circle" /> : <i className="bi bi-clipboard" />}
-  </button>
-);
-
-const CODE_CONTAINER_STYLES = {
-  position: 'relative',
-  borderRadius: '1px',
-  overflow: 'hidden',
-  maxWidth: '100%',
-  wordBreak: 'break-word',
-  fontFamily: 'monospace',
-};
-
-const MARKDOWN_DOCUMENT_STYLES = {
-  border: '1px solid #ddd',
-  borderRadius: '8px',
-  overflow: 'hidden',
-  marginBottom: '1rem',
-  maxWidth: '100%',
-  backgroundColor: 'white',
-  position: 'relative',
-  borderColor: 'black',
-};
-
-const INLINE_CODE_STYLES = {
-  backgroundColor: '#f6f8fa',
-  padding: '0.2em 0.4em',
-  borderRadius: '3px',
-  fontFamily: 'monospace',
-};
-
+// Keep TABLE_STYLES for bootstrap classes
 const TABLE_STYLES = {
   table: 'table table-striped table-bordered',
   thead: 'table-light',
 };
 
-const SYNTAX_HIGHLIGHTER_STYLES = {
-  maxHeight: '1000px',
-  overflowY: 'auto',
-  overflowX: 'hidden',
-  borderRadius: '5px',
-  padding: '1rem',
-  maxWidth: '100%',
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-};
+const MarkdownDocument = ({ textContent, copied, handleCopy }) => {
+  return (
+    <div className="markdown-document">
+      <div className="markdown-document-header">
+        <i className="bi bi-file-earmark-text" />
+        Document
+      </div>
 
-const PARAGRAPH_STYLES = {
-  whiteSpace: 'pre-wrap',
-  overflowWrap: 'break-word',
-  margin: '1em 0',
-};
+      <button
+        className="markdown-pre-copy-button"
+        onClick={() => handleCopy(textContent)}
+        style={{ top: '5px', right: '10px', zIndex: 10 }}
+      >
+        {copied ? 'Copied!' : 'Copy'}
+        {copied ? <i className="bi bi-check-circle" /> : <i className="bi bi-clipboard" />}
+      </button>
 
-const MarkdownDocument = ({ textContent, copied, handleCopy }) => (
-  <div style={MARKDOWN_DOCUMENT_STYLES}>
-    <div
-      style={{
-        backgroundColor: '#4b007d',
-        color: 'white',
-        padding: '0.5rem 1rem',
-        fontWeight: 'bold',
-        display: 'flex',
-        alignItems: 'center',
-      }}
-    >
-      <i className="bi bi-file-earmark-text" style={{ marginRight: '0.5rem' }} />
-      Document
+      <div className="markdown-document-content">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            h1: ({ children, ...props }) => (
+              <h1 className="markdown-h1" {...props}>
+                {children}
+              </h1>
+            ),
+            h2: ({ children, ...props }) => (
+              <h2 className="markdown-h2" {...props}>
+                {children}
+              </h2>
+            ),
+            h3: ({ children, ...props }) => (
+              <h3 className="markdown-h3" {...props}>
+                {children}
+              </h3>
+            ),
+            h4: ({ children, ...props }) => (
+              <h4 className="markdown-h4" {...props}>
+                {children}
+              </h4>
+            ),
+            h5: ({ children, ...props }) => (
+              <h5 className="markdown-h5" {...props}>
+                {children}
+              </h5>
+            ),
+            h6: ({ children, ...props }) => (
+              <h6 className="markdown-h6" {...props}>
+                {children}
+              </h6>
+            ),
+            p: ({ ...props }) => <p className="markdown-paragraph" {...props} />,
+          }}
+        >
+          {textContent}
+        </ReactMarkdown>
+      </div>
     </div>
+  );
+};
 
-    <CopyButton
-      copied={copied}
-      onClick={() => handleCopy(textContent)}
-      style={{ top: '5px', right: '10px', zIndex: 10 }}
-    />
-
-    <div
-      style={{
-        padding: '1rem',
-        shadow: '0 0 10px var(--color-eggplant-200)',
-        fontFamily: 'monospace',
-        fontSize: '14px',
-        lineHeight: '1.4',
-        color: '#333',
-        wordBreak: 'break-word',
-      }}
-    >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          h1: createHeaderComponent('h1', HEADER_STYLES.h1, true),
-          h2: createHeaderComponent('h2', HEADER_STYLES.h2, true),
-          h3: createHeaderComponent('h3', HEADER_STYLES.h3, true),
-          h4: createHeaderComponent('h4', HEADER_STYLES.h4, true),
-          h5: createHeaderComponent('h5', HEADER_STYLES.h5, true),
-          h6: createHeaderComponent('h6', HEADER_STYLES.h6, true),
-          p: ({ ...props }) => (
-            <p
-              style={{
-                fontSize: '14px',
-                margin: '0rem 0',
-                lineHeight: '1.2',
-                marginBottom: '0rem',
-                marginTop: '0rem',
-              }}
-              {...props}
-            />
-          ),
-        }}
+const CodeBlock = ({ textContent, language, copied, handleCopy }) => {
+  return (
+    <div className="markdown-code-container">
+      <button className="markdown-pre-copy-button" onClick={() => handleCopy(textContent)}>
+        {copied ? 'Copied!' : 'Copy'}
+        {copied ? <i className="bi bi-check-circle" /> : <i className="bi bi-clipboard" />}
+      </button>
+      <SyntaxHighlighter
+        style={oneDark}
+        language={language || 'plaintext'}
+        PreTag="div"
+        className="markdown-pre-block"
+        wrapLines={true}
       >
         {textContent}
-      </ReactMarkdown>
+      </SyntaxHighlighter>
     </div>
-  </div>
-);
-
-const CodeBlock = ({ textContent, language, copied, handleCopy }) => (
-  <div style={CODE_CONTAINER_STYLES}>
-    <CopyButton copied={copied} onClick={() => handleCopy(textContent)} style={{ top: '12px', right: '10px' }} />
-    <SyntaxHighlighter
-      style={oneDark}
-      language={language || 'plaintext'}
-      PreTag="div"
-      customStyle={SYNTAX_HIGHLIGHTER_STYLES}
-      wrapLines={true}
-    >
-      {textContent}
-    </SyntaxHighlighter>
-  </div>
-);
+  );
+};
 
 class MarkdownErrorBoundary extends React.Component {
   constructor(props) {
@@ -229,9 +128,9 @@ const MarkdownContent = React.memo(({ content }) => {
           return children[0];
         }
         return (
-          <p style={PARAGRAPH_STYLES} {...props}>
+          <div className="markdown-paragraph" style={{ maxWidth: '1100px' }} {...props}>
             {children}
-          </p>
+          </div>
         );
       },
       code: ({ inline, className, children, ...props }) => {
@@ -240,7 +139,7 @@ const MarkdownContent = React.memo(({ content }) => {
 
         if (inline) {
           return (
-            <code style={INLINE_CODE_STYLES} {...props}>
+            <code className="markdown-code-inline" {...props}>
               {children}
             </code>
           );
@@ -261,12 +160,36 @@ const MarkdownContent = React.memo(({ content }) => {
       },
       table: ({ ...props }) => <table className={TABLE_STYLES.table} {...props} />,
       thead: ({ ...props }) => <thead className={TABLE_STYLES.thead} {...props} />,
-      h1: createHeaderComponent('h1', HEADER_STYLES.h1),
-      h2: createHeaderComponent('h2', HEADER_STYLES.h2),
-      h3: createHeaderComponent('h3', HEADER_STYLES.h3),
-      h4: createHeaderComponent('h4', HEADER_STYLES.h4),
-      h5: createHeaderComponent('h5', HEADER_STYLES.h5),
-      h6: createHeaderComponent('h6', HEADER_STYLES.h6),
+      h1: ({ children, ...props }) => (
+        <h1 className="markdown-h1" {...props}>
+          {children}
+        </h1>
+      ),
+      h2: ({ children, ...props }) => (
+        <h2 className="markdown-h2" {...props}>
+          {children}
+        </h2>
+      ),
+      h3: ({ children, ...props }) => (
+        <h3 className="markdown-h3" {...props}>
+          {children}
+        </h3>
+      ),
+      h4: ({ children, ...props }) => (
+        <h4 className="markdown-h4" {...props}>
+          {children}
+        </h4>
+      ),
+      h5: ({ children, ...props }) => (
+        <h5 className="markdown-h5" {...props}>
+          {children}
+        </h5>
+      ),
+      h6: ({ children, ...props }) => (
+        <h6 className="markdown-h6" {...props}>
+          {children}
+        </h6>
+      ),
     }),
     [copied],
   );
