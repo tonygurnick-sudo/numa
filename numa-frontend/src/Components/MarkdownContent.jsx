@@ -4,8 +4,6 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-// We're now using CSS classes from _markdown.scss instead of inline styles
-
 // Keep TABLE_STYLES for bootstrap classes
 const TABLE_STYLES = {
   table: 'table table-striped table-bordered',
