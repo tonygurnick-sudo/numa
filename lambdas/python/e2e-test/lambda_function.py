@@ -1,3 +1,9 @@
+"""
+E2E test Lambda function that simulates a long-running job.
+This module provides functionality to test polling and job creation by waiting
+for a specified period before completing.
+"""
+
 import json
 import logging
 import time
@@ -6,22 +12,22 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-def handler(event, context):
+def handler(event, _context):
     """
     Simple E2E test Lambda that waits for 30 seconds before completing.
     This is used to test polling and job creation functionality.
 
     Args:
         event: Lambda event data
-        context: Lambda context
+        _context: Lambda context (unused)
 
     Returns:
         Dictionary with status and message
     """
-    logger.info(f"E2E Test Lambda started with event: {json.dumps(event)}")
+    logger.info("E2E Test Lambda started with event: %s", json.dumps(event))
 
     job_id = event.get("job_id", "unknown")
-    logger.info(f"Processing job: {job_id}")
+    logger.info("Processing job: %s", job_id)
 
     # Wait for 30 seconds
     logger.info("Starting 30-second wait period...")
@@ -36,7 +42,9 @@ def handler(event, context):
                     {
                         "content_type": "application/json",
                         "data": {
-                            "message": "E2E test completed successfully after 30 seconds"
+                            "message": (
+                                "E2E test completed successfully " "after 30 seconds"
+                            )
                         },
                         "location": "inline",
                         "title": "E2E Test",
@@ -46,5 +54,5 @@ def handler(event, context):
         ]
     }
 
-    logger.info(f"Returning result: {json.dumps(result)}")
+    logger.info("Returning result: %s", json.dumps(result))
     return result
