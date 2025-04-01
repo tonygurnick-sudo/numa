@@ -20,14 +20,16 @@ const environmentConfig =
         domainSuffix: 'numa-dev.arcanum.ai',
         hostedZone: 'Z01700621EGTW85OJXXO7',
       };
-new QAppsDeployerStack(app, 'q-apps-deployer', {
-  environmentName,
-  client: 'arcanum',
-  serviceName: 'q-apps-deployer',
-  templateBucketName: 'arcanum-numa-templates' + bucketSuffix,
-  appsBucketName: 'numa-qapps' + bucketSuffix,
-  ...environmentConfig,
-});
+if (override === undefined) {
+  new QAppsDeployerStack(app, 'q-apps-deployer', {
+    environmentName,
+    client: 'arcanum',
+    serviceName: 'q-apps-deployer',
+    templateBucketName: 'arcanum-numa-templates' + bucketSuffix,
+    appsBucketName: 'numa-qapps' + bucketSuffix,
+    ...environmentConfig,
+  });
+}
 
 for (const client of override ? [override] : listNumaClients(environmentName)) {
   new NumaClientStack(app, `numa-${client}`, {
