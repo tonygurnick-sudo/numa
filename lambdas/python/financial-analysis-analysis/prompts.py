@@ -8,7 +8,7 @@ Here is the extracted data:
 {documents}
 -------------------------------------
 
-Please review the extracted data and write a summary report emphasizing any key financial insights.
+Please review the extracted data and write a financial analysis report emphasizing any key financial insights.
 
 If applicable, include a detailed and structured section of information for our home loan business relevant to home loans, such as the loan balance, interest rate, loan limit, and location/address of the property for each property. Provide this at the top of the report.
 
