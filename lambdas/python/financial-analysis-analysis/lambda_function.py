@@ -84,19 +84,19 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                             "content_type": "text/markdown",
                             "data": {
                                 "bucket": os.environ["BUCKET"],
-                                "key": summary_output_key,
+                                "key": analysis_output_key,
                             },
                             "location": "S3",
-                            "title": "Documents Summary",
+                            "title": "Financial Analysis",
                         },
                         {
                             "content_type": "text/markdown",
                             "data": {
                                 "bucket": os.environ["BUCKET"],
-                                "key": analysis_output_key,
+                                "key": summary_output_key,
                             },
                             "location": "S3",
-                            "title": "Financial Analysis",
+                            "title": "Summary of Submitted Documents",
                         },
                         {
                             "content_type": "text/csv",
@@ -105,7 +105,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                                 "key": csv_output_key,
                             },
                             "location": "S3",
-                            "title": "CSV",
+                            "title": "Structured Data Extraction",
                         },
                     ],
                 }

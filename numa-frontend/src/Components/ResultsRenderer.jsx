@@ -630,7 +630,7 @@ const FileDownloadButtons = ({ output, getIdentityPoolCredentials, loadingAction
   );
 };
 
-export const ResultsRenderer = ({ results, activeResultIndex = 0 }) => {
+export const ResultsRenderer = ({ results }) => {
   const [contents, setContents] = useState({});
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
@@ -638,12 +638,16 @@ export const ResultsRenderer = ({ results, activeResultIndex = 0 }) => {
   const { fetchS3Content } = useNumaApp();
   const pendingRequests = useRef({});
   const [loadingActions, setLoadingActions] = useState({});
+  const [selectedOutputIndex, setSelectedOutputIndex] = useState(0);
 
   useEffect(() => {
     if (!results || !Array.isArray(results)) {
       console.log('No results or results is not an array:', results);
       return;
     }
+
+    // Reset selected output index when results change
+    setSelectedOutputIndex(0);
 
     const fetchContents = async () => {
       for (const result of results) {
@@ -652,7 +656,7 @@ export const ResultsRenderer = ({ results, activeResultIndex = 0 }) => {
         }
 
         for (const output of result.outputs) {
-          const key = `${result.input_reference}-${output.content_type}`;
+          const key = `${result.input_reference}-${output.content_type}-${output.data.key}`;
 
           // Skip if we've already loaded this content
           if (contents[key] !== undefined) {
@@ -705,43 +709,53 @@ export const ResultsRenderer = ({ results, activeResultIndex = 0 }) => {
     };
 
     fetchContents();
-  }, [results, getIdentityPoolCredentials, fetchS3Content, contents]);
+  }, [results, getIdentityPoolCredentials, fetchS3Content]);
 
-  if (!results || !Array.isArray(results)) {
+  if (!results || !Array.isArray(results) || results.length === 0) {
     return <div>No results to display</div>;
   }
 
-  // Calculate which result and output to show based on activeResultIndex
-  let currentResultIndex = 0;
-  let targetResult = null;
-  let targetOutputIndex = 0;
-
-  // Find the result and output that corresponds to the activeResultIndex
-  for (const result of results) {
-    const outputCount = result.outputs?.length || 0;
-    if (activeResultIndex < currentResultIndex + outputCount) {
-      targetResult = result;
-      targetOutputIndex = activeResultIndex - currentResultIndex;
-      break;
-    }
-    currentResultIndex += outputCount;
+  // Get the first result
+  const result = results[0];
+  if (!result.outputs || !Array.isArray(result.outputs) || result.outputs.length === 0) {
+    return <div>No outputs found in results</div>;
   }
 
-  if (!targetResult) {
-    return <div>No result found for index {activeResultIndex}</div>;
-  }
+  // The selected output
+  const selectedOutput = result.outputs[selectedOutputIndex];
+  if (!selectedOutput) return null;
 
-  const output = targetResult.outputs[targetOutputIndex];
-  if (!output) return null;
-
-  const key = `${targetResult.input_reference}-${output.content_type}`;
+  // Create unique key for this output
+  const key = `${result.input_reference}-${selectedOutput.content_type}-${selectedOutput.data.key}`;
   const isLoading = loading[key];
   const error = errors[key];
   const content = contents[key];
 
+  // Render tabs for all outputs
+  const renderOutputTabs = () => {
+    if (result.outputs.length <= 1) return null;
+
+    return (
+      <div className="mb-4">
+        <ul className="nav nav-tabs">
+          {result.outputs.map((output, index) => (
+            <li className="nav-item" key={index}>
+              <button
+                className={`nav-link ${selectedOutputIndex === index ? 'active' : ''}`}
+                onClick={() => setSelectedOutputIndex(index)}
+              >
+                {output.title || `Output ${index + 1}`}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+
   return (
     <div className="result-section mb-4">
-      {output.title && <h4 className="mb-3">{output.title}</h4>}
+      {renderOutputTabs()}
 
       {isLoading ? (
         <div className="text-center mb-3">
@@ -753,39 +767,39 @@ export const ResultsRenderer = ({ results, activeResultIndex = 0 }) => {
           <div className="text-danger">{error}</div>
           <div className="mt-2">
             <strong>Debug info:</strong>
-            <pre>{JSON.stringify(output, null, 2)}</pre>
+            <pre>{JSON.stringify(selectedOutput, null, 2)}</pre>
           </div>
         </div>
       ) : !content ? (
         <div className="s3-link mb-3">
           <FileDownloadButtons
-            output={output}
+            output={selectedOutput}
             getIdentityPoolCredentials={getIdentityPoolCredentials}
             loadingActions={loadingActions}
             setLoadingActions={setLoadingActions}
           />
         </div>
       ) : // Render content based on type
-      isCSVContent(content, output.content_type) ? (
+      isCSVContent(content, selectedOutput.content_type) ? (
         <div className="mb-3">
           <div className="csv-content p-3 bg-white rounded border">
             <CsvRenderer data={content} />
           </div>
         </div>
-      ) : output.content_type === 'text/markdown' || output.content_type === 'text/plain' ? (
+      ) : selectedOutput.content_type === 'text/markdown' || selectedOutput.content_type === 'text/plain' ? (
         <div className="mb-3">
           <div className="markdown-content p-3 bg-white rounded border">
             <MarkdownContent content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)} />
           </div>
         </div>
-      ) : output.content_type === 'application/json' ? (
+      ) : selectedOutput.content_type === 'application/json' ? (
         <div className="mb-3">
           <JsonRenderer data={content} />
         </div>
       ) : (
         <div className="s3-link mb-3">
           <FileDownloadButtons
-            output={output}
+            output={selectedOutput}
             getIdentityPoolCredentials={getIdentityPoolCredentials}
             loadingActions={loadingActions}
             setLoadingActions={setLoadingActions}
