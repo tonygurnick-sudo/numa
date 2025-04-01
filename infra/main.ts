@@ -4,6 +4,7 @@ import { QAppsDeployerStack } from './stacks/q-apps-deployer-stack';
 import { NumaClientStack, listNumaClients } from './stacks/numa-client-stack';
 
 const environmentName = process.env['TF_ENVIRONMENT'] as EnvironmentName;
+const override = process.env['CLIENT_OVERRIDE'];
 
 const app = new App();
 const bucketSuffix = environmentName == 'prod' ? '' : '-dev';
@@ -27,7 +28,8 @@ new QAppsDeployerStack(app, 'q-apps-deployer', {
   appsBucketName: 'numa-qapps' + bucketSuffix,
   ...environmentConfig,
 });
-for (const client of listNumaClients(environmentName)) {
+
+for (const client of override ? [override] : listNumaClients(environmentName)) {
   new NumaClientStack(app, `numa-${client}`, {
     environmentName,
     client,
