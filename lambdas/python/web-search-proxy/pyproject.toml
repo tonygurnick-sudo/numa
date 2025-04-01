@@ -37,8 +37,8 @@ helpers = {path = "../../../lib/helpers", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.15.0"
-pylint = "3.3.5"
-pyright = "1.1.397"
+pylint = "3.3.6"
+pyright = "1.1.398"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.9.0"
