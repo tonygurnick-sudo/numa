@@ -12,9 +12,10 @@ import { useAuth } from '../Providers/AuthProvider';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
-import MdToDocx from '../hooks/MdToDocx';
+import { createDocxBlob } from '../Services/fileConverter';
 import { getPolicyBuilderBucketInfo } from '../utils/bucketNameUtil';
 import { useJobsApi } from '../Services/jobsApi';
+import { saveAs } from 'file-saver';
 
 export const PolicyBuilderDetail = () => {
   const [activeTab, setActiveTab] = useState('policies');
@@ -45,7 +46,6 @@ export const PolicyBuilderDetail = () => {
 
   const { loading, isAuthenticated, getIdentityPoolCredentials } = useAuth();
   const { numaPost, numaPut, numaGet } = useNumaRequest();
-  const { convertMarkdownToDocx } = MdToDocx();
   const jobsApi = useJobsApi();
 
   useEffect(() => {
@@ -588,7 +588,13 @@ export const PolicyBuilderDetail = () => {
       });
 
       // Use the utility function to get bucket info and the correct key
-      const { bucketName, key } = await getPolicyBuilderBucketInfo(config, jobId, s3Client, '.md');
+      const { bucketName, key } = await getPolicyBuilderBucketInfo(
+        config,
+        jobId,
+        policy.jobDetails.stepFunctionJobId, // Pass the step function job ID as the third argument
+        s3Client,
+        '.md',
+      );
 
       // Create the command to get the markdown content
       const command = new GetObjectCommand({
@@ -613,12 +619,15 @@ export const PolicyBuilderDetail = () => {
       if (!response.ok) {
         throw new Error('Failed to download file');
       }
+
       const markdownContent = await response.text();
 
-      // Convert the Markdown content to DOCX with the specified filename
-      convertMarkdownToDocx(markdownContent, `${sanitizedFileName}.docx`);
+      // Convert the markdown content to a DOCX blob using the fileConverter service
+      const docxBlob = await createDocxBlob(markdownContent, sanitizedFileName);
+
+      // Create a URL for the blob and trigger the download (consitent with ResultActions component)
+      saveAs(docxBlob, `${sanitizedFileName}.docx`);
     } catch (error) {
-      console.error('Download failed:', error);
       setErrorMessage(error.message || 'Failed to download file');
     } finally {
       setIsDownloading(null);
