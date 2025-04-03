@@ -1,12 +1,10 @@
-import { ArcanumStack, ArcanumStackProps, EnvironmentName } from '@arcanumai/cdktf-util';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
-import { Fn } from 'cdktf';
+import { Fn, S3Backend, TerraformStack } from 'cdktf';
 import { Construct } from 'constructs';
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import _clientConfigDev from '../../clientConfigDev.json';
 import _clientConfigProd from '../../clientConfigProd.json';
 import { AppAgnosticApiGatewayLambdaCollection } from '../constructs/app-agnostic-api-gateway-lambda-collection';
 import {
@@ -30,20 +28,44 @@ import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-constr
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import { Honeycomb } from '../constructs/honeycomb-construct';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
+import { EnvironmentName } from '@arcanumai/cdktf-util';
 
-export class NumaClientStack extends ArcanumStack {
+export class NumaClientStack extends TerraformStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
     const defaults = {
       domainSuffix: props.domainSuffix,
     };
-    props.config ??= lookupConfigForClient(props.client, props.environmentName as EnvironmentName, defaults);
+    const clientConfig = lookupConfigForClient(props.client, defaults);
+
     const deployerRole = `arn:aws:iam::${props.arcanumNumaAccount}:role/admin-delegated-access`;
-    const clientRole = `arn:aws:iam::${props.config.clientAccountId}:role/ArcanumAIAccess`;
-    super(scope, name, {
-      ...props,
-      assumeRoleList: [{ roleArn: deployerRole }, { roleArn: clientRole }],
+    const clientRole = `arn:aws:iam::${clientConfig.clientAccountId}:role/ArcanumAIAccess`;
+    super(scope, name);
+
+    const keyName = [name, 'numa'].join('/') + '.tfstate';
+    const key = ['product', props.client, props.environmentName, keyName].filter((x) => x).join('/');
+    new S3Backend(this, {
+      bucket: 'arcanum-terraform-state',
+      region: 'ap-southeast-2',
+      key,
+      dynamodbTable: 'arcanum-terraform-lock',
     });
-    const region = 'us-east-1'; // TODO: Temporary
+
+    const defaultProvider = new AwsProvider(this, 'default-provider', {
+      assumeRole: [{ roleArn: deployerRole }, { roleArn: clientRole }],
+      region: clientConfig.region,
+      defaultTags: [
+        {
+          tags: {
+            Arcanum: 'true',
+            Client: props.client ?? 'unspecified',
+            CreatedBy: 'CDKTF',
+            Repository: process.env['CI_PROJECT_PATH'] ?? 'unknown',
+            ServiceName: 'numa',
+            StackName: name,
+          },
+        },
+      ],
+    });
 
     const hostedZoneProvider = new AwsProvider(this, 'hosted-zone-provider', {
       assumeRole: [
@@ -52,26 +74,37 @@ export class NumaClientStack extends ArcanumStack {
         },
       ],
       alias: 'dns-provider',
-      defaultTags: this.provider.defaultTags,
+      defaultTags: defaultProvider.defaultTags,
     });
     const certificateProvider = new AwsProvider(this, 'certificate-provider', {
       region: 'us-east-1', // Needs to be us-east-1 to work with Cloudfront.
       assumeRole: [{ roleArn: deployerRole }, { roleArn: clientRole }],
       alias: 'certificate-provider',
-      defaultTags: this.provider.defaultTags,
+      defaultTags: defaultProvider.defaultTags,
+    });
+
+    // QBusiness provider - currently needs to be us-east-1 in most regions
+    // When QBusiness becomes available in other regions, this can use the client's region
+    const qBusinessRegion = clientConfig.qBusinessRegion ?? clientConfig.region;
+    const qBusinessProvider = new AwsProvider(this, 'qbusiness-provider', {
+      region: qBusinessRegion,
+      assumeRole: [{ roleArn: deployerRole }, { roleArn: clientRole }],
+      alias: 'qbusiness-provider',
+      defaultTags: defaultProvider.defaultTags,
     });
 
     const core = new CoreNumaInfra(this, 'numa', {
-      ...props.config,
+      ...clientConfig,
       environmentName: props.environmentName,
+      qBusinessProvider: qBusinessProvider,
     });
 
     const honeycomb = new Honeycomb(this, 'honeycomb', {
-      name: props.config.client,
+      name: clientConfig.client,
     });
 
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
-      ...props.config,
+      ...clientConfig,
       environmentName: props.environmentName,
       zoneId: props.hostedZone,
       hostedZoneProvider,
@@ -80,7 +113,7 @@ export class NumaClientStack extends ArcanumStack {
       userPoolId: core.userPoolId,
       userPoolClientId: core.userPoolClient.id,
       outputsBucket: core.outputsBucket,
-      accountId: props.config.clientAccountId,
+      accountId: clientConfig.clientAccountId,
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
@@ -92,14 +125,15 @@ export class NumaClientStack extends ArcanumStack {
       clientSecret: core.userPoolClient.clientSecret,
       client: props.client,
       chatHistoryTableName: core.chatHistoryTable.name,
+      region: clientConfig.region,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(
       appLibrary,
-      props.config.apps ?? {},
-      props.config.allApps ?? false,
-      props.config.allProdApps ?? false,
-      props.config.devInstance ?? false,
+      clientConfig.apps ?? {},
+      clientConfig.allApps ?? false,
+      clientConfig.allProdApps ?? false,
+      clientConfig.devInstance ?? false,
     );
     const apps = appConfigsToDeploy.map(([appId, appConfig]) => {
       const app = lookupAppFromId(appId);
@@ -111,12 +145,12 @@ export class NumaClientStack extends ArcanumStack {
         otelConfig: {
           otelConfigPath: core.otelConfigPath,
           honeycombIngestKey: honeycomb.backendKey,
-          region,
+          region: clientConfig.region,
         },
       });
     });
 
-    if (props.config.uploadFrontend ?? true) {
+    if (clientConfig.uploadFrontend ?? true) {
       const folderPath = path.join(import.meta.dirname, '..', 'build', 'numa-frontend');
       const excludedFiles = ['config.json', 'manifest.json'];
       let objects: S3Object[] = [];
@@ -148,7 +182,7 @@ export class NumaClientStack extends ArcanumStack {
         console.warn('No frontend code found at: ' + folderPath);
       }
 
-      const config = new S3Object(this, 'config-item', {
+      const configObject = new S3Object(this, 'config-item', {
         bucket: fe.frontendBucket.bucket,
         key: 'config.json',
         content: JSON.stringify({
@@ -156,7 +190,7 @@ export class NumaClientStack extends ArcanumStack {
           CLIENT_ID: core.userPoolClient?.id,
           IDENTITY_POOL_ID: core.identityPoolId,
           IDENTITY_POOL_ROLE_ARN: core.identityPoolArn,
-          REGION: 'us-east-1', // TODO: Dynamic.
+          REGION: clientConfig.region,
           ROLE_ARN: core.webExperienceRoleArn,
           Q_APPLICATION_ID: core.qBusinessApplicationId,
           Q_INDEX_ID: core.qBusinessIndexId,
@@ -199,13 +233,18 @@ export class NumaClientStack extends ArcanumStack {
 
       new InvalidateCloudfront(this, 'invalidate', {
         cloudfrontDistribution: fe.distribution,
-        dependsOn: [manifest, config, version, ...objects],
+        dependsOn: [manifest, configObject, version, ...objects],
       });
     }
   }
 }
 
-interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
+export interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
+  /**
+   * AWS region to deploy resources to.
+   * This is the primary region for all resources except those that must be in specific regions.
+   */
+  region: string;
   customDomain?: string;
   /**
    * Whether this is a development instance that should include dev-only apps
@@ -213,6 +252,13 @@ interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
    * @default false
    */
   devInstance?: boolean;
+  /**
+   * Region to use for QBusiness resources.
+   * Currently QBusiness is only available in us-east-1, but will be available in other regions in the future.
+   *
+   * @default 'us-east-1'
+   */
+  qBusinessRegion?: string;
   /**
    * Whether to deploy all apps to to the environment.
    *
@@ -240,27 +286,27 @@ interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
   uploadFrontend?: boolean;
 }
 type InputConfig = Omit<ClientConfig, 'client' | 'domainName'>;
-const clientConfigDev = _clientConfigDev as Record<string, InputConfig>;
 const clientConfigProd = _clientConfigProd as Record<string, InputConfig>;
 
-export function listNumaClients(environmentName?: EnvironmentName): string[] {
-  return Object.keys(environmentName == EnvironmentName.prod ? clientConfigProd : clientConfigDev);
+export function listNumaClients(): string[] {
+  return Object.keys(clientConfigProd);
 }
 
-function lookupConfigForClient(
-  client: string,
-  environmentName: EnvironmentName,
-  defaults: Record<string, string>,
-): ClientConfig {
-  if (!listNumaClients(environmentName).includes(client)) throw new Error('Invalid client.');
-  const config = (environmentName == EnvironmentName.prod ? clientConfigProd : clientConfigDev)[client];
+export function lookupConfigForClient(client: string, defaults: Record<string, string>): ClientConfig {
+  if (!listNumaClients().includes(client)) throw new Error('Invalid client.');
+  const config = clientConfigProd[client];
   const domainName = config.customDomain ?? `${client}.${defaults.domainSuffix}`;
-  return { client, domainName, ...config };
+  return {
+    client,
+    domainName,
+    ...defaults,
+    ...config,
+  };
 }
 
-export interface NumaClientStackProps extends ArcanumStackProps {
+export interface NumaClientStackProps {
   client: string;
-  config?: ClientConfig;
+  environmentName: EnvironmentName;
   domainSuffix: string;
   hostedZone: string;
   arcanumNumaAccount: string;

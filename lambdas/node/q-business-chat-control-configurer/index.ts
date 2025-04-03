@@ -10,7 +10,7 @@ interface ChatControlConfiguration {
 export const handler: Handler<ChatControlConfiguration, void> = async (event) => {
   console.log('Event received:', JSON.stringify(event, null, 2));
 
-  const client = new QBusinessClient();
+  const client = new QBusinessClient({ region: process.env['Q_BUSINESS_REGION'] });
 
   await client.send(
     new UpdateChatControlsConfigurationCommand({

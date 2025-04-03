@@ -7,7 +7,7 @@ import {
 export async function handler(event, _context) {
   const { userPoolId, userPoolClientId, callbackAddress } = event;
 
-  const client = new CognitoIdentityProviderClient({ region: process.env['AWS_REGION'] });
+  const client = new CognitoIdentityProviderClient({ region: process.env['Q_BUSINESS_REGION'] });
   const describeCommand = new DescribeUserPoolClientCommand({
     ClientId: userPoolClientId,
     UserPoolId: userPoolId,

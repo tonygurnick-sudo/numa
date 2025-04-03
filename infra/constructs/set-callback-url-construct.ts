@@ -22,6 +22,11 @@ export class SetCallbackUrl extends Construct {
       lambdaProps: {
         functionName: 'cognito-callback-setter-' + props.userPoolClientId,
         role: role.arn,
+        environment: {
+          variables: {
+            Q_BUSINESS_REGION: props.region,
+          },
+        },
       },
       path: 'constructs/callback-renamer/',
     });
@@ -47,4 +52,5 @@ export interface SetCallbackUrlProps {
   userPoolClientId: string;
   userPoolId: string;
   callbackAddress: string;
+  region: string;
 }

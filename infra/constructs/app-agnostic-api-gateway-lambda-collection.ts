@@ -11,7 +11,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         ALLOWED_ORIGIN: '*', // TODO: More closely scope this.
         CLIENT_SECRET: props.clientSecret,
         COGNITO_CLIENT_ID: props.clientId,
-        COGNITO_REGION: 'us-east-1',
+        COGNITO_REGION: props.region,
       },
     };
 
@@ -65,4 +65,5 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends ApiGatewayLa
   clientSecret: string;
   client: string;
   chatHistoryTableName: string;
+  region: string;
 }

@@ -16,6 +16,7 @@ export interface NumaCorsEnabledBucketProps extends S3BucketConfig {
    * @default false
    */
   allowLocalhostOrigin?: boolean;
+  region?: string;
 }
 
 export class NumaCorsEnabledBucket extends PrivateBucket {

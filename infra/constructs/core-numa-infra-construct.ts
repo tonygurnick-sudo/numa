@@ -1,4 +1,5 @@
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
+import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
 import { CognitoIdentityPool } from '@cdktf/provider-aws/lib/cognito-identity-pool';
 import { CognitoIdentityPoolRolesAttachment } from '@cdktf/provider-aws/lib/cognito-identity-pool-roles-attachment';
@@ -54,7 +55,6 @@ export class CoreNumaInfra extends Construct {
     super(scope, name);
 
     props.indexType ??= 'STARTER';
-    const region = props.region ?? 'us-east-1';
     props.loadSampleFile ??= true;
     props.createServiceLinkedRole ??= true;
     props.webCrawlerConfigs ??= [];
@@ -68,7 +68,6 @@ export class CoreNumaInfra extends Construct {
     // TODO: Typing
     let appIdentityConfig;
     let webexIdentityConfig;
-    let pool = { id: '', name: '', endpoint: '' };
 
     const at = new AdjustToken(this, 'token-adjuster', {
       nameSuffix: numaClient,
@@ -86,7 +85,7 @@ export class CoreNumaInfra extends Construct {
         : {
             mfaConfiguration: 'OFF',
           };
-    pool = new CognitoUserPool(this, 'user-pool', {
+    const userPool = new CognitoUserPool(this, 'user-pool', {
       name: numaClient,
       usernameAttributes: ['email'],
       lambdaConfig: {
@@ -104,14 +103,14 @@ export class CoreNumaInfra extends Construct {
       },
       ...mfa,
     });
-    this.userPoolId = pool.id;
+    this.userPoolId = userPool.id;
 
     new TerraformOutput(this, 'user-pool-id', {
-      value: pool.id,
+      value: userPool.id,
     });
 
     new CognitoUserPoolDomain(this, 'domain', {
-      userPoolId: pool.id,
+      userPoolId: userPool.id,
       domain: cognitoDomain,
     });
 
@@ -131,7 +130,7 @@ export class CoreNumaInfra extends Construct {
         email: systemUserEmail,
       },
       password: systemUserPassword,
-      userPoolId: pool.id,
+      userPoolId: userPool.id,
     });
     const systemUserSecret = new SecretsmanagerSecret(this, 'system-user-secret-manager-secret', {
       name: `${props.client}-system-user-password`,
@@ -149,7 +148,7 @@ export class CoreNumaInfra extends Construct {
     });
 
     this.userPoolClient = new CognitoUserPoolClient(this, 'client', {
-      userPoolId: pool.id,
+      userPoolId: userPool.id,
       name: numaClient,
       generateSecret: true,
       callbackUrls: ['https://localhost'], // Placeholder, must be provided, but is replaced later.
@@ -173,7 +172,7 @@ export class CoreNumaInfra extends Construct {
       cognitoIdentityProviders: [
         {
           clientId: this.userPoolClient.id,
-          providerName: pool.endpoint,
+          providerName: userPool.endpoint,
         },
       ],
     });
@@ -213,6 +212,7 @@ export class CoreNumaInfra extends Construct {
       clientAccountId: props.clientAccountId,
       allowedMethods: ['GET', 'PUT', 'DELETE'],
       allowLocalhostOrigin: props.devInstance,
+      region: props.region,
     });
     this.dataBucket.bucket.moveFromId('aws_s3_bucket.data-source-bucket_1F269801');
 
@@ -223,6 +223,7 @@ export class CoreNumaInfra extends Construct {
       clientAccountId: props.clientAccountId,
       allowedMethods: ['GET', 'PUT', 'DELETE'],
       allowLocalhostOrigin: props.devInstance,
+      region: props.region,
     });
 
     const otelConfigKey = 'otel-config.yaml';
@@ -247,6 +248,7 @@ export class CoreNumaInfra extends Construct {
       bucketName: 'outputs',
       allowedMethods: ['GET', 'PUT'],
       allowLocalhostOrigin: props.devInstance,
+      region: props.region,
     });
     this.outputsBucket.bucket.moveFromId('aws_s3_bucket.outputs-bucket_1F269801');
 
@@ -272,7 +274,7 @@ export class CoreNumaInfra extends Construct {
         {
           effect: 'Allow',
           actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminCreateUser'],
-          resources: [`arn:aws:cognito-idp:${region}:${callerId.accountId}:userpool/${pool.id}`],
+          resources: [userPool.arn],
         },
       ],
     });
@@ -287,12 +289,12 @@ export class CoreNumaInfra extends Construct {
         {
           effect: 'Allow',
           actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminCreateUser'],
-          resources: [`arn:aws:cognito-idp:${region}:${callerId.accountId}:userpool/${pool.id}`],
+          resources: [userPool.arn],
           condition: [
             {
               test: 'StringEquals',
               variable: 'aws:RequestedRegion',
-              values: [region],
+              values: [props.region],
             },
             {
               test: 'StringEquals',
@@ -385,7 +387,7 @@ export class CoreNumaInfra extends Construct {
     const oidc = new CloudcontrolapiResource(this, 'idp', {
       typeName: 'AWS::IAM::OIDCProvider',
       desiredState: Fn.jsonencode({
-        Url: `https://cognito-idp.${region}.amazonaws.com/${pool.id}`,
+        Url: `https://${userPool.endpoint}`,
         ClientIdList: [this.userPoolClient.id],
       }),
     });
@@ -470,7 +472,7 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
-    const webExArn = `arn:aws:iam::${callerId.accountId}:oidc-provider/cognito-idp.${region}.amazonaws.com/${pool.id}`;
+    const webExArn = `arn:aws:iam::${callerId.accountId}:oidc-provider/cognito-idp.${props.region}.amazonaws.com/${userPool.id}`;
 
     const webExperienceTrustDocument = new DataAwsIamPolicyDocument(this, 'webex-policy-trust-doc', {
       statement: [
@@ -531,6 +533,7 @@ export class CoreNumaInfra extends Construct {
         },
         ...appIdentityConfig,
       }),
+      provider: props.qBusinessProvider,
     });
     this.qBusinessApplicationId = Fn.lookup(Fn.jsondecode(application.properties), 'ApplicationId');
 
@@ -544,7 +547,7 @@ export class CoreNumaInfra extends Construct {
       applicationId: this.qBusinessApplicationId,
       enableDirectLLMAccess: props.enableDirectLLMAccess,
       enableLLMKnowledgeFallback: props.enableLLMKnowledgeFallback,
-      region,
+      region: props.qBusinessProvider?.region ?? props.region,
       accountId: callerId.accountId,
     });
 
@@ -556,6 +559,7 @@ export class CoreNumaInfra extends Construct {
         ...webexIdentityConfig,
         ...origins,
       }),
+      provider: props.qBusinessProvider,
     });
 
     this.webExUrl = Fn.lookup(Fn.jsondecode(webexperience.properties), 'DefaultEndpoint');
@@ -563,7 +567,8 @@ export class CoreNumaInfra extends Construct {
     new SetCallbackUrl(this, 'callback', {
       callbackAddress: this.webExUrl + 'authorization-code/callback',
       userPoolClientId: this.userPoolClient.id,
-      userPoolId: pool.id,
+      userPoolId: userPool.id,
+      region: props.region,
     });
 
     if (props.indexUnits) {
@@ -585,6 +590,7 @@ export class CoreNumaInfra extends Construct {
           Units: props.indexUnits ?? 1,
         },
       }),
+      provider: props.qBusinessProvider,
     });
     this.qBusinessIndexId = Fn.lookup(Fn.jsondecode(index.properties), 'IndexId');
 
@@ -600,6 +606,7 @@ export class CoreNumaInfra extends Construct {
         },
         Type: 'NATIVE_INDEX',
       }),
+      provider: props.qBusinessProvider,
     });
     this.qBusinessRetrieverId = Fn.lookup(Fn.jsondecode(retriever.properties), 'RetrieverId');
 
@@ -685,6 +692,7 @@ export class CoreNumaInfra extends Construct {
         RoleArn: dataRole.arn,
         SyncSchedule: 'cron(0/30 * ? * * *)',
       }),
+      provider: props.qBusinessProvider,
     });
     const dataSourceId = Fn.lookup(Fn.jsondecode(s3DataSource.properties), 'DataSourceId');
 
@@ -707,7 +715,7 @@ export class CoreNumaInfra extends Construct {
         siteMapFiles,
         applicationId: application.id,
         indexId: this.qBusinessIndexId,
-        region: props.region ?? 'us-east-1',
+        region: props.region,
         dataSourceRoleArn: dataRole.arn,
         siteMapBucket: siteMapBucket.bucket,
       });
@@ -724,7 +732,7 @@ export class CoreNumaInfra extends Construct {
         indexId: this.qBusinessIndexId,
         domain: sharePointDataSource.domain,
         tenantId: sharePointDataSource.tenantId,
-        region: props.region ?? 'us-east-1',
+        region: props.region,
         configuration: sharePointDataSource.configuration,
         dataSourceRoleArn: dataRole.arn,
       });
@@ -736,7 +744,7 @@ export class CoreNumaInfra extends Construct {
         enterpriseId: boxDataSource.enterpriseId,
         applicationId: this.qBusinessApplicationId,
         indexId: this.qBusinessIndexId,
-        region: props.region ?? 'us-east-1',
+        region: props.region,
         configuration: boxDataSource.configuration,
         dataSourceRoleArn: dataRole.arn,
       });
@@ -748,7 +756,7 @@ export class CoreNumaInfra extends Construct {
         tenantId: teamsDataSource.tenantId,
         applicationId: this.qBusinessApplicationId,
         indexId: this.qBusinessIndexId,
-        region: props.region ?? 'us-east-1',
+        region: props.region,
         configuration: teamsDataSource.configuration,
         dataSourceRoleArn: dataRole.arn,
       });
@@ -772,15 +780,15 @@ export class CoreNumaInfra extends Construct {
     const models = [
       {
         model_id: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
-        regions: [process.env['AWS_REGION']],
+        regions: [props.region],
       },
       {
         model_id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-        regions: [process.env['AWS_REGION']],
+        regions: [props.region],
       },
       {
         model_id: 'anthropic.claude-3-haiku-20240307-v1:0',
-        regions: [process.env['AWS_REGION']],
+        regions: [props.region],
       },
     ];
     for (const model of models) {
@@ -796,7 +804,7 @@ export class CoreNumaInfra extends Construct {
               environment: {
                 ACCOUNT_ID: props.clientAccountId,
                 MODEL: model.model_id,
-                REGION: region!,
+                REGION: region,
               },
             },
           ],
@@ -830,7 +838,7 @@ interface TeamsConfig {
 
 export interface CoreNumaInfraProps
   extends _CoreNumaInfraProps,
-    Omit<QBusinessChatControlConfigurerProps, 'applicationId' | 'region' | 'accountId'> {}
+    Omit<QBusinessChatControlConfigurerProps, 'applicationId' | 'accountId'> {}
 
 interface _CoreNumaInfraProps {
   client: string;
@@ -843,7 +851,10 @@ interface _CoreNumaInfraProps {
   enableIFrame?: boolean;
   indexType?: 'ENTERPRISE' | 'STARTER';
   indexUnits?: number;
-  region?: string;
+  /**
+   * Provider for QBusiness resources.
+   */
+  qBusinessProvider?: AwsProvider;
   domainName: string;
   clientAccountId: string;
   loadSampleFile?: boolean;
