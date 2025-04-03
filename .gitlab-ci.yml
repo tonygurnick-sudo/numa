@@ -176,7 +176,9 @@ python-package:
   extends: .poetry-job
   stage: package
   script:
-    - poetry build-lambda zip-compression=ZIP_DEFLATED
+    - apt-get update
+    - apt-get install zip
+    - $CI_PROJECT_DIR/lambdas/package-python-lambda.sh .
   parallel: !reference [.python-lambdas-matrix]
   artifacts:
     paths: [$PYTHON_WORKING_DIRECTORY/lambda_function.zip]
