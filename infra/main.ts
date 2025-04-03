@@ -31,11 +31,10 @@ if (override === undefined) {
   });
 }
 
-for (const client of override ? [override] : listNumaClients(environmentName)) {
+for (const client of override ? [override] : listNumaClients()) {
   new NumaClientStack(app, `numa-${client}`, {
     environmentName,
     client,
-    serviceName: 'numa',
     ...environmentConfig,
   });
 }

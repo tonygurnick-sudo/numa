@@ -43,6 +43,7 @@ export class QBusinessChatControlConfigurer extends Construct {
       lambdaProps: {
         functionName: Fn.substr('q-business-chat-control-configurer-' + props.applicationId, 0, 64),
         role: role.arn,
+        environment: { variables: { Q_BUSINESS_REGION: props.region } },
       },
       path: path.join('..', 'lambdas', 'node', 'q-business-chat-control-configurer', 'dist'),
     });

@@ -6,7 +6,8 @@
       {
         "url": "https://2gen.com.au"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "30-seconds": {
     "allProdApps": true,
@@ -21,7 +22,8 @@
         ],
         "tenantId": "a2275cde-9164-4712-8c15-47ab712f1766"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "accumen": {
     "allProdApps": true,
@@ -33,7 +35,8 @@
       {
         "url": "https://archipro.co.nz/professional/accumen-shapes"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "align-me": {
     "boxConfigs": [
@@ -42,6 +45,7 @@
       }
     ],
     "clientAccountId": "390403893889",
+    "region": "us-east-1",
     "teamsConfigs": [
       {
         "configuration": {
@@ -58,13 +62,15 @@
     },
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "devInstance": true
+    "devInstance": true,
+    "region": "us-east-1"
   },
   "arcanum-demo": {
     "allApps": true,
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "devInstance": true,
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://arcanum.ai/"
@@ -75,7 +81,8 @@
     "allApps": true,
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "devInstance": true
+    "devInstance": true,
+    "region": "us-east-1"
   },
   "arcanum-demo-nick": {
     "allApps": true,
@@ -86,7 +93,8 @@
     ],
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "devInstance": true
+    "devInstance": true,
+    "region": "us-east-1"
   },
   "arcanum-demo-sam": {
     "apps": {
@@ -100,19 +108,22 @@
     },
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "devInstance": true
+    "devInstance": true,
+    "region": "us-east-1"
   },
   "arcanum-demo-sebastian": {
     "allApps": true,
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "devInstance": true
+    "devInstance": true,
+    "region": "us-east-1"
   },
   "arcanum-hams": {
     "allApps": true,
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
-    "devInstance": true
+    "devInstance": true,
+    "region": "us-east-1"
   },
   "arcanum-prod-numa-demo": {
     "apps": {
@@ -126,13 +137,16 @@
       "policy-drafter": {},
       "policy-reviewer": {}
     },
-    "clientAccountId": "619071323471"
+    "clientAccountId": "619071323471",
+    "devInstance": true,
+    "region": "us-east-1"
   },
   "arcanum-prod-trial": {
     "allProdApps": true,
     "clientAccountId": "619071323471",
     "createServiceLinkedRole": false,
     "devInstance": true,
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://arcanum.ai/"
@@ -149,15 +163,18 @@
       {
         "url": "https://apser.es/en/"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "autoshoppe": {
     "allProdApps": true,
-    "clientAccountId": "060795909741"
+    "clientAccountId": "060795909741",
+    "region": "us-east-1"
   },
   "av-media": {
     "allProdApps": true,
-    "clientAccountId": "961341552812"
+    "clientAccountId": "961341552812",
+    "region": "us-east-1"
   },
   "bendigo-council": {
     "clientAccountId": "183295422459",
@@ -174,7 +191,8 @@
       {
         "url": "https://letstalkgreaterbendigo.com.au/"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "beyond-expectations": {
     "clientAccountId": "474668383176",
@@ -188,7 +206,8 @@
       {
         "url": "https://help.core.cin7.com/hc/en-us/articles/9034429844111-Account-Summary-Report"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "broken-hill-city-council": {
     "clientAccountId": "863518418134",
@@ -217,11 +236,13 @@
       {
         "url": "https://www.olg.nsw.gov.au/"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "classic-group": {
     "allProdApps": true,
-    "clientAccountId": "734951567821"
+    "clientAccountId": "734951567821",
+    "region": "us-east-1"
   },
   "corangamite": {
     "clientAccountId": "442426871546",
@@ -259,15 +280,18 @@
       {
         "url": "https://www.fairwork.gov.au/"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "cuttriss": {
     "allProdApps": true,
-    "clientAccountId": "850995553818"
+    "clientAccountId": "850995553818",
+    "region": "us-east-1"
   },
   "debtworks": {
     "allProdApps": true,
-    "clientAccountId": "767828739522"
+    "clientAccountId": "767828739522",
+    "region": "us-east-1"
   },
   "delta-insurance": {
     "allProdApps": true,
@@ -282,14 +306,17 @@
       {
         "url": "https://deltainsurance.co.nz/pages/brokers/"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "design-builders": {
     "allProdApps": true,
-    "clientAccountId": "061039773876"
+    "clientAccountId": "061039773876",
+    "region": "us-east-1"
   },
   "ema": {
-    "clientAccountId": "209479264602"
+    "clientAccountId": "209479264602",
+    "region": "us-east-1"
   },
   "geofabrics": {
     "allProdApps": true,
@@ -310,11 +337,13 @@
       {
         "url": "https://cirtexcivil.co.nz/"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "kapiti-coast": {
     "allProdApps": true,
-    "clientAccountId": "557690588447"
+    "clientAccountId": "557690588447",
+    "region": "us-east-1"
   },
   "lg-pro": {
     "allProdApps": true,
@@ -335,7 +364,8 @@
       {
         "url": "https://www.localgovernment.vic.gov.au/"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "macedon-ranges": {
     "clientAccountId": "575108922680",
@@ -355,14 +385,17 @@
       {
         "url": "https://www.vic.gov.au/know-your-council"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "modern-sales": {
     "allProdApps": true,
-    "clientAccountId": "228743762183"
+    "clientAccountId": "228743762183",
+    "region": "us-east-1"
   },
   "moira-shire-council": {
     "clientAccountId": "084828600250",
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au"
@@ -396,7 +429,8 @@
   "momentum": {
     "allProdApps": true,
     "clientAccountId": "746669231307",
-    "createServiceLinkedRole": false
+    "createServiceLinkedRole": false,
+    "region": "us-east-1"
   },
   "mornington-peninsula-council": {
     "clientAccountId": "672071675188",
@@ -413,7 +447,8 @@
       {
         "url": "https://www.mornpen.vic.gov.au/Home"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "mosaic": {
     "allProdApps": true,
@@ -449,7 +484,8 @@
       {
         "url": "https://www.accenture.com/nz-en/industries/banking"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "ngati-kahu": {
     "clientAccountId": "328307064241",
@@ -478,7 +514,8 @@
       {
         "url": "https://www.sspa.org.nz/"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "nzsba": {
     "apps": {
@@ -496,24 +533,17 @@
     "sharePointConfigs": [
       {
         "configuration": {
-          "inclusionFilePath": [
-            "^.*(?:PLD ?2021).*$"
-          ],
-          "linkTitleFilterRegEx": [
-            "^.*(?:PLD ?2021).*$"
-          ],
-          "pageTitleFilterRegEx": [
-            "^.*(?:PLD ?2021).*$"
-          ]
+          "inclusionFilePath": ["^.*(?:PLD ?2021).*$"],
+          "linkTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"],
+          "pageTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"]
         },
         "domain": "nzsta.sharepoint.com",
-        "siteUrls": [
-          "https://nzsta.sharepoint.com/sites/Company"
-        ],
+        "siteUrls": ["https://nzsta.sharepoint.com/sites/Company"],
         "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29"
       }
     ],
     "uploadFrontend": false,
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://www.nzstaresourcecentre.org.nz/"
@@ -527,10 +557,13 @@
     ]
   },
   "rebura": {
-    "clientAccountId": "307739227996"
+    "allProdApps": true,
+    "clientAccountId": "307739227996",
+    "region": "us-east-1"
   },
   "rooflogic": {
-    "clientAccountId": "640168445517"
+    "clientAccountId": "640168445517",
+    "region": "us-east-1"
   },
   "shire-of-narrogin": {
     "clientAccountId": "491085384376",
@@ -580,17 +613,27 @@
       {
         "url": "https://wheatbelt.wa.gov.au/"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "story-box": {
     "clientAccountId": "851725285135",
-    "loadSampleFile": false
+    "loadSampleFile": false,
+    "region": "us-east-1"
+  },
+  "sydney-test-dave": {
+    "allApps": true,
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "qBusinessRegion": "us-east-1",
+    "region": "ap-southeast-2"
   },
   "symphony": {
     "allProdApps": true,
     "clientAccountId": "557690588490",
     "createServiceLinkedRole": false,
-    "loadSampleFile": false
+    "loadSampleFile": false,
+    "region": "us-east-1"
   },
   "tda": {
     "allProdApps": true,
@@ -598,21 +641,19 @@
     "sharePointConfigs": [
       {
         "configuration": {
-          "inclusionFilePath": [
-            ".*NEX[ -]?Milestone[ -]?Reports.*"
-          ]
+          "inclusionFilePath": [".*NEX[ -]?Milestone[ -]?Reports.*"]
         },
         "domain": "teachersrcc",
-        "siteUrls": [
-          "https://teachersrcc.sharepoint.com/"
-        ],
+        "siteUrls": ["https://teachersrcc.sharepoint.com/"],
         "tenantId": "91ff374c-03ff-4eed-9628-d89e52352b55"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "transit": {
     "allProdApps": true,
-    "clientAccountId": "442426865055"
+    "clientAccountId": "442426865055",
+    "region": "us-east-1"
   },
   "w-advisory": {
     "allProdApps": true,
@@ -631,7 +672,8 @@
       {
         "url": "https://central.xero.com/s/"
       }
-    ]
+    ],
+    "region": "us-east-1"
   },
   "warrnambool-city-council": {
     "clientAccountId": "440744229592",
@@ -744,6 +786,7 @@
       {
         "url": "https://content.legislation.vic.gov.au/sites/default/files/2023-11/66-7405aa142-authorised.pdf"
       }
-    ]
+    ],
+    "region": "us-east-1"
   }
 }
