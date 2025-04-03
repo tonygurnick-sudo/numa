@@ -1,6 +1,21 @@
 @use '../abstracts/mixins' as *;
 
 /* Layout */
+
+/* Login Page */
+.numalogin-right {
+  background-color: var(--color-magenta-700) !important;
+
+  h1,
+  p {
+    text-align: center;
+    color: white;
+  }
+}
+
+.benefits_trial {
+  background-color: transparent !important;
+}
 .app-header {
   background: white;
   border-bottom: 1px solid var(--color-border-light);
@@ -439,15 +454,6 @@ header {
     }
   }
 
-  .numalogin-right {
-    background-color: var(--color-magenta-700);
-
-    h1,
-    p {
-      text-align: center;
-      color: white;
-    }
-  }
 
   .output-text {
     background-color: white;
