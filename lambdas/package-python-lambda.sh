@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -o errexit -o nounset -o pipefail -o xtrace
 
@@ -29,6 +29,13 @@ popd
 
 pushd "${LAMBDA_DIRECTORY}"
     rm -f lambda_function.zip;
+    # Use --no-compile to exclude pyc files which contain random data making
+    # the zip non-deterministic which forces a deploy for every build.
+    # Use poetry show to use the versions from the lock file (grep to exclude local
+    # dependencies, sed to remove "not installed" marker) - no quoting around
+    # subshell to keep requirements separated, hence the following shellcheck
+    # disable:
+    # shellcheck disable=SC2046
     # Pillow is very sensitive to the Python version provided, a typical mismatch error is:
     # ImportError: cannot import name '_imaging' from 'PIL'
     ${PIP} install \
@@ -38,10 +45,18 @@ pushd "${LAMBDA_DIRECTORY}"
         --python-version 3.13 \
         --only-binary=:all: \
         --no-cache-dir \
+        --no-compile \
         --find-links "${WHEEL_DIR}" \
-        .
+        . $(poetry show | sed 's|(!)|   |'| grep -v "../" | awk '{print $1 "==" $2}')
 popd
 
+# Use the last modification date of the lambda for all files in the ZIP to make
+# it deterministic
+LAST_MODIFIED=$(git log -1 --format=%cd --date format:"%FT%T" "${LAMBDA_DIRECTORY}")
+find "${BUILD_DIR}" -exec touch -d "${LAST_MODIFIED}" {} +
+
 pushd "${BUILD_DIR}";
-    zip --quiet --recurse-paths ../lambda_function.zip ./*
+    # use -X (--no-extra, which isn't supported on Mac) to not save attributes
+    # that would make the zip file non-deterministic
+    zip --quiet -X --recurse-paths ../lambda_function.zip ./*
 popd
