@@ -191,6 +191,13 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
       ]),
     );
 
+    // TODO: Remove this once PDFs are generated in the FE from the MD
+    // Set memory size for completion lambda
+    const completionLambda = lambdas.get('completion');
+    if (completionLambda) {
+      completionLambda.memorySize = 1024; // 1GB because building the PDF takes RAM
+    }
+
     const exemplar_policy_file_name = 'examplar_policy_nzsba.pdf.json';
     const exemplar_policy: S3Object = new S3Object(this, 'exemplar_policy', {
       bucket: props.outputsBucket.bucket,
