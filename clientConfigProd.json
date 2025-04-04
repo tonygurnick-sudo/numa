@@ -542,7 +542,6 @@
         "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29"
       }
     ],
-    "uploadFrontend": false,
     "region": "us-east-1",
     "webCrawlerConfigs": [
       {
