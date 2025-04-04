@@ -6,7 +6,7 @@ include:
   - project: arcanumai/ci
     file: pipelines/node.yml
   - project: arcanumai/ci
-    file: pipelines/python.yml
+    file: libraries/python.yml
   - .gitlab-ci-clients.yml
 
 workflow:
@@ -143,6 +143,7 @@ python-lint:
           - $PYTHON_WORKING_DIRECTORY/**/*
 
 python-test:
+  extends: .python-unittest
   parallel: !reference [.python-matrix]
 
 node-lint:
@@ -176,8 +177,6 @@ python-package:
   extends: .poetry-job
   stage: package
   script:
-    - apt-get update
-    - apt-get install zip
     - $CI_PROJECT_DIR/lambdas/package-python-lambda.sh .
   parallel: !reference [.python-lambdas-matrix]
   artifacts:
