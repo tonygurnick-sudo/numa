@@ -3849,8 +3849,8 @@ __metadata:
   linkType: hard
 
 "@mdxeditor/editor@npm:^3.19.3":
-  version: 3.29.1
-  resolution: "@mdxeditor/editor@npm:3.29.1"
+  version: 3.29.2
+  resolution: "@mdxeditor/editor@npm:3.29.2"
   dependencies:
     "@codemirror/lang-markdown": "npm:^6.2.3"
     "@codemirror/language-data": "npm:^6.5.1"
@@ -3907,7 +3907,7 @@ __metadata:
   peerDependencies:
     react: ">= 18 || >= 19"
     react-dom: ">= 18 || >= 19"
-  checksum: 10c0/1616fd7843ec881089a28ffdfbc0ae54f1e3fa8a7a298912e6360f2ec4fdc054bf2184c1e49c242ca3319b6ffa75e69734c0ff3a2e989cec51d22fd5a0753c1c
+  checksum: 10c0/bcff929f57509c74abee0ed9180afc3d1aa9693d1a99ec0a204c2e165f142600cbb5034f71d9440d618f732367214e02f18b1dc3115d334d8044a5a59db33295
   languageName: node
   linkType: hard
 
