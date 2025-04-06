@@ -16,6 +16,7 @@ import {
 import { CandidateScreening } from '../constructs/apps/candidate-screening-construct';
 import { CompanyProfile } from '../constructs/apps/company-profile-construct';
 import { ContractAnalysis } from '../constructs/apps/contract-analysis-construct';
+import { CostingCalculator } from '../constructs/apps/costing-calculator-construct';
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
 import { FinancialAnalysis } from '../constructs/apps/financial-analysis-construct';
 import { InfringementReview } from '../constructs/apps/infringement-review-construct';
@@ -321,6 +322,7 @@ export const appLibrary: Record<string, AppDefinition> = {
   'candidate-screening': { app: CandidateScreening, isProdApp: true },
   'company-profile': { app: CompanyProfile, isProdApp: false },
   'contract-analysis': { app: ContractAnalysis, isProdApp: true },
+  'costing-calculator': { app: CostingCalculator, isProdApp: true },
   'document-summariser': { app: DocumentSummariser, isProdApp: true },
   'financial-analysis': { app: FinancialAnalysis, isProdApp: true },
   'infringement-review': { app: InfringementReview, isProdApp: false },
