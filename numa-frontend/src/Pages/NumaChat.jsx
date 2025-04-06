@@ -800,7 +800,7 @@ const NumaChat = () => {
           <DataSourcesList />
 
           {/* Main chat content */}
-          <div className="flex-grow-1 d-flex">
+          <div className="flex-grow-1 d-flex contain-width">
             <div className="chat-content flex-grow-1 d-flex flex-column">
               {/* Header with chat instructions and New Chat button on the right */}
               <div className="chat-header d-flex justify-content-between align-items-center mb-3">
