@@ -151,92 +151,90 @@ export class NumaClientStack extends TerraformStack {
       });
     });
 
-    if (clientConfig.uploadFrontend ?? true) {
-      const folderPath = path.join(import.meta.dirname, '..', 'build', 'numa-frontend');
-      const excludedFiles = ['config.json', 'manifest.json'];
-      let objects: S3Object[] = [];
-      try {
-        objects = fs
-          .readdirSync(folderPath, { recursive: true, withFileTypes: true })
-          .filter((f) => f.isFile())
-          .filter((f) => !excludedFiles.includes(f.name))
-          .map((f) => path.join(f.parentPath, f.name))
-          .map((source) => {
-            const contentType = {
-              html: 'text/html; charset=utf-8',
-              json: 'application/json',
-              js: 'application/x-javascript',
-              css: 'text/css; charset=utf-8',
-              jpg: 'image/jpg',
-              svg: 'image/svg+xml',
-              default: undefined,
-            }[source.split('.')?.pop() ?? 'default'];
-            return new S3Object(this, `website-file-${source}`, {
-              bucket: fe.frontendBucket.bucket,
-              contentType,
-              key: path.relative(folderPath, source),
-              source,
-              sourceHash: Fn.filemd5(source),
-            });
+    const folderPath = path.join(import.meta.dirname, '..', 'build', 'numa-frontend');
+    const excludedFiles = ['config.json', 'manifest.json'];
+    let objects: S3Object[] = [];
+    try {
+      objects = fs
+        .readdirSync(folderPath, { recursive: true, withFileTypes: true })
+        .filter((f) => f.isFile())
+        .filter((f) => !excludedFiles.includes(f.name))
+        .map((f) => path.join(f.parentPath, f.name))
+        .map((source) => {
+          const contentType = {
+            html: 'text/html; charset=utf-8',
+            json: 'application/json',
+            js: 'application/x-javascript',
+            css: 'text/css; charset=utf-8',
+            jpg: 'image/jpg',
+            svg: 'image/svg+xml',
+            default: undefined,
+          }[source.split('.')?.pop() ?? 'default'];
+          return new S3Object(this, `website-file-${source}`, {
+            bucket: fe.frontendBucket.bucket,
+            contentType,
+            key: path.relative(folderPath, source),
+            source,
+            sourceHash: Fn.filemd5(source),
           });
-      } catch {
-        console.warn('No frontend code found at: ' + folderPath);
-      }
-
-      const configObject = new S3Object(this, 'config-item', {
-        bucket: fe.frontendBucket.bucket,
-        key: 'config.json',
-        content: JSON.stringify({
-          USER_POOL_ID: core.userPoolId,
-          CLIENT_ID: core.userPoolClient?.id,
-          IDENTITY_POOL_ID: core.identityPoolId,
-          IDENTITY_POOL_ROLE_ARN: core.identityPoolArn,
-          REGION: clientConfig.region,
-          ROLE_ARN: core.webExperienceRoleArn,
-          Q_APPLICATION_ID: core.qBusinessApplicationId,
-          Q_INDEX_ID: core.qBusinessIndexId,
-          Q_RETRIEVER_ID: core.qBusinessRetrieverId,
-          API_ENDPOINT: '/api',
-          CLIENT_NAME: props.client,
-          OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
-          HONEYCOMB_KEY: honeycomb.frontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
-          DATA_BUCKET: core.dataBucket.bucket.bucket,
-        }),
-        contentType: 'application/json',
-      });
-
-      const manifest = new S3Object(this, 'manifest-item', {
-        bucket: fe.frontendBucket.bucket,
-        key: 'manifest.json',
-        content: JSON.stringify({ apps: apps.map((app) => app.manifest) }),
-        contentType: 'application/json',
-      });
-
-      const gitHash = execSync('git rev-parse --short HEAD').toString().trim();
-      const gitBranch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
-      const deployTime = new Date();
-      const version = new S3Object(this, 'version-file', {
-        bucket: fe.frontendBucket.bucket,
-        key: 'version.json',
-        content: JSON.stringify(
-          {
-            version: '0.0.0', // TODO: Make this more meaningful.
-            gitHash,
-            gitBranch,
-            deployTime: deployTime.getTime(),
-            deployTimeHuman: deployTime.toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' }),
-          },
-          undefined,
-          2,
-        ),
-        contentType: 'application/json',
-      });
-
-      new InvalidateCloudfront(this, 'invalidate', {
-        cloudfrontDistribution: fe.distribution,
-        dependsOn: [manifest, configObject, version, ...objects],
-      });
+        });
+    } catch {
+      console.warn('No frontend code found at: ' + folderPath);
     }
+
+    const configObject = new S3Object(this, 'config-item', {
+      bucket: fe.frontendBucket.bucket,
+      key: 'config.json',
+      content: JSON.stringify({
+        USER_POOL_ID: core.userPoolId,
+        CLIENT_ID: core.userPoolClient?.id,
+        IDENTITY_POOL_ID: core.identityPoolId,
+        IDENTITY_POOL_ROLE_ARN: core.identityPoolArn,
+        REGION: clientConfig.region,
+        ROLE_ARN: core.webExperienceRoleArn,
+        Q_APPLICATION_ID: core.qBusinessApplicationId,
+        Q_INDEX_ID: core.qBusinessIndexId,
+        Q_RETRIEVER_ID: core.qBusinessRetrieverId,
+        API_ENDPOINT: '/api',
+        CLIENT_NAME: props.client,
+        OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
+        HONEYCOMB_KEY: honeycomb.frontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
+        DATA_BUCKET: core.dataBucket.bucket.bucket,
+      }),
+      contentType: 'application/json',
+    });
+
+    const manifest = new S3Object(this, 'manifest-item', {
+      bucket: fe.frontendBucket.bucket,
+      key: 'manifest.json',
+      content: JSON.stringify({ apps: apps.map((app) => app.manifest) }),
+      contentType: 'application/json',
+    });
+
+    const gitHash = execSync('git rev-parse --short HEAD').toString().trim();
+    const gitBranch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
+    const deployTime = new Date();
+    const version = new S3Object(this, 'version-file', {
+      bucket: fe.frontendBucket.bucket,
+      key: 'version.json',
+      content: JSON.stringify(
+        {
+          version: '0.0.0', // TODO: Make this more meaningful.
+          gitHash,
+          gitBranch,
+          deployTime: deployTime.getTime(),
+          deployTimeHuman: deployTime.toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' }),
+        },
+        undefined,
+        2,
+      ),
+      contentType: 'application/json',
+    });
+
+    new InvalidateCloudfront(this, 'invalidate', {
+      cloudfrontDistribution: fe.distribution,
+      dependsOn: [manifest, configObject, version, ...objects],
+    });
   }
 }
 
@@ -278,13 +276,6 @@ export interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'
    * @default {}
    */
   apps?: Record<string, UserConfigurableBaseNumaAppProps>;
-  /**
-   * Whether to upload the Numa frontend. Used to disable frontend installation when using a custom frontend.
-   *
-   * @default true
-   * @deprecated Should only be set to false for NZSBA.
-   */
-  uploadFrontend?: boolean;
 }
 type InputConfig = Omit<ClientConfig, 'client' | 'domainName'>;
 const clientConfigProd = _clientConfigProd as Record<string, InputConfig>;
