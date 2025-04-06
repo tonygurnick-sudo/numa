@@ -4,6 +4,8 @@ import { useNumaApp } from '../Providers/NumaAppContext';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
 import { TextOutputModule } from '../Modules/TextOutputModule';
+import { DropdownTableModule } from '../Modules/DropdownTableModule';
+import { DropdownModule } from '../Modules/DropdownModule';
 import { WizardNavigation } from './WizardNavigation';
 import { Preloader } from '../Components/Preloader';
 import { ResultsRenderer } from './ResultsRenderer';
@@ -284,6 +286,10 @@ const AppWizard = ({ manifest }) => {
         return <TextInputModule hasRun={hasRun} key={task.id} {...commonProps} />;
       case 's3-upload':
         return <S3UploadModule disabled={hasRun} key={task.id} {...commonProps} />;
+      case 'dropdown':
+        return <DropdownModule hasRun={hasRun} key={task.id} {...commonProps} />;
+      case 'dropdown-table':
+        return <DropdownTableModule hasRun={hasRun} key={task.id} {...commonProps} />;
       case 'text-output':
         return <TextOutputModule key={task.id} task={task} />;
       default:

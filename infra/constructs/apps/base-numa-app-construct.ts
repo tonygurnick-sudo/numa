@@ -354,6 +354,7 @@ export enum AppStatus {
 }
 
 export const DROPDOWN_TASK = 'dropdown' as const;
+export const DROPDOWN_TABLE_TASK = 'dropdown-table' as const;
 export const HTTP_REQUEST_TASK = 'http-request' as const;
 export const Q_APP_TASK = 'q-app' as const;
 export const S3_UPLOAD_TASK = 's3-upload' as const;
@@ -415,6 +416,27 @@ export interface NumaAppManifestTextOutputTask extends NumaAppManifestBaseTask {
   };
 }
 
+export interface NumaAppManifestDropdownTableTask extends NumaAppManifestBaseTask {
+  type: typeof DROPDOWN_TABLE_TASK;
+  required: boolean;
+  params: {
+    fields: Array<{
+      id: string;
+      label: string;
+      type: 'dropdown' | 'number' | 'text';
+      options?: string[];
+      defaultValue?: string | number;
+      required?: boolean;
+      placeholder?: string;
+      validation?: {
+        min?: number;
+        max?: number;
+        pattern?: string;
+      };
+    }>;
+  };
+}
+
 export enum AppCategory {
   PRODUCTIVITY = 'productivity',
   FINANCE = 'finance',
@@ -426,6 +448,7 @@ export enum AppCategory {
 
 export type NumaAppManifestTask =
   | NumaAppManifestDropdownTask
+  | NumaAppManifestDropdownTableTask
   | NumaAppManifestHttpRequestTask
   | NumaAppManifestQAppTask
   | NumaAppManifestS3UploadTask

@@ -202,6 +202,12 @@ export const NumaAppProvider = ({ children }) => {
     return currentResults;
   };
 
+  const processDropdownTableTask = (task, currentResults) => {
+    currentResults[task.id] = taskInputValues[task.id] || {};
+    console.log(`Dropdown table task result: ${JSON.stringify(currentResults[task.id])}`);
+    return currentResults;
+  };
+
   const processS3UploadTask = (task, currentResults) => {
     const uploadedFilePath = taskInputValues[task.id];
     // Check if the task is required (default to false for better user experience)
@@ -973,10 +979,22 @@ export const NumaAppProvider = ({ children }) => {
             completedWeight += taskWeight;
             break;
 
+          case 'dropdown-table':
+            currentResults = processDropdownTableTask(task, currentResults);
+            completedWeight += taskWeight;
+            break;
+
+          case 'dropdown':
+            // Handle similarly to text input
+            currentResults = processTextInputTask(task, currentResults);
+            completedWeight += taskWeight;
+            break;
+
           case 's3-upload':
             currentResults = processS3UploadTask(task, currentResults);
             completedWeight += taskWeight;
             break;
+
           case 'http-request':
             currentResults = await processHttpRequestTask(jobID, task, currentResults);
             completedWeight += taskWeight;
