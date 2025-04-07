@@ -1,16 +1,20 @@
 # Candidate Screening Lambda
 
 ## Overview
+
 This Lambda function uses AWS Bedrock's Claude 3.5 Sonnet model to perform automated candidate screening by analyzing resumes and cover letters. It evaluates candidates against specified job requirements and company profiles, providing detailed assessments including skills matching, cultural fit analysis, and recommendations.
 
 The function:
+
 1. Retrieves resume and cover letter documents from S3
 2. Analyzes documents against job requirements and company profile using Bedrock
 3. Generates comprehensive screening report
 4. Saves results back to S3
 
 ## Input Schema
+
 The function expects a JSON event with the following structure:
+
 ```json
 {
   "resume_text_s3_key": "input/resume.txt",
@@ -40,7 +44,9 @@ The function expects a JSON event with the following structure:
 ```
 
 ## Output Schema
+
 The function returns a JSON object containing the screening results:
+
 ```json
 {
   "screening_results": {
@@ -63,15 +69,9 @@ The function returns a JSON object containing the screening results:
 ```
 
 ## Notes
+
 - Uses Bedrock Claude 3.5 Sonnet model
 - Maximum output tokens: 4096
 - Requires S3 and Bedrock
 - Temperature set to 0.1 for consistent results
 - Includes comprehensive error handling for S3 and Bedrock operations
-
-## Build and Deploy
-Build deployable zip with:
-```bash
-poetry self add poetry-plugin-lambda-build # if not already installed
-poetry build-lambda
-```

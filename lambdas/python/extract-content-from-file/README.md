@@ -12,18 +12,6 @@ Helpful links for poetry with Lambda functions:
 - https://stackoverflow.com/questions/74292510/how-to-create-a-deployable-python-lamba-zip-using-poetry
 - https://aws.plainenglish.io/streamline-lambda-development-with-poetry-25fbc212a846
 
-The lambda zip package configuration is in the pyproject.toml file. The
-following plugins are used:
-
-- poetry-plugin-lambda-build
-
-The following command will create the zip package to be used to create the
-lambda function:
-
-```bash
-poetry build-lambda
-```
-
 ## Supported File Types
 
 - **Text Files**: `.txt`
@@ -72,10 +60,12 @@ text content is added to the output.
 The function now also supports CSV and Excel (XLSX) file types.
 
 ### CSV Files
+
 - Processed using Python’s built-in csv module.
 - Rows are parsed and then formatted as a table-like string (fields are joined with commas, and rows with newlines) before being processed as a single document page.
 
 ### Excel Files (XLSX)
+
 - Processed using the pure‑Python library openpyxl, which has no binary dependencies.
 - Each sheet in an Excel file is treated as a separate page in the output "document".
 - To capture both the underlying formulas and computed values:
@@ -85,24 +75,25 @@ The function now also supports CSV and Excel (XLSX) file types.
 
 Here is an example output:
 {
-  "1": {
-    "sheet_name": "Sheet1",
-    "structure": {
-      "columns": ["A", "B"],
-      "headers": ["Test Excel File With Formulas", "None"],
-      "rows_count": 5
-    },
-    "rows": [
-      "A1: Test Excel File With Formulas | B1: None",
-      "A2: None | B2: None",
-      "A3: a | B3: 1",
-      "A4: b | B4: 5",
-      "A5: c (a+b) | B5: =B3+B4 (computed: 6)"
-    ]
-  }
+"1": {
+"sheet_name": "Sheet1",
+"structure": {
+"columns": ["A", "B"],
+"headers": ["Test Excel File With Formulas", "None"],
+"rows_count": 5
+},
+"rows": [
+"A1: Test Excel File With Formulas | B1: None",
+"A2: None | B2: None",
+"A3: a | B3: 1",
+"A4: b | B4: 5",
+"A5: c (a+b) | B5: =B3+B4 (computed: 6)"
+]
+}
 }
 
 Future Ideas for Advanced Extraction
+
 - Handle empty cells and missing data more gracefully. At the moment, empty cells are just "A2: None" for example.
 - Handling merged cells and more complex formatting.
 - Extracting structured data such as headers, data types, and even cell styling.
