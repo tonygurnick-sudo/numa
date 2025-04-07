@@ -29,7 +29,8 @@
     "downgrade-licences": "node --import tsx downgrade-licences.ts",
     "lint": "eslint . && tsc --noEmit",
     "test": "mkdir -p test-reports; node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml",
-    "upload-files": "node --import tsx upload-files.ts"
+    "upload-files": "node --import tsx upload-files.ts",
+    "check-email-cases": "AWS_PROFILE=arcanum-q-deployer-prod node --import tsx check-email-cases.ts"
   },
   "packageManager": "yarn@4.7.0",
   "devDependencies": {

@@ -20,19 +20,20 @@ export class UserManagementUtils {
    */
   async createUser(email, userPoolId) {
     try {
-      console.log('Creating user with:', { email, userPoolId });
+      const lowercaseEmail = email.toLowerCase();
+      console.log('Creating user with:', { email: lowercaseEmail, userPoolId });
 
       // Generate a secure temporary password
       const tempPassword = `Welcome${Math.random().toString(36).slice(2, 8)}!`;
 
       const command = new AdminCreateUserCommand({
         UserPoolId: userPoolId,
-        Username: email,
+        Username: lowercaseEmail,
         TemporaryPassword: tempPassword,
         UserAttributes: [
           {
             Name: 'email',
-            Value: email,
+            Value: lowercaseEmail,
           },
           {
             Name: 'email_verified',
@@ -46,7 +47,7 @@ export class UserManagementUtils {
       const response = await this.cognitoClient.send(command);
       console.log('Cognito create user response:', JSON.stringify(response, null, 2));
       console.log('User sub:', response.User.Username);
-      console.log('Login username should be:', email);
+      console.log('Login username should be:', lowercaseEmail);
 
       return {
         user: response.User,

@@ -167,3 +167,52 @@ Options:
 --include-resolved: Include resolved cases in the output
 --details: Show detailed case information including communications history
 --all: Check all clients and generate a summary report
+
+```
+
+### check-email-cases
+
+Checks Cognito user pools for email addresses containing capital letters. This is useful for identifying users whose email addresses may need to be normalized to lowercase.
+
+Usage:
+
+```bash
+# Check a single client
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-email-cases <client-name> [options]
+
+# Check all clients and generate a report
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-email-cases --all [options]
+
+Options:
+--dev: Only check dev instances
+--all: Check all clients and generate a summary report
+--fix: Automatically convert emails with capital letters to lowercase
+
+```
+
+The script will:
+
+1. Find the Cognito user pool for each client
+2. List all users in the pool
+3. Check each user's email attribute for capital letters
+4. If --fix is specified, automatically convert any emails with capital letters to lowercase
+5. Generate a report of users with capital letters in their email addresses
+
+The report includes:
+
+- Total number of clients checked
+- Number of clients with capital email addresses
+- Total number of users with capital email addresses
+- Detailed list of affected users by client
+
+The report is saved as `email-case-report.json`.
+
+Example with fix:
+
+```bash
+# Check and fix emails for a single client
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-email-cases <client-name> --fix
+
+# Check and fix emails for all dev instances
+AWS_PROFILE=arcanum-q-deployer-prod yarn check-email-cases --all --dev --fix
+```
