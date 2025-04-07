@@ -626,6 +626,35 @@
     "clientAccountId": "557690588490",
     "createServiceLinkedRole": false,
     "loadSampleFile": false,
+    "webCrawlerConfigs": [
+      {
+        "url": "https://www.brokenhill.nsw.gov.au/Home"
+      },
+      {
+        "url": "https://www.olg.nsw.gov.au/councils/governance/"
+      },
+      {
+        "url": "https://www.olg.nsw.gov.au/councils/policy-and-legislation/"
+      },
+      {
+        "url": "https://www.olg.nsw.gov.au/councils/responsible-pet-ownership/"
+      },
+      {
+        "url": "https://www.olg.nsw.gov.au/councils/land-management/leases-licences-other-estates/"
+      },
+      {
+        "url": "https://lgnsw.org.au/Public/Public/Policy/Planning/Planning.aspx"
+      },
+      {
+        "url": "https://lgnsw.org.au/Public/Events/Annual-Conferences/2023/2023-Home.aspx"
+      },
+      {
+        "url": "https://lgnsw.org.au/Public/Public/Members-Services/Grants.aspx"
+      },
+      {
+        "url": "https://lgnsw.org.au/Public/Public/About-LGNSW/About-LGNSW.aspx"
+      }
+    ],
     "region": "us-east-1"
   },
   "tda": {
