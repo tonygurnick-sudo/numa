@@ -144,7 +144,7 @@ describe('AuthProvider', () => {
 
     try {
       await act(async () => {
-        await auth.login(mockUser);
+        await auth.login(mockUser.username, mockUser.password);
       });
     } catch (error) {
       console.error('Login error:', error);
@@ -807,5 +807,145 @@ describe('AuthProvider', () => {
         'Error resetting password: Invalid confirmation code',
       );
     });
+  });
+
+  it('should convert email to lowercase during login', async () => {
+    const mockUser = { username: 'TestUser@Example.com', password: 'testpass' };
+    const mockResponse = {
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        ChallengeParameters: {
+          SALT: 'mock-salt',
+          SECRET_BLOCK: 'mock-secret-block',
+          SRP_B: 'mock-srp-b',
+          USERNAME: mockUser.username.toLowerCase(),
+          USER_ID_FOR_SRP: mockUser.username.toLowerCase(),
+        },
+        ChallengeName: 'PASSWORD_VERIFIER',
+        Session: 'mock-session',
+      }),
+    };
+    global.fetch.mockResolvedValue(mockResponse);
+
+    const onAuth = vi.fn();
+    render(
+      <AuthProvider>
+        <TestComponent onAuth={onAuth} />
+      </AuthProvider>,
+      { container },
+    );
+
+    await waitFor(() => {
+      expect(onAuth).toHaveBeenCalled();
+    });
+
+    const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+
+    try {
+      await act(async () => {
+        await auth.login(mockUser.username, mockUser.password);
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+    }
+
+    // Verify that the username was converted to lowercase in the API call
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/srp-hasher'),
+      expect.objectContaining({
+        body: JSON.stringify({ email: mockUser.username.toLowerCase() }),
+      }),
+    );
+  });
+
+  it('should convert email to lowercase during password reset request', async () => {
+    const mockEmail = 'TestUser@Example.com';
+    const mockResponse = {
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({ hash: 'mock-hash' }),
+    };
+    global.fetch.mockResolvedValue(mockResponse);
+
+    const onAuth = vi.fn();
+    render(
+      <AuthProvider>
+        <TestComponent onAuth={onAuth} />
+      </AuthProvider>,
+      { container },
+    );
+
+    await waitFor(() => {
+      expect(onAuth).toHaveBeenCalled();
+    });
+
+    const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+
+    try {
+      await act(async () => {
+        await auth.requestPasswordReset(mockEmail);
+      });
+    } catch (error) {
+      console.error('Password reset error:', error);
+    }
+
+    // Verify that the email was converted to lowercase in the API call
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/srp-hasher'),
+      expect.objectContaining({
+        body: JSON.stringify({ email: mockEmail.toLowerCase() }),
+      }),
+    );
+  });
+
+  it('should convert email to lowercase during set new password', async () => {
+    const mockUser = { username: 'TestUser@Example.com', oldPassword: 'oldpass', newPassword: 'newpass' };
+    const mockResponse = {
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        ChallengeParameters: {
+          SALT: 'mock-salt',
+          SECRET_BLOCK: 'mock-secret-block',
+          SRP_B: 'mock-srp-b',
+          USERNAME: mockUser.username.toLowerCase(),
+          USER_ID_FOR_SRP: mockUser.username.toLowerCase(),
+        },
+        ChallengeName: 'PASSWORD_VERIFIER',
+        Session: 'mock-session',
+      }),
+    };
+    global.fetch.mockResolvedValue(mockResponse);
+
+    const onAuth = vi.fn();
+    render(
+      <AuthProvider>
+        <TestComponent onAuth={onAuth} />
+      </AuthProvider>,
+      { container },
+    );
+
+    await waitFor(() => {
+      expect(onAuth).toHaveBeenCalled();
+    });
+
+    const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+
+    try {
+      await act(async () => {
+        await auth.setNewPassword(mockUser.username, mockUser.oldPassword, mockUser.newPassword);
+      });
+    } catch (error) {
+      console.error('Set new password error:', error);
+    }
+
+    // Verify that the username was converted to lowercase in the API call
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/srp-hasher'),
+      expect.objectContaining({
+        body: JSON.stringify({ email: mockUser.username.toLowerCase() }),
+      }),
+    );
   });
 });

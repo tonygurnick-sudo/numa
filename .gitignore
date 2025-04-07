@@ -133,3 +133,5 @@ numa-frontend/coverage
 test-reports
 
 infra/.gen
+
+tools/email-case-report.json

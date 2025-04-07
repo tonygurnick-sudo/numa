@@ -116,6 +116,18 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
   const fetchSecretHash = async (identifier) => {
     const API_ENDPOINT = window.sessionStorage.getItem('API_ENDPOINT');
+
+    // Check that the identifier is all lowercase
+    if (identifier !== identifier.toLowerCase()) {
+      // Get the call stack but remove the first line (current function)
+      const callStack = new Error().stack?.split('\n').slice(1).join('\n');
+      console.error('Uppercase email detected:', {
+        original: identifier,
+        lowercase: identifier.toLowerCase(),
+        callStack,
+      });
+    }
+
     try {
       // Check if identifier is provided
       if (!identifier) {
@@ -530,58 +542,74 @@ export const AuthProvider = ({ children, initialTokens }) => {
     setUser(null);
   };
 
+  const performSrpAuthentication = async (username, password) => {
+    const REGION = window.sessionStorage.getItem('REGION');
+    const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
+    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+    const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
+
+    const lowercaseUsername = username.toLowerCase();
+    const SECRET_HASH = await fetchSecretHash(lowercaseUsername);
+
+    // Step 1: Create SRP session
+    const srpSession = createSrpSession(lowercaseUsername, password, USER_POOL_ID, false);
+
+    // Step 2: Initiate authentication
+    const initiateAuthParams = {
+      AuthFlow: 'USER_SRP_AUTH',
+      ClientId: CLIENT_ID,
+      AuthParameters: {
+        USERNAME: lowercaseUsername,
+        SRP_A: srpSession.largeA,
+        SECRET_HASH: SECRET_HASH,
+      },
+    };
+
+    const initiateAuthCommand = new InitiateAuthCommand(initiateAuthParams);
+    const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
+
+    if (!initiateAuthResponse.ChallengeParameters) {
+      throw new Error('Missing ChallengeParameters in InitiateAuthResponse');
+    }
+
+    // Step 3: Sign SRP session
+    const signedSrpSession = signSrpSession(srpSession, initiateAuthResponse);
+
+    // Step 4: Respond to the password verifier challenge
+    const respondToAuthChallengeParams = {
+      ChallengeName: 'PASSWORD_VERIFIER',
+      ClientId: CLIENT_ID,
+      Session: initiateAuthResponse.Session,
+      ChallengeResponses: {
+        USERNAME: lowercaseUsername,
+        PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
+        PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
+        SECRET_HASH: SECRET_HASH,
+        TIMESTAMP: signedSrpSession.timestamp,
+      },
+    };
+
+    const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand(respondToAuthChallengeParams);
+    const respondToAuthChallengeResponse = await cognitoClient.send(respondToAuthChallengeCommand);
+
+    return {
+      response: respondToAuthChallengeResponse,
+      cognitoClient,
+      lowercaseUsername,
+      SECRET_HASH,
+      CLIENT_ID,
+    };
+  };
+
   const login = async (username, password) => {
     try {
-      const REGION = window.sessionStorage.getItem('REGION');
-      const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
-      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-      const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
-      const SECRET_HASH = await fetchSecretHash(username);
+      const { response } = await performSrpAuthentication(username, password);
 
-      // Step 1: Create SRP session
-      const srpSession = createSrpSession(username, password, USER_POOL_ID, false); // false for not hashed already
-
-      // Step 2: Initiate authentication
-      const initiateAuthParams = {
-        AuthFlow: 'USER_SRP_AUTH',
-        ClientId: CLIENT_ID,
-        AuthParameters: {
-          USERNAME: username,
-          SRP_A: srpSession.largeA,
-          SECRET_HASH: SECRET_HASH,
-        },
-      };
-
-      const initiateAuthCommand = new InitiateAuthCommand(initiateAuthParams);
-      const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
-
-      if (!initiateAuthResponse.ChallengeParameters) {
-        throw new Error('Missing ChallengeParameters in InitiateAuthResponse');
-      }
-      // Step 3: Sign SRP session
-      const signedSrpSession = signSrpSession(srpSession, initiateAuthResponse);
-
-      // Step 4: Respond to the password verifier challenge
-      const respondToAuthChallengeParams = {
-        ChallengeName: 'PASSWORD_VERIFIER',
-        ClientId: CLIENT_ID,
-        ChallengeResponses: {
-          USERNAME: username,
-          PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
-          PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
-          SECRET_HASH: SECRET_HASH,
-          TIMESTAMP: signedSrpSession.timestamp,
-        },
-      };
-
-      const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand(respondToAuthChallengeParams);
-      const respondToAuthChallengeResponse = await cognitoClient.send(respondToAuthChallengeCommand);
-
-      if (respondToAuthChallengeResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
-        return { requiresNewPassword: true, session: respondToAuthChallengeResponse.AuthenticationResult };
+      if (response.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+        return { requiresNewPassword: true, session: response.AuthenticationResult };
       }
 
-      await handleLoginSuccess(respondToAuthChallengeResponse.AuthenticationResult);
+      await handleLoginSuccess(response.AuthenticationResult);
       return { success: true };
     } catch (error) {
       console.error('Error during authentication:', error);
@@ -591,72 +619,29 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
   const setNewPassword = async (username, oldPassword, newPassword) => {
     try {
-      const REGION = window.sessionStorage.getItem('REGION');
-      const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
-      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+      const { response, cognitoClient, lowercaseUsername, SECRET_HASH, CLIENT_ID } = await performSrpAuthentication(
+        username,
+        oldPassword,
+      );
 
-      const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
-      const SECRET_HASH = await fetchSecretHash(username);
-
-      // Step 1: Create SRP session for old password
-      const srpSession = createSrpSession(username, oldPassword, USER_POOL_ID, false);
-
-      // Step 2: Initiate authentication with SRP
-      const initiateAuthParams = {
-        AuthFlow: 'USER_SRP_AUTH',
-        ClientId: CLIENT_ID,
-        AuthParameters: {
-          USERNAME: username,
-          SRP_A: srpSession.largeA,
-          SECRET_HASH: SECRET_HASH,
-        },
-      };
-
-      const initiateAuthCommand = new InitiateAuthCommand(initiateAuthParams);
-      const initiateAuthResponse = await cognitoClient.send(initiateAuthCommand);
-
-      if (initiateAuthResponse.ChallengeName === 'PASSWORD_VERIFIER') {
-        // Step 3: Sign SRP session
-        const signedSrpSession = signSrpSession(srpSession, initiateAuthResponse);
-
-        // Step 4: Respond to the password verifier challenge
-        const respondToAuthChallengeParams = {
-          ChallengeName: 'PASSWORD_VERIFIER',
+      if (response.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+        // Handle new password challenge
+        const newPasswordChallengeParams = {
           ClientId: CLIENT_ID,
-          Session: initiateAuthResponse.Session,
+          ChallengeName: 'NEW_PASSWORD_REQUIRED',
+          Session: response.Session,
           ChallengeResponses: {
-            USERNAME: username,
-            PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
-            PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
+            USERNAME: lowercaseUsername,
+            NEW_PASSWORD: newPassword,
             SECRET_HASH: SECRET_HASH,
-            TIMESTAMP: signedSrpSession.timestamp,
           },
         };
 
-        const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand(respondToAuthChallengeParams);
-        const respondToAuthChallengeResponse = await cognitoClient.send(respondToAuthChallengeCommand);
+        const newPasswordChallengeCommand = new RespondToAuthChallengeCommand(newPasswordChallengeParams);
+        await cognitoClient.send(newPasswordChallengeCommand);
 
-        if (respondToAuthChallengeResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
-          // Step 5: Respond to the new password required challenge
-          const newPasswordChallengeParams = {
-            ClientId: CLIENT_ID,
-            ChallengeName: 'NEW_PASSWORD_REQUIRED',
-            Session: respondToAuthChallengeResponse.Session,
-            ChallengeResponses: {
-              USERNAME: username,
-              NEW_PASSWORD: newPassword,
-              SECRET_HASH: SECRET_HASH,
-            },
-          };
-
-          const newPasswordChallengeCommand = new RespondToAuthChallengeCommand(newPasswordChallengeParams);
-          await cognitoClient.send(newPasswordChallengeCommand);
-
-          // Login with new password
-          return await login(username, newPassword);
-        } else {
-          throw new Error('Unexpected authentication response');
-        }
+        // Login with new password
+        return await login(lowercaseUsername, newPassword);
       } else {
         throw new Error('Unexpected authentication response');
       }
@@ -704,13 +689,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
   const requestPasswordReset = async (email) => {
     try {
-      const SECRET_HASH = await fetchSecretHash(email);
+      const lowercaseEmail = email.toLowerCase();
+      const SECRET_HASH = await fetchSecretHash(lowercaseEmail);
 
       const REGION = window.sessionStorage.getItem('REGION');
       const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
 
       const command = new ForgotPasswordCommand({
-        Username: email,
+        Username: lowercaseEmail,
         ClientId: CLIENT_ID,
         SecretHash: SECRET_HASH,
       });
