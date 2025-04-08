@@ -1,13 +1,13 @@
-import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
-import { TypescriptLambdaConstruct } from '@arcanumai/typescript-lambda-construct';
-import { Construct } from 'constructs';
-import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
-import * as path from 'node:path';
-import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
-import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
+import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
+import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
+import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { Fn } from 'cdktf';
+import { Construct } from 'constructs';
+import * as path from 'node:path';
 
 export class QBusinessChatControlConfigurer extends Construct {
   constructor(scope: Construct, name: string, props: QBusinessChatControlConfigurerProps) {
@@ -39,14 +39,25 @@ export class QBusinessChatControlConfigurer extends Construct {
       policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', policy.arn],
     });
 
-    const func = new TypescriptLambdaConstruct(this, 'function', {
-      lambdaProps: {
-        functionName: Fn.substr('q-business-chat-control-configurer-' + props.applicationId, 0, 64),
-        role: role.arn,
-        environment: { variables: { Q_BUSINESS_REGION: props.region } },
-      },
-      path: path.join('..', 'lambdas', 'node', 'q-business-chat-control-configurer', 'dist'),
+    const lambdaFilename = path.resolve(
+      import.meta.dirname,
+      '..',
+      '..',
+      'lambdas',
+      'node',
+      'q-business-chat-control-configurer',
+      'lambda_function.zip',
+    );
+    const func = new LambdaFunction(this, 'function', {
+      functionName: Fn.substr('q-business-chat-control-configurer-' + props.applicationId, 0, 64),
+      role: role.arn,
+      filename: lambdaFilename,
+      sourceCodeHash: Fn.filebase64sha256(lambdaFilename),
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: { variables: { Q_BUSINESS_REGION: props.region } },
     });
+    func.moveFromId('aws_lambda_function.numa_chat-control_function_384AC619');
 
     const input = JSON.stringify({
       applicationId: props.applicationId,
@@ -55,12 +66,12 @@ export class QBusinessChatControlConfigurer extends Construct {
     });
 
     new LambdaInvocation(this, 'invocation', {
-      functionName: func.lambdaFunction.functionName,
+      functionName: func.functionName,
       input,
       triggers: {
         // This causes the lambda to trigger on config changes.
         input,
-        functionHash: func.lambdaFunction.sourceCodeHash,
+        functionHash: func.sourceCodeHash,
       },
     });
   }

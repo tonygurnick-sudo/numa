@@ -12,7 +12,9 @@ for directory in "${SCRIPT_DIRECTORY}"/node/*/; do
     popd;
 done;
 
-PYTHON_DIRS=$(find ${SCRIPT_DIRECTORY}/python -maxdepth 2 -type f -name pyproject.toml | xargs realpath | xargs dirname)
+# can't double quote so disable the shellcheck
+# shellcheck disable=SC2086
+PYTHON_DIRS=$(find ${SCRIPT_DIRECTORY}/python -maxdepth 2 -type f -name pyproject.toml -print0 | xargs -0 realpath | xargs dirname)
 
 # This fails immediately when there is an error and running jobs aren't cleaned
 # up, so all build directories might still be there. `now` could be changed to
