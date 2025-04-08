@@ -27,6 +27,9 @@
   },
   "accumen": {
     "allProdApps": true,
+    "apps": {
+      "costing-calculator": {}
+    },
     "clientAccountId": "677276116117",
     "webCrawlerConfigs": [
       {
@@ -131,8 +134,10 @@
       "candidate-screening": {},
       "company-profile": {},
       "contract-analysis": {},
+      "costing-calculator": {},
       "document-summariser": {},
       "financial-analysis": {},
+      "infringement-review": {},
       "meeting-analyser": {},
       "nzsba-policy-builder": {},
       "policy-drafter": {},
@@ -623,6 +628,9 @@
   },
   "symphony": {
     "allProdApps": true,
+    "apps": {
+      "infringement-review": {}
+    },
     "clientAccountId": "557690588490",
     "createServiceLinkedRole": false,
     "loadSampleFile": false,
@@ -698,6 +706,10 @@
     "region": "us-east-1"
   },
   "warrnambool-city-council": {
+    "allProdApps": true,
+    "apps": {
+      "infringement-review": {}
+    },
     "clientAccountId": "440744229592",
     "webCrawlerConfigs": [
       {
