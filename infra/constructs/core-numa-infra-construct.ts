@@ -528,7 +528,7 @@ export class CoreNumaInfra extends Construct {
         DisplayName: numaClient,
         AutoSubscriptionConfiguration: {
           AutoSubscribe: 'ENABLED',
-          DefaultSubscriptionType: 'Q_BUSINESS',
+          DefaultSubscriptionType: 'Q_LITE',
         },
         ...appIdentityConfig,
       }),
