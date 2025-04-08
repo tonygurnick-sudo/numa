@@ -341,38 +341,33 @@ export function getAppConfigsToDeploy(
   allProdApps: boolean,
   isDevInstance: boolean,
 ): Array<[string, UserConfigurableBaseNumaAppProps]> {
-  let appConfigsToDeploy: Array<[string, UserConfigurableBaseNumaAppProps]> = [];
+  const appConfigsToDeploy: Array<[string, UserConfigurableBaseNumaAppProps]> = Object.entries(appConfigs);
 
   if (allApps || allProdApps) {
     // Handle production apps
-    appConfigsToDeploy = Object.entries(appLibrary)
+    Object.entries(appLibrary)
+      .filter(([appId]) => !(appId in appConfigs))
       .filter((entry) => {
         const [_appId, { isProdApp }] = entry;
         return allApps || isProdApp;
       })
-      .map((entry) => {
+      .forEach((entry) => {
         const [appId] = entry;
-        return [appId, appConfigs[appId] ?? {}];
+        appConfigsToDeploy.push([appId, appConfigs[appId] ?? {}]);
       });
-
-    // Add dev apps if this is a dev instance
-    if (isDevInstance) {
-      const devAppConfigs = Object.entries(devAppLibrary).map(([appId]): [string, UserConfigurableBaseNumaAppProps] => [
-        appId,
-        appConfigs[appId] ?? {},
-      ]);
-      appConfigsToDeploy = [...appConfigsToDeploy, ...devAppConfigs];
-    }
-  } else {
-    // Use specific app configurations, including dev apps if this is a dev instance
-    appConfigsToDeploy = Object.entries(appConfigs);
-    if (isDevInstance) {
-      const devAppConfigs = Object.entries(devAppLibrary)
-        .filter(([appId]) => !(appId in appConfigs))
-        .map(([appId]): [string, UserConfigurableBaseNumaAppProps] => [appId, {}]);
-      appConfigsToDeploy = [...appConfigsToDeploy, ...devAppConfigs];
-    }
   }
 
-  return appConfigsToDeploy;
+  // Use specific app configurations, including dev apps if this is a dev instance
+  if (isDevInstance) {
+    Object.entries(devAppLibrary)
+      .filter(([appId]) => !(appId in appConfigs))
+      .forEach((entry) => {
+        const [appId] = entry;
+        appConfigsToDeploy.push([appId, appConfigs[appId] ?? {}]);
+      });
+  }
+
+  return appConfigsToDeploy.sort((a, b) => {
+    return a[0].localeCompare(b[0]);
+  });
 }

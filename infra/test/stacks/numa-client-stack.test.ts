@@ -58,4 +58,19 @@ describe('getAppConfigsToDeploy', () => {
     assert.deepEqual(appConfigsToDeploy[0][1], { s3KeyPrefix: 'foobar' });
     assert.deepEqual(appConfigsToDeploy[1][1], {});
   });
+  it('Merges production apps and apps', (): void => {
+    const specificAppConfigs: Record<string, UserConfigurableBaseNumaAppProps> = {
+      'nzsba-policy-builder': {
+        s3KeyPrefix: 'foobar',
+      },
+    };
+    const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, specificAppConfigs, false, true, false);
+    assert.deepEqual(
+      appConfigsToDeploy.map(([appId, _]) => appId),
+      ['document-summariser', 'financial-analysis', 'nzsba-policy-builder'],
+    );
+    assert.deepEqual(appConfigsToDeploy[0][1], {});
+    assert.deepEqual(appConfigsToDeploy[1][1], {});
+    assert.deepEqual(appConfigsToDeploy[2][1], { s3KeyPrefix: 'foobar' });
+  });
 });
