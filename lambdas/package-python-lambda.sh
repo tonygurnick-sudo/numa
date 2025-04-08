@@ -47,7 +47,7 @@ pushd "${LAMBDA_DIRECTORY}"
         --no-cache-dir \
         --no-compile \
         --find-links "${WHEEL_DIR}" \
-        . $(poetry show | sed 's|(!)|   |'| grep -v "../" | awk '{print $1 "==" $2}')
+        . $(poetry show --without dev | sed 's|(!)|   |'| grep -v "../" | awk '{print $1 "==" $2}')
 popd
 
 # Use the last modification date of the lambda for all files in the ZIP to make
