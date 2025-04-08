@@ -270,7 +270,7 @@ export const NumaAppProvider = ({ children }) => {
       const { status, result } = await pollJobStatus({
         jobID: response.job_id,
         pollInterval: 10000,
-        maxPollingTime: 24 * 10000, // 24 attempts * 10 seconds
+        maxPollingTime: 10 * 60 * 1000, // 10 minutes
       });
 
       if (status === 'completed' && result) {
@@ -280,7 +280,7 @@ export const NumaAppProvider = ({ children }) => {
         return currentResults;
       }
 
-      throw new Error('The process is taking longer than expected. Please try again.');
+      throw new Error('The process exceeded the 10-minute timeout limit. Please try again.');
     } catch (error) {
       // Log the technical error for debugging
       console.error('HTTP Request task error:', error);
