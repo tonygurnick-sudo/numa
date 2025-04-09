@@ -125,23 +125,26 @@ export const resolveReference = (key, taskResults) => {
     return '';
   }
 
-  // Process file arrays - if the result is an array of file objects, extract just the paths
+  // Process file arrays - if the result is an array of file objects, preserve the standardized format
   if (
     Array.isArray(baseResult) &&
     baseResult.length > 0 &&
     typeof baseResult[0] === 'object' &&
-    baseResult[0].filePath
+    (baseResult[0].filePath || baseResult[0].s3_key)
   ) {
-    const filePaths = baseResult.map((fileObj) => fileObj.filePath);
-
-    // If there's no subPath, return the processed array
+    // If there's no subPath, return the array as-is
     if (subPaths.length === 0) {
-      return filePaths;
+      // Convert legacy format (filePath) to standardized format (s3_key)
+      return baseResult.map((fileObj) => ({
+        id: fileObj.randomId || fileObj.id,
+        name: fileObj.fileName || fileObj.name,
+        s3_key: fileObj.filePath || fileObj.s3_key,
+      }));
     }
 
     // If there is a subPath, we can't navigate further since we've transformed the structure
     console.warn(`Cannot navigate to subpath ${subPaths.join('/')} after file array transformation`);
-    return filePaths;
+    return baseResult;
   }
 
   // If there's no subPath or the result isn't an object, return the base result

@@ -111,7 +111,7 @@ export class PolicyDrafter extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'additional_instructions.$': '$.additional_instructions',
-            'example_policy_key.$': '$.uploaded_files[0]',
+            'example_policy_key.$': '$.uploaded_files[0].s3_key',
             'job_id.$': '$.job_id',
             'legislation_content.$': '$.legislation_content',
             'policy_context.$': '$.policy_context',

@@ -139,7 +139,7 @@ export class CandidateScreening extends BaseNumaApp {
           ItemsPath: '$.candidate_documents',
           Parameters: {
             // Cover letter functionality is preserved in the backend but not currently used
-            'resume_key.$': '$$.Map.Item.Value',
+            'resume_key.$': '$$.Map.Item.Value.s3_key',
             'company_profile.$': '$.company_profile',
             'job_requirements.$': '$.job_requirements',
             'job_id.$': '$.job_id',
