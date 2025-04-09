@@ -5,9 +5,9 @@ import {
   AppType,
   BaseNumaApp,
   BaseNumaAppProps,
+  DROPDOWN_TABLE_TASK,
   HTTP_REQUEST_TASK,
   S3_UPLOAD_TASK,
-  TEXT_INPUT_TASK,
 } from './base-numa-app-construct';
 
 const description = 'Review parking infringement evidence and provide recommendations';
@@ -38,11 +38,112 @@ export class InfringementReview extends BaseNumaApp {
         {
           id: 'infringement-details',
           title: 'Infringement Details',
-          description:
-            'Provide details about the infringement including ticket number, issue date, issue time, location, and reason for the infringement.',
-          type: TEXT_INPUT_TASK,
+          description: 'Please provide details about the infringement and the applicant requesting the review.',
+          type: DROPDOWN_TABLE_TASK,
           required: true,
           order: 2,
+          params: {
+            fields: [
+              {
+                id: 'applicant_type',
+                label: 'Type of applicant',
+                type: 'dropdown' as const,
+                options: [
+                  'Person named on the infringement',
+                  'Other person with consent',
+                  'Authorised company representative',
+                ],
+                required: true,
+              },
+              {
+                id: 'full_name',
+                label: 'Full Name',
+                type: 'text' as const,
+                required: true,
+              },
+              {
+                id: 'corporate_name',
+                label: 'Corporate Name and ACN (if applicable)',
+                type: 'text' as const,
+                required: false,
+              },
+              {
+                id: 'contact_method',
+                label: 'Preferred method of contact (outcome will be sent here)',
+                type: 'dropdown' as const,
+                options: ['Mail', 'Email'],
+                required: true,
+              },
+              {
+                id: 'street_address',
+                label: 'Street address',
+                type: 'text' as const,
+                required: true,
+              },
+              {
+                id: 'city',
+                label: 'City',
+                type: 'text' as const,
+                required: true,
+              },
+              {
+                id: 'state',
+                label: 'State',
+                type: 'dropdown' as const,
+                options: ['VIC', 'NSW', 'QLD', 'SA', 'WA', 'TAS', 'NT', 'ACT'],
+                required: true,
+              },
+              {
+                id: 'postcode',
+                label: 'Postcode',
+                type: 'text' as const,
+                required: true,
+              },
+              {
+                id: 'email',
+                label: 'Email Address',
+                type: 'text' as const,
+                required: false,
+              },
+              {
+                id: 'phone',
+                label: 'Phone Number',
+                type: 'text' as const,
+                required: false,
+              },
+              {
+                id: 'infringement_number',
+                label: 'Infringement Notice Number',
+                type: 'text' as const,
+                required: true,
+              },
+              {
+                id: 'registration_number',
+                label: 'Vehicle Registration/Animal Number',
+                type: 'text' as const,
+                required: true,
+              },
+              {
+                id: 'grounds',
+                label: 'Grounds for application',
+                type: 'dropdown' as const,
+                options: [
+                  'Person unaware: you did not know about the fine',
+                  'Contrary to law: the fine is invalid or was improperly issued to you',
+                  'Mistake of identity: the fine was issued to the wrong person',
+                  'Exceptional circumstances: the offence occurred due to an extraordinary or unavoidable situation',
+                  'Special circumstances: you have serious personal issues, conditions or difficulties',
+                ],
+                required: true,
+              },
+              {
+                id: 'explanation',
+                label: 'Explanation of circumstances and ground(s) in support of application',
+                type: 'text' as const,
+                required: true,
+              },
+            ],
+          },
         },
         {
           id: 'call-step-function',
