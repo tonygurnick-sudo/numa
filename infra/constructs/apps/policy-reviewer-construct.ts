@@ -137,7 +137,7 @@ export class PolicyReviewer extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$.job_id',
-            'policy_key.$': '$.uploaded_files[0]',
+            'policy_key.$': '$.uploaded_files[0].s3_key',
             'legislation_content.$': '$.legislation_content',
             'policy_context.$': '$.policy_context',
           },

@@ -92,7 +92,7 @@ export class ContractAnalysis extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$.job_id',
-            'contract_key.$': '$.uploaded_files[0]',
+            'contract_key.$': '$.uploaded_files[0].s3_key',
             'contract_context.$': '$.contract_context',
           },
           Next: 'ExtractContent',

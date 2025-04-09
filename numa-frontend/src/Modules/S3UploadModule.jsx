@@ -54,7 +54,6 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
     // Process the value based on its format
     if (Array.isArray(value)) {
-      console.log('value is an array', value);
       // Handle the standardized format (array of maps with name, key, id)
       if (value.length > 0 && typeof value[0] === 'object' && value[0].name && value[0].key) {
         // Already in the correct format
@@ -69,11 +68,9 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       }
     } else if (typeof value === 'string') {
       // Legacy format: string file path
-      console.log('value is a string', value);
       setSelectedFiles([{ name: value.split('/').pop() }]);
     } else if (typeof value === 'object' && value !== null) {
       // Legacy format: single object
-      console.log('value is an object', value);
       // Check if it's already in the new format
       if (value.name && value.key) {
         setSelectedFiles([{ name: value.name }]);
@@ -265,21 +262,32 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         setUploadStatus(`Uploading file ${i + 1} of ${selectedFiles.length}: ${file.name}`);
         setUploadProgress(0);
 
-        const relativePath = file.name;
-        const encodedPath = relativePath
+        // Generate a random string to prevent name clashes
+        const randomId = Math.random().toString(36).substring(2, 15);
+
+        // Split the filename and extension for better formatting
+        const lastDotIndex = file.name.lastIndexOf('.');
+        const fileName = lastDotIndex !== -1 ? file.name.substring(0, lastDotIndex) : file.name;
+        const fileExt = lastDotIndex !== -1 ? file.name.substring(lastDotIndex) : '';
+
+        // Create the encoded path with random string to prevent name clashes
+        const encodedFileName = fileName
           .split('/')
           .map((segment) => encodeURIComponent(segment))
           .join('/');
+        const encodedExt = encodeURIComponent(fileExt).replace(/%2E/g, '.');
+
+        // Create the S3 key with random string to prevent name clashes
+        const s3Key = `${numaAppId}/${jobId}/${encodedFileName}_${randomId}${encodedExt}`;
 
         const command = new PutObjectCommand({
           Bucket: bucketName,
-          Key: `${numaAppId}/${jobId}/${encodedPath}`,
+          Key: s3Key,
         });
 
         const presignedUrl = await getSignedUrl(s3Client, command, {
           expiresIn: 3600,
         });
-        const filePath = command.input.Key;
 
         await axios.put(presignedUrl, file, {
           headers: {
@@ -292,45 +300,38 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         });
 
         results.push({
-          filePath,
+          filePath: s3Key,
           fileName: file.name,
           fileType: file.type,
           s3Bucket: bucketName,
           file,
+          randomId,
         });
       }
 
-      // Format the results for the task input value
-      // IMPORTANT: For backend compatibility, we need to follow the original format:
-      // - For single file uploads: use the file path as a string (not in an array)
-      // - For multiple file uploads: use an array of file paths
-      // This is required by the state machine which expects $.uploaded_files to be an array of strings
-
-      // For backend compatibility
-      // ALWAYS use an array of file paths for the meeting analyzer app
-      // This ensures the state machine receives $.uploaded_files as an array
-      const finalResults = results.map((r) => r.filePath);
-
-      // For UI display and future use, we also create a standardized format
-      // This isn't used by the backend but is useful for the frontend
+      // Create the standardized format objects with id, name, s3_key
+      // This is the new format required by the task system
       const fileObjects = results.map((r) => ({
+        id: r.randomId,
         name: r.fileName,
-        key: r.filePath,
-        id: null, // Currently unused, but added for future compatibility
+        s3_key: r.filePath,
       }));
 
-      // Update the job with the final file paths
+      // Keep the raw results for chat page compatibility
+      // The chat page needs the full result objects with presignedUrl etc.
+
+      // Update the job with the standardized file format
       try {
         // Create an object with just this task's input
-        // ALWAYS store as an array in the job history for consistency
+        // ALWAYS store the standardized format (array of objects with id, name, s3_key)
         const fileInputs = {
-          [task.id]: Array.isArray(finalResults) ? finalResults : [finalResults],
+          [task.id]: fileObjects,
         };
 
         // Merge with existing task input values
         const mergedInputs = { ...taskInputValues, ...fileInputs };
 
-        // Update the job with the final file paths and status, but don't modify results
+        // Update the job with the standardized format and status, but don't modify results
         await jobsApi.updateJob(numaAppData, jobId, undefined, mergedInputs, 'files-uploaded');
       } catch (updateError) {
         console.error('Failed to save file paths to job:', updateError);
@@ -339,13 +340,13 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
       setUploadStatus(`Upload successful!`);
 
-      // Pass the array of file paths to the backend (for state machine compatibility)
-      onChange(finalResults);
+      // Pass the standardized format (array of objects with id, name, s3_key) to the task system
+      onChange(fileObjects);
 
       // Store the file objects in the component state for UI display
       setSelectedFiles(fileObjects.map((obj) => ({ name: obj.name })));
 
-      // Pass the complete file info to the onComplete callback
+      // Pass the raw results to onComplete for chat page compatibility
       // ALWAYS ensure we pass a valid array, even if results is undefined
       onComplete(results || []); // needed for numa chat
 

@@ -121,7 +121,7 @@ export class DocumentSummariser extends BaseNumaApp {
           ItemsPath: '$.uploaded_files',
           Parameters: {
             'job_id.$': '$.job_id',
-            'key.$': '$$.Map.Item.Value',
+            'key.$': '$$.Map.Item.Value.s3_key',
           },
           ItemProcessor: {
             ProcessorConfig: {

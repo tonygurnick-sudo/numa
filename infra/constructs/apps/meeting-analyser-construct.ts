@@ -182,7 +182,7 @@ export class MeetingAnalyser extends BaseNumaApp {
               ExtractContent: this.addLambdaTask(
                 extractContentLambda.arn,
                 {
-                  'input_key.$': '$',
+                  'input_key.$': '$.s3_key',
                   input_bucket: props.outputsBucket.bucket,
                   return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
                 },

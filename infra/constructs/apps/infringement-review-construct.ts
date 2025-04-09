@@ -194,7 +194,7 @@ export class InfringementReview extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$.job_id',
-            'evidence_key.$': '$.uploaded_files[0]',
+            'evidence_key.$': '$.uploaded_files[0].s3_key',
             'infringement_details.$': '$.infringement_details',
           },
           Next: 'ExtractContent',

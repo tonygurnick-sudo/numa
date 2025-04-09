@@ -209,34 +209,74 @@ export const NumaAppProvider = ({ children }) => {
   };
 
   const processS3UploadTask = (task, currentResults) => {
-    const uploadedFilePath = taskInputValues[task.id];
+    const uploadedFiles = taskInputValues[task.id];
     // Check if the task is required (default to false for better user experience)
     const isRequired = task.required !== undefined ? task.required : false;
 
     console.log('Uploaded isRequired:', isRequired);
 
-    // Check if we have a valid upload path
-    const isValidUpload = uploadedFilePath && !(Array.isArray(uploadedFilePath) && uploadedFilePath.length === 0);
+    // Check if we have valid uploads in either format:
+    // 1. Standardized format (array of objects with id, name, s3_key)
+    // 2. Legacy format (string or array of strings)
+    const isValidUpload =
+      uploadedFiles &&
+      // Check standardized format or legacy object format
+      ((Array.isArray(uploadedFiles) &&
+        uploadedFiles.length > 0 &&
+        uploadedFiles.every(
+          (file) =>
+            file &&
+            // Check either standardized format (s3_key) or legacy format (filePath)
+            ((file.id && file.name && file.s3_key) || (file.randomId && file.fileName && file.filePath)),
+        )) ||
+        // Check legacy string format
+        (typeof uploadedFiles === 'string' && uploadedFiles.length > 0) ||
+        (Array.isArray(uploadedFiles) &&
+          uploadedFiles.length > 0 &&
+          uploadedFiles.every((path) => typeof path === 'string')));
 
-    // If the upload is required and we don't have a valid file, throw an error
+    console.log('isValidUpload:', isValidUpload);
+
+    // If the upload is required and we don't have valid files, throw an error
     if (isRequired && !isValidUpload) {
       throw new Error('No file uploaded');
     }
 
-    // We're using the session ID consistently throughout, so no path modification is needed
     // For non-required uploads with no file or invalid uploads, handle appropriately
     if (!isValidUpload) {
-      // Always return an empty array for consistency with the state machine expectations
+      // Always return an empty array for consistency
       currentResults[task.id] = [];
     } else {
-      // We have a valid upload, use it
-      // ALWAYS convert to an array for consistency with state machine expectations
-      // This ensures $.uploaded_files is always an array, even for single file uploads
-      if (Array.isArray(uploadedFilePath)) {
-        currentResults[task.id] = uploadedFilePath.filter((item) => item !== null);
+      // Convert to standardized format
+      if (Array.isArray(uploadedFiles)) {
+        if (uploadedFiles[0] && uploadedFiles[0].s3_key) {
+          // Already in standardized format
+          currentResults[task.id] = uploadedFiles;
+        } else if (uploadedFiles[0] && uploadedFiles[0].filePath) {
+          // Legacy object format - convert to standardized format
+          currentResults[task.id] = uploadedFiles.map((file) => ({
+            id: file.randomId || file.id,
+            name: file.fileName || file.name,
+            s3_key: file.filePath || file.s3_key,
+          }));
+        } else {
+          // Legacy string format - convert to standardized format
+          currentResults[task.id] = uploadedFiles.map((path) => ({
+            id: path.split('/').pop().split('_')[1].split('.')[0], // Extract randomId from path
+            name: path.split('/').pop().split('_')[0] + path.split('_')[1].split('.')[1], // Extract filename
+            s3_key: path,
+          }));
+        }
       } else {
-        // Convert single string to array with one element
-        currentResults[task.id] = [uploadedFilePath];
+        // Legacy format - single string
+        const path = uploadedFiles;
+        currentResults[task.id] = [
+          {
+            id: path.split('/').pop().split('_')[1].split('.')[0], // Extract randomId from path
+            name: path.split('/').pop().split('_')[0] + path.split('_')[1].split('.')[1], // Extract filename
+            s3_key: path,
+          },
+        ];
       }
     }
 

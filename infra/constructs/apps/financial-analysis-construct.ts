@@ -113,8 +113,8 @@ export class FinancialAnalysis extends BaseNumaApp {
           ItemsPath: '$.uploaded_files',
           Parameters: {
             'job_id.$': '$.job_id',
-            'key.$': '$$.Map.Item.Value',
-            'key_parts.$': `States.StringSplit($$.Map.Item.Value, '/')`,
+            'key.$': '$$.Map.Item.Value.s3_key',
+            'key_parts.$': `States.StringSplit($$.Map.Item.Value.s3_key, '/')`,
           },
           ItemProcessor: {
             ProcessorConfig: {
