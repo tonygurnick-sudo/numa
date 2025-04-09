@@ -313,7 +313,7 @@ export const appLibrary: Record<string, AppDefinition> = {
   'candidate-screening': { app: CandidateScreening, isProdApp: true },
   'company-profile': { app: CompanyProfile, isProdApp: false },
   'contract-analysis': { app: ContractAnalysis, isProdApp: true },
-  'costing-calculator': { app: CostingCalculator, isProdApp: true },
+  'costing-calculator': { app: CostingCalculator, isProdApp: false },
   'document-summariser': { app: DocumentSummariser, isProdApp: true },
   'financial-analysis': { app: FinancialAnalysis, isProdApp: true },
   'infringement-review': { app: InfringementReview, isProdApp: false },
