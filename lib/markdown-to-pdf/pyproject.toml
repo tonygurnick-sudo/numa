@@ -29,4 +29,4 @@ xhtml2pdf = "0.2.17"
 [tool.poetry.group.dev.dependencies]
 mypy = "1.15.0"
 pylint = "3.3.6"
-pyright = "1.1.398"
+pyright = "1.1.399"
