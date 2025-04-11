@@ -2,9 +2,7 @@ include:
   - project: arcanumai/ci
     file: pipelines/pre-commit.yml
   - project: arcanumai/ci
-    file: pipelines/infra.yml
-  - project: arcanumai/ci
-    file: pipelines/node.yml
+    file: libraries/node.yml
   - project: arcanumai/ci
     file: libraries/python.yml
   - .gitlab-ci-clients.yml
@@ -122,12 +120,30 @@ client-list-lint:
   script:
     - diff <(jq --raw-output keys[] clientConfigProd.json | sort | grep -v 'arcanum-demo$' | grep -v arcanum-prod-numa-demo) <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
 
+.node-job-infra-overrides: &node-job-infra-overrides
+  image: registry.gitlab.com/arcanumai/ci/cdktf:latest
+  before_script:
+    - cd infra
+    - !reference [.yarn, setup-private-auth]
+    - !reference [.yarn, install]
+    - yarn exec cdktf get
+
 infra-lint:
+  extends: .node-lint
+  <<: *node-job-infra-overrides
   rules:
     - changes:
         paths:
           - infra/**/*
           - style/**/*
+
+infra-test:
+  extends: .node-test
+  <<: *node-job-infra-overrides
+
+infra-build:
+  extends: .node-build
+  <<: *node-job-infra-overrides
 
 python-lint:
   extends: .poetry-job
@@ -147,13 +163,16 @@ python-test:
   parallel: !reference [.python-matrix]
 
 node-lint:
+  extends: .node-lint
   script:
     - yarn workspaces foreach --parallel --all --exclude infra run lint
 
 node-test:
+  extends: .node-test
   parallel: !reference [.node-matrix]
 
 node-build:
+  extends: .node-build
   parallel: !reference [.node-matrix]
 
 frontend-test:
@@ -200,17 +219,24 @@ node-package:
   rules:
     - !reference [.rules, if-main]
 
+infra-bin:
+  extends: .poetry-job
+  stage: package
+  variables:
+    PYTHON_WORKING_DIRECTORY: infra/bin
+  script:
+    - ls -lha
+  artifacts:
+    paths: [$PYTHON_WORKING_DIRECTORY]
+  rules:
+    - !reference [.rules, if-main]
+
 .deploy-infra:
-  extends: infra-build
+  extends: .node-job-infra-overrides
   stage: deploy
   variables:
     TF_ENVIRONMENT: prod
     AWS_REGION: us-east-1
-  before_script:
-    - !reference [infra-build, before_script]
-    - cd bin
-    - poetry install
-    - cd ..
   script:
     - yarn exec cdktf deploy --auto-approve numa-${CLIENT_NAME}
   needs:
