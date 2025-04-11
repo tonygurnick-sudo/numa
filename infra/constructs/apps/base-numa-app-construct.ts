@@ -406,6 +406,9 @@ export interface NumaAppManifestS3UploadTask extends NumaAppManifestBaseTask {
     // Accepts either MIME types (e.g., 'image/jpeg') or file extensions (e.g., '.pdf')
     allowedFileTypes?: string[];
     maximumFileSize?: number; // Maximum file size in MB
+    minFiles?: number;
+    maxFiles?: number;
+    userMessage?: string;
   };
 }
 

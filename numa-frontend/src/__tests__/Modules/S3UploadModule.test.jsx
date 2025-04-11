@@ -103,11 +103,7 @@ describe('S3UploadModule Component', () => {
     });
 
     await waitFor(() => {
-      expect(
-        screen.getByText((content, element) => {
-          return element.tagName.toLowerCase() === 'li' && content.includes(validFile.name);
-        }),
-      ).toBeInTheDocument();
+      expect(screen.getByText(validFile.name)).toBeInTheDocument();
     });
   });
 

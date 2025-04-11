@@ -29,6 +29,9 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   // Extract parameters from task with defaults
   const acceptedFileTypes = task?.parameters?.allowedFileTypes ?? [];
   const maxFileSize = task?.parameters?.maximumFileSize ?? null;
+  const minFiles = task?.parameters?.minFiles ?? 0;
+  const maxFiles = task?.parameters?.maxFiles ?? null;
+  const userMessage = task?.parameters?.userMessage;
 
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploadStatus, setUploadStatus] = useState(null);
@@ -122,6 +125,16 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     }
   }, []);
 
+  const validateFileCount = (files) => {
+    if (minFiles > 0 && files.length < minFiles) {
+      return `At least ${minFiles} file${minFiles > 1 ? 's' : ''} required`;
+    }
+    if (maxFiles && files.length > maxFiles) {
+      return `Maximum of ${maxFiles} file${maxFiles > 1 ? 's' : ''} allowed`;
+    }
+    return null;
+  };
+
   const validateFile = (file) => {
     // Check file type if acceptedFileTypes is specified
     if (acceptedFileTypes && acceptedFileTypes.length > 0) {
@@ -144,12 +157,28 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     return { validFile: file, error: null };
   };
 
+  const removeFile = (fileToRemove) => {
+    setSelectedFiles((prev) => prev.filter((file) => file.name !== fileToRemove.name));
+    setError(null);
+    onNotComplete();
+    onChange(null);
+  };
+
   const handleFileSelection = (fileList) => {
-    const files = Array.from(fileList);
+    const newFiles = Array.from(fileList);
+    const combinedFiles = [...selectedFiles, ...newFiles];
+
+    // Check file count constraints with combined files
+    const fileCountError = validateFileCount(combinedFiles);
+    if (fileCountError) {
+      setError(fileCountError);
+      return;
+    }
+
     const validFiles = [];
     const errors = [];
 
-    files.forEach((file) => {
+    newFiles.forEach((file) => {
       const { validFile, error: fileError } = validateFile(file);
       if (validFile) {
         validFiles.push(validFile);
@@ -165,12 +194,14 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       return;
     }
 
-    setSelectedFiles(validFiles);
-    setUploadStatus(null);
-    setUploadProgress(0);
-    setError(null);
-    onNotComplete();
-    onChange(null);
+    if (validFiles.length > 0) {
+      setSelectedFiles((prev) => [...prev, ...validFiles]);
+      setUploadStatus(null);
+      setUploadProgress(0);
+      setError(null);
+      onNotComplete();
+      onChange(null);
+    }
   };
 
   const handleFileChange = (e) => {
@@ -270,15 +301,8 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         const fileName = lastDotIndex !== -1 ? file.name.substring(0, lastDotIndex) : file.name;
         const fileExt = lastDotIndex !== -1 ? file.name.substring(lastDotIndex) : '';
 
-        // Create the encoded path with random string to prevent name clashes
-        const encodedFileName = fileName
-          .split('/')
-          .map((segment) => encodeURIComponent(segment))
-          .join('/');
-        const encodedExt = encodeURIComponent(fileExt).replace(/%2E/g, '.');
-
         // Create the S3 key with random string to prevent name clashes
-        const s3Key = `${numaAppId}/${jobId}/${encodedFileName}_${randomId}${encodedExt}`;
+        const s3Key = `${numaAppId}/${jobId}/${fileName}_${randomId}${fileExt}`;
 
         const command = new PutObjectCommand({
           Bucket: bucketName,
@@ -372,8 +396,6 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       }
 
       setError(errorMessage);
-      setUploadStatus('Upload failed');
-      onNotComplete();
 
       // Ensure onComplete is called with an empty array in case of errors
       // This prevents 'Cannot read properties of undefined (reading \'length\')' errors
@@ -393,9 +415,10 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   return (
     <div className="task-container">
       {task?.title && <h3>{task.title}</h3>}
+      {userMessage && <div className="alert alert-info mb-3">{userMessage}</div>}
 
       <div
-        className={`upload-container bg-light p-4 rounded ${isDragging ? 'dragging' : ''} ${
+        className={`upload-container bg-light p-4 rounded  ${isDragging ? 'dragging' : ''} ${
           disabled ? 'disabled' : ''
         }`}
         onDragEnter={handleDragEnter}
@@ -404,21 +427,9 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         onDrop={handleDrop}
         onClick={handleZoneClick}
       >
-        {appRunning && !taskResponse?.result && <Preloader overlayParent={true} />}
-        <input
-          type="file"
-          onChange={handleFileChange}
-          ref={fileInputRef}
-          id={`file-upload-${task?.id}`}
-          data-testid="file-upload-input"
-          style={{ display: 'none' }}
-          multiple
-          accept={acceptedFileTypes?.join(',')}
-          disabled={disabled}
-        />
         <div className="text-center">
           <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
-          <p className="mt-2">Drag and drop your files here, or</p>
+          <p className="mt-2">Drag and drop your file(s) here, or</p>
           <Button
             variant="primary"
             as="label"
@@ -429,22 +440,6 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           >
             Select Files
           </Button>
-          {selectedFiles.length > 0 && (
-            <div className="selected-file mt-3" style={{ textAlign: 'left' }}>
-              <p className="mb-2">Selected {selectedFiles.length === 1 ? 'file:' : 'files:'}</p>
-              <ul style={{ listStyleType: 'none', listStylePosition: 'inside' }}>
-                {selectedFiles.map((f, index) => (
-                  <li key={index}>{f.name || 'Unknown file'}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {selectedFiles.length > 0 && !uploadStatus && (
-            <Button variant="primary" onClick={handleUpload} className="mt-3" disabled={loading || disabled}>
-              Upload
-            </Button>
-          )}
-
           {error && <div className="alert alert-danger mt-3">{error}</div>}
 
           {uploadStatus && (
@@ -468,6 +463,60 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
             </div>
           )}
         </div>
+
+        {appRunning && !taskResponse?.result && <Preloader overlayParent={true} />}
+        {selectedFiles.length > 0 && (
+          <>
+            <div className="selected-files mb-3">
+              <h6 className="text-center">Selected Files:</h6>
+              {selectedFiles.map((file, index) => (
+                <div key={index} className="d-flex align-items-center justify-content-center mb-1">
+                  <span className="me-2 text-center">{file.name}</span>
+                  <Button
+                    variant="link"
+                    className="p-0 text-danger"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile(file);
+                    }}
+                  >
+                    <i className="bi bi-x-circle"></i>
+                  </Button>
+                </div>
+              ))}
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                className="mt-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedFiles([]);
+                  setError(null);
+                  onNotComplete();
+                  onChange(null);
+                }}
+              >
+                Clear All Files
+              </Button>
+            </div>
+            {selectedFiles.length > 0 && !uploadStatus && (
+              <Button variant="primary" onClick={handleUpload} className="mt-3" disabled={loading || disabled}>
+                Upload
+              </Button>
+            )}
+          </>
+        )}
+        <input
+          type="file"
+          onChange={handleFileChange}
+          ref={fileInputRef}
+          id={`file-upload-${task?.id}`}
+          data-testid="file-upload-input"
+          style={{ display: 'none' }}
+          multiple
+          accept={acceptedFileTypes?.join(',')}
+          disabled={disabled}
+        />
       </div>
     </div>
   );

@@ -44,6 +44,11 @@ export class PolicyDrafter extends BaseNumaApp {
           description: 'Upload an example policy to guide the policy generation',
           type: S3_UPLOAD_TASK,
           order: 2,
+          parameters: {
+            minFiles: 1,
+            maxFiles: 1,
+            userMessage: 'Please upload 1 example policy.',
+          },
         },
         {
           id: 'legislation-content',
