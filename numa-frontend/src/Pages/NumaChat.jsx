@@ -227,11 +227,21 @@ const NumaChat = () => {
 
   // Create a new conversation
   const handleNewChat = async () => {
+    // Stop any ongoing streaming response
+    stopGenerationRef.current = true;
+    setButtonStatus('idle');
+
+    // Clear all states
     setMessages([]);
     setUploadedFiles([]);
     setInputMessage('');
     setConversationId(null);
     setInlineDocument(null);
+
+    // Reset the stop generation flag after a short delay
+    setTimeout(() => {
+      stopGenerationRef.current = false;
+    }, 200);
 
     // Add an initial greeting from the assistant
     const greeting = { role: 'assistant', content: 'How can I help you today?' };
