@@ -4,6 +4,8 @@
 @use 'base/base' as *;
 @use 'layouts/layout' as *;
 @use 'components/components' as *;
+@use 'components/upload_module' as *;
+
 @use 'components/run_button' as *;
 @use 'components/icons' as *;
 @use 'components/markdown' as *;

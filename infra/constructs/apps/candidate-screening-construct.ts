@@ -36,6 +36,10 @@ export class CandidateScreening extends BaseNumaApp {
           type: S3_UPLOAD_TASK,
           required: true,
           order: 1,
+          parameters: {
+            minFiles: 1,
+            userMessage: 'Please upload atleast 1 candidate resume. Each resume will be analyzed separately.',
+          },
         },
         {
           id: 'company-profile',

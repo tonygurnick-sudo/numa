@@ -34,6 +34,11 @@ export class InfringementReview extends BaseNumaApp {
           type: S3_UPLOAD_TASK,
           required: true,
           order: 1,
+          parameters: {
+            minFiles: 1,
+            maxFiles: 1,
+            userMessage: 'Please upload 1 evidence file.',
+          },
         },
         {
           id: 'infringement-details',
