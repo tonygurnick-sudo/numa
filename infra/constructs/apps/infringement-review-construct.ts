@@ -50,57 +50,8 @@ export class InfringementReview extends BaseNumaApp {
           params: {
             fields: [
               {
-                id: 'applicant_type',
-                label: 'Type of applicant',
-                type: 'dropdown' as const,
-                options: [
-                  'Person named on the infringement',
-                  'Other person with consent',
-                  'Authorised company representative',
-                ],
-                required: true,
-              },
-              {
                 id: 'full_name',
                 label: 'Full Name',
-                type: 'text' as const,
-                required: true,
-              },
-              {
-                id: 'corporate_name',
-                label: 'Corporate Name and ACN (if applicable)',
-                type: 'text' as const,
-                required: false,
-              },
-              {
-                id: 'contact_method',
-                label: 'Preferred method of contact (outcome will be sent here)',
-                type: 'dropdown' as const,
-                options: ['Mail', 'Email'],
-                required: true,
-              },
-              {
-                id: 'street_address',
-                label: 'Street address',
-                type: 'text' as const,
-                required: true,
-              },
-              {
-                id: 'city',
-                label: 'City',
-                type: 'text' as const,
-                required: true,
-              },
-              {
-                id: 'state',
-                label: 'State',
-                type: 'dropdown' as const,
-                options: ['VIC', 'NSW', 'QLD', 'SA', 'WA', 'TAS', 'NT', 'ACT'],
-                required: true,
-              },
-              {
-                id: 'postcode',
-                label: 'Postcode',
                 type: 'text' as const,
                 required: true,
               },
@@ -108,13 +59,7 @@ export class InfringementReview extends BaseNumaApp {
                 id: 'email',
                 label: 'Email Address',
                 type: 'text' as const,
-                required: false,
-              },
-              {
-                id: 'phone',
-                label: 'Phone Number',
-                type: 'text' as const,
-                required: false,
+                required: true,
               },
               {
                 id: 'infringement_number',
@@ -146,6 +91,12 @@ export class InfringementReview extends BaseNumaApp {
                 label: 'Explanation of circumstances and ground(s) in support of application',
                 type: 'text' as const,
                 required: true,
+              },
+              {
+                id: 'notes',
+                label: 'Notes',
+                type: 'text' as const,
+                required: false,
               },
             ],
           },

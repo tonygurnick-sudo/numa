@@ -25,7 +25,7 @@ Here is the customer evidence that has been submitted:
 Here are the details of the infringement:
 {infringement_details}
 
-Please perform a focused analysis to identify any potential human errors in the infringement record. Look specifically for:
+Please perform a focused analysis to identify any potential human errors in the infringement record. If reviewer notes are provided, take them into consideration. Look specifically for:
 
 - Registration number discrepancies between the infringement and actual vehicle
 - Location description errors that don't match where the vehicle was actually parked
@@ -78,6 +78,7 @@ Please carefully analyze the provided evidence and extract all relevant informat
 - Parking payment receipts or permit information
 - Photos or descriptions of parking signage
 - Any mitigating circumstances described
+- Notes provided by the reviewer (if any)
 
 Look specifically for potential human errors such as:
 - Incorrect registration numbers
@@ -126,7 +127,7 @@ Here is the human error analysis:
 Here is the relevant parking legislation and regulations:
 {legislation_content}
 
-Please carefully evaluate the evidence against the parking legislation to determine compliance. Consider:
+Please carefully evaluate the evidence against the parking legislation to determine compliance. If reviewer notes were provided in the infringement details, ensure they are considered in your evaluation. Consider:
 - Whether the vehicle was parked in accordance with relevant regulations
 - If any exemptions might apply based on the evidence
 - The clarity of parking signage or restrictions based on evidence
@@ -167,7 +168,7 @@ Here is the human error analysis:
 Here is the legislation evaluation:
 {legislation_comparison}
 
-Based on the evidence, human error analysis, and legislation evaluation, you need to make a decision on whether the infringement should be upheld or cancelled, or if more information is needed.
+Based on the evidence, human error analysis, and legislation evaluation, you need to make a decision on whether the infringement should be upheld or cancelled, or if more information is needed. Take into account any reviewer notes that were provided in the infringement details.
 
 Consider:
 - Compliance with relevant parking regulations
@@ -221,19 +222,19 @@ Here is the human error analysis:
 Here is the legislation evaluation:
 {legislation_comparison}
 
-Draft a professional and empathetic response letter that:
-- Includes a proper salutation (Dear [Customer Name])
-- States the purpose of the letter in the introduction (responding to infringement review)
-- Clearly states the decision (upheld, cancelled, or need more information)
-- Explains the rationale in easy-to-understand language
-- References specific evidence that influenced the decision
-- Cites relevant legislation that supports the decision
+Draft a professional and empathetic response letter that addresses any specific points raised in the reviewer notes (if provided) and:
+- Include a proper salutation (Dear [Customer Name])
+- State the purpose of the letter in the introduction (responding to infringement review)
+- Clearly state the decision (upheld, cancelled, or need more information)
+- Explain the rationale in easy-to-understand language
+- Reference specific evidence that influenced the decision
+- Cite relevant legislation that supports the decision
 - If human error was detected, acknowledges this clearly
 - If more information is needed, specifies exactly what the customer should provide
-- Provides clear next steps for the recipient based on the decision
-- Maintains a professional, respectful tone throughout
-- Includes Warrnambool City Council contact information for further inquiries
-- Closes with appropriate signature block (Regards, [Officer Name], Parking Services)
+- Provide clear next steps for the recipient based on the decision
+- Maintain a professional, respectful tone throughout
+- Include Warrnambool City Council contact information for further inquiries
+- Close with appropriate signature block (Regards, [Officer Name], Parking Services)
 
 Always include the following Warrnambool City Council contact information in the letter:
 - Email: contact@warrnambool.vic.gov.au
