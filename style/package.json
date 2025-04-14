@@ -1,6 +1,6 @@
 {
   "name": "@arcanumai/style",
-  "packageManager": "yarn@4.7.0",
+  "packageManager": "yarn@4.9.1",
   "type": "module",
   "exports": [
     "./eslint.config.base.js"
