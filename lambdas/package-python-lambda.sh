@@ -50,6 +50,10 @@ pushd "${LAMBDA_DIRECTORY}"
         . $(poetry show --without dev | sed 's|(!)|   |'| grep -v "../" | awk '{print $1 "==" $2}')
 popd
 
+# remove files that aren't required and contain paths that can differ based on clone location
+rm -r "${BUILD_DIR:?}/bin"
+find "${BUILD_DIR}" -type d -name "*.dist-info" -exec rm -r "{}" +
+
 # Use the last modification date of the lambda for all files in the ZIP to make
 # it deterministic
 LAST_MODIFIED=$(git log -1 --format=%cd --date format:"%FT%T" "${LAMBDA_DIRECTORY}")
@@ -58,5 +62,7 @@ find "${BUILD_DIR}" -exec touch -d "${LAST_MODIFIED}" {} +
 pushd "${BUILD_DIR}";
     # use -X (--no-extra, which isn't supported on Mac) to not save attributes
     # that would make the zip file non-deterministic
-    zip --quiet -X --recurse-paths ../lambda_function.zip ./*
+    # use find with sort to ensure order
+    # shellcheck disable=SC2046
+    zip --quiet -X ../lambda_function.zip $(find . | sort)
 popd
