@@ -535,9 +535,7 @@
       "document-summariser": {},
       "financial-analysis": {},
       "meeting-analyser": {},
-      "nzsba-policy-builder": {
-        "s3KeyPrefix": "/nzsba-nzsba-policy-builder"
-      }
+      "nzsba-policy-builder": {}
     },
     "clientAccountId": "307946678276",
     "loadSampleFile": false,

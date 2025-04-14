@@ -1,5 +1,3 @@
-import { GetObjectCommand } from '@aws-sdk/client-s3';
-
 /**
  * Generates policy builder specific bucket paths
  * @param {Object} config - Application config object
@@ -42,30 +40,8 @@ export const getPolicyBuilderBucketInfo = async (
     console.warn('OUTPUTS_BUCKET_NAME is not defined in the config');
   }
 
-  // Define new and legacy key paths
-  const newKeyPath = `policy-builder/${jobId}/final_policy${fileExtension}`;
-
-  // The old key path is the step function job ID
-  const legacyKeyPath = `${config.CLIENT_NAME}-nzsba-policy-builder/${stepFunctionJobId}/final_policy${fileExtension}`;
-
-  console.log('newKeyPath', newKeyPath);
-  console.log('legacyKeyPath', legacyKeyPath);
-
-  // Try to find the file at the new location first
-  let key = newKeyPath;
-  try {
-    const command = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: key,
-    });
-
-    await s3Client.send(command);
-    console.log('File found at new location:', key);
-  } catch {
-    console.log('File not found at new location, trying old location');
-    // If the file doesn't exist at the new location, try the old location
-    key = legacyKeyPath;
-  }
+  // Define the key path
+  const key = `policy-builder/${jobId}/final_policy${fileExtension}`;
 
   return {
     bucketName,
