@@ -10,7 +10,7 @@ export class ConfigBucket extends Construct {
     super(scope, name);
 
     this.bucket = new S3Bucket(this, 'config-bucket', {
-      bucket: `numa-${props.client}-config`,
+      bucket: `numa-${props.clientName}-config`,
     });
 
     const configKey = 'otel-config.yaml';
@@ -45,6 +45,6 @@ export class ConfigBucket extends Construct {
 }
 
 export interface ConfigBucketProps {
-  client: string;
   clientAccountId: string;
+  clientName: string;
 }

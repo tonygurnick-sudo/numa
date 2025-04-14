@@ -2,15 +2,23 @@ import { Construct } from 'constructs';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
 
 export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaCollection {
+  readonly clientName: string;
+
+  protected getRoleName(suffix: string): string {
+    return this.clientName.slice(0, 64 - suffix.length) + suffix;
+  }
+
   constructor(scope: Construct, name: string, props: AppAgnosticApiGatewayLambdaCollectionProps) {
     super(scope, name, props);
+
+    this.clientName = props.clientName;
 
     // SRP Proxy
     const environment = {
       variables: {
         ALLOWED_ORIGIN: '*', // TODO: More closely scope this.
-        CLIENT_SECRET: props.clientSecret,
-        COGNITO_CLIENT_ID: props.clientId,
+        CLIENT_SECRET: props.userPoolClientSecret,
+        COGNITO_CLIENT_ID: props.userPoolClientId,
         COGNITO_REGION: props.region,
       },
     };
@@ -40,7 +48,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         variables: {
           LOG_LEVEL: 'INFO',
           ALLOWED_ORIGIN: '*',
-          CLIENT_NAME: props.client,
+          CLIENT_NAME: props.clientName,
         },
       },
       timeout: 45,
@@ -61,9 +69,9 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
 }
 
 export interface AppAgnosticApiGatewayLambdaCollectionProps extends ApiGatewayLambdaCollectionProps {
-  clientId: string;
-  clientSecret: string;
-  client: string;
   chatHistoryTableName: string;
+  clientName: string;
   region: string;
+  userPoolClientId: string;
+  userPoolClientSecret: string;
 }

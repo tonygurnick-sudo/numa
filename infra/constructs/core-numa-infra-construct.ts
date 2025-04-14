@@ -62,7 +62,7 @@ export class CoreNumaInfra extends Construct {
 
     const callerId = new DataAwsCallerIdentity(this, 'caller-id', {});
 
-    const numaClient = `numa-${props.client}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}`;
+    const numaClient = `numa-${props.clientName}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}`;
 
     // TODO: Typing
     let appIdentityConfig;
@@ -132,7 +132,7 @@ export class CoreNumaInfra extends Construct {
       userPoolId: userPool.id,
     });
     const systemUserSecret = new SecretsmanagerSecret(this, 'system-user-secret-manager-secret', {
-      name: `${props.client}-system-user-password`,
+      name: `${props.clientName}-system-user-password`,
     });
     new SecretsmanagerSecretVersion(this, 'system-user-secret-version', {
       secretId: systemUserSecret.arn,
@@ -206,7 +206,7 @@ export class CoreNumaInfra extends Construct {
 
     this.dataBucket = new NumaCorsEnabledBucket(this, 'data-source-bucket', {
       bucketName: 'data',
-      client: props.client,
+      clientName: props.clientName,
       environmentName: props.environmentName,
       clientAccountId: props.clientAccountId,
       allowedMethods: ['GET', 'PUT', 'DELETE'],
@@ -217,7 +217,7 @@ export class CoreNumaInfra extends Construct {
 
     const companyBucket = new NumaCorsEnabledBucket(this, 'company-data-bucket', {
       bucketName: 'company',
-      client: props.client,
+      clientName: props.clientName,
       environmentName: props.environmentName,
       clientAccountId: props.clientAccountId,
       allowedMethods: ['GET', 'PUT', 'DELETE'],
@@ -227,7 +227,7 @@ export class CoreNumaInfra extends Construct {
 
     const otelConfigKey = 'otel-config.yaml';
     const configBucket = new ConfigBucket(this, 'config-bucket', {
-      client: props.client,
+      clientName: props.clientName,
       clientAccountId: props.clientAccountId,
     });
 
@@ -241,7 +241,7 @@ export class CoreNumaInfra extends Construct {
     this.otelConfigPath = `${configBucket.bucket.bucketRegionalDomainName}/${otelConfigKey}`;
 
     this.outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
-      client: props.client,
+      clientName: props.clientName,
       clientAccountId: props.clientAccountId,
       environmentName: props.environmentName,
       bucketName: 'outputs',
@@ -835,7 +835,7 @@ export interface CoreNumaInfraProps
     Omit<QBusinessChatControlConfigurerProps, 'applicationId' | 'accountId'> {}
 
 interface _CoreNumaInfraProps {
-  client: string;
+  clientName: string;
   environmentName: string;
   /**
    * Enable iFrame support. Not supported on every account.

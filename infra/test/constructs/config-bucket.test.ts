@@ -7,7 +7,7 @@ import { Construct } from 'constructs';
 class TestStack extends TerraformStack {
   constructor(scope: Construct, name: string) {
     super(scope, name);
-    new ConfigBucket(this, 'test', { client: 'bob', clientAccountId: '12345' });
+    new ConfigBucket(this, 'test', { clientName: 'bob', clientAccountId: '12345' });
   }
 }
 

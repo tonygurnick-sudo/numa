@@ -24,11 +24,18 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   protected s3KeyPrefix: string;
   protected outputsBucket: S3Bucket;
   readonly appId: string;
+  readonly clientName: string;
+
+  protected getRoleName(suffix: string): string {
+    const appSpecificSuffix = `-${this.appId}${suffix}`;
+    return `${this.clientName}`.slice(0, 64 - appSpecificSuffix.length) + appSpecificSuffix;
+  }
 
   constructor(scope: Construct, name: string, props: AppSpecificBaseNumaAppProps) {
     super(scope, name, props);
 
     this.appId = props.appId;
+    this.clientName = props.clientName;
     this.outputsBucket = props.outputsBucket;
 
     this.urlPathPrefix = '/api' + this.prepPathPart(props.urlPathPrefix ?? this.appId);
@@ -68,7 +75,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     });
 
     const stepFunctionRole = new IamRole(scope, name + '_role', {
-      name: scope.node.id + '_' + name,
+      name: this.getRoleName(`_${name}`),
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'states.amazonaws.com',
       }),
@@ -79,8 +86,9 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       roleName: stepFunctionRole.name,
     });
 
+    const functionNameSuffix = `-${this.appId}_${name}_step-function`;
     const stepFunction = new SfnStateMachine(this, name + '_step-function', {
-      name: scope.node.id + '_' + name + '_step-function',
+      name: this.clientName.slice(0, 80 - functionNameSuffix.length) + functionNameSuffix,
       definition: props.stepFunctionDefinition,
       roleArn: stepFunctionRole.arn,
       loggingConfiguration: {
@@ -483,6 +491,7 @@ export interface UserConfigurableBaseNumaAppProps {
 }
 
 export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiGatewayLambdaCollectionProps {
+  clientName: string;
   outputsBucket: S3Bucket;
 }
 

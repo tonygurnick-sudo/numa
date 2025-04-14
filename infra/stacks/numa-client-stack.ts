@@ -36,14 +36,14 @@ export class NumaClientStack extends TerraformStack {
     const defaults = {
       domainSuffix: props.domainSuffix,
     };
-    const clientConfig = lookupConfigForClient(props.client, defaults);
+    const clientConfig = lookupConfigForClient(props.clientName, defaults);
 
     const deployerRole = `arn:aws:iam::${props.arcanumNumaAccount}:role/admin-delegated-access`;
     const clientRole = `arn:aws:iam::${clientConfig.clientAccountId}:role/ArcanumAIAccess`;
     super(scope, name);
 
     const keyName = [name, 'numa'].join('/') + '.tfstate';
-    const key = ['product', props.client, props.environmentName, keyName].filter((x) => x).join('/');
+    const key = ['product', props.clientName, props.environmentName, keyName].filter((x) => x).join('/');
     new S3Backend(this, {
       bucket: 'arcanum-terraform-state',
       region: 'ap-southeast-2',
@@ -58,7 +58,7 @@ export class NumaClientStack extends TerraformStack {
         {
           tags: {
             Arcanum: 'true',
-            Client: props.client ?? 'unspecified',
+            Client: props.clientName ?? 'unspecified',
             CreatedBy: 'CDKTF',
             Repository: process.env['CI_PROJECT_PATH'] ?? 'unknown',
             ServiceName: 'numa',
@@ -101,7 +101,7 @@ export class NumaClientStack extends TerraformStack {
     });
 
     const honeycomb = new Honeycomb(this, 'honeycomb', {
-      name: clientConfig.client,
+      name: clientConfig.clientName,
     });
 
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
@@ -118,15 +118,15 @@ export class NumaClientStack extends TerraformStack {
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
-    const safeConstructId = props.client.replace(/^(?=[^a-zA-Z_])/, '_');
+    const safeConstructId = props.clientName.replace(/^(?=[^a-zA-Z_])/, '_');
     new AppAgnosticApiGatewayLambdaCollection(this, safeConstructId + '-core', {
       apiGatewayAuthorizerId: fe.authorizer.id,
       apiGatewayId: fe.apiGateway.id,
-      clientId: core.userPoolClient.id,
-      clientSecret: core.userPoolClient.clientSecret,
-      client: props.client,
       chatHistoryTableName: core.chatHistoryTable.name,
+      clientName: props.clientName,
       region: clientConfig.region,
+      userPoolClientId: core.userPoolClient.id,
+      userPoolClientSecret: core.userPoolClient.clientSecret,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(
@@ -136,12 +136,13 @@ export class NumaClientStack extends TerraformStack {
       clientConfig.allProdApps ?? false,
       clientConfig.devInstance ?? false,
     );
-    const apps = appConfigsToDeploy.map(([appId, appConfig]) => {
-      const app = lookupAppFromId(appId);
-      return new app(this, `${safeConstructId}-${appId}`, {
+    const apps = appConfigsToDeploy.map(([configuredAppId, appConfig]) => {
+      const app = lookupAppFromId(configuredAppId);
+      return new app(this, `${safeConstructId}-${configuredAppId}`, {
         ...appConfig,
         apiGatewayAuthorizerId: fe.authorizer.id,
         apiGatewayId: fe.apiGateway.id,
+        clientName: props.clientName,
         outputsBucket: core.outputsBucket.bucket,
         otelConfig: {
           otelConfigPath: core.otelConfigPath,
@@ -196,7 +197,7 @@ export class NumaClientStack extends TerraformStack {
         Q_INDEX_ID: core.qBusinessIndexId,
         Q_RETRIEVER_ID: core.qBusinessRetrieverId,
         API_ENDPOINT: '/api',
-        CLIENT_NAME: props.client,
+        CLIENT_NAME: props.clientName,
         OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
         HONEYCOMB_KEY: honeycomb.frontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
         DATA_BUCKET: core.dataBucket.bucket.bucket,
@@ -277,19 +278,19 @@ export interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'
    */
   apps?: Record<string, UserConfigurableBaseNumaAppProps>;
 }
-type InputConfig = Omit<ClientConfig, 'client' | 'domainName'>;
+type InputConfig = Omit<ClientConfig, 'clientName' | 'domainName'>;
 const clientConfigProd = _clientConfigProd as Record<string, InputConfig>;
 
 export function listNumaClients(): string[] {
   return Object.keys(clientConfigProd);
 }
 
-export function lookupConfigForClient(client: string, defaults: Record<string, string>): ClientConfig {
-  if (!listNumaClients().includes(client)) throw new Error('Invalid client.');
-  const config = clientConfigProd[client];
-  const domainName = config.customDomain ?? `${client}.${defaults.domainSuffix}`;
+export function lookupConfigForClient(clientName: string, defaults: Record<string, string>): ClientConfig {
+  if (!listNumaClients().includes(clientName)) throw new Error(`Invalid client name: ${clientName}`);
+  const config = clientConfigProd[clientName];
+  const domainName = config.customDomain ?? `${clientName}.${defaults.domainSuffix}`;
   return {
-    client,
+    clientName,
     domainName,
     ...defaults,
     ...config,
@@ -297,7 +298,7 @@ export function lookupConfigForClient(client: string, defaults: Record<string, s
 }
 
 export interface NumaClientStackProps {
-  client: string;
+  clientName: string;
   environmentName: EnvironmentName;
   domainSuffix: string;
   hostedZone: string;
@@ -346,24 +347,24 @@ export function getAppConfigsToDeploy(
   if (allApps || allProdApps) {
     // Handle production apps
     Object.entries(appLibrary)
-      .filter(([appId]) => !(appId in appConfigs))
+      .filter(([configuredAppId]) => !(configuredAppId in appConfigs))
       .filter((entry) => {
         const [_appId, { isProdApp }] = entry;
         return allApps || isProdApp;
       })
       .forEach((entry) => {
-        const [appId] = entry;
-        appConfigsToDeploy.push([appId, appConfigs[appId] ?? {}]);
+        const [configuredAppId] = entry;
+        appConfigsToDeploy.push([configuredAppId, appConfigs[configuredAppId] ?? {}]);
       });
   }
 
   // Use specific app configurations, including dev apps if this is a dev instance
   if (isDevInstance) {
     Object.entries(devAppLibrary)
-      .filter(([appId]) => !(appId in appConfigs))
+      .filter(([configuredAppId]) => !(configuredAppId in appConfigs))
       .forEach((entry) => {
-        const [appId] = entry;
-        appConfigsToDeploy.push([appId, appConfigs[appId] ?? {}]);
+        const [configuredAppId] = entry;
+        appConfigsToDeploy.push([configuredAppId, appConfigs[configuredAppId] ?? {}]);
       });
   }
 

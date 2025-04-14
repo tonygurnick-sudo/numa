@@ -4,7 +4,7 @@ import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { Construct } from 'constructs';
 
 export interface NumaCorsEnabledBucketProps extends S3BucketConfig {
-  client: string;
+  clientName: string;
   environmentName: string;
   bucketName: string;
   clientAccountId: string;
@@ -21,17 +21,17 @@ export interface NumaCorsEnabledBucketProps extends S3BucketConfig {
 
 export class NumaCorsEnabledBucket extends PrivateBucket {
   constructor(scope: Construct, name: string, props: NumaCorsEnabledBucketProps) {
-    const { client, environmentName, bucketName, addTestObject = false, ...bucketConfig } = props;
+    const { clientName, environmentName, bucketName, addTestObject = false, ...bucketConfig } = props;
     const envSuffix = environmentName != 'prod' ? `-${environmentName}` : '';
 
-    const allowedOrigins = [`https://${client}.numa.arcanum.ai`];
+    const allowedOrigins = [`https://${clientName}.numa.arcanum.ai`];
     if (props.allowLocalhostOrigin ?? false) {
       allowedOrigins.push('http://localhost:5173');
     }
 
     super(scope, name, {
       ...bucketConfig,
-      bucket: `numa-${client}${envSuffix}-${bucketName}`,
+      bucket: `numa-${clientName}${envSuffix}-${bucketName}`,
       corsRule: [
         {
           allowedHeaders: ['*'],
