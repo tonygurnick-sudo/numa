@@ -346,6 +346,11 @@
     ],
     "region": "us-east-1"
   },
+  "gracepapers": {
+    "allProdApps": true,
+    "clientAccountId": "770424809441",
+    "region": "ap-southeast-2"
+  },
   "kapiti-coast": {
     "allProdApps": true,
     "clientAccountId": "557690588447",
