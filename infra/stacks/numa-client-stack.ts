@@ -311,7 +311,7 @@ export interface AppDefinition {
 
 export const appLibrary: Record<string, AppDefinition> = {
   'candidate-screening': { app: CandidateScreening, isProdApp: true },
-  'company-profile': { app: CompanyProfile, isProdApp: false },
+  'company-profile': { app: CompanyProfile, isProdApp: true },
   'contract-analysis': { app: ContractAnalysis, isProdApp: true },
   'costing-calculator': { app: CostingCalculator, isProdApp: false },
   'document-summariser': { app: DocumentSummariser, isProdApp: true },
@@ -319,8 +319,8 @@ export const appLibrary: Record<string, AppDefinition> = {
   'infringement-review': { app: InfringementReview, isProdApp: false },
   'meeting-analyser': { app: MeetingAnalyser, isProdApp: true },
   'nzsba-policy-builder': { app: NZSBAPolicyBuilder, isProdApp: false },
-  'policy-drafter': { app: PolicyDrafter, isProdApp: false },
-  'policy-reviewer': { app: PolicyReviewer, isProdApp: false },
+  'policy-drafter': { app: PolicyDrafter, isProdApp: true },
+  'policy-reviewer': { app: PolicyReviewer, isProdApp: true },
 };
 
 // Include the E2E test app in a separate object
