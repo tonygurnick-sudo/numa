@@ -11,7 +11,6 @@ vi.mock('@aws-sdk/client-s3', () => {
     S3Client: vi.fn(() => ({
       send: vi.fn(),
     })),
-    GetObjectCommand: vi.fn(),
   };
 });
 
@@ -29,9 +28,6 @@ describe('bucketNameUtil', () => {
 
   describe('getPolicyBuilderBucketInfo', () => {
     it('should return the correct bucket info object', async () => {
-      // Mock the S3 client to simulate a successful response
-      s3Client.send.mockResolvedValueOnce({});
-
       // Test data
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const jobId = 'job123';
@@ -51,9 +47,6 @@ describe('bucketNameUtil', () => {
     });
 
     it('should handle missing OUTPUTS_BUCKET_NAME in config', async () => {
-      // Mock the S3 client to simulate a successful response
-      s3Client.send.mockResolvedValueOnce({});
-
       // Test with missing bucket name
       const config = { CLIENT_NAME: 'testclient' };
       const jobId = 'job123';
@@ -73,9 +66,6 @@ describe('bucketNameUtil', () => {
     });
 
     it('should handle missing CLIENT_NAME in config', async () => {
-      // Mock the S3 client to simulate a successful response
-      s3Client.send.mockResolvedValueOnce({});
-
       // Test with missing client name
       const config = { OUTPUTS_BUCKET_NAME: 'numa-outputs' };
       const jobId = 'job123';
@@ -95,9 +85,6 @@ describe('bucketNameUtil', () => {
     });
 
     it('should handle empty jobId', async () => {
-      // Mock the S3 client to simulate a successful response
-      s3Client.send.mockResolvedValueOnce({});
-
       // Test with empty job ID
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const jobId = '';
@@ -114,9 +101,6 @@ describe('bucketNameUtil', () => {
     });
 
     it('should handle null or undefined jobId', async () => {
-      // Mock the S3 client to simulate a successful response
-      s3Client.send.mockResolvedValueOnce({});
-
       // Test with null job ID
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const stepFunctionJobId = 'step123';
@@ -140,34 +124,7 @@ describe('bucketNameUtil', () => {
       });
     });
 
-    it('should use the legacy key if the new key is not found', async () => {
-      // Mock the S3 client to simulate a failure for the new key and success for the legacy key
-      s3Client.send
-        .mockRejectedValueOnce(new Error('Not Found')) // Simulate not found for new key
-        .mockResolvedValueOnce({}); // Simulate success for legacy key
-
-      // Test data
-      const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
-      const jobId = 'job123';
-      const stepFunctionJobId = 'step123';
-
-      // Expected result
-      const expected = {
-        bucketName: 'numa-testclient-outputs',
-        key: 'testclient-nzsba-policy-builder/step123/final_policy.pdf',
-      };
-
-      // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
-
-      // Verify the result
-      expect(result).toEqual(expected);
-    });
-
     it('should use "final_policy" as the default file name', async () => {
-      // Mock the S3 client to simulate a successful response
-      s3Client.send.mockResolvedValueOnce({});
-
       // Test data
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const jobId = 'job123';
