@@ -52,6 +52,16 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
   addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): LambdaFunction {
     props.runtime ??= 'python3.13';
 
+    const additionalPolicies = !props.additionalPolicyStatements
+      ? []
+      : [
+          new IamPolicy(this, name + '_policy', {
+            policy: new DataAwsIamPolicyDocument(this, name + '_policy-document', {
+              statement: props.additionalPolicyStatements,
+            }).json,
+          }),
+        ];
+
     // TODO: remove once deployed
     const oldRole = new IamRole(scope, scope.node.id + '_' + name + '_role', {
       name: scope.node.id + '_' + name,
@@ -64,22 +74,16 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       name: this.getRoleName('_' + name),
       assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
       lifecycle: { createBeforeDestroy: true },
+      dependsOn: additionalPolicies,
     });
     role.addMoveTarget(scope.node.id + '_' + name + '_role');
 
-    const additionalPolicyArns = !props.additionalPolicyStatements
-      ? []
-      : [
-          new IamPolicy(this, name + '_policy', {
-            policy: new DataAwsIamPolicyDocument(this, name + '_policy-document', {
-              statement: props.additionalPolicyStatements,
-            }).json,
-          }).arn,
-        ];
+    const additionalPolicyArns = additionalPolicies.map((policy) => policy.arn);
 
     new IamRolePolicyAttachmentsExclusive(scope, name + '_role-policy', {
       policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', ...additionalPolicyArns],
       roleName: role.name,
+      dependsOn: additionalPolicies,
     });
 
     const filename = path.resolve(

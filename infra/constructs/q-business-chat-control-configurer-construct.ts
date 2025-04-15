@@ -32,11 +32,13 @@ export class QBusinessChatControlConfigurer extends Construct {
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'lambda.amazonaws.com',
       }),
+      dependsOn: [policy],
     });
 
     new IamRolePolicyAttachmentsExclusive(this, 'role-attachments', {
       roleName: role.name,
       policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', policy.arn],
+      dependsOn: [policy],
     });
 
     const lambdaFilename = path.resolve(
