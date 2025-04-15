@@ -70,8 +70,8 @@ const ResetPassword = () => {
 
           {!isCodeSent ? (
             <Form onSubmit={handleRequestReset}>
-              <h1 className="mb-2">Request Password Reset</h1>
-              <p className="mb-4 fs-lg-1">Enter your email to receive a password reset code.</p>
+              <h2 className="mb-2">Password Reset</h2>
+              <p className="mb-4">Enter your email to receive a password reset code.</p>
               <Form.Group className="mb-3">
                 <Form.Label>Email</Form.Label>
                 <Form.Control
@@ -91,8 +91,8 @@ const ResetPassword = () => {
             </Form>
           ) : (
             <Form onSubmit={handleResetPassword}>
-              <h1 className="mb-2">Reset Your Password</h1>
-              <p className="mb-4 fs-lg-1">Enter the code you received and your new password.</p>
+              <h2 className="mb-2">Reset Your Password</h2>
+              <p className="mb-4">Enter the code you received and your new password.</p>
 
               <Form.Group className="mb-3">
                 <Form.Label>Email</Form.Label>
