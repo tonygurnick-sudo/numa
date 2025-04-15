@@ -12,6 +12,32 @@ import { useJobsApi } from '../Services/jobsApi';
 // Default no-op functions
 const noop = () => {};
 
+// Utility function to standardize file format
+const standardizeFileFormat = (file) => {
+  if (!file) return null;
+
+  // If it's a string, treat it as a file path
+  if (typeof file === 'string') {
+    return {
+      id: Math.random().toString(36).substring(2, 15),
+      name: file.split('/').pop(),
+      s3_key: file,
+    };
+  }
+
+  // If it's already in the standard format, return as is
+  if (file.id && file.name && file.s3_key) {
+    return file;
+  }
+
+  // Convert from various formats to standard
+  return {
+    id: file.randomId || file.id || Math.random().toString(36).substring(2, 15),
+    name: file.fileName || file.name || (file.filePath || file.s3_key || '').split('/').pop() || 'Unknown file',
+    s3_key: file.filePath || file.s3_key || file.key || '',
+  };
+};
+
 function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChange = noop, value, disabled = false }) {
   const {
     loading,
@@ -44,46 +70,34 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   const fileInputRef = useRef(null);
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
 
-  // Handle value prop changes - extract file names from various input formats
-  // This useEffect handles the value prop which can come in different formats
-  // We support both the new standardized format (array of objects with name, key, id)
-  // and legacy formats (string, single object, array of strings) for backward compatibility
+  // Handle value prop changes
+  // Uses standardizeFileFormat to convert any input format to our standard format:
+  // { id: string, name: string, s3_key: string }
   useEffect(() => {
-    if (!value) return;
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log('S3UploadModule received value:', value);
+    if (!value) {
+      return;
     }
+
+    let processedFiles;
 
     // Process the value based on its format
     if (Array.isArray(value)) {
-      // Handle the standardized format (array of maps with name, key, id)
-      if (value.length > 0 && typeof value[0] === 'object' && value[0].name && value[0].key) {
-        // Already in the correct format
-        setSelectedFiles(value.map((file) => ({ name: file.name })));
-      } else {
-        // Legacy format: array of strings or other objects
-        setSelectedFiles(
-          value.map((file) => ({
-            name: typeof file === 'string' ? file.split('/').pop() : file.fileName || file.name || 'Unknown file',
-          })),
-        );
-      }
-    } else if (typeof value === 'string') {
-      // Legacy format: string file path
-      setSelectedFiles([{ name: value.split('/').pop() }]);
-    } else if (typeof value === 'object' && value !== null) {
-      // Legacy format: single object
-      // Check if it's already in the new format
-      if (value.name && value.key) {
-        setSelectedFiles([{ name: value.name }]);
-      } else {
-        setSelectedFiles([{ name: value.fileName || value.name || 'Unknown file' }]);
-      }
+      processedFiles = value.map(standardizeFileFormat).filter(Boolean);
+    } else if (value) {
+      const standardized = standardizeFileFormat(value);
+      processedFiles = standardized ? [standardized] : [];
     }
 
-    // Mark as uploaded since we have a value
-    setUploadStatus('Upload successful!');
+    if (processedFiles && processedFiles.length > 0) {
+      setSelectedFiles(processedFiles);
+      const fileNames = processedFiles.map((f) => f.name).join(', ');
+      setUploadStatus(`Files uploaded: ${fileNames}`);
+      // Don't call onComplete here to avoid infinite loop
+      // onComplete is only called after actual file uploads
+    } else {
+      setSelectedFiles([]);
+      setUploadStatus(null);
+    }
   }, [value]);
 
   const fetchConfig = useCallback(async () => {
@@ -323,14 +337,19 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           },
         });
 
-        results.push({
-          filePath: s3Key,
-          fileName: file.name,
+        // Create standardized file object
+        const standardizedFile = standardizeFileFormat({
+          id: randomId,
+          name: file.name,
+          s3_key: s3Key,
+          filePath: s3Key, // Keep for backward compatibility
+          fileName: file.name, // Keep for backward compatibility
           fileType: file.type,
           s3Bucket: bucketName,
-          file,
-          randomId,
+          file, // Keep the original file for chat compatibility
         });
+
+        results.push(standardizedFile);
       }
 
       // Create the standardized format objects with id, name, s3_key
@@ -490,10 +509,12 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
                 className="mt-2"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedFiles([]);
+                  // Clear files and notify parent components
+                  const clearedFiles = [];
+                  setSelectedFiles(clearedFiles);
                   setError(null);
                   onNotComplete();
-                  onChange(null);
+                  onChange(clearedFiles); // Pass empty array instead of null for consistency
                 }}
               >
                 Clear All Files

@@ -189,12 +189,12 @@ const AppWizard = ({ manifest }) => {
 
   const handleTaskCompletion = (taskId, success = true, results = null) => {
     updateTaskCompletionStatus(taskId, success);
-    if (results) {
-      console.log('results', results);
-      if (results.length === 1) {
-        updateTaskInputValue(taskId, results[0].filePath);
-      } else {
-        updateTaskInputValue(taskId, results);
+    if (results && results.length > 0) {
+      // The results should already be in standardized format from S3UploadModule
+      // Just validate and store them
+      const validFiles = results.filter((file) => file && file.s3_key);
+      if (validFiles.length > 0) {
+        updateTaskInputValue(taskId, validFiles);
       }
     }
   };
