@@ -20,7 +20,7 @@ describe('ResetPassword Component', () => {
   it('should render initial password reset request form', () => {
     renderWithProviders(<ResetPassword />);
 
-    expect(screen.getByRole('heading', { name: 'Request Password Reset' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Password Reset' })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter your email')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Request Password Reset' })).toBeInTheDocument();
   });
