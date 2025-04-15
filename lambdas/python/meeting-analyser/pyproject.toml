@@ -25,11 +25,10 @@ python = "~3.13.0"
 
 aws-lambda-powertools = "3.9.0"
 bedrock = {path = "../../../lib/bedrock", develop = true}
-boto3 = "1.37.20"
 helpers = {path = "../../../lib/helpers", develop = true}
+s3_helpers = {path = "../../../lib/s3_helpers", develop = true}
 
 [tool.poetry.group.dev.dependencies]
-boto3-stubs = "1.37.20"
 mypy = "1.15.0"
 pylint = "3.3.6"
 pyright = "1.1.399"

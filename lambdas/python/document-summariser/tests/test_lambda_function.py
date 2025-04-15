@@ -30,6 +30,7 @@ class TestLambdaFunction(unittest.TestCase):
         write_mock.assert_called_once_with(
             "test-out-key",
             b"test-summary",
+            content_type="text/markdown",
         )
 
 

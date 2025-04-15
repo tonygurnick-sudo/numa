@@ -8,7 +8,6 @@ import {
   HTTP_REQUEST_TASK,
   S3_UPLOAD_TASK,
   TEXT_INPUT_TASK,
-  TEXT_OUTPUT_TASK,
 } from './base-numa-app-construct';
 
 const description = 'Review a policy';
@@ -71,42 +70,6 @@ export class PolicyReviewer extends BaseNumaApp {
           },
           order: 4,
         },
-        {
-          id: 'initial-analysis',
-          title: 'Initial Analysis',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/initial_analysis',
-          },
-          order: 5,
-        },
-        {
-          id: 'policy-review',
-          title: 'Review',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/policy_review',
-          },
-          order: 6,
-        },
-        {
-          id: 'recommended-updates',
-          title: 'Recommended Updates',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/recommended_updates',
-          },
-          order: 7,
-        },
-        {
-          id: 'updated-policy',
-          title: 'Updated Policy',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/updated_policy',
-          },
-          order: 8,
-        },
       ],
     };
 
@@ -157,6 +120,7 @@ export class PolicyReviewer extends BaseNumaApp {
             'legislation_content.$': '$.legislation_content',
             'policy_context.$': '$.policy_context',
             app_id: this.appId,
+            'output_path.$': `States.Format('${this.appId}/{}', $$.Execution.Input.job_id)`,
           },
           'WriteSuccessStatus',
           {

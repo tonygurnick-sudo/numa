@@ -1,4 +1,3 @@
-import json
 import os
 
 import structlog
@@ -28,12 +27,18 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
     helpers.setup_step_function_lambda_logging(event, context)
     try:
         input_key = event["input_key"]
-        output_key = event["output_key"]
+        output_path = event["output_path"]
         contract_context = event.get("contract_context", "")
+
+        # Create outputs array for each file
+        outputs: list[
+            helpers.AppOutputResultInlineOutput | helpers.AppOutputResulS3Output
+        ] = []
 
         contract_content = s3_helpers.read(input_key)
 
         # Step 1: Clause Identification
+        logger.info("Generating clause identification")
         identified_clauses = get_model_response(
             prompt=CLAUSE_IDENTIFICATION_PROMPT,
             input_data={
@@ -42,7 +47,27 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             },
         )
 
+        # Save clause identification as markdown
+        identified_clauses_key = f"{output_path}/identified_clauses.md"
+        s3_helpers.write(
+            identified_clauses_key,
+            identified_clauses.encode("utf-8"),
+            content_type="text/markdown",
+        )
+        outputs.append(
+            {
+                "content_type": "text/markdown",
+                "data": {
+                    "bucket": os.environ["BUCKET"],
+                    "key": identified_clauses_key,
+                },
+                "location": "S3",
+                "title": "Identified Clauses",
+            }
+        )
+
         # Step 2: Highlighting & Explanation
+        logger.info("Generating highlighting and explanation")
         highlighted_explanations = get_model_response(
             prompt=HIGHLIGHTING_EXPLANATION_PROMPT,
             input_data={
@@ -52,7 +77,27 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             },
         )
 
+        # Save highlighting & explanation as markdown
+        highlighted_explanations_key = f"{output_path}/highlighted_explanations.md"
+        s3_helpers.write(
+            highlighted_explanations_key,
+            highlighted_explanations.encode("utf-8"),
+            content_type="text/markdown",
+        )
+        outputs.append(
+            {
+                "content_type": "text/markdown",
+                "data": {
+                    "bucket": os.environ["BUCKET"],
+                    "key": highlighted_explanations_key,
+                },
+                "location": "S3",
+                "title": "Highlighted Explanations",
+            }
+        )
+
         # Step 3: Risk Assessment (combined risk detection and scoring)
+        logger.info("Generating risk assessment")
         risk_assessment = get_model_response(
             prompt=RISK_ASSESSMENT_PROMPT,
             input_data={
@@ -62,7 +107,27 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             },
         )
 
+        # Save risk assessment as markdown
+        risk_assessment_key = f"{output_path}/risk_assessment.md"
+        s3_helpers.write(
+            risk_assessment_key,
+            risk_assessment.encode("utf-8"),
+            content_type="text/markdown",
+        )
+        outputs.append(
+            {
+                "content_type": "text/markdown",
+                "data": {
+                    "bucket": os.environ["BUCKET"],
+                    "key": risk_assessment_key,
+                },
+                "location": "S3",
+                "title": "Risk Assessment",
+            }
+        )
+
         # Step 4: Improvement Suggestions
+        logger.info("Generating improvement suggestions")
         improvement_suggestions = get_model_response(
             prompt=IMPROVEMENT_SUGGESTIONS_PROMPT,
             input_data={
@@ -72,31 +137,32 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             },
         )
 
-        results = {
-            "identified_clauses": identified_clauses,
-            "highlighted_explanations": highlighted_explanations,
-            "risk_assessment": risk_assessment,
-            "improvement_suggestions": improvement_suggestions,
-        }
+        # Save improvement suggestions as markdown
+        improvement_suggestions_key = f"{output_path}/improvement_suggestions.md"
+        s3_helpers.write(
+            improvement_suggestions_key,
+            improvement_suggestions.encode("utf-8"),
+            content_type="text/markdown",
+        )
+        outputs.append(
+            {
+                "content_type": "text/markdown",
+                "data": {
+                    "bucket": os.environ["BUCKET"],
+                    "key": improvement_suggestions_key,
+                },
+                "location": "S3",
+                "title": "Improvement Suggestions",
+            }
+        )
 
-        results_json = json.dumps(results, indent=2).encode("utf-8")
-        s3_helpers.write(output_key, results_json, content_type="application/json")
+        logger.info("Completed contract analysis")
 
         return {
             "results": [
                 {
                     "input_reference": None,
-                    "outputs": [
-                        {
-                            "content_type": "application/json",
-                            "data": {
-                                "bucket": os.environ["BUCKET"],
-                                "key": output_key,
-                            },
-                            "location": "S3",
-                            "title": "Contract Analysis",
-                        },
-                    ],
+                    "outputs": outputs,
                 },
             ]
         }
