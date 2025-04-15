@@ -67,7 +67,7 @@ export class NumaFrontendInfra extends Construct {
       dependsOn: [validationRecord],
     });
 
-    const numaClient = `numa-${props.client}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}`;
+    const numaClient = `numa-${props.clientName}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}`;
     this.frontendBucket = new PrivateBucket(this, 'frontend-bucket', {
       bucket: numaClient + '-fe',
     }).bucket;
@@ -85,21 +85,24 @@ export class NumaFrontendInfra extends Construct {
     });
 
     const apiGatewayLogGroup = new NumaLogGroup(this, 'api-gateway-log-group', {
-      logGroupName: `${props.client}-access`,
+      logGroupName: `${props.clientName}-access`,
     }).logGroup;
 
+    const roleNameSuffix = '_' + name + '_' + 'authorizer-lambda-role';
     const authorizerRole = new IamRole(this, 'authorizer-lambda-role', {
-      name: name + '_' + scope.node.id + '_' + 'authorizer-lambda-role',
+      name: props.clientName.slice(0, 64 - roleNameSuffix.length) + roleNameSuffix,
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'lambda.amazonaws.com',
       }),
+      lifecycle: { createBeforeDestroy: true },
     });
 
     const cloudfrontSecretParameter = new SsmParameter(this, 'cloudfront-secret', {
-      name: name + '_' + scope.node.id + '_cloudfront-secret',
+      name: props.clientName + '_' + name + '_cloudfront-secret',
       type: 'String',
       value: uuidv4(),
       lifecycle: {
+        createBeforeDestroy: true,
         ignoreChanges: ['value'],
       },
     });
@@ -118,8 +121,9 @@ export class NumaFrontendInfra extends Construct {
       'api-gateway-authorizer',
       'lambda_function.zip',
     );
+    const lambdaNameSuffix = '_' + name + '_authorizer-lambda';
     const authorizerLambda = new LambdaFunction(this, 'authorizer-lambda', {
-      functionName: name + '_' + scope.node.id + '_authorizer-lambda',
+      functionName: props.clientName.slice(0, 64 - lambdaNameSuffix.length) + lambdaNameSuffix,
       role: authorizerRole.arn,
       filename: authorizerLambdaFilename,
       sourceCodeHash: Fn.filebase64sha256(authorizerLambdaFilename),
@@ -137,6 +141,7 @@ export class NumaFrontendInfra extends Construct {
           COGNITO_USER_POOL_ID: props.userPoolId,
         },
       },
+      lifecycle: { createBeforeDestroy: true },
     });
 
     this.authorizer = new Apigatewayv2Authorizer(this, 'authorizer', {
@@ -183,7 +188,7 @@ export class NumaFrontendInfra extends Construct {
     });
 
     const defaultCachePolicy = new CloudfrontCachePolicy(this, 'defaultCachePolicy', {
-      name: `${props.client.replaceAll('.', '-')}-default-cache-policy`,
+      name: `${props.clientName.replaceAll('.', '-')}-default-cache-policy`,
       parametersInCacheKeyAndForwardedToOrigin: {
         cookiesConfig: {
           cookieBehavior: 'none',
@@ -202,7 +207,7 @@ export class NumaFrontendInfra extends Construct {
     });
 
     const apiCachePolicy = new CloudfrontCachePolicy(this, 'apiCachePolicy', {
-      name: `${props.client.replaceAll('.', '-')}-api-cache-policy`,
+      name: `${props.clientName.replaceAll('.', '-')}-api-cache-policy`,
       parametersInCacheKeyAndForwardedToOrigin: {
         cookiesConfig: {
           cookieBehavior: 'all',
@@ -317,7 +322,7 @@ export class NumaFrontendInfra extends Construct {
     });
 
     new NumaCorsEnabledBucket(this, 'frontend-s3-datasource', {
-      client: props.client,
+      clientName: props.clientName,
       clientAccountId: props.accountId,
       environmentName: props.environmentName,
       bucketName: 'frontend-s3-datasource',
@@ -345,7 +350,7 @@ export class NumaFrontendInfra extends Construct {
 
 export interface NumaFrontendInfraProps {
   certificateProvider: AwsProvider;
-  client: string;
+  clientName: string;
   domainName: string;
   environmentName: string;
   hostedZoneProvider: AwsProvider;

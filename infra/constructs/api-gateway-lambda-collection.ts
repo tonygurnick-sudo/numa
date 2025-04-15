@@ -47,13 +47,25 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       .trim();
   }
 
+  protected abstract getRoleName(suffix: string): string;
+
   addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): LambdaFunction {
     props.runtime ??= 'python3.13';
 
-    const role = new IamRole(scope, scope.node.id + '_' + name + '_role', {
+    // TODO: remove once deployed
+    const oldRole = new IamRole(scope, scope.node.id + '_' + name + '_role', {
       name: scope.node.id + '_' + name,
       assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
+      lifecycle: { createBeforeDestroy: true },
     });
+    oldRole.moveTo(scope.node.id + '_' + name + '_role');
+
+    const role = new IamRole(scope, name + '_role', {
+      name: this.getRoleName('_' + name),
+      assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
+      lifecycle: { createBeforeDestroy: true },
+    });
+    role.addMoveTarget(scope.node.id + '_' + name + '_role');
 
     const additionalPolicyArns = !props.additionalPolicyStatements
       ? []
