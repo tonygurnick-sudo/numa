@@ -63,7 +63,9 @@ const FileUploader = ({ onUploadSuccess }) => {
     );
 
     // Create a set of unique folder paths
-    const folders = new Set();
+    const combinedFiles = [...files, ...fileList];
+    const folders = new Set([...fileStructure.folders]);
+
     fileList.forEach((file) => {
       const path = file.webkitRelativePath || file.name;
       const parts = path.split('/');
@@ -73,12 +75,12 @@ const FileUploader = ({ onUploadSuccess }) => {
       }
     });
 
-    setFiles(fileList);
+    setFiles(combinedFiles);
     setFileStructure({
-      files: fileList,
+      files: combinedFiles,
       folders: folders,
     });
-    setTotalFiles(fileList.length);
+    setTotalFiles(combinedFiles.length);
     setError(null);
     setSuccess(false);
     setUploadProgress(0);
@@ -162,7 +164,21 @@ const FileUploader = ({ onUploadSuccess }) => {
 
       console.log('All files uploaded successfully');
       setSuccess(true);
+
+      // Clear all file-related state after successful upload
       setFiles([]);
+      setFileStructure({
+        files: [],
+        folders: new Set(),
+      });
+      setTotalFiles(0);
+
+      // Reset file input to allow re-adding the same files
+      const fileInput = document.getElementById('file-upload');
+      if (fileInput) {
+        fileInput.value = '';
+      }
+
       onUploadSuccess();
     } catch (err) {
       console.error('Upload error:', err);
@@ -232,7 +248,11 @@ const FileUploader = ({ onUploadSuccess }) => {
 
     if (files.length) {
       // Create a set of unique folder paths
-      const folders = new Set();
+      // Get existing files from state and combine with newly dropped files
+      const stateFiles = [...fileStructure.files]; // Get existing files from state
+      const combinedFiles = [...stateFiles, ...files];
+      const folders = new Set([...fileStructure.folders]);
+
       files.forEach((file) => {
         const path = file.customRelativePath || file.webkitRelativePath || file.name;
         const parts = path.split('/');
@@ -243,11 +263,11 @@ const FileUploader = ({ onUploadSuccess }) => {
       });
 
       setFileStructure({
-        files: files,
+        files: combinedFiles,
         folders: folders,
       });
-      setFiles(files);
-      setTotalFiles(files.length);
+      setFiles(combinedFiles);
+      setTotalFiles(combinedFiles.length);
       setError(null);
       setSuccess(false);
       setUploadProgress(0);
@@ -289,6 +309,54 @@ const FileUploader = ({ onUploadSuccess }) => {
     return () => clearTimeout(timeoutId);
   }, [success, uploadProgress]);
 
+  const removeFile = (fileToRemove) => {
+    // Update files array
+    setFiles((prev) => prev.filter((file) => file !== fileToRemove));
+
+    // Update fileStructure
+    setFileStructure((prev) => ({
+      ...prev,
+      files: prev.files.filter((file) => file !== fileToRemove),
+    }));
+
+    setTotalFiles((prev) => prev - 1);
+    setError(null);
+
+    // Reset file input to allow re-adding the same file
+    const fileInput = document.getElementById('file-upload');
+    if (fileInput) {
+      fileInput.value = '';
+    }
+  };
+
+  const clearAllFiles = () => {
+    setFiles([]);
+    setFileStructure({
+      files: [],
+      folders: new Set(),
+    });
+    setTotalFiles(0);
+    setError(null);
+    setSuccess(false);
+
+    // Reset file input to allow re-adding the same files
+    const fileInput = document.getElementById('file-upload');
+    if (fileInput) {
+      fileInput.value = '';
+    }
+  };
+
+  // State to track which folders are expanded/collapsed
+  const [expandedFolders, setExpandedFolders] = useState({});
+
+  // Toggle folder expanded/collapsed state
+  const toggleFolder = (folderPath) => {
+    setExpandedFolders((prev) => ({
+      ...prev,
+      [folderPath]: !prev[folderPath],
+    }));
+  };
+
   const renderFileTree = () => {
     if (!fileStructure.files.length) return null;
 
@@ -327,7 +395,12 @@ const FileUploader = ({ onUploadSuccess }) => {
               <i className="bi bi-file-earmark me-2"></i>
               {file.name}
             </div>
-            <div className="text-muted small">{(file.size / 1024).toFixed(2)} KB</div>
+            <div className="d-flex align-items-center">
+              <span className="text-muted small me-3">{(file.size / 1024).toFixed(2)} KB</span>
+              <Button variant="link" className="p-0 text-danger" onClick={() => removeFile(file)}>
+                <i className="bi bi-x-circle"></i>
+              </Button>
+            </div>
           </div>
         ))}
 
@@ -343,35 +416,53 @@ const FileUploader = ({ onUploadSuccess }) => {
             const depth = folder.split('/').length;
             const folderName = folder.split('/').pop();
             const indentLevel = Math.max(0, depth - 1);
+            const isExpanded = expandedFolders[folder] !== false; // Default to expanded if not set
 
             return (
               <div key={folder}>
-                <div className="list-group-item bg-light d-flex justify-content-between align-items-center">
+                <div
+                  className="list-group-item bg-light d-flex justify-content-between align-items-center"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => toggleFolder(folder)}
+                >
                   <div>
                     <span style={{ marginLeft: `${indentLevel * 2}rem` }}>
-                      <i className="bi bi-folder me-2 text-warning"></i>
+                      <i className={`bi ${isExpanded ? 'bi-folder-minus' : 'bi-folder-plus'} me-2 text-warning`}></i>
                       <strong>{folderName}</strong>
                       <span className="ms-2 text-muted small">({files.length} files)</span>
                     </span>
                   </div>
                 </div>
-                {files.map((file) => {
-                  const fileName = file.name.split('/').pop();
-                  return (
-                    <div
-                      key={file.name}
-                      className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                    >
-                      <div>
-                        <span style={{ marginLeft: `${(indentLevel + 1) * 2}rem` }}>
-                          <i className="bi bi-file-earmark me-2"></i>
-                          {fileName}
-                        </span>
+                {isExpanded &&
+                  files.map((file) => {
+                    const fileName = file.name.split('/').pop();
+                    return (
+                      <div
+                        key={file.name}
+                        className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                      >
+                        <div>
+                          <span style={{ marginLeft: `${(indentLevel + 1) * 2}rem` }}>
+                            <i className="bi bi-file-earmark me-2"></i>
+                            {fileName}
+                          </span>
+                        </div>
+                        <div className="d-flex align-items-center">
+                          <span className="text-muted small me-3">{(file.size / 1024).toFixed(2)} KB</span>
+                          <Button
+                            variant="link"
+                            className="p-0 text-danger"
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent folder toggle when clicking remove
+                              removeFile(file);
+                            }}
+                          >
+                            <i className="bi bi-x-circle"></i>
+                          </Button>
+                        </div>
                       </div>
-                      <div className="text-muted small">{(file.size / 1024).toFixed(2)} KB</div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             );
           })}
@@ -412,6 +503,13 @@ const FileUploader = ({ onUploadSuccess }) => {
         {fileStructure.files.length > 0 && (
           <>
             <div className="mb-4">{renderFileTree()}</div>
+
+            <div className="d-flex justify-content-center mb-3">
+              <Button variant="outline-secondary" size="sm" onClick={clearAllFiles} className="me-2">
+                <i className="bi bi-trash me-1"></i>
+                Clear All Files
+              </Button>
+            </div>
 
             <div className="selected-file">
               {isUploading && (
