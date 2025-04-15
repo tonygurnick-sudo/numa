@@ -7,7 +7,6 @@ import {
   BaseNumaAppProps,
   HTTP_REQUEST_TASK,
   S3_UPLOAD_TASK,
-  TEXT_OUTPUT_TASK,
 } from './base-numa-app-construct';
 
 const description = `Summarise one or multiple documents`;
@@ -47,15 +46,6 @@ export class DocumentSummariser extends BaseNumaApp {
             },
           },
           order: 2,
-        },
-        {
-          id: 'summaries',
-          title: 'Summaries',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/content',
-          },
-          order: 3,
         },
       ],
     };

@@ -8,7 +8,6 @@ import {
   HTTP_REQUEST_TASK,
   S3_UPLOAD_TASK,
   TEXT_INPUT_TASK,
-  TEXT_OUTPUT_TASK,
 } from './base-numa-app-construct';
 
 const description = `Transform raw meeting data into comprehensive summaries,
@@ -76,60 +75,6 @@ export class MeetingAnalyser extends BaseNumaApp {
             },
           },
           order: 4,
-        },
-        {
-          id: 'analysis-templated',
-          title: 'Analysis based on template',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/template_output',
-          },
-          order: 5,
-        },
-        {
-          id: 'summary',
-          title: 'Summary',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/summary',
-          },
-          order: 6,
-        },
-        {
-          id: 'topic-analysis',
-          title: 'Topic Analysis',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/topic_analysis',
-          },
-          order: 7,
-        },
-        {
-          id: 'participant-insights',
-          title: 'Participant Insights',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/participant_insights',
-          },
-          order: 8,
-        },
-        {
-          id: 'action-items',
-          title: 'Action Items',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/action_items',
-          },
-          order: 9,
-        },
-        {
-          id: 'follow-up-emails',
-          title: 'Follow Up Emails',
-          type: TEXT_OUTPUT_TASK,
-          params: {
-            dataRef: '@call-step-function/follow_up_emails',
-          },
-          order: 10,
         },
       ],
     };
@@ -229,13 +174,16 @@ export class MeetingAnalyser extends BaseNumaApp {
             'job_id.$': '$.job_id',
             'meeting_notes_and_or_transcript.$': '$.extracted[*].Payload.content',
             'other_notes.$': '$$.Execution.Input.other_notes',
-            'output_key.$': `States.Format('${this.appId}/{}/analysis.json', $$.Execution.Input.job_id)`,
+            'output_path.$': `States.Format('${this.appId}/{}', $$.Execution.Input.job_id)`,
             'template.$': '$$.Execution.Input.template',
           },
           'WriteSuccessStatus',
+          {
+            OutputPath: '$.Payload',
+          },
         ),
         WriteFailureStatus: this.writeFailureStatus(),
-        WriteSuccessStatus: this.writeSuccessStatus('$.Payload'),
+        WriteSuccessStatus: this.writeSuccessStatus(),
         Success: {
           Type: 'Succeed',
         },

@@ -10,42 +10,49 @@ CONTEXT._function_name = "test_function_name"  # pylint: disable=protected-acces
 
 
 class TestLambdaFunction(unittest.TestCase):
-    @patch("s3_helpers.read", side_effect=[b"bar", b"foo"])
-    @patch("s3_helpers.write")
-    def test_handler(self, write_mock, _read_mock):
+    @patch("os.environ", {"BUCKET": "test-bucket"})
+    def test_handler(self):
         test_event = {
             "app_id": "test-app",
             "job_id": "test-job",
-            "output_key": "test-key",
-            "key_suffix": ".foobar.json",
+            "output_path": "test-app/test-job",
+            "key_suffix": ".md",
             "input_keys": [
-                "some/path/foo-file.foobar.json",
-                "some/other/path/bar-file.foobar.json",
+                "some/path/foo-file.md",
+                "some/other/path/bar-file.md",
             ],
         }
 
         result = lambda_function.handler(test_event, CONTEXT)
 
-        expected_content = (
-            "# Document 1: bar-file\n"
-            "bar\n"
-            "\n---\n"
-            "\n"
-            "# Document 2: foo-file\n"
-            "foo\n"
-            "\n---\n"
-        )
-        self.assertEqual(
-            result,
-            {
-                "content": expected_content,
-                "output_key": "test-key",
-            },
-        )
-        write_mock.assert_called_once_with(
-            "test-key",
-            expected_content.encode("utf-8"),
-        )
+        expected_result = {
+            "results": [
+                {
+                    "input_reference": None,
+                    "outputs": [
+                        {
+                            "content_type": "text/markdown",
+                            "data": {
+                                "bucket": "test-bucket",
+                                "key": "some/other/path/bar-file.md",
+                            },
+                            "location": "S3",
+                            "title": "Summary: bar-file",
+                        },
+                        {
+                            "content_type": "text/markdown",
+                            "data": {
+                                "bucket": "test-bucket",
+                                "key": "some/path/foo-file.md",
+                            },
+                            "location": "S3",
+                            "title": "Summary: foo-file",
+                        },
+                    ],
+                }
+            ]
+        }
+        self.assertEqual(result, expected_result)
 
 
 if __name__ == "__main__":

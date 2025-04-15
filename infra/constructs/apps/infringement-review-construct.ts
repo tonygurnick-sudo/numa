@@ -163,7 +163,7 @@ export class InfringementReview extends BaseNumaApp {
             'job_id.$': '$.job_id',
             'input_key.$': '$.extracted.output_key',
             'infringement_details.$': '$.infringement_details',
-            'output_key.$': `States.Format('${this.appId}/{}/infringement-review.json', $$.Execution.Input.job_id)`,
+            'output_path.$': `States.Format('${this.appId}/{}', $$.Execution.Input.job_id)`,
           },
           'WriteSuccessStatus',
           {

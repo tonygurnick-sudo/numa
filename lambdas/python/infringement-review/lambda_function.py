@@ -1,4 +1,3 @@
-import json
 import os
 
 import structlog
@@ -25,11 +24,13 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
     helpers.setup_step_function_lambda_logging(event, context)
     try:
         input_key = event["input_key"]
-        output_key = event.get(
-            "output_key",
-            f"{event['app_id']}/{event['job_id']}/infringement-review.json",
-        )
+        output_path = event["output_path"]
         infringement_details = event["infringement_details"]
+
+        # Create outputs array for each file
+        outputs: list[
+            helpers.AppOutputResultInlineOutput | helpers.AppOutputResulS3Output
+        ] = []
 
         logger.info(
             "Processing infringement review",
@@ -55,6 +56,25 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             },
         )
 
+        # Save evidence analysis as markdown
+        evidence_analysis_key = f"{output_path}/evidence_analysis.md"
+        s3_helpers.write(
+            evidence_analysis_key,
+            evidence_analysis.encode("utf-8"),
+            content_type="text/markdown",
+        )
+        outputs.append(
+            {
+                "content_type": "text/markdown",
+                "data": {
+                    "bucket": os.environ["BUCKET"],
+                    "key": evidence_analysis_key,
+                },
+                "location": "S3",
+                "title": "Evidence Analysis",
+            }
+        )
+
         # Step 2: Human Error Analysis
         logger.info("Starting human error analysis")
         human_error_analysis = get_model_response(
@@ -63,6 +83,25 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "evidence_content": evidence_content,
                 "infringement_details": infringement_details,
             },
+        )
+
+        # Save human error analysis as markdown
+        human_error_analysis_key = f"{output_path}/human_error_analysis.md"
+        s3_helpers.write(
+            human_error_analysis_key,
+            human_error_analysis.encode("utf-8"),
+            content_type="text/markdown",
+        )
+        outputs.append(
+            {
+                "content_type": "text/markdown",
+                "data": {
+                    "bucket": os.environ["BUCKET"],
+                    "key": human_error_analysis_key,
+                },
+                "location": "S3",
+                "title": "Human Error Analysis",
+            }
         )
 
         # Step 3: Legislation Evaluation
@@ -76,6 +115,25 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             },
         )
 
+        # Save legislation evaluation as markdown
+        legislation_evaluation_key = f"{output_path}/legislation_evaluation.md"
+        s3_helpers.write(
+            legislation_evaluation_key,
+            legislation_evaluation.encode("utf-8"),
+            content_type="text/markdown",
+        )
+        outputs.append(
+            {
+                "content_type": "text/markdown",
+                "data": {
+                    "bucket": os.environ["BUCKET"],
+                    "key": legislation_evaluation_key,
+                },
+                "location": "S3",
+                "title": "Legislation Evaluation",
+            }
+        )
+
         # Step 4: Decision Determination
         logger.info("Determining decision")
         decision_determination = get_model_response(
@@ -85,6 +143,25 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "human_error_analysis": human_error_analysis,
                 "legislation_comparison": legislation_evaluation,
             },
+        )
+
+        # Save decision determination as markdown
+        decision_determination_key = f"{output_path}/decision_determination.md"
+        s3_helpers.write(
+            decision_determination_key,
+            decision_determination.encode("utf-8"),
+            content_type="text/markdown",
+        )
+        outputs.append(
+            {
+                "content_type": "text/markdown",
+                "data": {
+                    "bucket": os.environ["BUCKET"],
+                    "key": decision_determination_key,
+                },
+                "location": "S3",
+                "title": "Decision Determination",
+            }
         )
 
         # Step 5: Generate Response Letter
@@ -100,34 +177,32 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             },
         )
 
+        # Save response letter as markdown
+        response_letter_key = f"{output_path}/response_letter.md"
+        s3_helpers.write(
+            response_letter_key,
+            response_letter.encode("utf-8"),
+            content_type="text/markdown",
+        )
+        outputs.append(
+            {
+                "content_type": "text/markdown",
+                "data": {
+                    "bucket": os.environ["BUCKET"],
+                    "key": response_letter_key,
+                },
+                "location": "S3",
+                "title": "Response Letter",
+            }
+        )
+
         logger.info("Completed infringement review")
-
-        results = {
-            "evidence_analysis": evidence_analysis,
-            "human_error_analysis": human_error_analysis,
-            "legislation_evaluation": legislation_evaluation,
-            "decision_determination": decision_determination,
-            "response_letter": response_letter,
-        }
-
-        results_json = json.dumps(results, indent=2).encode("utf-8")
-        s3_helpers.write(output_key, results_json, content_type="application/json")
 
         return {
             "results": [
                 {
                     "input_reference": None,
-                    "outputs": [
-                        {
-                            "content_type": "application/json",
-                            "data": {
-                                "bucket": os.environ["BUCKET"],
-                                "key": output_key,
-                            },
-                            "location": "S3",
-                            "title": "Infringement Review",
-                        },
-                    ],
+                    "outputs": outputs,
                 },
             ]
         }

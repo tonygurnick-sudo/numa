@@ -26,7 +26,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
         }
 
         summary = _summarise(input_data)["markdown_summary"].encode("utf-8")
-        s3_helpers.write(output_key, summary)
+        s3_helpers.write(output_key, summary, content_type="text/markdown")
 
         return {"output_key": output_key}
 

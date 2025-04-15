@@ -110,7 +110,7 @@ export class ContractAnalysis extends BaseNumaApp {
             'job_id.$': '$.job_id',
             'input_key.$': '$.extracted.output_key',
             'contract_context.$': '$.contract_context',
-            'output_key.$': `States.Format('${this.appId}/{}/contract-analysis.json', $$.Execution.Input.job_id)`,
+            'output_path.$': `States.Format('${this.appId}/{}', $$.Execution.Input.job_id)`,
           },
           'WriteSuccessStatus',
           {
