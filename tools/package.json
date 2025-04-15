@@ -32,7 +32,7 @@
     "upload-files": "node --import tsx upload-files.ts",
     "check-email-cases": "AWS_PROFILE=arcanum-q-deployer-prod node --import tsx check-email-cases.ts"
   },
-  "packageManager": "yarn@4.7.0",
+  "packageManager": "yarn@4.9.1",
   "devDependencies": {
     "@arcanumai/style": "workspace:*",
     "@types/adm-zip": "^0.5.5",

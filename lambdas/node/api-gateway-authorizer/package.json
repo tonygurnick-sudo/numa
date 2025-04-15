@@ -1,6 +1,6 @@
 {
   "name": "api-gateway-authorizer",
-  "packageManager": "yarn@4.7.0",
+  "packageManager": "yarn@4.9.1",
   "type": "module",
   "main": "index.ts",
   "types": "index.ts",
