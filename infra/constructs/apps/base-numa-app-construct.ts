@@ -79,11 +79,13 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'states.amazonaws.com',
       }),
+      dependsOn: [stepFunctionPolicy],
     });
 
     new IamRolePolicyAttachmentsExclusive(scope, name + '_role-policy', {
       policyArns: [stepFunctionPolicy.arn],
       roleName: stepFunctionRole.name,
+      dependsOn: [stepFunctionPolicy],
     });
 
     const functionNameSuffix = `-${this.appId}_${name}_step-function`;

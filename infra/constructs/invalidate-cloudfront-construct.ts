@@ -28,11 +28,13 @@ export class InvalidateCloudfront extends Construct {
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'lambda.amazonaws.com',
       }),
+      dependsOn: [invalidatePolicy],
     });
 
     const policyAttachment = new IamRolePolicyAttachmentsExclusive(this, 'attach-roles', {
       policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', invalidatePolicy.arn],
       roleName: role.name,
+      dependsOn: [invalidatePolicy],
     });
 
     const func = new TypescriptLambdaConstruct(this, 'function', {
