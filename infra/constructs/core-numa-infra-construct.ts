@@ -700,9 +700,8 @@ export class CoreNumaInfra extends Construct {
     });
 
     for (const crawlerDataSource of props.webCrawlerConfigs) {
-      crawlerDataSource.siteMapFiles ??= [];
-      const siteMapFiles = crawlerDataSource.siteMapFiles?.map((siteMapPath) => path.join(...siteMapPath));
-      if (!crawlerDataSource.url && crawlerDataSource.siteMapFiles.length == 0) {
+      const siteMapFiles = crawlerDataSource.siteMapFiles || [];
+      if (!crawlerDataSource.url && siteMapFiles.length == 0) {
         throw new Error('Empty web crawler configuration');
       }
 
@@ -810,7 +809,7 @@ export class CoreNumaInfra extends Construct {
 
 interface WebCrawlerConfig {
   url?: string;
-  siteMapFiles?: string[][];
+  siteMapFiles?: string[];
 }
 
 interface SharePointConfig {
