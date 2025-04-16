@@ -1,7 +1,8 @@
-import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { copyFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
+import fsExtra from 'fs-extra';
 import { resolve } from 'path';
+import { defineConfig } from 'vite';
 import config from './public/config.json';
 
 // Custom plugin to copy build output to @numa-frontend
@@ -12,10 +13,10 @@ const copyBuildPlugin = () => ({
     const targetDir = '../infra/build/numa-frontend';
     const excludeFiles = ['config.json', 'manifest.json'];
 
-    // Create target directory if it doesn't exist
-    if (!existsSync(targetDir)) {
-      mkdirSync(targetDir, { recursive: true });
-    }
+    // Cleanup old builds
+    fsExtra.removeSync(targetDir);
+
+    mkdirSync(targetDir, { recursive: true });
 
     // Function to copy directory recursively
     const copyDir = (src, dest) => {

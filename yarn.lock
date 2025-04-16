@@ -85,6 +85,7 @@ __metadata:
     eslint-plugin-react-refresh: "npm:^0.4.12"
     file-saver: "npm:^2.0.5"
     file-type: "npm:^20.0.0"
+    fs-extra: "npm:^11.3.0"
     globals: "npm:^16.0.0"
     html-to-docx-lite: "npm:^2.0.1"
     html2pdf.js: "npm:^0.10.2"
@@ -10484,7 +10485,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fs-extra@npm:^11.2.0":
+"fs-extra@npm:^11.2.0, fs-extra@npm:^11.3.0":
   version: 11.3.0
   resolution: "fs-extra@npm:11.3.0"
   dependencies:
