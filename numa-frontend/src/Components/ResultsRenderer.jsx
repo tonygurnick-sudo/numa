@@ -4,6 +4,7 @@ import { useAuth } from '../Providers/AuthProvider';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { downloadFileFromS3, downloadFileWithSignedUrl, openFileWithSignedUrl } from '../utils/s3Utils';
 import { MarkdownContent } from './MarkdownContent';
+import { ResultActions } from './ResultActions';
 
 // Shared tab navigation component for both JSON and CSV renderers
 const TabNavigation = ({ items, activeIndex, setActiveIndex, getLabel }) => {
@@ -785,16 +786,34 @@ export const ResultsRenderer = ({ results }) => {
           <div className="csv-content p-3 bg-white rounded border">
             <CsvRenderer data={content} />
           </div>
+          {!isLoading && !error && content && (
+            <ResultActions
+              content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
+              title={selectedOutput.title || `Result ${selectedOutputIndex + 1}`}
+            />
+          )}
         </div>
       ) : selectedOutput.content_type === 'text/markdown' || selectedOutput.content_type === 'text/plain' ? (
         <div className="mb-3">
           <div className="markdown-content p-3 bg-white rounded border">
             <MarkdownContent content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)} />
           </div>
+          {!isLoading && !error && content && (
+            <ResultActions
+              content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
+              title={selectedOutput.title || `Result ${selectedOutputIndex + 1}`}
+            />
+          )}
         </div>
       ) : selectedOutput.content_type === 'application/json' ? (
         <div className="mb-3">
           <JsonRenderer data={content} />
+          {!isLoading && !error && content && (
+            <ResultActions
+              content={typeof content === 'object' ? JSON.stringify(content, null, 2) : content}
+              title={selectedOutput.title || `Result ${selectedOutputIndex + 1}`}
+            />
+          )}
         </div>
       ) : (
         <div className="s3-link mb-3">
