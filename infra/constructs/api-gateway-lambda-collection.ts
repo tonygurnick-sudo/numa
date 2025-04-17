@@ -8,7 +8,7 @@ import {
 } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
-import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
+import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
 import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { Fn } from 'cdktf';
@@ -52,16 +52,6 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
   addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): LambdaFunction {
     props.runtime ??= 'python3.13';
 
-    const additionalPolicies = !props.additionalPolicyStatements
-      ? []
-      : [
-          new IamPolicy(this, name + '_policy', {
-            policy: new DataAwsIamPolicyDocument(this, name + '_policy-document', {
-              statement: props.additionalPolicyStatements,
-            }).json,
-          }),
-        ];
-
     // TODO: remove once deployed
     const oldRole = new IamRole(scope, scope.node.id + '_' + name + '_role', {
       name: scope.node.id + '_' + name,
@@ -74,17 +64,25 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       name: this.getRoleName('_' + name),
       assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
       lifecycle: { createBeforeDestroy: true },
-      dependsOn: additionalPolicies,
     });
     role.addMoveTarget(scope.node.id + '_' + name + '_role');
 
-    const additionalPolicyArns = additionalPolicies.map((policy) => policy.arn);
-
-    new IamRolePolicyAttachmentsExclusive(scope, name + '_role-policy', {
-      policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', ...additionalPolicyArns],
-      roleName: role.name,
-      dependsOn: additionalPolicies,
+    new IamRolePolicyAttachment(scope, name + 'role-policy-attachment-basic', {
+      role: role.name,
+      policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
     });
+
+    if (props.additionalPolicyStatements) {
+      const additionalPolicy = new IamPolicy(this, name + '_policy', {
+        policy: new DataAwsIamPolicyDocument(this, name + '_policy-document', {
+          statement: props.additionalPolicyStatements,
+        }).json,
+      });
+      new IamRolePolicyAttachment(scope, name + 'role-policy-attachment-additional', {
+        role: role.name,
+        policyArn: additionalPolicy.arn,
+      });
+    }
 
     const filename = path.resolve(
       import.meta.dirname,

@@ -2,7 +2,7 @@ import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
-import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
+import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
 import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { Fn } from 'cdktf';
@@ -32,14 +32,18 @@ export class QBusinessChatControlConfigurer extends Construct {
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'lambda.amazonaws.com',
       }),
-      dependsOn: [policy],
     });
 
-    new IamRolePolicyAttachmentsExclusive(this, 'role-attachments', {
-      roleName: role.name,
-      policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', policy.arn],
-      dependsOn: [policy],
-    });
+    const policyAttachments = [
+      new IamRolePolicyAttachment(this, 'role-policy-attachment-basic', {
+        role: role.name,
+        policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+      }),
+      new IamRolePolicyAttachment(this, 'role-policy-attachment-chat-control', {
+        role: role.name,
+        policyArn: policy.arn,
+      }),
+    ];
 
     const lambdaFilename = path.resolve(
       import.meta.dirname,
@@ -75,6 +79,7 @@ export class QBusinessChatControlConfigurer extends Construct {
         input,
         functionHash: func.sourceCodeHash,
       },
+      dependsOn: [func, ...policyAttachments],
     });
   }
 }

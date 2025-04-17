@@ -1,8 +1,9 @@
-import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
-import { TypescriptLambdaConstruct } from '@arcanumai/typescript-lambda-construct';
-import { Construct } from 'constructs';
-import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
+import { TypescriptLambdaConstruct } from '@arcanumai/typescript-lambda-construct';
+import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
+import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
+import { Construct } from 'constructs';
 
 export class SetCallbackUrl extends Construct {
   constructor(scope: Construct, name: string, props: SetCallbackUrlProps) {
@@ -12,11 +13,18 @@ export class SetCallbackUrl extends Construct {
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'lambda.amazonaws.com',
       }),
-      managedPolicyArns: [
-        'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
-        'arn:aws:iam::aws:policy/AmazonCognitoPowerUser', // FIXME: Replace this.
-      ],
     });
+
+    const policyAttachments = [
+      new IamRolePolicyAttachment(this, 'role-policy-attachment-basic', {
+        role: role.name,
+        policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+      }),
+      new IamRolePolicyAttachment(this, 'role-policy-attachment-cognito', {
+        role: role.name,
+        policyArn: 'arn:aws:iam::aws:policy/AmazonCognitoPowerUser', // FIXME: Replace this.
+      }),
+    ];
 
     const func = new TypescriptLambdaConstruct(this, 'function', {
       lambdaProps: {
@@ -44,6 +52,7 @@ export class SetCallbackUrl extends Construct {
         // This causes the lambda to trigger on config changes.
         input,
       },
+      dependsOn: [func.lambdaFunction, ...policyAttachments],
     });
   }
 }

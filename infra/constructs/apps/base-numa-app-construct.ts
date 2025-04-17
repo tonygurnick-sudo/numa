@@ -1,5 +1,4 @@
 import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
-import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import {
   DataAwsIamPolicyDocument,
   DataAwsIamPolicyDocumentStatement,
@@ -7,7 +6,8 @@ import {
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
-import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
+import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
+import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
 import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
 import * as asl from 'asl-types';
@@ -79,13 +79,11 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'states.amazonaws.com',
       }),
-      dependsOn: [stepFunctionPolicy],
     });
 
-    new IamRolePolicyAttachmentsExclusive(scope, name + '_role-policy', {
-      policyArns: [stepFunctionPolicy.arn],
-      roleName: stepFunctionRole.name,
-      dependsOn: [stepFunctionPolicy],
+    new IamRolePolicyAttachment(scope, name + '_role-policy-attachment', {
+      role: stepFunctionRole.name,
+      policyArn: stepFunctionPolicy.arn,
     });
 
     const functionNameSuffix = `-${this.appId}_${name}_step-function`;
