@@ -1,21 +1,16 @@
-import { CognitoIdentityProviderClient, AdminDeleteUserCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { AdminDeleteUserCommand, CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
+import chalk from 'chalk';
 import { parse } from 'csv-parse';
 import { createReadStream } from 'node:fs';
-import { finished } from 'node:stream/promises';
 import { argv, exit } from 'node:process';
-import chalk from 'chalk';
-import { getQUserPool, temporaryCredentials, AwsCredentialIdentityProvider } from './utils';
+import { finished } from 'node:stream/promises';
 import clientConfigProd from '../clientConfigProd.json';
+import { AWSClientConfig, getQUserPool, temporaryCredentials } from './utils';
 
-const region = 'us-east-1';
 const inputFile = 'input.csv';
 
-export async function deleteQUsers(
-  credentials: AwsCredentialIdentityProvider,
-  userPool: string,
-  dryRun: boolean,
-): Promise<void> {
-  const client = new CognitoIdentityProviderClient({ region, credentials });
+export async function deleteQUsers(awsClientConfig: AWSClientConfig, userPool: string, dryRun: boolean): Promise<void> {
+  const client = new CognitoIdentityProviderClient(awsClientConfig);
 
   if (dryRun) {
     console.log(chalk.green('Dry run is true, so not really doing anything. Give parameter "live" to disable.'));
@@ -62,9 +57,12 @@ export async function deleteQUsers(
   const args = argv.slice(2);
 
   const accountId = clientConfigProd[args[0]].clientAccountId;
-  const credentials = temporaryCredentials(accountId);
-  const userPool = await getQUserPool(credentials);
+  const awsClientConfig = {
+    credentials: temporaryCredentials(accountId),
+    region: clientConfigProd[args[0]].region,
+  };
+  const userPool = await getQUserPool(awsClientConfig);
   const dryRun = args[1] != 'live';
 
-  await deleteQUsers(credentials, userPool, dryRun);
+  await deleteQUsers(awsClientConfig, userPool, dryRun);
 })();

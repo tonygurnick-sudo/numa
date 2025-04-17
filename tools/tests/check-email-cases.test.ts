@@ -135,7 +135,7 @@ describe('check-email-cases', () => {
       mockCognitoClient.send.mockResolvedValueOnce({ UserPools: mockUserPools });
 
       const { findUserPoolId } = await import('../check-email-cases');
-      const userPoolId = await findUserPoolId(mockCredentials, 'testClient');
+      const userPoolId = await findUserPoolId({ credentials: mockCredentials, region: '' }, 'testClient');
 
       expect(userPoolId).toBe('pool-123');
       expect(mockCognitoClient.send).toHaveBeenCalledWith(
@@ -149,7 +149,7 @@ describe('check-email-cases', () => {
       mockCognitoClient.send.mockResolvedValueOnce({ UserPools: [] });
 
       const { findUserPoolId } = await import('../check-email-cases');
-      await expect(findUserPoolId(mockCredentials, 'nonexistent')).rejects.toThrow(
+      await expect(findUserPoolId({ credentials: mockCredentials, region: '' }, 'nonexistent')).rejects.toThrow(
         'User pool numa-nonexistent not found',
       );
     });
@@ -165,7 +165,7 @@ describe('check-email-cases', () => {
       });
 
       const { findUsersWithCapital } = await import('../check-email-cases');
-      const usersWithCapital = await findUsersWithCapital(mockCredentials, 'pool-123');
+      const usersWithCapital = await findUsersWithCapital({ credentials: mockCredentials, region: '' }, 'pool-123');
 
       expect(usersWithCapital).toHaveLength(1);
       expect(usersWithCapital[0]).toEqual({
@@ -183,7 +183,7 @@ describe('check-email-cases', () => {
         .mockResolvedValueOnce({ Users: mockUsers2, PaginationToken: undefined });
 
       const { findUsersWithCapital } = await import('../check-email-cases');
-      const usersWithCapital = await findUsersWithCapital(mockCredentials, 'pool-123');
+      const usersWithCapital = await findUsersWithCapital({ credentials: mockCredentials, region: '' }, 'pool-123');
 
       expect(usersWithCapital).toHaveLength(2);
       expect(mockCognitoClient.send).toHaveBeenCalledTimes(2);
@@ -193,7 +193,7 @@ describe('check-email-cases', () => {
   describe('fixUserEmail', () => {
     it('should convert email to lowercase', async () => {
       const { fixUserEmail } = await import('../check-email-cases');
-      await fixUserEmail(mockCredentials, 'pool-123', 'user1', 'User1@Example.com');
+      await fixUserEmail({ credentials: mockCredentials, region: '' }, 'pool-123', 'user1', 'User1@Example.com');
 
       expect(mockCognitoClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -238,7 +238,7 @@ describe('check-email-cases', () => {
 
     it('should process only dev clients when --dev flag is used', async () => {
       const { processClients } = await import('../check-email-cases');
-      const report = await processClients(undefined, { isDevOnly: true });
+      const report = await processClients({ isDevOnly: true });
 
       expect(report.summary.totalClients).toBe(5);
       expect(report.summary.processedClients).toBe(5);
@@ -258,7 +258,7 @@ describe('check-email-cases', () => {
       mockCognitoClient.send.mockResolvedValueOnce({ UserPools: mockUserPools }).mockResolvedValueOnce({ Users: [] });
 
       const { processClients } = await import('../check-email-cases');
-      const report = await processClients(targetClient);
+      const report = await processClients();
 
       expect(report.summary.totalClients).toBe(1);
       expect(report.summary.processedClients).toBe(1);
@@ -274,7 +274,7 @@ describe('check-email-cases', () => {
         .mockRejectedValueOnce(new Error('Test error'));
 
       const { processClients } = await import('../check-email-cases');
-      const report = await processClients(targetClient);
+      const report = await processClients();
 
       expect(report.summary.errorClients).toBe(1);
       expect(report.results[0].error).toContain('Test error');
@@ -291,7 +291,7 @@ describe('check-email-cases', () => {
         .mockResolvedValueOnce({}); // fixUserEmail response
 
       const { processClients } = await import('../check-email-cases');
-      const report = await processClients(targetClient, { shouldFix: true });
+      const report = await processClients({ shouldFix: true });
 
       expect(report.summary.totalClients).toBe(1);
       expect(report.summary.processedClients).toBe(1);
