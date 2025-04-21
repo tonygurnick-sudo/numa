@@ -17,8 +17,10 @@
         "configuration": {},
         "domain": "30secondsnz",
         "siteUrls": [
-          "https://30secondsnz.sharepoint.com/sites/AllCompany",
-          "https://30secondsnz.sharepoint.com/sites/30STeam"
+          "https://30secondsnz.sharepoint.com/sites/Marketing",
+          "https://30secondsnz.sharepoint.com/sites/Operations",
+          "https://30secondsnz.sharepoint.com/sites/Operations-OpsMgmt",
+          "https://30secondsnz.sharepoint.com/sites/HS"
         ],
         "tenantId": "a2275cde-9164-4712-8c15-47ab712f1766"
       }
