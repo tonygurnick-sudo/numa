@@ -183,7 +183,7 @@
   "bendigo-council": {
     "allProdApps": true,
     "clientAccountId": "183295422459",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au/home"
@@ -217,7 +217,7 @@
   "broken-hill-city-council": {
     "allProdApps": true,
     "clientAccountId": "863518418134",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au"
@@ -253,7 +253,7 @@
   "corangamite": {
     "allProdApps": true,
     "clientAccountId": "442426871546",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au"
@@ -328,7 +328,7 @@
   "geofabrics": {
     "allProdApps": true,
     "clientAccountId": "802893027097",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://www.geofabrics.co/"
@@ -360,7 +360,7 @@
   "lg-pro": {
     "allProdApps": true,
     "clientAccountId": "539247480075",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://www.lgpro.com/"
@@ -382,7 +382,7 @@
   "macedon-ranges": {
     "allProdApps": true,
     "clientAccountId": "575108922680",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au/home"
@@ -409,7 +409,7 @@
   "moira-shire-council": {
     "allProdApps": true,
     "clientAccountId": "084828600250",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au"
@@ -449,7 +449,7 @@
   "mornington-peninsula-council": {
     "allProdApps": true,
     "clientAccountId": "672071675188",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au/home"
@@ -580,7 +580,7 @@
   "shire-of-narrogin": {
     "allProdApps": true,
     "clientAccountId": "491085384376",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://www.legislation.wa.gov.au"
@@ -642,7 +642,7 @@
     "clientAccountId": "557690588490",
     "createServiceLinkedRole": false,
     "loadSampleFile": false,
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://www.brokenhill.nsw.gov.au/Home"
@@ -719,7 +719,7 @@
       "infringement-review": {}
     },
     "clientAccountId": "440744229592",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au"
