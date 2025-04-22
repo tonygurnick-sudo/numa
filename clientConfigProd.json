@@ -181,6 +181,7 @@
     "region": "us-east-1"
   },
   "bendigo-council": {
+    "allProdApps": true,
     "clientAccountId": "183295422459",
     "region": "us-east-1",
     "webCrawlerConfigs": [
@@ -214,6 +215,7 @@
     ]
   },
   "broken-hill-city-council": {
+    "allProdApps": true,
     "clientAccountId": "863518418134",
     "region": "us-east-1",
     "webCrawlerConfigs": [
@@ -249,6 +251,7 @@
     "region": "us-east-1"
   },
   "corangamite": {
+    "allProdApps": true,
     "clientAccountId": "442426871546",
     "region": "us-east-1",
     "webCrawlerConfigs": [
@@ -377,6 +380,7 @@
     ]
   },
   "macedon-ranges": {
+    "allProdApps": true,
     "clientAccountId": "575108922680",
     "region": "us-east-1",
     "webCrawlerConfigs": [
@@ -403,6 +407,7 @@
     "region": "us-east-1"
   },
   "moira-shire-council": {
+    "allProdApps": true,
     "clientAccountId": "084828600250",
     "region": "us-east-1",
     "webCrawlerConfigs": [
@@ -442,6 +447,7 @@
     "region": "us-east-1"
   },
   "mornington-peninsula-council": {
+    "allProdApps": true,
     "clientAccountId": "672071675188",
     "region": "us-east-1",
     "webCrawlerConfigs": [
@@ -572,6 +578,7 @@
     "region": "us-east-1"
   },
   "shire-of-narrogin": {
+    "allProdApps": true,
     "clientAccountId": "491085384376",
     "region": "us-east-1",
     "webCrawlerConfigs": [
