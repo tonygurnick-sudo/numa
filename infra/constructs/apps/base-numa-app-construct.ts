@@ -26,7 +26,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   readonly appId: string;
   readonly clientName: string;
 
-  protected getRoleName(suffix: string): string {
+  protected getResourceName(suffix: string): string {
     const appSpecificSuffix = `-${this.appId}${suffix}`;
     return `${this.clientName}`.slice(0, 64 - appSpecificSuffix.length) + appSpecificSuffix;
   }
@@ -75,7 +75,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     });
 
     const stepFunctionRole = new IamRole(scope, name + '_role', {
-      name: this.getRoleName(`_${name}`),
+      name: this.getResourceName(`_${name}`),
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'states.amazonaws.com',
       }),
@@ -302,20 +302,18 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     // Define API operations
     type Operation = RouteDefinition & {
       handler: string;
+      lambdaName: string;
     };
 
     const operations: Operation[] = [
-      { verb: 'POST', path: jobsBasePath, handler: 'create_job.handler' },
-      { verb: 'GET', path: jobsBasePath, handler: 'list_jobs.handler' },
-      { verb: 'GET', path: `${jobsBasePath}/{job_id}`, handler: 'get_job.handler' },
-      { verb: 'PUT', path: `${jobsBasePath}/{job_id}`, handler: 'update_job.handler' },
+      { verb: 'POST', path: jobsBasePath, handler: 'create_job.handler', lambdaName: 'create-job' },
+      { verb: 'GET', path: jobsBasePath, handler: 'list_jobs.handler', lambdaName: 'list-jobs' },
+      { verb: 'GET', path: `${jobsBasePath}/{job_id}`, handler: 'get_job.handler', lambdaName: 'get-job' },
+      { verb: 'PUT', path: `${jobsBasePath}/{job_id}`, handler: 'update_job.handler', lambdaName: 'update-job' },
     ];
 
     operations.forEach((op) => {
-      const lambdaName = `jobs-${op.verb.toLowerCase()}-${op.path.replace(/[{}]/g, '').replaceAll(/\//g, '')}`;
-
-      // Create the lambda function
-      this.addLambdaFunction(this, lambdaName, {
+      this.addLambdaFunction(this, op.lambdaName, {
         route: {
           verb: op.verb,
           path: op.path,

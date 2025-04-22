@@ -4,7 +4,7 @@ import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './a
 export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaCollection {
   readonly clientName: string;
 
-  protected getRoleName(suffix: string): string {
+  protected getResourceName(suffix: string): string {
     return this.clientName.slice(0, 64 - suffix.length) + suffix;
   }
 

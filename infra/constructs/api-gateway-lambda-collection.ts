@@ -47,7 +47,7 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       .trim();
   }
 
-  protected abstract getRoleName(suffix: string): string;
+  protected abstract getResourceName(suffix: string): string;
 
   addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): LambdaFunction {
     props.runtime ??= 'python3.13';
@@ -61,7 +61,7 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
     oldRole.moveTo(scope.node.id + '_' + name + '_role');
 
     const role = new IamRole(scope, name + '_role', {
-      name: this.getRoleName('_' + name),
+      name: this.getResourceName('_' + name),
       assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
       lifecycle: { createBeforeDestroy: true },
     });
@@ -96,7 +96,7 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
     const honeycombConfig = otelLayersAndEnvironment(props.runtime, this.otelConfig);
 
     const lf = new LambdaFunction(this, name + '_lambda', {
-      functionName: scope.node.id + '_' + name,
+      functionName: this.getResourceName('_' + name),
       role: role.arn,
       filename,
       sourceCodeHash: Fn.filebase64sha256(filename),
