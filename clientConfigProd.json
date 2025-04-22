@@ -102,16 +102,7 @@
     "region": "us-east-1"
   },
   "arcanum-demo-sam": {
-    "apps": {
-      "candidate-screening": {},
-      "company-profile": {},
-      "contract-analysis": {},
-      "costing-calculator": {},
-      "document-summariser": {},
-      "infringement-review": {},
-      "meeting-analyser": {},
-      "policy-reviewer": {}
-    },
+    "allApps": true,
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "devInstance": true,

@@ -19,6 +19,7 @@ import { ContractAnalysis } from '../constructs/apps/contract-analysis-construct
 import { CostingCalculator } from '../constructs/apps/costing-calculator-construct';
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
 import { FinancialAnalysis } from '../constructs/apps/financial-analysis-construct';
+import { GdsrAssessment } from '../constructs/apps/gdsr-assessment-construct';
 import { InfringementReview } from '../constructs/apps/infringement-review-construct';
 import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
@@ -317,6 +318,7 @@ export const appLibrary: Record<string, AppDefinition> = {
   'costing-calculator': { app: CostingCalculator, isProdApp: false },
   'document-summariser': { app: DocumentSummariser, isProdApp: true },
   'financial-analysis': { app: FinancialAnalysis, isProdApp: true },
+  'gdsr-assessment': { app: GdsrAssessment, isProdApp: true },
   'infringement-review': { app: InfringementReview, isProdApp: false },
   'meeting-analyser': { app: MeetingAnalyser, isProdApp: true },
   'nzsba-policy-builder': { app: NZSBAPolicyBuilder, isProdApp: false },

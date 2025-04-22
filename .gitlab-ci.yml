@@ -52,6 +52,7 @@ variables:
         - lambdas/python/extract-content-from-file
         - lambdas/python/financial-analysis-analysis
         - lambdas/python/financial-analysis-data-extraction
+        - lambdas/python/gdsr-assessment
         - lambdas/python/infringement-review
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-recent-jobs
@@ -85,6 +86,7 @@ variables:
         - lambdas/python/extract-content-from-file
         - lambdas/python/financial-analysis-analysis
         - lambdas/python/financial-analysis-data-extraction
+        - lambdas/python/gdsr-assessment
         - lambdas/python/infringement-review
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-recent-jobs
