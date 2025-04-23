@@ -54,6 +54,7 @@ variables:
         - lambdas/python/financial-analysis-data-extraction
         - lambdas/python/gdsr-assessment
         - lambdas/python/infringement-review
+        - lambdas/python/procurement-rfp-assessment
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-recent-jobs
         - lambdas/python/policy-builder-completion
@@ -88,6 +89,7 @@ variables:
         - lambdas/python/financial-analysis-data-extraction
         - lambdas/python/gdsr-assessment
         - lambdas/python/infringement-review
+        - lambdas/python/procurement-rfp-assessment
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-recent-jobs
         - lambdas/python/policy-builder-completion
