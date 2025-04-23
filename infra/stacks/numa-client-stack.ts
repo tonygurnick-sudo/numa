@@ -71,6 +71,7 @@ export class NumaClientStack extends TerraformStack {
     });
 
     const hostedZoneProvider = new AwsProvider(this, 'hosted-zone-provider', {
+      region: 'us-east-1',
       assumeRole: [
         {
           roleArn: deployerRole,
