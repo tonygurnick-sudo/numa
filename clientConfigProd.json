@@ -134,7 +134,9 @@
       "meeting-analyser": {},
       "nzsba-policy-builder": {},
       "policy-drafter": {},
-      "policy-reviewer": {}
+      "policy-reviewer": {},
+      "gdsr-assessment": {},
+      "procurement-rfp-assessment": {}
     },
     "clientAccountId": "619071323471",
     "devInstance": true,

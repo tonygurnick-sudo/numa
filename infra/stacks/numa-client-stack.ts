@@ -25,6 +25,7 @@ import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
 import { PolicyDrafter } from '../constructs/apps/policy-drafter-construct';
 import { PolicyReviewer } from '../constructs/apps/policy-reviewer-construct';
+import { ProcurementRfpAssessment } from '../constructs/apps/procurement-rfp-assessment-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
@@ -318,12 +319,13 @@ export const appLibrary: Record<string, AppDefinition> = {
   'costing-calculator': { app: CostingCalculator, isProdApp: false },
   'document-summariser': { app: DocumentSummariser, isProdApp: true },
   'financial-analysis': { app: FinancialAnalysis, isProdApp: true },
-  'gdsr-assessment': { app: GdsrAssessment, isProdApp: true },
+  'gdsr-assessment': { app: GdsrAssessment, isProdApp: false },
   'infringement-review': { app: InfringementReview, isProdApp: false },
   'meeting-analyser': { app: MeetingAnalyser, isProdApp: true },
   'nzsba-policy-builder': { app: NZSBAPolicyBuilder, isProdApp: false },
   'policy-drafter': { app: PolicyDrafter, isProdApp: true },
   'policy-reviewer': { app: PolicyReviewer, isProdApp: true },
+  'procurement-rfp-assessment': { app: ProcurementRfpAssessment, isProdApp: false },
 };
 
 // Include the E2E test app in a separate object
