@@ -5,22 +5,34 @@ import path from 'path';
 import * as fs from 'fs';
 import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
 
-// Add new interface for web configuration
-interface WebConfiguration {
-  rateLimit?: string;
+export interface WebConfiguration {
+  crawlAllDomain?: boolean;
+  crawlAttachments?: boolean;
+  crawlDepth?: string;
+  crawlSubDomain?: boolean;
   honorRobots?: boolean;
   maxFileSize?: string;
   maxLinksPerUrl?: string;
-  crawlDepth?: string;
-  crawlSubDomain?: boolean;
-  crawlAllDomain?: boolean;
-  crawlAttachments?: boolean;
+  rateLimit?: string;
   /**
    * Schedule for data source synchronization.
    * @default 'weekly'
    */
   schedule?: Schedule;
 }
+
+const defaultAdditionalProperties = {
+  crawlAllDomain: false,
+  crawlAttachments: true,
+  crawlDepth: '10',
+  crawlSubDomain: true,
+  exclusionURLCrawlPatterns: [],
+  honorRobots: true,
+  maxFileSize: '50',
+  maxFileSizeInMegaBytes: '50',
+  maxLinksPerUrl: '100',
+  rateLimit: '300',
+};
 
 const repositoryConfigurations: Record<string, RepositoryConfiguration> = {
   attachment: {
@@ -125,26 +137,12 @@ export class WebDataSourceConstruct extends DataSource {
       };
     }
 
-    const defaultAdditionalProperties = {
-      rateLimit: '300',
-      honorRobots: true,
-      maxFileSize: '50',
-      maxLinksPerUrl: '100',
-      crawlDepth: '10',
-      crawlSubDomain: true,
-      crawlAllDomain: false,
-      crawlAttachments: true,
-      maxFileSizeInMegaBytes: '50',
-      inclusionURLCrawlPatterns: [`${baseUrl}/`],
-      exclusionURLCrawlPatterns: [],
-    };
-
     super(scope, name, {
       applicationId: props.applicationId,
       indexId: props.indexId,
       displayName: props.displayName,
       region: props.region,
-      schedule: props.configuration?.schedule ?? 'weekly',
+      schedule: props.configuration.schedule ?? 'weekly',
       dataSourceType: 'WEBCRAWLERV2',
       dataSourceRoleArn: props.dataSourceRoleArn,
       dataSourceConfiguration: {
@@ -153,6 +151,7 @@ export class WebDataSourceConstruct extends DataSource {
         },
         additionalProperties: {
           ...defaultAdditionalProperties,
+          inclusionURLCrawlPatterns: [`${baseUrl}/`],
           ...props.configuration,
         },
       },
@@ -161,11 +160,11 @@ export class WebDataSourceConstruct extends DataSource {
   }
 }
 
-export interface WebDataSourceConstructProps extends DataSourceProps {
+interface WebDataSourceConstructProps extends DataSourceProps {
   /**
    * Web crawler configuration.
    */
-  configuration?: WebConfiguration;
+  configuration: WebConfiguration;
   /**
    * URL to crawl.
    */
