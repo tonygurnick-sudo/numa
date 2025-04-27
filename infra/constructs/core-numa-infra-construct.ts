@@ -26,6 +26,7 @@ import { AdjustToken } from './adjust-token-construct';
 import { ConfigBucket } from './config-bucket-construct';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 import { BoxConfiguration, BoxDataSource } from './data-sources/box-datasource-construct';
+import { S3Configuration, S3DataSource } from './data-sources/s3-datasource-construct';
 import { SharePointConfiguration, SharePointDataSource } from './data-sources/sharepoint-datasource-construct';
 import { TeamsConfiguration, TeamsDataSource } from './data-sources/teams-datasource-construct';
 import { WebConfiguration, WebDataSourceConstruct } from './data-sources/web-datasource-construct';
@@ -662,7 +663,7 @@ export class CoreNumaInfra extends Construct {
       policy: dataSourcePolicyDoc.json,
     });
 
-    const s3DataSource = new CloudcontrolapiResource(this, 'data-source', {
+    const mainS3DataSource = new CloudcontrolapiResource(this, 'data-source', {
       typeName: 'AWS::QBusiness::DataSource',
       desiredState: Fn.jsonencode({
         ApplicationId: application.id,
@@ -693,7 +694,7 @@ export class CoreNumaInfra extends Construct {
       }),
       provider: props.qBusinessProvider,
     });
-    const dataSourceId = Fn.lookup(Fn.jsondecode(s3DataSource.properties), 'DataSourceId');
+    const dataSourceId = Fn.lookup(Fn.jsondecode(mainS3DataSource.properties), 'DataSourceId');
 
     const siteMapBucket = new PrivateBucket(this, 'site-map-bucket', {
       bucket: numaClient + '-sitemaps',
@@ -758,6 +759,18 @@ export class CoreNumaInfra extends Construct {
         region: props.region,
         configuration: teamsDataSource.configuration,
         dataSourceRoleArn: dataRole.arn,
+      });
+    }
+
+    for (const s3DataSource of props.s3Configs ?? []) {
+      new S3DataSource(this, `data-source-s3-${s3DataSource.bucketName}`, {
+        displayName: `${numaClient}-s3-${s3DataSource.bucketName}`,
+        bucketName: s3DataSource.bucketName,
+        applicationId: this.qBusinessApplicationId,
+        indexId: this.qBusinessIndexId,
+        region: props.region,
+        dataSourceRoleArn: dataRole.arn,
+        configuration: s3DataSource.configuration,
       });
     }
 
@@ -831,6 +844,11 @@ interface TeamsConfig {
   configuration?: TeamsConfiguration;
 }
 
+interface S3Config {
+  bucketName: string;
+  configuration?: S3Configuration;
+}
+
 export interface CoreNumaInfraProps
   extends _CoreNumaInfraProps,
     Omit<QBusinessChatControlConfigurerProps, 'applicationId' | 'accountId'> {}
@@ -861,6 +879,7 @@ interface _CoreNumaInfraProps {
   sharePointConfigs?: SharePointConfig[];
   boxConfigs?: BoxConfig[];
   teamsConfigs?: TeamsConfig[];
+  s3Configs?: S3Config[];
   /**
    * Various settings to make development easier:
    *
