@@ -1,5 +1,4 @@
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
-import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
 import { CognitoIdentityPool } from '@cdktf/provider-aws/lib/cognito-identity-pool';
 import { CognitoIdentityPoolRolesAttachment } from '@cdktf/provider-aws/lib/cognito-identity-pool-roles-attachment';
@@ -9,10 +8,12 @@ import { CognitoUserPoolClient } from '@cdktf/provider-aws/lib/cognito-user-pool
 import { CognitoUserPoolDomain } from '@cdktf/provider-aws/lib/cognito-user-pool-domain';
 import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
+import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 import { SecretsmanagerSecretVersion } from '@cdktf/provider-aws/lib/secretsmanager-secret-version';
@@ -22,18 +23,17 @@ import { DataResource, Fn, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import { AdjustToken } from './adjust-token-construct';
+import { ConfigBucket } from './config-bucket-construct';
+import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 import { BoxConfiguration, BoxDataSource } from './data-sources/box-datasource-construct';
 import { SharePointConfiguration, SharePointDataSource } from './data-sources/sharepoint-datasource-construct';
 import { TeamsConfiguration, TeamsDataSource } from './data-sources/teams-datasource-construct';
-import { WebDataSourceConstruct } from './data-sources/web-datasource-construct';
+import { WebConfiguration, WebDataSourceConstruct } from './data-sources/web-datasource-construct';
 import {
   QBusinessChatControlConfigurer,
   QBusinessChatControlConfigurerProps,
 } from './q-business-chat-control-configurer-construct';
 import { SetCallbackUrl } from './set-callback-url-construct';
-import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
-import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
-import { ConfigBucket } from './config-bucket-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -700,23 +700,23 @@ export class CoreNumaInfra extends Construct {
     });
 
     for (const crawlerDataSource of props.webCrawlerConfigs) {
-      crawlerDataSource.siteMapFiles ??= [];
-      const siteMapFiles = crawlerDataSource.siteMapFiles?.map((siteMapPath) => path.join(...siteMapPath));
-      if (!crawlerDataSource.url && crawlerDataSource.siteMapFiles.length == 0) {
+      const siteMapFiles = crawlerDataSource.siteMapFiles || [];
+      if (!crawlerDataSource.url && siteMapFiles.length == 0) {
         throw new Error('Empty web crawler configuration');
       }
 
       const cleanedUrl = (crawlerDataSource.url ?? siteMapFiles[0]).replace(/[^a-zA-Z0-9_-]/g, '-');
 
       new WebDataSourceConstruct(this, `data-source-${cleanedUrl}`, {
-        displayName: `${numaClient}-web-${cleanedUrl}`,
-        url: crawlerDataSource?.url,
-        siteMapFiles,
         applicationId: application.id,
+        configuration: crawlerDataSource.configuration ?? {},
+        dataSourceRoleArn: dataRole.arn,
+        displayName: `${numaClient}-web-${cleanedUrl}`,
         indexId: this.qBusinessIndexId,
         region: props.region,
-        dataSourceRoleArn: dataRole.arn,
         siteMapBucket: siteMapBucket.bucket,
+        siteMapFiles,
+        url: crawlerDataSource.url,
       });
 
       // TODO: Trigger an initial crawl.
@@ -810,7 +810,8 @@ export class CoreNumaInfra extends Construct {
 
 interface WebCrawlerConfig {
   url?: string;
-  siteMapFiles?: string[][];
+  siteMapFiles?: string[];
+  configuration?: WebConfiguration;
 }
 
 interface SharePointConfig {

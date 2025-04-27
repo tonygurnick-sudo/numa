@@ -38,6 +38,9 @@
         "url": "https://www.accumen.co.nz/"
       },
       {
+        "configuration": {
+          "crawlDepth": 1
+        },
         "url": "https://archipro.co.nz/professional/accumen-shapes"
       }
     ],
