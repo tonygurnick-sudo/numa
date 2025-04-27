@@ -2,16 +2,17 @@
   "2gen": {
     "allProdApps": true,
     "clientAccountId": "709771312005",
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://2gen.com.au"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "30-seconds": {
     "allProdApps": true,
     "clientAccountId": "593793032721",
+    "region": "us-east-1",
     "sharePointConfigs": [
       {
         "configuration": {},
@@ -24,8 +25,7 @@
         ],
         "tenantId": "a2275cde-9164-4712-8c15-47ab712f1766"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "accumen": {
     "allProdApps": true,
@@ -33,6 +33,7 @@
       "costing-calculator": {}
     },
     "clientAccountId": "677276116117",
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://www.accumen.co.nz/"
@@ -43,8 +44,7 @@
         },
         "url": "https://archipro.co.nz/professional/accumen-shapes"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "align-me": {
     "boxConfigs": [
@@ -163,12 +163,12 @@
   "asper": {
     "allProdApps": true,
     "clientAccountId": "913524922624",
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://apser.es/en/"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "autoshoppe": {
     "allProdApps": true,
@@ -181,7 +181,9 @@
     "region": "us-east-1"
   },
   "bendigo-council": {
+    "allProdApps": true,
     "clientAccountId": "183295422459",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au/home"
@@ -195,11 +197,11 @@
       {
         "url": "https://letstalkgreaterbendigo.com.au/"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "beyond-expectations": {
     "clientAccountId": "474668383176",
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://help.core.cin7.com/hc/en-us/articles/9034481552783-Getting-Started-Guide"
@@ -210,11 +212,12 @@
       {
         "url": "https://help.core.cin7.com/hc/en-us/articles/9034429844111-Account-Summary-Report"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "broken-hill-city-council": {
+    "allProdApps": true,
     "clientAccountId": "863518418134",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au"
@@ -240,8 +243,7 @@
       {
         "url": "https://www.olg.nsw.gov.au/"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "classic-group": {
     "allProdApps": true,
@@ -249,7 +251,9 @@
     "region": "us-east-1"
   },
   "corangamite": {
+    "allProdApps": true,
     "clientAccountId": "442426871546",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au"
@@ -284,8 +288,7 @@
       {
         "url": "https://www.fairwork.gov.au/"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "cuttriss": {
     "allProdApps": true,
@@ -300,6 +303,7 @@
   "delta-insurance": {
     "allProdApps": true,
     "clientAccountId": "842676001293",
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://deltaunderwriting.com/"
@@ -310,8 +314,7 @@
       {
         "url": "https://deltainsurance.co.nz/pages/brokers/"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "design-builders": {
     "allProdApps": true,
@@ -325,6 +328,7 @@
   "geofabrics": {
     "allProdApps": true,
     "clientAccountId": "802893027097",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://www.geofabrics.co/"
@@ -341,8 +345,7 @@
       {
         "url": "https://cirtexcivil.co.nz/"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "gracepapers": {
     "allProdApps": true,
@@ -357,6 +360,7 @@
   "lg-pro": {
     "allProdApps": true,
     "clientAccountId": "539247480075",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://www.lgpro.com/"
@@ -373,11 +377,12 @@
       {
         "url": "https://www.localgovernment.vic.gov.au/"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "macedon-ranges": {
+    "allProdApps": true,
     "clientAccountId": "575108922680",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au/home"
@@ -394,8 +399,7 @@
       {
         "url": "https://www.vic.gov.au/know-your-council"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "modern-sales": {
     "allProdApps": true,
@@ -403,8 +407,9 @@
     "region": "us-east-1"
   },
   "moira-shire-council": {
+    "allProdApps": true,
     "clientAccountId": "084828600250",
-    "region": "us-east-1",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au"
@@ -442,7 +447,9 @@
     "region": "us-east-1"
   },
   "mornington-peninsula-council": {
+    "allProdApps": true,
     "clientAccountId": "672071675188",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au/home"
@@ -456,12 +463,12 @@
       {
         "url": "https://www.mornpen.vic.gov.au/Home"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "mosaic": {
     "allProdApps": true,
     "clientAccountId": "471112582627",
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://www.minterellison.co.nz/"
@@ -493,11 +500,11 @@
       {
         "url": "https://www.accenture.com/nz-en/industries/banking"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "ngati-kahu": {
     "clientAccountId": "328307064241",
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://charities.govt.nz/"
@@ -523,8 +530,7 @@
       {
         "url": "https://www.sspa.org.nz/"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "nzsba": {
     "apps": {
@@ -537,6 +543,7 @@
     },
     "clientAccountId": "307946678276",
     "loadSampleFile": false,
+    "region": "us-east-1",
     "sharePointConfigs": [
       {
         "configuration": {
@@ -549,7 +556,6 @@
         "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29"
       }
     ],
-    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://www.nzstaresourcecentre.org.nz/"
@@ -572,7 +578,9 @@
     "region": "us-east-1"
   },
   "shire-of-narrogin": {
+    "allProdApps": true,
     "clientAccountId": "491085384376",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://www.legislation.wa.gov.au"
@@ -619,8 +627,7 @@
       {
         "url": "https://wheatbelt.wa.gov.au/"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "story-box": {
     "clientAccountId": "851725285135",
@@ -635,6 +642,7 @@
     "clientAccountId": "557690588490",
     "createServiceLinkedRole": false,
     "loadSampleFile": false,
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://www.brokenhill.nsw.gov.au/Home"
@@ -663,12 +671,12 @@
       {
         "url": "https://lgnsw.org.au/Public/Public/About-LGNSW/About-LGNSW.aspx"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "tda": {
     "allProdApps": true,
     "clientAccountId": "575108948290",
+    "region": "us-east-1",
     "sharePointConfigs": [
       {
         "configuration": {
@@ -678,8 +686,7 @@
         "siteUrls": ["https://teachersrcc.sharepoint.com/"],
         "tenantId": "91ff374c-03ff-4eed-9628-d89e52352b55"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "transit": {
     "allProdApps": true,
@@ -690,6 +697,7 @@
     "allProdApps": true,
     "clientAccountId": "746669235417",
     "loadSampleFile": false,
+    "region": "us-east-1",
     "webCrawlerConfigs": [
       {
         "url": "https://www.ato.gov.au/"
@@ -703,8 +711,7 @@
       {
         "url": "https://central.xero.com/s/"
       }
-    ],
-    "region": "us-east-1"
+    ]
   },
   "warrnambool-city-council": {
     "allProdApps": true,
@@ -712,6 +719,7 @@
       "infringement-review": {}
     },
     "clientAccountId": "440744229592",
+    "region": "ap-southeast-2",
     "webCrawlerConfigs": [
       {
         "url": "https://data.gov.au"
@@ -821,7 +829,6 @@
       {
         "url": "https://content.legislation.vic.gov.au/sites/default/files/2023-11/66-7405aa142-authorised.pdf"
       }
-    ],
-    "region": "us-east-1"
+    ]
   }
 }

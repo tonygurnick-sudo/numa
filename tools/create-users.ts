@@ -1,21 +1,20 @@
 import {
-  CognitoIdentityProviderClient,
   AdminCreateUserCommand,
   AdminSetUserPasswordCommand,
+  CognitoIdentityProviderClient,
   UsernameExistsException,
 } from '@aws-sdk/client-cognito-identity-provider';
+import chalk from 'chalk';
 import { parse } from 'csv-parse';
 import { stringify } from 'csv-stringify';
-import { createReadStream, createWriteStream } from 'node:fs';
-import { finished } from 'node:stream/promises';
 import { generate } from 'generate-password';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { argv, exit } from 'node:process';
+import { finished } from 'node:stream/promises';
 import { webkit } from 'playwright';
-import chalk from 'chalk';
-import { temporaryCredentials, AwsCredentialIdentityProvider, getQInstanceDetails } from './utils';
 import clientConfigProd from '../clientConfigProd.json';
+import { AWSClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
 
-const region = 'us-east-1';
 const passwordConfig = {
   length: 12,
   numbers: true,
@@ -30,12 +29,12 @@ const outputFile = 'user-details.csv';
 const activateLicences = false;
 
 export async function createQUsers(
-  credentials: AwsCredentialIdentityProvider,
+  awsClientConfig: AWSClientConfig,
   userPool: string,
   qUrl: string,
   dryRun: boolean,
 ): Promise<void> {
-  const client = new CognitoIdentityProviderClient({ region, credentials });
+  const client = new CognitoIdentityProviderClient(awsClientConfig);
 
   if (dryRun) {
     console.log(chalk.green('Dry run is true, so not really doing anything. Give parameter "live" to disable.'));
@@ -48,7 +47,6 @@ export async function createQUsers(
     console.log(chalk.red('One or more arguments is missing!'));
     exit(1);
   }
-  console.log(chalk.yellow('Region: ' + region));
   const result: User[] = [];
   const readStream = createReadStream(inputFile)
     .pipe(parse({ from_line: 2 }))
@@ -67,9 +65,9 @@ export async function createQUsers(
     password: generate(passwordConfig),
   });
   await finished(readStream);
-  console.log(`Creating ${result.length} users.`);
+  console.log(chalk.green(`Creating ${result.length} users.`));
   for (const userDetails of result) {
-    console.log(`Creating user: ${userDetails.email}`);
+    console.log(chalk.green(`Creating user: ${userDetails.givenName} ${userDetails.familyName} ${userDetails.email}`));
     if (!dryRun) await createQUser(client, qUrl, userDetails, userPool);
   }
   const writeStream = createWriteStream(outputFile);
@@ -123,7 +121,11 @@ async function createQUser(
     );
   } catch (e) {
     if (e instanceof UsernameExistsException) {
-      console.log('Username already exists: ' + userDetails.email);
+      console.log(
+        chalk.yellow(
+          `Username already exists: ${userDetails.givenName} ${userDetails.familyName} ${userDetails.email}`,
+        ),
+      );
     } else {
       throw e;
     }
@@ -140,12 +142,14 @@ async function createQUser(
     try {
       await activateQLicence(qUrl, userDetails.email, userDetails.password);
     } catch {
-      console.log('Activation failed for: ' + userDetails.email);
+      console.log(
+        chalk.red(`Activation failed for: ${userDetails.givenName} ${userDetails.familyName} ${userDetails.email}`),
+      );
       try {
         await activateQLicence(qUrl, userDetails.email, userDetails.password);
       } catch (e) {
-        console.log('Activation failed again, forget it...');
-        console.log(e);
+        console.log(chalk.red('Activation failed again, forget it...'));
+        console.log(chalk.red(e));
       }
     }
   }
@@ -179,13 +183,17 @@ async function activateQLicence(qUrl, username: string, password: string): Promi
 }
 
 (async (): Promise<void> => {
+  console.log(chalk.green('Starting user creation'));
   const args = argv.slice(2);
 
   const accountId = clientConfigProd[args[0]].clientAccountId;
-  const credentials = temporaryCredentials(accountId);
-  const accountDetails = await getQInstanceDetails(credentials);
+  const awsClientConfig = {
+    credentials: temporaryCredentials(accountId),
+    region: clientConfigProd[args[0]].region,
+  };
+  const accountDetails = await getQInstanceDetails(awsClientConfig);
   const qUrl = args[1];
   const dryRun = args[2] != 'live';
 
-  await createQUsers(credentials, accountDetails.qUserPool, qUrl, dryRun);
+  await createQUsers(awsClientConfig, accountDetails.qUserPool, qUrl, dryRun);
 })();

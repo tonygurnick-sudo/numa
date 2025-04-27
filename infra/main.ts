@@ -3,26 +3,19 @@ import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { QAppsDeployerStack } from './stacks/q-apps-deployer-stack';
 import { NumaClientStack, listNumaClients } from './stacks/numa-client-stack';
 
-const environmentName = process.env['TF_ENVIRONMENT'] as EnvironmentName;
 const override = process.env['CLIENT_OVERRIDE'];
 
 const app = new App();
-const bucketSuffix = environmentName == 'prod' ? '' : '-dev';
-const environmentConfig =
-  environmentName == EnvironmentName.prod
-    ? {
-        arcanumNumaAccount: '207567759910',
-        domainSuffix: 'numa.arcanum.ai',
-        hostedZone: 'Z05615802D0KHGAAOFX9U',
-      }
-    : {
-        arcanumNumaAccount: '324037291751',
-        domainSuffix: 'numa-dev.arcanum.ai',
-        hostedZone: 'Z01700621EGTW85OJXXO7',
-      };
+const bucketSuffix = ''; // we are only deploying `prod` this used to be `-dev` for other environments
+const environmentConfig = {
+  arcanumNumaAccount: '207567759910',
+  domainSuffix: 'numa.arcanum.ai',
+  environmentName: EnvironmentName.prod,
+  hostedZone: 'Z05615802D0KHGAAOFX9U',
+};
+
 if (override === undefined) {
   new QAppsDeployerStack(app, 'q-apps-deployer', {
-    environmentName,
     client: 'arcanum',
     serviceName: 'q-apps-deployer',
     templateBucketName: 'arcanum-numa-templates' + bucketSuffix,
@@ -33,7 +26,6 @@ if (override === undefined) {
 
 for (const clientName of override ? [override] : listNumaClients()) {
   new NumaClientStack(app, `numa-${clientName}`, {
-    environmentName,
     clientName,
     ...environmentConfig,
   });

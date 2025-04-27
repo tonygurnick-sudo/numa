@@ -1,13 +1,11 @@
-import { argv } from 'node:process';
+import { GetServiceQuotaCommand, ServiceQuotas } from '@aws-sdk/client-service-quotas';
+import { CaseDetails, DescribeCasesCommand, DescribeCasesCommandInput, Support } from '@aws-sdk/client-support';
 import fs from 'node:fs/promises';
-import { Support, DescribeCasesCommand, DescribeCasesCommandInput, CaseDetails } from '@aws-sdk/client-support';
-import { ServiceQuotas, GetServiceQuotaCommand } from '@aws-sdk/client-service-quotas';
-import { AwsCredentialIdentityProvider } from '@aws-sdk/types';
-import { temporaryCredentials } from './utils';
+import { argv } from 'node:process';
 import clientConfigProd from '../clientConfigProd.json';
+import { AWSClientConfig, temporaryCredentials } from './utils';
 
 const args = argv.slice(2);
-const region = 'us-east-1';
 const CLAUDE_QUOTA_CODE = 'L-254CACF4';
 const REQUIRED_QUOTA = 50;
 
@@ -34,11 +32,8 @@ interface ReportSummary {
 }
 
 // Core functionality from original script
-async function getCurrentQuota(credentials: AwsCredentialIdentityProvider): Promise<number> {
-  const quotasClient = new ServiceQuotas({
-    region: process.env.AWS_REGION ?? region,
-    credentials,
-  });
+async function getCurrentQuota(awsClientConfig: AWSClientConfig): Promise<number> {
+  const quotasClient = new ServiceQuotas(awsClientConfig);
 
   try {
     const response = await quotasClient.send(
@@ -54,11 +49,8 @@ async function getCurrentQuota(credentials: AwsCredentialIdentityProvider): Prom
   }
 }
 
-async function findBedrockCases(
-  credentials: AwsCredentialIdentityProvider,
-  clientName: string,
-): Promise<CaseDetails[]> {
-  const support = new Support({ region, credentials });
+async function findBedrockCases(awsClientConfig: AWSClientConfig, clientName: string): Promise<CaseDetails[]> {
+  const support = new Support(awsClientConfig);
   try {
     const params: DescribeCasesCommandInput = {
       includeResolvedCases: args.includes('--include-resolved'),
@@ -99,32 +91,21 @@ async function checkClient(clientName: string, showDetails: boolean): Promise<Cl
     cases: [],
   };
 
-  if (!clientConfigProd[clientName]) {
-    console.error(`Client ${clientName} not found in configuration`);
-    result.error = 'Client not found in configuration';
-    return result;
-  }
-
   const accountId = clientConfigProd[clientName].clientAccountId;
-  if (!accountId) {
-    console.error(`Account ID for ${clientName} not found in configuration`);
-    result.error = 'Account ID not found in configuration';
-    return result;
-  }
-
   result.accountId = accountId;
-  const credentials = temporaryCredentials(accountId);
+  const awsClientConfig = {
+    credentials: temporaryCredentials(accountId),
+    region: clientConfigProd[clientName].region,
+  };
 
   try {
-    // Check quota
-    const currentQuota = await getCurrentQuota(credentials);
+    const currentQuota = await getCurrentQuota(awsClientConfig);
     result.currentQuota = currentQuota;
     result.sufficientQuota = currentQuota >= REQUIRED_QUOTA ? '✅' : '❌';
 
     console.log(`Quota Status: ${currentQuota}/${REQUIRED_QUOTA} RPM (${result.sufficientQuota})`);
 
-    // Check cases
-    const cases = await findBedrockCases(credentials, clientName);
+    const cases = await findBedrockCases(awsClientConfig, clientName);
     if (cases.length === 0) {
       console.log('No Bedrock quota cases found');
     } else {
@@ -155,9 +136,9 @@ async function checkClient(clientName: string, showDetails: boolean): Promise<Cl
   }
 }
 
-async function processAllClients(specificClient?: string): Promise<ReportSummary> {
+async function processAllClients(): Promise<ReportSummary> {
   const showDetails = args.includes('--details');
-  const clientNames = specificClient ? [specificClient] : Object.keys(clientConfigProd);
+  const clientNames = Object.keys(clientConfigProd);
 
   console.log(`Checking Bedrock quotas for ${clientNames.length} clients...`);
 
@@ -211,14 +192,17 @@ if (import.meta.filename === process?.argv[1]) {
       process.exit(1);
     }
 
-    const credentials = temporaryCredentials(accountId);
+    const awsClientConfig = {
+      region: clientConfigProd[args[1]].region,
+      credentials: temporaryCredentials(accountId),
+    };
     const showDetails = args.includes('--details');
 
     console.log(`Checking Bedrock quota and cases for ${clientName}...`);
 
     try {
       // Check quota
-      const currentQuota = await getCurrentQuota(credentials);
+      const currentQuota = await getCurrentQuota(awsClientConfig);
       console.log('\nQuota Status:');
       console.log(`Current quota: ${currentQuota} requests per minute`);
       console.log(`Required quota: ${REQUIRED_QUOTA} requests per minute`);
@@ -226,7 +210,7 @@ if (import.meta.filename === process?.argv[1]) {
 
       // Check cases
       console.log('\nChecking support cases...');
-      const cases = await findBedrockCases(credentials, clientName);
+      const cases = await findBedrockCases(awsClientConfig, clientName);
 
       if (cases.length === 0) {
         console.log('No Bedrock quota cases found');
@@ -254,7 +238,7 @@ if (import.meta.filename === process?.argv[1]) {
   }
   // Otherwise process all clients and generate report
   else {
-    processAllClients(args.includes('--all') ? undefined : clientName)
+    processAllClients()
       .then(async (report) => {
         // Save JSON report
         const jsonOutputPath = 'bedrock-quota-report.json';

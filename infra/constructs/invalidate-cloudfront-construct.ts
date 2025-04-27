@@ -4,7 +4,7 @@ import { CloudfrontDistribution } from '@cdktf/provider-aws/lib/cloudfront-distr
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
-import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
+import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { Fn } from 'cdktf';
@@ -28,14 +28,18 @@ export class InvalidateCloudfront extends Construct {
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'lambda.amazonaws.com',
       }),
-      dependsOn: [invalidatePolicy],
     });
 
-    const policyAttachment = new IamRolePolicyAttachmentsExclusive(this, 'attach-roles', {
-      policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', invalidatePolicy.arn],
-      roleName: role.name,
-      dependsOn: [invalidatePolicy],
-    });
+    const policyAttachments = [
+      new IamRolePolicyAttachment(this, 'role-policy-attachment-basic', {
+        role: role.name,
+        policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+      }),
+      new IamRolePolicyAttachment(this, 'role-policy-attachment-invalidate', {
+        role: role.name,
+        policyArn: invalidatePolicy.arn,
+      }),
+    ];
 
     const func = new TypescriptLambdaConstruct(this, 'function', {
       lambdaProps: {
@@ -62,7 +66,7 @@ export class InvalidateCloudfront extends Construct {
           ),
         ),
       },
-      dependsOn: [...props.dependsOn, func.lambdaFunction, policyAttachment],
+      dependsOn: [...props.dependsOn, func.lambdaFunction, ...policyAttachments],
     });
   }
 }

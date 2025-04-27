@@ -1,19 +1,15 @@
-import { argv } from 'node:process';
-import fs from 'node:fs/promises';
 import {
-  CognitoIdentityProvider,
-  ListUsersCommand,
-  ListUserPoolsCommand,
   AdminUpdateUserAttributesCommand,
+  CognitoIdentityProvider,
+  ListUserPoolsCommand,
+  ListUsersCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
-import { AwsCredentialIdentityProvider } from '@aws-sdk/types';
-import { temporaryCredentials } from './utils';
+import fs from 'node:fs/promises';
+import { argv } from 'node:process';
 import clientConfigProd from '../clientConfigProd.json';
+import { AWSClientConfig, temporaryCredentials } from './utils';
 
-const region = 'us-east-1';
-
-// Get command line flags
-function getFlags(): { isDevOnly: boolean; shouldFix: boolean } {
+function getGetCommandLineFlags(): { isDevOnly: boolean; shouldFix: boolean } {
   const args = argv.slice(2);
   return {
     isDevOnly: args.includes('--dev'),
@@ -47,12 +43,12 @@ interface ReportSummary {
 }
 
 export async function fixUserEmail(
-  credentials: AwsCredentialIdentityProvider,
+  awsClientConfig: AWSClientConfig,
   userPoolId: string,
   username: string,
   currentEmail: string,
 ): Promise<void> {
-  const cognito = new CognitoIdentityProvider({ region, credentials });
+  const cognito = new CognitoIdentityProvider(awsClientConfig);
   const lowercaseEmail = currentEmail.toLowerCase();
 
   try {
@@ -76,10 +72,10 @@ export async function fixUserEmail(
 }
 
 export async function findUsersWithCapital(
-  credentials: AwsCredentialIdentityProvider,
+  awsClientConfig: AWSClientConfig,
   userPoolId: string,
 ): Promise<UserWithCapital[]> {
-  const cognito = new CognitoIdentityProvider({ region, credentials });
+  const cognito = new CognitoIdentityProvider(awsClientConfig);
   const usersWithCapital: UserWithCapital[] = [];
 
   try {
@@ -118,21 +114,18 @@ export async function findUsersWithCapital(
   }
 }
 
-export async function fixUsersWithCapital(
-  credentials: AwsCredentialIdentityProvider,
-  users: UserWithCapital[],
-): Promise<void> {
+export async function fixUsersWithCapital(awsClientConfig: AWSClientConfig, users: UserWithCapital[]): Promise<void> {
   for (const user of users) {
     try {
-      await fixUserEmail(credentials, user.userPoolId, user.username, user.email);
+      await fixUserEmail(awsClientConfig, user.userPoolId, user.username, user.email);
     } catch (error) {
       console.error(`Error fixing user ${user.username}:`, error);
     }
   }
 }
 
-export async function findUserPoolId(credentials: AwsCredentialIdentityProvider, clientName: string): Promise<string> {
-  const cognito = new CognitoIdentityProvider({ region, credentials });
+export async function findUserPoolId(awsClientConfig: AWSClientConfig, clientName: string): Promise<string> {
+  const cognito = new CognitoIdentityProvider(awsClientConfig);
 
   try {
     const response = await cognito.send(
@@ -175,15 +168,19 @@ async function checkClient(clientName: string, shouldFix = false): Promise<Clien
   }
 
   result.accountId = accountId;
-  const credentials = temporaryCredentials(accountId);
+
+  const awsClientConfig = {
+    region: clientConfigProd[clientName].region,
+    credentials: temporaryCredentials(accountId),
+  };
 
   try {
-    const userPoolId = await findUserPoolId(credentials, clientName);
-    const usersWithCapital = await findUsersWithCapital(credentials, userPoolId);
+    const userPoolId = await findUserPoolId(awsClientConfig, clientName);
+    const usersWithCapital = await findUsersWithCapital(awsClientConfig, userPoolId);
     result.usersWithCapital = usersWithCapital;
 
     if (shouldFix && usersWithCapital.length > 0) {
-      await fixUsersWithCapital(credentials, usersWithCapital);
+      await fixUsersWithCapital(awsClientConfig, usersWithCapital);
     }
 
     if (usersWithCapital.length > 0) {
@@ -203,26 +200,12 @@ async function checkClient(clientName: string, shouldFix = false): Promise<Clien
   }
 }
 
-export async function processClients(
-  specificClient?: string,
-  config?: { isDevOnly?: boolean; shouldFix?: boolean },
-): Promise<ReportSummary> {
-  const { isDevOnly, shouldFix } = config ?? getFlags();
+export async function processClients(config?: { isDevOnly?: boolean; shouldFix?: boolean }): Promise<ReportSummary> {
+  const { isDevOnly, shouldFix } = config ?? getGetCommandLineFlags();
 
-  // Filter clients based on dev flag
   let clientNames = Object.keys(clientConfigProd);
   if (isDevOnly) {
     clientNames = clientNames.filter((name) => clientConfigProd[name].devInstance === true);
-  }
-
-  if (specificClient) {
-    if (!clientConfigProd[specificClient]) {
-      throw new Error(`Client ${specificClient} not found in configuration`);
-    }
-    if (isDevOnly && !clientConfigProd[specificClient].devInstance) {
-      throw new Error(`Client ${specificClient} is not a dev instance`);
-    }
-    clientNames = [specificClient];
   }
 
   console.log(`Checking Cognito users for ${clientNames.length} clients...`);
@@ -268,9 +251,13 @@ export async function processClients(
   };
 }
 
-async function handleSingleClient(clientName: string, accountId: string): Promise<void> {
-  const credentials = temporaryCredentials(accountId);
-  const { isDevOnly, shouldFix } = getFlags();
+async function handleSingleClient(clientName: string, accountId: string, region: string): Promise<void> {
+  const awsClientConfig = {
+    credentials: temporaryCredentials(accountId),
+    region,
+  };
+
+  const { isDevOnly, shouldFix } = getGetCommandLineFlags();
 
   console.log(`Checking Cognito users for ${clientName}...`);
   if (isDevOnly) {
@@ -281,8 +268,8 @@ async function handleSingleClient(clientName: string, accountId: string): Promis
   }
 
   try {
-    const userPoolId = await findUserPoolId(credentials, clientName);
-    const usersWithCapital = await findUsersWithCapital(credentials, userPoolId);
+    const userPoolId = await findUserPoolId(awsClientConfig, clientName);
+    const usersWithCapital = await findUsersWithCapital(awsClientConfig, userPoolId);
 
     if (usersWithCapital.length === 0) {
       console.log('No users found with capital letters in their email');
@@ -295,7 +282,7 @@ async function handleSingleClient(clientName: string, accountId: string): Promis
     });
 
     if (shouldFix) {
-      await fixUsersWithCapital(credentials, usersWithCapital);
+      await fixUsersWithCapital(awsClientConfig, usersWithCapital);
       console.log('\nAll emails have been converted to lowercase');
     }
   } catch (error) {
@@ -304,9 +291,9 @@ async function handleSingleClient(clientName: string, accountId: string): Promis
   }
 }
 
-async function handleMultipleClients(clientName?: string): Promise<void> {
+async function handleMultipleClients(): Promise<void> {
   try {
-    const report = await processClients(clientName);
+    const report = await processClients();
 
     // Save JSON report
     await fs.writeFile('email-case-report.json', JSON.stringify(report, null, 2));
@@ -347,7 +334,6 @@ if (import.meta.filename === process?.argv[1]) {
   const args = argv.slice(2);
   const clientName = args.find((arg) => !arg.startsWith('--'));
 
-  // If single client specified, run original behavior
   if (clientName && !args.includes('--all')) {
     const accountId = clientConfigProd[clientName]?.clientAccountId;
     if (!accountId) {
@@ -355,17 +341,15 @@ if (import.meta.filename === process?.argv[1]) {
       process.exit(1);
     }
 
-    // Check if this is a dev instance when --dev flag is used
-    const { isDevOnly } = getFlags();
+    const { isDevOnly } = getGetCommandLineFlags();
     if (isDevOnly && !clientConfigProd[clientName].devInstance) {
       console.error(`Client ${clientName} is not a dev instance`);
       process.exit(1);
     }
 
-    await handleSingleClient(clientName, accountId);
-  }
-  // Otherwise process all clients and generate report
-  else {
-    await handleMultipleClients(args.includes('--all') ? undefined : clientName);
+    const region = clientConfigProd[clientName].region;
+    await handleSingleClient(clientName, accountId, region);
+  } else {
+    await handleMultipleClients();
   }
 }

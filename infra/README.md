@@ -45,7 +45,7 @@ The deploy script for this project requires you to have access to the arcanum-q-
 
 ## Usage
 
-Usage of this project is facilitated via the `yarn cdktf` helper script. This requires a `TF_ENVIRONMENT` variable to be set. For all development, this should be set to `dev`.
+Usage of this project is facilitated via the `yarn cdktf` helper script.
 
 ---
 
@@ -62,8 +62,6 @@ Note: The Honeycomb Key must be a management key. This can be created [here](htt
 ```bash
 export HONEYCOMB_KEY_ID=hcamk_your_key_id_here
 export HONEYCOMB_KEY_SECRET=your_key_secret_here
-export TF_ENVIRONMENT=dev # Only need to do this once per shell.
-export AWS_REGION=us-east-1
 yarn cdktf plan
 ```
 
@@ -82,8 +80,6 @@ To run the deploy of Numa to a customer account, do the following:
 ```bash
 export HONEYCOMB_KEY_ID=hcamk_your_key_id_here
 export HONEYCOMB_KEY_SECRET=your_key_secret_here
-export TF_ENVIRONMENT=prod # All customer deployments are prod.
-export AWS_REGION=us-east-1 # Important: These stacks can only be deployed in us-east-1.
 yarn cdktf deploy --auto-approve numa-{client-id}
 ```
 

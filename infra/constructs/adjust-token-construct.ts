@@ -1,7 +1,8 @@
-import { TypescriptLambdaConstruct } from '@arcanumai/typescript-lambda-construct';
-import { Construct } from 'constructs';
-import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
+import { TypescriptLambdaConstruct } from '@arcanumai/typescript-lambda-construct';
+import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
+import { Construct } from 'constructs';
 
 export class AdjustToken extends Construct {
   readonly function;
@@ -12,7 +13,11 @@ export class AdjustToken extends Construct {
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'lambda.amazonaws.com',
       }),
-      managedPolicyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'],
+    });
+
+    new IamRolePolicyAttachment(this, 'role-policy-attachment', {
+      role: role.name,
+      policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
     });
 
     this.function = new TypescriptLambdaConstruct(this, 'function', {
