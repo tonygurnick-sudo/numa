@@ -135,3 +135,4 @@ test-reports
 infra/.gen
 
 tools/email-case-report.json
+tools/email-verification-report.json
