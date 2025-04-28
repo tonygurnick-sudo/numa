@@ -31,6 +31,7 @@ import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-constr
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import { Honeycomb } from '../constructs/honeycomb-construct';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
+import { CouncilResourceConsents } from '../constructs/apps/council-resource-consents-construct';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 
 export class NumaClientStack extends TerraformStack {
@@ -317,6 +318,7 @@ export const appLibrary: Record<string, AppDefinition> = {
   'candidate-screening': { app: CandidateScreening, isProdApp: true },
   'company-profile': { app: CompanyProfile, isProdApp: true },
   'contract-analysis': { app: ContractAnalysis, isProdApp: true },
+  'council-recourse-consents': { app: CouncilResourceConsents, isProdApp: false },
   'costing-calculator': { app: CostingCalculator, isProdApp: false },
   'document-summariser': { app: DocumentSummariser, isProdApp: true },
   'financial-analysis': { app: FinancialAnalysis, isProdApp: true },

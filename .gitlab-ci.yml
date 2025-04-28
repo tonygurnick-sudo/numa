@@ -47,6 +47,7 @@ variables:
         - lambdas/python/company-profile
         - lambdas/python/contract-analysis
         - lambdas/python/costing-calculator
+        - lambdas/python/council-resource-consents
         - lambdas/python/document-summariser
         - lambdas/python/e2e-test
         - lambdas/python/extract-content-from-file
@@ -82,6 +83,7 @@ variables:
         - lambdas/python/company-profile
         - lambdas/python/contract-analysis
         - lambdas/python/costing-calculator
+        - lambdas/python/council-resource-consents
         - lambdas/python/document-summariser
         - lambdas/python/e2e-test
         - lambdas/python/extract-content-from-file
