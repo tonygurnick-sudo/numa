@@ -45,12 +45,7 @@
     "html-to-docx-lite": "^2.0.1",
     "html2pdf.js": "^0.10.2",
     "jwt-decode": "^4.0.0",
-    "mammoth": "1.9.0",
-    "marked": "^15.0.7",
     "micromark": "^4.0.1",
-    "papaparse": "^5.5.0",
-    "pdfjs-dist": "5.0.375",
-    "pptx-parser": "^1.0.0",
     "react": "^19.0.0",
     "react-bootstrap": "^2.10.5",
     "react-bootstrap-icons": "^1.11.4",
@@ -60,8 +55,7 @@
     "react-syntax-highlighter": "15.6.1",
     "react-transition-group": "^4.4.5",
     "remark-gfm": "^4.0.0",
-    "vitest": "^3.0.0",
-    "xlsx": "^0.18.0"
+    "vitest": "^3.0.0"
   },
   "devDependencies": {
     "@arcanumai/style": "workspace:*",

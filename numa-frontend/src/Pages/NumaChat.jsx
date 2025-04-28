@@ -761,12 +761,6 @@ const NumaChat = () => {
     stopGenerationRef.current = true;
   };
 
-  // File upload success callback
-  const handleFileUploadSuccess = async () => {
-    setShowUploadModal(false);
-    refreshSidebar();
-  };
-
   // Add a CSS class for the loading indicator
   const loadingIndicatorStyle = {
     display: 'inline-flex',
@@ -892,7 +886,6 @@ const NumaChat = () => {
       <ChatFileUpload
         show={showUploadModal}
         onHide={() => setShowUploadModal(false)}
-        onUploadSuccess={handleFileUploadSuccess}
         getAccessToken={getAccessToken}
         setMessages={setMessages}
         conversationId={conversationId}

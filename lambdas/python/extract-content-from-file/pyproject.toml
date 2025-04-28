@@ -30,6 +30,7 @@ helpers = {path = "../../../lib/helpers", develop = true}
 structlog = "25.2.0"
 openpyxl = "^3.1.5"
 python-docx = "^1.1.2"
+pypdf = "^4.1.0"
 
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.37.20"

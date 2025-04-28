@@ -275,10 +275,12 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     try {
       setError(null);
 
-      // Create a job if we don't have a job ID yet
-      // This ensures we have a consistent job ID for all uploads
+      // Check if this is a chat file upload (special case that doesn't need a job)
+      const isChatFileUpload = task?.id === 'chatFileUpload';
+
+      // Create a job if we don't have a job ID yet and this is not a chat file upload
       let jobId = currentJobId;
-      if (!jobId && numaAppData) {
+      if (!isChatFileUpload && !jobId && numaAppData) {
         setUploadStatus('Creating job for file uploads...');
         try {
           // First create a job to get a job ID
@@ -315,8 +317,15 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         const fileName = lastDotIndex !== -1 ? file.name.substring(0, lastDotIndex) : file.name;
         const fileExt = lastDotIndex !== -1 ? file.name.substring(lastDotIndex) : '';
 
-        // Create the S3 key with random string to prevent name clashes
-        const s3Key = `${numaAppId}/${jobId}/${fileName}_${randomId}${fileExt}`;
+        // Create the S3 key with path appropriate to the context
+        // For chat uploads, we use a different path structure that doesn't rely on job IDs
+        let s3Key;
+        if (isChatFileUpload) {
+          const chatId = Math.random().toString(36).substring(2, 10);
+          s3Key = `numa-chat/uploads/${chatId}/${fileName}_${randomId}${fileExt}`;
+        } else {
+          s3Key = `${numaAppId}/${jobId}/${fileName}_${randomId}${fileExt}`;
+        }
 
         const command = new PutObjectCommand({
           Bucket: bucketName,
@@ -360,25 +369,24 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         s3_key: r.filePath,
       }));
 
-      // Keep the raw results for chat page compatibility
-      // The chat page needs the full result objects with presignedUrl etc.
+      // Update the job with the standardized file format only if this is not a chat file upload
+      if (!isChatFileUpload) {
+        try {
+          // Create an object with just this task's input
+          // ALWAYS store the standardized format (array of objects with id, name, s3_key)
+          const fileInputs = {
+            [task.id]: fileObjects,
+          };
 
-      // Update the job with the standardized file format
-      try {
-        // Create an object with just this task's input
-        // ALWAYS store the standardized format (array of objects with id, name, s3_key)
-        const fileInputs = {
-          [task.id]: fileObjects,
-        };
+          // Merge with existing task input values
+          const mergedInputs = { ...taskInputValues, ...fileInputs };
 
-        // Merge with existing task input values
-        const mergedInputs = { ...taskInputValues, ...fileInputs };
-
-        // Update the job with the standardized format and status, but don't modify results
-        await jobsApi.updateJob(numaAppData, jobId, undefined, mergedInputs, 'files-uploaded');
-      } catch (updateError) {
-        console.error('Failed to save file paths to job:', updateError);
-        // Continue with the upload process even if the update fails
+          // Update the job with the standardized format and status, but don't modify results
+          await jobsApi.updateJob(numaAppData, jobId, undefined, mergedInputs, 'files-uploaded');
+        } catch (updateError) {
+          console.error('Failed to save file paths to job:', updateError);
+          // Continue with the upload process even if the update fails
+        }
       }
 
       setUploadStatus(`Upload successful!`);
@@ -394,7 +402,11 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       onComplete(results || []); // needed for numa chat
 
       // Indicate that files are uploaded and ready for processing
-      console.log(`Files uploaded successfully to job ${jobId}`);
+      if (!isChatFileUpload && jobId) {
+        console.log(`Files uploaded successfully to job ${jobId}`);
+      } else {
+        console.log(`Files uploaded successfully for chat`);
+      }
     } catch (error) {
       console.error('Error during file upload:', error);
 

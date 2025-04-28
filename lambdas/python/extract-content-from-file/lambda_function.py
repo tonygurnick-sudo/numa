@@ -11,15 +11,46 @@ from typing import Generic, List, TypeVar
 
 import boto3
 import docx
+import structlog
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 import aws_transcribe
 import bedrock
 import helpers
+import pdf
 import textract
 
 s3_client = boto3.client("s3")
+logger = structlog.get_logger(__name__)
+
+
+# File extension constants
+TEXT_FILE_EXTENSIONS = [
+    ".bash",
+    ".cfg",
+    ".conf",
+    ".css",
+    ".csv",
+    ".html",
+    ".ini",
+    ".js",
+    ".json",
+    ".less",
+    ".log",
+    ".markdown",
+    ".md",
+    ".py",
+    ".scss",
+    ".sh",
+    ".sql",
+    ".tex",
+    ".ts",
+    ".txt",
+    ".xml",
+    ".yaml",
+    ".yml",
+]
 
 
 class UnsupportedFileFormat(Exception):
@@ -61,14 +92,24 @@ class ExcelDocument(Document[ExcelDocumentPage]):
 def handler(event: dict, _context) -> dict:
     helpers.setup_logging()
 
-    input_bucket = event["input_bucket"]
-    output_bucket = event.get("output_bucket", input_bucket)
-    input_key = event["input_key"]
-    output_key = event.get("output_key", f"{input_key}.json")
+    if "body" in event:
+        # API Gateway sends the body as a JSON string
+        payload = json.loads(event["body"])
+    else:
+        payload = event
+
+    input_bucket = payload.get("input_bucket")
+    input_key = payload.get("input_key")
+    output_bucket = payload.get("output_bucket", input_bucket)
+    output_key = payload.get("output_key", f"{input_key}.json")
+    file_name = payload.get("file_name", None)
+
     # only set this to true when it's certain this will be less than 256KB
     return_content = event.get("return_content", False)
 
-    document = __generate_document(input_bucket, input_key)
+    document = __generate_document(input_bucket, input_key)  # type: ignore
+    if file_name:
+        document.name = file_name  # Set the name if provided (to return original name without unique key)
 
     content = json.dumps(dataclasses.asdict(document), indent=4).encode("utf-8")
     s3_client.put_object(Body=content, Bucket=output_bucket, Key=output_key)
@@ -81,6 +122,10 @@ def handler(event: dict, _context) -> dict:
     }
     if return_content:
         result["content"] = __document_to_string(document)
+
+    logger.info(
+        f"Document processed successfully: {input_key} -> {output_bucket}/{output_key}"
+    )
     return result
 
 
@@ -88,15 +133,13 @@ def __generate_document(input_bucket: str, input_key: str) -> Document:
     suffix = pathlib.PurePosixPath(input_key.lower()).suffix
 
     if not suffix:
-        raise UnsupportedFileFormat(f"{input_key} has an unsupported file format")
+        raise UnsupportedFileFormat(f"{input_key} file type cannot be determined")
 
-    if suffix in [
-        ".csv",
-        ".txt",
-    ]:
+    if suffix in TEXT_FILE_EXTENSIONS:
         s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
         extracted_text = s3_file_object["Body"].read().decode("utf-8")
         return __text_to_document(extracted_text, input_key)
+
     elif suffix in [
         ".docx",
     ]:
@@ -120,6 +163,10 @@ def __generate_document(input_bucket: str, input_key: str) -> Document:
         return __text_to_document(extracted_text, input_key)
     elif suffix in [
         ".pdf",
+    ]:
+        pages = pdf.process_pdf_document(input_bucket, input_key)
+        return _textract_pages_to_document(pages, input_key)
+    elif suffix in [
         ".tiff",
     ]:
         pages = textract.get_pages_from_document(input_bucket, input_key)

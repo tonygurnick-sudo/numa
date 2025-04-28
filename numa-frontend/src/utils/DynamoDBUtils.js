@@ -95,16 +95,7 @@ class NumaChatDynamoUtils {
   /**
    * Add a "file" message with file metadata.
    */
-  async addFileMessage({
-    conversationId,
-    userId,
-    fileName,
-    fileType,
-    s3Key,
-    s3Bucket,
-    extractedContentS3Key,
-    contentType,
-  }) {
+  async addFileMessage({ conversationId, userId, fileName, fileType, s3Key, s3Bucket, extractedContentS3Key }) {
     try {
       const timestamp = Date.now();
       const sk = `${conversationId}#${timestamp}`;
@@ -123,7 +114,6 @@ class NumaChatDynamoUtils {
           s3Key,
           s3Bucket,
           extractedContentS3Key,
-          contentType,
         },
       };
 
