@@ -47,6 +47,7 @@
     ]
   },
   "align-me": {
+    "allProdApps": true,
     "boxConfigs": [
       {
         "enterpriseId": "511773"
@@ -133,12 +134,12 @@
       "costing-calculator": {},
       "document-summariser": {},
       "financial-analysis": {},
+      "gdsr-assessment": {},
       "infringement-review": {},
       "meeting-analyser": {},
       "nzsba-policy-builder": {},
       "policy-drafter": {},
       "policy-reviewer": {},
-      "gdsr-assessment": {},
       "procurement-rfp-assessment": {}
     },
     "clientAccountId": "619071323471",
@@ -484,6 +485,7 @@
     ]
   },
   "ngati-kahu": {
+    "allProdApps": true,
     "clientAccountId": "328307064241",
     "region": "us-east-1",
     "webCrawlerConfigs": [
