@@ -128,6 +128,7 @@ export class CoreNumaInfra extends Construct {
       username: systemUserEmail,
       attributes: {
         email: systemUserEmail,
+        email_verified: 'true',
       },
       password: systemUserPassword,
       userPoolId: userPool.id,
