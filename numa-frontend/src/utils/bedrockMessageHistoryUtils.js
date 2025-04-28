@@ -81,7 +81,7 @@ const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) =>
               },
               {
                 type: 'text',
-                text: textBody,
+                text: textBody.trim() || 'No content found in file',
               },
             ],
           };
@@ -111,7 +111,8 @@ const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) =>
 /**
  * Prepares conversation history for Bedrock
  * @param {Array} conversationHistory - Full conversation history from DynamoDB
- * @returns {Array} - Formatted and truncated messages for Bedrock
+ * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @returns {Promise<Array>} - Formatted and truncated messages for Bedrock
  */
 const prepareConversationHistoryForBedrock = async (conversationHistory, getIdentityPoolCredentials) => {
   const sortedHistory = conversationHistory.sort((a, b) => a.timestamp - b.timestamp);

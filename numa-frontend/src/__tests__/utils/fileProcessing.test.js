@@ -2,71 +2,126 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { estimateTokenCount } from '../../utils/fileProcessing';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { processFile } from '../../utils/fileProcessing';
 
-const CHARS_PER_TOKEN = 4.0;
-const MAX_TOKEN_LIMIT = 100000;
-
-vi.mock('file-type', () => ({
-  fileTypeFromBuffer: vi.fn().mockResolvedValue({ ext: 'txt' }),
+// Hoist mocks before imports are processed
+const { fetchFileFromS3 } = vi.hoisted(() => ({
+  fetchFileFromS3: vi.fn(),
 }));
 
-vi.mock('pdfjs-dist/build/pdf', () => ({
-  getDocument: vi.fn(),
-  GlobalWorkerOptions: { workerSrc: null },
+// Mock dependencies
+vi.mock('../../utils/s3Utils', () => ({
+  fetchFileFromS3,
 }));
 
-describe('fileProcessing - Token Estimation and Size Limits', () => {
+describe('File Processing Utils', () => {
+  // Setup test environment
   beforeEach(() => {
     vi.clearAllMocks();
 
+    // Mock session storage and local storage
+    const sessionStorageData = {
+      REGION: 'us-east-1',
+      API_ENDPOINT: '/api',
+      id_token: 'session-id-token-123',
+    };
+
+    const mockGetItem = vi.fn((key) => sessionStorageData[key] || null);
+    Object.defineProperty(window, 'sessionStorage', {
+      value: {
+        getItem: mockGetItem,
+      },
+      writable: true,
+    });
+
+    const localStorageData = {
+      idToken: 'local-id-token-123',
+    };
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: vi.fn((key) => localStorageData[key] || null),
+      },
+      writable: true,
+    });
+
+    // Mock global fetch
     vi.spyOn(global, 'fetch').mockImplementation(() => {
       return Promise.resolve({
-        text: () => Promise.resolve('Mocked text content'),
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            output_key: 'processed/output.json',
+            output_bucket: 'output-bucket',
+          }),
+        text: () => Promise.resolve('{"error": "Error text"}'),
       });
     });
+
+    // Mock fetchFileFromS3 to simulate successful file fetch from S3
+    fetchFileFromS3.mockImplementation(() =>
+      Promise.resolve({
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              pages: [{ text: 'Page 1 content' }, { text: 'Page 2 content' }],
+              documentInfo: { title: 'Test Document' },
+            }),
+          ),
+      }),
+    );
+
+    // Mock setTimeout to avoid actual waiting in tests
+    vi.spyOn(global, 'setTimeout').mockImplementation((callback) => {
+      callback();
+      return 123; // dummy timeout id
+    });
   });
 
-  describe('estimateTokenCount', () => {
-    it('correctly estimates tokens based on characters', () => {
-      expect(estimateTokenCount(null)).toBe(0);
-      expect(estimateTokenCount('')).toBe(0);
-      expect(estimateTokenCount('Success!')).toBe(2); // 8 chars / 4.0 = 2
-      expect(estimateTokenCount('A'.repeat(40))).toBe(10); // 40 chars / 4.0 = 10
-    });
-
-    it('rounds up token count correctly', () => {
-      expect(estimateTokenCount('A'.repeat(9))).toBe(3);
-      expect(estimateTokenCount('A'.repeat(4))).toBe(1);
-      expect(estimateTokenCount('A'.repeat(5))).toBe(2);
-    });
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  describe('processFile - size limits', () => {
-    it('rejects files exceeding token limit', async () => {
-      const excessiveCharCount = (MAX_TOKEN_LIMIT + 1) * CHARS_PER_TOKEN;
+  describe('processFile', () => {
+    it('should handle failed Lambda call and fall back to S3 polling', async () => {
+      // Create a mock numaPost function that fails with a timeout
+      const mockNumaPost = vi.fn().mockRejectedValueOnce(new Error('Gateway Timeout'));
 
-      const largeContent = 'A'.repeat(excessiveCharCount);
-      expect(estimateTokenCount(largeContent)).toBeGreaterThan(MAX_TOKEN_LIMIT);
+      const fileInfo = {
+        s3Key: 'input/timeout.pdf',
+        s3Bucket: 'input-bucket',
+        fileName: 'timeout.pdf',
+      };
 
-      const tokenCount = estimateTokenCount(largeContent);
-      expect(tokenCount).toBe(MAX_TOKEN_LIMIT + 1);
-    });
+      const authContext = {
+        user: { tokens: { idToken: 'auth-context-token' } },
+      };
 
-    it('accepts files within token limit', async () => {
-      const safeCharCount = MAX_TOKEN_LIMIT * CHARS_PER_TOKEN - 1;
-      const content = 'A'.repeat(safeCharCount);
+      const getIdentityPoolCredentials = vi.fn().mockResolvedValue({});
 
-      expect(estimateTokenCount(content)).toBeLessThanOrEqual(MAX_TOKEN_LIMIT);
-    });
+      const result = await processFile(fileInfo, authContext, getIdentityPoolCredentials, mockNumaPost);
 
-    it('handles exact token limit boundary', () => {
-      const exactLimitContent = 'A'.repeat(MAX_TOKEN_LIMIT * CHARS_PER_TOKEN);
-      expect(estimateTokenCount(exactLimitContent)).toBe(MAX_TOKEN_LIMIT);
+      // Verify numaPost was called with correct parameters
+      expect(mockNumaPost).toHaveBeenCalledWith(
+        expect.stringContaining('/extract-content'),
+        expect.objectContaining({
+          input_bucket: 'input-bucket',
+          input_key: 'input/timeout.pdf',
+          output_bucket: 'input-bucket',
+          output_key: expect.stringContaining('input/timeout.pdf.json'),
+          file_name: 'timeout.pdf',
+        }),
+      );
 
-      const justOverContent = 'A'.repeat(MAX_TOKEN_LIMIT * CHARS_PER_TOKEN + 1);
-      expect(estimateTokenCount(justOverContent)).toBe(MAX_TOKEN_LIMIT + 1);
+      // Verify S3 polling was attempted
+      expect(fetchFileFromS3).toHaveBeenCalled();
+
+      // Check result structure reflects polling success
+      expect(result).toEqual(
+        expect.objectContaining({
+          s3Key: 'input/timeout.pdf',
+        }),
+      );
     });
   });
 });

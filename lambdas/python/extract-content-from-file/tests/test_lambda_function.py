@@ -184,10 +184,10 @@ class TestLambdaFunction(unittest.TestCase):
 
     @patch("lambda_function.s3_client")
     @patch("bedrock.get_text_from_image")
-    @patch("textract.get_pages_from_document", return_value={1: "Sample pdf content"})
+    @patch("pdf.process_pdf_document", return_value={1: "Sample pdf content"})
     def test_handler_pdf(
         self,
-        mock_textract,
+        mock_pdf_process,
         mock_bedrock,
         mock_s3_client,
     ):
@@ -201,6 +201,7 @@ class TestLambdaFunction(unittest.TestCase):
 
         self.assertEqual(response["content"], "Sample pdf content\n")
 
+        # s3_client.get_object should not be called as pdf.process_pdf_document handles the S3 interaction
         mock_s3_client.get_object.assert_not_called()
         mock_s3_client.put_object.assert_called_once()
         kwargs = mock_s3_client.put_object.call_args.kwargs
@@ -217,7 +218,8 @@ class TestLambdaFunction(unittest.TestCase):
                 "total_num_words": 3,
             },
         )
-        mock_textract.assert_called_once()
+        # Verify that pdf.process_pdf_document was called with the correct arguments
+        mock_pdf_process.assert_called_once_with("test-bucket", "test.pdf")
         mock_bedrock.assert_not_called()
 
 

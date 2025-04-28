@@ -65,6 +65,44 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         },
       ],
     });
+
+    // Extract Content from File API Endpoint
+    this.addLambdaFunction(this, 'extract-content', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/extract-content-from-file',
+      handler: 'lambda_function.handler',
+      route: {
+        verb: 'POST',
+        path: 'extract-content',
+      },
+      environment: {
+        variables: {
+          LOG_LEVEL: 'INFO',
+        },
+      },
+      timeout: 300,
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject', 's3:PutObject'],
+          resources: [`arn:aws:s3:::numa-${props.clientName}-outputs/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['bedrock:InvokeModel'],
+          resources: ['arn:aws:bedrock:*::foundation-model/*'],
+        },
+        {
+          actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
+          resources: ['*'],
+        },
+        {
+          actions: ['transcribe:StartTranscriptionJob', 'transcribe:GetTranscriptionJob'],
+          effect: 'Allow',
+          resources: ['*'],
+        },
+      ],
+    });
   }
 }
 

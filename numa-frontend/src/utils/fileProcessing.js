@@ -1,250 +1,137 @@
-import mammoth from 'mammoth';
-import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
-import { fileTypeFromBuffer } from 'file-type';
-
-import * as pdfjsLib from 'pdfjs-dist';
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString();
-
-// Additional libs for new file types
-import PPTXParser from 'pptx-parser';
-import { marked } from 'marked';
-
-// Token estimation
-const MAX_TOKEN_LIMIT = 100000;
-const CHARS_PER_TOKEN = 4;
+import { fetchFileFromS3 } from './s3Utils';
 
 /**
- * @param {string} text - The text content
- * @returns {number} - Estimated token count
- */
-export const estimateTokenCount = (text) => {
-  if (!text) return 0;
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
-};
-
-const detectFileType = async (file) => {
-  const buffer = await file.arrayBuffer();
-  const detectedType = await fileTypeFromBuffer(buffer);
-  return detectedType?.ext || 'unknown';
-};
-
-/**
- * Process a file and return { content, contentType, inferredType }.
- * This covers:
- * - pdf, docx, txt, csv, xlsx, images (jpg, jpeg, png, gif, webp), pptx, json, html, md
+ * Process a file by calling the extract-content-from-file lambda
  *
- * Will throw an error if the estimated token count exceeds the maximum limit.
+ * @param {Object} fileInfo - Information about the file in S3
+ * @param {string} fileInfo.s3Key - The S3 key of the file
+ * @param {string} fileInfo.s3Bucket - The S3 bucket where the file is stored
+ * @param {string} fileInfo.fileType - The type of the file (mime-type or extension)
+ * @param {string} fileInfo.fileName - The name of the file
+ * @param {Object} authContext - Auth context that provides tokens/credentials
+ * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} numaPost - The numaPost function from RequestProvider context
+ * @returns {Promise<Object>} - Processed file metadata
  */
-export const processFile = async (file, fileType, numaChatBedrockUtils) => {
-  let inferredType = fileType?.toLowerCase() || '';
-  if (!inferredType) {
-    inferredType = await detectFileType(file);
-    console.log(`Detected file type: ${inferredType}`);
-  }
+export const processFile = async (fileInfo, authContext, getIdentityPoolCredentials, numaPost) => {
+  const { s3Key, s3Bucket, fileName } = fileInfo;
 
   try {
-    let result;
+    // Call the Lambda to process the file
+    const { output_key, output_bucket } = await callExtractContentLambda(
+      s3Bucket,
+      s3Key,
+      fileName,
+      authContext,
+      getIdentityPoolCredentials,
+      numaPost,
+    );
 
-    switch (inferredType) {
-      case 'pdf': {
-        const pdfText = await processPDF(file);
-        result = { content: pdfText, contentType: 'text/plain', inferredType: 'pdf' };
-        break;
-      }
-
-      case 'docx': {
-        const docxText = await processDocx(file);
-        result = { content: docxText, contentType: 'text/plain', inferredType: 'docx' };
-        break;
-      }
-
-      case 'txt': {
-        const textContent = await processText(file);
-        result = { content: textContent, contentType: 'text/plain', inferredType: 'txt' };
-        break;
-      }
-
-      case 'csv': {
-        const csvText = await processCSV(file);
-        result = { content: csvText, contentType: 'text/plain', inferredType: 'csv' };
-        break;
-      }
-
-      case 'xlsx': {
-        const xlsxData = await processXLSX(file);
-        result = { content: xlsxData, contentType: 'text/plain', inferredType: 'xlsx' };
-        break;
-      }
-
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-      case 'gif':
-      case 'webp': {
-        const imageDescription = await processImage(file, inferredType, numaChatBedrockUtils);
-        return {
-          content: imageDescription,
-          contentType: `image/${inferredType}`,
-          inferredType: inferredType,
-        };
-      }
-
-      case 'pptx': {
-        const pptxData = await processPPTX(file);
-        result = { content: pptxData, contentType: 'text/plain', inferredType: 'pptx' };
-        break;
-      }
-
-      case 'json': {
-        const jsonData = await processJSON(file);
-        result = { content: jsonData, contentType: 'application/json', inferredType: 'json' };
-        break;
-      }
-
-      case 'html': {
-        const htmlText = await processHTML(file);
-        result = { content: htmlText, contentType: 'text/plain', inferredType: 'html' };
-        break;
-      }
-
-      case 'md': {
-        const markdownRendered = await processMarkdown(file);
-        result = { content: markdownRendered, contentType: 'text/plain', inferredType: 'md' };
-        break;
-      }
-
-      default:
-        throw new Error(`Unsupported file type: ${inferredType}`);
-    }
-
-    // For text-based content, check token count
-    if (result.contentType === 'text/plain' || result.contentType === 'application/json') {
-      const tokenCount = estimateTokenCount(result.content);
-      console.log(`Estimated token count for ${file.name}: ${tokenCount}`);
-
-      if (tokenCount > MAX_TOKEN_LIMIT) {
-        throw new Error(
-          `File is too large (estimated ${tokenCount.toLocaleString()} tokens). Maximum allowed is ${MAX_TOKEN_LIMIT.toLocaleString()} tokens.`,
-        );
-      }
-    }
-
-    return result;
+    // Return the processed file data
+    return {
+      fileName,
+      s3Key,
+      s3Bucket,
+      extractedContentS3Key: output_key,
+      output_bucket: output_bucket,
+    };
   } catch (error) {
     console.error('Error processing file:', error);
     throw error;
   }
 };
 
-/** ==========  Processing Helpers  ========== **/
-
-// -------- PDF --------
-const processPDF = async (file) => {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-  let allText = '';
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
-    const page = await pdf.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items.map((item) => item.str).join(' ');
-    allText += `\n${pageText}`;
-  }
-  /// Check if there is content besides whitespaces or new lines
-  /// Let allText be a message "No content found in file, possibly a scanned/image based pdf" if there is no content
-  if (!allText.trim()) {
-    allText = 'No content found in file, possibly a scanned/image based pdf.';
-  }
-  return allText;
-};
-
-// -------- DOCX --------
-const processDocx = async (file) => {
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  return result.value;
-};
-
-// -------- TXT --------
-const processText = async (file) => {
-  return await file.text();
-};
-
-// -------- CSV --------
-const processCSV = async (file) => {
-  const text = await file.text();
-  const result = Papa.parse(text, { header: true });
-  return JSON.stringify(result.data);
-};
-
-// -------- XLSX --------
-const processXLSX = async (file) => {
-  const arrayBuffer = await file.arrayBuffer();
-  const data = new Uint8Array(arrayBuffer);
-  const workbook = XLSX.read(data, { type: 'array' });
-
-  const firstSheetName = workbook.SheetNames[0];
-  const firstWorksheet = workbook.Sheets[firstSheetName];
-  const sheetJSON = XLSX.utils.sheet_to_json(firstWorksheet, { header: 1 });
-
-  return JSON.stringify(sheetJSON);
-};
-
-// -------- Images --------
-const convertImageToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64String = reader.result.split(',')[1];
-      resolve(base64String);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-};
-
-const processImage = async (file, inferredType, numaChatBedrockUtils) => {
+/**
+ * Call the extract-content-from-file lambda function to process a file in S3
+ */
+const callExtractContentLambda = async (bucket, key, fileName, authContext, getIdentityPoolCredentials, numaPost) => {
   try {
-    const base64Image = await convertImageToBase64(file);
-    const mimeType = `image/${inferredType}`;
-    const description = await numaChatBedrockUtils.getImageDescription(base64Image, mimeType);
-    return description;
+    // Get API endpoint from session storage
+    const API_GATEWAY_URL = window.sessionStorage.getItem('API_ENDPOINT') || '/api';
+    const extractUrl = `${API_GATEWAY_URL}/extract-content`;
+
+    const outputBucket = bucket;
+
+    // Keep the file in the same folder but append .json extension
+    const keyParts = key.split('/');
+    const baseName = keyParts.pop(); // Get the file name without path
+    const directory = keyParts.join('/'); // Get the directory path
+    const outputKey = `${directory}/${baseName}.json`;
+
+    const requestBody = {
+      input_bucket: bucket,
+      input_key: key,
+      output_bucket: bucket,
+      output_key: outputKey,
+      file_name: fileName,
+    };
+
+    // Try the initial request - this might succeed for quick processing
+    try {
+      // Use numaPost instead of fetch - it will handle auth headers automatically
+      const responseData = await numaPost(extractUrl, requestBody);
+
+      if (responseData) {
+        return {
+          output_key: responseData.output_key,
+          output_bucket: responseData.output_bucket,
+        };
+      }
+    } catch (initialError) {
+      console.log('Error during initial request:', initialError);
+      // If we got a timeout or other error, the Lambda might still be processing
+      // so we'll start polling the expected output location
+      console.log('Initial request failed. Starting S3 polling...');
+    }
+
+    // Start polling the S3 location directly
+    return await pollS3ForFile(outputBucket, outputKey, getIdentityPoolCredentials);
   } catch (error) {
-    console.error('Error processing image:', error);
-    throw error;
+    console.error('Error in extract content lambda process:', error);
+    throw new Error(`File processing failed: ${error.message}`);
   }
 };
 
-// -------- PPTX --------
-const processPPTX = async (file) => {
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await PPTXParser(arrayBuffer);
-  // Convert to JSON string
-  return JSON.stringify(result);
-};
+/**
+ * Poll S3 directly for the file until it exists
+ */
+const pollS3ForFile = async (bucket, key, getIdentityPoolCredentials) => {
+  const POLL_INTERVAL = 10000; // Check every 10 seconds
+  const MAX_POLL_TIME = 10 * 60 * 1000; // 10 minutes total polling time
+  const region = window.sessionStorage.getItem('REGION');
 
-// -------- JSON --------
-const processJSON = async (file) => {
-  const text = await file.text();
-  const data = JSON.parse(text);
-  // Return pretty-printed JSON
-  return JSON.stringify(data, null, 2);
-};
+  const startTime = Date.now();
+  const maxEndTime = startTime + MAX_POLL_TIME;
+  let attempt = 0;
 
-// -------- HTML --------
-const processHTML = async (file) => {
-  const text = await file.text();
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(text, 'text/html');
-  return doc.body ? doc.body.innerText : '';
-};
+  console.log(
+    `Starting polling for ${key} with ${POLL_INTERVAL / 1000} second intervals (max ${MAX_POLL_TIME / 60000} minutes)`,
+  );
 
-// -------- Markdown --------
-const processMarkdown = async (file) => {
-  const text = await file.text();
-  return marked(text);
+  while (Date.now() < maxEndTime) {
+    attempt++;
+
+    console.log(`Polling attempt ${attempt} for ${key} (${Math.round((maxEndTime - Date.now()) / 1000)}s remaining)`);
+
+    try {
+      // Try to fetch the file from S3
+      const contentFile = await fetchFileFromS3(key, bucket, region, getIdentityPoolCredentials);
+
+      if (contentFile) {
+        console.log(`Found file in S3: ${bucket}/${key}`);
+        return {
+          output_key: key,
+          output_bucket: bucket,
+        };
+      }
+    } catch (error) {
+      console.warn(`Error checking S3 (attempt ${attempt}):`, error);
+      // Continue to wait - file might not exist yet
+    }
+
+    // Wait for fixed interval before next check
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+  }
+
+  throw new Error(`File processing timed out after ${attempt} polling attempts (${MAX_POLL_TIME / 1000} seconds)`);
 };

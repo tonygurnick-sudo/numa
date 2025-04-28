@@ -17,6 +17,9 @@ const ChatInput = ({
 }) => {
   const inputRef = useRef(null);
 
+  // Calculate if input should be disabled based on buttonStatus or the disabled prop
+  const isInputDisabled = buttonStatus === 'loading' || buttonStatus === 'streaming' || disabled;
+
   const handleInputChange = (e) => {
     setInputMessage(e.target.value);
     e.target.style.height = 'auto';
@@ -32,7 +35,7 @@ const ChatInput = ({
 
   const handleKeyDown = (e) => {
     // If disabled or loading, don't process Enter as a submit
-    if (disabled || buttonStatus === 'loading') {
+    if (isInputDisabled) {
       return;
     }
 
@@ -53,9 +56,8 @@ const ChatInput = ({
           value={inputMessage}
           onInput={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder="Chat with Numa"
-          // If file is processing or we're loading, disable the input
-          disabled={disabled || buttonStatus === 'loading'}
+          placeholder={isInputDisabled ? 'Processing...' : 'Chat with Numa...'}
+          disabled={isInputDisabled || buttonStatus === 'loading'}
           className="chat-textarea"
         />
 
@@ -71,7 +73,7 @@ const ChatInput = ({
                 setShowUploadModal(true);
               }}
               aria-label="Upload Files"
-              disabled={disabled} // Optionally disable if needed
+              disabled={isInputDisabled}
             >
               <i className="bi bi-paperclip"></i>
             </Button>
@@ -82,7 +84,7 @@ const ChatInput = ({
               className={`data-mode-toggle ${queryDataSources ? 'active' : ''}`}
               onClick={() => setQueryDataSources(!queryDataSources)}
               aria-label="Toggle Data Mode"
-              disabled={disabled} // Optionally disable if needed
+              disabled={isInputDisabled}
             >
               <Database size={25} />
               {queryDataSources && <span className="bubble-text">Data Sources Enabled</span>}
@@ -94,7 +96,7 @@ const ChatInput = ({
               className={`web-search-toggle ${webSearchEnabled ? 'active' : ''}`}
               onClick={() => setWebSearchEnabled(!webSearchEnabled)}
               aria-label="Toggle Web Search"
-              disabled={disabled}
+              disabled={isInputDisabled}
             >
               <Search size={25} />
               {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}
@@ -102,11 +104,7 @@ const ChatInput = ({
           </div>
           <div className="right-controls">
             {buttonStatus === 'streaming' ? (
-              <Button
-                onClick={handleStopGeneration}
-                className="stop-button"
-                disabled={disabled} // Optionally disable if needed
-              >
+              <Button onClick={handleStopGeneration} className="stop-button" disabled={isInputDisabled}>
                 <i className="bi bi-stop-circle-fill" style={{ fontSize: '2.4rem', color: '#4b007d' }}></i>
               </Button>
             ) : buttonStatus === 'loading' ? (
@@ -134,7 +132,7 @@ const ChatInput = ({
                 type="submit"
                 id="send-message-button"
                 className="send-button"
-                disabled={disabled || !inputMessage.trim()}
+                disabled={isInputDisabled || !inputMessage.trim()}
               >
                 <i className="bi bi-arrow-up-circle-fill" style={{ fontSize: '2.4rem', color: '#4b007d' }}></i>
               </Button>
