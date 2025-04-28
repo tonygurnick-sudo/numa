@@ -446,25 +446,6 @@
     "createServiceLinkedRole": false,
     "region": "us-east-1"
   },
-  "mornington-peninsula-council": {
-    "allProdApps": true,
-    "clientAccountId": "672071675188",
-    "region": "ap-southeast-2",
-    "webCrawlerConfigs": [
-      {
-        "url": "https://data.gov.au/home"
-      },
-      {
-        "url": "https://www.vic.gov.au/"
-      },
-      {
-        "url": "https://www.planning.vic.gov.au/planning-schemes"
-      },
-      {
-        "url": "https://www.mornpen.vic.gov.au/Home"
-      }
-    ]
-  },
   "mosaic": {
     "allProdApps": true,
     "clientAccountId": "471112582627",
