@@ -1,5 +1,6 @@
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { S3BucketConfig } from '@cdktf/provider-aws/lib/s3-bucket';
+import { S3BucketCorsConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-cors-configuration';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { Construct } from 'constructs';
 
@@ -32,6 +33,10 @@ export class NumaCorsEnabledBucket extends PrivateBucket {
     super(scope, name, {
       ...bucketConfig,
       bucket: `numa-${clientName}${envSuffix}-${bucketName}`,
+    });
+
+    new S3BucketCorsConfiguration(this, 'cors-configuration', {
+      bucket: this.bucket.id,
       corsRule: [
         {
           allowedHeaders: ['*'],
