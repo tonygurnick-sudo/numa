@@ -2801,8 +2801,8 @@ __metadata:
   linkType: hard
 
 "@honeycombio/opentelemetry-web@npm:^0.17.0":
-  version: 0.17.0
-  resolution: "@honeycombio/opentelemetry-web@npm:0.17.0"
+  version: 0.17.1
+  resolution: "@honeycombio/opentelemetry-web@npm:0.17.1"
   dependencies:
     "@babel/runtime": "npm:^7.24.7"
     "@opentelemetry/api": "npm:~1.9.0"
@@ -2828,7 +2828,7 @@ __metadata:
       optional: true
     "@opentelemetry/context-zone":
       optional: true
-  checksum: 10c0/4ac7079d9b443b46b9f352bbfa03de3be19db4c419a9bf9544b9a060fd89af2ed19198e92f42a0dd6adf1dacf966229c7eb43df28913839d15d55d565d34b916
+  checksum: 10c0/8e370dece0c8fa6e9ab0b18b66f158191a3872a3d7d4d41c09070a5784524f94f9e988c31f902bacfb540f29ba87074d82db0f9792f84f97513a6620f40c6120
   languageName: node
   linkType: hard
 
