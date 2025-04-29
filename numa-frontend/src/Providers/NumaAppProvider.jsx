@@ -80,6 +80,7 @@ export const NumaAppProvider = ({ children }) => {
     setActiveStep(0);
     setHasRun(false);
     setCurrentJobId(null);
+    setJob(null);
   };
 
   // We now create a job directly when uploading files instead of using a session ID

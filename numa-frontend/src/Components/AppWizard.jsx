@@ -46,8 +46,10 @@ const AppWizard = ({ manifest }) => {
 
   // Update activeTab when job changes
   useEffect(() => {
-    if (job?.results) {
+    if (job && job.results) {
       setActiveTab('results');
+    } else {
+      setActiveTab('inputs');
     }
   }, [job]);
 
