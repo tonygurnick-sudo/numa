@@ -25,17 +25,17 @@ The policy documents created by our team have already been reviewed for clarity,
 However we need you legal expertise to review the document against legislative requirements to ensure that the policy is legally compliant and meets all relevant legal obligations.
 
 Your job is to
-- Ensure compliance with legislative requirements from the 'Board Assurance Statement' and 'Guidelines for Board Assurance Statement - January 2024'.
+- Ensure compliance with legislative requirements from the 'Board Assurance Statement' and 'Guidelines for Board Assurance Statement'.
 Documents:
 --------------------------------
 Boad Assurance Statement: {board_assurance_statement}
 --------------------------------
-Guidelines for Board Assurance Statement - January 2024: {guidelines_for_board_assurance_statement}
+Guidelines for Board Assurance Statement: {guidelines_for_board_assurance_statement}
 --------------------------------
 
 Please review the attached policy document for {school_name} and provide detailed feedback on the following aspects:
 - Compliance: Does the policy comply with all relevant legal obligations and legislative requirements?
-- Alignment: Does the policy align with the 'Board Assurance Statement' and 'Guidelines for Board Assurance Statement - January 2024'? If so, please highlight the relevant sections.
+- Alignment: Does the policy align with the 'Board Assurance Statement' and 'Guidelines for Board Assurance Statement'? If so, please highlight the relevant sections.
 - Recommendations: Are there any recommendations for improving the policy to ensure legal compliance? Please highlight specific sections of the policy document where necessary and what change you would recommend instead of the current wording
 
 We also want to make sure the policies reference relevant legislation under 'References' as a footnote to the policy in the format 'Number. section 123 of legislation: page of BAS'. E.g. '1. Section 127, Education and Training Act 2020: page 5 of Board Assurance Statement - Board objectives in governing schools'. To ensure readability, we will output legislation references as a seperate output that will be appended to the policy document rather then referenced through the policy.
@@ -54,7 +54,7 @@ IMPLEMENT_LEGAL_REVIEW_PROMPT = """You are an expert at writing policy documents
 
 Our legal team has reviewed the policy document created by our team for {school_name} and provided feedback on the following aspects:
 - Compliance: Does the policy comply with all relevant legal obligations and legislative requirements?
-- Alignment: Does the policy align with the 'Board Assurance Statement' and 'Guidelines for Board Assurance Statement - January 2024'?
+- Alignment: Does the policy align with the 'Board Assurance Statement' and 'Guidelines for Board Assurance Statement'?
 - Recommendations: Are there any recommendations for improving the policy to ensure legal compliance? Please highlight specific sections of the policy document where necessary and what change you would recommend instead of the current wording
 
 The legal team has also provided references to the legislation for each requirement in the policy in the format 'Number. section 123 of legislation: page of BAS'. E.g. '1. Section 127, Education and Training Act 2020: page 5 of Board Assurance Statement - Board objectives in governing schools'.
