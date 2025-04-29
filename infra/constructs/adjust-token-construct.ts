@@ -22,6 +22,7 @@ export class AdjustToken extends Construct {
 
     this.function = new TypescriptLambdaConstruct(this, 'function', {
       lambdaProps: {
+        runtime: 'nodejs22.x',
         functionName: 'token-adjuster-' + props.nameSuffix,
         role: role.arn,
       },

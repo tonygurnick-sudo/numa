@@ -35,6 +35,7 @@ export class SetCallbackUrl extends Construct {
             Q_BUSINESS_REGION: props.region,
           },
         },
+        runtime: 'nodejs22.x',
       },
       path: 'constructs/callback-renamer/',
     });

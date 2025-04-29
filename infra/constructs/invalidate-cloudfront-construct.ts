@@ -45,6 +45,7 @@ export class InvalidateCloudfront extends Construct {
       lambdaProps: {
         functionName: 'cloudfront-invalidater-' + props.cloudfrontDistribution.id,
         role: role.arn,
+        runtime: 'nodejs22.x',
       },
       path: 'constructs/cloudfront-invalidater/',
     });
