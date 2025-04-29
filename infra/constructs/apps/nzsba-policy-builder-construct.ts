@@ -205,14 +205,14 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
       source: path.join(import.meta.dirname, '..', '..', 'assets', exemplar_policy_file_name),
     });
 
-    const board_assurance_statement_file_name = 'examplar_policy_nzsba.pdf.json';
+    const board_assurance_statement_file_name = 'board_assurance_statement.pdf.json';
     const board_assurance_statement: S3Object = new S3Object(this, 'board_assurance_statement', {
       bucket: props.outputsBucket.bucket,
       key: `${this.appId}/${board_assurance_statement_file_name}`,
       source: path.join(import.meta.dirname, '..', '..', 'assets', exemplar_policy_file_name),
     });
 
-    const board_assurance_statement_guidelines_file_name = 'examplar_policy_nzsba.pdf.json';
+    const board_assurance_statement_guidelines_file_name = 'board_assurance_statement_guidelines.pdf.json';
     const board_assurance_statement_guidelines: S3Object = new S3Object(this, 'board_assurance_statement_guidelines', {
       bucket: props.outputsBucket.bucket,
       key: `${this.appId}/${board_assurance_statement_guidelines_file_name}`,
