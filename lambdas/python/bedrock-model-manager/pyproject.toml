@@ -1,11 +1,23 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
 [tool.poetry]
-name = "Infrastructure scripts"
+name = "bedrock-model-manager"
 version = "0.1.0"
-description = ""
+description = "Enable or disable Bedrock models"
 authors = ["Arcanum AI"]
 readme = "README.md"
 packages = [
-    { include = "*.py" },
+    { include = "**/*.py" },
 ]
 
 [tool.poetry.dependencies]
@@ -20,7 +32,3 @@ mypy = "1.15.0"
 pylint = "3.3.6"
 pyright = "1.1.400"
 types-requests = "2.32.0.20250328"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

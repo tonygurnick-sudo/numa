@@ -46,6 +46,7 @@ variables:
     - PYTHON_WORKING_DIRECTORY:
         - lambdas/python/aggregate-candidate-results
         - lambdas/python/aggregate-document-results
+        - lambdas/python/bedrock-model-manager
         - lambdas/python/candidate-screening
         - lambdas/python/company-profile
         - lambdas/python/contract-analysis
@@ -58,8 +59,6 @@ variables:
         - lambdas/python/financial-analysis-data-extraction
         - lambdas/python/gdsr-assessment
         - lambdas/python/infringement-review
-        - lambdas/python/procurement-rfp-assessment
-        - lambdas/python/rfp-response-comparison
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-recent-jobs
         - lambdas/python/policy-builder-completion
@@ -70,48 +69,18 @@ variables:
         - lambdas/python/policy-builder-principles-and-structure
         - lambdas/python/policy-drafter
         - lambdas/python/policy-reviewer
+        - lambdas/python/procurement-rfp-assessment
         - lambdas/python/recruitment-job-ad-creation
+        - lambdas/python/rfp-response-comparison
         - lambdas/python/step-function-start
         - lambdas/python/step-function-status
         - lambdas/python/structured-data-extraction
         - lambdas/python/web-search-proxy
 
-.python-matrix:
+.python-libraries-matrix:
   matrix:
     - PYTHON_WORKING_DIRECTORY:
         - deployer
-        - infra/bin
-        - lambdas/python/aggregate-candidate-results
-        - lambdas/python/aggregate-document-results
-        - lambdas/python/candidate-screening
-        - lambdas/python/company-profile
-        - lambdas/python/contract-analysis
-        - lambdas/python/costing-calculator
-        - lambdas/python/council-resource-consents
-        - lambdas/python/document-summariser
-        - lambdas/python/e2e-test
-        - lambdas/python/extract-content-from-file
-        - lambdas/python/financial-analysis-analysis
-        - lambdas/python/financial-analysis-data-extraction
-        - lambdas/python/gdsr-assessment
-        - lambdas/python/infringement-review
-        - lambdas/python/procurement-rfp-assessment
-        - lambdas/python/rfp-response-comparison
-        - lambdas/python/meeting-analyser
-        - lambdas/python/numa-recent-jobs
-        - lambdas/python/policy-builder-completion
-        - lambdas/python/policy-builder-expert-review
-        - lambdas/python/policy-builder-explainability
-        - lambdas/python/policy-builder-generation
-        - lambdas/python/policy-builder-legal-review
-        - lambdas/python/policy-builder-principles-and-structure
-        - lambdas/python/policy-drafter
-        - lambdas/python/policy-reviewer
-        - lambdas/python/recruitment-job-ad-creation
-        - lambdas/python/step-function-start
-        - lambdas/python/step-function-status
-        - lambdas/python/structured-data-extraction
-        - lambdas/python/web-search-proxy
         - lib/aws-transcribe
         - lib/bedrock
         - lib/helpers
@@ -156,10 +125,9 @@ infra-build:
   extends: .node-build
   <<: *node-job-infra-overrides
 
-python-lint:
+.python-lint-base:
   extends: .poetry-job
   needs: []
-  parallel: !reference [.python-matrix]
   script:
     - poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
     - poetry run mypy .
@@ -169,9 +137,21 @@ python-lint:
         paths:
           - $PYTHON_WORKING_DIRECTORY/**/*
 
-python-test:
+python-libraries-lint:
+  extends: .python-lint-base
+  parallel: !reference [.python-libraries-matrix]
+
+python-lambdas-lint:
+  extends: .python-lint-base
+  parallel: !reference [.python-lambdas-matrix]
+
+python-libraries-test:
   extends: .python-unittest
-  parallel: !reference [.python-matrix]
+  parallel: !reference [.python-libraries-matrix]
+
+python-lambdas-test:
+  extends: .python-unittest
+  parallel: !reference [.python-lambdas-matrix]
 
 node-lint:
   extends: .node-lint
@@ -203,7 +183,7 @@ frontend-build:
   artifacts:
     paths: [infra/build/numa-frontend]
 
-python-package:
+python-lambdas-package:
   extends: .poetry-job
   stage: package
   script:
