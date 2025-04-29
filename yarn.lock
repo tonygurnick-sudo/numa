@@ -29,12 +29,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@arcanumai/lambda-construct@npm:^1.1.9":
-  version: 1.1.9
-  resolution: "@arcanumai/lambda-construct@npm:1.1.9::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Flambda-construct%2F-%2F%40arcanumai%2Flambda-construct-1.1.9.tgz"
+"@arcanumai/cdktf-util@npm:^1.14.4":
+  version: 1.14.4
+  resolution: "@arcanumai/cdktf-util@npm:1.14.4::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Fcdktf-util%2F-%2F%40arcanumai%2Fcdktf-util-1.14.4.tgz"
+  checksum: 10c0/dd51fdd4887d85fd666a9faf019dfa68f13820b5b65b3c9aec065821a191ea7c318d75c3da086ccdde6ad835972ba2487012f03221932b16ae1b4ab3b829e9ba
+  languageName: node
+  linkType: hard
+
+"@arcanumai/lambda-construct@npm:^1.1.10":
+  version: 1.1.10
+  resolution: "@arcanumai/lambda-construct@npm:1.1.10::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Flambda-construct%2F-%2F%40arcanumai%2Flambda-construct-1.1.10.tgz"
   dependencies:
-    "@arcanumai/cdktf-util": "npm:^1.14.3"
-  checksum: 10c0/148123b90d318acd9274fa4b93d99c7fbf9ea3c648e8a13e5d2f429e76d980828c42f39ee0ced9a42ed8f90accb60a7ceff64bac67a31042e402cd1ded7069bf
+    "@arcanumai/cdktf-util": "npm:^1.14.4"
+  checksum: 10c0/997bf85017551a517e63d3aadf5786e1a12a36d5d02eb5ef19c96acd5e79e4f5b0307151eccde9349fcaf353e0bdb422b60f49f71813c1a78bcfcd37871d2783
   languageName: node
   linkType: hard
 
@@ -191,12 +198,12 @@ __metadata:
   linkType: soft
 
 "@arcanumai/typescript-lambda-construct@npm:^1.2.4":
-  version: 1.2.10
-  resolution: "@arcanumai/typescript-lambda-construct@npm:1.2.10::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Ftypescript-lambda-construct%2F-%2F%40arcanumai%2Ftypescript-lambda-construct-1.2.10.tgz"
+  version: 1.2.11
+  resolution: "@arcanumai/typescript-lambda-construct@npm:1.2.11::__archiveUrl=https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%2Fprojects%2F36835511%2Fpackages%2Fnpm%2F%40arcanumai%2Ftypescript-lambda-construct%2F-%2F%40arcanumai%2Ftypescript-lambda-construct-1.2.11.tgz"
   dependencies:
-    "@arcanumai/cdktf-util": "npm:^1.14.3"
-    "@arcanumai/lambda-construct": "npm:^1.1.9"
-  checksum: 10c0/857e483841bc62ff348fafe4144b276275c9353f05a12c0c420b0a3a1e1080131f0db3955f9b8a49ac3c822c33c78da3942b72ee3203a15569e76ab420b7b57b
+    "@arcanumai/cdktf-util": "npm:^1.14.4"
+    "@arcanumai/lambda-construct": "npm:^1.1.10"
+  checksum: 10c0/72bd560efa1e4aeda8c0f9944195eca23202f61cd18198685e8120134bfe0c3664a93fa3253ca7a6c4a4af74a16087563d2486d93a43dbfd8cb55887337e694e
   languageName: node
   linkType: hard
 
