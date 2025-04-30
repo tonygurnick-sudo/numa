@@ -139,15 +139,19 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     }
   }, []);
 
+  // Only enforce maxFiles; minFiles will be shown as a warning
   const validateFileCount = (files) => {
-    if (minFiles > 0 && files.length < minFiles) {
-      return `At least ${minFiles} file${minFiles > 1 ? 's' : ''} required`;
-    }
     if (maxFiles && files.length > maxFiles) {
       return `Maximum of ${maxFiles} file${maxFiles > 1 ? 's' : ''} allowed`;
     }
     return null;
   };
+
+  // Warning when fewer than minFiles have been selected (only after initial selection)
+  const warning =
+    minFiles > 0 && selectedFiles.length > 0 && selectedFiles.length < minFiles
+      ? `At least ${minFiles} file${minFiles > 1 ? 's' : ''} required`
+      : null;
 
   const validateFile = (file) => {
     // Check file type if acceptedFileTypes is specified
@@ -472,6 +476,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
             Select Files
           </Button>
           {error && <div className="alert alert-danger mt-3">{error}</div>}
+          {!error && warning && <div className="alert alert-warning mt-3">{warning}</div>}
 
           {uploadStatus && (
             <div className="mt-3">

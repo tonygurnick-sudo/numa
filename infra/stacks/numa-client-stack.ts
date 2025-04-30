@@ -17,6 +17,7 @@ import { CandidateScreening } from '../constructs/apps/candidate-screening-const
 import { CompanyProfile } from '../constructs/apps/company-profile-construct';
 import { ContractAnalysis } from '../constructs/apps/contract-analysis-construct';
 import { CostingCalculator } from '../constructs/apps/costing-calculator-construct';
+import { CouncilResourceConsents } from '../constructs/apps/council-resource-consents-construct';
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
 import { FinancialAnalysis } from '../constructs/apps/financial-analysis-construct';
 import { GdsrAssessment } from '../constructs/apps/gdsr-assessment-construct';
@@ -26,12 +27,12 @@ import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-cons
 import { PolicyDrafter } from '../constructs/apps/policy-drafter-construct';
 import { PolicyReviewer } from '../constructs/apps/policy-reviewer-construct';
 import { ProcurementRfpAssessment } from '../constructs/apps/procurement-rfp-assessment-construct';
+import { RfpResponseComparison } from '../constructs/apps/rfp-response-comparison-construct';
 import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import { Honeycomb } from '../constructs/honeycomb-construct';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
-import { CouncilResourceConsents } from '../constructs/apps/council-resource-consents-construct';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 
 export class NumaClientStack extends TerraformStack {
@@ -328,6 +329,7 @@ export const appLibrary: Record<string, AppDefinition> = {
   'nzsba-policy-builder': { app: NZSBAPolicyBuilder, isProdApp: false },
   'policy-drafter': { app: PolicyDrafter, isProdApp: true },
   'policy-reviewer': { app: PolicyReviewer, isProdApp: true },
+  'rfp-response-comparison': { app: RfpResponseComparison, isProdApp: false },
   'procurement-rfp-assessment': { app: ProcurementRfpAssessment, isProdApp: false },
 };
 
