@@ -19,7 +19,15 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => navigationHandlers.mockNavigate,
     MemoryRouter: ({ children }) => children,
-    useLocation: () => ({ pathname: navigationHandlers.currentRoute }),
+    useLocation: () => {
+      // Get the current location from navigationHandlers
+      const currentLocation = navigationHandlers.currentLocation || {
+        pathname: navigationHandlers.currentRoute,
+        search: '',
+        hash: '',
+      };
+      return currentLocation;
+    },
     useParams: () => ({}),
   };
 });

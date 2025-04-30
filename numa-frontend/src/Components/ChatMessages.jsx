@@ -1,7 +1,7 @@
 // ChatMessages.jsx
 import { Spinner, Button } from 'react-bootstrap';
 import { MarkdownContent } from './MarkdownContent';
-import numaIcon from '../assets/images/numa-logo.svg';
+import numaIcon from '../../public/numa-logo.svg';
 import { ChatReferencesDropdown } from '../Components/ChatReferencesDropdown';
 import { useAuth } from '../Providers/AuthProvider';
 
