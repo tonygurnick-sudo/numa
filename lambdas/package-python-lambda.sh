@@ -2,6 +2,15 @@
 
 set -o errexit -o nounset -o pipefail -o xtrace
 
+SCRIPT_DIRECTORY=$(dirname "${BASH_SOURCE:-$0}" | xargs realpath)
+declare -r SCRIPT_DIRECTORY
+GIT_DIR="${SCRIPT_DIRECTORY}"/../.git
+
+if ! test -d "${GIT_DIR}"; then
+    echo ".git directory is not accessible"
+    exit 1
+fi
+
 LAMBDA_DIRECTORY=$(realpath "${1:-.}")
 
 BUILD_DIR="${LAMBDA_DIRECTORY}"/lambda_function.build;
@@ -53,6 +62,11 @@ popd
 # remove files that aren't required and contain paths that can differ based on clone location
 rm -r "${BUILD_DIR:?}/bin"
 find "${BUILD_DIR}" -type d -name "*.dist-info" -exec rm -r "{}" +
+
+# make sure full history is available to make git log reliable
+if test -f "${GIT_DIR}/shallow"; then
+    git fetch --unshallow
+fi
 
 # Use the last modification date of the lambda for all files in the ZIP to make
 # it deterministic
