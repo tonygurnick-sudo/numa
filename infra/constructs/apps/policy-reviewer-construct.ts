@@ -89,9 +89,7 @@ export class PolicyReviewer extends BaseNumaApp {
     const policyReviewerLambda = this.addLambdaFunction(this, 'review', {
       additionalPolicyStatements: policyReviewerLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/policy-reviewer',
       timeout: 900,

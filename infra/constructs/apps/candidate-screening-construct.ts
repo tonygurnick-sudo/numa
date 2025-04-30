@@ -90,9 +90,7 @@ export class CandidateScreening extends BaseNumaApp {
     const candidateScreeningLambda = this.addLambdaFunction(this, 'screen', {
       additionalPolicyStatements: candidateScreeningLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/candidate-screening',
       timeout: 900,
@@ -113,9 +111,7 @@ export class CandidateScreening extends BaseNumaApp {
     const aggregatorLambda = this.addLambdaFunction(this, 'aggregate', {
       additionalPolicyStatements: aggregatorLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/aggregate-candidate-results',
       timeout: 900,

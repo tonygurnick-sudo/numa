@@ -81,9 +81,7 @@ export class ContractAnalysis extends BaseNumaApp {
     const contractAnalysisLambda = this.addLambdaFunction(this, 'analyze', {
       additionalPolicyStatements: contractAnalysisLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/contract-analysis',
       timeout: 900,

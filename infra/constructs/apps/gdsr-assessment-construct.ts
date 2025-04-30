@@ -72,9 +72,7 @@ export class GdsrAssessment extends BaseNumaApp {
     const assessGdsrLambda = this.addLambdaFunction(this, 'assess', {
       additionalPolicyStatements: assessGdsrLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/gdsr-assessment',
       timeout: 900,

@@ -79,7 +79,7 @@ export class RfpResponseComparison extends BaseNumaApp {
           resources: ['arn:aws:bedrock:*::foundation-model/*'],
         },
       ],
-      environment: { variables: { BUCKET: props.outputsBucket.bucket } },
+      environment: { BUCKET: props.outputsBucket.bucket },
       lambdaDirectory: 'python/rfp-response-comparison',
       timeout: 900,
     });

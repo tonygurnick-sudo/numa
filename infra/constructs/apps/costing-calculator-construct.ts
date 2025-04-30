@@ -132,9 +132,7 @@ export class CostingCalculator extends BaseNumaApp {
     const costingCalculatorLambda = this.addLambdaFunction(this, 'calculate', {
       additionalPolicyStatements: costingCalculatorLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/costing-calculator',
       timeout: 300,

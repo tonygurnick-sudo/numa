@@ -4,10 +4,6 @@ import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './a
 export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaCollection {
   readonly clientName: string;
 
-  protected getResourceName(suffix: string): string {
-    return this.clientName.slice(0, 64 - suffix.length) + suffix;
-  }
-
   constructor(scope: Construct, name: string, props: AppAgnosticApiGatewayLambdaCollectionProps) {
     super(scope, name, props);
 
@@ -15,12 +11,10 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
 
     // SRP Proxy
     const environment = {
-      variables: {
-        ALLOWED_ORIGIN: '*', // TODO: More closely scope this.
-        CLIENT_SECRET: props.userPoolClientSecret,
-        COGNITO_CLIENT_ID: props.userPoolClientId,
-        COGNITO_REGION: props.region,
-      },
+      ALLOWED_ORIGIN: '*', // TODO: More closely scope this.
+      CLIENT_SECRET: props.userPoolClientSecret,
+      COGNITO_CLIENT_ID: props.userPoolClientId,
+      COGNITO_REGION: props.region,
     };
 
     this.addLambdaFunction(this, 'srp-hasher', {
@@ -45,11 +39,9 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         path: 'web-search',
       },
       environment: {
-        variables: {
-          LOG_LEVEL: 'INFO',
-          ALLOWED_ORIGIN: '*',
-          CLIENT_NAME: props.clientName,
-        },
+        LOG_LEVEL: 'INFO',
+        ALLOWED_ORIGIN: '*',
+        CLIENT_NAME: props.clientName,
       },
       timeout: 45,
       additionalPolicyStatements: [
@@ -76,9 +68,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         path: 'extract-content',
       },
       environment: {
-        variables: {
-          LOG_LEVEL: 'INFO',
-        },
+        LOG_LEVEL: 'INFO',
       },
       timeout: 300,
       additionalPolicyStatements: [

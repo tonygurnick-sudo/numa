@@ -134,9 +134,7 @@ export class InfringementReview extends BaseNumaApp {
     const infringementReviewLambda = this.addLambdaFunction(this, 'review', {
       additionalPolicyStatements: infringementReviewLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/infringement-review',
       timeout: 900,

@@ -181,9 +181,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
         this.addLambdaFunction(this, lambdaName, {
           additionalPolicyStatements,
           environment: {
-            variables: {
-              BUCKET: props.outputsBucket.bucket,
-            },
+            BUCKET: props.outputsBucket.bucket,
           },
           lambdaDirectory: directory,
           timeout: 900,

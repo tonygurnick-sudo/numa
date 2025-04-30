@@ -32,7 +32,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   }
 
   constructor(scope: Construct, name: string, props: AppSpecificBaseNumaAppProps) {
-    super(scope, name, props);
+    super(scope, name, { ...props, resourceNameInfix: '-' + props.appId });
 
     this.appId = props.appId;
     this.clientName = props.clientName;
@@ -105,10 +105,8 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       },
       lambdaDirectory: 'python/step-function-start',
       environment: {
-        variables: {
-          STEP_FUNCTION_ARN: stepFunction.arn,
-          APP_ID: this.appId,
-        },
+        APP_ID: this.appId,
+        STEP_FUNCTION_ARN: stepFunction.arn,
       },
       additionalPolicyStatements: [
         {
@@ -126,10 +124,8 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       },
       lambdaDirectory: 'python/step-function-status',
       environment: {
-        variables: {
-          BUCKET: this.outputsBucket.bucket,
-          APP_ID: this.appId,
-        },
+        APP_ID: this.appId,
+        BUCKET: this.outputsBucket.bucket,
       },
       additionalPolicyStatements: [
         {
@@ -322,9 +318,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         lambdaDirectory: 'python/numa-recent-jobs',
         runtime: 'python3.13',
         environment: {
-          variables: {
-            DYNAMODB_TABLE: table.arn,
-          },
+          DYNAMODB_TABLE: table.arn,
         },
         additionalPolicyStatements: [
           {
