@@ -32,10 +32,18 @@ export class NumaLambda extends Construct {
       lifecycle: { createBeforeDestroy: true },
     });
 
-    new IamRolePolicyAttachment(scope, name + 'role-policy-attachment-basic', {
+    // TODO: remove once applied
+    const policyAttachmentBasicOld = new IamRolePolicyAttachment(scope, name + 'role-policy-attachment-basic', {
       role: role.name,
       policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
     });
+    policyAttachmentBasicOld.moveTo(scope.node.id + name + '_role-policy-attachment-basic');
+
+    const policyAttachmentBasic = new IamRolePolicyAttachment(scope, name + '_role-policy-attachment-basic', {
+      role: role.name,
+      policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+    });
+    policyAttachmentBasic.addMoveTarget(scope.node.id + name + '_role-policy-attachment-basic');
 
     if (props.additionalPolicyStatements) {
       const additionalPolicy = new IamPolicy(scope, name + '_policy', {
@@ -43,10 +51,27 @@ export class NumaLambda extends Construct {
           statement: props.additionalPolicyStatements,
         }).json,
       });
-      new IamRolePolicyAttachment(scope, name + 'role-policy-attachment-additional', {
-        role: role.name,
-        policyArn: additionalPolicy.arn,
-      });
+
+      // TODO: remove once applied
+      const policyAttachmentAdditionalOld = new IamRolePolicyAttachment(
+        scope,
+        name + 'role-policy-attachment-additional',
+        {
+          role: role.name,
+          policyArn: additionalPolicy.arn,
+        },
+      );
+      policyAttachmentAdditionalOld.moveTo(scope.node.id + name + '_role-policy-attachment-additional');
+
+      const policyAttachmentAdditional = new IamRolePolicyAttachment(
+        scope,
+        name + '_role-policy-attachment-additional',
+        {
+          role: role.name,
+          policyArn: additionalPolicy.arn,
+        },
+      );
+      policyAttachmentAdditional.addMoveTarget(scope.node.id + name + '_role-policy-attachment-additional');
     }
 
     const filename = path.resolve(
