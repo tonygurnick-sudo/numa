@@ -3,6 +3,7 @@
  */
 import { setupAuthMocks } from '../Mocks/AuthMockHandlers';
 import { clearAllMocks, renderWithProviders } from '../Mocks/ProviderWrapper';
+import { setupNavigationMocks } from '../Mocks/NavigationMockHandlers';
 
 import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -17,150 +18,260 @@ describe('ResetPassword Component', () => {
     clearAllMocks();
   });
 
-  it('should render initial password reset request form', () => {
-    renderWithProviders(<ResetPassword />);
+  describe('Password Reset Flow', () => {
+    beforeEach(() => {
+      // Set up navigation for reset password path
+      setupNavigationMocks({
+        pathname: '/reset-password',
+        search: '',
+        hash: '',
+      });
+    });
 
-    expect(screen.getByRole('heading', { name: 'Password Reset' })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Enter your email')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Request Password Reset' })).toBeInTheDocument();
+    it('should render initial password reset request form', () => {
+      renderWithProviders(<ResetPassword />);
+
+      expect(screen.getByRole('heading', { name: 'Password Reset' })).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Enter your email')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Request Password Reset' })).toBeInTheDocument();
+    });
+
+    it('should handle password reset request submission', async () => {
+      authHandlers.requestPasswordReset.mockResolvedValueOnce();
+
+      renderWithProviders(<ResetPassword />);
+
+      const emailInput = screen.getByPlaceholderText('Enter your email');
+      const submitButton = screen.getByRole('button', {
+        name: 'Request Password Reset',
+      });
+
+      fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Password reset code sent. Please check your email.')).toBeInTheDocument();
+      });
+      expect(authHandlers.requestPasswordReset).toHaveBeenCalledWith('test@example.com', 'reset');
+    });
+
+    it('should handle password reset request error', async () => {
+      authHandlers.requestPasswordReset.mockRejectedValueOnce(new Error('Invalid email'));
+
+      renderWithProviders(<ResetPassword />);
+
+      const emailInput = screen.getByPlaceholderText('Enter your email');
+      const submitButton = screen.getByRole('button', {
+        name: 'Request Password Reset',
+      });
+
+      fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Invalid email')).toBeInTheDocument();
+      });
+    });
+
+    it('should render password reset form after code is sent', async () => {
+      authHandlers.requestPasswordReset.mockResolvedValueOnce();
+
+      renderWithProviders(<ResetPassword />);
+
+      // Submit the initial form
+      const emailInput = screen.getByPlaceholderText('Enter your email');
+      const submitButton = screen.getByRole('button', {
+        name: 'Request Password Reset',
+      });
+
+      fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Password Reset')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Enter the code')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Enter your new password')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Confirm your new password')).toBeInTheDocument();
+      });
+    });
+
+    it('should handle password reset confirmation', async () => {
+      authHandlers.requestPasswordReset.mockResolvedValueOnce();
+      authHandlers.confirmPasswordReset.mockResolvedValueOnce();
+
+      renderWithProviders(<ResetPassword />);
+
+      // Submit the initial form
+      const emailInput = screen.getByPlaceholderText('Enter your email');
+      fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Request Password Reset' }));
+
+      // Wait for the reset form to appear
+      await waitFor(() => {
+        expect(screen.getByText('Password Reset')).toBeInTheDocument();
+      });
+
+      // Fill out the reset form
+      const codeInput = screen.getByPlaceholderText('Enter the code');
+      const newPasswordInput = screen.getByPlaceholderText('Enter your new password');
+      const confirmPasswordInput = screen.getByPlaceholderText('Confirm your new password');
+      const resetEmailInput = screen.getByPlaceholderText('Enter your email');
+
+      // Fill in all form fields
+      fireEvent.change(codeInput, { target: { value: '123456' } });
+      fireEvent.change(resetEmailInput, {
+        target: { value: 'test@example.com' },
+      });
+      fireEvent.change(newPasswordInput, { target: { value: 'newpassword' } });
+      fireEvent.change(confirmPasswordInput, {
+        target: { value: 'newpassword' },
+      });
+
+      // Submit the reset form
+      const resetButton = screen.getByRole('button', { name: 'Reset Password' });
+      fireEvent.click(resetButton);
+
+      // Wait for the confirmation handler to be called
+      await waitFor(() => {
+        expect(authHandlers.confirmPasswordReset).toHaveBeenCalledWith('test@example.com', '123456', 'newpassword');
+      });
+
+      expect(screen.getByText('Password reset successfully. Redirecting to login...')).toBeInTheDocument();
+    });
+
+    it('should handle password mismatch', async () => {
+      authHandlers.requestPasswordReset.mockResolvedValueOnce();
+
+      renderWithProviders(<ResetPassword />);
+
+      // Get to the reset form
+      fireEvent.change(screen.getByPlaceholderText('Enter your email'), {
+        target: { value: 'test@example.com' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Request Password Reset' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Password Reset')).toBeInTheDocument();
+      });
+
+      // Fill form with mismatched passwords
+      const codeInput = screen.getByPlaceholderText('Enter the code');
+      const emailInput = screen.getByPlaceholderText('Enter your email');
+      const newPasswordInput = screen.getByPlaceholderText('Enter your new password');
+      const confirmPasswordInput = screen.getByPlaceholderText('Confirm your new password');
+
+      fireEvent.change(codeInput, { target: { value: '123456' } });
+      fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+      fireEvent.change(newPasswordInput, { target: { value: 'password1' } });
+      fireEvent.change(confirmPasswordInput, { target: { value: 'password2' } });
+
+      // Submit the form
+      fireEvent.click(screen.getByRole('button', { name: 'Reset Password' }));
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Passwords do not match.');
+      expect(authHandlers.confirmPasswordReset).not.toHaveBeenCalled();
+    });
   });
 
-  it('should handle password reset request submission', async () => {
-    authHandlers.requestPasswordReset.mockResolvedValueOnce();
-
-    renderWithProviders(<ResetPassword />);
-
-    const emailInput = screen.getByPlaceholderText('Enter your email');
-    const submitButton = screen.getByRole('button', {
-      name: 'Request Password Reset',
+  describe('Create Password Flow', () => {
+    beforeEach(() => {
+      // Set up navigation for create password path with email in query
+      setupNavigationMocks({
+        pathname: '/create-password',
+        search: '?email=test@example.com',
+        hash: '',
+      });
     });
 
-    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
-    fireEvent.click(submitButton);
+    it('should render initial create password form with email from URL', () => {
+      renderWithProviders(<ResetPassword />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Password reset code sent. Please check your email.')).toBeInTheDocument();
-    });
-    expect(authHandlers.requestPasswordReset).toHaveBeenCalledWith('test@example.com');
-  });
-
-  it('should handle password reset request error', async () => {
-    authHandlers.requestPasswordReset.mockRejectedValueOnce(new Error('Invalid email'));
-
-    renderWithProviders(<ResetPassword />);
-
-    const emailInput = screen.getByPlaceholderText('Enter your email');
-    const submitButton = screen.getByRole('button', {
-      name: 'Request Password Reset',
+      expect(screen.getByRole('heading', { name: 'Create Your Password' })).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Enter your email')).toHaveValue('test@example.com');
+      expect(screen.getByRole('button', { name: 'Request Activation Code' })).toBeInTheDocument();
     });
 
-    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
-    fireEvent.click(submitButton);
+    it('should handle activation code request submission', async () => {
+      authHandlers.requestPasswordReset.mockResolvedValueOnce();
 
-    await waitFor(() => {
-      expect(screen.getByText('Invalid email')).toBeInTheDocument();
-    });
-  });
+      renderWithProviders(<ResetPassword />);
 
-  it('should render password reset form after code is sent', async () => {
-    authHandlers.requestPasswordReset.mockResolvedValueOnce();
+      const submitButton = screen.getByRole('button', { name: 'Request Activation Code' });
+      fireEvent.click(submitButton);
 
-    renderWithProviders(<ResetPassword />);
-
-    // Submit the initial form
-    const emailInput = screen.getByPlaceholderText('Enter your email');
-    const submitButton = screen.getByRole('button', {
-      name: 'Request Password Reset',
+      await waitFor(() => {
+        expect(screen.getByText('Activation code sent. Please check your email.')).toBeInTheDocument();
+      });
+      expect(authHandlers.requestPasswordReset).toHaveBeenCalledWith('test@example.com', 'create');
     });
 
-    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
-    fireEvent.click(submitButton);
+    it('should render create password form after code is sent', async () => {
+      authHandlers.requestPasswordReset.mockResolvedValueOnce();
 
-    await waitFor(() => {
-      expect(screen.getByText('Reset Your Password')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Enter the code')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Enter your new password')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Confirm your new password')).toBeInTheDocument();
-    });
-  });
+      renderWithProviders(<ResetPassword />);
 
-  it('should handle password reset confirmation', async () => {
-    authHandlers.requestPasswordReset.mockResolvedValueOnce();
-    authHandlers.confirmPasswordReset.mockResolvedValueOnce();
+      // Request the activation code
+      fireEvent.click(screen.getByRole('button', { name: 'Request Activation Code' }));
 
-    renderWithProviders(<ResetPassword />);
-
-    // Submit the initial form
-    const emailInput = screen.getByPlaceholderText('Enter your email');
-    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Request Password Reset' }));
-
-    // Wait for the reset form to appear
-    await waitFor(() => {
-      expect(screen.getByText('Reset Your Password')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Create Your Password')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Enter the code')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Enter your new password')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Confirm your new password')).toBeInTheDocument();
+      });
     });
 
-    // Fill out the reset form
-    const codeInput = screen.getByPlaceholderText('Enter the code');
-    const newPasswordInput = screen.getByPlaceholderText('Enter your new password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm your new password');
-    const resetEmailInput = screen.getByPlaceholderText('Enter your email');
+    it('should handle password creation confirmation', async () => {
+      authHandlers.requestPasswordReset.mockResolvedValueOnce();
+      authHandlers.confirmPasswordReset.mockResolvedValueOnce();
 
-    // Fill in all form fields
-    fireEvent.change(codeInput, { target: { value: '123456' } });
-    fireEvent.change(resetEmailInput, {
-      target: { value: 'test@example.com' },
-    });
-    fireEvent.change(newPasswordInput, { target: { value: 'newpassword' } });
-    fireEvent.change(confirmPasswordInput, {
-      target: { value: 'newpassword' },
-    });
+      renderWithProviders(<ResetPassword />);
 
-    // Submit the reset form
-    const resetButton = screen.getByRole('button', { name: 'Reset Password' });
-    fireEvent.click(resetButton);
+      // Request the activation code
+      fireEvent.click(screen.getByRole('button', { name: 'Request Activation Code' }));
 
-    // Wait for the confirmation handler to be called
-    await waitFor(() => {
-      expect(authHandlers.confirmPasswordReset).toHaveBeenCalledWith('test@example.com', '123456', 'newpassword');
-    });
+      // Wait for the create password form to appear
+      await waitFor(() => {
+        expect(screen.getByText('Create Your Password')).toBeInTheDocument();
+      });
 
-    // Update the expected success message to match the actual UI
-    expect(screen.getByText('Password reset successfully. Redirecting to login...')).toBeInTheDocument();
-  });
+      // Fill out the form
+      fireEvent.change(screen.getByPlaceholderText('Enter the code'), { target: { value: '123456' } });
+      fireEvent.change(screen.getByPlaceholderText('Enter your new password'), { target: { value: 'newpassword' } });
+      fireEvent.change(screen.getByPlaceholderText('Confirm your new password'), { target: { value: 'newpassword' } });
 
-  it('should handle password mismatch', async () => {
-    authHandlers.requestPasswordReset.mockResolvedValueOnce();
+      // Submit the form
+      fireEvent.click(screen.getByRole('button', { name: 'Create Password' }));
 
-    renderWithProviders(<ResetPassword />);
+      await waitFor(() => {
+        expect(authHandlers.confirmPasswordReset).toHaveBeenCalledWith('test@example.com', '123456', 'newpassword');
+      });
 
-    // Get to the reset form
-    fireEvent.change(screen.getByPlaceholderText('Enter your email'), {
-      target: { value: 'test@example.com' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Request Password Reset' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Reset Your Password')).toBeInTheDocument();
+      expect(screen.getByText('Password created successfully. Redirecting to login...')).toBeInTheDocument();
     });
 
-    // Fill form with mismatched passwords
-    const codeInput = screen.getByPlaceholderText('Enter the code');
-    const emailInput = screen.getByPlaceholderText('Enter your email');
-    const newPasswordInput = screen.getByPlaceholderText('Enter your new password');
-    const confirmPasswordInput = screen.getByPlaceholderText('Confirm your new password');
+    it('should handle password mismatch in create mode', async () => {
+      authHandlers.requestPasswordReset.mockResolvedValueOnce();
 
-    fireEvent.change(codeInput, { target: { value: '123456' } });
-    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
-    fireEvent.change(newPasswordInput, { target: { value: 'password1' } });
-    fireEvent.change(confirmPasswordInput, { target: { value: 'password2' } });
+      renderWithProviders(<ResetPassword />);
 
-    // Submit the form
-    fireEvent.click(screen.getByRole('button', { name: 'Reset Password' }));
+      // Request the activation code
+      fireEvent.click(screen.getByRole('button', { name: 'Request Activation Code' }));
 
-    // Look for the correct error message in an alert
-    expect(screen.getByRole('alert')).toHaveTextContent('Passwords do not match.');
+      await waitFor(() => {
+        expect(screen.getByText('Create Your Password')).toBeInTheDocument();
+      });
 
-    expect(authHandlers.confirmPasswordReset).not.toHaveBeenCalled();
+      // Fill form with mismatched passwords
+      fireEvent.change(screen.getByPlaceholderText('Enter the code'), { target: { value: '123456' } });
+      fireEvent.change(screen.getByPlaceholderText('Enter your new password'), { target: { value: 'password1' } });
+      fireEvent.change(screen.getByPlaceholderText('Confirm your new password'), { target: { value: 'password2' } });
+
+      // Submit the form
+      fireEvent.click(screen.getByRole('button', { name: 'Create Password' }));
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Passwords do not match.');
+      expect(authHandlers.confirmPasswordReset).not.toHaveBeenCalled();
+    });
   });
 });

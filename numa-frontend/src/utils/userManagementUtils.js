@@ -2,6 +2,7 @@ import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
   ListUsersCommand,
+  AdminSetUserPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
 export class UserManagementUtils {
@@ -13,23 +14,32 @@ export class UserManagementUtils {
   }
 
   /**
-   * Creates a new user in Cognito with a temporary password
+   * Creates a new user in Cognito with a permanent password
    * @param {string} email - Email address of the new user
    * @param {string} userPoolId - Cognito User Pool ID
-   * @returns {Promise<Object>} - Object containing the user's details and temporary password
+   * @returns {Promise<Object>} - Object containing the user's details and password
    */
   async createUser(email, userPoolId) {
     try {
       const lowercaseEmail = email.toLowerCase();
       console.log('Creating user with:', { email: lowercaseEmail, userPoolId });
 
-      // Generate a secure temporary password
-      const tempPassword = `Welcome${Math.random().toString(36).slice(2, 8)}!`;
+      // Fully random password with all character types
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+      let password = '';
 
+      // Use browser's Web Crypto API instead of Node.js crypto
+      const randomValues = new Uint8Array(16);
+      window.crypto.getRandomValues(randomValues);
+      for (let i = 0; i < 16; i++) {
+        password += chars.charAt(randomValues[i] % chars.length);
+      }
+
+      // Create the user with email verified and a specified password
       const command = new AdminCreateUserCommand({
         UserPoolId: userPoolId,
         Username: lowercaseEmail,
-        TemporaryPassword: tempPassword,
+        TemporaryPassword: password,
         UserAttributes: [
           {
             Name: 'email',
@@ -49,9 +59,19 @@ export class UserManagementUtils {
       console.log('User sub:', response.User.Username);
       console.log('Login username should be:', lowercaseEmail);
 
+      // Set the password as permanent immediately
+      const passwordCommand = new AdminSetUserPasswordCommand({
+        UserPoolId: userPoolId,
+        Username: lowercaseEmail,
+        Password: password,
+        Permanent: true,
+      });
+
+      console.log('Setting permanent password for user:', lowercaseEmail);
+      await this.cognitoClient.send(passwordCommand);
+
       return {
         user: response.User,
-        temporaryPassword: tempPassword,
       };
     } catch (error) {
       // Handle specific Cognito errors

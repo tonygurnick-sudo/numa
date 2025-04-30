@@ -55,6 +55,7 @@ const AppRoutes = () => {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/dash" replace /> : <NumaLogin />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/create-password" element={<ResetPassword />} />
 
       <Route path="/" element={<Navigate to={user ? '/dash' : '/login'} replace />} />
 

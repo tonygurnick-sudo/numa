@@ -5,18 +5,19 @@ import { useAuth } from '../Providers/AuthProvider';
 import { UserManagementUtils } from '../utils/userManagementUtils';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Nav } from '../Components/Nav';
+import { generateCognitoIdpPolicy } from '../Modules/CognitoIdpPolicyGenerator';
 
 const UserManagement = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [tempPassword, setTempPassword] = useState(null);
+  const [success, setSuccess] = useState(false);
+  const [createdEmail, setCreatedEmail] = useState('');
   // These states will be used once ListUsers permission is added
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState(null);
-  const { getIdentityPoolCredentials } = useAuth();
+  const { getWebTokenCredentials } = useAuth();
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -24,7 +25,28 @@ const UserManagement = () => {
     try {
       const REGION = window.sessionStorage.getItem('REGION');
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-      const credentials = await getIdentityPoolCredentials();
+      const ACCOUNT_ID = window.sessionStorage.getItem('ACCOUNT_ID');
+
+      // Make sure we have the ACCOUNT_ID in session storage
+      if (!ACCOUNT_ID) {
+        // Extract account ID from the role ARN if not directly available
+        const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+        const extractedAccountId = ROLE_ARN ? ROLE_ARN.split(':')[4] : null;
+
+        if (extractedAccountId) {
+          window.sessionStorage.setItem('ACCOUNT_ID', extractedAccountId);
+        } else {
+          throw new Error('Could not determine AWS Account ID');
+        }
+      }
+
+      const policy = generateCognitoIdpPolicy({
+        Region: REGION,
+        AccountId: ACCOUNT_ID || window.sessionStorage.getItem('ACCOUNT_ID'),
+        UserPoolId: USER_POOL_ID,
+      });
+
+      const credentials = await getWebTokenCredentials(policy);
       if (!credentials) {
         throw new Error('Failed to get AWS credentials');
       }
@@ -32,9 +54,9 @@ const UserManagement = () => {
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
       const userList = await userManagementUtils.listUsers(USER_POOL_ID);
       setUsers(userList);
-      // For now, just set loading to false without fetching users
       setLoadingUsers(false);
     } catch (err) {
+      console.error('Error fetching users:', err);
       setUsersError(err.message || 'Failed to fetch users');
     } finally {
       setLoadingUsers(false);
@@ -49,13 +71,34 @@ const UserManagement = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setSuccess(null);
-    setTempPassword(null);
+    setSuccess(false);
+    setCreatedEmail('');
 
     try {
       const REGION = window.sessionStorage.getItem('REGION');
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-      const credentials = await getIdentityPoolCredentials();
+      const ACCOUNT_ID = window.sessionStorage.getItem('ACCOUNT_ID');
+
+      // Make sure we have the ACCOUNT_ID in session storage
+      if (!ACCOUNT_ID) {
+        // Extract account ID from the role ARN if not directly available
+        const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+        const extractedAccountId = ROLE_ARN ? ROLE_ARN.split(':')[4] : null;
+
+        if (extractedAccountId) {
+          window.sessionStorage.setItem('ACCOUNT_ID', extractedAccountId);
+        } else {
+          throw new Error('Could not determine AWS Account ID');
+        }
+      }
+
+      const policy = generateCognitoIdpPolicy({
+        Region: REGION,
+        AccountId: ACCOUNT_ID || window.sessionStorage.getItem('ACCOUNT_ID'),
+        UserPoolId: USER_POOL_ID,
+      });
+
+      const credentials = await getWebTokenCredentials(policy);
 
       if (!credentials) {
         throw new Error('Failed to get AWS credentials');
@@ -64,11 +107,11 @@ const UserManagement = () => {
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
       const result = await userManagementUtils.createUser(email, USER_POOL_ID);
       console.log('User creation result:', result);
-      // Show the temporary password first
-      setSuccess({ message: 'User created successfully!', user: result.user, email: email });
-      setTempPassword(result.temporaryPassword);
+      // Store the email for display and set success to true
+      setCreatedEmail(email);
+      setSuccess(true);
       setLoading(false);
-      // Wait a bit before refreshing the list to ensure password is seen
+      // Wait a bit before refreshing the list
       setTimeout(() => {
         setLoadingUsers(true);
         fetchUsers().finally(() => {
@@ -102,11 +145,11 @@ const UserManagement = () => {
             <div className="card-body">
               <h3 className="card-title h5">Create New User</h3>
               <div className="card-text text-muted mb-4">
-                <p className="mb-2">Create a new user account by entering their email address. You will receive:</p>
+                <p className="mb-2">Create a new user account by entering their email address:</p>
                 <ul className="mt-2 mb-0">
-                  <li>A temporary password to log in</li>
-                  <li>Instructions to change their password on first login</li>
-                  <li>Access to Numa based on their assigned permissions</li>
+                  <li>The user will need to visit {window.location.origin}/create-password to set their password</li>
+                  <li>You&apos;ll receive instructions to share with the user after creation</li>
+                  <li>Access to Numa will be based on their assigned permissions</li>
                 </ul>
               </div>
 
@@ -129,59 +172,60 @@ const UserManagement = () => {
                 </Button>
               </Form>
 
-              {success?.message && tempPassword && (
+              {success && (
                 <Alert variant="success" className="mt-4 mb-0">
-                  <h4 className="alert-heading h5">{success.message}</h4>
+                  <h4 className="alert-heading h5">User created successfully!</h4>
                   <hr />
                   <div className="mb-3">
-                    <strong className="d-block mb-2">Login Credentials</strong>
-                    <div className="bg-light p-3 rounded">
-                      <div className="mb-2">
-                        <strong className="d-block mb-1">Username (Email):</strong>
-                        <div className="d-flex align-items-center">
-                          <code className="user-select-all d-block flex-grow-1">{success.email}</code>
-                          <Button
-                            variant="outline-secondary"
-                            size="sm"
-                            className="ms-2"
-                            onClick={() => {
-                              navigator.clipboard.writeText(success.email);
-                              alert('Email copied to clipboard!');
-                            }}
-                          >
-                            Copy
-                          </Button>
-                        </div>
+                    <strong className="d-block mb-2">User Instructions</strong>
+                    <div className="bg-light p-3 rounded position-relative">
+                      <div className="user-select-all">
+                        <p className="mb-2">Welcome to Numa!</p>
+                        <p className="mb-2">
+                          Your account has been created with the following email address:{' '}
+                          <strong>{createdEmail}</strong>
+                        </p>
+                        <p className="mb-2">To set up your password and access the system, please:</p>
+                        <ol className="ps-4 mb-2">
+                          <li>Go to {window.location.origin}/create-password</li>
+                          <li>Enter your email address: {createdEmail}</li>
+                          <li>Follow the instructions to create your password</li>
+                        </ol>
+                        <p className="mb-0">If you have any questions, please contact your administrator.</p>
                       </div>
-                      <div>
-                        <strong className="d-block mb-1">Temporary Password:</strong>
-                        <div className="d-flex align-items-center">
-                          <code className="user-select-all d-block flex-grow-1">{tempPassword}</code>
-                          <Button
-                            variant="outline-secondary"
-                            size="sm"
-                            className="ms-2"
-                            onClick={() => {
-                              navigator.clipboard.writeText(tempPassword);
-                              alert('Password copied to clipboard!');
-                            }}
-                          >
-                            Copy
-                          </Button>
-                        </div>
+                      <div className="d-flex justify-content-end mt-3">
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          className="me-2"
+                          onClick={() => {
+                            navigator.clipboard.writeText(createdEmail);
+                            alert('Email copied to clipboard!');
+                          }}
+                        >
+                          Copy Email
+                        </Button>
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
+                          onClick={() => {
+                            const instructions = `Welcome to Numa!\n\nYour account has been created with the following email address: ${createdEmail}\n\nTo set up your password and access the system, please:\n1. Go to ${window.location.origin}/create-password\n2. Enter your email address: ${createdEmail}\n3. Follow the instructions to create your password\n\nIf you have any questions, please contact your administrator.`;
+                            navigator.clipboard.writeText(instructions);
+                            alert('Instructions copied to clipboard!');
+                          }}
+                        >
+                          Copy All Instructions
+                        </Button>
                       </div>
-                      <small className="text-muted d-block mt-2">
-                        Important: Use your email address as your username to log in. The temporary password will only
-                        be shown once.
-                      </small>
                     </div>
                   </div>
+
                   <div>
                     <strong className="d-block mb-2">Next Steps</strong>
                     <ol className="mb-0 ps-3">
-                      <li className="mb-1">Share these credentials with the user securely</li>
-                      <li className="mb-1">Ask them to log in at {window.location.origin}</li>
-                      <li>They will be required to change their password on first login</li>
+                      <li className="mb-1">Share these instructions with the user securely</li>
+                      <li className="mb-1">They will need to visit {window.location.origin}/create-password</li>
+                      <li>They will be able to set their password there for the first time</li>
                     </ol>
                   </div>
                 </Alert>

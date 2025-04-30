@@ -687,7 +687,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   }, [initialTokens]);
 
-  const requestPasswordReset = async (email) => {
+  const requestPasswordReset = async (email, mode = 'reset') => {
     try {
       const lowercaseEmail = email.toLowerCase();
       const SECRET_HASH = await fetchSecretHash(lowercaseEmail);
@@ -695,10 +695,15 @@ export const AuthProvider = ({ children, initialTokens }) => {
       const REGION = window.sessionStorage.getItem('REGION');
       const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
 
+      // Add mode parameter to distinguish between reset and create password flows
       const command = new ForgotPasswordCommand({
         Username: lowercaseEmail,
         ClientId: CLIENT_ID,
         SecretHash: SECRET_HASH,
+        // Custom client metadata can be used to pass additional information
+        ClientMetadata: {
+          mode: mode, // 'reset' or 'create'
+        },
       });
 
       const cognitoClient = new CognitoIdentityProviderClient({
@@ -735,10 +740,11 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   };
 
-  const getWebTokenCredentials = async () => {
+  const getWebTokenCredentials = async (policy = null) => {
     const REGION = window.sessionStorage.getItem('REGION');
     const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
     const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
 
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
 
@@ -748,11 +754,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     const idToken = user.tokens.idToken;
 
-    const policy = generatePolicy({
-      Region: REGION,
-      AccountId: accountId,
-      ApplicationId: Q_APPLICATION_ID,
-    });
+    if (!policy) {
+      policy = generatePolicy({
+        Region: REGION,
+        AccountId: accountId,
+        ApplicationId: Q_APPLICATION_ID,
+        UserPoolId: USER_POOL_ID,
+      });
+    }
 
     const credentials = await fromWebToken({
       client: cognitoIdentity,

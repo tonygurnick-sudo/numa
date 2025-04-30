@@ -1,6 +1,5 @@
-import { useState } from 'react';
-
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Alert, Button, Form } from 'react-bootstrap';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { useAuth } from '../Providers/AuthProvider';
@@ -12,6 +11,21 @@ const ResetPassword = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Check if we're in create password mode
+  const isCreateMode = location.pathname === '/create-password';
+
+  // Check for email in URL parameters
+  useEffect(() => {
+    if (isCreateMode) {
+      const searchParams = new URLSearchParams(location.search);
+      const emailFromUrl = searchParams.get('email');
+      if (emailFromUrl) {
+        setEmail(emailFromUrl);
+      }
+    }
+  }, [isCreateMode, location.search]);
 
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [error, setError] = useState(null);
@@ -27,9 +41,14 @@ const ResetPassword = () => {
     setLoading(true);
 
     try {
-      await requestPasswordReset(email);
+      // Pass 'create' as mode for create password flow, or 'reset' for reset password flow
+      await requestPasswordReset(email, isCreateMode ? 'create' : 'reset');
       setIsCodeSent(true);
-      setSuccess('Password reset code sent. Please check your email.');
+      setSuccess(
+        isCreateMode
+          ? 'Activation code sent. Please check your email.'
+          : 'Password reset code sent. Please check your email.',
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -51,7 +70,11 @@ const ResetPassword = () => {
 
     try {
       await confirmPasswordReset(email, resetCode, newPassword);
-      setSuccess('Password reset successfully. Redirecting to login...');
+      setSuccess(
+        isCreateMode
+          ? 'Password created successfully. Redirecting to login...'
+          : 'Password reset successfully. Redirecting to login...',
+      );
       setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
       setError(err.message);
@@ -60,9 +83,22 @@ const ResetPassword = () => {
     }
   };
 
+  const getFormTitle = () => (isCreateMode ? 'Create Your Password' : 'Password Reset');
+  const getRequestButtonText = () => (isCreateMode ? 'Request Activation Code' : 'Request Password Reset');
+  const getCodeLabel = () => (isCreateMode ? 'Activation Code' : 'Reset Code');
+  const getSubmitButtonText = () => (isCreateMode ? 'Create Password' : 'Reset Password');
+  const getPromptText = () =>
+    isCreateMode
+      ? 'Enter your email to receive an activation code.'
+      : 'Enter your email to receive a password reset code.';
+  const getCodeInstructionText = () =>
+    isCreateMode
+      ? 'Enter the activation code you received and choose a new password.'
+      : 'Enter the code you received and your new password.';
+
   return (
     <LayoutForm
-      FormName={'numa-reset-password'}
+      FormName="numalogin"
       Content={
         <>
           {error && <Alert variant="danger">{error}</Alert>}
@@ -70,8 +106,8 @@ const ResetPassword = () => {
 
           {!isCodeSent ? (
             <Form onSubmit={handleRequestReset}>
-              <h2 className="mb-2">Password Reset</h2>
-              <p className="mb-4">Enter your email to receive a password reset code.</p>
+              <h2 className="mb-2">{getFormTitle()}</h2>
+              <p className="mb-4">{getPromptText()}</p>
               <Form.Group className="mb-3">
                 <Form.Label>Email</Form.Label>
                 <Form.Control
@@ -83,16 +119,18 @@ const ResetPassword = () => {
                 />
               </Form.Group>
               <Button variant="primary" type="submit" disabled={loading}>
-                {loading ? 'Requesting...' : 'Request Password Reset'}
+                {loading ? 'Requesting...' : getRequestButtonText()}
               </Button>
-              <p className="mt-1">
-                <a href="/login">Back to login</a>
-              </p>
+              {!isCreateMode && (
+                <p className="mt-1">
+                  <a href="/login">Back to login</a>
+                </p>
+              )}
             </Form>
           ) : (
             <Form onSubmit={handleResetPassword}>
-              <h2 className="mb-2">Reset Your Password</h2>
-              <p className="mb-4">Enter the code you received and your new password.</p>
+              <h2 className="mb-2">{getFormTitle()}</h2>
+              <p className="mb-4">{getCodeInstructionText()}</p>
 
               <Form.Group className="mb-3">
                 <Form.Label>Email</Form.Label>
@@ -106,7 +144,7 @@ const ResetPassword = () => {
                   autoComplete="email"
                 />
 
-                <Form.Label>Reset Code</Form.Label>
+                <Form.Label>{getCodeLabel()}</Form.Label>
                 <Form.Control
                   type="text"
                   placeholder="Enter the code"
@@ -145,7 +183,7 @@ const ResetPassword = () => {
               </Form.Group>
 
               <Button variant="primary" type="submit" disabled={loading}>
-                {loading ? 'Resetting...' : 'Reset Password'}
+                {loading ? (isCreateMode ? 'Creating...' : 'Resetting...') : getSubmitButtonText()}
               </Button>
             </Form>
           )}

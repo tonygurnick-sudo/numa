@@ -14,11 +14,17 @@ vi.mock('@aws-sdk/client-cognito-identity-provider', () => {
     return this;
   };
 
+  const mockAdminSetUserPasswordCommand = function (params) {
+    this.params = params;
+    return this;
+  };
+
   return {
     CognitoIdentityProviderClient: vi.fn().mockImplementation(() => ({
       send: mockSend(),
     })),
     AdminCreateUserCommand: mockAdminCreateUserCommand,
+    AdminSetUserPasswordCommand: mockAdminSetUserPasswordCommand,
     ListUsersCommand: vi.fn(),
   };
 });
@@ -62,6 +68,8 @@ describe('UserManagementUtils', () => {
 
       // Mock the send method to return our mock response
       mockCognitoClient.send.mockResolvedValueOnce(mockResponse);
+      // Mock the send method for AdminSetUserPasswordCommand
+      mockCognitoClient.send.mockResolvedValueOnce({});
 
       // Execute
       const result = await userManagementUtils.createUser(mockEmail, mockUserPoolId);
@@ -70,8 +78,9 @@ describe('UserManagementUtils', () => {
       console.log('mockCognitoClient.send calls:', mockCognitoClient.send.mock.calls);
 
       // Assert
-      // Verify that send was called with correct parameters
-      expect(mockCognitoClient.send).toHaveBeenCalledWith(
+      // Verify that send was called with correct parameters for user creation
+      expect(mockCognitoClient.send).toHaveBeenNthCalledWith(
+        1,
         expect.objectContaining({
           params: expect.objectContaining({
             UserPoolId: mockUserPoolId,
@@ -90,9 +99,22 @@ describe('UserManagementUtils', () => {
         }),
       );
 
-      expect(result).toHaveProperty('user', mockResponse.User);
-      expect(result).toHaveProperty('temporaryPassword');
-      expect(result.temporaryPassword).toBe('Welcomei!');
+      // Verify that send was called with correct parameters for setting password
+      expect(mockCognitoClient.send).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          params: expect.objectContaining({
+            UserPoolId: mockUserPoolId,
+            Username: mockEmail,
+            Password: expect.any(String),
+            Permanent: true,
+          }),
+        }),
+      );
+
+      expect(result).toEqual({
+        user: mockResponse.User,
+      });
     });
 
     it('should handle user already exists error', async () => {
@@ -129,12 +151,14 @@ describe('UserManagementUtils', () => {
         },
       };
 
-      mockCognitoClient.send.mockResolvedValue(mockResponse);
+      mockCognitoClient.send.mockResolvedValueOnce(mockResponse);
+      mockCognitoClient.send.mockResolvedValueOnce({});
 
       const result = await userManagementUtils.createUser(email, userPoolId);
 
-      // Verify the command was created with lowercase email
-      expect(mockCognitoClient.send).toHaveBeenCalledWith(
+      // Verify the command was created with lowercase email for user creation
+      expect(mockCognitoClient.send).toHaveBeenNthCalledWith(
+        1,
         expect.objectContaining({
           params: expect.objectContaining({
             Username: email.toLowerCase(),
@@ -148,10 +172,22 @@ describe('UserManagementUtils', () => {
         }),
       );
 
+      // Verify the command was created with lowercase email for password setting
+      expect(mockCognitoClient.send).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          params: expect.objectContaining({
+            UserPoolId: userPoolId,
+            Username: email.toLowerCase(),
+            Password: expect.any(String),
+            Permanent: true,
+          }),
+        }),
+      );
+
       // Verify the response
       expect(result).toEqual({
         user: mockResponse.User,
-        temporaryPassword: expect.any(String),
       });
     });
 
