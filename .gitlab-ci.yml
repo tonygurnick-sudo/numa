@@ -258,6 +258,7 @@ deploy-to-arcanum-demo:
   artifacts:
     paths:
       - infra/**/archive.zip
+    when: on_failure
   variables:
     CLIENT_NAME: arcanum-demo
   environment:
