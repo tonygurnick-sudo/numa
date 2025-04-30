@@ -255,6 +255,9 @@ infra-bin:
 
 deploy-to-arcanum-demo:
   extends: .deploy-infra
+  artifacts:
+    paths:
+      - infra/**/archive.zip
   variables:
     CLIENT_NAME: arcanum-demo
   environment:
