@@ -20,38 +20,182 @@ const ResultActions = ({ content, title = 'Result' }) => {
   // ─────────────────────────────────────────────────────────────
   // PDF Creation
   const createStyledPdfBlob = async (markdownString, title) => {
-    const element = document.createElement('div');
     const markdownHtml = ReactDOMServer.renderToString(<MarkdownContent content={markdownString} />);
+
+    const element = document.createElement('div');
+
     element.innerHTML = `
-      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-        <div style="border-bottom: 2px solid #8e50a7; margin-bottom: 20px;">
-          <h1 style="color: #8e50a7; margin: 0; padding: 10px 0;">${title}</h1>
-        </div>
-        <div style="line-height: 1.6;">
-          ${markdownHtml}
-        </div>
-        <div style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; font-size: 12px; color: #666;">
-          Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
-        </div>
-      </div>
+      <html>
+        <head>
+          <style>
+            @page {
+              margin: 25mm;
+              size: A4;
+            }
+            body {
+              font-family: 'Helvetica', 'Arial', sans-serif;
+              line-height: 1.6;
+              color: #333;
+              font-size: 10.5pt;
+              margin: 0;
+              padding: 0;
+              background-color: white;
+            }
+            .container {
+              max-width: 100%;
+              width: 100%;
+              padding: 12px;
+              box-sizing: border-box;
+              background-color: white;
+            }
+            .header {
+              border-bottom: 2px solid #8e50a7;
+              margin-bottom: 20px;
+              padding-bottom: 10px;
+              width: 95%;
+              margin-left: auto;
+              margin-right: auto;
+            }
+            h1 {
+              color: #8e50a7;
+              margin: 0 0 10px 0;
+              padding: 0;
+              font-size: 24pt;
+              page-break-after: avoid;
+            }
+            h2, h3, h4, h5, h6 {
+              margin-top: 20px;
+              margin-bottom: 10px;
+              page-break-after: avoid;
+            }
+            p {
+              margin: 0 0 12px 0;
+              max-width: 95%;
+              width: 95%;
+              margin-left: auto;
+              margin-right: auto;
+              word-wrap: break-word;
+            }
+            table {
+              width: 95%;
+              max-width: 95%;
+              table-layout: fixed;
+              border-collapse: collapse;
+              margin: 16px auto;
+              page-break-inside: avoid;
+              font-size: 9.5pt;
+            }
+            th, td {
+              border: 1px solid #ddd;
+              padding: 5px;
+              text-align: left;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+              vertical-align: top;
+              overflow: hidden;
+            }
+            th {
+              background-color: #f5f5f5;
+              font-weight: bold;
+            }
+            pre, code {
+              background-color: #f8f8f8;
+              border-radius: 3px;
+              border: 1px solid #eaeaea;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 9pt;
+              padding: 10px;
+              white-space: pre-wrap;
+              word-wrap: break-word;
+              overflow-x: hidden;
+              max-width: 95%;
+              width: 95%;
+              margin: 16px auto;
+              display: block;
+              page-break-inside: avoid;
+            }
+            ul, ol {
+              margin-bottom: 12px;
+              padding-left: 20px;
+            }
+            li {
+              margin-bottom: 6px;
+            }
+            .footer {
+              margin-top: 30px;
+              padding-top: 10px;
+              border-top: 1px solid #eee;
+              font-size: 9pt;
+              color: #666;
+              text-align: center;
+              width: 95%;
+              margin-left: auto;
+              margin-right: auto;
+            }
+            img {
+              max-width: 100%;
+              height: auto;
+            }
+            a {
+              color: #0366d6;
+              text-decoration: none;
+            }
+            blockquote {
+              margin: 16px 0;
+              padding: 0 16px;
+              color: #6a737d;
+              border-left: 4px solid #dfe2e5;
+            }
+            .content {
+              min-height: 500px;
+              width: 95%;
+              margin: 0 auto;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>${title}</h1>
+            </div>
+            <div class="content">
+              ${markdownHtml}
+            </div>
+            <div class="footer">
+              Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
+            </div>
+          </div>
+        </body>
+      </html>
     `;
 
+    // PDF generation settings
     const opt = {
-      margin: [15, 15],
+      margin: [0, 0],
       filename: `${title}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
+      image: {
+        type: 'jpeg',
+        quality: 0.98,
+      },
       html2canvas: {
         scale: 2,
         useCORS: true,
         logging: false,
+        letterRendering: true,
       },
       jsPDF: {
         unit: 'mm',
         format: 'a4',
         orientation: 'portrait',
+        compress: true,
+        hotfixes: ['px_scaling'],
       },
-      pagebreak: { mode: 'avoid-all' },
+      pagebreak: {
+        mode: 'css',
+        avoid: ['table', 'img', 'pre', 'h1, h2, h3, h4, h5, h6'],
+      },
     };
+
     const worker = html2pdf().set(opt).from(element);
     const pdfBlob = await worker.outputPdf('blob');
     return pdfBlob;
