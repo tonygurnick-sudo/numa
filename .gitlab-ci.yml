@@ -26,8 +26,11 @@ variables:
   matrix:
     - BUILD_DIR:
         - lambdas/node/api-gateway-authorizer
+        - lambdas/node/callback-renamer
+        - lambdas/node/cloudfront-invalidator
         - lambdas/node/q-business-chat-control-configurer
         - lambdas/node/srp-hasher
+        - lambdas/node/token-adjuster
 
 .node-matrix:
   matrix:
