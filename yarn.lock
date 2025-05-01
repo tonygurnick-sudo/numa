@@ -2463,12 +2463,12 @@ __metadata:
   linkType: hard
 
 "@cdktf/provider-aws@npm:^19.42.0":
-  version: 19.60.1
-  resolution: "@cdktf/provider-aws@npm:19.60.1"
+  version: 19.62.0
+  resolution: "@cdktf/provider-aws@npm:19.62.0"
   peerDependencies:
     cdktf: ^0.20.0
     constructs: ^10.3.0
-  checksum: 10c0/e9d2368cc42169fb7d1cf60ed555405d7da9c732df2e9ce26285e4c8d3b45d5ea87d04fcc1a0e7790f904e2b377b83e0ddc115b58807c47feec520ab1e8e4d72
+  checksum: 10c0/e29696474145ad331afa58cb7627c7fb6655fb37fa21de46584198129553912891d52da2a84358f7132c8929f5f61213ce407dd3631c281a7dfcf24b0813bf56
   languageName: node
   linkType: hard
 
