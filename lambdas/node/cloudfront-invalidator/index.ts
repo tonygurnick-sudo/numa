@@ -1,7 +1,7 @@
 import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-cloudfront';
 import { randomUUID } from 'node:crypto';
 
-export async function handler(event, _context) {
+export async function handler(event: Event): Promise<void> {
   const { distributionId, paths } = event;
   const items = paths?.split(',').map((path) => (path.startsWith('/') ? path : `/${path}`)) ?? ['/*'];
 
@@ -18,4 +18,9 @@ export async function handler(event, _context) {
   };
   const invalidationCommand = new CreateInvalidationCommand(input);
   console.log(await client.send(invalidationCommand));
+}
+
+interface Event {
+  distributionId: string;
+  paths?: string;
 }

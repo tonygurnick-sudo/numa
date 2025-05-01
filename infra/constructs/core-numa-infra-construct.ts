@@ -90,7 +90,7 @@ export class CoreNumaInfra extends Construct {
       usernameAttributes: ['email'],
       lambdaConfig: {
         preTokenGenerationConfig: {
-          lambdaArn: at.function.lambdaFunction.arn,
+          lambdaArn: at.function.arn,
           lambdaVersion: 'V2_0',
         },
       },
@@ -379,7 +379,7 @@ export class CoreNumaInfra extends Construct {
     new LambdaPermission(this, 'permission', {
       statementId: 'cognito',
 
-      functionName: at.function.lambdaFunction.functionName,
+      functionName: at.function.functionName,
       action: 'lambda:InvokeFunction',
       principal: 'cognito-idp.amazonaws.com',
       // TODO: Add suitable condition.

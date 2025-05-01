@@ -4,7 +4,7 @@ import {
   UpdateUserPoolClientCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
-export async function handler(event, _context) {
+export async function handler(event: Event): Promise<void> {
   const { userPoolId, userPoolClientId, callbackAddress } = event;
 
   const client = new CognitoIdentityProviderClient({ region: process.env['Q_BUSINESS_REGION'] });
@@ -16,8 +16,16 @@ export async function handler(event, _context) {
   const updateCommand = new UpdateUserPoolClientCommand({
     // Update will set anything undefined to default, so we need to populate existing values.
     ...describeResult.UserPoolClient,
+    ClientId: userPoolClientId,
+    UserPoolId: userPoolId,
     CallbackURLs: [callbackAddress],
   });
   const updateResult = await client.send(updateCommand);
   console.log(updateResult);
+}
+
+interface Event {
+  userPoolId: string;
+  userPoolClientId: string;
+  callbackAddress: string;
 }
