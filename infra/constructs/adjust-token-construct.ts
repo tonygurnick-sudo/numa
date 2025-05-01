@@ -23,7 +23,7 @@ export class AdjustToken extends Construct {
       policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
     });
 
-    const adjusterPath = path.resolve(import.meta.dirname, '..', '..', 'lambdas', 'node', 'cloudfront-invalidator');
+    const adjusterPath = path.resolve(import.meta.dirname, '..', '..', 'lambdas', 'node', 'token-adjuster');
     const adjusterFilename = path.resolve(adjusterPath, 'lambda_function.zip');
 
     const oldFunction = new TypescriptLambdaConstruct(this, 'function', {

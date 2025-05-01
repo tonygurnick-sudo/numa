@@ -29,7 +29,7 @@ export class SetCallbackUrl extends Construct {
       }),
     ];
 
-    const callbackPath = path.resolve(import.meta.dirname, '..', '..', 'lambdas', 'node', 'cloudfront-invalidator');
+    const callbackPath = path.resolve(import.meta.dirname, '..', '..', 'lambdas', 'node', 'callback-renamer');
     const callbackFilename = path.resolve(callbackPath, 'lambda_function.zip');
 
     const oldFunc = new TypescriptLambdaConstruct(this, 'function', {
