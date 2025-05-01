@@ -17,10 +17,13 @@ import {
   ApiGatewayLambdaCollectionProps,
   RouteDefinition,
 } from '../api-gateway-lambda-collection';
+import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
+import { NumaLogGroup } from '../numa-log-group';
 
 export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   abstract readonly manifest: NumaAppManifest;
   protected jobsTable?: DynamodbTable;
+  protected logGroup: CloudwatchLogGroup;
   protected s3KeyPrefix: string;
   protected outputsBucket: S3Bucket;
   readonly appId: string;
@@ -37,6 +40,10 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     this.appId = props.appId;
     this.clientName = props.clientName;
     this.outputsBucket = props.outputsBucket;
+
+    this.logGroup = new NumaLogGroup(this, 'lambda-log-group', {
+      logGroupName: name,
+    }).logGroup;
 
     this.urlPathPrefix = '/api' + this.prepPathPart(props.urlPathPrefix ?? this.appId);
     this.s3KeyPrefix = props.s3KeyPrefix ?? `/${this.appId}`;

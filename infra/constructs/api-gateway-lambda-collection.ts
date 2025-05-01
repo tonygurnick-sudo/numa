@@ -6,11 +6,10 @@ import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { Construct } from 'constructs';
 import { NumaLambda, OTelConfig } from './numa-lambda';
-import { NumaLogGroup } from './numa-log-group';
 
 export abstract class ApiGatewayLambdaCollection extends Construct {
   private props: ApiGatewayLambdaCollectionProps;
-  protected logGroup: CloudwatchLogGroup;
+  protected abstract logGroup: CloudwatchLogGroup;
   protected urlPathPrefix: string;
 
   constructor(scope: Construct, name: string, props: ApiGatewayLambdaCollectionProps) {
@@ -18,9 +17,6 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
 
     this.props = props;
     this.urlPathPrefix = '/api';
-    this.logGroup = new NumaLogGroup(this, 'lambda-log-group', {
-      logGroupName: this.node.id,
-    }).logGroup;
   }
 
   protected prepPathPart(part: string): string {

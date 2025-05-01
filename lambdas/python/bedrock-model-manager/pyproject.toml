@@ -23,8 +23,11 @@ packages = [
 [tool.poetry.dependencies]
 python = "~3.13.0"
 
+aws-lambda-powertools = "3.9.0"
 boto3 = "1.37.20"
+helpers = {path = "../../../lib/helpers", develop = true}
 requests = "2.32.3"
+structlog = "25.2.0"
 
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.37.20"

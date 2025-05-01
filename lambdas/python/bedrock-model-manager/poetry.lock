@@ -13,6 +13,32 @@ files = [
 ]
 
 [[package]]
+name = "aws-lambda-powertools"
+version = "3.9.0"
+description = "Powertools for AWS Lambda (Python) is a developer toolkit to implement Serverless best practices and increase developer velocity."
+optional = false
+python-versions = "<4.0.0,>=3.9"
+groups = ["main"]
+files = [
+    {file = "aws_lambda_powertools-3.9.0-py3-none-any.whl", hash = "sha256:759a48bcd570274a19b29a481d68b8331481ae6b0bb37c3e4cb80de1b31abc12"},
+    {file = "aws_lambda_powertools-3.9.0.tar.gz", hash = "sha256:58a3800066595a9c5c29a99067d106cc4f2820293164af0e68203005e6c4bd16"},
+]
+
+[package.dependencies]
+jmespath = ">=1.0.1,<2.0.0"
+typing-extensions = ">=4.11.0,<5.0.0"
+
+[package.extras]
+all = ["aws-encryption-sdk (>=3.1.1,<5.0.0)", "aws-xray-sdk (>=2.8.0,<3.0.0)", "fastjsonschema (>=2.14.5,<3.0.0)", "jsonpath-ng (>=1.6.0,<2.0.0)", "pydantic (>=2.4.0,<3.0.0)", "pydantic-settings (>=2.6.1,<3.0.0)"]
+aws-sdk = ["boto3 (>=1.34.32,<2.0.0)"]
+datadog = ["datadog-lambda (>=6.106.0,<7.0.0)"]
+datamasking = ["aws-encryption-sdk (>=3.1.1,<5.0.0)", "jsonpath-ng (>=1.6.0,<2.0.0)"]
+parser = ["pydantic (>=2.4.0,<3.0.0)"]
+redis = ["redis (>=4.4,<6.0)"]
+tracer = ["aws-xray-sdk (>=2.8.0,<3.0.0)"]
+validation = ["fastjsonschema (>=2.14.5,<3.0.0)"]
+
+[[package]]
 name = "boto3"
 version = "1.37.20"
 description = "The AWS SDK for Python"
@@ -640,6 +666,24 @@ graph = ["objgraph (>=1.7.2)"]
 profile = ["gprof2dot (>=2022.7.29)"]
 
 [[package]]
+name = "helpers"
+version = "0.1.0"
+description = ""
+optional = false
+python-versions = "~3.13.0"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+aws-lambda-powertools = "3.9.0"
+structlog = "25.2.0"
+
+[package.source]
+type = "directory"
+url = "../../../lib/helpers"
+
+[[package]]
 name = "idna"
 version = "3.10"
 description = "Internationalized Domain Names in Applications (IDNA)"
@@ -901,6 +945,24 @@ files = [
 ]
 
 [[package]]
+name = "structlog"
+version = "25.2.0"
+description = "Structured Logging for Python"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "structlog-25.2.0-py3-none-any.whl", hash = "sha256:0fecea2e345d5d491b72f3db2e5fcd6393abfc8cd06a4851f21fcd4d1a99f437"},
+    {file = "structlog-25.2.0.tar.gz", hash = "sha256:d9f9776944207d1035b8b26072b9b140c63702fd7aa57c2f85d28ab701bd8e92"},
+]
+
+[package.extras]
+dev = ["freezegun (>=0.2.8)", "mypy (>=1.4)", "pretend", "pytest (>=6.0)", "pytest-asyncio (>=0.17)", "rich", "simplejson", "twisted"]
+docs = ["cogapp", "furo", "myst-parser", "sphinx", "sphinx-notfound-page", "sphinxcontrib-mermaid", "sphinxext-opengraph", "twisted"]
+tests = ["freezegun (>=0.2.8)", "pretend", "pytest (>=6.0)", "pytest-asyncio (>=0.17)", "simplejson"]
+typing = ["mypy (>=1.4)", "rich", "twisted"]
+
+[[package]]
 name = "tomlkit"
 version = "0.13.2"
 description = "Style preserving TOML library"
@@ -957,7 +1019,7 @@ version = "4.12.2"
 description = "Backported and Experimental Type Hints for Python 3.8+"
 optional = false
 python-versions = ">=3.8"
-groups = ["dev"]
+groups = ["main", "dev"]
 files = [
     {file = "typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d"},
     {file = "typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8"},
@@ -984,4 +1046,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.13.0"
-content-hash = "f49d32885e7d8bbba7598ea99a9d8d709704e33e1d5db03f9eabf47c0f5ee1bc"
+content-hash = "a572a751586f36deb8ecf0650f122b9e0009e9c8562ef46296a3390660e692f1"

@@ -17,7 +17,9 @@ const OTEL_LANGUAGE_LAYER_VERSION = '0_12_0';
 const OTEL_LAYER_ACCOUNT = '184161586896'; // From: https://github.com/open-telemetry/opentelemetry-lambda/releases
 
 export class NumaLambda extends Construct {
+  readonly additionalPolicies: IamPolicy[];
   readonly lambda: LambdaFunction;
+  readonly policyAttachments: IamRolePolicyAttachment[];
 
   constructor(scope: Construct, name: string, props: NumaLambdaProps) {
     super(scope, name);
@@ -32,6 +34,9 @@ export class NumaLambda extends Construct {
       lifecycle: { createBeforeDestroy: true },
     });
 
+    this.additionalPolicies = [];
+    this.policyAttachments = [];
+
     // TODO: remove once applied
     const policyAttachmentBasicOld = new IamRolePolicyAttachment(scope, name + 'role-policy-attachment-basic', {
       role: role.name,
@@ -44,6 +49,7 @@ export class NumaLambda extends Construct {
       policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
     });
     policyAttachmentBasic.addMoveTarget(scope.node.id + name + '_role-policy-attachment-basic');
+    this.policyAttachments.push(policyAttachmentBasic);
 
     if (props.additionalPolicyStatements) {
       const additionalPolicy = new IamPolicy(scope, name + '_policy', {
@@ -51,6 +57,7 @@ export class NumaLambda extends Construct {
           statement: props.additionalPolicyStatements,
         }).json,
       });
+      this.additionalPolicies.push(additionalPolicy);
 
       // TODO: remove once applied
       const policyAttachmentAdditionalOld = new IamRolePolicyAttachment(
@@ -72,6 +79,7 @@ export class NumaLambda extends Construct {
         },
       );
       policyAttachmentAdditional.addMoveTarget(scope.node.id + name + '_role-policy-attachment-additional');
+      this.policyAttachments.push(policyAttachmentAdditional);
     }
 
     const filename = path.resolve(

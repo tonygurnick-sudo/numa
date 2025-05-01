@@ -1,12 +1,15 @@
+import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { Construct } from 'constructs';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
 
 export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaCollection {
+  protected logGroup: CloudwatchLogGroup;
   readonly clientName: string;
 
   constructor(scope: Construct, name: string, props: AppAgnosticApiGatewayLambdaCollectionProps) {
     super(scope, name, props);
 
+    this.logGroup = props.logGroup;
     this.clientName = props.clientName;
 
     // SRP Proxy
@@ -99,6 +102,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
 export interface AppAgnosticApiGatewayLambdaCollectionProps extends ApiGatewayLambdaCollectionProps {
   chatHistoryTableName: string;
   clientName: string;
+  logGroup: CloudwatchLogGroup;
   region: string;
   userPoolClientId: string;
   userPoolClientSecret: string;
