@@ -221,6 +221,25 @@ export const AuthProvider = ({ children, initialTokens }) => {
         refreshToken,
       });
 
+      // Decode the new tokens to update the decoded token references
+      const newDecodedAccessToken = jwtDecode(AccessToken);
+      const newDecodedIdToken = jwtDecode(IdToken);
+
+      // Update the user state object with the refreshed tokens
+      // This ensures all AWS clients will be reinitialized with the new tokens
+      setUser((prev) => ({
+        ...prev,
+        tokens: {
+          accessToken: AccessToken,
+          idToken: IdToken,
+          refreshToken,
+        },
+        decoded_tokens: {
+          accessToken: newDecodedAccessToken,
+          idToken: newDecodedIdToken,
+        },
+      }));
+
       console.log('✅ Tokens refreshed successfully');
       return true;
     } catch (error) {
@@ -447,7 +466,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return true;
       }
 
-      console.log('🕒 Token check: Token still valid');
       return true;
     } catch (error) {
       console.error('Error decoding token during check:', error);
