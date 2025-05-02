@@ -210,18 +210,6 @@ node-package:
   rules:
     - !reference [.rules, if-main]
 
-infra-bin:
-  extends: .poetry-job
-  stage: package
-  variables:
-    PYTHON_WORKING_DIRECTORY: infra/bin
-  script:
-    - ls -lha
-  artifacts:
-    paths: [$PYTHON_WORKING_DIRECTORY]
-  rules:
-    - !reference [.rules, if-main]
-
 .deploy-infra:
   extends: .node-job-infra-overrides
   stage: deploy
