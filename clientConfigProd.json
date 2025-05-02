@@ -3,6 +3,11 @@
     "allProdApps": true,
     "clientAccountId": "709771312005",
     "region": "us-east-1",
+    "s3Configs": [
+      {
+        "bucketName": "numa-2gen-frontend-s3-datasource"
+      }
+    ],
     "webCrawlerConfigs": [
       {
         "url": "https://2gen.com.au"
@@ -356,7 +361,21 @@
   "kapiti-coast": {
     "allProdApps": true,
     "clientAccountId": "557690588447",
-    "region": "us-east-1"
+    "region": "us-east-1",
+    "webCrawlerConfigs": [
+      {
+        "url": "https://www.qualityplanning.org.nz/"
+      },
+      {
+        "url": "https://www.environmentguide.org.nz/"
+      },
+      {
+        "url": "https://environment.govt.nz/"
+      },
+      {
+        "url": "https://www.epa.govt.nz/"
+      }
+    ]
   },
   "lg-pro": {
     "allProdApps": true,
@@ -530,12 +549,20 @@
     "sharePointConfigs": [
       {
         "configuration": {
-          "inclusionFilePath": ["^.*(?:PLD ?2021).*$"],
-          "linkTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"],
-          "pageTitleFilterRegEx": ["^.*(?:PLD ?2021).*$"]
+          "inclusionFilePath": [
+            "^.*(?:PD\\/NZSBA Shared Knowledge Base).*$"
+          ],
+          "linkTitleFilterRegEx": [
+            "^.*(?:PD\\/NZSBA Shared Knowledge Base).*$"
+          ],
+          "pageTitleFilterRegEx": [
+            "^.*(?:PD\\/NZSBA Shared Knowledge Base).*$"
+          ]
         },
         "domain": "nzsta.sharepoint.com",
-        "siteUrls": ["https://nzsta.sharepoint.com/sites/Company"],
+        "siteUrls": [
+          "https://nzsta.sharepoint.com/sites/Company"
+        ],
         "tenantId": "e6d2df1c-3054-49db-a866-0ab173fdca29"
       }
     ],
@@ -663,10 +690,14 @@
     "sharePointConfigs": [
       {
         "configuration": {
-          "inclusionFilePath": [".*NEX[ -]?Milestone[ -]?Reports.*"]
+          "inclusionFilePath": [
+            ".*NEX[ -]?Milestone[ -]?Reports.*"
+          ]
         },
         "domain": "teachersrcc",
-        "siteUrls": ["https://teachersrcc.sharepoint.com/"],
+        "siteUrls": [
+          "https://teachersrcc.sharepoint.com/"
+        ],
         "tenantId": "91ff374c-03ff-4eed-9628-d89e52352b55"
       }
     ]
