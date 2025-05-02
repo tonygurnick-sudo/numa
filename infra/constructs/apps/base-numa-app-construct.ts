@@ -17,10 +17,13 @@ import {
   ApiGatewayLambdaCollectionProps,
   RouteDefinition,
 } from '../api-gateway-lambda-collection';
+import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
+import { NumaLogGroup } from '../numa-log-group';
 
 export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   abstract readonly manifest: NumaAppManifest;
   protected jobsTable?: DynamodbTable;
+  protected logGroup: CloudwatchLogGroup;
   protected s3KeyPrefix: string;
   protected outputsBucket: S3Bucket;
   readonly appId: string;
@@ -32,11 +35,15 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   }
 
   constructor(scope: Construct, name: string, props: AppSpecificBaseNumaAppProps) {
-    super(scope, name, props);
+    super(scope, name, { ...props, resourceNameInfix: '-' + props.appId });
 
     this.appId = props.appId;
     this.clientName = props.clientName;
     this.outputsBucket = props.outputsBucket;
+
+    this.logGroup = new NumaLogGroup(this, 'lambda-log-group', {
+      logGroupName: name,
+    }).logGroup;
 
     this.urlPathPrefix = '/api' + this.prepPathPart(props.urlPathPrefix ?? this.appId);
     this.s3KeyPrefix = props.s3KeyPrefix ?? `/${this.appId}`;
@@ -105,10 +112,8 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       },
       lambdaDirectory: 'python/step-function-start',
       environment: {
-        variables: {
-          STEP_FUNCTION_ARN: stepFunction.arn,
-          APP_ID: this.appId,
-        },
+        APP_ID: this.appId,
+        STEP_FUNCTION_ARN: stepFunction.arn,
       },
       additionalPolicyStatements: [
         {
@@ -126,10 +131,8 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       },
       lambdaDirectory: 'python/step-function-status',
       environment: {
-        variables: {
-          BUCKET: this.outputsBucket.bucket,
-          APP_ID: this.appId,
-        },
+        APP_ID: this.appId,
+        BUCKET: this.outputsBucket.bucket,
       },
       additionalPolicyStatements: [
         {
@@ -322,9 +325,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         lambdaDirectory: 'python/numa-recent-jobs',
         runtime: 'python3.13',
         environment: {
-          variables: {
-            DYNAMODB_TABLE: table.arn,
-          },
+          DYNAMODB_TABLE: table.arn,
         },
         additionalPolicyStatements: [
           {

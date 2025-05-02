@@ -12,6 +12,7 @@ import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
+import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
@@ -19,7 +20,7 @@ import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-sec
 import { SecretsmanagerSecretVersion } from '@cdktf/provider-aws/lib/secretsmanager-secret-version';
 import { password } from '@cdktf/provider-random';
 import { RandomProvider } from '@cdktf/provider-random/lib/provider';
-import { DataResource, Fn, TerraformOutput } from 'cdktf';
+import { Fn, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import { AdjustToken } from './adjust-token-construct';
@@ -30,11 +31,14 @@ import { S3Configuration, S3DataSource } from './data-sources/s3-datasource-cons
 import { SharePointConfiguration, SharePointDataSource } from './data-sources/sharepoint-datasource-construct';
 import { TeamsConfiguration, TeamsDataSource } from './data-sources/teams-datasource-construct';
 import { WebConfiguration, WebDataSourceConstruct } from './data-sources/web-datasource-construct';
+import { NumaLambda } from './numa-lambda';
+import { NumaLogGroup } from './numa-log-group';
 import {
   QBusinessChatControlConfigurer,
   QBusinessChatControlConfigurerProps,
 } from './q-business-chat-control-configurer-construct';
 import { SetCallbackUrl } from './set-callback-url-construct';
+import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -46,6 +50,7 @@ export class CoreNumaInfra extends Construct {
   readonly qBusinessApplicationId: string;
   readonly qBusinessIndexId: string;
   readonly qBusinessRetrieverId: string;
+  readonly logGroup: CloudwatchLogGroup;
   readonly outputsBucket: NumaCorsEnabledBucket;
   readonly otelConfigPath: string;
   readonly dataBucket: NumaCorsEnabledBucket;
@@ -786,37 +791,81 @@ export class CoreNumaInfra extends Construct {
     new TerraformOutput(this, 'index-id', { value: this.qBusinessIndexId });
     new TerraformOutput(this, 'retriever-id', { value: this.qBusinessRetrieverId });
 
+    this.logGroup = new NumaLogGroup(this, 'core-log-group', {
+      logGroupName: `${props.clientName}-core`,
+    }).logGroup;
+
+    const bedrockModelManagerPolicyStatements = [
+      {
+        actions: [
+          'aws-marketplace:Subscribe',
+          'aws-marketplace:ViewSubscriptions',
+          'bedrock:CreateFoundationModelAgreement',
+          'bedrock:ListFoundationModelAgreementOffers',
+          'bedrock:PutFoundationModelEntitlement',
+          'bedrock:PutUseCaseForModelAccess',
+        ],
+        effect: 'Allow',
+        resources: ['*'],
+      },
+    ];
+
+    const bedrockModelManager = new NumaLambda(this, 'bedrock-model-manager', {
+      additionalPolicyStatements: bedrockModelManagerPolicyStatements,
+      clientName: props.clientName,
+      lambdaDirectory: 'python/bedrock-model-manager/',
+      logGroup: this.logGroup,
+      resourceNameSuffix: '_bedrock-model-manager',
+    });
+    this.logGroup.moveFromId(`aws_cloudwatch_log_group.${props.clientName}-core_log-group_B3D841A3`);
+
+    // modify trigger to force re-run of lambda
     const models = [
       {
         model_id: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
         regions: [props.region],
+        trigger: '1',
       },
       {
         model_id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
         regions: [props.region],
+        trigger: '1',
       },
       {
         model_id: 'anthropic.claude-3-haiku-20240307-v1:0',
         regions: [props.region],
+        trigger: '1',
       },
     ];
+
     for (const model of models) {
       for (const region of model.regions) {
-        new DataResource(this, `bedrock-model_${model.model_id.replace(/[.:]/g, '-')}_${region}`, {
-          provisioners: [
-            {
-              type: 'local-exec',
-              command:
-                'poetry run python manage_bedrock_model.py enable --account-id $${ACCOUNT_ID} --region $${REGION} --model-id $${MODEL}',
-              workingDir: path.join(import.meta.dirname, '..', 'bin'),
-              environment: {
-                ACCOUNT_ID: props.clientAccountId,
-                MODEL: model.model_id,
-                REGION: region,
-              },
-            },
-          ],
+        const input = JSON.stringify({
+          model_id: model.model_id,
+          region,
+          trigger: model.trigger,
         });
+
+        new LambdaInvocation(
+          this,
+          `bedrock-model-manager-invocation_${model.model_id.replace(/[.:]/g, '-')}_${region}`,
+          {
+            functionName: bedrockModelManager.lambda.functionName,
+            input,
+            triggers: {
+              bedrockModelManagerSourceHash: bedrockModelManager.lambda.sourceCodeHash,
+              input,
+            },
+            // this should make sure permissions are sorted before calling the
+            // lambda, but there seems to be a problem with eventual
+            // consistency at times
+            dependsOn: [
+              bedrockModelManager.lambda,
+              ...bedrockModelManager.additionalPolicies,
+              ...bedrockModelManager.policyAttachments,
+            ],
+          },
+        );
       }
     }
   }

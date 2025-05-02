@@ -100,9 +100,7 @@ export class PolicyDrafter extends BaseNumaApp {
     const policyDrafterLambda = this.addLambdaFunction(this, 'draft', {
       additionalPolicyStatements: policyDrafterLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/policy-drafter',
       timeout: 900,

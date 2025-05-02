@@ -83,9 +83,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
     const analyzeDocumentsLambda = this.addLambdaFunction(this, 'analyze', {
       additionalPolicyStatements: analyzeDocumentsLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/council-resource-consents',
       timeout: 900,

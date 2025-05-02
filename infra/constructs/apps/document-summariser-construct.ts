@@ -66,9 +66,7 @@ export class DocumentSummariser extends BaseNumaApp {
     const summariseDocumentLambda = this.addLambdaFunction(this, 'summarise', {
       additionalPolicyStatements: summariseDocumentLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/document-summariser',
       timeout: 900,
@@ -84,9 +82,7 @@ export class DocumentSummariser extends BaseNumaApp {
     const aggregatorLambda = this.addLambdaFunction(this, 'aggregate', {
       additionalPolicyStatements: aggregatorLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/aggregate-document-results',
       timeout: 900,

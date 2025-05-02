@@ -84,9 +84,7 @@ export class CompanyProfile extends BaseNumaApp {
     const companyProfileLambda = this.addLambdaFunction(this, 'profile', {
       additionalPolicyStatements: companyProfileLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/company-profile',
       timeout: 900,

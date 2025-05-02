@@ -95,9 +95,7 @@ export class MeetingAnalyser extends BaseNumaApp {
     const analyserLambda = this.addLambdaFunction(this, 'analyse', {
       additionalPolicyStatements: analyserLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/meeting-analyser',
       timeout: 900,

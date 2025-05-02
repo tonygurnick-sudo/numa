@@ -66,9 +66,7 @@ export class FinancialAnalysis extends BaseNumaApp {
     const extractFinancialDataLambda = this.addLambdaFunction(this, 'extract-financial-data', {
       additionalPolicyStatements: extractFinancialDataLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/financial-analysis-data-extraction',
       timeout: 900,
@@ -88,9 +86,7 @@ export class FinancialAnalysis extends BaseNumaApp {
     const financialAnalysisLambda = this.addLambdaFunction(this, 'analyse', {
       additionalPolicyStatements: financialAnalysisLambdaPolicyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/financial-analysis-analysis',
       timeout: 900,

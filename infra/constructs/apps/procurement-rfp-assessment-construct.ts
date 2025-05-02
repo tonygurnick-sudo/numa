@@ -101,9 +101,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
     const rfpAssessmentLambda = this.addLambdaFunction(this, 'assess', {
       additionalPolicyStatements: policyStatements,
       environment: {
-        variables: {
-          BUCKET: props.outputsBucket.bucket,
-        },
+        BUCKET: props.outputsBucket.bucket,
       },
       lambdaDirectory: 'python/procurement-rfp-assessment',
       timeout: 900,
