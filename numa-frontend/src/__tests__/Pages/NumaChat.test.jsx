@@ -7,6 +7,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import { NumaChat } from '../../Pages/NumaChat';
+import { MemoryRouter } from 'react-router-dom';
 
 // --- Mock chatSystemPromptUtils ---
 vi.mock('../../utils/chatSystemPromptUtils', () => ({
@@ -164,7 +165,11 @@ Object.defineProperty(window, 'sessionStorage', {
 // --- Additional Tests for NumaChat ---
 describe('NumaChat Component', () => {
   it('renders main page layout', () => {
-    render(<NumaChat />);
+    render(
+      <MemoryRouter>
+        <NumaChat />
+      </MemoryRouter>,
+    );
     expect(screen.getByText('Numa Chat')).toBeInTheDocument();
     expect(screen.getByTestId('nav')).toBeInTheDocument();
     expect(screen.getByTestId('breadcrumbs')).toHaveTextContent('Chat');
@@ -177,7 +182,11 @@ describe('NumaChat Component', () => {
   });
 
   it('clicking New Chat button resets conversation', async () => {
-    render(<NumaChat />);
+    render(
+      <MemoryRouter>
+        <NumaChat />
+      </MemoryRouter>,
+    );
     await waitFor(() => {
       expect(screen.getByTestId('chat-messages')).toBeInTheDocument();
     });
@@ -189,7 +198,11 @@ describe('NumaChat Component', () => {
   });
 
   it('submits a user message and ensures ChatMessages remains rendered', async () => {
-    render(<NumaChat />);
+    render(
+      <MemoryRouter>
+        <NumaChat />
+      </MemoryRouter>,
+    );
     expect(screen.getByTestId('chat-input-field')).toBeInTheDocument();
     const submitButton = screen.getByTestId('chat-submit');
     fireEvent.click(submitButton);
@@ -199,7 +212,11 @@ describe('NumaChat Component', () => {
   });
 
   it('displays initial assistant greeting when no conversation exists', async () => {
-    render(<NumaChat />);
+    render(
+      <MemoryRouter>
+        <NumaChat />
+      </MemoryRouter>,
+    );
     // Wait for asynchronous conversation initialization to set the greeting.
     await waitFor(() => {
       expect(screen.getByTestId('chat-messages')).toHaveTextContent('How can I help you today?');
@@ -208,7 +225,11 @@ describe('NumaChat Component', () => {
 
   it('updates isMobile prop in ChatInput when window is resized', async () => {
     window.innerWidth = 1024;
-    render(<NumaChat />);
+    render(
+      <MemoryRouter>
+        <NumaChat />
+      </MemoryRouter>,
+    );
     const chatInput = screen.getByTestId('chat-input');
     expect(chatInput.getAttribute('data-is-mobile')).toBe('false');
     // Change window.innerWidth to a smaller value and dispatch resize.
@@ -220,14 +241,22 @@ describe('NumaChat Component', () => {
   });
 
   it('does not render file upload modal initially', () => {
-    render(<NumaChat />);
+    render(
+      <MemoryRouter>
+        <NumaChat />
+      </MemoryRouter>,
+    );
     expect(screen.queryByTestId('chat-file-upload')).toBeNull();
   });
 
   it('creates a new conversation and stores conversation id in localStorage', async () => {
     // Reset localStorage mock.
     const setItemSpy = vi.spyOn(window.localStorage.__proto__, 'setItem');
-    render(<NumaChat />);
+    render(
+      <MemoryRouter>
+        <NumaChat />
+      </MemoryRouter>,
+    );
     // Simulate user typing a message.
     const inputField = screen.getByTestId('chat-input-field');
     fireEvent.change(inputField, { target: { value: 'Hello, Numa!' } });
@@ -242,7 +271,11 @@ describe('NumaChat Component', () => {
   });
 
   it('renders right pane in ResizableSplitView when document is opened', async () => {
-    render(<NumaChat />);
+    render(
+      <MemoryRouter>
+        <NumaChat />
+      </MemoryRouter>,
+    );
     // Initially, the right pane should not be rendered.
     expect(screen.queryByTestId('right-pane')).toBeNull();
     // Simulate clicking the "Open Doc" button in ChatMessages.
@@ -256,7 +289,11 @@ describe('NumaChat Component', () => {
 
   it('sets company profile state when component mounts', async () => {
     // Render the component
-    render(<NumaChat />);
+    render(
+      <MemoryRouter>
+        <NumaChat />
+      </MemoryRouter>,
+    );
 
     // Since we've mocked loadCompanyProfile to return 'Test Company Profile',
     // we can check that the component state is updated correctly by looking for

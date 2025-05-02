@@ -2,14 +2,20 @@ import { useNavigate } from 'react-router-dom';
 import Logo from '../../public/numa-logo.svg';
 
 import { useAuth } from '../Providers/AuthProvider';
-
 import { useState, useEffect } from 'react';
+
+function useNoChatGroup() {
+  const { user } = useAuth();
+  const groups = user?.decoded_tokens?.idToken?.['cognito:groups'] || [];
+  return Array.isArray(groups) ? groups.includes('no-chat') : false;
+}
 import { Navbar, Button, Dropdown } from 'react-bootstrap';
 
 const Nav = () => {
   const navigate = useNavigate();
   const { logout: authLogout } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const noChat = useNoChatGroup();
 
   useEffect(() => {
     const handleResize = () => {
@@ -47,10 +53,12 @@ const Nav = () => {
               <i className="bi bi-star-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Favorites
             </Dropdown.Item>
-            <Dropdown.Item onClick={() => navigate('/chat')}>
-              <i className="bi bi-chat-dots-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
-              Chat
-            </Dropdown.Item>
+            {!noChat && (
+              <Dropdown.Item onClick={() => navigate('/chat')}>
+                <i className="bi bi-chat-dots-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
+                Chat
+              </Dropdown.Item>
+            )}
             <Dropdown.Item onClick={() => navigate('/company-info')}>
               <i className="bi bi-building-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Company Info
@@ -103,12 +111,14 @@ const Nav = () => {
               <span className="icon-label">Favs</span>
             </div>
           </li>
-          <li>
-            <div className="nav-link nav-item" onClick={() => navigate('/chat')} title="Chat" role="button">
-              <i className="bi bi-chat-dots-fill icon" style={{ color: 'var(--color-icon)' }}></i>
-              <span className="icon-label">Chat</span>
-            </div>
-          </li>
+          {!noChat && (
+            <li>
+              <div className="nav-link nav-item" onClick={() => navigate('/chat')} title="Chat" role="button">
+                <i className="bi bi-chat-dots-fill icon" style={{ color: 'var(--color-icon)' }}></i>
+                <span className="icon-label">Chat</span>
+              </div>
+            </li>
+          )}
           <li>
             <div
               className="nav-link nav-item"
