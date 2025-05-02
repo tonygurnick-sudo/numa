@@ -32,13 +32,6 @@ Then install any additional CDKTF providers:
 yarn get
 ```
 
-There are also some Python dependencies that need to be installed:
-
-```bash
-# run this in infra/bin
-poetry install
-```
-
 ### AWS Profiles
 
 The deploy script for this project requires you to have access to the arcanum-q-deployer accounts and expects their profiles in your .aws/config file to be named `arcanum-q-deployer-dev` and `arcanum-q-deployer-prod`.
