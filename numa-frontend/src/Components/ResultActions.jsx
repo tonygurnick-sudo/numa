@@ -8,6 +8,44 @@ import { useAuth } from '../Providers/AuthProvider';
 import { uploadFileToS3 } from '../utils/s3Utils';
 import { createDocxBlob } from '../Services/fileConverter';
 
+// Helper function to convert markdown to formatted plain text
+const convertMarkdownToPlainText = (markdown) => {
+  // New Line for <br> tags
+  let plainText = markdown.replace(/<br\s*\/?>/gi, '\n');
+
+  // Remove remaining HTML tags
+  plainText = plainText.replace(/<[^>]+>/g, '');
+
+  // Lists
+  plainText = plainText.replace(/^\s*[-*+]\s+(.+)$/gm, '• $1');
+  plainText = plainText.replace(/^\s*(\d+)\.?\s+(.+)$/gm, '$1. $2');
+
+  // Add newline after the end of a list
+  plainText = plainText.replace(/^((?:•|\d+\.)[^\n]+)$(?!\n^(?:•|\d+\.))/gm, '$1\n');
+
+  // Give 4 spaces at the beginning of each line of a dotted list
+  plainText = plainText.replace(/^(\s*•\s+.*)$/gm, '    $1');
+
+  // Headers
+  plainText = plainText.replace(/^#{1,6}\s+(.+)$/gm, '$1\n');
+
+  // Remove text styles
+  plainText = plainText.replace(/\*\*(.+?)\*\*/g, '$1'); // Bold
+  plainText = plainText.replace(/\*(.+?)\*/g, '$1'); // Italic
+  plainText = plainText.replace(/__(.+?)__/g, '$1'); // Bold (alt)
+  plainText = plainText.replace(/_(.+?)_/g, '$1'); // Italic (alt)
+  plainText = plainText.replace(/~~(.+?)~~/g, '$1'); // Strikethrough
+  plainText = plainText.replace(/`(.+?)`/g, '$1'); // Inline code
+
+  // Preserve code blocks indentation
+  plainText = plainText.replace(/```(?:\w+)?\n([\s\S]*?)\n```/g, '\n$1\n');
+
+  // Make sure paragraphs are separated
+  plainText = plainText.replace(/\n{3,}/g, '\n\n');
+
+  return plainText.trim();
+};
+
 const ResultActions = ({ content, title = 'Result' }) => {
   const { getIdentityPoolCredentials } = useAuth();
 
@@ -289,7 +327,7 @@ const ResultActions = ({ content, title = 'Result' }) => {
   // ─────────────────────────────────────────────────────────────
   // 5) SHARE Handlers (Email, Copy, Print)
   const handleEmailShare = () => {
-    const plainText = content.replace(/<[^>]+>/g, '');
+    const plainText = convertMarkdownToPlainText(content);
     const emailSubject = encodeURIComponent(title);
     const emailBody = encodeURIComponent(plainText);
     const mailtoUrl = `mailto:?subject=${emailSubject}&body=${emailBody}`;
@@ -298,7 +336,7 @@ const ResultActions = ({ content, title = 'Result' }) => {
 
   const handleCopyToClipboard = async () => {
     try {
-      const plainText = content.replace(/<[^>]+>/g, '');
+      const plainText = convertMarkdownToPlainText(content);
       await navigator.clipboard.writeText(plainText);
     } catch (err) {
       console.error('Failed to copy text:', err);
