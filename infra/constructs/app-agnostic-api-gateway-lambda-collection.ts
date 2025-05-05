@@ -1,6 +1,7 @@
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { Construct } from 'constructs';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
+import { NumaLogGroup } from './numa-log-group';
 
 export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaCollection {
   protected logGroup: CloudwatchLogGroup;
@@ -11,6 +12,11 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
 
     this.logGroup = props.logGroup;
     this.clientName = props.clientName;
+
+    // TODO: remove once deployed, this is only here to move the resource
+    new NumaLogGroup(this, 'lambda-log-group', {
+      logGroupName: this.node.id,
+    }).logGroup.moveTo(`${props.clientName}-core-log-group`);
 
     // SRP Proxy
     const environment = {

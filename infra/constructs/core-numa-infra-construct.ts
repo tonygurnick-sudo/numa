@@ -812,6 +812,8 @@ export class CoreNumaInfra extends Construct {
       logGroupName: `${props.clientName}-core`,
     }).logGroup;
 
+    this.logGroup.addMoveTarget(`${props.clientName}-core-log-group`);
+
     const bedrockModelManagerPolicyStatements = [
       {
         actions: [
@@ -834,7 +836,6 @@ export class CoreNumaInfra extends Construct {
       logGroup: this.logGroup,
       resourceNameSuffix: '_bedrock-model-manager',
     });
-    this.logGroup.moveFromId(`aws_cloudwatch_log_group.${props.clientName}-core_log-group_B3D841A3`);
 
     // modify trigger to force re-run of lambda
     const models = [
