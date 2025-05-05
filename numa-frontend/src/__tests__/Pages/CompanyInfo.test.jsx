@@ -71,7 +71,7 @@ describe('CompanyInfo Component', () => {
     Object.defineProperty(window, 'sessionStorage', {
       value: {
         getItem: vi.fn((key) => {
-          if (key === 'CLIENT_NAME') return 'arcanum-hams';
+          if (key === 'CLIENT_NAME') return 'dev-hams';
           if (key === 'REGION') return 'us-east-1';
           return null;
         }),
