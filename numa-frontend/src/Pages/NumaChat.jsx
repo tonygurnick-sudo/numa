@@ -791,7 +791,7 @@ const NumaChat = () => {
     setInlineDocument(null); // Clear the document content
   }
 
-  if (noChat) return null; // Optionally, show a spinner or message here
+  if (noChat) return null;
 
   return (
     <div className="dashboard">

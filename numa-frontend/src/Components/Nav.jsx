@@ -15,7 +15,7 @@ const Nav = () => {
   const navigate = useNavigate();
   const { logout: authLogout } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  const noChat = useNoChatGroup();
+  const limitedAccess = useNoChatGroup();
 
   useEffect(() => {
     const handleResize = () => {
@@ -53,7 +53,7 @@ const Nav = () => {
               <i className="bi bi-star-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Favorites
             </Dropdown.Item>
-            {!noChat && (
+            {!limitedAccess && (
               <Dropdown.Item onClick={() => navigate('/chat')}>
                 <i className="bi bi-chat-dots-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
                 Chat
@@ -67,10 +67,12 @@ const Nav = () => {
               <i className="bi bi-cloud-upload-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
               Upload Files
             </Dropdown.Item>
-            <Dropdown.Item onClick={() => navigate('/user-management')}>
-              <i className="bi bi-people-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
-              User Management
-            </Dropdown.Item>
+            {!limitedAccess && (
+              <Dropdown.Item onClick={() => navigate('/user-management')}>
+                <i className="bi bi-people-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
+                User Management
+              </Dropdown.Item>
+            )}
             <Dropdown.Divider />
             <div className="px-2">
               <Button onClick={logout} className="w-100">
@@ -111,7 +113,7 @@ const Nav = () => {
               <span className="icon-label">Favs</span>
             </div>
           </li>
-          {!noChat && (
+          {!limitedAccess && (
             <li>
               <div className="nav-link nav-item" onClick={() => navigate('/chat')} title="Chat" role="button">
                 <i className="bi bi-chat-dots-fill icon" style={{ color: 'var(--color-icon)' }}></i>
@@ -139,14 +141,16 @@ const Nav = () => {
         </ul>
 
         <footer className="footer">
-          <div
-            className="nav-link nav-item"
-            onClick={() => navigate('/user-management')}
-            title="User Management"
-            role="button"
-          >
-            <i className="bi bi-people-fill icon" style={{ color: 'var(--color-icon)' }}></i>
-          </div>
+          {!limitedAccess && (
+            <div
+              className="nav-link nav-item"
+              onClick={() => navigate('/user-management')}
+              title="User Management"
+              role="button"
+            >
+              <i className="bi bi-people-fill icon" style={{ color: 'var(--color-icon)' }}></i>
+            </div>
+          )}
           <button onClick={logout} className="btn-logout" title="Logout">
             <div className="icon-with-text">
               <i className="bi bi-box-arrow-right"></i>
