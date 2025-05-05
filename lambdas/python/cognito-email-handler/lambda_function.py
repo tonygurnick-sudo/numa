@@ -1,16 +1,16 @@
-import json
-import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Dict, Optional, TypedDict
 
+import structlog
 from aws_lambda_powertools.utilities.data_classes import (
     cognito_user_pool_event as cognito_event,
 )
-from jinja2 import Environment
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from jinja2 import Environment, Template
 
-# Configure logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+import helpers
+
+logger = structlog.get_logger()
 
 # Template content as separate variables
 BASE_TEMPLATE = """<!DOCTYPE html>
@@ -137,18 +137,33 @@ BASE_TEMPLATE = """<!DOCTYPE html>
 jinja_env = Environment(autoescape=False)
 base_template = jinja_env.from_string(BASE_TEMPLATE)
 
-# Email templates
-TEMPLATES = {
+
+class TemplateDict(TypedDict):
+    subject: str
+    title: str
+    text: Template
+    html: Template
+
+
+EmailTemplates = TypedDict(
+    "EmailTemplates",
+    {
+        "reset-password": TemplateDict,
+        "create-password": TemplateDict,
+    },
+)
+
+EMAIL_TEMPLATES: EmailTemplates = {
     "reset-password": {
         "subject": "Reset Your Numa Password",
         "title": "Reset Your Numa Password",
-        "text": (
+        "text": jinja_env.from_string(
             "We received a request to reset your password. Use this "
             "verification code: {{code}}. This code will expire in "
             "24 hours. If you didn't request this code, you can "
             "safely ignore this email."
         ),
-        "html": (
+        "html": jinja_env.from_string(
             "<p>We received a request to reset your password. "
             "Use the verification code below:</p>\n"
             '<div class="code">{{code}}</div>\n'
@@ -160,7 +175,7 @@ TEMPLATES = {
     "create-password": {
         "subject": "Welcome to Numa - Create Your Password",
         "title": "Welcome to Numa",
-        "text": (
+        "text": jinja_env.from_string(
             "Your account has been created. To get started, you'll need "
             "to set up your password using this activation code: {{code}}. "
             "To complete your account setup: 1) Go to the account "
@@ -169,7 +184,7 @@ TEMPLATES = {
             "3) Enter this activation code 4) Create your password. "
             "This code will expire in 24 hours."
         ),
-        "html": (
+        "html": jinja_env.from_string(
             "<p>Your account has been created! To get started, "
             "you'll need to set up your password.</p>\n"
             "<p>Your activation code:</p>\n"
@@ -193,24 +208,10 @@ TEMPLATES = {
     },
 }
 
-# Convert templates to Jinja templates
-for template_name, template_config in TEMPLATES.items():
-    if "html" in template_config:
-        template_config["html_template"] = jinja_env.from_string(
-            template_config["html"]
-        )
-    if "text" in template_config:
-        template_config["text_template"] = jinja_env.from_string(
-            template_config["text"]
-        )
-    if "subject" in template_config:
-        template_config["subject_template"] = jinja_env.from_string(
-            template_config["subject"]
-        )
-
 
 def render_template(
-    template_name: str, context: Dict[str, str]
+    template_config: TemplateDict,
+    context: Dict[str, str],
 ) -> Optional[Dict[str, str]]:
     """
     Render an email template with the given context using Jinja2.
@@ -223,36 +224,32 @@ def render_template(
         Dictionary with 'subject', 'html', and 'text'
           keys, or None if rendering fails
     """
-    # Get template data
-    if template_name not in TEMPLATES:
-        logger.error(f"Template not found: {template_name}")
-        return None
-
-    template_config = TEMPLATES[template_name]
-
     try:
         # Render content HTML with Jinja
-        content_html = template_config["html_template"].render(**context)
+        content_html = template_config["html"].render(**context)
 
         # Render title
-        title = template_config.get("title", "")
+        title = template_config["title"]
 
         # Render full HTML with base template
         html = base_template.render(title=title, content=content_html)
 
         # Render text version
-        text = template_config["text_template"].render(**context)
+        text = template_config["text"].render(**context)
 
         # Render subject
-        subject = template_config["subject_template"].render(**context)
+        subject = template_config["subject"]
 
         return {"subject": subject, "html": html, "text": text}
-    except Exception as e:
-        logger.error(f"Error rendering template {template_name}: {str(e)}")
+    except Exception:
+        logger.exception("Error rendering template")
         return None
 
 
-def handler(event: cognito_event.CustomMessageTriggerEvent, context) -> Dict[str, Any]:
+def handler(
+    event: cognito_event.CustomMessageTriggerEvent,
+    context: LambdaContext,
+) -> cognito_event.CustomMessageTriggerEvent:
     """
     Lambda handler for customizing Cognito emails based on the context.
 
@@ -263,49 +260,59 @@ def handler(event: cognito_event.CustomMessageTriggerEvent, context) -> Dict[str
     Returns:
         The updated event with customized email messages
     """
-    logger.info(f"Event: {json.dumps(event)}")
+
+    helpers.setup_logging()
+
+    structlog.contextvars.bind_contextvars(
+        event=event,
+        function_name=context.function_name,
+    )
+    logger.info("Execute Lambda")
 
     # Only customize "ForgotPassword" emails
-    trigger = "CustomMessage_ForgotPassword"
-    if event["triggerSource"] == trigger:
-        # Get client metadata or use defaults
-        client_metadata = event["request"]["clientMetadata"] or {}
-        mode = client_metadata.get("mode", "reset")
-        domain = client_metadata.get(
-            "domain", os.environ.get("DEFAULT_DOMAIN", "app.numa.ai")
+    if event["triggerSource"] != "CustomMessage_ForgotPassword":
+        return event
+
+    # Get client metadata or use defaults
+    client_metadata = event["request"]["clientMetadata"] or {}
+    mode = client_metadata.get("mode", "reset")
+    domain = client_metadata.get(
+        "domain", os.environ.get("DEFAULT_DOMAIN", "app.numa.ai")
+    )
+
+    # Get the code parameter
+    code_parameter = event["request"]["codeParameter"]
+
+    template_data = None
+    if mode == "create":
+        # For create password flow - get email from user attributes
+        user_attrs = event["request"]["userAttributes"]
+        email = user_attrs.get("email", "")
+
+        # Render the create-password template
+        template_data = render_template(
+            EMAIL_TEMPLATES["create-password"],
+            {"code": code_parameter, "domain": domain, "email": email},
+        )
+    else:
+        # For regular password reset flow
+        template_data = render_template(
+            EMAIL_TEMPLATES["reset-password"],
+            {"code": code_parameter},
         )
 
-        # Get the code parameter
-        code_parameter = event["request"]["codeParameter"]
+    if template_data:
+        # Set the subject and message
+        event["response"]["emailSubject"] = template_data["subject"]
 
-        template_data = None
-        if mode == "create":
-            # For create password flow - get email from user attributes
-            user_attrs = event["request"]["userAttributes"]
-            email = user_attrs.get("email", "")
+        # Cognito requires message to be correctly formatted as HTML
+        html_message = template_data["html"]
+        # Ensure <!DOCTYPE html> is present at the beginning
+        if not html_message.startswith("<!DOCTYPE html>"):
+            html_message = f"<!DOCTYPE html>{html_message}"
 
-            # Render the create-password template
-            template_data = render_template(
-                "create-password",
-                {"code": code_parameter, "domain": domain, "email": email},
-            )
-        else:
-            # For regular password reset flow
-            params = {"code": code_parameter}
-            template_data = render_template("reset-password", params)
-
-        if template_data:
-            # Set the subject and message
-            event["response"]["emailSubject"] = template_data["subject"]
-
-            # Cognito requires message to be correctly formatted as HTML
-            html_message = template_data["html"]
-            # Ensure <!DOCTYPE html> is present at the beginning
-            if not html_message.startswith("<!DOCTYPE html>"):
-                html_message = f"<!DOCTYPE html>{html_message}"
-
-            event["response"]["emailMessage"] = html_message
-        else:
-            logger.error(f"Failed to render {mode} template")
+        event["response"]["emailMessage"] = html_message
+    else:
+        logger.error(f"Failed to render {mode} template")
 
     return event
