@@ -8,7 +8,6 @@ import { CognitoUserPoolClient } from '@cdktf/provider-aws/lib/cognito-user-pool
 import { CognitoUserPoolDomain } from '@cdktf/provider-aws/lib/cognito-user-pool-domain';
 import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
-import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
@@ -24,8 +23,7 @@ import { Fn, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import { AdjustToken } from './adjust-token-construct';
-import { ConfigBucket } from './config-bucket-construct';
-import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
+import { CognitoEmailHandler } from './cognito-email-handler-construct';
 import { BoxConfiguration, BoxDataSource } from './data-sources/box-datasource-construct';
 import { S3Configuration, S3DataSource } from './data-sources/s3-datasource-construct';
 import { SharePointConfiguration, SharePointDataSource } from './data-sources/sharepoint-datasource-construct';
@@ -39,6 +37,9 @@ import {
 } from './q-business-chat-control-configurer-construct';
 import { SetCallbackUrl } from './set-callback-url-construct';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
+import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
+import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
+import { ConfigBucket } from './config-bucket-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -74,6 +75,12 @@ export class CoreNumaInfra extends Construct {
     let appIdentityConfig;
     let webexIdentityConfig;
 
+    // Create Cognito email handler Lambda function
+    const cognitoEmailHandler = new CognitoEmailHandler(this, 'cognito-email-handler', {
+      nameSuffix: numaClient,
+      domainName: props.domainName,
+    });
+
     const at = new AdjustToken(this, 'token-adjuster', {
       nameSuffix: numaClient,
     });
@@ -98,6 +105,7 @@ export class CoreNumaInfra extends Construct {
           lambdaArn: at.function.arn,
           lambdaVersion: 'V2_0',
         },
+        customMessage: cognitoEmailHandler.function.arn,
       },
       userPoolAddOns: {
         advancedSecurityMode: 'AUDIT',
@@ -117,6 +125,15 @@ export class CoreNumaInfra extends Construct {
     new CognitoUserPoolDomain(this, 'domain', {
       userPoolId: userPool.id,
       domain: cognitoDomain,
+    });
+
+    // Grant permissions for Cognito to invoke the email handler Lambda
+    new LambdaPermission(this, 'cognito-email-permission', {
+      statementId: 'cognito-email-handler',
+      functionName: cognitoEmailHandler.function.functionName,
+      action: 'lambda:InvokeFunction',
+      principal: 'cognito-idp.amazonaws.com',
+      sourceArn: userPool.arn,
     });
 
     new RandomProvider(this, 'random-provider', {});

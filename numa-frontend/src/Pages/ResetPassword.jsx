@@ -16,16 +16,18 @@ const ResetPassword = () => {
   // Check if we're in create password mode
   const isCreateMode = location.pathname === '/create-password';
 
-  // Check for email in URL parameters
+  // Check for email and code in URL parameters
   useEffect(() => {
-    if (isCreateMode) {
-      const searchParams = new URLSearchParams(location.search);
-      const emailFromUrl = searchParams.get('email');
-      if (emailFromUrl) {
-        setEmail(emailFromUrl);
-      }
+    const searchParams = new URLSearchParams(location.search);
+    const emailFromUrl = searchParams.get('email');
+    const codeFromUrl = searchParams.get('code');
+
+    if (codeFromUrl && emailFromUrl) {
+      setEmail(emailFromUrl);
+      setResetCode(codeFromUrl);
+      setIsCodeSent(true); // Auto-advance to the second step
     }
-  }, [isCreateMode, location.search]);
+  }, [location.search]);
 
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [error, setError] = useState(null);
@@ -151,6 +153,8 @@ const ResetPassword = () => {
                   value={resetCode}
                   onChange={(e) => setResetCode(e.target.value)}
                   required
+                  // Disable the code if it's in the url and populated
+                  disabled={location.search.includes('code') && resetCode}
                   name="reset-code"
                   autoComplete="off"
                 />
