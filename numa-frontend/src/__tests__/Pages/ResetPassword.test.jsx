@@ -95,6 +95,25 @@ describe('ResetPassword Component', () => {
       });
     });
 
+    it('should advance to reset form when code and email are in URL parameters', () => {
+      // Set up navigation with code and email in URL parameters
+      setupNavigationMocks({
+        pathname: '/reset-password',
+        search: '?email=test@example.com&code=123456',
+        hash: '',
+      });
+
+      renderWithProviders(<ResetPassword />);
+
+      // It should directly show the reset password form
+      expect(screen.getByText('Password Reset')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Enter the code')).toHaveValue('123456');
+      expect(screen.getByPlaceholderText('Enter your email')).toHaveValue('test@example.com');
+      expect(screen.getByPlaceholderText('Enter your new password')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Confirm your new password')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reset Password' })).toBeInTheDocument();
+    });
+
     it('should handle password reset confirmation', async () => {
       authHandlers.requestPasswordReset.mockResolvedValueOnce();
       authHandlers.confirmPasswordReset.mockResolvedValueOnce();
@@ -178,23 +197,35 @@ describe('ResetPassword Component', () => {
       // Set up navigation for create password path with email in query
       setupNavigationMocks({
         pathname: '/create-password',
-        search: '?email=test@example.com',
+        search: '?email=test@example.com&code=123456',
         hash: '',
       });
     });
 
-    it('should render initial create password form with email from URL', () => {
+    it('should render at correct step when a link has email and code in the query', () => {
       renderWithProviders(<ResetPassword />);
 
-      expect(screen.getByRole('heading', { name: 'Create Your Password' })).toBeInTheDocument();
+      expect(screen.getByText('Create Your Password')).toBeInTheDocument();
+
+      // Check that the email and code are in the form
       expect(screen.getByPlaceholderText('Enter your email')).toHaveValue('test@example.com');
-      expect(screen.getByRole('button', { name: 'Request Activation Code' })).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Enter the code')).toHaveValue('123456');
     });
 
     it('should handle activation code request submission', async () => {
       authHandlers.requestPasswordReset.mockResolvedValueOnce();
 
+      // Reset navigation mock without code and email in URL for this specific test
+      setupNavigationMocks({
+        pathname: '/create-password',
+        search: '',
+        hash: '',
+      });
+
       renderWithProviders(<ResetPassword />);
+
+      const emailInput = screen.getByPlaceholderText('Enter your email');
+      fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
 
       const submitButton = screen.getByRole('button', { name: 'Request Activation Code' });
       fireEvent.click(submitButton);
@@ -208,7 +239,18 @@ describe('ResetPassword Component', () => {
     it('should render create password form after code is sent', async () => {
       authHandlers.requestPasswordReset.mockResolvedValueOnce();
 
+      // Reset navigation mock without code and email in URL for this specific test
+      setupNavigationMocks({
+        pathname: '/create-password',
+        search: '',
+        hash: '',
+      });
+
       renderWithProviders(<ResetPassword />);
+
+      // Fill email field first
+      const emailInput = screen.getByPlaceholderText('Enter your email');
+      fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
 
       // Request the activation code
       fireEvent.click(screen.getByRole('button', { name: 'Request Activation Code' }));
@@ -227,16 +269,9 @@ describe('ResetPassword Component', () => {
 
       renderWithProviders(<ResetPassword />);
 
-      // Request the activation code
-      fireEvent.click(screen.getByRole('button', { name: 'Request Activation Code' }));
-
-      // Wait for the create password form to appear
-      await waitFor(() => {
-        expect(screen.getByText('Create Your Password')).toBeInTheDocument();
-      });
+      // The form is already in the second step due to URL parameters
 
       // Fill out the form
-      fireEvent.change(screen.getByPlaceholderText('Enter the code'), { target: { value: '123456' } });
       fireEvent.change(screen.getByPlaceholderText('Enter your new password'), { target: { value: 'newpassword' } });
       fireEvent.change(screen.getByPlaceholderText('Confirm your new password'), { target: { value: 'newpassword' } });
 
@@ -251,19 +286,11 @@ describe('ResetPassword Component', () => {
     });
 
     it('should handle password mismatch in create mode', async () => {
-      authHandlers.requestPasswordReset.mockResolvedValueOnce();
-
       renderWithProviders(<ResetPassword />);
 
-      // Request the activation code
-      fireEvent.click(screen.getByRole('button', { name: 'Request Activation Code' }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Create Your Password')).toBeInTheDocument();
-      });
+      // The form is already in the second step due to URL parameters
 
       // Fill form with mismatched passwords
-      fireEvent.change(screen.getByPlaceholderText('Enter the code'), { target: { value: '123456' } });
       fireEvent.change(screen.getByPlaceholderText('Enter your new password'), { target: { value: 'password1' } });
       fireEvent.change(screen.getByPlaceholderText('Confirm your new password'), { target: { value: 'password2' } });
 

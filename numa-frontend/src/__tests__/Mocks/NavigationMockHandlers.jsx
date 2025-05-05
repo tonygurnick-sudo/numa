@@ -1,10 +1,11 @@
 import { vi } from 'vitest';
 
 export const setupNavigationMocks = (initialLocation) => {
+  // If initialLocation is not provided, use the current route
   navigationHandlers.currentLocation = initialLocation || {
     pathname: navigationHandlers.currentRoute,
-    search: '',
-    hash: '',
+    search: initialLocation?.search || '',
+    hash: initialLocation?.hash || '',
   };
   return navigationHandlers;
 };

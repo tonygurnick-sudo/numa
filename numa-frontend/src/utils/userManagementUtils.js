@@ -50,7 +50,7 @@ export class UserManagementUtils {
             Value: 'true',
           },
         ],
-        MessageAction: 'SUPPRESS', // We'll handle sending credentials ourselves
+        MessageAction: 'SUPPRESS', // New users will be notifed by the user who created them
       });
 
       console.log('Sending create user command:', JSON.stringify(command, null, 2));
