@@ -70,6 +70,23 @@
       }
     ]
   },
+  "arcanum-council-trial": {
+    "apps": {
+      "candidate-screening": {},
+      "company-profile": {},
+      "contract-analysis": {},
+      "document-summariser": {},
+      "financial-analysis": {},
+      "meeting-analyser": {},
+      "policy-drafter": {},
+      "policy-reviewer": {},
+      "procurement-rfp-assessment": {}
+    },
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "devInstance": true,
+    "region": "us-east-1"
+  },
   "arcanum-dave": {
     "apps": {
       "meeting-analyser": {}
@@ -118,13 +135,6 @@
     "region": "us-east-1"
   },
   "arcanum-demo-sebastian": {
-    "allApps": true,
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "devInstance": true,
-    "region": "us-east-1"
-  },
-  "arcanum-hams": {
     "allApps": true,
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
@@ -325,6 +335,13 @@
   "design-builders": {
     "allProdApps": true,
     "clientAccountId": "061039773876",
+    "region": "us-east-1"
+  },
+  "dev-hams": {
+    "allApps": true,
+    "clientAccountId": "905418183804",
+    "createServiceLinkedRole": false,
+    "devInstance": true,
     "region": "us-east-1"
   },
   "ema": {

@@ -21,7 +21,7 @@ const mockClientConfigProd = {
   'arcanum-demo': { clientAccountId: '123456789012', devInstance: true },
   'arcanum-demo-nick': { clientAccountId: '345678901234', devInstance: true },
   'arcanum-demo-sam': { clientAccountId: '456789012345', devInstance: true },
-  'arcanum-hams': { clientAccountId: '678901234567', devInstance: false },
+  'dev-hams': { clientAccountId: '678901234567', devInstance: false },
   'arcanum-prod-trial': { clientAccountId: '789012345678', devInstance: true },
   'arcanum-enterprise': { clientAccountId: '890123456789', devInstance: false },
   'arcanum-staging': { clientAccountId: '901234567890', devInstance: true },
