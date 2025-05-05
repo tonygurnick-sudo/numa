@@ -48,6 +48,7 @@ variables:
         - lambdas/python/aggregate-document-results
         - lambdas/python/bedrock-model-manager
         - lambdas/python/candidate-screening
+        - lambdas/python/cognito-email-handler
         - lambdas/python/company-profile
         - lambdas/python/contract-analysis
         - lambdas/python/costing-calculator
@@ -85,6 +86,7 @@ variables:
         - lib/bedrock
         - lib/helpers
         - lib/markdown-to-pdf
+        - lib/s3_helpers
 
 client-list-lint:
   stage: lint
@@ -116,6 +118,7 @@ infra-lint:
         paths:
           - infra/**/*
           - style/**/*
+          - .gitlab-ci.yml
 
 infra-test:
   extends: .node-test
@@ -136,6 +139,7 @@ infra-build:
     - changes:
         paths:
           - $PYTHON_WORKING_DIRECTORY/**/*
+          - .gitlab-ci.yml
 
 python-libraries-lint:
   extends: .python-lint-base
