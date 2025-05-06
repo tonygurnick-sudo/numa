@@ -99,6 +99,11 @@
   },
   "arcanum-demo": {
     "allApps": true,
+    "apps": {
+      "gdsr-assessment": {},
+      "rfp-response-comparison": {},
+      "procurement-rfp-assessment": {}
+    },
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "devInstance": true,
@@ -156,6 +161,7 @@
       "nzsba-policy-builder": {},
       "policy-drafter": {},
       "policy-reviewer": {},
+      "rfp-response-comparison": {},
       "procurement-rfp-assessment": {}
     },
     "clientAccountId": "619071323471",
