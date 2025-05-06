@@ -262,6 +262,19 @@ describe('ResultsRenderer Component', () => {
         ],
       },
     ];
+
+    // Mock sessionStorage to return a region
+    Object.defineProperty(window, 'sessionStorage', {
+      value: {
+        getItem: vi.fn((key) => {
+          if (key === 'test-bucket') return 'test-bucket';
+          if (key === 'REGION') return 'us-east-1';
+          return 'test-bucket';
+        }),
+      },
+      writable: true,
+    });
+
     render(<ResultsRenderer results={results} />);
 
     await waitFor(() => {
@@ -291,6 +304,19 @@ describe('ResultsRenderer Component', () => {
         ],
       },
     ];
+
+    // Mock sessionStorage to return a region
+    Object.defineProperty(window, 'sessionStorage', {
+      value: {
+        getItem: vi.fn((key) => {
+          if (key === 'test-bucket') return 'test-bucket';
+          if (key === 'REGION') return 'us-east-1';
+          return 'test-bucket';
+        }),
+      },
+      writable: true,
+    });
+
     render(<ResultsRenderer results={results} />);
 
     await waitFor(() => {

@@ -120,8 +120,10 @@ const FileUploader = ({ onUploadSuccess }) => {
             .map((segment) => encodeURIComponent(segment))
             .join('/');
 
+          const region = window.sessionStorage.getItem('REGION');
+
           // User generates a presigned URL
-          const s3Client = new S3Client({ region: 'us-east-1', credentials: await getIdentityPoolCredentials() });
+          const s3Client = new S3Client({ region: region, credentials: await getIdentityPoolCredentials() });
 
           const command = new PutObjectCommand({
             Bucket: `numa-${config.CLIENT_NAME}-data`,

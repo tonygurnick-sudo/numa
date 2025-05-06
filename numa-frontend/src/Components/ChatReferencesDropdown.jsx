@@ -138,7 +138,7 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
 
   const getPresignedUrl = async (ref, getIdentityPoolCredentials) => {
     try {
-      const region = window.sessionStorage.getItem('REGION') || 'us-east-1';
+      const region = window.sessionStorage.getItem('REGION');
       const s3Key = ref.key;
       const s3Bucket = ref.bucket;
 
