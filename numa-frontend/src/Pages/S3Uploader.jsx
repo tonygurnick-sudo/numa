@@ -217,8 +217,9 @@ export function S3Uploader() {
     }
     setIsLoadingFiles(true);
     try {
+      const region = window.sessionStorage.getItem('REGION');
       const s3Client = new S3Client({
-        region: 'us-east-1',
+        region: region,
         credentials: await getIdentityPoolCredentials(),
       });
       const cmd = new ListObjectsV2Command({

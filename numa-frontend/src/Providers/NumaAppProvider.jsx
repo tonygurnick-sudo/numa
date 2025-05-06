@@ -673,8 +673,9 @@ export const NumaAppProvider = ({ children }) => {
 
     try {
       console.log('Creating S3 client with provided credentials...');
+      const region = window.sessionStorage.getItem('REGION');
       const s3Client = new S3Client({
-        region: 'us-east-1',
+        region: region,
         credentials,
       });
 

@@ -165,8 +165,10 @@ export const PolicyBuilderDetail = () => {
 
       const credentials = await getIdentityPoolCredentials();
 
+      const region = window.sessionStorage.getItem('REGION');
+
       const s3Client = new S3Client({
-        region: 'us-east-1', // replace with your region
+        region: region,
         credentials,
       });
 
@@ -581,9 +583,11 @@ export const PolicyBuilderDetail = () => {
       // Get fresh credentials each time instead of caching
       const credentials = await getIdentityPoolCredentials();
 
+      const region = window.sessionStorage.getItem('REGION');
+
       // Create S3 client with fresh credentials
       const s3Client = new S3Client({
-        region: 'us-east-1', // replace with your region
+        region: region,
         credentials,
       });
 

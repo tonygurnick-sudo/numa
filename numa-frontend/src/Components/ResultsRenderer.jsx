@@ -378,7 +378,9 @@ const CsvRenderer = ({ data }) => {
       // Set loading state for this file path
       setLoadingFiles((prev) => ({ ...prev, [filePath + '-download']: true }));
 
-      downloadFileFromS3(filePath, bucketName, 'us-east-1', getIdentityPoolCredentials).finally(() => {
+      const region = window.sessionStorage.getItem('REGION');
+
+      downloadFileFromS3(filePath, bucketName, region, getIdentityPoolCredentials).finally(() => {
         // Clear loading state when done
         setLoadingFiles((prev) => ({ ...prev, [filePath + '-download']: false }));
       });
@@ -399,7 +401,9 @@ const CsvRenderer = ({ data }) => {
       // Set loading state for this file path
       setLoadingFiles((prev) => ({ ...prev, [filePath + '-open']: true }));
 
-      openFileWithSignedUrl(filePath, bucketName, 'us-east-1', getIdentityPoolCredentials).finally(() => {
+      const region = window.sessionStorage.getItem('REGION');
+
+      openFileWithSignedUrl(filePath, bucketName, region, getIdentityPoolCredentials).finally(() => {
         // Clear loading state when done
         setLoadingFiles((prev) => ({ ...prev, [filePath + '-open']: false }));
       });
@@ -585,10 +589,11 @@ const FileDownloadButtons = ({ output, getIdentityPoolCredentials, loadingAction
         className="btn btn-primary"
         onClick={() => {
           setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-download`]: true }));
+          const region = window.sessionStorage.getItem('REGION');
           downloadFileWithSignedUrl(
             output.data.key,
             output.data.bucket,
-            'us-east-1',
+            region,
             getIdentityPoolCredentials,
             output.title || null,
           ).finally(() => {
@@ -610,11 +615,10 @@ const FileDownloadButtons = ({ output, getIdentityPoolCredentials, loadingAction
         className="btn btn-outline-secondary"
         onClick={() => {
           setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-open`]: true }));
-          openFileWithSignedUrl(output.data.key, output.data.bucket, 'us-east-1', getIdentityPoolCredentials).finally(
-            () => {
-              setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-open`]: false }));
-            },
-          );
+          const region = window.sessionStorage.getItem('REGION');
+          openFileWithSignedUrl(output.data.key, output.data.bucket, region, getIdentityPoolCredentials).finally(() => {
+            setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-open`]: false }));
+          });
         }}
         disabled={loadingActions[`${output.data.key}-download`] || loadingActions[`${output.data.key}-open`]}
       >
