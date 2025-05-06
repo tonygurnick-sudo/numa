@@ -291,28 +291,24 @@ label {
   gap: 0.5rem;
   margin-top: 0.75rem;
   flex-wrap: wrap;
-  justify-content: space-evenly;
+  justify-content: flex-end;
+  position: relative;
 }
 
 .tag-pill {
   display: inline-block;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.75rem;
   border-radius: 1rem;
   font-size: 0.75rem;
   font-weight: 500;
-  white-space: nowrap;
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition:
-    max-width 0.3s ease,
-    padding 0.3s ease;
+  white-space: normal;
+  max-width: none;
+  overflow: visible;
+  text-overflow: unset;
   cursor: pointer;
-
-  &:hover {
-    max-width: 200px;
-    padding: 0.25rem 0.75rem;
-  }
+  position: relative;
+  transition: none;
+  z-index: 1;
 
   &.tag-green {
     background-color: var(--color-success-bg);
@@ -2565,10 +2561,10 @@ label {
       transition: all 0.3s ease;
       text-align: left;
       /* Constrain width so the text is truncated, expands on hover */
-      max-width: 150px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      max-width: none;
+      white-space: normal;
+      overflow: visible;
+      text-overflow: unset;
 
       /* The document icon in the bubble */
       i {
@@ -2579,7 +2575,7 @@ label {
       /* On hover/focus, slightly expand and show the text fully */
       &:hover,
       &:focus {
-        max-width: 600px;
+        max-width: none;
         background-color: rgba(248, 245, 251, 0.95);
         color: #3a005f;
         border-color: #c0a1da;
