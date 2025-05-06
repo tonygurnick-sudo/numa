@@ -80,7 +80,8 @@
       "meeting-analyser": {},
       "policy-drafter": {},
       "policy-reviewer": {},
-      "procurement-rfp-assessment": {}
+      "procurement-rfp-assessment": {},
+      "rfp-response-comparison": {}
     },
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
