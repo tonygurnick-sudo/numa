@@ -193,7 +193,7 @@ if (import.meta.filename === process?.argv[1]) {
     }
 
     const awsClientConfig = {
-      region: clientConfigProd[args[1]].region,
+      region: clientConfigProd[clientName].region,
       credentials: temporaryCredentials(accountId),
     };
     const showDetails = args.includes('--details');
