@@ -4,6 +4,7 @@
   "main": "index.ts",
   "type": "module",
   "dependencies": {
+    "@arcanumai/client-config": "workspace:^",
     "@aws-sdk/client-cognito-identity-provider": "^3.675.0",
     "@aws-sdk/client-qbusiness": "^3.675.0",
     "@aws-sdk/client-s3": "^3.676.0",

@@ -5,7 +5,6 @@ import { Construct } from 'constructs';
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import _clientConfigProd from '../../clientConfigProd.json';
 import { AppAgnosticApiGatewayLambdaCollection } from '../constructs/app-agnostic-api-gateway-lambda-collection';
 import {
   BaseNumaApp,
@@ -40,7 +39,13 @@ export class NumaClientStack extends TerraformStack {
     const defaults = {
       domainSuffix: props.domainSuffix,
     };
-    const clientConfig = lookupConfigForClient(props.clientName, defaults);
+    const domainName = props.clientConfig.customDomain ?? `${props.clientName}.${defaults.domainSuffix}`;
+    const clientConfig = {
+      clientName: props.clientName,
+      domainName,
+      ...defaults,
+      ...props.clientConfig,
+    };
 
     const deployerRole = `arn:aws:iam::${props.arcanumNumaAccount}:role/admin-delegated-access`;
     const clientRole = `arn:aws:iam::${clientConfig.clientAccountId}:role/ArcanumAIAccess`;
@@ -284,24 +289,7 @@ export interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'
    */
   apps?: Record<string, UserConfigurableBaseNumaAppProps>;
 }
-type InputConfig = Omit<ClientConfig, 'clientName' | 'domainName'>;
-const clientConfigProd = _clientConfigProd as Record<string, InputConfig>;
-
-export function listNumaClients(): string[] {
-  return Object.keys(clientConfigProd);
-}
-
-export function lookupConfigForClient(clientName: string, defaults: Record<string, string>): ClientConfig {
-  if (!listNumaClients().includes(clientName)) throw new Error(`Invalid client name: ${clientName}`);
-  const config = clientConfigProd[clientName];
-  const domainName = config.customDomain ?? `${clientName}.${defaults.domainSuffix}`;
-  return {
-    clientName,
-    domainName,
-    ...defaults,
-    ...config,
-  };
-}
+export type InputConfig = Omit<ClientConfig, 'clientName' | 'domainName'>;
 
 export interface NumaClientStackProps {
   clientName: string;
@@ -309,6 +297,7 @@ export interface NumaClientStackProps {
   domainSuffix: string;
   hostedZone: string;
   arcanumNumaAccount: string;
+  clientConfig: InputConfig;
 }
 
 export interface AppDefinition {

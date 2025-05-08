@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@arcanumai/cdktf-util": "^1.14.0",
+    "@arcanumai/client-config": "workspace:^",
     "@arcanumai/private-bucket-construct": "^1.2.1",
     "@arcanumai/typescript-lambda-construct": "^1.2.4",
     "@aws-sdk/client-service-quotas": "^3.738.0",

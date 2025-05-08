@@ -4,8 +4,8 @@ import { SubscriptionType } from '@aws-sdk/client-qbusiness';
 import { HttpRequest } from '@smithy/protocol-http';
 import { SignatureV4 } from '@smithy/signature-v4';
 import { argv } from 'node:process';
-import clientConfigProd from '../clientConfigProd.json';
-import { AWSClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
+import { AWSClientConfig, BasicClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
+import { getClientConfig } from '@arcanumai/client-config';
 
 const args = argv.slice(2);
 const downgrade = true;
@@ -115,10 +115,11 @@ if (import.meta.filename === process?.argv[1]) {
   const customerName = args[0];
   const excludedUsernames = ['numa-system-user@arcanum.ai', 'testuser@arcanum.ai'];
   console.log(customerName);
-  const accountId = clientConfigProd[customerName].clientAccountId;
+  const clientConfig = await getClientConfig<BasicClientConfig>(args[0]);
+  const accountId = clientConfig.clientAccountId;
   const awsClientConfig = {
     credentials: temporaryCredentials(accountId),
-    region: clientConfigProd[customerName].region,
+    region: clientConfig.region,
   };
   console.log('Gathering account details...');
   const accountDetails = await getQInstanceDetails(awsClientConfig, customerName);

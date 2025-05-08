@@ -6,8 +6,8 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import fs from 'node:fs/promises';
 import { argv } from 'node:process';
-import clientConfigProd from '../clientConfigProd.json';
-import { AWSClientConfig, temporaryCredentials } from './utils';
+import { AWSClientConfig, BasicClientConfig, temporaryCredentials } from './utils';
+import { getClientConfig, listClients } from '@arcanumai/client-config';
 
 function getGetCommandLineFlags(): { isDevOnly: boolean; shouldFix: boolean } {
   const args = argv.slice(2);
@@ -154,14 +154,9 @@ async function checkClient(clientName: string, shouldFix = false): Promise<Clien
     accountId: '',
     unverifiedUsers: [],
   };
+  const clientConfig = await getClientConfig<BasicClientConfig>(clientName);
 
-  if (!clientConfigProd[clientName]) {
-    console.error(`Client ${clientName} not found in configuration`);
-    result.error = 'Configuration error: Client not found in configuration';
-    return result;
-  }
-
-  const accountId = clientConfigProd[clientName].clientAccountId;
+  const accountId = clientConfig.clientAccountId;
   if (!accountId) {
     console.error(`Account ID for ${clientName} not found in configuration`);
     result.error = 'Configuration error: Account ID not found in configuration';
@@ -171,7 +166,7 @@ async function checkClient(clientName: string, shouldFix = false): Promise<Clien
   result.accountId = accountId;
 
   const awsClientConfig = {
-    region: clientConfigProd[clientName].region,
+    region: clientConfig.region,
     credentials: temporaryCredentials(accountId),
   };
 
@@ -204,10 +199,7 @@ async function checkClient(clientName: string, shouldFix = false): Promise<Clien
 export async function processClients(config?: { isDevOnly?: boolean; shouldFix?: boolean }): Promise<ReportSummary> {
   const { isDevOnly, shouldFix } = config ?? getGetCommandLineFlags();
 
-  let clientNames = Object.keys(clientConfigProd);
-  if (isDevOnly) {
-    clientNames = clientNames.filter((name) => clientConfigProd[name].devInstance === true);
-  }
+  let clientNames = await listClients();
 
   console.log(`Checking Cognito users for ${clientNames.length} clients...`);
   if (isDevOnly) {
@@ -218,6 +210,10 @@ export async function processClients(config?: { isDevOnly?: boolean; shouldFix?:
   let errorCount = 0;
 
   for (const clientName of clientNames) {
+    const clientConfig = await getClientConfig<BasicClientConfig>(clientName);
+    if (isDevOnly && !clientConfig.devInstance) {
+      continue;
+    }
     try {
       const result = await checkClient(clientName, shouldFix);
       results.push(result);
@@ -229,7 +225,7 @@ export async function processClients(config?: { isDevOnly?: boolean; shouldFix?:
       errorCount++;
       results.push({
         clientName,
-        accountId: clientConfigProd[clientName]?.clientAccountId || '',
+        accountId: clientConfig.clientAccountId || '',
         unverifiedUsers: [],
         error: `Fatal error: ${error.message || 'Unknown error'}`,
       });
@@ -336,19 +332,20 @@ if (import.meta.filename === process?.argv[1]) {
   const clientName = args.find((arg) => !arg.startsWith('--'));
 
   if (clientName && !args.includes('--all')) {
-    const accountId = clientConfigProd[clientName]?.clientAccountId;
+    const clientConfig = await getClientConfig<BasicClientConfig>(clientName);
+    const accountId = clientConfig.clientAccountId;
     if (!accountId) {
       console.error(`Client ${clientName} not found in configuration`);
       process.exit(1);
     }
 
     const { isDevOnly } = getGetCommandLineFlags();
-    if (isDevOnly && !clientConfigProd[clientName].devInstance) {
+    if (isDevOnly && !clientConfig.devInstance) {
       console.error(`Client ${clientName} is not a dev instance`);
       process.exit(1);
     }
 
-    const region = clientConfigProd[clientName].region;
+    const region = clientConfig.region;
     await handleSingleClient(clientName, accountId, region);
   } else {
     await handleMultipleClients();

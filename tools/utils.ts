@@ -184,3 +184,9 @@ function hasExactlyOne(collection: Array<unknown>, resource: string): boolean {
     return true;
   }
 }
+
+export interface BasicClientConfig {
+  clientAccountId: string;
+  region: string;
+  devInstance: boolean;
+}
