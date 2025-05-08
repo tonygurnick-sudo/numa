@@ -316,10 +316,16 @@ const NumaChat = () => {
       // We'll store references from data source queries
       let dsReferences = [];
 
+      // Add user message to local state
+      const userMsgObject = { role: 'user', content: userMsg };
+      setMessages((prev) => [...prev, userMsgObject]);
+
       // If web search is enabled, perform search first and enhance user message
       if (webSearchEnabled) {
-        // Show searching indicator
-        setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'searching' }]);
+        // Show searching indicator after user message is rendered
+        setTimeout(() => {
+          setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'searching' }]);
+        }, 0);
 
         try {
           const userId = user?.decoded_tokens?.idToken?.sub;
@@ -380,10 +386,6 @@ const NumaChat = () => {
           });
         }
       }
-
-      // 1) Add user message to local state (original message, not enhanced)
-      const userMsgObject = { role: 'user', content: userMsg };
-      setMessages((prev) => [...prev, userMsgObject]);
 
       // 2) Store original user message in DynamoDB as structured
       if (numaChatDynamoUtils) {
