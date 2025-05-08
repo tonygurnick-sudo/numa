@@ -15,16 +15,18 @@ export class Honeycomb extends Construct {
       name: props.name,
       color: 'purple',
     });
-    const apiKey = new ApiKey(this, 'honeycomb-backend-ingest-key', {
-      name: 'Backend Ingest Key',
-      type: 'ingest',
-      environmentId: honeycombEnvironment.id,
-      permissions: [
-        {
-          createDatasets: true, // This key is only used in the backend, so it can create datasets.
-        },
-      ],
-    });
+    // Remove this tempoarily to decrease the number of keys we create.
+    // const apiKey = new ApiKey(this, 'honeycomb-backend-ingest-key', {
+    //   name: 'Backend Ingest Key',
+    //   type: 'ingest',
+    //   environmentId: honeycombEnvironment.id,
+    //   permissions: [
+    //     {
+    //       createDatasets: true, // This key is only used in the backend, so it can create datasets.
+    //     },
+    //   ],
+    // });
+    // this.backendKey = apiKey.id + apiKey.secret;
     const frontendKey = new ApiKey(this, 'honeycomb-frontend-ingest-key', {
       name: 'Frontend Ingest Key',
       type: 'ingest',
@@ -41,7 +43,7 @@ export class Honeycomb extends Construct {
 
     // Keys are comprised of the key id concatenated with the key secret.
     this.frontendKey = frontendKey.id + frontendKey.secret;
-    this.backendKey = apiKey.id + apiKey.secret;
+    this.backendKey = this.frontendKey; // TODO: remove this when we create the backend key.
   }
 }
 
