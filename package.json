@@ -6,6 +6,10 @@
     "tools",
     "numa-frontend",
     "numa-management",
-    "lambdas/node/*"
-  ]
+    "lambdas/node/*",
+    "lib/client-config-node"
+  ],
+  "resolutions": {
+    "@smithy/core": "^3.3.1"
+  }
 }

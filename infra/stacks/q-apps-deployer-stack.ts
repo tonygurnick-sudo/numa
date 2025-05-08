@@ -2,6 +2,7 @@ import { ArcanumStack, ArcanumStackProps } from '@arcanumai/cdktf-util';
 import { Construct } from 'constructs';
 import { PublicS3Bucket } from '../constructs/public-s3-bucket-construct';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
+import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { Route53Zone } from '@cdktf/provider-aws/lib/route53-zone';
 import { TerraformOutput } from 'cdktf';
 
@@ -24,6 +25,28 @@ export class QAppsDeployerStack extends ArcanumStack {
 
     const zone = new Route53Zone(this, 'route53-zone', {
       name: props.domainSuffix,
+    });
+
+    const clientConfigTable = new DynamodbTable(this, 'client-config-table', {
+      name: 'numa-client-config',
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'clientName',
+      attribute: [
+        {
+          name: 'clientName',
+          type: 'S',
+        },
+      ],
+      pointInTimeRecovery: {
+        enabled: true,
+      },
+      lifecycle: {
+        preventDestroy: true,
+      },
+    });
+
+    new TerraformOutput(this, 'client-config-table-arn', {
+      value: clientConfigTable.arn,
     });
 
     new TerraformOutput(this, 'zone-id', {

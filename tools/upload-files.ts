@@ -7,8 +7,8 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { argv } from 'node:process';
-import clientConfigProd from '../clientConfigProd.json';
-import { AWSClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
+import { AWSClientConfig, BasicClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
+import { getClientConfig } from '@arcanumai/client-config';
 
 const args = argv.slice(2);
 
@@ -45,10 +45,11 @@ export async function startSync(awsClientConfig, applicationId: string, indexId:
 }
 
 if (import.meta.filename === process?.argv[1]) {
-  const accountId = clientConfigProd[args[1]].clientAccountId;
+  const clientConfig = await getClientConfig<BasicClientConfig>(args[0]);
+  const accountId = clientConfig.clientAccountId;
   const awsClientConfig = {
     credentials: temporaryCredentials(accountId),
-    region: clientConfigProd[args[1]].region,
+    region: clientConfig.region,
   };
   console.log('Gathering account details...');
   const accountDetails = await getQInstanceDetails(awsClientConfig);

@@ -12,8 +12,8 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { argv, exit } from 'node:process';
 import { finished } from 'node:stream/promises';
 import { webkit } from 'playwright';
-import clientConfigProd from '../clientConfigProd.json';
-import { AWSClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
+import { AWSClientConfig, BasicClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
+import { getClientConfig } from '@arcanumai/client-config';
 
 const passwordConfig = {
   length: 12,
@@ -185,11 +185,12 @@ async function activateQLicence(qUrl, username: string, password: string): Promi
 (async (): Promise<void> => {
   console.log(chalk.green('Starting user creation'));
   const args = argv.slice(2);
+  const clientConfig = await getClientConfig<BasicClientConfig>(args[0]);
 
-  const accountId = clientConfigProd[args[0]].clientAccountId;
+  const accountId = clientConfig.clientAccountId;
   const awsClientConfig = {
     credentials: temporaryCredentials(accountId),
-    region: clientConfigProd[args[0]].region,
+    region: clientConfig.region,
   };
   const accountDetails = await getQInstanceDetails(awsClientConfig);
   const qUrl = args[1];

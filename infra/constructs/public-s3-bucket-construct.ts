@@ -1,6 +1,5 @@
 import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
-import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Bucket, S3BucketConfig } from '@cdktf/provider-aws/lib/s3-bucket';
 import { S3BucketOwnershipControls } from '@cdktf/provider-aws/lib/s3-bucket-ownership-controls';
 import { S3BucketPolicy } from '@cdktf/provider-aws/lib/s3-bucket-policy';
@@ -9,22 +8,8 @@ import { Construct } from 'constructs';
 
 export class PublicS3Bucket extends S3Bucket {
   constructor(scope: Construct, name: string, props: S3BucketConfig) {
-    const clientProfile = process.env['AWS_CLIENT_PROFILE'] ?? process.env['AWS_PROFILE'];
-    const clientRoleArn = process.env['AWS_CLIENT_ROLE_ARN'];
-    const provider = new AwsProvider(scope, 'us-east-1-provider', {
-      profile: clientProfile,
-      alias: 'us-east-1-for-s3',
-      region: 'us-east-1',
-      assumeRole: [
-        {
-          roleArn: clientRoleArn,
-        },
-      ],
-    });
-
     super(scope, name, {
       ...props,
-      provider,
     });
 
     const callerId = new DataAwsCallerIdentity(this, 'caller-id', {

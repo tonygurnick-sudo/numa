@@ -1,7 +1,8 @@
 import { App } from 'cdktf';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { QAppsDeployerStack } from './stacks/q-apps-deployer-stack';
-import { NumaClientStack, listNumaClients } from './stacks/numa-client-stack';
+import { InputConfig, NumaClientStack } from './stacks/numa-client-stack';
+import { getClientConfig, listClients } from '@arcanumai/client-config';
 
 const override = process.env['CLIENT_OVERRIDE'];
 
@@ -24,10 +25,12 @@ if (override === undefined) {
   });
 }
 
-for (const clientName of override ? [override] : listNumaClients()) {
+for (const clientName of override ? [override] : await listClients()) {
+  const clientConfig = await getClientConfig<InputConfig>(clientName);
   new NumaClientStack(app, `numa-${clientName}`, {
     clientName,
     ...environmentConfig,
+    clientConfig,
   });
 }
 app.synth();

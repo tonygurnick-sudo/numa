@@ -2,8 +2,8 @@ import { GetServiceQuotaCommand, ServiceQuotas } from '@aws-sdk/client-service-q
 import { CaseDetails, DescribeCasesCommand, DescribeCasesCommandInput, Support } from '@aws-sdk/client-support';
 import fs from 'node:fs/promises';
 import { argv } from 'node:process';
-import clientConfigProd from '../clientConfigProd.json';
-import { AWSClientConfig, temporaryCredentials } from './utils';
+import { AWSClientConfig, BasicClientConfig, temporaryCredentials } from './utils';
+import { getClientConfig, listClients } from '@arcanumai/client-config';
 
 const args = argv.slice(2);
 const CLAUDE_QUOTA_CODE = 'L-254CACF4';
@@ -81,6 +81,7 @@ async function findBedrockCases(awsClientConfig: AWSClientConfig, clientName: st
 // Main functions
 async function checkClient(clientName: string, showDetails: boolean): Promise<ClientResult> {
   console.log(`\nChecking Bedrock quota and cases for ${clientName}...`);
+  const clientConfig = await getClientConfig<BasicClientConfig>(clientName);
 
   const result: ClientResult = {
     clientName,
@@ -91,11 +92,11 @@ async function checkClient(clientName: string, showDetails: boolean): Promise<Cl
     cases: [],
   };
 
-  const accountId = clientConfigProd[clientName].clientAccountId;
+  const accountId = clientConfig.clientAccountId;
   result.accountId = accountId;
   const awsClientConfig = {
     credentials: temporaryCredentials(accountId),
-    region: clientConfigProd[clientName].region,
+    region: clientConfig.region,
   };
 
   try {
@@ -138,7 +139,7 @@ async function checkClient(clientName: string, showDetails: boolean): Promise<Cl
 
 async function processAllClients(): Promise<ReportSummary> {
   const showDetails = args.includes('--details');
-  const clientNames = Object.keys(clientConfigProd);
+  const clientNames = await listClients();
 
   console.log(`Checking Bedrock quotas for ${clientNames.length} clients...`);
 
@@ -151,10 +152,11 @@ async function processAllClients(): Promise<ReportSummary> {
       results.push(result);
       if (result.error) errorCount++;
     } catch (error) {
+      const clientConfig = await getClientConfig<BasicClientConfig>(clientName);
       errorCount++;
       results.push({
         clientName,
-        accountId: clientConfigProd[clientName]?.clientAccountId || '',
+        accountId: clientConfig.clientAccountId || '',
         currentQuota: 0,
         requiredQuota: REQUIRED_QUOTA,
         sufficientQuota: '❌',
@@ -186,14 +188,15 @@ if (import.meta.filename === process?.argv[1]) {
 
   // If single client specified, run original behavior
   if (clientName && !args.includes('--all')) {
-    const accountId = clientConfigProd[clientName]?.clientAccountId;
+    const clientConfig = await getClientConfig<BasicClientConfig>(clientName);
+    const accountId = clientConfig.clientAccountId;
     if (!accountId) {
       console.error(`Client ${clientName} not found in configuration`);
       process.exit(1);
     }
 
     const awsClientConfig = {
-      region: clientConfigProd[clientName].region,
+      region: clientConfig.region,
       credentials: temporaryCredentials(accountId),
     };
     const showDetails = args.includes('--details');

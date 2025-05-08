@@ -4,8 +4,8 @@ import { parse } from 'csv-parse';
 import { createReadStream } from 'node:fs';
 import { argv, exit } from 'node:process';
 import { finished } from 'node:stream/promises';
-import clientConfigProd from '../clientConfigProd.json';
-import { AWSClientConfig, getQUserPool, temporaryCredentials } from './utils';
+import { AWSClientConfig, BasicClientConfig, getQUserPool, temporaryCredentials } from './utils';
+import { getClientConfig } from '@arcanumai/client-config';
 
 const inputFile = 'input.csv';
 
@@ -55,11 +55,11 @@ export async function deleteQUsers(awsClientConfig: AWSClientConfig, userPool: s
 
 (async (): Promise<void> => {
   const args = argv.slice(2);
-
-  const accountId = clientConfigProd[args[0]].clientAccountId;
+  const clientConfig = await getClientConfig<BasicClientConfig>(args[0]);
+  const accountId = clientConfig.clientAccountId;
   const awsClientConfig = {
     credentials: temporaryCredentials(accountId),
-    region: clientConfigProd[args[0]].region,
+    region: clientConfig.region,
   };
   const userPool = await getQUserPool(awsClientConfig);
   const dryRun = args[1] != 'live';

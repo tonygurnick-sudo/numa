@@ -7,8 +7,8 @@ import {
   StartDataSourceSyncJobCommand,
 } from '@aws-sdk/client-qbusiness';
 import { argv } from 'node:process';
-import clientConfigProd from '../clientConfigProd.json';
-import { AWSClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
+import { AWSClientConfig, BasicClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
+import { getClientConfig } from '@arcanumai/client-config';
 
 const args = argv.slice(2);
 
@@ -70,14 +70,11 @@ if (import.meta.filename === process?.argv[1]) {
   const showAll = args.includes('--all');
   const showSyncStatus = args.includes('--sync-status');
 
-  if (!clientConfigProd[clientName]) {
-    console.error(`Client ${clientName} not found in configuration`);
-    process.exit(1);
-  }
+  const clientConfig = await getClientConfig<BasicClientConfig>(clientName);
 
-  const accountId = clientConfigProd[clientName].clientAccountId;
+  const accountId = clientConfig.clientAccountId;
   const awsClientConfig = {
-    region: clientConfigProd[clientName].region,
+    region: clientConfig.region,
     credentials: temporaryCredentials(accountId),
   };
 
