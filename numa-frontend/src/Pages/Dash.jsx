@@ -123,9 +123,17 @@ export const Dash = ({ showFavorites }) => {
     localStorage.setItem('numaAppsSortOrder', order);
   };
 
+  const [isAnimating, setIsAnimating] = useState(false);
   const handlePageChange = (page) => {
+    setIsAnimating(true);
     setCurrentPage(page);
   };
+  useEffect(() => {
+    if (isAnimating) {
+      const timeout = setTimeout(() => setIsAnimating(false), 500);
+      return () => clearTimeout(timeout);
+    }
+  }, [isAnimating, currentPage]);
 
   const itemsPerPage = 12;
   const totalPages = Math.ceil(filteredApps.length / itemsPerPage);
@@ -166,6 +174,7 @@ export const Dash = ({ showFavorites }) => {
               initialCategories={activeCategories}
               initialSortOrder={sortOrder}
             />
+            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
 
             {error && (
               <Row>
@@ -180,7 +189,7 @@ export const Dash = ({ showFavorites }) => {
             {loading ? (
               <Preloader />
             ) : (
-              <Row className="g-4 w-100 mx-0">
+              <Row className={`g-4 w-100 mx-0${isAnimating ? ' fade-swipe-animating' : ''}`}>
                 {!error &&
                   Array.isArray(currentItems) &&
                   currentItems?.map((app) => (

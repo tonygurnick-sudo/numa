@@ -2208,44 +2208,6 @@ label {
     }
   }
 
-  .pagination {
-    .page-item {
-      .page-link {
-        border-color: #e9ecef;
-        color: var(--color-gray-700);
-        padding: 0.5rem 0.75rem;
-        min-width: 2.5rem;
-        text-align: center;
-
-        &:hover {
-          background-color: var(--color-gray-50);
-          border-color: #dee2e6;
-          color: var(--color-gray-900);
-        }
-
-        &:focus {
-          box-shadow: none;
-        }
-      }
-
-      &.active .page-link {
-        background-color: var(--color-primary);
-        border-color: var(--color-primary);
-        color: white;
-
-        &:hover {
-          background-color: var(--color-primary-hover);
-        }
-      }
-
-      &.disabled .page-link {
-        color: var(--color-gray-400);
-        background-color: #fff;
-        border-color: #e9ecef;
-      }
-    }
-  }
-
   .card-apps {
     .header-right {
       .favorite-button {
@@ -2307,6 +2269,70 @@ label {
     }
     100% {
       transform: scale(1);
+    }
+  }
+}
+
+@keyframes fade-swipe-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fade-swipe-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+.fade-swipe-animating {
+  animation: fade-swipe-in 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pagination {
+  .page-item {
+    .page-link {
+      border-color: #e9ecef;
+      color: var(--color-gray-700);
+      padding: 0.5rem 0.75rem;
+      min-width: 2.5rem;
+      text-align: center;
+
+      &:hover {
+        background-color: var(--color-gray-50);
+        border-color: #dee2e6;
+        color: var(--color-gray-900);
+      }
+
+      &:focus {
+        box-shadow: none;
+      }
+    }
+
+    &.active .page-link {
+      background-color: var(--color-primary) !important;
+      border-color: var(--color-primary);
+      color: white;
+
+      &:hover {
+        background-color: var(--color-primary-hover);
+      }
+    }
+
+    &.disabled .page-link {
+      color: var(--color-gray-400);
+      background-color: #fff;
+      border-color: #e9ecef;
     }
   }
 }
