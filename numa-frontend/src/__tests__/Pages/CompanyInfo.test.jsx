@@ -6,6 +6,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CompanyInfo } from '../../Pages/CompanyInfo';
 import { saveCompanyInfo, fetchCompanyInfo, getProfileText } from '../../utils/companyInfoUtils';
+import { MemoryRouter } from 'react-router-dom';
 
 // Mock the companyInfoUtils functions
 vi.mock('../../utils/companyInfoUtils', () => ({
@@ -82,7 +83,11 @@ describe('CompanyInfo Component', () => {
   });
 
   it('should render the component', () => {
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
     expect(screen.getByText('Company Info')).toBeInTheDocument();
     expect(screen.getByText('Edit Company Information')).toBeInTheDocument();
   });
@@ -90,13 +95,21 @@ describe('CompanyInfo Component', () => {
   it('should show loading spinner initially', () => {
     // Make fetchCompanyInfo never resolve to keep the loading state
     fetchCompanyInfo.mockImplementation(() => new Promise(() => {}));
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
     expect(screen.getByRole('status')).toBeInTheDocument();
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
   it('should have the correct page structure', () => {
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
     expect(
       screen.getByText('Enter your company information below. This will be used in chat interactions.'),
     ).toBeInTheDocument();
@@ -107,7 +120,11 @@ describe('CompanyInfo Component', () => {
 
   it('should call fetchCompanyInfo on mount', async () => {
     fetchCompanyInfo.mockResolvedValue(mockCompanyInfo);
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
     expect(fetchCompanyInfo).toHaveBeenCalled();
   });
 
@@ -120,7 +137,11 @@ describe('CompanyInfo Component', () => {
     // Make sure getProfileText returns the expected value
     getProfileText.mockImplementation(() => 'Test company profile');
 
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
 
     // Wait for the loading spinner to disappear and the textarea to appear
     const textarea = await waitFor(() => screen.getByRole('textbox'));
@@ -138,7 +159,11 @@ describe('CompanyInfo Component', () => {
     // Setup the mock to resolve with empty data
     fetchCompanyInfo.mockResolvedValue(mockEmptyCompanyInfo);
 
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
 
     // Wait for the alert to appear
     const alert = await waitFor(() =>
@@ -151,7 +176,11 @@ describe('CompanyInfo Component', () => {
     // Setup the mock to reject with an error
     fetchCompanyInfo.mockRejectedValue(new Error('Failed to load'));
 
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
 
     // Wait for the error alert to appear
     const errorAlert = await waitFor(() => screen.getByText('Error loading company information: Failed to load'));
@@ -162,7 +191,11 @@ describe('CompanyInfo Component', () => {
     // Setup the mock to resolve with data
     fetchCompanyInfo.mockResolvedValue(mockCompanyInfo);
 
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
 
     // Wait for the textarea to appear
     const textarea = await waitFor(() => screen.getByRole('textbox'));
@@ -179,7 +212,11 @@ describe('CompanyInfo Component', () => {
     fetchCompanyInfo.mockResolvedValue(mockCompanyInfo);
     saveCompanyInfo.mockResolvedValue('s3://test-bucket/company-data.json');
 
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
 
     // Wait for the textarea to appear
     await waitFor(() => screen.getByRole('textbox'));
@@ -207,7 +244,11 @@ describe('CompanyInfo Component', () => {
     });
     saveCompanyInfo.mockReturnValue(savePromise);
 
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
 
     // Wait for the textarea to appear
     await waitFor(() => screen.getByRole('textbox'));
@@ -233,7 +274,11 @@ describe('CompanyInfo Component', () => {
     fetchCompanyInfo.mockResolvedValue(mockCompanyInfo);
     saveCompanyInfo.mockRejectedValue(new Error('Failed to save'));
 
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
 
     // Wait for the textarea to appear
     await waitFor(() => screen.getByRole('textbox'));
@@ -251,7 +296,11 @@ describe('CompanyInfo Component', () => {
     // Setup the mock to resolve with empty data
     fetchCompanyInfo.mockResolvedValue(mockEmptyCompanyInfo);
 
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
 
     // Wait for the alert to appear
     await waitFor(() =>
@@ -274,7 +323,11 @@ describe('CompanyInfo Component', () => {
     // Setup the mock to resolve with data
     fetchCompanyInfo.mockResolvedValue(mockCompanyInfo);
 
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
 
     // Wait for the textarea to appear
     await waitFor(() => screen.getByRole('textbox'));
@@ -287,7 +340,11 @@ describe('CompanyInfo Component', () => {
     // Setup the mock to resolve with empty data
     fetchCompanyInfo.mockResolvedValue(mockEmptyCompanyInfo);
 
-    customRender(<CompanyInfo />);
+    customRender(
+      <MemoryRouter>
+        <CompanyInfo />
+      </MemoryRouter>,
+    );
 
     // Wait for the textarea to appear
     const textarea = await waitFor(() => screen.getByRole('textbox'));
