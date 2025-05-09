@@ -8,6 +8,7 @@ import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav as TopNav } from '../Components/Nav';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { FileUploader } from '../Components/FileUploader';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * Build a nested folder tree from S3 object keys.
@@ -206,6 +207,21 @@ export function S3Uploader() {
   const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
 
   const initialFetchDone = useRef(false);
+
+  const navigate = useNavigate();
+
+  function useNoChatGroup() {
+    const { user } = useAuth();
+    const groups = user?.decoded_tokens?.idToken?.['cognito:groups'] || [];
+    return Array.isArray(groups) ? groups.includes('no-chat') : false;
+  }
+
+  const noChat = useNoChatGroup();
+  useEffect(() => {
+    if (noChat && navigate) {
+      navigate('/dash', { replace: true });
+    }
+  }, [noChat, navigate]);
 
   /**
    * Fetch files from S3
@@ -522,6 +538,8 @@ export function S3Uploader() {
   const failedDocuments = useMemo(() => {
     return kbDocuments.filter((doc) => doc.error && Object.keys(doc.error).length > 0 && doc.error.errorMessage);
   }, [kbDocuments]);
+
+  if (noChat) return null;
 
   /**
    * Render the entire S3 Uploader page.
