@@ -24,22 +24,23 @@ import { Construct } from 'constructs';
 import * as path from 'node:path';
 import { AdjustToken } from './adjust-token-construct';
 import { CognitoEmailHandler } from './cognito-email-handler-construct';
-import { BoxConfiguration, BoxDataSource } from './data-sources/box-datasource-construct';
-import { S3Configuration, S3DataSource } from './data-sources/s3-datasource-construct';
-import { SharePointConfiguration, SharePointDataSource } from './data-sources/sharepoint-datasource-construct';
-import { TeamsConfiguration, TeamsDataSource } from './data-sources/teams-datasource-construct';
-import { WebConfiguration, WebDataSourceConstruct } from './data-sources/web-datasource-construct';
+import { BoxDataSource, boxDataSourcePropsSchema } from './data-sources/box-datasource-construct';
+import { S3DataSource, s3DataSourcePropsSchema } from './data-sources/s3-datasource-construct';
+import { SharePointDataSource, sharePointDataSourcePropsSchema } from './data-sources/sharepoint-datasource-construct';
+import { TeamsDataSource, teamsDataSourcePropsSchema } from './data-sources/teams-datasource-construct';
+import { webCrawlerDataSourcePropsSchema, WebDataSourceConstruct } from './data-sources/web-datasource-construct';
 import { NumaLambda } from './numa-lambda';
 import { NumaLogGroup } from './numa-log-group';
 import {
   QBusinessChatControlConfigurer,
-  QBusinessChatControlConfigurerProps,
+  qBusinessChatControlConfigurerPropsSchema,
 } from './q-business-chat-control-configurer-construct';
 import { SetCallbackUrl } from './set-callback-url-construct';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { ConfigBucket } from './config-bucket-construct';
+import { z } from 'zod';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -889,72 +890,48 @@ export class CoreNumaInfra extends Construct {
   }
 }
 
-interface WebCrawlerConfig {
-  url?: string;
-  siteMapFiles?: string[];
-  configuration?: WebConfiguration;
-}
+const _coreNumaInfraPropsSchema = z
+  .object({
+    environmentName: z.string(),
+    /**
+     * Enable iFrame support. Not supported on every account.
+     *
+     * @default false
+     */
+    enableIFrame: z.boolean().optional(),
+    indexType: z.union([z.literal('ENTERPRISE'), z.literal('STARTER')]).optional(),
+    indexUnits: z.number().optional(),
+    clientAccountId: z.string(),
+    loadSampleFile: z.boolean().optional(),
+    createServiceLinkedRole: z.boolean().optional(),
+    webCrawlerConfigs: z.array(webCrawlerDataSourcePropsSchema).optional(),
+    temporaryPasswordValidityDays: z.number().optional(),
+    passwordLength: z.number().optional(),
+    mfa: z.boolean().optional(),
+    sharePointConfigs: z.array(sharePointDataSourcePropsSchema).optional(),
+    boxConfigs: z.array(boxDataSourcePropsSchema).optional(),
+    teamsConfigs: z.array(teamsDataSourcePropsSchema).optional(),
+    s3Configs: z.array(s3DataSourcePropsSchema).optional(),
+    /**
+     * Various settings to make development easier:
+     *
+     * - add localhost CORS value to outputs bucket.
+     * - add localhost CORS value to data bucket.
+     *
+     * @default false
+     */
+    devInstance: z.boolean().optional(),
+  })
+  .strict();
 
-interface SharePointConfig {
-  tenantId: string;
-  domain: string;
-  siteUrls: string[];
-  configuration: SharePointConfiguration;
-}
-
-interface BoxConfig {
-  enterpriseId: string;
-  configuration?: BoxConfiguration;
-}
-
-interface TeamsConfig {
-  tenantId: string;
-  configuration?: TeamsConfiguration;
-}
-
-interface S3Config {
-  bucketName: string;
-  configuration?: S3Configuration;
-}
-
-export interface CoreNumaInfraProps
-  extends _CoreNumaInfraProps,
-    Omit<QBusinessChatControlConfigurerProps, 'applicationId' | 'accountId'> {}
-
-interface _CoreNumaInfraProps {
+export const coreNumaInfraPropsSchema = _coreNumaInfraPropsSchema.merge(
+  qBusinessChatControlConfigurerPropsSchema.omit({ applicationId: true, accountId: true }),
+);
+export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {
   clientName: string;
-  environmentName: string;
-  /**
-   * Enable iFrame support. Not supported on every account.
-   *
-   * @default false
-   */
-  enableIFrame?: boolean;
-  indexType?: 'ENTERPRISE' | 'STARTER';
-  indexUnits?: number;
+  domainName: string;
   /**
    * Provider for QBusiness resources.
    */
   qBusinessProvider?: AwsProvider;
-  domainName: string;
-  clientAccountId: string;
-  loadSampleFile?: boolean;
-  createServiceLinkedRole?: boolean;
-  webCrawlerConfigs?: WebCrawlerConfig[];
-  temporaryPasswordValidityDays?: number;
-  passwordLength?: number;
-  mfa?: boolean;
-  sharePointConfigs?: SharePointConfig[];
-  boxConfigs?: BoxConfig[];
-  teamsConfigs?: TeamsConfig[];
-  s3Configs?: S3Config[];
-  /**
-   * Various settings to make development easier:
-   *
-   * - add localhost CORS value to outputs bucket.
-   * - add localhost CORS value to data bucket.
-   *
-   * @default false
-   */
-  devInstance?: boolean;
-}
+};

@@ -1,19 +1,20 @@
 import { Construct } from 'constructs';
 import { TerraformOutput } from 'cdktf';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
-import { DataSourceProps, DataSource, RepositoryConfiguration } from './base-datasource-construct';
+import { DataSource, DataSourceProps, RepositoryConfiguration } from './base-datasource-construct';
+import { z } from 'zod';
 
-export interface BoxConfiguration {
-  enableDeletionProtection?: boolean;
-  deletionProtectionThreshold?: string;
-  crawlWebLinks?: boolean;
-  crawlTasks?: boolean;
-  crawlComments?: boolean;
-  maxFileSizeInMegaBytes?: string;
-  inclusionPatterns?: string[];
-  exclusionPatterns?: string[];
-  folderIDs?: string[];
-}
+export const boxConfigurationSchema = z.object({
+  enableDeletionProtection: z.boolean().optional(),
+  deletionProtectionThreshold: z.string().optional(),
+  crawlWebLinks: z.boolean().optional(),
+  crawlTasks: z.boolean().optional(),
+  crawlComments: z.boolean().optional(),
+  maxFileSizeInMegaBytes: z.string().optional(),
+  inclusionPatterns: z.array(z.string()).optional(),
+  exclusionPatterns: z.array(z.string()).optional(),
+  folderIDs: z.array(z.string()).optional(),
+});
 
 const repositoryConfigurations: Record<string, RepositoryConfiguration> = {
   comment: {
@@ -161,13 +162,14 @@ export class BoxDataSource extends DataSource {
   }
 }
 
-export interface BoxDataSourceProps extends DataSourceProps {
+export const boxDataSourcePropsSchema = z.object({
   /**
    * Box configuration.
    */
-  configuration?: BoxConfiguration;
+  configuration: boxConfigurationSchema.optional(),
   /**
    * Box Enterprise ID.
    */
-  enterpriseId: string;
-}
+  enterpriseId: z.string(),
+});
+export type BoxDataSourceProps = z.infer<typeof boxDataSourcePropsSchema> & DataSourceProps;

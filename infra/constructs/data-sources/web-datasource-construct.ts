@@ -1,25 +1,31 @@
 import { Construct } from 'constructs';
-import { DataSourceProps, DataSource, Schedule, RepositoryConfiguration } from './base-datasource-construct';
+import { DataSource, RepositoryConfiguration, scheduleSchema, DataSourceProps } from './base-datasource-construct';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import path from 'path';
 import * as fs from 'fs';
 import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
+import { z } from 'zod';
 
-export interface WebConfiguration {
-  crawlAllDomain?: boolean;
-  crawlAttachments?: boolean;
-  crawlDepth?: string;
-  crawlSubDomain?: boolean;
-  honorRobots?: boolean;
-  maxFileSize?: string;
-  maxLinksPerUrl?: string;
-  rateLimit?: string;
+export const webConfigurationSchema = z.object({
+  crawlAllDomain: z.boolean().optional(),
+  crawlAttachments: z.boolean().optional(),
+  crawlDepth: z
+    .number()
+    .int()
+    .positive()
+    .transform((val) => val.toString())
+    .optional(),
+  crawlSubDomain: z.boolean().optional(),
+  honorRobots: z.boolean().optional(),
+  maxFileSize: z.string().optional(),
+  maxLinksPerUrl: z.string().optional(),
+  rateLimit: z.string().optional(),
   /**
    * Schedule for data source synchronization.
    * @default 'weekly'
    */
-  schedule?: Schedule;
-}
+  schedule: scheduleSchema.optional(),
+});
 
 const defaultAdditionalProperties = {
   crawlAllDomain: false,
@@ -142,7 +148,7 @@ export class WebDataSourceConstruct extends DataSource {
       indexId: props.indexId,
       displayName: props.displayName,
       region: props.region,
-      schedule: props.configuration.schedule ?? 'weekly',
+      schedule: props.configuration?.schedule ?? 'weekly',
       dataSourceType: 'WEBCRAWLERV2',
       dataSourceRoleArn: props.dataSourceRoleArn,
       dataSourceConfiguration: {
@@ -160,21 +166,15 @@ export class WebDataSourceConstruct extends DataSource {
   }
 }
 
-interface WebDataSourceConstructProps extends DataSourceProps {
-  /**
-   * Web crawler configuration.
-   */
-  configuration: WebConfiguration;
-  /**
-   * URL to crawl.
-   */
-  url?: string;
-  /**
-   * List of paths to sitemap files to use.
-   */
-  siteMapFiles?: string[];
-  /**
-   * Bucket for storing sitemap files.
-   */
-  siteMapBucket: S3Bucket;
-}
+export const webCrawlerDataSourcePropsSchema = z.object({
+  url: z.string().optional(),
+  siteMapFiles: z.array(z.string()).optional(),
+  configuration: webConfigurationSchema.optional(),
+});
+export type WebDataSourceConstructProps = z.infer<typeof webCrawlerDataSourcePropsSchema> &
+  DataSourceProps & {
+    /**
+     * The bucket to store the sitemap file in.
+     */
+    siteMapBucket: S3Bucket;
+  };

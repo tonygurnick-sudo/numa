@@ -1,13 +1,14 @@
 import { Construct } from 'constructs';
-import { DataSourceProps, DataSource, Schedule, RepositoryConfiguration } from './base-datasource-construct';
+import { DataSource, RepositoryConfiguration, scheduleSchema, DataSourceProps } from './base-datasource-construct';
+import { z } from 'zod';
 
-export interface S3Configuration {
+export const s3ConfigurationSchema = z.object({
   /**
    * Schedule for data source synchronization.
    * @default 'hourly'
    */
-  schedule?: Schedule;
-}
+  schedule: scheduleSchema.optional(),
+});
 
 const repositoryConfigurations: Record<string, RepositoryConfiguration> = {
   document: {
@@ -53,13 +54,14 @@ export class S3DataSource extends DataSource {
   }
 }
 
-export interface S3DataSourceProps extends DataSourceProps {
+export const s3DataSourcePropsSchema = z.object({
   /**
    * S3 configuration.
    */
-  configuration?: S3Configuration;
+  configuration: s3ConfigurationSchema.optional(),
   /**
    * Name of the bucket to retrieve from.
    */
-  bucketName: string;
-}
+  bucketName: z.string(),
+});
+export type S3DataSourceProps = z.infer<typeof s3DataSourcePropsSchema> & DataSourceProps;

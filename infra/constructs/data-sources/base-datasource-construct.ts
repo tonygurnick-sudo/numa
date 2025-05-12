@@ -1,7 +1,31 @@
 import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
 import { Construct } from 'constructs';
+import { z } from 'zod';
 
-export type Schedule = 'hourly' | 'daily' | 'weekly' | string;
+export const scheduleSchema = z.union([z.literal('hourly'), z.literal('daily'), z.literal('weekly'), z.string()]);
+export type Schedule = z.infer<typeof scheduleSchema>;
+
+const dateFieldMappingSchema = z.object({
+  dateFieldFormat: z.string(),
+  indexFieldType: z.literal('DATE'),
+});
+
+const otherFieldMappingSchema = z.object({
+  indexFieldType: z.union([z.literal('STRING'), z.literal('STRING_LIST'), z.literal('LONG')]),
+});
+
+const fieldMappingSchema = z.union([dateFieldMappingSchema, otherFieldMappingSchema]).and(
+  z.object({
+    indexFieldName: z.string(),
+    dataSourceFieldName: z.string(),
+  }),
+);
+export type FieldMapping = z.infer<typeof fieldMappingSchema>;
+
+export const repositoryConfigurationSchema = z.object({
+  fieldMappings: z.array(fieldMappingSchema),
+});
+export type RepositoryConfiguration = z.infer<typeof repositoryConfigurationSchema>;
 
 interface BaseDataSourceProps {
   /**
@@ -53,24 +77,6 @@ export type DataSourceProps = Omit<
   BaseDataSourceProps,
   'dataSourceType' | 'dataSourceConfiguration' | 'repositoryConfigurations'
 >;
-
-export interface RepositoryConfiguration {
-  fieldMappings: FieldMapping[];
-}
-
-type FieldMapping = (DateFieldMapping | OtherFieldMapping) & {
-  indexFieldName: string;
-  dataSourceFieldName: string;
-};
-
-interface DateFieldMapping {
-  dateFieldFormat: string;
-  indexFieldType: 'DATE';
-}
-
-interface OtherFieldMapping {
-  indexFieldType: 'STRING' | 'STRING_LIST' | 'LONG';
-}
 
 export abstract class DataSource extends Construct {
   constructor(scope: Construct, name: string, props: BaseDataSourceProps) {

@@ -19,6 +19,7 @@ import {
 } from '../api-gateway-lambda-collection';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { NumaLogGroup } from '../numa-log-group';
+import { z } from 'zod';
 
 export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   abstract readonly manifest: NumaAppManifest;
@@ -483,11 +484,12 @@ export interface AddStepFunctionProps {
   urlPath: string;
 }
 
-export interface UserConfigurableBaseNumaAppProps {
-  enableJobs?: boolean; // Optional flag to enable jobs functionality
-  urlPathPrefix?: string;
-  s3KeyPrefix?: string;
-}
+export const userConfigurableBaseNumaAppPropsSchema = z.object({
+  enableJobs: z.boolean().optional(),
+  urlPathPrefix: z.string().optional(),
+  s3KeyPrefix: z.string().optional(),
+});
+export type UserConfigurableBaseNumaAppProps = z.infer<typeof userConfigurableBaseNumaAppPropsSchema>;
 
 export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiGatewayLambdaCollectionProps {
   clientName: string;
