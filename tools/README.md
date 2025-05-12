@@ -216,3 +216,138 @@ AWS_PROFILE=arcanum-q-deployer-prod yarn check-email-cases <client-name> --fix
 # Check and fix emails for all dev instances
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-email-cases --all --dev --fix
 ```
+
+### retrieve-config and write-config
+
+Read and write config.
+
+#### Editing on disk
+
+The typical workflow is to retrieve the config and write it to a file. The file can then be edited before writing it back.
+
+```bash
+$ yarn retrieve-config dave-test | tee dave-test.json
+{
+  "clientAccountId": "905418183804",
+  "createServiceLinkedRole": false,
+  "devInstance": true,
+  "region": "us-east-1",
+  "apps": {
+    "meeting-analyser": {}
+  }
+}
+# Edit and save the JSON to add policy-analyser
+$ yarn write-config dave-test dave-test.json
+Differences: [
+  {
+    "type": "UPDATE",
+    "key": "apps",
+    "changes": [
+      {
+        "type": "ADD",
+        "key": "policy-analyser",
+        "value": {}
+      }
+    ]
+  }
+]
+Approve changes? [y/N] y
+Changes approved.
+Writing new config...
+Successfully wrote client config for dave-test:
+{
+  "clientAccountId": "905418183804",
+  "createServiceLinkedRole": false,
+  "devInstance": true,
+  "region": "us-east-1",
+  "apps": {
+    "meeting-analyser": {},
+    "policy-analyser": {}
+  }
+}
+```
+
+#### retrieve-config
+
+Retrieves config from clientConfigProd.json if available, else DynamoDB. Prints to stdout.
+
+```bash
+yarn retrieve-config dave-test
+{
+  "clientAccountId": "905418183804",
+  "createServiceLinkedRole": false,
+  "devInstance": true,
+  "region": "us-east-1",
+  "apps": {
+    "meeting-analyser": {}
+  }
+}
+```
+
+#### write-config
+
+Takes config from a file and writes to DynamoDB.
+
+```bash
+$ cat dave-test.json
+{
+  "clientAccountId": "905418183804",
+  "createServiceLinkedRole": false,
+  "devInstance": true,
+  "region": "us-east-1",
+  "apps": {
+    "meeting-analyser": {}
+  }
+}
+$ yarn write-config arcanum-dave dave-test.json
+Differences: [
+  {
+    "type": "UPDATE",
+    "key": "apps",
+    "changes": [
+      {
+        "type": "REMOVE",
+        "key": "policy-drafter",
+        "value": {}
+      }
+    ]
+  }
+]
+Approve changes? [y/N] y
+Changes approved.
+Writing new config...
+Successfully wrote client config for arcanum-dave:
+{
+  "clientAccountId": "905418183804",
+  "createServiceLinkedRole": false,
+  "devInstance": true,
+  "region": "us-east-1",
+  "apps": {
+    "meeting-analyser": {}
+  }
+}
+```
+
+Attempting to write configs that don't validate correctly will produce an error:
+
+```bash
+$ cat dave-test.json
+{
+  "clientAccountId": "905418183804",
+  "createServiceLinkedRole": false,
+  "devInstance": true,
+  "region": "us-east-1",
+  "apps": {
+    "meeting-analyser": {}
+  },
+  "a-random-entry": {}
+}
+$ yarn write-config arcanum-dave dave-test.json
+[
+  {
+    code: 'unrecognized_keys',
+    keys: [ 'a-random-entry' ],
+    path: [],
+    message: "Unrecognized key(s) in object: 'a-random-entry'"
+  }
+```
