@@ -153,14 +153,6 @@ async function createQUser(
       }
     }
   }
-  await client.send(
-    new AdminSetUserPasswordCommand({
-      UserPoolId: userPool,
-      Username: userDetails.email,
-      Password: userDetails.password,
-      Permanent: false,
-    }),
-  );
 }
 
 async function activateQLicence(qUrl, username: string, password: string): Promise<void> {
