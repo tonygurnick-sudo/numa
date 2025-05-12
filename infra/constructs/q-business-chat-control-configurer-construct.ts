@@ -8,6 +8,7 @@ import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
+import { z } from 'zod';
 
 export class QBusinessChatControlConfigurer extends Construct {
   constructor(scope: Construct, name: string, props: QBusinessChatControlConfigurerProps) {
@@ -84,23 +85,24 @@ export class QBusinessChatControlConfigurer extends Construct {
   }
 }
 
-export interface QBusinessChatControlConfigurerProps {
+export const qBusinessChatControlConfigurerPropsSchema = z.object({
   /**
    * The ID of the Q Application.
    */
-  applicationId: string;
+  applicationId: z.string(),
   /**
    * Enable "Allow end users to send queries directly to the LLM" setting
    *
    * @default true
    */
-  enableDirectLLMAccess?: boolean;
+  enableDirectLLMAccess: z.boolean().optional(),
   /**
    * Enable "Allow Amazon Q to fall back to LLM knowledge" setting
    *
    * @default true
    */
-  enableLLMKnowledgeFallback?: boolean;
-  region: string;
-  accountId: string;
-}
+  enableLLMKnowledgeFallback: z.boolean().optional(),
+  region: z.string(),
+  accountId: z.string(),
+});
+export type QBusinessChatControlConfigurerProps = z.infer<typeof qBusinessChatControlConfigurerPropsSchema>;

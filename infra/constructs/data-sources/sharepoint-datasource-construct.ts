@@ -1,32 +1,33 @@
 import { Construct } from 'constructs';
 import { TerraformOutput } from 'cdktf';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
-import { DataSourceProps, DataSource, Schedule } from './base-datasource-construct';
+import { DataSource, scheduleSchema, DataSourceProps } from './base-datasource-construct';
 import { RepositoryConfiguration } from './base-datasource-construct';
+import { z } from 'zod';
 
-export interface SharePointConfiguration {
-  enableDeletionProtection?: boolean;
-  deletionProtectionThreshold?: string;
-  crawlListData?: boolean;
-  crawlComments?: boolean;
-  crawlPages?: boolean;
-  crawlFiles?: boolean;
-  crawlEvents?: boolean;
-  crawlLinks?: boolean;
-  crawlAttachment?: boolean;
-  maxFileSizeInMegaBytes?: string;
-  inclusionFileTypePatterns?: string[];
-  exclusionFileTypePatterns?: string[];
-  inclusionFileNamePatterns?: string[];
-  exclusionFileNamePatterns?: string[];
-  inclusionFilePath?: string[];
-  exclusionFilePath?: string[];
-  linkTitleFilterRegEx?: string[];
-  pageTitleFilterRegEx?: string[];
-  eventTitleFilterRegEx?: string[];
-  crawlAcl?: boolean;
-  schedule?: Schedule;
-}
+export const sharePointConfigurationSchema = z.object({
+  enableDeletionProtection: z.boolean().optional(),
+  deletionProtectionThreshold: z.string().optional(),
+  crawlListData: z.boolean().optional(),
+  crawlComments: z.boolean().optional(),
+  crawlPages: z.boolean().optional(),
+  crawlFiles: z.boolean().optional(),
+  crawlEvents: z.boolean().optional(),
+  crawlLinks: z.boolean().optional(),
+  crawlAttachment: z.boolean().optional(),
+  maxFileSizeInMegaBytes: z.string().optional(),
+  inclusionFileTypePatterns: z.array(z.string()).optional(),
+  exclusionFileTypePatterns: z.array(z.string()).optional(),
+  inclusionFileNamePatterns: z.array(z.string()).optional(),
+  exclusionFileNamePatterns: z.array(z.string()).optional(),
+  inclusionFilePath: z.array(z.string()).optional(),
+  exclusionFilePath: z.array(z.string()).optional(),
+  linkTitleFilterRegEx: z.array(z.string()).optional(),
+  pageTitleFilterRegEx: z.array(z.string()).optional(),
+  eventTitleFilterRegEx: z.array(z.string()).optional(),
+  crawlAcl: z.boolean().optional(),
+  schedule: scheduleSchema.optional(),
+});
 
 const repositoryConfigurations: Record<string, RepositoryConfiguration> = {
   link: {
@@ -276,21 +277,22 @@ export class SharePointDataSource extends DataSource {
   }
 }
 
-export interface SharePointDataSourceProps extends DataSourceProps {
+export const sharePointDataSourcePropsSchema = z.object({
   /**
    * SharePoint configuration.
    */
-  configuration?: SharePointConfiguration;
+  configuration: sharePointConfigurationSchema.optional(),
   /**
    * Sharepoint Domain.
    */
-  domain: string;
+  domain: z.string(),
   /**
    * Host URLs of the SharePoint account.
    */
-  siteUrls: string[];
+  siteUrls: z.array(z.string()),
   /**
    * Sharepoint Tenant ID.
    */
-  tenantId: string;
-}
+  tenantId: z.string(),
+});
+export type SharePointDataSourceProps = z.infer<typeof sharePointDataSourcePropsSchema> & DataSourceProps;

@@ -1,35 +1,36 @@
 import { Construct } from 'constructs';
 import { TerraformOutput } from 'cdktf';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
-import { DataSourceProps, DataSource, RepositoryConfiguration } from './base-datasource-construct';
+import { DataSource, RepositoryConfiguration, DataSourceProps } from './base-datasource-construct';
+import { z } from 'zod';
 
-export interface TeamsConfiguration {
-  enableDeletionProtection?: boolean;
-  deletionProtectionThreshold?: string;
-  isCrawlAcl?: boolean;
-  isCrawlChatMessage?: boolean;
-  isCrawlChatAttachment?: boolean;
-  isCrawlChannelPost?: boolean;
-  isCrawlChannelAttachment?: boolean;
-  isCrawlChannelWiki?: boolean;
-  isCrawlCalendarMeeting?: boolean;
-  isCrawlMeetingChat?: boolean;
-  isCrawlMeetingFile?: boolean;
-  isCrawlMeetingNote?: boolean;
-  maxFileSizeInMegaBytes?: string;
-  inclusionTeamNameFilter?: string[];
-  exclusionTeamNameFilter?: string[];
-  inclusionChannelNameFilter?: string[];
-  exclusionChannelNameFilter?: string[];
-  inclusionFileNamePatterns?: string[];
-  exclusionFileNamePatterns?: string[];
-  inclusionFileTypePatterns?: string[];
-  exclusionFileTypePatterns?: string[];
-  inclusionUserEmailFilter?: string[];
-  startCalendarDateTime?: string;
+export const teamsConfigurationSchema = z.object({
+  enableDeletionProtection: z.boolean().optional(),
+  deletionProtectionThreshold: z.string().optional(),
+  isCrawlAcl: z.boolean().optional(),
+  isCrawlChatMessage: z.boolean().optional(),
+  isCrawlChatAttachment: z.boolean().optional(),
+  isCrawlChannelPost: z.boolean().optional(),
+  isCrawlChannelAttachment: z.boolean().optional(),
+  isCrawlChannelWiki: z.boolean().optional(),
+  isCrawlCalendarMeeting: z.boolean().optional(),
+  isCrawlMeetingChat: z.boolean().optional(),
+  isCrawlMeetingFile: z.boolean().optional(),
+  isCrawlMeetingNote: z.boolean().optional(),
+  maxFileSizeInMegaBytes: z.string().optional(),
+  inclusionTeamNameFilter: z.array(z.string()).optional(),
+  exclusionTeamNameFilter: z.array(z.string()).optional(),
+  inclusionChannelNameFilter: z.array(z.string()).optional(),
+  exclusionChannelNameFilter: z.array(z.string()).optional(),
+  inclusionFileNamePatterns: z.array(z.string()).optional(),
+  exclusionFileNamePatterns: z.array(z.string()).optional(),
+  inclusionFileTypePatterns: z.array(z.string()).optional(),
+  exclusionFileTypePatterns: z.array(z.string()).optional(),
+  inclusionUserEmailFilter: z.array(z.string()).optional(),
+  startCalendarDateTime: z.string().optional(),
   // endCalendarDateTime?: string;  NOTE: Wondering if it creates it up to the current date if we don't include this.
-  paymentModel?: string;
-}
+  paymentModel: z.string().optional(),
+});
 
 const repositoryConfigurations: Record<string, RepositoryConfiguration> = {
   chatMessage: {
@@ -367,13 +368,14 @@ export class TeamsDataSource extends DataSource {
   }
 }
 
-export interface TeamsDataSourceProps extends DataSourceProps {
+export const teamsDataSourcePropsSchema = z.object({
   /**
    * Teams configuration.
    */
-  configuration?: TeamsConfiguration;
+  configuration: teamsConfigurationSchema.optional(),
   /**
    * Teams Tenant ID.
    */
-  tenantId: string;
-}
+  tenantId: z.string(),
+});
+export type TeamsDataSourceProps = z.infer<typeof teamsDataSourcePropsSchema> & DataSourceProps;

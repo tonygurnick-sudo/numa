@@ -11,6 +11,7 @@ import {
   BaseNumaAppProps,
   BaseNumaAppType,
   UserConfigurableBaseNumaAppProps,
+  userConfigurableBaseNumaAppPropsSchema,
 } from '../constructs/apps/base-numa-app-construct';
 import { CandidateScreening } from '../constructs/apps/candidate-screening-construct';
 import { CompanyProfile } from '../constructs/apps/company-profile-construct';
@@ -27,12 +28,13 @@ import { PolicyDrafter } from '../constructs/apps/policy-drafter-construct';
 import { PolicyReviewer } from '../constructs/apps/policy-reviewer-construct';
 import { ProcurementRfpAssessment } from '../constructs/apps/procurement-rfp-assessment-construct';
 import { RfpResponseComparison } from '../constructs/apps/rfp-response-comparison-construct';
-import { CoreNumaInfra, CoreNumaInfraProps } from '../constructs/core-numa-infra-construct';
+import { CoreNumaInfra, coreNumaInfraPropsSchema } from '../constructs/core-numa-infra-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import { Honeycomb } from '../constructs/honeycomb-construct';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
+import { z } from 'zod';
 
 export class NumaClientStack extends TerraformStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -250,46 +252,54 @@ export class NumaClientStack extends TerraformStack {
   }
 }
 
-export interface ClientConfig extends Omit<CoreNumaInfraProps, 'environmentName'> {
-  /**
-   * AWS region to deploy resources to.
-   * This is the primary region for all resources except those that must be in specific regions.
-   */
-  region: string;
-  customDomain?: string;
-  /**
-   * Whether this is a development instance that should include dev-only apps
-   *
-   * @default false
-   */
-  devInstance?: boolean;
-  /**
-   * Region to use for QBusiness resources.
-   * Currently QBusiness is only available in us-east-1, but will be available in other regions in the future.
-   *
-   * @default 'us-east-1'
-   */
-  qBusinessRegion?: string;
-  /**
-   * Whether to deploy all apps to to the environment.
-   *
-   * @default false
-   */
-  allApps?: boolean;
-  /**
-   * Whether to deploy all production apps to to the environment.
-   *
-   * @default false
-   */
-  allProdApps?: boolean;
-  /**
-   * Object of apps and configs to deploy to the environment.
-   *
-   * @default {}
-   */
-  apps?: Record<string, UserConfigurableBaseNumaAppProps>;
-}
-export type InputConfig = Omit<ClientConfig, 'clientName' | 'domainName'>;
+export const clientConfigSchema = coreNumaInfraPropsSchema
+  .omit({
+    environmentName: true,
+  })
+  .merge(
+    z
+      .object({
+        /**
+         * AWS region to deploy resources to.
+         * This is the primary region for all resources except those that must be in specific regions.
+         */
+        region: z.string(),
+        customDomain: z.string().optional(),
+        /**
+         * Whether this is a development instance that should include dev-only apps
+         *
+         * @default false
+         */
+        devInstance: z.boolean().optional(),
+        /**
+         * Region to use for QBusiness resources.
+         * Currently QBusiness is only available in us-east-1, but will be available in other regions in the future.
+         *
+         * @default 'us-east-1'
+         */
+        qBusinessRegion: z.string().optional(),
+        /**
+         * Whether to deploy all apps to to the environment.
+         *
+         * @default false
+         */
+        allApps: z.boolean().optional(),
+        /**
+         * Whether to deploy all production apps to to the environment.
+         *
+         * @default false
+         */
+        allProdApps: z.boolean().optional(),
+        /**
+         * Object of apps and configs to deploy to the environment.
+         *
+         * @default {}
+         */
+        apps: z.record(userConfigurableBaseNumaAppPropsSchema).optional(),
+      })
+      .strict(),
+  );
+export type ClientConfig = z.infer<typeof clientConfigSchema>;
 
 export interface NumaClientStackProps {
   clientName: string;
@@ -297,7 +307,7 @@ export interface NumaClientStackProps {
   domainSuffix: string;
   hostedZone: string;
   arcanumNumaAccount: string;
-  clientConfig: InputConfig;
+  clientConfig: ClientConfig;
 }
 
 export interface AppDefinition {
