@@ -43,7 +43,6 @@ variables:
         - lambdas/node/token-adjuster
         - lib/client-config-node
         - numa-management
-        - tools
 
 .python-lambdas-matrix:
   matrix:
@@ -114,6 +113,14 @@ client-list-lint:
     - !reference [.yarn, install]
     - yarn exec cdktf get
 
+.node-job-tools-overrides: &node-job-tools-overrides
+  image: registry.gitlab.com/arcanumai/ci/cdktf:latest
+  variables:
+    BUILD_DIR: tools
+  before_script:
+    - !reference [.node_job, before_script]
+    - (cd ../infra && yarn exec cdktf get)
+
 infra-lint:
   extends: .node-lint
   <<: *node-job-infra-overrides
@@ -163,8 +170,18 @@ python-lambdas-test:
 
 node-lint:
   extends: .node-lint
+  image: registry.gitlab.com/arcanumai/ci/cdktf:latest
   script:
+    - yarn workspace @arcanumai/q-apps-deployer-infra run get
     - yarn workspaces foreach --parallel --all --exclude infra run lint
+
+tools-test:
+  extends: .node-test
+  <<: *node-job-tools-overrides
+
+tools-build:
+  extends: .node-build
+  <<: *node-job-tools-overrides
 
 node-test:
   extends: .node-test

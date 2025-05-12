@@ -63,7 +63,7 @@ export async function getClientConfig<ClientConfig>(clientName: string, schema?:
   return schema.parse(config);
 }
 
-async function getClientConfigFromDynamo<ClientConfig>(clientName: string): Promise<ClientConfig | undefined> {
+export async function getClientConfigFromDynamo<ClientConfig>(clientName: string): Promise<ClientConfig | undefined> {
   const ddbdc = getDocument();
   const result = await ddbdc.get({
     TableName,
