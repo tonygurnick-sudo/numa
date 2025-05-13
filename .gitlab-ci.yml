@@ -241,6 +241,7 @@ node-package:
   variables:
     TF_ENVIRONMENT: prod
     AWS_REGION: us-east-1
+    CLIENT_OVERRIDE: $CLIENT_NAME
   script:
     - yarn exec cdktf deploy --auto-approve numa-${CLIENT_NAME}
   needs:
