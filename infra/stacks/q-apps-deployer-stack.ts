@@ -40,6 +40,7 @@ export class QAppsDeployerStack extends ArcanumStack {
       pointInTimeRecovery: {
         enabled: true,
       },
+      deletionProtectionEnabled: true,
       lifecycle: {
         preventDestroy: true,
       },
