@@ -282,3 +282,14 @@ deploy-to-client:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: manual
+
+deploy-to-client-custom:
+  extends: .deploy-infra
+  stage: deploy:customer
+  variables:
+    CLIENT_NAME:
+  environment:
+    deployment_tier: production
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
