@@ -311,7 +311,7 @@ export const NumaAppProvider = ({ children }) => {
       const { status, result } = await pollJobStatus({
         jobID: response.job_id,
         pollInterval: 10000,
-        maxPollingTime: 10 * 60 * 1000, // 10 minutes
+        maxPollingTime: 30 * 60 * 1000, // 30 minutes
       });
 
       if (status === 'completed' && result) {
@@ -321,7 +321,9 @@ export const NumaAppProvider = ({ children }) => {
         return currentResults;
       }
 
-      throw new Error('The process exceeded the 10-minute timeout limit. Please try again.');
+      throw new Error(
+        'The process exceeded the 30-minute timeout limit. Please check again later via the job history tab.',
+      );
     } catch (error) {
       // Log the technical error for debugging
       console.error('HTTP Request task error:', error);
