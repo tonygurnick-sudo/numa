@@ -28,6 +28,11 @@ aws-lambda-powertools = "3.9.0"
 bedrock = {path = "../../../lib/bedrock", develop = true}
 helpers = {path = "../../../lib/helpers", develop = true}
 s3_helpers = {path = "../../../lib/s3_helpers", develop = true}
+requests = "^2.31.0"
+pdfminer-six = "^20231228"
+beautifulsoup4 = "^4.12.3"
+lxml = "^5.1.0"
+types-requests = "^2.31.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.15.0"
