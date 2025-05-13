@@ -1,4 +1,4 @@
-import '../assets/css/Preloader.scss';
+import '../assets/styles/Preloader.scss';
 
 const Preloader = ({ smallscreen, overlayParent }) => {
   return (

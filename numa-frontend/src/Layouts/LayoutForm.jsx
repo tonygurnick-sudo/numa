@@ -21,8 +21,8 @@ const LayoutForm = ({ FormName, Content }) => {
                 </div>
                 {Content}
               </Col>
+              <footer className="public-footer">&copy; ARCANUM {new Date().getFullYear()}</footer>
             </Row>
-            <footer>&copy; ARCANUM {new Date().getFullYear()}</footer>
           </Col>
 
           <Col lg={6} className={`${FormName}-right`}>

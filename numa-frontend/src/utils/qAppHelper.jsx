@@ -1,4 +1,4 @@
-import exampleItem from './Data/Meeting_Tools_Q_App_v27.json';
+import exampleItem from '../Data/Meeting_Tools_Q_App_v27.json';
 import {
   CreateQAppCommand,
   CreateLibraryItemCommand,
