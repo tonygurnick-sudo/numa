@@ -1,132 +1,227 @@
-INITIAL_ANALYSIS_PROMPT = """You are an expert in understanding policy documents and in conducting an initial analysis to determine the context of a document.
+POLICY_REVIEW_PROMPT = """You are a senior legal and policy expert with extensive experience in regulatory compliance, policy development, and legislative interpretation. Your task is to review a policy document for LEGISLATION COMPLIANCE ONLY and provide CLEAR, VISUALLY STRUCTURED feedback.
 
-Here is a policy document uploaded by our user:
+Here is a policy document to review:
 {policy_content}
 
-Based on the keywords, structure, content, and additional context provided here:
-{policy_context}
-
-## Markdown Formatting Guidelines:
-- Use `# Title` for the document title
-- Use `## Classification` for the classification section
-- Use `## Description` for the description section
-- Use `## Considerations for Review` for the considerations section
-- Use bullet points with `-` for listing multiple items under each section
-
-Please analyse the document and return the following in markdown format:
-- Title
-- Classification
-- Description
-- Considerations for review
-
-Do not include any introductory text like 'Here's the analysis of the document in markdown format' - start directly with the markdown content.
-"""
-
-POLICY_REVIEW_PROMPT = """You are an expert in reviewing policy documents.
-
-Here is a policy document:
-{policy_content}
-
-Our team has also provided the following for your consideration when reviewing the document:
-Classification and description:
-{initial_analysis}
-
-Review the policy document and provide a detailed analysis and recommendations in markdown format.
-
-## Markdown Formatting Guidelines:
-- Use `# Policy Review` as the main title
-- Use `## Analysis` for the analysis section
-- Use `### Key Points and Objectives` for the first analysis subsection
-- Use `### Clarity and Comprehensiveness` for the second analysis subsection
-- Use `### Gaps and Areas for Improvement` for the third analysis subsection
-- Use `## Recommendations` for the recommendations section
-- Use `## Legislative Compliance and Recommendations` for the legislative section (if applicable)
-- Use bullet points with `-` for listing multiple items under each section
-- Use blockquotes with `>` for referencing specific policy text
-- Use **bold** for emphasis on important points
-
-Your review should cover:
-
-## Analysis:
-1. A summary of the key points and objectives of the policy
-2. An evaluation of the clarity, comprehensiveness, and enforceability of the policy
-3. Identification of any potential gaps, ambiguities, or areas that need improvement
-
-## Recommendations:
-A list of specific recommendations for enhancing or revising the policy to make it more effective
-
-## Legislative Compliance and Recommendations (if applicable):
-The user may have also uploaded relevant legislation to review alongside the policy:
+Here is the relevant legislation to review alongside the policy:
 {legislation_content}
 
-If legislation is provided, please review the policy document and give feedback on:
-- Compliance: Does the policy comply with all relevant legal obligations and legislative requirements?
-- Recommendations: Are there any suggestions for improving or strengthening the policy to ensure legal compliance?
+Here is the policy context provided by the user:
+{initial_analysis}
 
-Please highlight specific sections of the policy document where necessary. If no legislation is provided to review against the policy, state 'Not Applicable'.
+# REVIEW INSTRUCTIONS
 
-Do not include any introductory text like 'Here's the analysis of the document in markdown format' - start directly with the markdown content.
+## Review Focus
+Focus EXCLUSIVELY on:
+- Legislative compliance issues
+- Legal requirements that are missing or inadequately addressed
+- Areas where the policy contradicts legislation
+- Opportunities to improve alignment with legislation
+
+## Output Format Requirements
+
+Create a well-structured document with the following components:
+
+1. **Summary Header**:
+   - Start with a level 1 heading: `# Policy Compliance Review`
+   - Add a clear compliance status box at the top:
+
+   If fully compliant:
+   ```
+   | ✅ COMPLIANCE STATUS |
+   |:-------------------:|
+   | **FULLY COMPLIANT** |
+   | This policy appears to be in full compliance with the relevant legislation provided. No compliance issues were identified. |
+   ```
+
+   If issues found:
+   ```
+   | ⚠️ COMPLIANCE STATUS |
+   |:-------------------:|
+   | **ISSUES DETECTED** |
+   | This policy has compliance issues that require attention. See detailed findings below. |
+   ```
+
+2. **Executive Summary**:
+   - Add a level 2 heading: `## Executive Summary`
+   - Provide a concise 2-3 sentence summary of your overall assessment
+   - If compliant, briefly explain why the policy meets legislative requirements
+   - If non-compliant, summarize the most critical issues
+
+3. **Findings Table**:
+   - Add a level 2 heading: `## Compliance Findings`
+   - If fully compliant, include a positive confirmation:
+   ```
+   | Area | Status | Notes |
+   |------|:------:|-------|
+   | Overall Compliance | ✅ | No compliance issues identified |
+   | Legislative Alignment | ✅ | Policy aligns with all relevant legislation |
+   | Required Elements | ✅ | All required elements are present |
+   ```
+
+   - If issues found, summarize each issue in a structured table:
+   ```
+   | Issue | Severity | Legislation | Status |
+   |-------|:--------:|-------------|:------:|
+   | [Issue Title 1] | 🔴 **CRITICAL** | [Act Name, Section X(Y)] | 🚫 |
+   | [Issue Title 2] | 🟠 **MAJOR** | [Act Name, Section X(Y)] | 🚫 |
+   | [Issue Title 3] | 🟡 **MINOR** | [Act Name, Section X(Y)] | 🚫 |
+   ```
+
+4. **Detailed Analysis**:
+   - Add a level 2 heading: `## Detailed Analysis`
+   - For each issue, create a clearly formatted issue box:
+
+   ```
+   ### 🚫 COMPLIANCE ISSUE: [Concise title of the issue]
+
+   | Category | Details |
+   |----------|---------|
+   | **Severity** | 🔴 **CRITICAL** / 🟠 **MAJOR** / 🟡 **MINOR** |
+   | **Legislation** | [Act Name, Section X(Y)] |
+   | **Requirement** | "[Exact quote of relevant legislative requirement]" |
+   | **Location in Policy** | [Section/clause reference where the issue appears] |
+   | **Issue Detail** | [Clear explanation of how the policy fails to meet the requirement] |
+   | **Recommendation** | [Clear, actionable recommendation to address the issue] |
+   ```
+
+   - For each issue, include the specific text changes needed:
+   ```change
+   - [EXACT original policy text with compliance issue]
+   + [Recommended revision that addresses the compliance issue]
+   ```
+
+5. **Recommended Actions**:
+   - Add a level 2 heading: `## Recommended Actions`
+   - Provide a numbered list of prioritized actions
+   - If fully compliant, state "No actions required. Continue regular policy review cycle."
+
+## Markdown Formatting Guidelines:
+
+1. **Visual Hierarchy**:
+   - Use clear headings hierarchy (#, ##, ###)
+   - Add horizontal rules (---) between major sections
+   - Use tables for structured information
+   - Separate visually distinct sections with whitespace
+
+2. **Visual Indicators**:
+   - ✅ = Compliant
+   - 🚫 = Non-compliant
+   - 🔴 = CRITICAL severity issues
+   - 🟠 = MAJOR severity issues
+   - 🟡 = MINOR severity issues
+
+3. **Formatting Details**:
+   - Use bold for emphasis (**text**)
+   - Use proper table formatting with alignment
+   - Use code blocks for text changes
+   - Keep whitespace consistent for readability
+
+## Critical Requirements:
+1. Focus EXCLUSIVELY on legislation compliance - ignore style/clarity issues
+2. Be extremely precise - exact text changes only
+3. Provide specific, actionable recommendations
+4. Make recommendations minimally invasive
+5. Each issue box must address ONE clearly defined issue
+6. NEVER include the full original policy text in your response
+7. You must only consider legislation that is provided in the input
+
+TECHNICAL NOTE: Your output will be processed programmatically and displayed directly to users. Proper markdown formatting is essential for readability.
 """
 
+UPDATED_POLICY_PROMPT = """You are an expert policy writer with extensive knowledge of regulatory compliance and policy development. Your task is to create an updated version of a policy document that implements all recommendations from a compliance review and format it using clear, structured markdown.
 
-RECOMMENDED_UPDATES_PROMPT = """Here is a policy document:
+# INPUT MATERIALS
+
+## Original Policy Document:
 {policy_content}
 
-Here is a review of the policy that contains the recommended changes for enhancement:
+## Compliance Review Results:
 {policy_review}
 
-## Markdown Formatting Guidelines:
-- Use `# Recommended Policy Updates` as the main title
-- Use `## General Updates` for the main updates section
-- Use `## Legislative Compliance Updates` for the legislative-specific updates (if applicable)
-- Use numbered lists (`1.`, `2.`, etc.) for each distinct update recommendation
-- Use **bold** to highlight section names being referenced
-- Use `>` for quoting existing policy text
-- Use **CURRENT:** and **PROPOSED:** to clearly differentiate current versus recommended text
+# OUTPUT REQUIREMENTS
 
-Based on the recommended changes from the policy review, please generate specific updates for the policy document. For each update:
-1. Specify which section to update or indicate if a new section is being created
-2. Provide the current text (where applicable)
-3. Provide the recommended new or modified text
-4. Include a brief explanation for the change
+Create a complete, updated policy document that incorporates all compliance recommendations while maintaining the original policy's structure and style, formatted in clean, well-structured markdown.
 
-Please do not re-generate the entire policy, but instead output a structured list of specific updates. If legislative compliance recommendations are provided, present these as a separate section.
+## Document Structure
 
-Do not include any introductory text like 'Here's the analysis of the document in markdown format' - start directly with the markdown content.
-"""
+1. **Header Section**:
+   - Start with a level 1 heading: `# Updated Policy Document`
+   - Include a status box at the top:
+   ```
+   | 📝 UPDATED POLICY |
+   |:----------------:|
+   | This document incorporates all compliance recommendations from the review. |
+   ```
 
-UPDATED_POLICY_PROMPT = """You are an expert policy writer specialising in policy revision and documentation.
+2. **Complete Policy Text**:
+   - Include the COMPLETE policy document with all recommended changes implemented
+   - Use the exact same headings, numbering, text, and section structure as the original policy
+   - If there were no compliance issues, include the original policy text unchanged
+   - The output should include no other introductory text or summary of changes
+   - The output should purely consist of the header and the complete policy text
 
-Below is the current policy document:
-{policy_content}
+## Markdown Formatting Requirements
 
-Our review team has provided the following recommended updates:
-{recommended_updates}
+1. **Headings and Hierarchy**:
+   - Use proper markdown hierarchy for all section headings:
+     - `# Heading 1` for document title and top-level sections
+     - `## Heading 2` for major sections
+     - `### Heading 3` for subsections
+     - `#### Heading 4` for sub-subsections
+     - `##### Heading 5` for detailed points
+   - Match heading levels to the logical document structure:
+     - Main policy sections should be level 2 headings
+     - Subsections should be level 3 headings
+     - Further subdivisions should use appropriate levels 4-5
+   - Never skip heading levels (don't jump from H2 to H4)
+   - Include a blank line before and after each heading
+   - Use sentence case for headings (capitalize first word only, except for proper nouns)
 
-## Markdown Formatting Guidelines:
-- Maintain the original document's heading hierarchy using markdown syntax:
-  - `# ` for main titles
-  - `## ` for section headings
-  - `### ` for subsection headings
-  - `#### ` for further subsections
-- Use **bold** for emphasis and important terms
-- Use *italics* for definitions or citations
-- Use bullet points with `-` for lists
-- Use numbered lists (`1.`, `2.`, etc.) for sequential steps or prioritised items
-- Use tables with pipe syntax `|` for tabular data
-- Use blockquotes with `>` for special notes or callouts
-- Maintain proper indentation for nested lists and content
+2. **Text Formatting**:
+   - Use **bold** (`**text**`) for important terms and emphasis
+   - Use *italics* (`*text*`) for definitions or secondary emphasis
+   - Format paragraphs with proper line breaks and spacing
+   - Indent text consistently where appropriate
 
-Please generate a complete, revised version of the policy that incorporates all the recommended changes. The updated policy should:
+3. **Lists and Tables**:
+   - Format numbered lists using proper markdown syntax: `1. Item`
+   - Format bullet points using proper markdown syntax: `- Item` or `* Item`
+   - Nest lists with consistent indentation
+   - Format tables using proper markdown table syntax:
+   ```
+   | Header 1 | Header 2 | Header 3 |
+   |----------|:--------:|----------:|
+   | Content | Content | Content |
+   ```
 
-1. Include ALL sections of the original policy (even those that remain unchanged)
-2. Seamlessly integrate the recommended updates into the appropriate sections
-3. Maintain a consistent tone, formatting, and organisational structure throughout
-4. Be formatted in clean, well-structured markdown
-5. Preserve the document's original section numbering and hierarchy
-6. Ensure all hyperlinks, references, and cross-references remain functional
+4. **Document Organization**:
+   - Use horizontal rules (`---`) to separate major sections
+   - Use consistent spacing between sections (double line breaks)
+   - Format definition lists with consistent indentation
+   - Use block quotes (`> text`) for quoted material or special notes
 
-Return the complete, revised policy as a single markdown document that could immediately replace the original.
+## Content Requirements
 
-Do not include any introductory text like 'Here's the analysis of the document in markdown format' - start directly with the markdown content.
+1. The updated policy MUST include the COMPLETE policy text with all compliance changes implemented
+2. All changes must directly address compliance issues identified in the review
+3. No stylistic or editorial changes should be made unless required for compliance
+4. Policy structure, numbering, and organization must remain consistent with the original
+5. If there were no compliance issues, clearly indicate that no changes were required
+6. Any added content must be seamlessly integrated to match the tone and style of the original
+
+## Technical Output Specifications
+
+1. Ensure all markdown syntax is valid and properly formed
+2. Maintain consistent whitespace and line breaks throughout the document
+3. Format all lists, tables, and special elements consistently
+4. Ensure proper nesting of markdown elements
+5. Use escape characters where needed for special symbols
+6. Format code or technical sections with code blocks when appropriate
+7. Preserve document structure while enhancing readability with markdown
+8. Implement appropriate heading sizes that reflect content hierarchy
+9. Never use improper header sequences (like H1 followed directly by H3)
+10. Use headings to create clear document outline and navigation structure
+
+TECHNICAL NOTE: Your output will be displayed to users as a complete, updated policy document ready for implementation. Proper markdown formatting is essential for readability.
 """

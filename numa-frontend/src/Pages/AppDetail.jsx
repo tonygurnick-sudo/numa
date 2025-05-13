@@ -14,6 +14,7 @@ import { useFavorites } from '../hooks/useFavorites';
 import AppWizard from '../Components/AppWizard';
 import { formatCategory } from '../utils/textUtils';
 import { PolicyBuilderDetail } from '../Components/PolicyBuilderDetail';
+import { PolicyReviewerDetail } from '../Components/PolicyReviewerDetail';
 import { manifestService } from '../Services/manifestService';
 
 const AppDetail = () => {
@@ -67,7 +68,7 @@ const AppDetail = () => {
         </div>
       )}
       {/* Hide JobHistorySidebar for policy apps */}
-      {numaAppData?.id !== 'policy-builder-app' && <JobHistorySidebar />}
+      {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && <JobHistorySidebar />}
       <JobIdSidebar />
       <header>
         <Container fluid>
@@ -138,6 +139,8 @@ const AppDetail = () => {
               <QAppDetail manifest={numaAppData} />
             ) : numaAppData?.type === 'policy-builder' ? (
               <PolicyBuilderDetail id={numaAppData.id} />
+            ) : numaAppData?.id === 'policy-reviewer' ? (
+              <PolicyReviewerDetail />
             ) : numaAppData ? (
               <AppWizard manifest={numaAppData} />
             ) : null}

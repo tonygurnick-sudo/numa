@@ -5,35 +5,32 @@ import {
   AppType,
   BaseNumaApp,
   BaseNumaAppProps,
-  HTTP_REQUEST_TASK,
+  NumaAppManifest,
   S3_UPLOAD_TASK,
   TEXT_INPUT_TASK,
 } from './base-numa-app-construct';
 
-const description = 'Review a policy';
+const description = 'Management of policies and legislation compliance.';
 
 export class PolicyReviewer extends BaseNumaApp {
-  readonly manifest;
+  readonly manifest: NumaAppManifest;
 
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     super(scope, name, { ...props, appId: 'policy-reviewer', enableJobs: true });
 
     this.manifest = {
-      appName: 'Policy Reviewer',
+      appName: 'Policy Management',
       id: this.appId,
       type: AppType.NUMA,
       status: AppStatus.ACTIVE,
       category: AppCategory.COMPLIANCE,
       createdDate: '2025-02-31',
       appDescription: description,
-      tags: ['compliance', 'policy-review', 'legal-analysis', 'governance'],
       tasks: [
         {
           id: 'upload-files-to-s3',
           title: 'Upload policy',
-          description: 'Upload the policy you would like reviewed',
           type: S3_UPLOAD_TASK,
-          required: true,
           order: 1,
           parameters: {
             minFiles: 1,
@@ -44,31 +41,14 @@ export class PolicyReviewer extends BaseNumaApp {
         {
           id: 'policy-context',
           title: 'Policy Context',
-          description:
-            'Provide a brief description of your policy’s purpose, scope, and any relevant background information. Include details such as the industry or organization it applies to, key stakeholders, and specific goals or concerns. This context will help tailor the review to your needs.',
           type: TEXT_INPUT_TASK,
           order: 2,
         },
         {
           id: 'legislation-content',
           title: 'Legislation Content',
-          description: 'Provide relevant legislation content or leave empty',
           type: TEXT_INPUT_TASK,
           order: 3,
-        },
-        {
-          id: 'call-step-function',
-          title: 'Review Policy',
-          type: HTTP_REQUEST_TASK,
-          endpoint: 'policy-reviewer',
-          params: {
-            payload: {
-              uploaded_files: '@upload-files-to-s3',
-              legislation_content: '@legislation-content',
-              policy_context: '@policy-context',
-            },
-          },
-          order: 4,
         },
       ],
     };
@@ -95,6 +75,10 @@ export class PolicyReviewer extends BaseNumaApp {
       timeout: 900,
     });
 
+    // Enable jobs API - setupJobs() is called in the constructor when enableJobs is true
+    // This creates the jobs endpoints using the same pattern as policy-builder
+
+    // Define step function
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
       States: {
@@ -102,10 +86,12 @@ export class PolicyReviewer extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'job_id.$': '$.job_id',
-            'policy_key.$': '$.uploaded_files[0].s3_key',
-            'legislation_content.$': '$.legislation_content',
-            'policy_context.$': '$.policy_context',
+            'job_id.$': '$$.Execution.Input.original_job_id',
+            'policy_key.$': '$$.Execution.Input.uploaded_files[0].s3_key',
+            'legislation_content.$': '$$.Execution.Input.legislation_content',
+            'policy_context.$': '$$.Execution.Input.policy_context',
+            app_id: this.appId,
+            'output_path.$': `States.Format('${this.appId}/{}', $$.Execution.Input.original_job_id)`,
           },
           Next: 'ExtractContent',
         },
@@ -118,7 +104,7 @@ export class PolicyReviewer extends BaseNumaApp {
             'legislation_content.$': '$.legislation_content',
             'policy_context.$': '$.policy_context',
             app_id: this.appId,
-            'output_path.$': `States.Format('${this.appId}/{}', $$.Execution.Input.job_id)`,
+            'output_path.$': `States.Format('${this.appId}/{}', $.job_id)`,
           },
           'WriteSuccessStatus',
           {
