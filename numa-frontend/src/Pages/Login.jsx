@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutForm } from '../Layouts/LayoutForm';
-import { Button, Form, Alert } from 'react-bootstrap';
+import { Button, Form, Alert, Spinner } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
 
 const NumaLogin = () => {
@@ -128,7 +128,14 @@ const NumaLogin = () => {
           </Form.Group>
 
           <Button variant="primary" type="submit" className="mb-3" data-testid="login-button">
-            {loading ? 'Logging In...' : 'Login'}
+            {loading ? (
+              <>
+                <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                Logging In...
+              </>
+            ) : (
+              'Login'
+            )}
           </Button>
         </Form>
       ) : (
@@ -156,7 +163,14 @@ const NumaLogin = () => {
           </Form.Group>
 
           <Button variant="primary" type="submit" className="mb-3" disabled={loading} data-testid="set-password-button">
-            {loading ? 'Setting New Password...' : 'Set New Password'}
+            {loading ? (
+              <>
+                <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                Setting New Password...
+              </>
+            ) : (
+              'Set New Password'
+            )}
           </Button>
         </Form>
       )}

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, Alert } from 'react-bootstrap';
 
 import { useAuth } from '../Providers/AuthProvider';
-import { createQApp } from '../qAppHelper';
+import { createQApp } from '../utils/qAppHelper';
 
 const QAppCreate = () => {
   const { qAppsClient, loading: authLoading } = useAuth();

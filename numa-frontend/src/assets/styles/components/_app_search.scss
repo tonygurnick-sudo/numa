@@ -1,0 +1,381 @@
+
+.app-search-container {
+    width: 100%;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    background-color: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+    .search-form {
+      width: 100%;
+    }
+
+    .search-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      width: 100%;
+      background: white;
+      border: 1px solid var(--color-gray-200);
+      border-radius: 12px;
+      transition: all 0.2s ease;
+
+      &:focus-within {
+        border-color: var(--color-magenta-700);
+        box-shadow: 0 0 0 3px rgba(var(--color-magenta-700-rgb), 0.1);
+      }
+
+      .search-icon {
+        position: absolute;
+        left: 1rem;
+        color: var(--color-magenta-700);
+        font-size: 1rem;
+        z-index: 1;
+      }
+
+      .search-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        color: var(--color-magenta-700);
+        font-size: 0.875rem;
+        border-left: 1px solid var(--color-gray-200);
+        background: rgba(var(--color-magenta-700-rgb), 0.03);
+
+        i {
+          font-size: 1rem;
+        }
+      }
+
+      .search-input {
+        flex: 1;
+        padding: 0.75rem 1rem 0.75rem 2.5rem;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: all 0.2s ease;
+
+        &::placeholder {
+          color: var(--color-gray);
+        }
+
+        &:focus {
+          outline: none;
+        }
+      }
+
+      .search-button {
+        padding: 0.75rem 1.5rem;
+        background: var(--color-magenta-700);
+        border: none;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+
+        &:hover {
+          opacity: 0.9;
+        }
+
+        i {
+          font-size: 1.125rem;
+        }
+      }
+    }
+
+    .filter-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+
+      .filter-tag {
+        background: var(--color-lt-gray);
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--color-text);
+        cursor: pointer;
+        transition: all 0.2s ease;
+
+        &:hover {
+          opacity: 0.8;
+        }
+
+        &.active {
+          background: var(--color-primary);
+          color: white;
+
+          &:hover {
+            opacity: 0.9;
+          }
+        }
+      }
+    }
+
+    .filter-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 1rem;
+
+      .category-filters {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 0 1rem 1rem;
+
+        .category-filter {
+          height: 2.25rem;
+          display: inline-flex;
+          align-items: center;
+          padding: 0.375rem 1rem;
+          font-size: 0.875rem;
+          line-height: 1.5;
+          border-radius: 20px;
+          font-weight: 500;
+          border: 1px solid var(--color-gray-200);
+          transition: all 0.2s ease;
+
+          &:hover {
+            border-color: var(--color-primary);
+            color: var(--color-primary);
+          }
+
+          &[data-category='legal'] {
+            &.active {
+              background: var(--color-orange);
+              border-color: var(--color-orange);
+              color: white;
+            }
+          }
+
+          &[data-category='productivity'] {
+            &.active {
+              background: var(--color-primary);
+              border-color: var(--color-primary);
+              color: white;
+            }
+          }
+
+          &[data-category='finance'] {
+            &.active {
+              background: var(--color-royal-900);
+              border-color: var(--color-royal-900);
+              color: white;
+            }
+          }
+
+          &[data-category='compliance'] {
+            &.active {
+              background: var(--color-blue);
+              border-color: var(--color-blue);
+              color: white;
+            }
+          }
+
+          &[data-category='hr'] {
+            &.active {
+              background: var(--color-green-700);
+              border-color: var(--color-green-700);
+              color: white;
+            }
+          }
+
+          &[data-category='general'] {
+            &.active {
+              background: var(--color-magenta-700);
+              border-color: var(--color-magenta-700);
+              color: white;
+            }
+
+            &.clear {
+              background: none;
+              border: 1px solid #e9ecef;
+              color: var(--color-gray-700);
+              border-radius: 0.25rem;
+
+              &:hover {
+                color: var(--color-gray-900);
+                border-color: #dee2e6;
+                background-color: var(--color-gray-50);
+              }
+
+              .bi-x {
+                font-size: 1.1em;
+              }
+            }
+          }
+        }
+
+        .dropdown {
+          .dropdown-toggle {
+            height: 2.25rem;
+            border-color: #e9ecef;
+            color: var(--color-gray-700);
+            padding: 0.375rem 1rem;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            display: inline-flex;
+            align-items: center;
+
+            &:hover,
+            &:focus {
+              background-color: var(--color-gray-50);
+              border-color: #dee2e6;
+            }
+
+            &::after {
+              margin-left: 0.5rem;
+            }
+          }
+        }
+      }
+    }
+
+    .card-apps {
+      .header-right {
+        .favorite-button {
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          &:hover {
+            transform: scale(1.1);
+            transition: transform 0.2s ease;
+          }
+
+          svg {
+            font-size: 1.2rem;
+
+            &.text-warning {
+              filter: drop-shadow(0 0 2px rgba(255, 193, 7, 0.3));
+            }
+          }
+        }
+      }
+      .favorite-button {
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        &:hover {
+          transform: scale(1.1);
+          transition: transform 0.2s ease;
+        }
+
+        &.fav-active {
+          svg {
+            filter: drop-shadow(0 0 2px rgba(255, 193, 7, 0.3));
+          }
+        }
+      }
+    }
+
+    // Title star icon
+    svg.title-star {
+      width: 32px;
+      height: 32px;
+      vertical-align: baseline;
+      margin-right: 0.5rem;
+      margin-top: -4px;
+      filter: drop-shadow(0 0 3px rgba(255, 193, 7, 0.4));
+      animation: star-pulse 2s infinite;
+    }
+
+    @keyframes star-pulse {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.1);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+  }
+
+  .category-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+
+    .category-filter {
+      &.clear {
+        background: none;
+        border: 1px solid #e9ecef;
+        color: var(--color-gray-700);
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        border-radius: 0.25rem;
+
+        &:hover {
+          color: var(--color-gray-900);
+          border-color: #dee2e6;
+          background-color: var(--color-gray-50);
+        }
+
+        .bi-x {
+          font-size: 1.1em;
+        }
+      }
+    }
+  }
+
+  .category-filter {
+    background: #e4e4e4;
+    border: none;
+    border-radius: 20px;
+    padding: 0.25rem 1rem;
+    font-size: 0.875rem;
+    color: var(--color-gray-700);
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      opacity: 0.9;
+    }
+
+    &.active {
+      color: white;
+
+      &[data-category='legal'] {
+        background: #f9d400;
+      }
+
+      &[data-category='productivity'] {
+        background: #9d64b5;
+      }
+
+      &[data-category='finance'] {
+        background: #026aa2;
+      }
+
+      &[data-category='compliance'] {
+        background: #56bcf2;
+      }
+
+      &[data-category='hr'] {
+        background: #28a07c;
+      }
+
+      &[data-category='general'] {
+        background: #b386c5;
+      }
+    }
+  }

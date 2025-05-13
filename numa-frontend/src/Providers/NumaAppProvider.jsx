@@ -7,7 +7,7 @@ import {
   updateQSessionData,
   fetchAndEncodeFile,
   importFileToQApp,
-} from '../qAppHelper';
+} from '../utils/qAppHelper';
 import { useJobsApi } from '../Services/jobsApi';
 import { useNumaRequest } from './NumaRequestContext';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';

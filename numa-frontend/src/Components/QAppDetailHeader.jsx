@@ -3,7 +3,7 @@ import { Button } from 'react-bootstrap';
 
 import { useNavigate } from 'react-router-dom';
 
-import { addAppToLibrary, deleteQAppById } from '../qAppHelper';
+import { addAppToLibrary, deleteQAppById } from '../utils/qAppHelper';
 import { useAuth } from '../Providers/AuthProvider';
 import { StartQAppSessionCommand } from '@aws-sdk/client-qapps';
 import { useNumaApp } from '../Providers/NumaAppProvider';
