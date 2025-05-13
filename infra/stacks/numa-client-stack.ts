@@ -328,7 +328,7 @@ export const appLibrary: Record<string, AppDefinition> = {
   'meeting-analyser': { app: MeetingAnalyser, isProdApp: true },
   'nzsba-policy-builder': { app: NZSBAPolicyBuilder, isProdApp: false },
   'policy-drafter': { app: PolicyDrafter, isProdApp: true },
-  'policy-reviewer': { app: PolicyReviewer, isProdApp: true },
+  'policy-reviewer': { app: PolicyReviewer, isProdApp: false },
   'rfp-response-comparison': { app: RfpResponseComparison, isProdApp: false },
   'procurement-rfp-assessment': { app: ProcurementRfpAssessment, isProdApp: false },
 };
