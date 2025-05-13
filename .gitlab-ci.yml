@@ -96,14 +96,17 @@ client-list-lint:
   needs: []
   image: registry.gitlab.com/arcanumai/ci/all-inclusive
   variables:
+    AWS_REGION: us-east-1
     YQ_VERSION: v4.45.1
   before_script:
+    - !reference [.yarn, setup-private-auth]
     - apt-get update
     - apt-get install -y wget
     - wget -O /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64
     - chmod +x /usr/local/bin/yq
+    - (cd tools && yarn install)
   script:
-    - diff <(jq --raw-output keys[] clientConfigProd.json | sort | grep -v 'arcanum-demo$' | grep -v arcanum-prod-numa-demo) <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
+    - diff <((cd tools && yarn list-clients) | grep -v 'arcanum-demo$' | grep -v arcanum-prod-numa-demo) <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
 
 .node-job-infra-overrides: &node-job-infra-overrides
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
