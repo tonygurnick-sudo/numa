@@ -293,6 +293,8 @@ deploy-to-client-custom:
   variables:
     CLIENT_NAME:
   environment:
+    name: custom
+    url:
     deployment_tier: production
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
