@@ -290,7 +290,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           // First create a job to get a job ID
           // We'll upload the files using this job ID, then update the job with the file paths
           const jobResponse = await jobsApi.createJob(numaAppData, {}, 'files-uploaded');
-          jobId = jobResponse.jobID;
+          jobId = jobResponse.jobId;
           setCurrentJobId(jobId);
         } catch (error) {
           console.error('Failed to create job for file uploads:', error);
