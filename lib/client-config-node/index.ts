@@ -21,6 +21,7 @@ function getDocument(): DynamoDBDocument {
         RoleSessionName: 'client-config',
       },
     }),
+    region: 'us-east-1',
   });
   return DynamoDBDocument.from(client);
 }
