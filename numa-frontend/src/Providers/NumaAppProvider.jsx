@@ -21,7 +21,7 @@ import {
 
 // Provider component
 export const NumaAppProvider = ({ children }) => {
-  const { qAppsClient, getIdentityPoolCredentials } = useAuth();
+  const { qAppsClient, getIdentityPoolCredentials, user } = useAuth();
   const jobsApi = useJobsApi();
 
   const [loading, setLoading] = useState(false);
@@ -84,19 +84,20 @@ export const NumaAppProvider = ({ children }) => {
   };
 
   // We now create a job directly when uploading files instead of using a session ID
-
   // Load jobs for the current app
-  const loadAppJobs = async ({ limit = 50, nextToken = null, append = false } = {}) => {
-    if (!numaAppId) return;
+  const loadAppJobs = async ({ nextToken = null, append = false } = {}) => {
+    if (!numaAppId) {
+      return { items: [], nextToken: null };
+    }
+
     try {
-      const response = await jobsApi.getJobsByAppId(numaAppId, {
-        limit,
-        nextToken,
-      });
-      const { items: appJobs, nextToken: newNextToken } = response;
+      const response = await jobsApi.getJobsByAppId(numaAppId, nextToken);
+
+      const items = response.items || [];
+      const newNextToken = response.next_token || response.nextToken || null;
 
       // Sort jobs by date before setting/appending
-      const sortedJobs = appJobs.sort((a, b) => {
+      const sortedJobs = items.sort((a, b) => {
         const dateA = new Date(a.startedAt || a.dateTime);
         const dateB = new Date(b.startedAt || b.dateTime);
         return dateB - dateA;
@@ -114,7 +115,8 @@ export const NumaAppProvider = ({ children }) => {
         return sortedJobs;
       });
 
-      return { items: sortedJobs, nextToken: newNextToken }; // Return for pagination check
+      const result = { items: sortedJobs, nextToken: newNextToken };
+      return result;
     } catch (error) {
       console.error('Failed to load jobs:', error);
       throw error;
@@ -199,13 +201,11 @@ export const NumaAppProvider = ({ children }) => {
   // Task Processing Functions
   const processTextInputTask = (task, currentResults) => {
     currentResults[task.id] = taskInputValues[task.id] || '';
-    console.log(`Input task result: ${currentResults[task.id]}`);
     return currentResults;
   };
 
   const processDropdownTableTask = (task, currentResults) => {
     currentResults[task.id] = taskInputValues[task.id] || {};
-    console.log(`Dropdown table task result: ${JSON.stringify(currentResults[task.id])}`);
     return currentResults;
   };
 
@@ -235,8 +235,6 @@ export const NumaAppProvider = ({ children }) => {
         (Array.isArray(uploadedFiles) &&
           uploadedFiles.length > 0 &&
           uploadedFiles.every((path) => typeof path === 'string')));
-
-    console.log('isValidUpload:', isValidUpload);
 
     // If the upload is required and we don't have valid files, throw an error
     if (isRequired && !isValidUpload) {
@@ -776,7 +774,8 @@ export const NumaAppProvider = ({ children }) => {
         console.log(`Using existing job ID: ${currentJobId}`);
         // We already have a job from file uploads, so we need to update its status to 'running'
         try {
-          await jobsApi.updateJob(numaAppData, currentJobId, null, taskInputValues, 'running');
+          const userId = user?.decoded_tokens?.idToken?.['sub'];
+          await jobsApi.updateJob(numaAppData, currentJobId, null, taskInputValues, 'running', userId);
           console.log(`Updated job ${currentJobId} status to 'running'`);
         } catch (updateError) {
           console.error('Failed to update job status:', updateError);
@@ -788,7 +787,8 @@ export const NumaAppProvider = ({ children }) => {
         };
       } else {
         // No job exists yet, create one with 'running' status
-        jobResponse = await jobsApi.createJob(numaAppData, taskInputValues);
+        const userId = user?.decoded_tokens?.idToken?.['sub'];
+        jobResponse = await jobsApi.createJob(numaAppData, taskInputValues, 'running', userId);
         setCurrentJobId(jobResponse.jobID);
         console.log(`Created new job with ID: ${jobResponse.jobID}`);
       }
@@ -861,7 +861,8 @@ export const NumaAppProvider = ({ children }) => {
 
       console.log('Text-output results to be saved:', textOutputResults);
       // Update the job with results and completed status, but don't modify inputs
-      await jobsApi.updateJob(numaAppData, jobID, textOutputResults, undefined, 'completed');
+      const userId = user?.decoded_tokens?.idToken?.['sub'];
+      await jobsApi.updateJob(numaAppData, jobID, textOutputResults, undefined, 'completed', userId);
 
       // Update the job in state
       setJob((prevJob) => ({

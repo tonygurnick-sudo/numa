@@ -512,7 +512,7 @@ export const PolicyBuilderDetail = () => {
       const appData = { id: 'policy-builder' };
 
       // Use jobsApi to get jobs instead of direct numaGet
-      const response = await jobsApi.getJobsByAppId(appData.id, { limit: 50 });
+      const response = await jobsApi.getJobsByAppId(appData.id);
 
       console.log('Response:', response);
 

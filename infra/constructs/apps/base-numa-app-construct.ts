@@ -282,19 +282,26 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
 
   protected setupJobs(): void {
     // Create DynamoDB table with same naming convention as before
-    const tableName = `${this.node.id}-recent-jobs`;
+    const tableName = `${this.clientName}-${this.appId}-recent-jobs`;
     const table = (this.jobsTable = new DynamodbTable(this, 'jobs-table', {
       name: tableName,
       billingMode: 'PAY_PER_REQUEST',
-      hashKey: 'jobID',
+      hashKey: 'jobId',
       attribute: [
-        { name: 'jobID', type: 'S' },
+        { name: 'jobId', type: 'S' },
         { name: 'dateTime', type: 'S' },
+        { name: 'userId', type: 'S' },
       ],
       globalSecondaryIndex: [
         {
           name: 'date-time-index',
           hashKey: 'dateTime',
+          projectionType: 'ALL',
+        },
+        {
+          name: 'user-date-index',
+          hashKey: 'userId',
+          rangeKey: 'dateTime',
           projectionType: 'ALL',
         },
       ],
@@ -312,8 +319,8 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     const operations: Operation[] = [
       { verb: 'POST', path: jobsBasePath, handler: 'create_job.handler', lambdaName: 'create-job' },
       { verb: 'GET', path: jobsBasePath, handler: 'list_jobs.handler', lambdaName: 'list-jobs' },
-      { verb: 'GET', path: `${jobsBasePath}/{job_id}`, handler: 'get_job.handler', lambdaName: 'get-job' },
-      { verb: 'PUT', path: `${jobsBasePath}/{job_id}`, handler: 'update_job.handler', lambdaName: 'update-job' },
+      { verb: 'GET', path: `${jobsBasePath}/{jobId}`, handler: 'get_job.handler', lambdaName: 'get-job' },
+      { verb: 'PUT', path: `${jobsBasePath}/{jobId}`, handler: 'update_job.handler', lambdaName: 'update-job' },
     ];
 
     operations.forEach((op) => {
