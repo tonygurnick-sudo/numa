@@ -42,45 +42,89 @@ const JobHistorySidebar = () => {
   const jobs = numaAppData?.id === 'policy-builder-app' ? [] : getAppJobs() || [];
 
   const loadMoreJobs = useCallback(async () => {
-    if (loadingMore || !hasMore || !jobHistorySidebarOpen) return;
+    // Prevent multiple simultaneous loads or if no more items to load
+    if (loadingMore || !hasMore || !jobHistorySidebarOpen) {
+      return;
+    }
 
     setLoadingMore(true);
-    try {
-      const response = await loadAppJobs({ nextToken, append: true });
 
-      // Update next token and check if we have more results
-      setNextToken(response.nextToken);
-      setHasMore(!!response.nextToken);
+    try {
+      // If nextToken is a string, parse it first
+      const tokenToUse = typeof nextToken === 'string' ? JSON.parse(nextToken) : nextToken;
+      const response = await loadAppJobs({
+        nextToken: tokenToUse,
+        append: true,
+      });
+
+      if (!response?.nextToken) {
+        setHasMore(false);
+        return;
+      }
+
+      const newNextToken = response?.nextToken;
+
+      // If we got a new token, update the state
+      if (newNextToken) {
+        // Check if tokens are the same
+        let isSameToken = false;
+        if (nextToken) {
+          if (nextToken.jobID && newNextToken.jobID) {
+            isSameToken = nextToken.jobID === newNextToken.jobID;
+          } else {
+            isSameToken = JSON.stringify(nextToken) === JSON.stringify(newNextToken);
+          }
+        }
+
+        if (!isSameToken) {
+          console.log('newNextToken', newNextToken);
+          setNextToken(newNextToken);
+          setHasMore(true);
+        } else {
+          setHasMore(false);
+        }
+      } else {
+        setHasMore(false);
+      }
     } catch (error) {
       console.error('Error loading more jobs:', error);
       setHasMore(false);
     } finally {
       setLoadingMore(false);
     }
-  }, [nextToken, loadingMore, hasMore, jobHistorySidebarOpen]);
+  }, [loadAppJobs, nextToken, loadingMore, hasMore, jobHistorySidebarOpen]);
 
   // Intersection Observer setup
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMoreJobs();
-        }
-      },
-      { threshold: 0.5 },
-    );
+    if (!loaderRef.current) return;
 
     const currentLoader = loaderRef.current;
-    if (currentLoader) {
+    let observer;
+
+    const handleIntersection = (entries) => {
+      const isIntersecting = entries[0]?.isIntersecting;
+
+      if (isIntersecting && hasMore && !loadingMore) {
+        loadMoreJobs();
+      }
+    };
+
+    // Create the observer with a small delay to avoid rapid firing
+    const timeoutId = setTimeout(() => {
+      observer = new IntersectionObserver(handleIntersection, {
+        threshold: 0.1,
+        rootMargin: '100px',
+      });
       observer.observe(currentLoader);
-    }
+    }, 100);
 
     return () => {
-      if (currentLoader) {
+      clearTimeout(timeoutId);
+      if (observer) {
         observer.unobserve(currentLoader);
       }
     };
-  }, [loadMoreJobs]);
+  }, [loadMoreJobs, hasMore, loadingMore, nextToken]);
 
   // Don't render anything for policy-builder-app
   if (numaAppData?.id === 'policy-builder-app') {
@@ -133,7 +177,6 @@ const JobHistorySidebar = () => {
                         {(() => {
                           try {
                             const date = new Date(job.startedAt || job.dateTime);
-                            // Check if date is valid
                             if (isNaN(date.getTime())) {
                               return 'Unknown time';
                             }
@@ -290,6 +333,23 @@ const JobHistorySidebar = () => {
                   </div>
                 </ListGroup.Item>
               ))}
+              {hasMore &&
+                (() => {
+                  return (
+                    <div
+                      ref={loaderRef}
+                      style={{
+                        height: 40,
+                        background: 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <span style={{ color: '#999' }}>Loading more...</span>
+                    </div>
+                  );
+                })()}
             </ListGroup>
           )}
         </Offcanvas.Body>

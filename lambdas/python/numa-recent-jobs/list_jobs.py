@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 import boto3
+from boto3.dynamodb.conditions import Key
 
 dynamodb = boto3.resource("dynamodb")
 
@@ -18,49 +19,71 @@ class DecimalEncoder(json.JSONEncoder):
 
 
 def handler(event, _context):
-    """Handler for listing jobs for an app.
-    Returns paginated jobs sorted by dateTime in descending order (newest first).
-    """
-    table = dynamodb.Table(os.environ["DYNAMODB_TABLE"])
-    try:
-        # Parse pagination parameters
-        query_params = event.get("queryStringParameters", {}) or {}
-        limit = min(int(query_params.get("limit", 50)), 100)
-        next_token = query_params.get("next_token")
+    """List jobs for a specific user."""
+    headers = {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "GET,OPTIONS",
+    }
 
-        # Base scan parameters
-        scan_params = {
-            "IndexName": "date-time-index",
+    try:
+        # Parse and validate all parameters
+        params = event.get("queryStringParameters", {}) or {}
+
+        try:
+            # Required parameters
+            user_id = params.get("userId")
+            if not user_id:
+                raise ValueError("userId is required")
+
+            # Optional parameters with defaults
+            limit = min(int(params.get("limit", 50)), 100)
+            next_token = params.get("next_token")
+
+            if next_token:
+                next_token = json.loads(next_token)
+
+        except (ValueError, json.JSONDecodeError) as e:
+            error_msg = str(e) if str(e) != "" else "Invalid request parameters"
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": error_msg}),
+                "headers": headers,
+            }
+
+        # Set up and execute query
+        query_kwargs = {
+            "IndexName": "user-date-index",
+            "KeyConditionExpression": Key("userId").eq(user_id),
+            "ScanIndexForward": False,  # Newest first
             "Limit": limit,
         }
 
-        # Add pagination token if provided
         if next_token:
-            try:
-                scan_params["ExclusiveStartKey"] = json.loads(next_token)
-            except (json.JSONDecodeError, TypeError):
-                return {
-                    "statusCode": 400,
-                    "body": json.dumps({"error": "Invalid pagination token"}),
-                }
+            query_kwargs["ExclusiveStartKey"] = next_token
 
-        # Execute scan
-        response = table.scan(**scan_params)
-
-        # Sort items by dateTime in descending order
-        items = sorted(response["Items"], key=lambda x: x["dateTime"], reverse=True)
+        response = dynamodb.Table(os.environ["DYNAMODB_TABLE"]).query(**query_kwargs)
 
         return {
             "statusCode": 200,
             "body": json.dumps(
                 {
-                    "items": items,
-                    "count": len(items),
-                    "next_token": json.dumps(response.get("LastEvaluatedKey")),
+                    "items": response.get("Items", []),
+                    "next_token": (
+                        json.dumps(response["LastEvaluatedKey"])
+                        if "LastEvaluatedKey" in response
+                        else None
+                    ),
                 },
                 cls=DecimalEncoder,
             ),
+            "headers": headers,
         }
 
     except Exception as e:
-        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"error": str(e)}),
+            "headers": headers,
+        }

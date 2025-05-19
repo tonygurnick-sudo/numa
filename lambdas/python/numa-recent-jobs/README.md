@@ -42,7 +42,7 @@ Example path: `/api/example-app/jobs`
 }
 ```
 
-- **Response**: Returns the created job object with generated jobID and dateTime
+- **Response**: Returns the created job object with generated jobId and dateTime
 
 ### List Jobs
 
@@ -56,13 +56,13 @@ Example path: `/api/example-app/jobs`
 ### Get Job
 
 - **Method**: GET
-- **Path**: `/{job_id}`
+- **Path**: `/{jobId}`
 - **Response**: Returns the specific job object
 
 ### Update Job Results
 
 - **Method**: PUT
-- **Path**: `/{job_id}`
+- **Path**: `/{jobId}`
 - **Request Body**:
 
 ```json
@@ -82,13 +82,13 @@ Example path: `/api/example-app/jobs`
 
 Each app's DynamoDB table uses the following schema:
 
-- **Hash Key**: `jobID` (String)
+- **Hash Key**: `jobId` (String)
 - **GSI**: date-time-index
   - Hash Key: `dateTime` (String)
 
 Each job record contains:
 
-- `jobID`: A unique identifier for the job
+- `jobId`: A unique identifier for the job
 - `dateTime`: ISO format timestamp of job creation
 - `results`: JSON object containing job results/status
 

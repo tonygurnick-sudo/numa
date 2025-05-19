@@ -1,12 +1,13 @@
 // API service for job-related operations
 import { createFormattedDate } from '../utils/dateUtils';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { useAuth } from '../Providers/AuthProvider';
 
-const createJobData = (numaAppData, taskInputs, jobID = null, status = 'running') => {
+const createJobData = (numaAppData, taskInputs, jobId = null, status = 'running') => {
   const { displayDate, isoDate } = createFormattedDate();
 
   return {
-    ...(jobID && { jobID }), // Only include jobID if provided
+    ...(jobId && { jobId }), // Only include jobId if provided
     startedAt: isoDate,
     appName: numaAppData.appName,
     appType: numaAppData.type,
@@ -21,16 +22,23 @@ const createJobData = (numaAppData, taskInputs, jobID = null, status = 'running'
 
 export const useJobsApi = () => {
   const { numaGet, numaPost, numaPut } = useNumaRequest();
+  const { user } = useAuth();
+  const userId = user?.decoded_tokens?.idToken?.['sub'];
 
   const createJob = async (numaAppData, taskInputs, status = 'running') => {
     try {
       const jobData = createJobData(numaAppData, taskInputs, null, status);
       const endpoint_call = `/api/${numaAppData.id}/jobs`;
-      const response = await numaPost(endpoint_call, jobData);
 
+      const requestBody = {
+        ...jobData,
+        userId: userId,
+      };
+
+      const response = await numaPost(endpoint_call, requestBody);
       // Verify the inputs were saved correctly
-      if (response && response.jobID) {
-        await getJobById(numaAppData.id, response.jobID);
+      if (response && response.jobId) {
+        await getJobById(numaAppData.id, response.jobId);
       }
 
       // Check if the response is an object
@@ -53,8 +61,8 @@ export const useJobsApi = () => {
     }
   };
 
-  // Update an existing job
   const updateJob = async (numaAppData, jobId, results, inputs = null, status = 'running') => {
+    // User ID is now handled by RequestProvider
     try {
       const { displayDate, isoDate } = createFormattedDate();
 
@@ -93,21 +101,30 @@ export const useJobsApi = () => {
     }
   };
 
-  const getJobsByAppId = async (appId, { limit = 25, nextToken = null } = {}) => {
+  const getJobsByAppId = async (appId, nextToken = null) => {
+    const limit = 50;
+
     try {
-      const params = new URLSearchParams({ limit: limit.toString() });
-      if (nextToken) {
-        params.append('next_token', nextToken);
-      }
-      const endpoint_call = `/api/${appId}/jobs?${params.toString()}`;
-      const response = await numaGet(endpoint_call);
+      const endpoint = `/api/${appId}/jobs`;
+      const nextTokenStr = nextToken ? JSON.stringify(nextToken) : null;
+
+      const params = {
+        limit,
+        ...(nextTokenStr && { nextToken: nextTokenStr }),
+        userId: userId,
+      };
+
+      const response = await numaGet(endpoint, params);
+
       return {
         items: response.items || [],
-        nextToken: response.next_token,
-        count: response.count || 0,
+        next_token: response.next_token || null,
+        nextToken: response.nextToken || null,
+        count: response.count || (response.items ? response.items.length : 0),
       };
     } catch (error) {
       console.error('API Error fetching jobs:', error);
+      console.error('Error details:', error.response?.data);
       throw error;
     }
   };
@@ -115,11 +132,21 @@ export const useJobsApi = () => {
   const getJobById = async (numaAppId, jobId) => {
     try {
       const endpoint = `/api/${numaAppId}/jobs/${jobId}`;
-      const response = await numaGet(endpoint);
+
+      const params = {
+        userId: userId,
+      };
+
+      const response = await numaGet(endpoint, params);
+
+      if (!response) {
+        throw new Error('No response received from server');
+      }
 
       return response;
     } catch (error) {
       console.error('API Error fetching job:', error);
+      console.error('Error details:', error.response?.data);
       throw error;
     }
   };
