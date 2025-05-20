@@ -132,3 +132,47 @@ Amazon Q Business requires an index to be configured for each application. There
 - **ENTERPRISE**: Advanced index type
   - Supports up to 50 units
   - Each unit provides capacity for 20,000 documents or 200 MB (whichever is reached first)
+
+### Configuration
+
+Index configuration can be specified in the client config JSON files (`clientConfigDev.json` and `clientConfigProd.json`):
+
+```json
+{
+  "clientname": {
+    "indexType": "ENTERPRISE", // Optional. Defaults to "STARTER" if not specified
+    "indexUnits": 5 // Optional. Defaults to 1 if not specified
+    // ... other configurations
+  }
+}
+```
+
+## AWS Budget Alerting
+
+Numa supports configuring AWS budget alerts for client accounts. When enabled, this feature sets up budget monitoring and forwards alerts to a centralised SNS topic for notification.
+
+### Configuration
+
+Budget alerting can be configured in the client config:(`clientConfigProd.json`):
+
+```json
+{
+  "clientname": {
+    "budget": {
+      "name": "monthly-budget", // Required: Name of the budget
+      "limitAmount": 500, // Required: Budget limit in USD
+      "timeUnit": "MONTHLY", // Optional: Time unit (defaults to "MONTHLY")
+      "alertThresholds": [50, 80, 100] // Optional: Notification thresholds as percentages (defaults to [80, 100])
+    }
+  }
+}
+```
+
+### How It Works
+
+1. When configured, the system creates:
+   - An AWS Budget in the client account
+   - A Lambda function that forwards budget alerts with client metadata
+   - An SNS topic that sends alerts to the centralised topic
+
+2. Alerts are batched and forwarded to a central SNS topic for consistent processing and notification delivery.

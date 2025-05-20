@@ -6,6 +6,7 @@ import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AppAgnosticApiGatewayLambdaCollection } from '../constructs/app-agnostic-api-gateway-lambda-collection';
+import { BudgetAlertForwarderConstruct, budgetConfigSchema } from '../constructs/budget-alert-forwarder-construct';
 import {
   BaseNumaApp,
   BaseNumaAppProps,
@@ -249,6 +250,16 @@ export class NumaClientStack extends TerraformStack {
       cloudfrontDistribution: fe.distribution,
       dependsOn: [manifest, configObject, version, ...objects],
     });
+
+    if (clientConfig.budget) {
+      new BudgetAlertForwarderConstruct(this, 'budget-alerts', {
+        clientName: props.clientName,
+        clientAccountId: clientConfig.clientAccountId,
+        logGroup: core.logGroup,
+        budget: clientConfig.budget,
+        centralTopicArn: 'arn:aws:sns:us-east-1:207567759910:NumaBudgetAlerts',
+      });
+    }
   }
 }
 
@@ -296,6 +307,11 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default {}
          */
         apps: z.record(userConfigurableBaseNumaAppPropsSchema).optional(),
+
+        /**
+         * Budget configuration for cost monitoring
+         */
+        budget: budgetConfigSchema.optional(),
       })
       .strict(),
   );

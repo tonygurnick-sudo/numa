@@ -26,6 +26,7 @@ variables:
   matrix:
     - BUILD_DIR:
         - lambdas/node/api-gateway-authorizer
+        - lambdas/node/budget-forwarder
         - lambdas/node/callback-renamer
         - lambdas/node/cloudfront-invalidator
         - lambdas/node/q-business-chat-control-configurer
@@ -36,6 +37,7 @@ variables:
   matrix:
     - BUILD_DIR:
         - lambdas/node/api-gateway-authorizer
+        - lambdas/node/budget-forwarder
         - lambdas/node/callback-renamer
         - lambdas/node/cloudfront-invalidator
         - lambdas/node/q-business-chat-control-configurer

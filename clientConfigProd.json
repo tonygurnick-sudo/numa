@@ -67,7 +67,12 @@
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "devInstance": true,
-    "region": "us-east-1"
+    "region": "us-east-1",
+    "budget": {
+      "name": "monthly-budget",
+      "limitAmount": 1500,
+      "alertThresholds": [100]
+    }
   },
   "arcanum-demo-sebastian": {
     "allApps": true,
