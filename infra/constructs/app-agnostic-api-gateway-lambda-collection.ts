@@ -38,7 +38,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment,
     });
 
-    // Web Search Proxy
+    // Web Search Proxy GET
     this.addLambdaFunction(this, 'web-search-proxy', {
       addAuthorizer: false,
       lambdaDirectory: 'python/web-search-proxy',
@@ -63,6 +63,54 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           effect: 'Allow',
           actions: ['dynamodb:Query', 'dynamodb:GetItem'],
           resources: [`arn:aws:dynamodb:*:*:table/${props.chatHistoryTableName}`],
+        },
+      ],
+    });
+
+    // Web Search Proxy POST for scraping/upload
+    this.addLambdaFunction(this, 'web-search-proxy-scrape', {
+      addAuthorizer: false,
+      lambdaDirectory: 'python/web-search-proxy',
+      handler: 'lambda_function.lambda_handler',
+      route: {
+        verb: 'POST',
+        path: 'web-search-proxy/scrape',
+      },
+      environment: {
+        LOG_LEVEL: 'INFO',
+        ALLOWED_ORIGIN: '*',
+        CLIENT_NAME: props.clientName,
+      },
+      timeout: 45,
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['s3:PutObject'],
+          resources: [`arn:aws:s3:::${props.dataBucketName}/*`],
+        },
+      ],
+    });
+
+    // URL Scraper API Endpoint
+    this.addLambdaFunction(this, 'url-scraper', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/url-scraper',
+      handler: 'lambda_function.lambda_handler',
+      route: {
+        verb: 'POST',
+        path: 'scrape-urls',
+      },
+      environment: {
+        LOG_LEVEL: 'INFO',
+        ALLOWED_ORIGIN: '*',
+        CLIENT_NAME: props.clientName,
+      },
+      timeout: 300, // 5 minutes for scraping multiple URLs
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['s3:PutObject', 's3:PutObjectTagging'],
+          resources: [`arn:aws:s3:::numa-${props.clientName}-data/*`],
         },
       ],
     });
@@ -105,11 +153,15 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
   }
 }
 
-export interface AppAgnosticApiGatewayLambdaCollectionProps extends ApiGatewayLambdaCollectionProps {
+export interface AppAgnosticApiGatewayLambdaCollectionProps
+  extends Omit<ApiGatewayLambdaCollectionProps, 'apiGatewayId' | 'apiGatewayAuthorizerId'> {
   chatHistoryTableName: string;
   clientName: string;
+  dataBucketName: string;
   logGroup: CloudwatchLogGroup;
   region: string;
   userPoolClientId: string;
   userPoolClientSecret: string;
+  apiGatewayId: string;
+  apiGatewayAuthorizerId: string;
 }

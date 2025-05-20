@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Container, Row, Col, Card, Button, Form, Alert, Table } from 'react-bootstrap';
+import { getUrlTagFromS3Object } from '../utils/s3Utils';
+import { UrlScraper } from '../Components/UrlScraper';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { ListDataSourcesCommand, ListDataSourceSyncJobsCommand, ListDocumentsCommand } from '@aws-sdk/client-qbusiness';
 
@@ -120,15 +122,21 @@ function buildRowsForTree(node, depth, parentPath) {
     const kbStatus = f.kbDoc ? (f.kbDoc.error && Object.keys(f.kbDoc.error).length > 0 ? 'FAILED' : 'SUCCESS') : null;
     const errorMessage = f.kbDoc ? f.kbDoc.error?.errorMessage : null;
 
+    // Store the URL tag if it exists
+    const urlTag = f.urlTag || null;
+
     rows.push({
       id: rowId,
       type: 'file',
       name: fileName,
+      displayName: urlTag || fileName, // Use URL tag if available
+      originalKey: f.Key,
       depth,
       uploadDate: new Date(f.LastModified).toLocaleString('en-NZ'),
       size: formatKB(f.Size),
       kbStatus,
       errorMessage,
+      urlTag,
     });
   });
 
@@ -234,15 +242,53 @@ export function S3Uploader() {
     setIsLoadingFiles(true);
     try {
       const region = window.sessionStorage.getItem('REGION');
+      const credentials = await getIdentityPoolCredentials();
       const s3Client = new S3Client({
         region: region,
-        credentials: await getIdentityPoolCredentials(),
+        credentials,
       });
       const cmd = new ListObjectsV2Command({
         Bucket: `numa-${CLIENT_NAME}-data`,
       });
       const resp = await s3Client.send(cmd);
-      setFiles(resp.Contents || []);
+
+      // Get the files
+      const files = resp.Contents || [];
+
+      // Only process files in batches and only those in scraped-content folder
+      const scrapedFiles = files.filter((file) => file.Key.includes('scraped-content/'));
+      const otherFiles = files.filter((file) => !file.Key.includes('scraped-content/'));
+
+      // Process scraped files in smaller batches to avoid rate limits
+      const batchSize = 5;
+      const scrapedFilesWithTags = [];
+
+      for (let i = 0; i < scrapedFiles.length; i += batchSize) {
+        const batch = scrapedFiles.slice(i, i + batchSize);
+        const batchResults = await Promise.all(
+          batch.map(async (file) => {
+            try {
+              const bucket = `numa-${CLIENT_NAME}-data`;
+              const urlTag = await getUrlTagFromS3Object(file.Key, bucket, region, getIdentityPoolCredentials);
+              return { ...file, urlTag };
+            } catch (error) {
+              console.error('Error getting URL tag:', error);
+              return file;
+            }
+          }),
+        );
+        scrapedFilesWithTags.push(...batchResults);
+
+        // Add a small delay between batches to avoid rate limits
+        if (i + batchSize < scrapedFiles.length) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      }
+
+      // Combine the results
+      const filesWithTags = [...scrapedFilesWithTags, ...otherFiles];
+
+      setFiles(filesWithTags);
     } catch (err) {
       console.error('Failed to list objects from S3', err);
     } finally {
@@ -407,16 +453,17 @@ export function S3Uploader() {
    */
   function renderTreeTableSection({
     title,
-    rows,
+    rows = [],
     isLoading,
-    searchValue,
-    setSearchValue,
-    expandedSet,
-    toggleFolderFn,
-    isPending,
+    searchValue = '',
+    setSearchValue = () => {},
+    expandedSet = new Set(),
+    toggleFolderFn = () => {},
+    isPending = false,
     showErrorColumn = false,
+    customContent = null,
   }) {
-    const showSearch = !isPending;
+    const showSearch = !isPending && !customContent;
     const noItemsMsg = isPending ? 'No files waiting to be indexed—everything is up to date!' : 'No files found';
 
     // If there are 20 or more rows, enable vertical scrolling.
@@ -431,101 +478,106 @@ export function S3Uploader() {
           <Card.Title className="mb-0">{title}</Card.Title>
         </Card.Header>
         <Card.Body>
-          {showSearch && (
-            <div className="mb-3" style={{ maxWidth: '300px' }}>
-              <Form.Control
-                type="text"
-                placeholder="Search..."
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                size="sm"
-              />
-            </div>
-          )}
+          {customContent || (
+            <>
+              {showSearch && (
+                <div className="mb-3" style={{ maxWidth: '300px' }}>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search..."
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
+                    size="sm"
+                  />
+                </div>
+              )}
 
-          {isLoading ? (
-            <div className="text-center p-4">
-              <div className="spinner-border text-primary">
-                <span className="visually-hidden">Loading…</span>
-              </div>
-            </div>
-          ) : rows.length === 0 ? (
-            <div className="text-center bg-light rounded" style={{ padding: '1rem' }}>
-              <p className="mt-2 text-muted mb-0">{noItemsMsg}</p>
-            </div>
-          ) : (
-            <div style={containerStyle}>
-              <Table
-                hover
-                size="sm"
-                className="mb-0"
-                style={{ tableLayout: 'fixed', backgroundColor: '#fff', minWidth: '100%' }}
-              >
-                <thead>
-                  <tr>
-                    <th style={{ width: showErrorColumn ? '60%' : '70%', cursor: 'default' }}>Name</th>
-                    <th style={{ width: '20%', cursor: 'default' }}>Upload Date</th>
-                    <th style={{ width: '10%', cursor: 'default' }}>Size (KB)</th>
-                    {showErrorColumn && <th style={{ width: '10%', cursor: 'default' }}>Status</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => {
-                    const { id, type, name, depth, uploadDate, size, kbStatus } = row;
-                    const isFolder = type === 'folder';
-                    const isExpanded = expandedSet.has(id);
-                    const indentPx = depth * 20;
-
-                    return (
-                      <tr key={id}>
-                        <td>
-                          <div
-                            style={{
-                              marginLeft: indentPx,
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                            }}
-                          >
-                            {isFolder ? (
-                              <i
-                                className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1`}
-                                style={{ cursor: 'pointer' }}
-                                onClick={() => toggleFolderFn(id)}
-                              />
-                            ) : (
-                              <span style={{ marginLeft: '1rem' }} />
-                            )}
-                            {isFolder ? (
-                              <>
-                                <i className="bi bi-folder me-2" style={{ color: '#4b007d' }} />
-                                <strong>{name}</strong>
-                              </>
-                            ) : (
-                              <>
-                                <i className="bi bi-file-earmark me-2" style={{ color: '#000' }} />
-                                {name}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                        <td>{uploadDate}</td>
-                        <td>{size}</td>
-                        {showErrorColumn && (
-                          <td>
-                            {kbStatus === 'SUCCESS' ? (
-                              <span className="badge bg-success">SUCCESS</span>
-                            ) : kbStatus === 'FAILED' ? (
-                              <span className="badge bg-danger">FAILED</span>
-                            ) : null}
-                          </td>
-                        )}
+              {isLoading ? (
+                <div className="text-center p-4">
+                  <div className="spinner-border text-primary">
+                    <span className="visually-hidden">Loading…</span>
+                  </div>
+                </div>
+              ) : rows.length === 0 ? (
+                <div className="text-center bg-light rounded" style={{ padding: '1rem' }}>
+                  <p className="mt-2 text-muted mb-0">{noItemsMsg}</p>
+                </div>
+              ) : (
+                <div style={containerStyle}>
+                  <Table
+                    hover
+                    size="sm"
+                    className="mb-0"
+                    style={{ tableLayout: 'fixed', backgroundColor: '#fff', minWidth: '100%' }}
+                  >
+                    <thead>
+                      <tr>
+                        <th style={{ width: showErrorColumn ? '60%' : '70%', cursor: 'default' }}>Name</th>
+                        <th style={{ width: '20%', cursor: 'default' }}>Upload Date</th>
+                        <th style={{ width: '10%', cursor: 'default' }}>Size (KB)</th>
+                        {showErrorColumn && <th style={{ width: '10%', cursor: 'default' }}>Status</th>}
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => {
+                        const { id, type, name, depth, uploadDate, size, kbStatus } = row;
+                        const isFolder = type === 'folder';
+                        const isExpanded = expandedSet.has(id);
+                        const indentPx = depth * 20;
+
+                        return (
+                          <tr key={id}>
+                            <td>
+                              <div
+                                style={{
+                                  marginLeft: indentPx,
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {isFolder ? (
+                                  <i
+                                    className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1`}
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => toggleFolderFn(id)}
+                                  />
+                                ) : (
+                                  <span style={{ marginLeft: '1rem' }} />
+                                )}
+                                {isFolder ? (
+                                  <>
+                                    <i className="bi bi-folder me-2" style={{ color: '#4b007d' }} />
+                                    <strong>{name}</strong>
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="bi bi-file-earmark me-2" style={{ color: '#000' }} />
+                                    {row.displayName || name}
+                                    {row.urlTag && <span className="ms-2 badge bg-info">URL</span>}
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                            <td>{uploadDate}</td>
+                            <td>{size}</td>
+                            {showErrorColumn && (
+                              <td>
+                                {kbStatus === 'SUCCESS' ? (
+                                  <span className="badge bg-success">SUCCESS</span>
+                                ) : kbStatus === 'FAILED' ? (
+                                  <span className="badge bg-danger">FAILED</span>
+                                ) : null}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+              )}
+            </>
           )}
         </Card.Body>
       </Card>
@@ -554,7 +606,7 @@ export function S3Uploader() {
           <Row>
             <Col className="px-3 px-lg-5">
               <Breadcrumbs label="Upload" clearStack={true} />
-              <h1>File Upload</h1>
+              <h1>Knowledge Base Upload</h1>
               <p className="small mt-2">
                 Once uploaded, files are automatically indexed every 30 minutes where they will be available for
                 querying in Numa Chat.
@@ -565,20 +617,8 @@ export function S3Uploader() {
       </header>
 
       <LayoutDashboard>
-        {/* Top Row: Upload + Knowledge Base Status */}
         <Row className="g-4 mb-4">
-          <Col xs={12} lg={6}>
-            <Card>
-              <Card.Header>
-                <Card.Title className="mb-0">Upload New Files or Folders</Card.Title>
-              </Card.Header>
-              <Card.Body>
-                <FileUploader onUploadSuccess={handleUploadSuccess} />
-              </Card.Body>
-            </Card>
-          </Col>
-
-          <Col xs={12} lg={6}>
+          <Col xs={12}>
             <Card>
               <Card.Header>
                 <Card.Title className="mb-0">Knowledge Base Status</Card.Title>
@@ -595,48 +635,77 @@ export function S3Uploader() {
                   Refresh
                 </Button>
 
-                <div className="mb-2">
-                  <strong>Status:</strong>{' '}
-                  {syncStatus === 'ACTIVE' ? (
-                    <span className="badge bg-success ms-1">Active</span>
-                  ) : (
-                    <span className="badge bg-secondary ms-1">{syncStatus || 'Unknown'}</span>
-                  )}
-                </div>
+                <Row>
+                  <Col xs={12} md={6}>
+                    <div className="mb-2">
+                      <strong>Status:</strong>{' '}
+                      {syncStatus === 'ACTIVE' ? (
+                        <span className="badge bg-success ms-1">Active</span>
+                      ) : (
+                        <span className="badge bg-secondary ms-1">{syncStatus || 'Unknown'}</span>
+                      )}
+                    </div>
 
-                {lastSuccessfulSync ? (
-                  <p className="text-muted small mb-2">
-                    <strong>Last indexed at:</strong> {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
-                  </p>
-                ) : (
-                  <p className="text-muted small mb-2">No successful sync yet.</p>
-                )}
+                    {lastSuccessfulSync ? (
+                      <p className="text-muted small mb-2">
+                        <strong>Last indexed at:</strong> {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
+                      </p>
+                    ) : (
+                      <p className="text-muted small mb-2">No successful sync yet.</p>
+                    )}
 
-                <p className="text-muted small mb-2">
-                  <strong>Next scheduled sync:</strong> {getNextSyncTime().toLocaleTimeString()}
-                </p>
+                    <p className="text-muted small mb-2">
+                      <strong>Next scheduled sync:</strong> {getNextSyncTime().toLocaleTimeString()}
+                    </p>
 
-                {syncJobStatus === 'SYNCING' && (
-                  <Alert variant="warning" className="d-flex align-items-center">
-                    <span className="spinner-border spinner-border-sm me-2" />
-                    <strong>Indexing in progress…</strong>
-                  </Alert>
-                )}
-
-                {syncMetrics && (
-                  <div className="text-muted small mb-2">
-                    <strong>Latest Sync Metrics:</strong>
-                    <ul className="list-unstyled mb-3">
-                      <li>Documents Added: {syncMetrics.documentsAdded}</li>
-                      <li>Documents Deleted: {syncMetrics.documentsDeleted}</li>
-                      <li>Documents Failed: {syncMetrics.documentsFailed}</li>
-                      <li>Documents Modified: {syncMetrics.documentsModified}</li>
-                      <li>Documents Scanned: {syncMetrics.documentsScanned}</li>
-                    </ul>
-                  </div>
-                )}
+                    {syncJobStatus === 'SYNCING' && (
+                      <Alert variant="warning" className="d-flex align-items-center">
+                        <span className="spinner-border spinner-border-sm me-2" />
+                        <strong>Indexing in progress…</strong>
+                      </Alert>
+                    )}
+                  </Col>
+                  <Col xs={12} md={6}>
+                    {syncMetrics && (
+                      <div className="text-muted small">
+                        <strong>Latest Sync Metrics:</strong>
+                        <ul className="list-unstyled">
+                          <li>Documents Added: {syncMetrics.documentsAdded}</li>
+                          <li>Documents Deleted: {syncMetrics.documentsDeleted}</li>
+                          <li>Documents Failed: {syncMetrics.documentsFailed}</li>
+                          <li>Documents Modified: {syncMetrics.documentsModified}</li>
+                          <li>Documents Scanned: {syncMetrics.documentsScanned}</li>
+                        </ul>
+                      </div>
+                    )}
+                  </Col>
+                </Row>
               </Card.Body>
             </Card>
+          </Col>
+        </Row>
+
+        {/* Upload + Knowledge Base Status */}
+        <Row className="g-4 mb-4">
+          <Col xs={12} lg={6}>
+            <Card>
+              <Card.Header>
+                <Card.Title className="mb-0">Upload New Files or Folders</Card.Title>
+              </Card.Header>
+              <Card.Body>
+                <FileUploader onUploadSuccess={handleUploadSuccess} />
+              </Card.Body>
+            </Card>
+          </Col>
+
+          {/* URL Scraping Section */}
+          <Col xs={12} lg={6}>
+            <UrlScraper
+              onScrapeSuccess={() => {
+                // Refresh the file list after successful scrape
+                fetchFiles();
+              }}
+            />
           </Col>
         </Row>
 

@@ -137,6 +137,7 @@ export class NumaClientStack extends TerraformStack {
       apiGatewayId: fe.apiGateway.id,
       chatHistoryTableName: core.chatHistoryTable.name,
       clientName: props.clientName,
+      dataBucketName: core.dataBucket.bucket.bucket,
       logGroup: core.logGroup,
       region: clientConfig.region,
       userPoolClientId: core.userPoolClient.id,
