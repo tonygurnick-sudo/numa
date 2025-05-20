@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, GetObjectTaggingCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getIdentityPoolCredentials) => {
@@ -178,6 +178,48 @@ export const downloadFileWithSignedUrl = async (
   } catch (error) {
     console.error('Error downloading file with signed URL:', error);
     throw error;
+  }
+};
+
+/**
+ * Get the URL tag from an S3 object
+ * @param {string} s3Key - The S3 object key
+ * @param {string} s3Bucket - The S3 bucket name
+ * @param {string} region - AWS region
+ * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @returns {Promise<string|null>} - The URL from the tag or null if not found
+ */
+export const getUrlTagFromS3Object = async (s3Key, s3Bucket, region, getIdentityPoolCredentials) => {
+  try {
+    const credentials = await getIdentityPoolCredentials();
+
+    if (!credentials?.accessKeyId) {
+      console.error('AWS Credentials are missing');
+      return null;
+    }
+
+    const s3Client = new S3Client({
+      region,
+      credentials,
+    });
+
+    const command = new GetObjectTaggingCommand({
+      Bucket: s3Bucket,
+      Key: s3Key,
+    });
+
+    const response = await s3Client.send(command);
+
+    if (response.TagSet) {
+      const urlTag = response.TagSet.find((tag) => tag.Key === 'url');
+      // Decode the URL value if it exists
+      return urlTag ? decodeURIComponent(urlTag.Value) : null;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error getting URL tag from S3 object:', error);
+    return null;
   }
 };
 

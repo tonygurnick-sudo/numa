@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getContentType } from '../utils/fileUtils';
+import { getUrlTagFromS3Object } from '../utils/s3Utils';
 import { Button, Collapse } from 'react-bootstrap';
 
 const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
@@ -7,6 +8,7 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
   const [processedRefs, setProcessedRefs] = useState([]);
   const [downloadingIndex, setDownloadingIndex] = useState(null);
   const downloadLinkRef = useRef(null);
+  const region = window.sessionStorage.getItem('REGION');
 
   useEffect(() => {
     // Process references when they change
@@ -105,6 +107,7 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
 
   // Function to handle document access using invisible link approach with pre-signed URLs
   const handleDocumentAccess = async (ref, index) => {
+    // For non-S3 URLs, just open the URL directly
     if (!ref.isS3 || !ref.bucket || !ref.key) {
       window.open(ref.url, '_blank');
       return;
@@ -112,6 +115,17 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
 
     try {
       setDownloadingIndex(index);
+
+      // First try to get the URL from the S3 object's tags
+      const urlFromTag = await getUrlTagFromS3Object(ref.key, ref.bucket, region, getIdentityPoolCredentials);
+
+      // If we found a URL in the tags, open it directly
+      if (urlFromTag) {
+        window.open(urlFromTag, '_blank');
+        return;
+      }
+
+      // If no URL tag found, fall back to pre-signed URL
       const signedUrl = await getPresignedUrl(ref, getIdentityPoolCredentials);
       if (!signedUrl) {
         return;
@@ -138,7 +152,6 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
 
   const getPresignedUrl = async (ref, getIdentityPoolCredentials) => {
     try {
-      const region = window.sessionStorage.getItem('REGION');
       const s3Key = ref.key;
       const s3Bucket = ref.bucket;
 

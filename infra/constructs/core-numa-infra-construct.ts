@@ -344,7 +344,7 @@ export class CoreNumaInfra extends Construct {
         },
         {
           effect: 'Allow',
-          actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject', 's3:GetObject'],
+          actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject', 's3:GetObject', 's3:GetObjectTagging'],
           resources: [`${this.dataBucket.bucket.arn}/*`, this.dataBucket.bucket.arn],
         },
         {

@@ -45,7 +45,7 @@ describe('S3Uploader', () => {
     renderComponent();
 
     // Check top-level elements
-    expect(screen.getByText('File Upload')).toBeInTheDocument();
+    expect(screen.getByText('Knowledge Base Upload')).toBeInTheDocument();
     expect(screen.getByTestId('file-uploader')).toBeInTheDocument();
     expect(screen.getByText('Knowledge Base Status')).toBeInTheDocument();
     expect(screen.getByText('Upload New Files or Folders')).toBeInTheDocument();
