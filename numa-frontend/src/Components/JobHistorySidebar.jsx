@@ -69,8 +69,8 @@ const JobHistorySidebar = () => {
         // Check if tokens are the same
         let isSameToken = false;
         if (nextToken) {
-          if (nextToken.jobID && newNextToken.jobID) {
-            isSameToken = nextToken.jobID === newNextToken.jobID;
+          if (nextToken.jobId && newNextToken.jobId) {
+            isSameToken = nextToken.jobId === newNextToken.jobId;
           } else {
             isSameToken = JSON.stringify(nextToken) === JSON.stringify(newNextToken);
           }
@@ -170,7 +170,7 @@ const JobHistorySidebar = () => {
           ) : (
             <ListGroup className="job-history-list">
               {jobs.map((job) => (
-                <ListGroup.Item key={job.jobID} className="mb-2 rounded shadow-sm border">
+                <ListGroup.Item key={job.jobId} className="mb-2 rounded shadow-sm border">
                   <div className="d-flex justify-content-between align-items-start">
                     <div>
                       <div className="fw-bold">
@@ -273,9 +273,9 @@ const JobHistorySidebar = () => {
                         }
                       })()}
                       size="sm"
-                      onClick={() => handleViewResults(job.jobID)}
-                      disabled={loadingJobId === job.jobID}
-                      title={`Job ID: ${job.jobID}`}
+                      onClick={() => handleViewResults(job.jobId)}
+                      disabled={loadingJobId === job.jobId}
+                      title={`Job ID: ${job.jobId}`}
                       className="shadow-sm"
                       style={(() => {
                         const status = job.status || 'completed';
@@ -289,7 +289,7 @@ const JobHistorySidebar = () => {
                         return { minWidth: '120px', padding: '6px 12px' };
                       })()}
                     >
-                      {loadingJobId === job.jobID ? (
+                      {loadingJobId === job.jobId ? (
                         <div className="d-flex align-items-center">
                           <Preloader smallscreen={true} />
                           <span className="ms-2">Loading...</span>

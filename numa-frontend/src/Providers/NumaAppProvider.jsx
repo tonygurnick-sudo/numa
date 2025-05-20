@@ -108,7 +108,7 @@ export const NumaAppProvider = ({ children }) => {
         if (append) {
           // Filter out any duplicates when appending
           const newJobs = sortedJobs.filter(
-            (newJob) => !prevJobs.some((existingJob) => existingJob.jobID === newJob.jobID),
+            (newJob) => !prevJobs.some((existingJob) => existingJob.jobId === newJob.jobId),
           );
           return [...prevJobs, ...newJobs];
         }
@@ -283,7 +283,7 @@ export const NumaAppProvider = ({ children }) => {
     return currentResults;
   };
 
-  const processHttpRequestTask = async (jobID, task, currentResults) => {
+  const processHttpRequestTask = async (jobId, task, currentResults) => {
     const templatePayload = task.params?.payload;
     const request_endpoint = `/api/${numaAppData.id}/main`;
 
@@ -291,7 +291,7 @@ export const NumaAppProvider = ({ children }) => {
 
     const requestPayload = {
       ...payload,
-      jobId: jobID,
+      jobId: jobId,
     };
     console.log('Generated Payload for http-request:', requestPayload);
     console.log('Endpoint for http-request:', request_endpoint);
@@ -307,7 +307,7 @@ export const NumaAppProvider = ({ children }) => {
 
       // Poll for results
       const { status, result } = await pollJobStatus({
-        jobID: response.job_id,
+        jobId: response.job_id,
         pollInterval: 10000,
         maxPollingTime: 30 * 60 * 1000, // 30 minutes
       });
@@ -459,7 +459,7 @@ export const NumaAppProvider = ({ children }) => {
 
   // Shared polling function for both initial tasks and history jobs
   const pollJobStatus = async ({
-    jobID,
+    jobId,
     pollInterval = 5000,
     maxPollingTime = 5 * 60 * 1000,
     initialState = null,
@@ -471,7 +471,7 @@ export const NumaAppProvider = ({ children }) => {
 
     try {
       while (true) {
-        const polling_endpoint = `/api/${numaAppData.id}/main?job_id=${jobID}`;
+        const polling_endpoint = `/api/${numaAppData.id}/main?job_id=${jobId}`;
         console.log('Polling job:', polling_endpoint);
 
         const pollResponse = await numaPollStatus(polling_endpoint);
@@ -557,7 +557,7 @@ export const NumaAppProvider = ({ children }) => {
       return jobHistoryItem;
     }
 
-    if (!jobHistoryItem.jobID) {
+    if (!jobHistoryItem.jobId) {
       console.log('No jobId available for polling incomplete job');
       return jobHistoryItem;
     }
@@ -600,7 +600,7 @@ export const NumaAppProvider = ({ children }) => {
 
       // Use the same polling logic as initial app run
       const { status, result } = await pollJobStatus({
-        jobID: jobHistoryItem.jobID,
+        jobId: jobHistoryItem.jobId,
         pollInterval: 5000,
         maxPollingTime: 5 * 60 * 1000,
       });
@@ -613,7 +613,7 @@ export const NumaAppProvider = ({ children }) => {
         });
 
         // Update job in history with results and completed status, but don't modify inputs
-        await jobsApi.updateJob(numaAppData, jobHistoryItem.jobID, formattedResult, undefined, 'completed');
+        await jobsApi.updateJob(numaAppData, jobHistoryItem.jobId, formattedResult, undefined, 'completed');
         await loadAppJobs();
 
         // Update UI same as initial app run
@@ -782,19 +782,19 @@ export const NumaAppProvider = ({ children }) => {
           // Continue even if the update fails - we'll still try to use the job
         }
         jobResponse = {
-          jobID: currentJobId,
+          jobId: currentJobId,
           startedAt: new Date().toISOString(),
         };
       } else {
         // No job exists yet, create one with 'running' status
         const userId = user?.decoded_tokens?.idToken?.['sub'];
         jobResponse = await jobsApi.createJob(numaAppData, taskInputValues, 'running', userId);
-        setCurrentJobId(jobResponse.jobID);
-        console.log(`Created new job with ID: ${jobResponse.jobID}`);
+        setCurrentJobId(jobResponse.jobId);
+        console.log(`Created new job with ID: ${jobResponse.jobId}`);
       }
 
       return {
-        jobID: jobResponse.jobID,
+        jobId: jobResponse.jobId,
         dateTime: jobResponse.startedAt,
       };
     } catch (error) {
@@ -805,7 +805,7 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
-  const saveJobResults = async (jobID, dateTime, currentResults) => {
+  const saveJobResults = async (jobId, dateTime, currentResults) => {
     try {
       // Get all text-output tasks
       const textOutputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
@@ -862,7 +862,7 @@ export const NumaAppProvider = ({ children }) => {
       console.log('Text-output results to be saved:', textOutputResults);
       // Update the job with results and completed status, but don't modify inputs
       const userId = user?.decoded_tokens?.idToken?.['sub'];
-      await jobsApi.updateJob(numaAppData, jobID, textOutputResults, undefined, 'completed', userId);
+      await jobsApi.updateJob(numaAppData, jobId, textOutputResults, undefined, 'completed', userId);
 
       // Update the job in state
       setJob((prevJob) => ({
@@ -1005,7 +1005,7 @@ export const NumaAppProvider = ({ children }) => {
     setError(null); // Clear any previous errors
 
     try {
-      const { jobID, dateTime } = await initializeJob();
+      const { jobId, dateTime } = await initializeJob();
       let currentResults = {};
 
       const orderedTasks = numaAppData.tasks.slice().sort((a, b) => a.order - b.order);
@@ -1041,7 +1041,7 @@ export const NumaAppProvider = ({ children }) => {
             break;
 
           case 'http-request':
-            currentResults = await processHttpRequestTask(jobID, task, currentResults);
+            currentResults = await processHttpRequestTask(jobId, task, currentResults);
             completedWeight += taskWeight;
             break;
 
@@ -1072,7 +1072,7 @@ export const NumaAppProvider = ({ children }) => {
       }
 
       // Save final results
-      await saveJobResults(jobID, dateTime, currentResults);
+      await saveJobResults(jobId, dateTime, currentResults);
       setProcessingProgress(100);
       setProcessingStatus('Complete!');
       return currentResults;
@@ -1151,8 +1151,8 @@ export const NumaAppProvider = ({ children }) => {
       }
 
       // Set the current job ID so we can use it when running the app
-      if (job.jobID) {
-        setCurrentJobId(job.jobID);
+      if (job.jobId) {
+        setCurrentJobId(job.jobId);
       }
 
       // Parse stored manifest if available, otherwise fall back to current manifest
