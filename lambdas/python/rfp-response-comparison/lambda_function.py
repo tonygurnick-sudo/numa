@@ -53,7 +53,6 @@ def handler(event: dict, context: LambdaContext) -> dict:
         prompt = COMPARISON_PROMPT.format(
             summaries=responses_block, framework=framework
         )
-        logger.debug("Comparison prompt length", length=len(prompt))
 
         # Invoke Bedrock LLM
         model = bedrock.BedrockClaude3Model(
@@ -65,7 +64,45 @@ def handler(event: dict, context: LambdaContext) -> dict:
             }
         )
         response = model.run(query=prompt, name_for_logging="rfp_comparison")
-        result = response.response[0]["input"]["comparison"]
+
+        # Extract the result with better error handling for different response formats
+        result = ""
+        if (
+            response.response
+            and isinstance(response.response, list)
+            and len(response.response) > 0
+        ):
+            first_item = response.response[0]
+
+            # Try to extract from tool format
+            if isinstance(first_item, dict) and "input" in first_item:
+                input_data = first_item["input"]
+                if isinstance(input_data, dict) and "comparison" in input_data:
+                    result = input_data["comparison"]
+                else:
+                    logger.warning(
+                        "Input field exists but comparison key not found",
+                        input_keys=(
+                            list(input_data.keys())
+                            if isinstance(input_data, dict)
+                            else "not a dict"
+                        ),
+                    )
+
+            # Fallback to text content if tool format fails
+            if not result and isinstance(first_item, dict) and "text" in first_item:
+                result = first_item["text"]
+                logger.info("Extracted text from direct response")
+            elif (
+                not result and isinstance(first_item, dict) and "content" in first_item
+            ):
+                result = first_item["content"]
+                logger.info("Extracted content from response")
+
+        # If still no result, try to use the entire response as a fallback
+        if not result:
+            logger.warning("Could not extract structured result, using full response")
+            result = str(response.response)
 
         # Save comparison result to S3 as Markdown
         output_key = f"{event['output_path']}/comparison.md"
