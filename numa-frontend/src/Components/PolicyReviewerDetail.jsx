@@ -145,12 +145,15 @@ export const PolicyReviewerDetail = () => {
   const [resultsTabView, setResultsTabView] = useState('review'); // 'review' or 'updated'
 
   // Auth / API
-  const { loading, isAuthenticated, getIdentityPoolCredentials } = useAuth();
+  const { loading, isAuthenticated, getIdentityPoolCredentials, user } = useAuth();
   const { numaPost, numaPut, numaGet } = useNumaRequest();
   const jobsApi = useJobsApi();
+  const userId = user?.decoded_tokens?.idToken?.['sub'];
 
   // Helper to get region consistently
   const getRegion = () => config?.REGION || 'us-east-1';
+
+  const getOutputBucketName = () => `numa-${config?.CLIENT_NAME}-outputs`;
 
   /**********************
    * Effects            *
@@ -227,7 +230,7 @@ export const PolicyReviewerDetail = () => {
           }
           const name = inputs?.policyName || 'Unnamed Policy';
           return {
-            id: j.jobID,
+            id: j.jobId,
             name,
             lastModified: j.dateTime,
             status: j.status,
@@ -266,13 +269,13 @@ export const PolicyReviewerDetail = () => {
 
   const handleRemoveUrl = (url) => setUrlList(urlList.filter((u) => u !== url));
 
-  const handleEditConfig = async (jobID) => {
+  const handleEditConfig = async (jobId) => {
     try {
-      const job = policies.find((p) => p.id === jobID);
+      const job = policies.find((p) => p.id === jobId);
       if (!job) throw new Error('Policy not found');
 
       setIsEditing(true);
-      setEditingJobId(jobID);
+      setEditingJobId(jobId);
       setPolicyName(job.name);
       setPolicyContext(job.jobDetails.inputs?.policyContext || '');
 
@@ -390,6 +393,7 @@ export const PolicyReviewerDetail = () => {
         jobData = {
           type: 'POLICY_REVIEW',
           status: JobStatus.UPLOADED,
+          userId: userId,
         };
 
         updatedJob = await numaPost(`${config.API_ENDPOINT}/policy-reviewer/jobs`, {
@@ -413,12 +417,12 @@ export const PolicyReviewerDetail = () => {
           ? selectedFile.name.substring(selectedFile.name.lastIndexOf('.'))
           : '';
 
-        const key = `policy-reviewer/${updatedJob.jobID}/${sanitizeFileName(policyName)}_${randomId}${ext}`;
+        const key = `policy-reviewer/${updatedJob.jobId}/${sanitizeFileName(policyName)}_${randomId}${ext}`;
 
         const presign = await getSignedUrl(
           s3Client,
           new PutObjectCommand({
-            Bucket: `numa-${config.CLIENT_NAME}-outputs`,
+            Bucket: getOutputBucketName(),
             Key: key,
           }),
           { expiresIn: 3600 },
@@ -432,7 +436,7 @@ export const PolicyReviewerDetail = () => {
           },
         });
 
-        await numaPut(`${config.API_ENDPOINT}/policy-reviewer/jobs/${updatedJob.jobID}`, {
+        await numaPut(`${config.API_ENDPOINT}/policy-reviewer/jobs/${updatedJob.jobId}`, {
           ...updatedJob,
           uploadedFile: {
             fileName: selectedFile.name,
@@ -478,7 +482,7 @@ export const PolicyReviewerDetail = () => {
     const url = await getSignedUrl(
       s3Client,
       new GetObjectCommand({
-        Bucket: config.OUTPUTS_BUCKET_NAME,
+        Bucket: getOutputBucketName(),
         Key: key,
       }),
       { expiresIn: 3600 },
@@ -601,7 +605,7 @@ export const PolicyReviewerDetail = () => {
       const url = await getSignedUrl(
         s3Client,
         new GetObjectCommand({
-          Bucket: config.OUTPUTS_BUCKET_NAME,
+          Bucket: getOutputBucketName(),
           Key: policy.jobDetails.uploadedFile.s3Key,
         }),
         { expiresIn: 3600 },
@@ -627,59 +631,59 @@ export const PolicyReviewerDetail = () => {
   };
 
   const pollProcessingPolicy = async (job) => {
-    const { jobID, stepFunctionJobId } = job;
+    const { jobId, stepFunctionJobId } = job;
 
     if (!stepFunctionJobId) {
-      console.warn(`Job ${jobID} missing stepFunctionJobId, stopping polling`);
-      clearPollingForJob(jobID);
+      console.warn(`Job ${jobId} missing stepFunctionJobId, stopping polling`);
+      clearPollingForJob(jobId);
       return true;
     }
 
     // prevent parallel requests
-    if (inFlightRequestsRef.current[jobID]) {
+    if (inFlightRequestsRef.current[jobId]) {
       return false;
     }
 
-    inFlightRequestsRef.current[jobID] = true;
+    inFlightRequestsRef.current[jobId] = true;
 
     try {
       const res = await numaGet(`${config.API_ENDPOINT}/policy-reviewer/main?job_id=${stepFunctionJobId}`);
       const status = res.status;
 
       if (normalizeStatus(status) !== 'PROCESSING') {
-        console.log(`Job ${jobID} status changed to ${status}, updating...`);
+        console.log(`Job ${jobId} status changed to ${status}, updating...`);
 
-        await numaPut(`${config.API_ENDPOINT}/policy-reviewer/jobs/${jobID}`, {
+        await numaPut(`${config.API_ENDPOINT}/policy-reviewer/jobs/${jobId}`, {
           ...job,
           status,
         });
 
-        clearPollingForJob(jobID);
+        clearPollingForJob(jobId);
         fetchPolicies();
         return true;
       }
     } catch (e) {
-      console.error(`Polling error for job ${jobID}:`, e);
-      clearPollingForJob(jobID);
+      console.error(`Polling error for job ${jobId}:`, e);
+      clearPollingForJob(jobId);
       return true;
     } finally {
-      delete inFlightRequestsRef.current[jobID];
+      delete inFlightRequestsRef.current[jobId];
     }
 
     return false;
   };
 
   const startPollingForJob = (job) => {
-    const { jobID } = job;
-    if (pollingPoliciesRef.current.has(jobID)) {
-      console.log(`Already polling job ${jobID}`);
+    const { jobId } = job;
+    if (pollingPoliciesRef.current.has(jobId)) {
+      console.log(`Already polling job ${jobId}`);
       return;
     }
 
-    console.log(`Starting polling for job ${jobID}`);
-    pollingPoliciesRef.current.add(jobID);
+    console.log(`Starting polling for job ${jobId}`);
+    pollingPoliciesRef.current.add(jobId);
 
-    pollingIntervalsRef.current[jobID] = setInterval(() => {
+    pollingIntervalsRef.current[jobId] = setInterval(() => {
       pollProcessingPolicy(job);
     }, 10000);
   };
