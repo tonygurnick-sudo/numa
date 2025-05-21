@@ -44,9 +44,10 @@ export const PolicyBuilderDetail = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const inFlightRequestsRef = useRef({});
 
-  const { loading, isAuthenticated, getIdentityPoolCredentials } = useAuth();
+  const { loading, isAuthenticated, getIdentityPoolCredentials, user } = useAuth();
   const { numaPost, numaPut, numaGet } = useNumaRequest();
   const jobsApi = useJobsApi();
+  const userId = user?.decoded_tokens?.idToken?.['sub'];
 
   useEffect(() => {
     const handleResize = () => {
@@ -313,6 +314,7 @@ export const PolicyBuilderDetail = () => {
       const jobData = {
         type: 'POLICY_GENERATION',
         status: 'PENDING',
+        userId: userId,
         inputs: {
           schoolName: policyInputs.schoolName,
           schoolContext: policyInputs.schoolContext,
@@ -327,7 +329,7 @@ export const PolicyBuilderDetail = () => {
 
       // Start the step function using postRequest
       const stepFunction = await numaPost(`${config.API_ENDPOINT}/policy-builder/main`, {
-        original_job_id: job.jobID,
+        original_job_id: job.jobId,
         organisation_name: policyInputs.schoolName,
         organisation_context: policyInputs.schoolContext,
       });
@@ -335,7 +337,7 @@ export const PolicyBuilderDetail = () => {
       console.log('Step Function started:', stepFunction);
 
       // Update the job with the step function details
-      const updatedJob = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${job.jobID}`, {
+      const updatedJob = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${job.jobId}`, {
         status: 'PROCESSING',
         stepFunctionJobId: stepFunction.job_id,
       });
@@ -372,17 +374,17 @@ export const PolicyBuilderDetail = () => {
   }, []);
 
   const pollProcessingPolicy = async (job) => {
-    const { jobID } = job;
-    console.log(`Polling status for job ${jobID}`);
+    const { jobId } = job;
+    console.log(`Polling status for job ${jobId}`);
 
     // Check if there's already a polling request in progress for this job
-    if (inFlightRequestsRef.current[jobID]) {
-      console.log(`Polling request already in progress for job ${jobID}, skipping`);
+    if (inFlightRequestsRef.current[jobId]) {
+      console.log(`Polling request already in progress for job ${jobId}, skipping`);
       return false;
     }
 
     // Set a flag indicating this job has a request in progress
-    inFlightRequestsRef.current[jobID] = true;
+    inFlightRequestsRef.current[jobId] = true;
 
     try {
       const response = await numaGet(`${config.API_ENDPOINT}/policy-builder/main?job_id=${job.stepFunctionJobId}`);
@@ -390,8 +392,8 @@ export const PolicyBuilderDetail = () => {
 
       // Check for unauthorized error
       if (response.status === 401) {
-        console.error(`Unauthorized access for job ${jobID}. Stopping polling.`);
-        clearPollingForJob(jobID);
+        console.error(`Unauthorized access for job ${jobId}. Stopping polling.`);
+        clearPollingForJob(jobId);
         setErrorMessage('Unauthorized access. Please check your credentials.');
         return true;
       }
@@ -400,7 +402,7 @@ export const PolicyBuilderDetail = () => {
         console.error(`Step Function request failed with status: ${response.status}`);
 
         // Update job manager with FAILED status
-        const updateResponse = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${jobID}`, {
+        const updateResponse = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${jobId}`, {
           ...job,
           status: 'FAILED',
           error: response.message || 'Step function execution failed',
@@ -408,7 +410,7 @@ export const PolicyBuilderDetail = () => {
 
         console.log('Update Response for failed job:', updateResponse);
 
-        clearPollingForJob(jobID);
+        clearPollingForJob(jobId);
         fetchPolicies(); // Refresh the policies list
         return true;
       }
@@ -417,10 +419,10 @@ export const PolicyBuilderDetail = () => {
 
       // Stop polling if the status is not PROCESSING
       if (stepFunctionStatus !== 'PROCESSING') {
-        console.log(`Job ${jobID} status changed from PROCESSING to ${stepFunctionStatus}`);
+        console.log(`Job ${jobId} status changed from PROCESSING to ${stepFunctionStatus}`);
 
         // Update job manager with new status
-        const updateResponse = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${jobID}`, {
+        const updateResponse = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${jobId}`, {
           ...job,
           status: stepFunctionStatus,
         });
@@ -429,12 +431,12 @@ export const PolicyBuilderDetail = () => {
 
         if (updateResponse && updateResponse.error) {
           console.error(`Failed to update job status in job manager: ${updateResponse.error}`);
-          clearPollingForJob(jobID);
+          clearPollingForJob(jobId);
           return true;
         }
 
-        console.log(`Successfully updated job ${jobID} in job manager`);
-        clearPollingForJob(jobID);
+        console.log(`Successfully updated job ${jobId} in job manager`);
+        clearPollingForJob(jobId);
 
         // Only trigger a fetch if the status has actually changed
         if (job.status !== stepFunctionStatus) {
@@ -447,41 +449,41 @@ export const PolicyBuilderDetail = () => {
         console.log('Fetch aborted');
         return false;
       }
-      console.error(`Error polling job ${jobID}:`, error);
-      clearPollingForJob(jobID);
+      console.error(`Error polling job ${jobId}:`, error);
+      clearPollingForJob(jobId);
       return true;
     } finally {
       // Clear the in-flight flag for this job
-      delete inFlightRequestsRef.current[jobID];
+      delete inFlightRequestsRef.current[jobId];
     }
 
     return false;
   };
 
   const startPollingForJob = (job) => {
-    const { jobID } = job;
+    const { jobId } = job;
 
     // Check if we're already polling this job
-    if (pollingPolicies.has(jobID)) {
-      console.log(`Already polling job ${jobID}, skipping`);
+    if (pollingPolicies.has(jobId)) {
+      console.log(`Already polling job ${jobId}, skipping`);
       return;
     }
 
-    console.log(`Starting polling for job ${jobID}`);
+    console.log(`Starting polling for job ${jobId}`);
 
     // Add this job to the set of polling jobs
-    setPollingPolicies((prev) => new Set(prev).add(jobID));
+    setPollingPolicies((prev) => new Set(prev).add(jobId));
 
     // Clear any existing interval for this job
-    if (pollingIntervalsRef.current[jobID]) {
-      clearInterval(pollingIntervalsRef.current[jobID]);
+    if (pollingIntervalsRef.current[jobId]) {
+      clearInterval(pollingIntervalsRef.current[jobId]);
     }
 
     const poll = async () => {
       // Only proceed if there's no in-flight request for this job
-      if (!inFlightRequestsRef.current[jobID]) {
+      if (!inFlightRequestsRef.current[jobId]) {
         const statusChanged = await pollProcessingPolicy(job);
-        if (!statusChanged && pollingIntervalsRef.current[jobID]) {
+        if (!statusChanged && pollingIntervalsRef.current[jobId]) {
           setTimeout(() => {
             requestAnimationFrame(poll);
           }, 10000);
@@ -489,7 +491,7 @@ export const PolicyBuilderDetail = () => {
           // Remove from polling set when complete
           setPollingPolicies((prev) => {
             const newSet = new Set(prev);
-            newSet.delete(jobID);
+            newSet.delete(jobId);
             return newSet;
           });
         }
@@ -501,7 +503,7 @@ export const PolicyBuilderDetail = () => {
       }
     };
 
-    pollingIntervalsRef.current[jobID] = true;
+    pollingIntervalsRef.current[jobId] = true;
     requestAnimationFrame(poll);
   };
 
@@ -524,7 +526,7 @@ export const PolicyBuilderDetail = () => {
         ?.filter((job) => job.type === 'POLICY_GENERATION')
         .map((job) => {
           return {
-            id: job.jobID,
+            id: job.jobId,
             name: job.inputs?.schoolName || 'Unnamed Policy',
             lastModified: job.dateTime,
             status: job.status,

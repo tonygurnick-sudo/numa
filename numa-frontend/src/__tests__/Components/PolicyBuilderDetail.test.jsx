@@ -37,12 +37,12 @@ describe('PolicyBuilderDetail Component', () => {
 
   // Default numa request context values
   const numaRequestContextValues = {
-    numaPost: vi.fn().mockResolvedValue({ jobID: 'test-job-id' }),
+    numaPost: vi.fn().mockResolvedValue({ jobId: 'test-job-id' }),
     numaPut: vi.fn().mockResolvedValue({}),
     numaGet: vi.fn().mockResolvedValue({
       items: [
         {
-          jobID: 'test-job-id',
+          jobId: 'test-job-id',
           type: 'POLICY_GENERATION',
           status: 'SUCCESS',
           dateTime: '2023-01-01T12:00:00Z',
@@ -81,7 +81,7 @@ describe('PolicyBuilderDetail Component', () => {
           data: {
             items: [
               {
-                jobID: 'test-job-id',
+                jobId: 'test-job-id',
                 type: 'POLICY_GENERATION',
                 status: 'SUCCESS',
                 dateTime: '2023-01-01T12:00:00Z',
@@ -258,7 +258,7 @@ describe('PolicyBuilderDetail Component', () => {
       if (url.includes('/policy-builder/main')) {
         return Promise.resolve({ job_id: 'test-step-function-id' });
       }
-      return Promise.resolve({ jobID: 'test-job-id' });
+      return Promise.resolve({ jobId: 'test-job-id' });
     });
 
     // Mock the job update
@@ -272,7 +272,7 @@ describe('PolicyBuilderDetail Component', () => {
       return Promise.resolve({
         items: [
           {
-            jobID: 'test-job-id',
+            jobId: 'test-job-id',
             type: 'POLICY_GENERATION',
             status: 'SUCCESS',
             dateTime: '2023-01-01T12:00:00Z',
@@ -395,7 +395,7 @@ describe('PolicyBuilderDetail Component', () => {
   it('should display processing policies correctly and start polling', async () => {
     // Mock a processing policy
     const processingPolicy = {
-      jobID: 'processing-job-id',
+      jobId: 'processing-job-id',
       type: 'POLICY_GENERATION',
       status: 'PROCESSING',
       dateTime: '2023-01-01T12:00:00Z',
