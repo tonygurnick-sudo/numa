@@ -569,6 +569,46 @@ const NumaChat = () => {
       for await (const event of response.stream) {
         if (stopGenerationRef.current) {
           console.log('Generation stopped by user.');
+
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastMsgIndex = updated.length - 1;
+            if (lastMsgIndex >= 0 && updated[lastMsgIndex].role === 'assistant') {
+              updated[lastMsgIndex].interrupted = true;
+            }
+            return updated;
+          });
+
+          // Save message to DynamoDB immediately
+          if (numaChatDynamoUtils) {
+            try {
+              const interruptedMessagePayload = {
+                conversationId: cid,
+                userId: sub,
+                messageType: 'text',
+                role: 'assistant',
+                content: rawAssistantText,
+                interrupted: true,
+                references: dsReferences.length > 0 ? dsReferences : undefined,
+              };
+
+              numaChatDynamoUtils
+                .addMessage(interruptedMessagePayload)
+                .catch((err) => console.error('Error storing interrupted message:', err));
+
+              numaChatDynamoUtils
+                .updateMetaItem(cid, sub, {
+                  latestTimestamp: Date.now(),
+                  latestMessage: inputMessage,
+                })
+                .catch((err) => console.error('Error updating meta item:', err));
+
+              console.log('Interrupted message saved to database');
+            } catch (err) {
+              console.error('Failed to save interrupted message:', err);
+            }
+          }
+
           break;
         }
 
@@ -636,7 +676,7 @@ const NumaChat = () => {
         assistantMessagePayload.references = dsReferences;
       }
 
-      if (numaChatDynamoUtils) {
+      if (numaChatDynamoUtils && !stopGenerationRef.current) {
         // Asynchronous store
         numaChatDynamoUtils
           .addMessage(assistantMessagePayload)
@@ -736,6 +776,7 @@ const NumaChat = () => {
           role: item.role,
           content: item.content || '',
           references: item.references || [],
+          interrupted: item.interrupted || false,
         };
 
         // Replace doc tags when loading conversation history
