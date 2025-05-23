@@ -24,7 +24,17 @@ class NumaChatDynamoUtils {
    * @param {object} [opts.fileInfo] - optional file metadata if needed
    * @param {Array} [opts.references] - optional references
    */
-  async addMessage({ conversationId, userId, messageType, role, content, conversationName, fileInfo, references }) {
+  async addMessage({
+    conversationId,
+    userId,
+    messageType,
+    role,
+    content,
+    conversationName,
+    fileInfo,
+    references,
+    interrupted,
+  }) {
     try {
       const timestamp = Date.now();
       const sk = `${conversationId}#${timestamp}`;
@@ -43,6 +53,7 @@ class NumaChatDynamoUtils {
         conversationName,
         references,
         fileInfo,
+        interrupted,
       };
 
       const command = new PutItemCommand({

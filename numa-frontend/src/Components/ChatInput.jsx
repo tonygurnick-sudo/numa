@@ -104,7 +104,7 @@ const ChatInput = ({
           </div>
           <div className="right-controls">
             {buttonStatus === 'streaming' ? (
-              <Button onClick={handleStopGeneration} className="stop-button" disabled={isInputDisabled}>
+              <Button onClick={handleStopGeneration} className="stop-button">
                 <i className="bi bi-stop-circle-fill" style={{ fontSize: '2.4rem', color: '#4b007d' }}></i>
               </Button>
             ) : buttonStatus === 'loading' ? (

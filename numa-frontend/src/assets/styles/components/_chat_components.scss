@@ -344,6 +344,10 @@
     margin-top: 0.5rem;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 
+    &.message-interrupted {
+      border-left: 4px solid #f8d7da;
+    }
+
     &.system {
       background: #f8f9fa;
       border-left: 4px solid #0d6efd;
@@ -394,6 +398,22 @@
       line-height: 1.5;
       margin-top: 0.25rem;
       max-width: 100%;
+    }
+
+    .message-interrupted-indicator {
+      display: flex;
+      align-items: center;
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background-color: #f8d7da;
+      border-radius: 4px;
+      color: #721c24;
+      font-size: 0.9rem;
+
+      i {
+        margin-right: 0.5rem;
+        color: #dc3545;
+      }
     }
 
     .message-bullet {
