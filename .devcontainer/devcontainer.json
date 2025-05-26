@@ -47,7 +47,8 @@
         "ms-python.isort",
         "ms-python.flake8",
         "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode"
+        "esbenp.prettier-vscode",
+        "gitlab.gitlab-workflow"
       ]
     }
   },
