@@ -61,8 +61,9 @@ export class KnowledgeBase extends Construct {
       vpcId: vpc.id,
     });
 
+    const clusterIdentierPrefix = /^[a-zA-Z]/.test(props.clientName) ? props.clientName : 'numa-' + props.clientName; // Cluster identifier must start with a letter.
     const cluster = new RdsCluster(this, 'rds-cluster', {
-      clusterIdentifier: `${props.clientName}-knowledge-base`,
+      clusterIdentifier: `${clusterIdentierPrefix}-knowledge-base`,
       vpcSecurityGroupIds: [securityGroup.id],
       dbSubnetGroupName: dbSubnetGroup.name,
       engine: 'aurora-postgresql',
