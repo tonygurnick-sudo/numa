@@ -36,11 +36,13 @@ import { Honeycomb } from '../constructs/honeycomb-construct';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { z } from 'zod';
+import { KnowledgeBase } from '../constructs/knowledge-base-construct';
 
 export class NumaClientStack extends TerraformStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
     const defaults = {
       domainSuffix: props.domainSuffix,
+      embeddingModel: 'amazon.titan-embed-text-v2:0',
     };
     const domainName = props.clientConfig.customDomain ?? `${props.clientName}.${defaults.domainSuffix}`;
     const clientConfig = {
@@ -128,6 +130,13 @@ export class NumaClientStack extends TerraformStack {
       userPoolClientId: core.userPoolClient.id,
       outputsBucket: core.outputsBucket,
       accountId: clientConfig.clientAccountId,
+    });
+
+    new KnowledgeBase(this, 'knowledge-base', {
+      clientName: clientConfig.clientName,
+      region: clientConfig.region,
+      dataBucketArn: core.dataBucket.bucket.arn,
+      embeddingModel: clientConfig.embeddingModel,
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.

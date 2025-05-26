@@ -32,6 +32,7 @@ variables:
         - lambdas/node/q-business-chat-control-configurer
         - lambdas/node/srp-hasher
         - lambdas/node/token-adjuster
+        - lambdas/node/vector-db-init
 
 .node-matrix:
   matrix:
@@ -43,6 +44,7 @@ variables:
         - lambdas/node/q-business-chat-control-configurer
         - lambdas/node/srp-hasher
         - lambdas/node/token-adjuster
+        - lambdas/node/vector-db-init
         - lib/client-config-node
         - numa-management
 
