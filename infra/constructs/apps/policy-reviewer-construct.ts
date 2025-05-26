@@ -19,7 +19,7 @@ export class PolicyReviewer extends BaseNumaApp {
     super(scope, name, { ...props, appId: 'policy-reviewer', enableJobs: true });
 
     this.manifest = {
-      appName: 'Policy Management',
+      appName: 'Policy Reviewer',
       id: this.appId,
       type: AppType.NUMA,
       status: AppStatus.ACTIVE,
