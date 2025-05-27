@@ -1,0 +1,37 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
+[tool.poetry]
+name = "beyond-expectations-analyse-logs"
+version = "0.1.0"
+description = ""
+authors = ["Nathan Douglas <nathan@arcanum.ai>"]
+readme = "README.md"
+packages = [
+    { include = "**/*.py" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+
+aws-lambda-powertools = "3.9.0"
+helpers = {path = "../../../lib/helpers", develop = true}
+s3_helpers = {path = "../../../lib/s3_helpers", develop = true}
+bedrock = {path = "../../../lib/bedrock", develop = true}
+boto3 = "^1.28.0"
+structlog = "^25.0.0"
+jsonschema = "^4.22.0"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "1.15.0"
+pylint = "3.3.6"
+pyright = "1.1.399"

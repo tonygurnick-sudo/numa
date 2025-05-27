@@ -1,0 +1,48 @@
+{
+  "notificationRequirements": {
+    "external": {
+      "notifyWhen": [
+        "The error directly impacts client operations or data, and requires action from them",
+        "If Beyond Expectations' client needs to be aware of the issue for their business operations",
+        "The error indicates client configuration issues",
+        "If the error affects a critical service or functionality that the client relies on"
+      ],
+      "dontNotifyWhen": [
+        "If the error only affects Beyond Expectations' client's customers but doesn't require the client's action",
+        "If the error is transient or has been automatically resolved",
+        "If the error is minor and doesn't affect any critical functionality",
+        "If the error is part of normal operation fluctuations and doesn't require intervention"
+      ]
+    },
+    "internal": {
+      "notifyWhen": [
+        "If the error requires investigation or follow-up from the Beyond Expectations team",
+        "If there's something the Beyond Expectations team can do to resolve the issue",
+        "If a pattern of errors suggests a systemic issue that Beyond Expectations needs to address",
+        "If the error indicates a potential security vulnerability or data breach"
+      ],
+      "dontNotifyWhen": [
+        "If the error is self-resolving or doesn't require any action from Beyond Expectations",
+        "If the error can be handled entirely by the client without any input from Beyond Expectations"
+      ]
+    }
+  },
+
+  "logsToIgnore": {
+    "byClientTask": [
+      {
+        "ClientId": 1642,
+        "TaskDescription": "Kayu - Cin7 Omni Branch Transfer to Carton Cloud Sales Orders"
+      },
+      {
+        "ClientId": 1466,
+        "TaskDescription": "Bluecurrent (AMS) - 3PL Central (Auckland) to D365 - Shipments"
+      }
+    ],
+    "byMessageContains": [
+      "Failed to get sale orders from Odoo",
+      "deprecated API warning",
+      "Connection reset by peer"
+    ]
+  }
+}
