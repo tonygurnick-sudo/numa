@@ -36,5 +36,5 @@ types-requests = "^2.31.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.15.0"
-pylint = "3.3.6"
-pyright = "1.1.400"
+pylint = "3.3.7"
+pyright = "1.1.401"

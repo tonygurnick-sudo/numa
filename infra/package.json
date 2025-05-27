@@ -37,7 +37,7 @@
     "@arcanumai/style": "workspace:*",
     "@cdktf/node-pty-prebuilt-multiarch": "^0.10.1-pre.11",
     "@types/fs-extra": "^11",
-    "@types/node": "22.15.3",
+    "@types/node": "22.15.21",
     "@typescript-eslint/eslint-plugin": "8.26.0",
     "@typescript-eslint/parser": "8.26.0",
     "cdktf-cli": "0.20.12",
