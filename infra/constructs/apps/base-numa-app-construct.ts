@@ -29,6 +29,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   protected outputsBucket: S3Bucket;
   readonly appId: string;
   readonly clientName: string;
+  readonly region: string;
 
   protected getResourceName(suffix: string): string {
     const appSpecificSuffix = `-${this.appId}${suffix}`;
@@ -40,6 +41,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
 
     this.appId = props.appId;
     this.clientName = props.clientName;
+    this.region = props.region;
     this.outputsBucket = props.outputsBucket;
 
     this.logGroup = new NumaLogGroup(this, 'lambda-log-group', {
@@ -54,7 +56,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     }
   }
 
-  addStepFunction(scope: Construct, name: string, props: AddStepFunctionProps): void {
+  addStepFunction(scope: Construct, name: string, props: AddStepFunctionProps): SfnStateMachine {
     const stepFunctionPolicy = new IamPolicy(this, name + '_policy', {
       policy: new DataAwsIamPolicyDocument(this, name + '_policy-document', {
         statement: [
@@ -148,11 +150,14 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         },
       ],
     });
+
+    // Return the step function object so it can be used by callers
+    return stepFunction;
   }
 
   addLambdaTask(
     lambdaArn: string,
-    payload: Record<string, string | boolean>,
+    payload: Record<string, string | boolean | number>,
     next: string | null,
     additionalParameters?: AdditionalLambdaParameters,
   ): asl.State {
@@ -501,6 +506,7 @@ export type UserConfigurableBaseNumaAppProps = z.infer<typeof userConfigurableBa
 export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiGatewayLambdaCollectionProps {
   clientName: string;
   outputsBucket: S3Bucket;
+  region: string;
 }
 
 export interface AppSpecificBaseNumaAppProps extends BaseNumaAppProps {

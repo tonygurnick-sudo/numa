@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beyond Expectations Error Log Analysis Report</title>
+    <style>
+        {{ css_content }}
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="email-header">
+            <h1>Beyond Expectations Error Log Analysis</h1>
+            <div class="period">
+                <div><strong>Start Time:</strong> {{ start_time_str }}</div>
+                <div><strong>End Time:</strong> {{ end_time_str }}</div>
+            </div>
+        </div>
+
+        <div class="email-body">
+            <div class="section">
+                <h2>Error Analysis Summary</h2>
+                <div class="section-content">
+                    {{ summary | safe }}
+                </div>
+            </div>
+
+            <div class="stats-section">
+                <h2>Error Statistics</h2>
+
+                <div class="stats-subsection">
+                    <h3>High Level Stats</h3>
+                    <div class="stats-grid-3">
+                        <div class="stat-card">
+                            <div class="stat-value">{{ total_errors }}</div>
+                            <div class="stat-label">Total Unique Errors</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value new-errors">{{ new_error_count }}</div>
+                            <div class="stat-label">New Errors</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value recurring-errors">{{ recurring_error_count }}</div>
+                            <div class="stat-label">Recurring Errors (Last 30 days)</div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid-3">
+                        <div class="stat-card">
+                            <div class="stat-value new-errors">{{ new_notification_count }}</div>
+                            <div class="stat-label">New Errors Requiring Notification</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value recurring-errors">{{ recurring_notification_count }}</div>
+                            <div class="stat-label">Recurring Errors Requiring Notification</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">{{ client_count }}</div>
+                            <div class="stat-label">Clients Affected</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-subsection">
+                    <h3>Error Notifications</h3>
+
+                    <div class="section-title new-errors">New Errors</div>
+                    <div class="stats-grid-3">
+                        <div class="stat-card">
+                            <div class="stat-value new-errors">{{ new_both_count }}</div>
+                            <div class="stat-label">Client & Internal</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value new-errors">{{ new_client_count }}</div>
+                            <div class="stat-label">Client Only</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value new-errors">{{ new_internal_count }}</div>
+                            <div class="stat-label">Internal Only</div>
+                        </div>
+                    </div>
+
+                    <div class="section-title recurring-errors">Recurring Errors (Occurring in the last 30 days)</div>
+                    <div class="stats-grid-3">
+                        <div class="stat-card">
+                            <div class="stat-value recurring-errors">{{ recurring_both_count }}</div>
+                            <div class="stat-label">Client & Internal</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value recurring-errors">{{ recurring_client_count }}</div>
+                            <div class="stat-label">Client Only</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value recurring-errors">{{ recurring_internal_count }}</div>
+                            <div class="stat-label">Internal Only</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-subsection">
+                    <h3>Error Severity</h3>
+
+                    <div class="section-title new-errors">New Errors</div>
+                    <div class="stats-grid-3">
+                        <div class="stat-card">
+                            <div class="stat-value severity-high">{{ new_severity_counts.get('High', 0) }}</div>
+                            <div class="stat-label">High Severity</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value severity-medium">{{ new_severity_counts.get('Medium', 0) }}</div>
+                            <div class="stat-label">Medium Severity</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value severity-low">{{ new_severity_counts.get('Low', 0) }}</div>
+                            <div class="stat-label">Low Severity</div>
+                        </div>
+                    </div>
+
+                    <div class="section-title recurring-errors">Recurring Errors (Occurring in the last 30 days)</div>
+                    <div class="stats-grid-3">
+                        <div class="stat-card">
+                            <div class="stat-value severity-high">{{ recurring_severity_counts.get('High', 0) }}</div>
+                            <div class="stat-label">High Severity</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value severity-medium">{{ recurring_severity_counts.get('Medium', 0) }}</div>
+                            <div class="stat-label">Medium Severity</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value severity-low">{{ recurring_severity_counts.get('Low', 0) }}</div>
+                            <div class="stat-label">Low Severity</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-description">
+                <h2>About These Reports</h2>
+                <p>Attached to this email, you will find two detailed HTML reports:</p>
+
+                <h3>1. Summary Report</h3>
+                <ul>
+                    <li><strong>High Level Error Analysis</strong> - A high level breakdown of all identified errors across your client systems</li>
+                    <li><strong>Tabbed Summary Dashboard</strong> - Interactive tabs showing summary, trends, critical issues, business impact, and recommendations</li>
+                    <li><strong>Error Categories</strong> - Categorization of errors by severity and type</li>
+                    <li><strong>Visualisations of Errors by Client</strong> - Charts showing errors by client, severity, and type</li>
+                </ul>
+
+                <h3>2. Notifications Report</h3>
+                <ul>
+                    <li><strong>New vs. Recurring Errors</strong> - Clear separation between new errors and those recurring from previous runs (past 30 days)</li>
+                    <li><strong>Notifications Grouped (E.g. Client and BE, Just BE etc)</strong> - Grouping of errors based on notification requirements</li>
+                    <li><strong>Errors Grouped by Client</strong> - Detailed breakdown of which errors are affecting each client</li>
+                    <li><strong>Notification Tools</strong> - Pre-generated email templates for client communications when needed. Similarly an explanation and recommendation for addressing the error.</li>
+                    <li><strong>Priority Queue</strong> - Recommended order for addressing and communicating issues</li>
+                </ul>
+
+                <p>These reports provide a complete overview of system health and prioritize issues based on severity and business impact.</p>
+            </div>
+
+            <div class="report-link">
+                <p>Detailed reports are attached to this email with comprehensive analysis and actionable insights.</p>
+                <div class="note">You may need to download the attached HTML files before opening them for the best viewing experience.</div>
+            </div>
+        </div>
+
+        <div class="email-footer">
+            <p>This is an automated message from the Beyond Expectations Error Monitoring System developed by <span class="arcanum-logo">Arcanum AI</span>.</p>
+            <p>© {{ current_year }} Arcanum AI. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

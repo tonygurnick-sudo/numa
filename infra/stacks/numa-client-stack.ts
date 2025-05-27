@@ -14,6 +14,7 @@ import {
   UserConfigurableBaseNumaAppProps,
   userConfigurableBaseNumaAppPropsSchema,
 } from '../constructs/apps/base-numa-app-construct';
+import { BeyondExpectations } from '../constructs/apps/beyond-expectations-construct';
 import { CandidateScreening } from '../constructs/apps/candidate-screening-construct';
 import { CompanyProfile } from '../constructs/apps/company-profile-construct';
 import { ContractAnalysis } from '../constructs/apps/contract-analysis-construct';
@@ -168,6 +169,7 @@ export class NumaClientStack extends TerraformStack {
         apiGatewayId: fe.apiGateway.id,
         clientName: props.clientName,
         outputsBucket: core.outputsBucket.bucket,
+        region: clientConfig.region,
         otelConfig: {
           otelConfigPath: core.otelConfigPath,
           honeycombIngestKey: honeycomb.backendKey,
@@ -342,6 +344,7 @@ export interface AppDefinition {
 }
 
 export const appLibrary: Record<string, AppDefinition> = {
+  'beyond-expectations': { app: BeyondExpectations, isProdApp: false },
   'candidate-screening': { app: CandidateScreening, isProdApp: true },
   'company-profile': { app: CompanyProfile, isProdApp: true },
   'contract-analysis': { app: ContractAnalysis, isProdApp: true },
