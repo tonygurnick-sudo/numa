@@ -58,8 +58,7 @@ export class BeyondExpectations extends BaseNumaApp {
     const sesConfig = new SesEmailConfig(this, 'ses-config', {
       emailAddresses: [senderEmail, ...receiverEmails],
       resourceNamePrefix: this.appId,
-      // Using the default naming convention from the SesEmailConfig construct
-      // This will create a configuration set named "beyond-expectations-config-set"
+      configurationSetName: `${props.clientName}-${this.appId}-config-set`,
     });
 
     // Default schedule is 5 pm NZ time (5:00 UTC during NZDT, 4:00 UTC during NZST)
