@@ -1,15 +1,15 @@
 import datetime
 import os
-from typing import Any, Dict, List
+from typing import Dict
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, Template
 
 
-def load_template_and_styles() -> tuple[str, str]:
+def load_template_and_styles() -> tuple[Template, str]:
     """Load the HTML template and CSS content from files.
 
     Returns:
-        Tuple of (template_content, css_content)
+        Tuple of (template_object, css_content)
     """
     # Get the directory containing this module
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -36,9 +36,6 @@ def generate_email_notification_html(
     severity_counts: Dict[str, int],
     new_severity_counts: Dict[str, int],
     recurring_severity_counts: Dict[str, int],
-    client_notification_count: int,
-    internal_notification_count: int,
-    both_notification_count: int,
     new_notification_count: int,
     recurring_notification_count: int,
     new_client_count: int,
@@ -60,9 +57,6 @@ def generate_email_notification_html(
         severity_counts: Count of errors by severity
         new_severity_counts: Count of new errors by severity
         recurring_severity_counts: Count of recurring errors by severity
-        client_notification_count: Number of errors requiring client notification
-        internal_notification_count: Number of errors requiring only internal notification
-        both_notification_count: Number of errors requiring both client and internal notification
         new_notification_count: Number of new errors requiring notification (any type)
         recurring_notification_count: Number of recurring errors requiring notification (any type)
         new_client_count: Number of new errors requiring client notification only

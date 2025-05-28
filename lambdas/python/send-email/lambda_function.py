@@ -55,6 +55,7 @@ def process_direct_content_attachment(
     content_type = attachment.get("content_type", "application/octet-stream")
 
     # Create the appropriate MIME part based on content type
+    part: Union[MIMEText, MIMEApplication]
     if content_type.startswith("text/"):
         part = create_text_mime_part(content, content_type)
     else:
@@ -249,9 +250,12 @@ def send_raw_email(
         }
 
     except ClientError as e:
-        error_message = e.response["Error"]["Message"]
-        logger.exception("Failed to send email", error=error_message)
-        return {"status": "error", "error": error_message}
+        error_message = e.response.get("Error", {}).get("Message", str(e))
+        logger.exception("Failed to send raw email", error=error_message)
+        return {
+            "statusCode": 400,
+            "body": {"status": "error", "error": error_message},
+        }
 
     except Exception as e:
         logger.exception("Unexpected error sending email")
@@ -295,7 +299,10 @@ def send_simple_email(
         }
 
     # Create message content
-    message = {"Subject": {"Data": subject, "Charset": "UTF-8"}, "Body": {}}
+    message: Dict[str, Any] = {
+        "Subject": {"Data": subject, "Charset": "UTF-8"},
+        "Body": {},
+    }
 
     # Add text body if provided
     if body_text:
@@ -305,10 +312,12 @@ def send_simple_email(
     if body_html:
         message["Body"]["Html"] = {"Data": body_html, "Charset": "UTF-8"}
 
+    destination: Dict[str, List[str]] = {"ToAddresses": to_addresses}
+
     # Prepare parameters for SES
-    params = {
+    params: Dict[str, Any] = {
         "Source": from_address,
-        "Destination": {"ToAddresses": to_addresses},
+        "Destination": destination,
         "Message": message,
     }
 
@@ -343,9 +352,12 @@ def send_simple_email(
         }
 
     except ClientError as e:
-        error_message = e.response["Error"]["Message"]
-        logger.exception("Failed to send email", error=error_message)
-        return {"status": "error", "error": error_message}
+        error_message = e.response.get("Error", {}).get("Message", str(e))
+        logger.exception("Failed to send simple email", error=error_message)
+        return {
+            "statusCode": 400,
+            "body": {"status": "error", "error": error_message},
+        }
 
     except Exception as e:
         logger.exception("Unexpected error sending email")

@@ -29,5 +29,7 @@ s3_helpers = {path = "../../../lib/s3_helpers", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.15.0"
-pylint = "3.3.7"
+pylint = "3.3.6"
 pyright = "1.1.401"
+boto3-stubs = "^1.38.23"
+botocore-stubs = "^1.38.19"

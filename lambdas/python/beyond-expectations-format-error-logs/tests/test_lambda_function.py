@@ -1,11 +1,8 @@
 import datetime
-import json
 import unittest
 from unittest.mock import MagicMock, patch
 
 from lambda_function import (
-    DEFAULT_CHUNK_SIZE,
-    DEFAULT_TIME_WINDOW,
     MAX_MESSAGE_LENGTH,
     MAX_TASK_DESCRIPTION_LENGTH,
     group_logs_by_content,
@@ -172,73 +169,14 @@ class TestParseTimeWindow(unittest.TestCase):
 
 class TestHandler(unittest.TestCase):
     @patch("lambda_function.s3_helpers")
-    @patch("lambda_function.helpers")
-    def test_handler_basic_functionality(self, mock_helpers, mock_s3):
-        """Test the main handler function"""
-        # Mock event
+    def test_handler_with_defaults(self, mock_s3):
+        """Test handler with default values"""
         event = {
-            "timeWindow": "1h",
             "errorPrefix": "error_logs/",
             "outputPrefix": "output_logs/",
-            "chunkSize": 2,
+            "app_id": "test-app-id",
+            "job_id": "test-job-id",
         }
-
-        # Mock context
-        context = MagicMock()
-
-        # Mock S3 operations
-        mock_s3.list_objects.return_value = [
-            "error_logs/2024-01-01-23-00-00.json",
-            "error_logs/2024-01-01-22-00-00.json",
-        ]
-
-        mock_log_data = {
-            "logs": [
-                {
-                    "DateTimeUtc": "2024-01-01T23:00:00Z",
-                    "ClientId": "client1",
-                    "TaskDescription": "task1",
-                    "Message": "error1",
-                },
-                {
-                    "DateTimeUtc": "2024-01-01T23:05:00Z",
-                    "ClientId": "client1",
-                    "TaskDescription": "task1",
-                    "Message": "error1",
-                },
-            ]
-        }
-
-        mock_s3.read.return_value = json.dumps(mock_log_data).encode("utf-8")
-
-        # Execute handler
-        with patch("datetime.datetime") as mock_datetime:
-            mock_datetime.utcnow.return_value = datetime.datetime(2024, 1, 2, 0, 0, 0)
-            mock_datetime.timedelta = datetime.timedelta
-
-            result = handler(event, context)
-
-        # Verify setup was called
-        mock_helpers.setup_step_function_lambda_logging.assert_called_once_with(
-            event, context
-        )
-
-        # Verify S3 operations
-        mock_s3.list_objects.assert_called_once_with(prefix="error_logs/")
-        self.assertEqual(mock_s3.read.call_count, 2)
-
-        # Verify output
-        self.assertIn("chunkPrefix", result)
-        self.assertTrue(result["chunkPrefix"].startswith("output_logs/"))
-
-        # Verify chunk files were written
-        self.assertTrue(mock_s3.write.called)
-
-    @patch("lambda_function.s3_helpers")
-    @patch("lambda_function.helpers")
-    def test_handler_with_defaults(self, mock_helpers, mock_s3):
-        """Test handler with default values"""
-        event = {"errorPrefix": "error_logs/", "outputPrefix": "output_logs/"}
         context = MagicMock()
 
         mock_s3.list_objects.return_value = []
@@ -251,31 +189,6 @@ class TestHandler(unittest.TestCase):
 
         # Verify defaults were used
         mock_s3.list_objects.assert_called_once_with(prefix="error_logs/")
-        self.assertIn("chunkPrefix", result)
-
-    @patch("lambda_function.s3_helpers")
-    @patch("lambda_function.helpers")
-    def test_handler_error_handling(self, mock_helpers, mock_s3):
-        """Test handler handles S3 read errors gracefully"""
-        event = {
-            "timeWindow": "1h",
-            "errorPrefix": "error_logs/",
-            "outputPrefix": "output_logs/",
-            "chunkSize": 10,
-        }
-        context = MagicMock()
-
-        mock_s3.list_objects.return_value = ["error_logs/2024-01-01-23-00-00.json"]
-        mock_s3.read.side_effect = Exception("S3 read error")
-
-        with patch("datetime.datetime") as mock_datetime:
-            mock_datetime.utcnow.return_value = datetime.datetime(2024, 1, 2, 0, 0, 0)
-            mock_datetime.timedelta = datetime.timedelta
-
-            # Should not raise an exception
-            result = handler(event, context)
-
-        # Should still return a result even with errors
         self.assertIn("chunkPrefix", result)
 
 

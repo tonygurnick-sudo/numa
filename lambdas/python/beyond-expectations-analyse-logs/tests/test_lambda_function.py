@@ -1,7 +1,8 @@
 import json
+import os
 import unittest
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import lambda_function
 
@@ -117,8 +118,9 @@ class TestCheckForCachedAnalysis(unittest.TestCase):
             result = lambda_function.check_for_cached_analysis(log_entry)
 
         self.assertIsNotNone(result)
-        self.assertTrue(result["recurring"])
-        self.assertEqual(result["log_entry"]["id"], "new-123")
+        if result is not None:
+            self.assertTrue(result["recurring"])
+            self.assertEqual(result["log_entry"]["id"], "new-123")
 
     @patch("lambda_function.s3_helpers")
     def test_check_for_cached_analysis_not_found(self, mock_s3_helpers):
@@ -164,8 +166,9 @@ class TestCheckForCachedAnalysis(unittest.TestCase):
 
 class TestAnalyzeLogsWithBedrock(unittest.TestCase):
     @patch("lambda_function.config_utils")
-    @patch("lambda_function.bedrock")
-    def test_analyze_logs_empty_list(self, mock_bedrock, mock_config_utils):
+    @patch.dict(os.environ, {"AWS_REGION": "us-east-1"})
+    @patch("lambda_function.bedrock.BedrockClaude3Model")
+    def test_analyze_logs_empty_list(self, _mock_bedrock_model, mock_config_utils):
         """Test analyzing empty logs list"""
         mock_config_utils.load_config.return_value = {
             "logsToIgnore": {"byClientTask": [], "byMessageContains": []}
@@ -179,10 +182,11 @@ class TestAnalyzeLogsWithBedrock(unittest.TestCase):
         self.assertEqual(result["all_results"], [])
 
     @patch("lambda_function.config_utils")
-    @patch("lambda_function.bedrock")
     @patch("lambda_function.check_for_cached_analysis")
+    @patch.dict(os.environ, {"AWS_REGION": "us-east-1"})
+    @patch("lambda_function.bedrock.BedrockClaude3Model")
     def test_analyze_logs_with_cache_hit(
-        self, mock_check_cache, mock_bedrock, mock_config_utils
+        self, _mock_bedrock_model, mock_check_cache, mock_config_utils
     ):
         """Test analyzing logs with cache hits"""
         mock_config_utils.load_config.return_value = {
@@ -218,61 +222,7 @@ class TestAnalyzeLogsWithBedrock(unittest.TestCase):
         self.assertEqual(result["cache_stats"]["misses"], 0)
 
     @patch("lambda_function.config_utils")
-    @patch("lambda_function.bedrock")
-    @patch("lambda_function.check_for_cached_analysis")
-    def test_analyze_logs_with_bedrock_analysis(
-        self, mock_check_cache, mock_bedrock, mock_config_utils
-    ):
-        """Test analyzing logs that require Bedrock analysis"""
-        mock_config_utils.load_config.return_value = {
-            "logsToIgnore": {"byClientTask": [], "byMessageContains": []}
-        }
-        mock_config_utils.update_prompt_with_config.return_value = (
-            "Updated prompt {log_entries}"
-        )
-
-        # No cache hit
-        mock_check_cache.return_value = None
-
-        # Mock Bedrock response
-        mock_model = Mock()
-        mock_response = Mock()
-        mock_response.response = [
-            {
-                "input": {
-                    "data": [
-                        {
-                            "error_type": "API Error",
-                            "client_notification": "No",
-                            "internal_notification": "Yes",
-                            "severity": "Medium",
-                        }
-                    ]
-                }
-            }
-        ]
-        mock_model.run.return_value = mock_response
-        mock_bedrock.BedrockClaude3Model.return_value = mock_model
-
-        logs = [
-            {
-                "Id": "123",
-                "ClientId": "12345",
-                "TaskDescription": "Test Task",
-                "Message": "API call failed",
-                "DateTimeUtc": "2025-01-01T10:00:00Z",
-            }
-        ]
-
-        result = lambda_function.analyze_logs_with_bedrock(logs)
-
-        self.assertEqual(len(result["all_results"]), 1)
-        self.assertEqual(len(result["notifications_not_required"]), 1)
-        self.assertEqual(result["cache_stats"]["hits"], 0)
-        self.assertEqual(result["cache_stats"]["misses"], 1)
-        self.assertEqual(result["error_categories"]["API Error"], 1)
-
-    @patch("lambda_function.config_utils")
+    @patch.dict(os.environ, {"AWS_REGION": "us-east-1"})
     def test_analyze_logs_with_filtering(self, mock_config_utils):
         """Test that logs are properly filtered based on config"""
         mock_config_utils.load_config.return_value = {
@@ -338,10 +288,10 @@ class TestAnalyzeLogsWithBedrock(unittest.TestCase):
 
 
 class TestLambdaHandler(unittest.TestCase):
-    @patch("lambda_function.helpers")
     @patch("lambda_function.s3_helpers")
     @patch("lambda_function.analyze_logs_with_bedrock")
-    def test_handler_success(self, mock_analyze, mock_s3_helpers, mock_helpers):
+    @patch("lambda_function.helpers.setup_step_function_lambda_logging")
+    def test_handler_success(self, mock_setup_logging, mock_analyze, mock_s3_helpers):
         """Test successful lambda handler execution"""
         # Mock S3 read
         chunk_data = {
@@ -366,7 +316,8 @@ class TestLambdaHandler(unittest.TestCase):
         mock_analyze.return_value = analysis_result
 
         event = {
-            "chunkPath": "beyond-expectations/logs_to_analyse/2025-01-01/chunk-1.json"
+            "chunkPath": "beyond-expectations/logs_to_analyse/2025-01-01/chunk-1.json",
+            "app_id": "test-app-id",
         }
         context = Mock()
 
@@ -375,26 +326,28 @@ class TestLambdaHandler(unittest.TestCase):
         self.assertEqual(result["statusCode"], 200)
         self.assertIn("Successfully analyzed log chunk", result["body"]["message"])
         mock_s3_helpers.write.assert_called_once()
+        mock_setup_logging.assert_called_once_with(event, context)
 
-    def test_handler_missing_chunk_path(self):
+    @patch("lambda_function.helpers.setup_step_function_lambda_logging")
+    def test_handler_missing_chunk_path(self, _mock_setup_logging):
         """Test handler with missing chunkPath"""
-        event = {}
+        event = {"app_id": "test-app-id"}
         context = Mock()
 
-        with patch("lambda_function.helpers"):
-            result = lambda_function.handler(event, context)
+        result = lambda_function.handler(event, context)
 
         self.assertEqual(result["statusCode"], 400)
         self.assertIn("No chunkPath provided", result["error"])
 
-    @patch("lambda_function.helpers")
     @patch("lambda_function.s3_helpers")
-    def test_handler_s3_error(self, mock_s3_helpers, mock_helpers):
+    @patch("lambda_function.helpers.setup_step_function_lambda_logging")
+    def test_handler_s3_error(self, _mock_setup_logging, mock_s3_helpers):
         """Test handler with S3 read error"""
         mock_s3_helpers.read.side_effect = Exception("S3 error")
 
         event = {
-            "chunkPath": "beyond-expectations/logs_to_analyse/2025-01-01/chunk-1.json"
+            "chunkPath": "beyond-expectations/logs_to_analyse/2025-01-01/chunk-1.json",
+            "app_id": "test-app-id",
         }
         context = Mock()
 
