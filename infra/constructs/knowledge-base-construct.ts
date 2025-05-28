@@ -102,7 +102,7 @@ export class KnowledgeBase extends Construct {
       name: props.clientName + '-bedrock-user',
     });
 
-    new SecretsmanagerSecretVersion(this, 'bedrock-user-secret-version', {
+    const secretVersion = new SecretsmanagerSecretVersion(this, 'bedrock-user-secret-version', {
       secretId: bedrockUserSecret.id,
       secretString: JSON.stringify({
         username: 'bedrock_user',
@@ -276,7 +276,7 @@ export class KnowledgeBase extends Construct {
       }),
       triggers: {
         sourceCodeHash: Fn.filebase64sha256(initFunctionFilename),
-        time: new Date().toISOString(),
+        secretVersion: secretVersion.versionId,
       },
       dependsOn: [clusterInstance, func, ...policyAttachments],
     });
