@@ -195,6 +195,7 @@ export class NumaClientStack extends TerraformStack {
             css: 'text/css; charset=utf-8',
             jpg: 'image/jpg',
             svg: 'image/svg+xml',
+            txt: 'text/plain',
             default: undefined,
           }[source.split('.')?.pop() ?? 'default'];
           return new S3Object(this, `website-file-${source}`, {
