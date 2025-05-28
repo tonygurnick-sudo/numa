@@ -4,6 +4,7 @@ import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { Fn } from 'cdktf';
 import * as path from 'node:path';
 import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
+import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
 
 export class CognitoEmailHandler extends Construct {
   readonly function: LambdaFunction;
@@ -20,7 +21,11 @@ export class CognitoEmailHandler extends Construct {
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'lambda.amazonaws.com',
       }),
-      managedPolicyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'],
+    });
+
+    new IamRolePolicyAttachment(this, 'execution-attachment', {
+      role: role.name,
+      policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
     });
 
     const emailsLambdaPath = path.resolve(
