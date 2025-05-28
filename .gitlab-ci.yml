@@ -54,6 +54,9 @@ variables:
         - lambdas/python/aggregate-candidate-results
         - lambdas/python/aggregate-document-results
         - lambdas/python/bedrock-model-manager
+        - lambdas/python/beyond-expectations-analyse-logs
+        - lambdas/python/beyond-expectations-format-error-logs
+        - lambdas/python/beyond-expectations-report-and-email
         - lambdas/python/candidate-screening
         - lambdas/python/cognito-email-handler
         - lambdas/python/company-profile
@@ -80,6 +83,7 @@ variables:
         - lambdas/python/procurement-rfp-assessment
         - lambdas/python/recruitment-job-ad-creation
         - lambdas/python/rfp-response-comparison
+        - lambdas/python/send-email
         - lambdas/python/step-function-start
         - lambdas/python/step-function-status
         - lambdas/python/structured-data-extraction

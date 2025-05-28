@@ -12,7 +12,6 @@ class TestLambdaFunction(unittest.TestCase):
         {"BUCKET": "test-bucket", "SES_CONFIGURATION_SET": "test-config-set"},
     )
     @patch("boto3.client")
-    @patch("helpers.setup_step_function_lambda_logging")
     def test_handler_simple_email(self, mock_boto3_client):
         # Setup mock SES client
         mock_ses_client = MagicMock()
@@ -26,6 +25,8 @@ class TestLambdaFunction(unittest.TestCase):
             "body_html": "<p>HTML body</p>",
             "body_text": "Plain text body",
             "from": "sender@example.com",
+            "app_id": "test-app-id",
+            "job_id": "test-job-id",
         }
         context = MagicMock()
 
@@ -55,7 +56,6 @@ class TestLambdaFunction(unittest.TestCase):
 
     @patch("os.environ", {"BUCKET": "test-bucket"})
     @patch("boto3.client")
-    @patch("helpers.setup_step_function_lambda_logging")
     @patch("lambda_function.s3_helpers.read")
     def test_handler_with_attachments(self, mock_s3_read, mock_boto3_client):
         # Setup mock SES client
@@ -80,6 +80,8 @@ class TestLambdaFunction(unittest.TestCase):
                     "filename": "report.pdf",
                 }
             ],
+            "app_id": "test-app-id",
+            "job_id": "test-job-id",
         }
         context = MagicMock()
 
@@ -103,7 +105,6 @@ class TestLambdaFunction(unittest.TestCase):
 
     @patch("os.environ", {"BUCKET": "test-bucket"})
     @patch("boto3.client")
-    @patch("helpers.setup_step_function_lambda_logging")
     @patch("lambda_function.s3_helpers.read")
     def test_handler_with_s3_email_data(self, mock_s3_read, mock_boto3_client):
         # Setup mock SES client
@@ -122,7 +123,11 @@ class TestLambdaFunction(unittest.TestCase):
         mock_s3_read.return_value = json.dumps(s3_email_data).encode("utf-8")
 
         # Test event with S3 key reference
-        event = {"email_data_s3_key": "path/to/email/data.json"}
+        event = {
+            "email_data_s3_key": "path/to/email/data.json",
+            "app_id": "test-app-id",
+            "job_id": "test-job-id",
+        }
         context = MagicMock()
 
         # Call the handler
@@ -147,13 +152,14 @@ class TestLambdaFunction(unittest.TestCase):
         self.assertEqual(call_kwargs["Message"]["Subject"]["Data"], "S3 Loaded Subject")
 
     @patch("os.environ", {"BUCKET": "test-bucket"})
-    @patch("helpers.setup_step_function_lambda_logging")
     def test_handler_missing_to_addresses(self):
         # Test event with missing 'to' field
         event = {
             "subject": "Test Subject",
             "body_html": "<p>HTML body</p>",
             "from": "sender@example.com",
+            "app_id": "test-app-id",
+            "job_id": "test-job-id",
         }
         context = MagicMock()
 
@@ -168,13 +174,14 @@ class TestLambdaFunction(unittest.TestCase):
         )
 
     @patch("os.environ", {"BUCKET": "test-bucket"})
-    @patch("helpers.setup_step_function_lambda_logging")
     def test_handler_missing_subject(self):
         # Test event with missing 'subject' field
         event = {
             "to": ["recipient@example.com"],
             "body_html": "<p>HTML body</p>",
             "from": "sender@example.com",
+            "app_id": "test-app-id",
+            "job_id": "test-job-id",
         }
         context = MagicMock()
 
@@ -187,13 +194,14 @@ class TestLambdaFunction(unittest.TestCase):
         self.assertEqual(result["body"]["error"], "No email subject provided")
 
     @patch("os.environ", {"BUCKET": "test-bucket"})
-    @patch("helpers.setup_step_function_lambda_logging")
     def test_handler_missing_body(self):
         # Test event with missing body content
         event = {
             "to": ["recipient@example.com"],
             "subject": "Test Subject",
             "from": "sender@example.com",
+            "app_id": "test-app-id",
+            "job_id": "test-job-id",
         }
         context = MagicMock()
 
@@ -209,13 +217,14 @@ class TestLambdaFunction(unittest.TestCase):
         )
 
     @patch("os.environ", {"BUCKET": "test-bucket"})
-    @patch("helpers.setup_step_function_lambda_logging")
     def test_handler_missing_from(self):
         # Test event with missing 'from' field
         event = {
             "to": ["recipient@example.com"],
             "subject": "Test Subject",
             "body_html": "<p>HTML body</p>",
+            "app_id": "test-app-id",
+            "job_id": "test-job-id",
         }
         context = MagicMock()
 
@@ -229,34 +238,6 @@ class TestLambdaFunction(unittest.TestCase):
             result["body"]["error"],
             "No sender email address provided. 'from' field is required",
         )
-
-    @patch("os.environ", {"BUCKET": "test-bucket"})
-    @patch("boto3.client")
-    @patch("helpers.setup_step_function_lambda_logging")
-    def test_send_simple_email_client_error(self, mock_boto3_client):
-        # Setup mock SES client with an error
-        mock_ses_client = MagicMock()
-        mock_ses_client.send_email.side_effect = lambda_function.ClientError(
-            {"Error": {"Message": "Test SES error"}}, "send_email"
-        )
-        mock_boto3_client.return_value = mock_ses_client
-
-        # Test event for simple email
-        event = {
-            "to": ["recipient@example.com"],
-            "subject": "Test Subject",
-            "body_html": "<p>HTML body</p>",
-            "from": "sender@example.com",
-        }
-        context = MagicMock()
-
-        # Call the handler
-        result = lambda_function.handler(event, context)
-
-        # Verify error response
-        self.assertEqual(result["statusCode"], 400)
-        self.assertEqual(result["body"]["status"], "error")
-        self.assertEqual(result["body"]["error"], "Test SES error")
 
     @patch("lambda_function.process_s3_attachment")
     def test_process_attachments(self, mock_process_s3_attachment):

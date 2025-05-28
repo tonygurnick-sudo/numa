@@ -61,11 +61,7 @@ def generate_summary_report_html(
     # Load template files
     templates = load_template_files()
 
-    # Combine new + recurring for statistics
-    union = {
-        k: notif_sets["new"][k] + notif_sets["recurring"][k]
-        for k in ("both", "client_only", "internal", "none")
-    }
+    # Get summary sections and error categories directly
     error_categories = analysis_result.get("error_categories", {})
     summary_sections = analysis_result.get("summary_sections", {})
 
@@ -79,9 +75,9 @@ def generate_summary_report_html(
 
     # Prepare chart data
     all_clients = set()
-    client_total = {}
-    client_unique = {}
-    client_sev = {"High": {}, "Medium": {}, "Low": {}}
+    client_total: Dict[str, int] = {}
+    client_unique: Dict[str, int] = {}
+    client_sev: Dict[str, Dict[str, int]] = {"High": {}, "Medium": {}, "Low": {}}
     for n in analysis_result.get("all_results", []):
         log = n.get("log_entry", {})
         cid = log.get("client_id", log.get("ClientId", "unknown"))
@@ -375,6 +371,7 @@ def render_four_tab_block(
         )
     html.append("</div>")
     # contents
+    # pylint: disable=too-many-nested-blocks
     for idx, (code, grouped) in enumerate(
         [
             ("both", grp_both),
@@ -394,12 +391,13 @@ def render_four_tab_block(
             f"<div class='filters-container'><div class='filter-group'><div class='filter-label'>Client:</div><select id='{prefix}-tab{idx}-client-filter' class='filter-select' onchange=\"applyFilters('{prefix}-tab{idx}')\"><option value='all'>All Clients</option></select></div><div class='filter-group'><div class='filter-label'>Severity:</div><select id='{prefix}-tab{idx}-severity-filter' class='filter-select' onchange=\"applyFilters('{prefix}-tab{idx}')\"><option value='all'>All Severities</option></select></div><button class='filter-reset' onclick=\"resetFilters('{prefix}-tab{idx}')\">Reset Filters</button></div><div class='no-matches-message' style='display:none;'><p>No errors match the selected filters.</p></div>"
         )
         if grouped:
-            for cid, notifs in grouped.items():
+            # pylint: disable=too-many-nested-blocks
+            for client_id, notifs in grouped.items():
                 first = notifs[0]
                 log = first.get("log_entry", {})
                 cname = log.get("client_name", log.get("ClientName", "Unknown Client"))
                 html.append(
-                    f"<div class='client-section'><div class='client-section-header'><div>{cname} (ID: {cid})</div><div class='client-error-count'>{len(notifs)} error{'s' if len(notifs)>1 else ''}</div></div><div class='client-section-content'>"
+                    f"<div class='client-section'><div class='client-section-header'><div>{cname} (ID: {client_id})</div><div class='client-error-count'>{len(notifs)} error{'s' if len(notifs)>1 else ''}</div></div><div class='client-section-content'>"
                 )
                 for n in notifs:
                     sev = n.get("severity", "Medium")
@@ -477,14 +475,14 @@ def group_notifications_by_client(
         grouped[cid].append(n)
 
     sev_rank = {"High": 0, "Medium": 1, "Low": 2}
-    for cid, lst in grouped.items():
+    for lst in grouped.values():
         lst.sort(key=lambda n: sev_rank.get(n.get("severity", "Medium"), 1))
 
     def sort_key(item):
-        cid, lst = item
+        _, lst = item
         has_high = any(n.get("severity") == "High" for n in lst)
         high_count = sum(1 for n in lst if n.get("severity") == "High")
         occ_sum = sum(n.get("log_entry", {}).get("occurrences", 1) for n in lst)
         return (not has_high, -high_count, -occ_sum, -len(lst))
 
-    return {cid: lst for cid, lst in sorted(grouped.items(), key=sort_key)}
+    return dict(sorted(grouped.items(), key=sort_key))

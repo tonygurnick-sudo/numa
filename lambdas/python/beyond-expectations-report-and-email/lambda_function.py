@@ -1,15 +1,14 @@
-import argparse
 import datetime
 import json
 import os
 import re
-from collections import defaultdict
-from typing import Any, Dict, List, Tuple
+import urllib.parse
+import uuid
+from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from botocore.exceptions import ClientError
 
 import bedrock
 import email_html
@@ -78,7 +77,7 @@ def truncate_log_entry(log_entry: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def load_analyzed_logs(
-    date_str: str = None,
+    date_str: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], datetime.datetime, datetime.datetime]:
     """Load pre-analyzed error logs from S3 bucket for the specified date
 
@@ -106,6 +105,7 @@ def load_analyzed_logs(
     earliest_timestamp = None
     latest_timestamp = None
 
+    # pylint: disable=too-many-nested-blocks
     for obj in objects:
         try:
             # Skip if directory
@@ -142,9 +142,9 @@ def load_analyzed_logs(
                             latest_timestamp = timestamp
                     except (ValueError, TypeError):
                         # Skip invalid timestamps
-                        pass
+                        continue
 
-        except (ValueError, json.JSONDecodeError) as e:
+        except (ValueError, json.JSONDecodeError):
             logger.exception(f"Error processing key {obj}")
             continue
 
@@ -169,7 +169,7 @@ def aggregate_analyzed_logs(analyzed_logs: List[Dict[str, Any]]) -> Dict[str, An
         Dictionary with combined analysis results
     """
     # Initialize the aggregated structure
-    aggregated_results = {
+    aggregated_results: Dict[str, Any] = {
         "notifications_required": [],
         "notifications_not_required": [],
         "error_categories": {},
@@ -425,8 +425,6 @@ The Beyond Expectations Team
             """
 
             # Create mailto link (url-encoded)
-            import urllib.parse
-
             mail_to = f"mailto:?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body)}"
 
             mail_to_links.append(
@@ -450,15 +448,13 @@ def save_report_to_s3(
     end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S UTC")
 
     # ── 2. unique timestamp for filenames ─────────────────────────────
-    import uuid
-
     unique_id = str(uuid.uuid4())[:8]
     report_time = (
         datetime.datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S-%f") + f"-{unique_id}"
     )
 
     # ── 3. build the 2-level notification structure ──────────────────
-    notif_sets = {
+    notif_sets: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
         "new": {"both": [], "client_only": [], "internal": [], "none": []},
         "recurring": {"both": [], "client_only": [], "internal": [], "none": []},
     }
@@ -545,7 +541,7 @@ def save_report_to_s3(
 
 
 def generate_email_notification(
-    email_addresses: list[str],
+    email_addresses: List[str],
     report_info: Dict[str, Any],
     report_data: Dict[str, Any],
     start_time: datetime.datetime,
@@ -695,9 +691,6 @@ def generate_email_notification(
         severity_counts,
         new_severity_counts,
         recurring_severity_counts,
-        client_notification_count,
-        internal_notification_count,
-        both_notification_count,
         new_notification_count,
         recurring_notification_count,
         new_client_count,
@@ -769,8 +762,6 @@ def generate_email_notification(
     report_time = report_info.get("report_time")
     if not report_time:
         # Create a unique timestamp with microseconds and random component like in save_report_to_s3
-        import uuid
-
         unique_id = str(uuid.uuid4())[:8]
         report_time = (
             datetime.datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S-%f")
@@ -866,8 +857,10 @@ def handler(event: dict, context: LambdaContext) -> Dict[str, Any]:
     )
     chunk_prefix: str = event.get("chunkPrefix", "")
 
-    # Remove any trailing “/”, then split, and take the last segment.
-    date_str = chunk_prefix.rstrip("/").split("/")[-1] if chunk_prefix else None
+    # Remove any trailing "/", then split, and take the last segment.
+    date_str: Optional[str] = (
+        chunk_prefix.rstrip("/").split("/")[-1] if chunk_prefix else None
+    )
 
     logger.info(
         "Starting error log summary and reporting",
@@ -902,7 +895,7 @@ def handler(event: dict, context: LambdaContext) -> Dict[str, Any]:
 
         # Generate mail-to links
         mail_to_links = generate_mail_to_links(
-            report_data.get("notifications_required", [])
+            report_data.get("notifications_required", [])  # type: ignore
         )
 
     # Save report to S3
@@ -914,7 +907,7 @@ def handler(event: dict, context: LambdaContext) -> Dict[str, Any]:
     email_result = None
     if notification_emails:
         email_result = generate_email_notification(
-            notification_emails, report_info, report_data, start_time, end_time
+            notification_emails, report_info, report_data, start_time, end_time  # type: ignore
         )
 
     response = {
@@ -929,6 +922,6 @@ def handler(event: dict, context: LambdaContext) -> Dict[str, Any]:
 
     # Include email data key in the response if available
     if email_result and "email_data_key" in email_result:
-        response["body"]["email_data_key"] = email_result["email_data_key"]
+        response["body"]["email_data_key"] = email_result["email_data_key"]  # type: ignore
 
     return response
