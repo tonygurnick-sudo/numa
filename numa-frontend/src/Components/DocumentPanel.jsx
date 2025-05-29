@@ -34,7 +34,9 @@ const DocumentPanel = ({ documentContent, onClose }) => {
       </div>
       {/* Body: main content */}
       <div className="document-panel-body">
-        <MarkdownContent content={content} />
+        <div className="message-content markdown-content">
+          <MarkdownContent content={content} />
+        </div>
       </div>
 
       {/* Result actions component */}
