@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { Container, Row, Col, Card, Button, Form, Alert, Table } from 'react-bootstrap';
-import { getUrlTagFromS3Object } from '../utils/s3Utils';
+import { Container, Row, Col, Card, Button, Form, Alert, Table, Modal } from 'react-bootstrap';
+import { getUrlTagFromS3Object, deleteFileFromS3 } from '../utils/s3Utils';
 import { UrlScraper } from '../Components/UrlScraper';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
-import { ListDataSourcesCommand, ListDataSourceSyncJobsCommand, ListDocumentsCommand } from '@aws-sdk/client-qbusiness';
+import {
+  ListDataSourcesCommand,
+  ListDataSourceSyncJobsCommand,
+  ListDocumentsCommand,
+  StartDataSourceSyncJobCommand,
+} from '@aws-sdk/client-qbusiness';
 
 import { useAuth } from '../Providers/AuthProvider';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
@@ -193,6 +198,11 @@ function documentIdToKey(documentId) {
 export function S3Uploader() {
   const [files, setFiles] = useState([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [isDeletingFile, setIsDeletingFile] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState(null);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+  const [dataSourceId, setDataSourceId] = useState(null);
 
   const [syncStatus, setSyncStatus] = useState(null);
   const [syncJobStatus, setSyncJobStatus] = useState(null);
@@ -315,6 +325,7 @@ export function S3Uploader() {
         return;
       }
       setSyncStatus(s3DataSource.status);
+      setDataSourceId(s3DataSource.dataSourceId);
 
       // List sync jobs
       const syncCmd = new ListDataSourceSyncJobsCommand({
@@ -380,6 +391,66 @@ export function S3Uploader() {
    */
   function handleUploadSuccess() {
     fetchFiles();
+  }
+
+  /**
+   * Handles confirmation of file deletion
+   */
+  function confirmDeleteFile(file) {
+    setFileToDelete(file);
+    setShowDeleteConfirmation(true);
+    setDeleteError(null);
+  }
+
+  /**
+   * Close the delete confirmation modal
+   */
+  function handleCloseDeleteModal() {
+    setShowDeleteConfirmation(false);
+    setFileToDelete(null);
+    setDeleteError(null);
+  }
+
+  /**
+   * Delete the file from S3 and trigger a sync
+   */
+  async function handleDeleteFile() {
+    if (!fileToDelete) return;
+
+    setIsDeletingFile(true);
+    setDeleteError(null);
+    try {
+      const region = window.sessionStorage.getItem('REGION');
+      const bucketName = `numa-${CLIENT_NAME}-data`;
+
+      // Delete the file from S3
+      await deleteFileFromS3(fileToDelete.originalKey, bucketName, region, getIdentityPoolCredentials);
+
+      // Start a sync job to update the index
+      if (qBusinessClient && dataSourceId) {
+        try {
+          const syncCmd = new StartDataSourceSyncJobCommand({
+            applicationId: Q_APPLICATION_ID,
+            indexId: Q_INDEX_ID,
+            dataSourceId: dataSourceId,
+          });
+          await qBusinessClient.send(syncCmd);
+          console.log('Knowledge base sync job started');
+        } catch (syncError) {
+          console.error('Failed to start sync job:', syncError);
+          // Continue anyway - the file has been deleted from S3
+        }
+      }
+
+      // Refresh the file list
+      await fetchFiles();
+      setShowDeleteConfirmation(false);
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      setDeleteError(error.message || 'Failed to delete file. Please try again.');
+    } finally {
+      setIsDeletingFile(false);
+    }
   }
 
   /**
@@ -512,10 +583,11 @@ export function S3Uploader() {
                   >
                     <thead>
                       <tr>
-                        <th style={{ width: showErrorColumn ? '60%' : '70%', cursor: 'default' }}>Name</th>
+                        <th style={{ width: showErrorColumn ? '50%' : '60%', cursor: 'default' }}>Name</th>
                         <th style={{ width: '20%', cursor: 'default' }}>Upload Date</th>
                         <th style={{ width: '10%', cursor: 'default' }}>Size (KB)</th>
                         {showErrorColumn && <th style={{ width: '10%', cursor: 'default' }}>Status</th>}
+                        <th style={{ width: '10%', cursor: 'default' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -570,6 +642,19 @@ export function S3Uploader() {
                                 ) : null}
                               </td>
                             )}
+                            <td>
+                              {!isFolder && (
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  onClick={() => confirmDeleteFile(row)}
+                                  aria-label="Delete file"
+                                  title="Delete file"
+                                >
+                                  <i className="bi bi-trash"></i>
+                                </Button>
+                              )}
+                            </td>
                           </tr>
                         );
                       })}
@@ -803,6 +888,45 @@ export function S3Uploader() {
           </Row>
         )}
       </LayoutDashboard>
+
+      {/* Delete Confirmation Modal */}
+      <Modal show={showDeleteConfirmation} onHide={handleCloseDeleteModal}>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Deletion</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {deleteError && (
+            <Alert variant="danger" className="mb-3">
+              {deleteError}
+            </Alert>
+          )}
+          <p>Are you sure you want to delete this file?</p>
+          {fileToDelete && (
+            <p>
+              <strong>{fileToDelete.displayName || fileToDelete.name}</strong>
+            </p>
+          )}
+          <p className="text-muted small">
+            Note: The file will be removed from S3 immediately. It may take some time (up to 30 minutes) for the change
+            to be reflected in the Knowledge Base index.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCloseDeleteModal} disabled={isDeletingFile}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleDeleteFile} disabled={isDeletingFile}>
+            {isDeletingFile ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" />
+                Deleting...
+              </>
+            ) : (
+              'Delete File'
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

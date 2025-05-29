@@ -1,4 +1,10 @@
-import { GetObjectCommand, GetObjectTaggingCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  GetObjectTaggingCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getIdentityPoolCredentials) => {
@@ -237,6 +243,40 @@ export const openFileWithSignedUrl = async (s3Key, s3Bucket, region, getIdentity
     window.open(signedUrl, '_blank');
   } catch (error) {
     console.error('Error opening file with signed URL:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a file from S3
+ * @param {string} s3Key
+ * @param {string} s3Bucket
+ * @param {string} region
+ * @param {Function} getIdentityPoolCredentials
+ * @returns {Promise<void>}
+ */
+export const deleteFileFromS3 = async (s3Key, s3Bucket, region, getIdentityPoolCredentials) => {
+  try {
+    const credentials = await getIdentityPoolCredentials();
+
+    if (!credentials?.accessKeyId) {
+      throw new Error('AWS Credentials are missing.');
+    }
+
+    const s3Client = new S3Client({
+      region,
+      credentials,
+    });
+
+    const command = new DeleteObjectCommand({
+      Bucket: s3Bucket,
+      Key: s3Key,
+    });
+
+    await s3Client.send(command);
+    console.log(`Successfully deleted file: ${s3Key} from bucket: ${s3Bucket}`);
+  } catch (error) {
+    console.error('Error deleting file from S3:', error);
     throw error;
   }
 };
