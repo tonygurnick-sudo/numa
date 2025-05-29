@@ -176,3 +176,27 @@ Budget alerting can be configured in the client config:(`clientConfigProd.json`)
    - An SNS topic that sends alerts to the centralised topic
 
 2. Alerts are batched and forwarded to a central SNS topic for consistent processing and notification delivery.
+
+## User Management Visibility Control
+
+Numa supports temporarily hiding the User Management functionality for specific clients using the `hideAdmin` flag. This feature will be superseded by security groups in the future but provides an immediate solution for restricting access.
+
+### Configuration
+
+The User Management visibility can be controlled in the client config (`clientConfigProd.json`):
+
+```json
+{
+  "clientname": {
+    "hideAdmin": true  // Set to true to hide the User Management icon in the UI
+  }
+}
+```
+
+### How It Works
+
+1. When configured, the system:
+   - Adds the `HIDE_ADMIN` flag to the client's `config.json` file during deployment
+   - The frontend checks this flag and conditionally renders the User Management icon
+
+2. This provides a per-client solution for restricting access to User Management functionality until the more comprehensive security groups feature is implemented.

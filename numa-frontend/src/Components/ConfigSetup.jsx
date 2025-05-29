@@ -34,6 +34,7 @@ export const fetchConfigAddtoSession = async () => {
     'HONEYCOMB_KEY',
     'OUTPUTS_BUCKET_NAME',
     'DATA_BUCKET',
+    'HIDE_ADMIN',
   ];
 
   // Check if all required properties exist
@@ -44,8 +45,17 @@ export const fetchConfigAddtoSession = async () => {
 
   propertiesToAdd.forEach((property) => {
     const existing = sessionStorage.getItem(property);
-    if ((configData[property] ?? 'undefined') != existing) {
-      sessionStorage.setItem(property, configData[property]);
+    const configValue = configData[property];
+
+    // Handle boolean values specially
+    if (typeof configValue === 'boolean') {
+      const stringValue = configValue.toString();
+      if (stringValue !== existing) {
+        sessionStorage.setItem(property, stringValue);
+        needsRefresh = true;
+      }
+    } else if ((configValue ?? 'undefined') != existing) {
+      sessionStorage.setItem(property, configValue);
       needsRefresh = true;
     }
   });
