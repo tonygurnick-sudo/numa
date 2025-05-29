@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 import Logo from '../../public/numa-logo.svg';
-
 import { useAuth } from '../Providers/AuthProvider';
 import { useState, useEffect } from 'react';
 
@@ -16,6 +15,7 @@ const Nav = () => {
   const { logout: authLogout } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const limitedAccess = useNoChatGroup();
+  const [hideAdmin, setHideAdmin] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -23,6 +23,11 @@ const Nav = () => {
     };
 
     window.addEventListener('resize', handleResize);
+
+    // Check if HIDE_ADMIN flag is set in sessionStorage
+    const hideAdminFlag = sessionStorage.getItem('HIDE_ADMIN');
+    setHideAdmin(hideAdminFlag === 'true');
+
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -70,10 +75,12 @@ const Nav = () => {
                   Upload Files
                 </Dropdown.Item>
 
-                <Dropdown.Item onClick={() => navigate('/user-management')}>
-                  <i className="bi bi-people-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
-                  User Management
-                </Dropdown.Item>
+                {!hideAdmin && (
+                  <Dropdown.Item onClick={() => navigate('/user-management')}>
+                    <i className="bi bi-people-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
+                    User Management
+                  </Dropdown.Item>
+                )}
               </>
             )}
             <Dropdown.Divider />
@@ -146,7 +153,7 @@ const Nav = () => {
         </ul>
 
         <footer className="footer">
-          {!limitedAccess && (
+          {!limitedAccess && !hideAdmin && (
             <div
               className="nav-link nav-item"
               onClick={() => navigate('/user-management')}
