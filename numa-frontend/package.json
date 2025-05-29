@@ -25,7 +25,7 @@
     "@aws-sdk/util-dynamodb": "3.817.0",
     "@honeycombio/opentelemetry-web": "^0.17.0",
     "@mdxeditor/editor": "^3.19.3",
-    "@opentelemetry/auto-instrumentations-web": "^0.46.0",
+    "@opentelemetry/auto-instrumentations-web": "^0.47.0",
     "@popperjs/core": "^2.11.8",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
