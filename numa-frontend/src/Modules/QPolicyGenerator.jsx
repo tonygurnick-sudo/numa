@@ -4,16 +4,7 @@ export function generatePolicy({ Region, AccountId, ApplicationId }) {
     Statement: [
       {
         Effect: 'Allow',
-        Action: [
-          'qbusiness:Chat*',
-          'qbusiness:List*',
-          'qbusiness:DeleteConversation',
-          'qbusiness:PutFeedback',
-          'qbusiness:StartDataSourceSyncJob',
-          'qapps:*',
-          'qbusiness:Get*',
-          'qbusiness:SearchRelevantContent',
-        ],
+        Action: ['qbusiness:*', 'qapps:*'],
         Resource: [
           `arn:aws:qbusiness:${Region}:${AccountId}:application/${ApplicationId}`,
           `arn:aws:qbusiness:${Region}:${AccountId}:application/${ApplicationId}/index/*`,
@@ -41,6 +32,11 @@ export function generatePolicy({ Region, AccountId, ApplicationId }) {
       {
         Effect: 'Allow',
         Action: ['user-subscriptions:CreateClaim', 'user-subscriptions:CreateUserClaim'],
+        Resource: ['*'],
+      },
+      {
+        Effect: 'Allow',
+        Action: ['cognito-idp:AdminDeleteUser', 'cognito-idp:AdminGetUser'],
         Resource: ['*'],
       },
     ],
