@@ -217,6 +217,55 @@ AWS_PROFILE=arcanum-q-deployer-prod yarn check-email-cases <client-name> --fix
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-email-cases --all --dev --fix
 ```
 
+### check-user-password-state
+
+Checks Cognito user pools for users in the FORCE_CHANGE_PASSWORD state.
+
+When run, the default developer account will be used to get the client configs, but then
+when editing the passwords in the customer account the profile `arcanum-q-deployer-prod`
+will be used.
+
+Usage:
+
+```bash
+# Check a single client
+yarn check-user-password-state <client-name> [options]
+
+# Check all clients and generate a report
+yarn check-user-password-state --all [options]
+
+Options:
+--dev: Only check dev instances
+--fix: Changes all users in FORCE_CHANGE state to have a random permenant password
+```
+
+The script uses credentials directly from your current AWS profile, so make sure you have the necessary permissions to access Cognito resources in the customer accounts.
+
+The script will:
+
+1. Find the Cognito user pool for each client
+2. List all users in the pool
+3. Identify users in the FORCE_CHANGE_PASSWORD state
+4. Generate a report of affected users
+
+The report includes:
+- Total number of clients checked
+- Number of clients with users in FORCE_CHANGE_PASSWORD state
+- Total number of affected users
+- Detailed list of affected users by client
+
+The report is saved as `password-state-report.json`.
+
+Examples:
+
+```bash
+# Check a single client
+yarn check-user-password-state <client-name>
+
+# Check all dev instances
+yarn check-user-password-state --all --dev
+```
+
 ### retrieve-config and write-config
 
 Read and write config.

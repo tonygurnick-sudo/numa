@@ -32,8 +32,9 @@
     "lint": "eslint . && tsc --noEmit",
     "test": "mkdir -p test-reports; node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml",
     "upload-files": "node --import tsx upload-files.ts",
-    "check-email-cases": "AWS_PROFILE=arcanum-q-deployer-prod node --import tsx check-email-cases.ts",
-    "check-email-verified": "AWS_PROFILE=arcanum-q-deployer-prod node --import tsx check-email-verified.ts",
+    "check-email-cases": "node --import tsx check-email-cases.ts",
+    "check-email-verified": "node --import tsx check-email-verified.ts",
+    "check-user-password-state": "node --import tsx check-user-password-state.ts",
     "retrieve-config": "node --import tsx retrieve-config.ts",
     "write-config": "node --import tsx write-config.ts",
     "list-clients": "node --import tsx list-clients.ts"
