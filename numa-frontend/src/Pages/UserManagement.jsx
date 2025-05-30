@@ -7,6 +7,7 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Nav } from '../Components/Nav';
 import { generateCognitoIdpPolicy } from '../Modules/CognitoIdpPolicyGenerator';
 import { useNavigate } from 'react-router-dom';
+
 function useNoChatGroup() {
   const { user } = useAuth();
   const groups = user?.decoded_tokens?.idToken?.['cognito:groups'] || [];
@@ -23,7 +24,9 @@ const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState(null);
-  const { getWebTokenCredentials } = useAuth();
+  const { getWebTokenCredentials, user, qBusinessClient } = useAuth();
+  const [deletingUser, setDeletingUser] = useState(null);
+  const currentUserSub = user?.decoded_tokens?.idToken?.sub;
 
   // --- No Chat Group logic ---
   const navigate = useNavigate();
@@ -74,6 +77,23 @@ const UserManagement = () => {
     }
   };
 
+  const handleDeleteUser = async (username) => {
+    setDeletingUser(username);
+    setUsersError(null);
+    if (!qBusinessClient) {
+      throw new Error('Q Business client not found');
+    }
+
+    if (!getWebTokenCredentials) {
+      throw new Error('Get web token credentials not found');
+    }
+
+    const REGION = window.sessionStorage.getItem('REGION');
+
+    const userManagementUtils = new UserManagementUtils(REGION, await getWebTokenCredentials());
+    await userManagementUtils.deleteUser(username, fetchUsers, setUsersError, setDeletingUser, qBusinessClient);
+  };
+
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -116,7 +136,6 @@ const UserManagement = () => {
       });
 
       const credentials = await getWebTokenCredentials(policy);
-
       if (!credentials) {
         throw new Error('Failed to get AWS credentials');
       }
@@ -269,6 +288,7 @@ const UserManagement = () => {
                         <th>Email</th>
                         <th>Status</th>
                         <th>Created</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -298,12 +318,24 @@ const UserManagement = () => {
                                 day: 'numeric',
                               })}
                             </td>
+                            <td>
+                              {!isSystemUser && (
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  disabled={deletingUser === user.email || user.username === currentUserSub}
+                                  onClick={() => handleDeleteUser(user.email)}
+                                >
+                                  {deletingUser === user.username ? 'Deleting...' : 'Delete'}
+                                </Button>
+                              )}
+                            </td>
                           </tr>
                         );
                       })}
                       {users.length === 0 && (
                         <tr>
-                          <td colSpan="3" className="text-center">
+                          <td colSpan="4" className="text-center">
                             No users found
                           </td>
                         </tr>

@@ -1,9 +1,12 @@
 import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
+  AdminDeleteUserCommand,
+  AdminGetUserCommand,
   ListUsersCommand,
   AdminSetUserPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
+import { DeleteUserCommand, GetUserCommand } from '@aws-sdk/client-qbusiness';
 
 export class UserManagementUtils {
   constructor(region, credentials) {
@@ -11,6 +14,8 @@ export class UserManagementUtils {
       region,
       credentials,
     });
+
+    this.credentials = credentials;
   }
 
   /**
@@ -100,5 +105,73 @@ export class UserManagementUtils {
       status: user.UserStatus,
       created: user.UserCreateDate,
     }));
+  }
+
+  async deleteUser(username, fetchUsers, setUsersError, setDeletingUser, qClient) {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete user ${username}? This will delete all data associated with this user.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+      const applicationId = window.sessionStorage.getItem('Q_APPLICATION_ID');
+
+      if (!applicationId) {
+        throw new Error('Q application ID not found');
+      }
+
+      // Get and delete Q user, skipping if not found
+      try {
+        const getQCommand = new GetUserCommand({
+          applicationId,
+          userId: username,
+        });
+        await qClient.send(getQCommand);
+
+        const deleteQCommand = new DeleteUserCommand({
+          applicationId,
+          userId: username,
+        });
+        await qClient.send(deleteQCommand);
+      } catch (err) {
+        if (err.name === 'ResourceNotFoundException' || err.$metadata?.httpStatusCode === 404) {
+          console.warn(`Q user ${username} not found, skipping Q get/delete`);
+        } else {
+          throw err;
+        }
+      }
+
+      // Get and delete Cognito user, skipping if not found
+      try {
+        const getCognitoCommand = new AdminGetUserCommand({
+          UserPoolId: USER_POOL_ID,
+          Username: username,
+        });
+        await this.cognitoClient.send(getCognitoCommand);
+
+        const deleteCognitoCommand = new AdminDeleteUserCommand({
+          UserPoolId: USER_POOL_ID,
+          Username: username,
+        });
+        await this.cognitoClient.send(deleteCognitoCommand);
+      } catch (err) {
+        if (err.name === 'UserNotFoundException') {
+          console.warn(`Cognito user ${username} not found, skipping Cognito get/delete`);
+        } else {
+          throw err;
+        }
+      }
+
+      // Refresh the user list
+      await fetchUsers();
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      setUsersError(err.message || 'Failed to delete user');
+    } finally {
+      setDeletingUser(null);
+    }
   }
 }
