@@ -314,9 +314,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       const idToken = user.tokens.idToken;
       const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
 
-      const policy = generateBedrockPolicy({
-        Region: REGION,
-      });
+      const policy = generateBedrockPolicy();
 
       const credentials = fromWebToken({
         client: cognitoIdentity,

@@ -63,7 +63,7 @@ export class PolicyReviewer extends BaseNumaApp {
       },
       {
         actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
     ];
     const policyReviewerLambda = this.addLambdaFunction(this, 'review', {

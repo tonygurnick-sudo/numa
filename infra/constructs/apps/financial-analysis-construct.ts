@@ -60,7 +60,7 @@ export class FinancialAnalysis extends BaseNumaApp {
       },
       {
         actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
     ];
     const extractFinancialDataLambda = this.addLambdaFunction(this, 'extract-financial-data', {
@@ -80,7 +80,7 @@ export class FinancialAnalysis extends BaseNumaApp {
       },
       {
         actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
     ];
     const financialAnalysisLambda = this.addLambdaFunction(this, 'analyse', {

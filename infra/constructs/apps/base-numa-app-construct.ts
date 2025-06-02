@@ -203,7 +203,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       },
       {
         actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
       {
         actions: ['textract:GetDocumentTextDetection', 'textract:StartDocumentTextDetection'],
