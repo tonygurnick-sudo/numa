@@ -89,7 +89,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       },
       {
         actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
     ];
     const analyserLambda = this.addLambdaFunction(this, 'analyse', {

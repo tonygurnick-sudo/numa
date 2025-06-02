@@ -131,8 +131,8 @@ class TestBedrockModelConfig(unittest.TestCase):
             for model_type in ModelTypes:
                 model_id = get_model_id(region, model_type)
                 self.assertTrue(
-                    model_id.startswith("anthropic.claude"),
-                    f"Model ID for {region.name}, {model_type.name} doesn't start with 'anthropic.claude': {model_id}",
+                    "anthropic" in model_id,
+                    f"Model ID for {region.name}, {model_type.name} doesn't contain 'anthropic': {model_id}",
                 )
 
     def test_default_parameter(self):

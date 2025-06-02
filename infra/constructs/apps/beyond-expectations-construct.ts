@@ -121,7 +121,7 @@ export class BeyondExpectations extends BaseNumaApp {
 
     const bedrockPolicyStatement = {
       actions: ['bedrock:InvokeModel'],
-      resources: ['arn:aws:bedrock:*::foundation-model/*'],
+      resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       effect: 'Allow',
     };
 

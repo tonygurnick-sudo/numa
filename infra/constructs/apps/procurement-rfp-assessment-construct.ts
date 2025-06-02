@@ -94,7 +94,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
       {
         actions: ['bedrock:InvokeModel'],
         effect: 'Allow',
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
     ];
 

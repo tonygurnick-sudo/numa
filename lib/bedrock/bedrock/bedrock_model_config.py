@@ -28,7 +28,7 @@ class ModelTypes(str, Enum):
 
 MODEL_MAP = {
     Region.US_EAST_1: {
-        ModelTypes.DEFAULT: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        ModelTypes.DEFAULT: "us.anthropic.claude-3-7-sonnet-20250219-v1:0",  # "us.anthr..." means cross region inference for us region
         ModelTypes.CLAUDE_HAIKU: "anthropic.claude-3-haiku-20240307-v1:0",
     },
     Region.AP_SOUTHEAST_2: {

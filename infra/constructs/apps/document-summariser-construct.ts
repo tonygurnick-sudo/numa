@@ -60,7 +60,7 @@ export class DocumentSummariser extends BaseNumaApp {
       },
       {
         actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
     ];
     const summariseDocumentLambda = this.addLambdaFunction(this, 'summarise', {

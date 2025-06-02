@@ -855,6 +855,16 @@ export class CoreNumaInfra extends Construct {
         regions: [props.region],
         trigger: '1',
       },
+      {
+        model_id: 'anthropic.claude-sonnet-4-20250514-v1:0',
+        regions: [props.region],
+        trigger: '1',
+      },
+      {
+        model_id: 'anthropic.claude-3-7-sonnet-20250219-v1:0',
+        regions: [props.region],
+        trigger: '1',
+      },
     ];
 
     for (const model of models) {

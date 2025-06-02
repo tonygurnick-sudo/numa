@@ -84,7 +84,7 @@ export class CandidateScreening extends BaseNumaApp {
       },
       {
         actions: ['bedrock:InvokeModel'],
-        resources: ['arn:aws:bedrock:*::foundation-model/*'],
+        resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
     ];
     const candidateScreeningLambda = this.addLambdaFunction(this, 'screen', {
