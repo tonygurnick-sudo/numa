@@ -101,7 +101,8 @@
     },
     "clientAccountId": "619071323471",
     "devInstance": true,
-    "region": "us-east-1"
+    "region": "us-east-1",
+    "hideAdmin": true
   },
   "arcanum-prod-trial": {
     "allProdApps": true,
