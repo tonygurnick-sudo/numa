@@ -1,7 +1,6 @@
 .clients:
   matrix:
     - CLIENT_NAME:
-        - 2gen
         - 30-seconds
         - accumen
         - align-me
