@@ -36,6 +36,7 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       handler: props.handler ?? 'lambda_function.handler',
       lambdaDirectory: props.lambdaDirectory,
       logGroup: this.logGroup,
+      memorySize: props.memorySize,
       otelConfig: this.props.otelConfig,
       resourceNameSuffix: (this.props.resourceNameInfix ?? '') + '_' + name,
       timeout: props.timeout || 29, // API Gateway will only wait 30 seconds. Let's try to come in under that
@@ -86,6 +87,7 @@ export interface AddLambdaFunctionProps {
   environment?: Record<string, string>;
   handler?: string;
   lambdaDirectory: string;
+  memorySize?: number;
   route?: RouteDefinition;
   runtime?: string;
   timeout?: number;

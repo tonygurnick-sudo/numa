@@ -109,6 +109,7 @@ export class NumaLambda extends Construct {
         logGroup: props.logGroup.name,
         systemLogLevel: 'INFO',
       },
+      memorySize: props.memorySize,
       role: role.arn,
       runtime: props.runtime,
       sourceCodeHash: Fn.filebase64sha256(filename),
@@ -168,6 +169,7 @@ export interface NumaLambdaProps {
   handler?: string;
   lambdaDirectory: string;
   logGroup: CloudwatchLogGroup;
+  memorySize?: number;
   otelConfig?: OTelConfig;
   resourceNameSuffix: string;
   runtime?: string;
