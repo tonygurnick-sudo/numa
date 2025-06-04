@@ -3,6 +3,7 @@ import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { QAppsDeployerStack } from './stacks/q-apps-deployer-stack';
 import { ClientConfig, clientConfigSchema, NumaClientStack } from './stacks/numa-client-stack';
 import { getClientConfig, listClients } from '@arcanumai/client-config';
+import { NextGenRootStack } from './stacks/nextgen-root-stack';
 
 const override = process.env['CLIENT_OVERRIDE'];
 
@@ -15,7 +16,7 @@ const environmentConfig = {
   hostedZone: 'Z05615802D0KHGAAOFX9U',
 };
 
-if (override === undefined) {
+if (override === undefined || override === 'none') {
   new QAppsDeployerStack(app, 'q-apps-deployer', {
     client: 'arcanum',
     serviceName: 'q-apps-deployer',
@@ -23,14 +24,48 @@ if (override === undefined) {
     appsBucketName: 'numa-qapps' + bucketSuffix,
     ...environmentConfig,
   });
-}
 
-for (const clientName of override ? [override] : await listClients()) {
-  const clientConfig = await getClientConfig<ClientConfig>(clientName, clientConfigSchema);
-  new NumaClientStack(app, `numa-${clientName}`, {
-    clientName,
+  new NextGenRootStack(app, 'next-gen-root', {
     ...environmentConfig,
-    clientConfig,
+    users: [
+      {
+        email: 'dave@arcanum.ai',
+        givenName: 'Dave',
+        familyName: 'Ball',
+        rootAccess: true,
+      },
+      {
+        email: 'nick@arcanum.ai',
+        givenName: 'Nick',
+        familyName: 'Walton',
+        rootAccess: true,
+      },
+      {
+        email: 'nathan@arcanum.ai',
+        givenName: 'Nathan',
+        familyName: 'Douglas',
+      },
+      {
+        email: 'hamish@arcanum.ai',
+        givenName: 'Hamish',
+        familyName: 'Wadham',
+      },
+      {
+        email: 'sam@arcanum.ai',
+        givenName: 'Sam',
+        familyName: 'Bentley',
+      },
+    ],
+    clientAccounts: [],
   });
+} else if (override !== 'none') {
+  for (const clientName of override ? [override] : await listClients()) {
+    const clientConfig = await getClientConfig<ClientConfig>(clientName, clientConfigSchema);
+    new NumaClientStack(app, `numa-${clientName}`, {
+      clientName,
+      ...environmentConfig,
+      clientConfig,
+    });
+  }
 }
 app.synth();
