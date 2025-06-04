@@ -216,10 +216,9 @@ export class NumaClientStack extends TerraformStack {
       content: JSON.stringify({
         USER_POOL_ID: core.userPoolId,
         CLIENT_ID: core.userPoolClient?.id,
-        IDENTITY_POOL_ID: core.identityPoolId,
-        IDENTITY_POOL_ROLE_ARN: core.identityPoolArn,
         REGION: clientConfig.region,
         ROLE_ARN: core.webExperienceRoleArn,
+        IDENTITY_POOLS: core.identityPools,
         Q_APPLICATION_ID: core.qBusinessApplicationId,
         Q_INDEX_ID: core.qBusinessIndexId,
         Q_RETRIEVER_ID: core.qBusinessRetrieverId,

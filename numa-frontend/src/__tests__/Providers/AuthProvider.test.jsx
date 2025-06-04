@@ -64,7 +64,12 @@ describe('AuthProvider', () => {
       API_ENDPOINT: 'https://api.example.com',
       CLIENT_ID: 'test-client-id',
       REGION: 'us-east-1',
-      IDENTITY_POOL_ID: 'us-east-1:test-identity-pool',
+      IDENTITY_POOLS: JSON.stringify({
+        admin: {
+          id: 'us-east-1:test-identity-pool',
+          features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+        },
+      }),
     };
 
     // Set up sessionStorage mock

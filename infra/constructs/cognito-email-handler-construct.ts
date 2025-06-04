@@ -12,12 +12,7 @@ export class CognitoEmailHandler extends Construct {
   constructor(scope: Construct, name: string, props: CognitoEmailHandlerProps) {
     super(scope, name);
 
-    const namePrefix = `cognito-email-handler-`;
-    const nameSuffix = props.nameSuffix.slice(0, 64 - namePrefix.length);
-    const roleName = namePrefix + nameSuffix;
-
     const role = new IamRole(this, 'role', {
-      name: roleName,
       assumeRolePolicy: createAssumptionPolicy({
         Service: 'lambda.amazonaws.com',
       }),
@@ -38,12 +33,8 @@ export class CognitoEmailHandler extends Construct {
       'lambda_function.zip',
     );
 
-    const lambdaPrefix = `cognito-email-handler-`;
-    const lambdaSuffix = props.nameSuffix.slice(0, 64 - lambdaPrefix.length);
-    const lambdaName = lambdaPrefix + lambdaSuffix;
-
     this.function = new LambdaFunction(this, 'lambda', {
-      functionName: lambdaName,
+      functionName: `cognito-email-lambda-${props.nameSuffix}`,
       role: role.arn,
       filename: emailsLambdaPath,
       sourceCodeHash: Fn.filebase64sha256(emailsLambdaPath),
