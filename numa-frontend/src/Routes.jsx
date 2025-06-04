@@ -30,7 +30,12 @@ const AppRoutes = () => {
     return <div>Loading...</div>;
   }
 
-  const ProtectedRoute = ({ children }) => {
+  const ProtectedRoute = ({ children, requiredFeature }) => {
+    const features = user?.features;
+    if (loading) {
+      return <div>Loading...</div>;
+    }
+
     if (!tokenValidationComplete) {
       return <div>Loading...</div>;
     }
@@ -38,6 +43,12 @@ const AppRoutes = () => {
     if (!user) {
       return <Navigate to="/login" replace />;
     }
+
+    if (requiredFeature && !features.includes(requiredFeature)) {
+      // Display a simple message to the user
+      return <div>You do not have access to this feature.</div>;
+    }
+
     return children;
   };
 
@@ -80,7 +91,7 @@ const AppRoutes = () => {
       <Route
         path="/upload"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requiredFeature="editCompanyData">
             <S3Uploader />
           </ProtectedRoute>
         }
@@ -89,7 +100,7 @@ const AppRoutes = () => {
       <Route
         path="/chat"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requiredFeature="chat">
             <NumaChat />
           </ProtectedRoute>
         }
@@ -98,7 +109,7 @@ const AppRoutes = () => {
       <Route
         path="/company-info"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requiredFeature="editCompanyData">
             <CompanyInfo />
           </ProtectedRoute>
         }
@@ -107,7 +118,7 @@ const AppRoutes = () => {
       <Route
         path="/user-management"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requiredFeature="manageUsers">
             <UserManagement />
           </ProtectedRoute>
         }

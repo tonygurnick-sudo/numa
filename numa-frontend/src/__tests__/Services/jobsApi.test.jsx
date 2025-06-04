@@ -54,6 +54,16 @@ const wrapper = ({ children }) => {
   );
 };
 
+// Add mock for AuthProvider and useAuth to bypass real implementation and AWS initialization
+vi.mock('../../Providers/AuthProvider', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    useAuth: () => ({ user: { decoded_tokens: { idToken: { sub: 'test-user-id' } } } }),
+    AuthProvider: ({ children }) => React.createElement(React.Fragment, null, children),
+  };
+});
+
 describe('jobsApi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -91,7 +101,7 @@ describe('jobsApi', () => {
         inputs: taskInputs,
         status: 'running',
         manifest: JSON.stringify(numaAppData),
-        userId: undefined,
+        userId: 'test-user-id',
       });
       expect(call[1]).toHaveProperty('startedAt');
       expect(call[1]).toHaveProperty('lastUpdated');
@@ -123,7 +133,7 @@ describe('jobsApi', () => {
       // Check that numaGet was called with the correct parameters
       expect(mockNumaGet).toHaveBeenCalledTimes(1);
       expect(mockNumaGet).toHaveBeenCalledWith(`/api/${numaAppId}/jobs/${jobId}`, {
-        userId: undefined, // The test doesn't pass userId to getJobById
+        userId: 'test-user-id', // The test doesn't pass userId to getJobById
       });
     });
   });
@@ -163,6 +173,7 @@ describe('jobsApi', () => {
       expect(mockNumaGet).toHaveBeenCalledTimes(1);
       expect(mockNumaGet).toHaveBeenCalledWith(`/api/${numaAppId}/jobs`, {
         limit: 50, // Default limit in the implementation
+        userId: 'test-user-id',
       });
     });
 
@@ -198,6 +209,7 @@ describe('jobsApi', () => {
       expect(mockNumaGet).toHaveBeenCalledTimes(1);
       expect(mockNumaGet).toHaveBeenCalledWith(`/api/${numaAppId}/jobs`, {
         limit: 50, // The implementation uses a default limit of 50
+        userId: 'test-user-id',
         nextToken: '"token"', // The implementation stringifies the nextToken
       });
     });

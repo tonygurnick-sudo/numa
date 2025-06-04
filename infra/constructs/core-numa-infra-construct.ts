@@ -1,29 +1,15 @@
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
-import { CognitoIdentityPool } from '@cdktf/provider-aws/lib/cognito-identity-pool';
-import { CognitoIdentityPoolRolesAttachment } from '@cdktf/provider-aws/lib/cognito-identity-pool-roles-attachment';
-import { CognitoUser } from '@cdktf/provider-aws/lib/cognito-user';
-import { CognitoUserPool } from '@cdktf/provider-aws/lib/cognito-user-pool';
-import { CognitoUserPoolClient } from '@cdktf/provider-aws/lib/cognito-user-pool-client';
-import { CognitoUserPoolDomain } from '@cdktf/provider-aws/lib/cognito-user-pool-domain';
 import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
-import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
-import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
-import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
-import { SecretsmanagerSecretVersion } from '@cdktf/provider-aws/lib/secretsmanager-secret-version';
-import { password } from '@cdktf/provider-random';
-import { RandomProvider } from '@cdktf/provider-random/lib/provider';
 import { Fn, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
-import { AdjustToken } from './adjust-token-construct';
-import { CognitoEmailHandler } from './cognito-email-handler-construct';
 import { BoxDataSource, boxDataSourcePropsSchema } from './data-sources/box-datasource-construct';
 import { S3DataSource, s3DataSourcePropsSchema } from './data-sources/s3-datasource-construct';
 import { SharePointDataSource, sharePointDataSourcePropsSchema } from './data-sources/sharepoint-datasource-construct';
@@ -35,28 +21,30 @@ import {
   QBusinessChatControlConfigurer,
   qBusinessChatControlConfigurerPropsSchema,
 } from './q-business-chat-control-configurer-construct';
-import { SetCallbackUrl } from './set-callback-url-construct';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { ConfigBucket } from './config-bucket-construct';
 import { z } from 'zod';
+import { CognitoConstruct, CognitoConstructProps, FeatureSetName } from './cognito-construct';
+import { CognitoUserPoolClient } from '@cdktf/provider-aws/lib/cognito-user-pool-client';
+import { WebExperienceConstruct } from './web-experience-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
   readonly userPoolId: string;
   readonly userPoolClient: CognitoUserPoolClient;
-  readonly identityPoolId: string;
-  readonly identityPoolArn: string;
   readonly webExperienceRoleArn: string;
   readonly qBusinessApplicationId: string;
   readonly qBusinessIndexId: string;
   readonly qBusinessRetrieverId: string;
+  readonly qBusinessApplicationArn: string;
   readonly logGroup: CloudwatchLogGroup;
   readonly outputsBucket: NumaCorsEnabledBucket;
   readonly otelConfigPath: string;
   readonly dataBucket: NumaCorsEnabledBucket;
   readonly chatHistoryTable: DynamodbTable;
+  readonly identityPools: Record<string, { id: string; features: FeatureSetName[] }>;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -75,159 +63,6 @@ export class CoreNumaInfra extends Construct {
     // TODO: Typing
     let appIdentityConfig;
     let webexIdentityConfig;
-
-    // Create Cognito email handler Lambda function
-    const cognitoEmailHandler = new CognitoEmailHandler(this, 'cognito-email-handler', {
-      nameSuffix: numaClient,
-      domainName: props.domainName,
-    });
-
-    const at = new AdjustToken(this, 'token-adjuster', {
-      nameSuffix: numaClient,
-    });
-    const cognitoDomain = numaClient;
-
-    const mfa =
-      (props.mfa ?? false)
-        ? {
-            mfaConfiguration: 'ON',
-            softwareTokenMfaConfiguration: {
-              enabled: true,
-            },
-          }
-        : {
-            mfaConfiguration: 'OFF',
-          };
-    const userPool = new CognitoUserPool(this, 'user-pool', {
-      name: numaClient,
-      usernameAttributes: ['email'],
-      lambdaConfig: {
-        preTokenGenerationConfig: {
-          lambdaArn: at.function.arn,
-          lambdaVersion: 'V2_0',
-        },
-        customMessage: cognitoEmailHandler.function.arn,
-      },
-      userPoolAddOns: {
-        advancedSecurityMode: 'AUDIT',
-      },
-      passwordPolicy: {
-        minimumLength: props.passwordLength ?? 8,
-        temporaryPasswordValidityDays: props.temporaryPasswordValidityDays,
-      },
-      ...mfa,
-    });
-    this.userPoolId = userPool.id;
-
-    new TerraformOutput(this, 'user-pool-id', {
-      value: userPool.id,
-    });
-
-    new CognitoUserPoolDomain(this, 'domain', {
-      userPoolId: userPool.id,
-      domain: cognitoDomain,
-    });
-
-    // Grant permissions for Cognito to invoke the email handler Lambda
-    new LambdaPermission(this, 'cognito-email-permission', {
-      statementId: 'cognito-email-handler',
-      functionName: cognitoEmailHandler.function.functionName,
-      action: 'lambda:InvokeFunction',
-      principal: 'cognito-idp.amazonaws.com',
-      sourceArn: userPool.arn,
-    });
-
-    new RandomProvider(this, 'random-provider', {});
-    const systemUserPassword = new password.Password(this, 'password', {
-      length: 64,
-      minLower: 5,
-      minNumeric: 5,
-      minSpecial: 5,
-      minUpper: 5,
-    }).result;
-    const systemUserEmail = 'numa-system-user@arcanum.ai';
-    new CognitoUser(this, 'system-user', {
-      enabled: true,
-      username: systemUserEmail,
-      attributes: {
-        email: systemUserEmail,
-        email_verified: 'true',
-      },
-      password: systemUserPassword,
-      userPoolId: userPool.id,
-    });
-    const systemUserSecret = new SecretsmanagerSecret(this, 'system-user-secret-manager-secret', {
-      name: `${props.clientName}-system-user-password`,
-    });
-    new SecretsmanagerSecretVersion(this, 'system-user-secret-version', {
-      secretId: systemUserSecret.arn,
-      secretString: JSON.stringify({
-        username: systemUserEmail,
-        password: systemUserPassword,
-      }),
-    });
-
-    new TerraformOutput(this, 'system-user-secret', {
-      value: systemUserSecret.arn,
-    });
-
-    this.userPoolClient = new CognitoUserPoolClient(this, 'client', {
-      userPoolId: userPool.id,
-      name: numaClient,
-      generateSecret: true,
-      callbackUrls: ['https://localhost'], // Placeholder, must be provided, but is replaced later.
-      allowedOauthFlowsUserPoolClient: true,
-      allowedOauthFlows: ['code'],
-      allowedOauthScopes: ['openid', 'email', 'profile'],
-      accessTokenValidity: 60,
-      refreshTokenValidity: 60,
-      idTokenValidity: 60,
-      tokenValidityUnits: [{ accessToken: 'minutes', refreshToken: 'days', idToken: 'minutes' }],
-      supportedIdentityProviders: ['COGNITO'],
-      lifecycle: {
-        ignoreChanges: ['callback_urls'],
-      },
-    });
-
-    const identityPool = new CognitoIdentityPool(this, 'identity-pool', {
-      identityPoolName: numaClient,
-      allowUnauthenticatedIdentities: false,
-      allowClassicFlow: true,
-      cognitoIdentityProviders: [
-        {
-          clientId: this.userPoolClient.id,
-          providerName: userPool.endpoint,
-        },
-      ],
-    });
-    this.identityPoolId = identityPool.id;
-    this.identityPoolArn = identityPool.arn;
-    const identityPoolRoleTrustPolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-trust-policy', {
-      statement: [
-        {
-          effect: 'Allow',
-          principals: [
-            {
-              type: 'Federated',
-              identifiers: ['cognito-identity.amazonaws.com'],
-            },
-          ],
-          actions: ['sts:AssumeRoleWithWebIdentity'],
-          condition: [
-            {
-              test: 'StringEquals',
-              values: [identityPool.id],
-              variable: 'cognito-identity.amazonaws.com:aud',
-            },
-            {
-              test: 'ForAnyValue:StringLike',
-              values: ['authenticated'],
-              variable: 'cognito-identity.amazonaws.com:amr',
-            },
-          ],
-        },
-      ],
-    });
 
     this.dataBucket = new NumaCorsEnabledBucket(this, 'data-source-bucket', {
       bucketName: 'data',
@@ -293,259 +128,47 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
-    const cognitoPermissionsPolicy = new DataAwsIamPolicyDocument(this, 'cognito-permissions-policy', {
-      statement: [
-        {
-          effect: 'Allow',
-          actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminCreateUser'],
-          resources: [userPool.arn],
-        },
-      ],
-    });
+    // Create Cognito construct with all Cognito resources
+    const cognitoProps: CognitoConstructProps = {
+      clientName: props.clientName,
+      environmentName: props.environmentName ?? 'dev',
+      domainName: props.domainName,
+      region: props.region,
+      devInstance: props.devInstance ?? false,
+      mfa: props.mfa ?? false,
+      passwordLength: props.passwordLength ?? 8,
+      temporaryPasswordValidityDays: props.temporaryPasswordValidityDays ?? 30,
+      createServiceLinkedRole: props.createServiceLinkedRole ?? true,
+      dataBucket: this.dataBucket,
+      outputsBucket: this.outputsBucket,
+      companyBucket: companyBucket,
+      chatHistoryTable: this.chatHistoryTable,
+      callerAccountId: callerId.accountId,
+    };
 
-    const identityPoolRolePolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-policy', {
-      statement: [
-        {
-          effect: 'Allow',
-          actions: ['cognito-identity:GetCredentialsForIdentity'],
-          resources: ['*'],
-        },
-        {
-          effect: 'Allow',
-          actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminCreateUser'],
-          resources: [userPool.arn],
-          condition: [
-            {
-              test: 'StringEquals',
-              variable: 'aws:RequestedRegion',
-              values: [props.region],
-            },
-            {
-              test: 'StringEquals',
-              variable: 'cognito-identity.amazonaws.com:aud',
-              values: [identityPool.id],
-            },
-            {
-              test: 'ForAnyValue:StringLike',
-              variable: 'cognito-identity.amazonaws.com:amr',
-              values: ['authenticated'],
-            },
-          ],
-        },
-        {
-          actions: ['s3:ListBucket'], // this is required to get a 404 instead of a 403 if object not found
-          effect: 'Allow',
-          resources: [this.outputsBucket.bucket.arn],
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject'],
-          resources: [`${this.outputsBucket.bucket.arn}/*`, this.outputsBucket.bucket.arn],
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject', 's3:GetObject', 's3:GetObjectTagging'],
-          resources: [`${this.dataBucket.bucket.arn}/*`, this.dataBucket.bucket.arn],
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-          resources: [`${companyBucket.bucket.arn}/*`, companyBucket.bucket.arn],
-        },
-        {
-          effect: 'Allow',
-          actions: [
-            'dynamodb:PutItem',
-            'dynamodb:GetItem',
-            'dynamodb:Query',
-            'dynamodb:UpdateItem',
-            'dynamodb:DeleteItem',
-          ],
-          resources: [this.chatHistoryTable.arn],
-          condition: [
-            {
-              test: 'StringEquals',
-              values: ['$${cognito-identity.amazonaws.com:sub}'],
-              variable: 'dynamodb:LeadingKeys',
-            },
-          ],
-        },
-      ],
-    });
+    const cognitoConstruct = new CognitoConstruct(this, 'cognito', cognitoProps);
+    this.identityPools = cognitoConstruct.identityPools;
 
-    const identityPoolRole = new IamRole(this, 'identity-pool-role', {
-      name: `${numaClient}-identity-role`,
-      assumeRolePolicy: identityPoolRoleTrustPolicy.json,
-    });
+    // Set Cognito-related properties to use values from the CognitoConstruct
+    this.userPoolId = cognitoConstruct.userPoolId;
+    this.userPoolClient = cognitoConstruct.userPoolClient;
 
-    // First attach the main role policy
-    new IamRolePolicy(this, 'identity-role-policy', {
-      name: 'policy',
-      role: identityPoolRole.name,
-      policy: identityPoolRolePolicy.json,
-    });
-
-    // Then attach the Cognito permissions policy
-    new IamRolePolicy(this, 'cognito-permissions-role-policy', {
-      name: 'cognito-policy',
-      role: identityPoolRole.name,
-      policy: cognitoPermissionsPolicy.json,
-    });
-
-    new CognitoIdentityPoolRolesAttachment(this, 'identity-pool-role-attachment', {
-      identityPoolId: identityPool.id,
-      roles: {
-        authenticated: identityPoolRole.arn,
-      },
-    });
-
-    new LambdaPermission(this, 'permission', {
-      statementId: 'cognito',
-
-      functionName: at.function.functionName,
-      action: 'lambda:InvokeFunction',
-      principal: 'cognito-idp.amazonaws.com',
-      // TODO: Add suitable condition.
-    });
-
-    const oidc = new CloudcontrolapiResource(this, 'idp', {
-      typeName: 'AWS::IAM::OIDCProvider',
-      desiredState: Fn.jsonencode({
-        Url: `https://${userPool.endpoint}`,
-        ClientIdList: [this.userPoolClient.id],
-      }),
-    });
-    const oidcArn = Fn.lookup(Fn.jsondecode(oidc.properties), 'Arn');
-
-    const secret = new SecretsmanagerSecret(this, 'secret', {
-      namePrefix: `QBusiness-oidc-client-secret-${numaClient}-`,
-    });
-
-    const secretsPolicyDocument = new DataAwsIamPolicyDocument(this, 'secrets-policy-doc', {
-      statement: [
-        {
-          effect: 'Allow',
-          actions: ['secretsmanager:GetSecretValue'],
-          resources: [secret.arn],
-        },
-      ],
-    });
-
-    const secretsTrustPolicyDocument = new DataAwsIamPolicyDocument(this, 'secrets-policy-trust-doc', {
-      statement: [
-        {
-          effect: 'Allow',
-          actions: ['sts:AssumeRole', 'sts:SetContext'],
-          principals: [
-            {
-              identifiers: ['application.qbusiness.amazonaws.com'],
-              type: 'Service',
-            },
-          ],
-        },
-      ],
-    });
-
-    const secretsRole = new IamRole(this, 'secrets-role', {
-      name: `numa-secrets-role-${numaClient}`,
-      assumeRolePolicy: secretsTrustPolicyDocument.json,
-    });
-
-    new IamRolePolicy(this, 'secrets-role-policy', {
-      name: 'policy',
-      role: secretsRole.name,
-      policy: secretsPolicyDocument.json,
-    });
-
-    if (props.createServiceLinkedRole) {
-      new IamServiceLinkedRole(this, 'q-service-role', {
-        awsServiceName: 'qbusiness.amazonaws.com',
-      });
-    }
-
-    new SecretsmanagerSecretVersion(this, 'secret-version', {
-      secretId: secret.id,
-      secretString: `{"client_secret": "${this.userPoolClient.clientSecret}"}`,
-    });
-
+    // Use the values from Cognito construct for QBusiness configuration
     appIdentityConfig = {
       IdentityType: 'AWS_IAM_IDP_OIDC',
       ClientIdsForOIDC: [this.userPoolClient.id],
-      IamIdentityProviderArn: oidcArn,
+      IamIdentityProviderArn: cognitoConstruct.oidcArn,
       RoleArn: `arn:aws:iam::${callerId.accountId}:role/aws-service-role/qbusiness.amazonaws.com/AWSServiceRoleForQBusiness`, // TODO: Dynamic.
     };
 
     webexIdentityConfig = {
       IdentityProviderConfiguration: {
         OpenIDConnectConfiguration: {
-          SecretsArn: secret.arn,
-          SecretsRole: secretsRole.arn,
+          SecretsArn: cognitoConstruct.secretsManagerSecret.arn,
+          SecretsRole: cognitoConstruct.secretsRole.arn,
         },
       },
     };
-
-    // TODO: Set this up as per https://docs.aws.amazon.com/amazonq/latest/qbusiness-ug/making-sigv4-authenticated-api-calls-iam.html#control-plane-setup-iam
-    const rolePolicyDocument = new DataAwsIamPolicyDocument(this, 'role-policy-doc', {
-      version: '2012-10-17',
-      statement: [
-        {
-          effect: 'Allow',
-          actions: ['*'],
-          resources: ['*'],
-        },
-      ],
-    });
-
-    const webExArn = `arn:aws:iam::${callerId.accountId}:oidc-provider/cognito-idp.${props.region}.amazonaws.com/${userPool.id}`;
-
-    const webExperienceTrustDocument = new DataAwsIamPolicyDocument(this, 'webex-policy-trust-doc', {
-      statement: [
-        {
-          actions: ['sts:AssumeRoleWithWebIdentity'],
-          principals: [
-            {
-              type: 'Federated',
-              identifiers: [webExArn],
-            },
-          ],
-        },
-        {
-          actions: ['sts:TagSession'],
-          principals: [
-            {
-              type: 'Federated',
-              identifiers: [webExArn],
-            },
-          ],
-          condition: [
-            {
-              test: 'StringLike',
-              values: ['*'],
-              variable: 'aws:RequestTag/Email',
-            },
-            {
-              test: 'ForAllValues:StringEquals',
-              values: ['Email'],
-              variable: 'sts:TransitiveTagKeys',
-            },
-          ],
-        },
-      ],
-    });
-
-    const role = new IamRole(this, 'web-experience-role', {
-      // TODO: Does this need to be different for IDC?
-
-      name: `web-experience-role-${numaClient}`,
-      assumeRolePolicy: webExperienceTrustDocument.json,
-    });
-    this.webExperienceRoleArn = role.arn;
-
-    new IamRolePolicy(this, 'web-experience-policy', {
-      name: 'policy',
-      role: role.name,
-      policy: rolePolicyDocument.json,
-    });
 
     const application = new CloudcontrolapiResource(this, 'qbus', {
       typeName: 'AWS::QBusiness::Application',
@@ -560,12 +183,24 @@ export class CoreNumaInfra extends Construct {
       provider: props.qBusinessProvider,
     });
     this.qBusinessApplicationId = Fn.lookup(Fn.jsondecode(application.properties), 'ApplicationId');
+    this.qBusinessApplicationArn = Fn.lookup(Fn.jsondecode(application.properties), 'ApplicationArn');
 
-    const origins = props.enableIFrame
-      ? {
-          Origins: [`https://${props.domainName}`],
-        }
-      : {};
+    // Create the WebExperienceConstruct
+    const webExperience = new WebExperienceConstruct(this, 'web-experience-construct', {
+      clientName: props.clientName,
+      environmentName: props.environmentName,
+      domainName: props.domainName,
+      region: props.region,
+      applicationId: this.qBusinessApplicationId,
+      applicationArn: this.qBusinessApplicationArn,
+      userPoolId: this.userPoolId,
+      userPoolClientId: this.userPoolClient.id,
+      enableIFrame: props.enableIFrame,
+      webexIdentityConfig,
+      qBusinessProvider: props.qBusinessProvider,
+    });
+    this.webExUrl = webExperience.webExUrl;
+    this.webExperienceRoleArn = webExperience.webExperienceRoleArn;
 
     new QBusinessChatControlConfigurer(this, 'chat-control', {
       applicationId: this.qBusinessApplicationId,
@@ -573,26 +208,6 @@ export class CoreNumaInfra extends Construct {
       enableLLMKnowledgeFallback: props.enableLLMKnowledgeFallback,
       region: props.qBusinessProvider?.region ?? props.region,
       accountId: callerId.accountId,
-    });
-
-    const webexperience = new CloudcontrolapiResource(this, 'web-experience', {
-      typeName: 'AWS::QBusiness::WebExperience',
-      desiredState: Fn.jsonencode({
-        ApplicationId: this.qBusinessApplicationId,
-        RoleArn: role.arn,
-        ...webexIdentityConfig,
-        ...origins,
-      }),
-      provider: props.qBusinessProvider,
-    });
-
-    this.webExUrl = Fn.lookup(Fn.jsondecode(webexperience.properties), 'DefaultEndpoint');
-
-    new SetCallbackUrl(this, 'callback', {
-      callbackAddress: this.webExUrl + 'authorization-code/callback',
-      userPoolClientId: this.userPoolClient.id,
-      userPoolId: userPool.id,
-      region: props.region,
     });
 
     if (props.indexUnits) {

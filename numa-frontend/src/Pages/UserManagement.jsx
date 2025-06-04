@@ -5,7 +5,6 @@ import { useAuth } from '../Providers/AuthProvider';
 import { UserManagementUtils } from '../utils/userManagementUtils';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Nav } from '../Components/Nav';
-import { generateCognitoIdpPolicy } from '../Modules/CognitoIdpPolicyGenerator';
 import { useNavigate } from 'react-router-dom';
 
 function useNoChatGroup() {
@@ -24,9 +23,9 @@ const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState(null);
-  const { getWebTokenCredentials, user, qBusinessClient } = useAuth();
-  const [deletingUser, setDeletingUser] = useState(null);
+  const { getIdentityPoolCredentials, user, qBusinessClient } = useAuth();
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
+  const [deletingUser, setDeletingUser] = useState(null);
 
   // --- No Chat Group logic ---
   const navigate = useNavigate();
@@ -54,13 +53,7 @@ const UserManagement = () => {
         }
       }
 
-      const policy = generateCognitoIdpPolicy({
-        Region: REGION,
-        AccountId: ACCOUNT_ID || window.sessionStorage.getItem('ACCOUNT_ID'),
-        UserPoolId: USER_POOL_ID,
-      });
-
-      const credentials = await getWebTokenCredentials(policy);
+      const credentials = await getIdentityPoolCredentials();
       if (!credentials) {
         throw new Error('Failed to get AWS credentials');
       }
@@ -84,13 +77,11 @@ const UserManagement = () => {
       throw new Error('Q Business client not found');
     }
 
-    if (!getWebTokenCredentials) {
-      throw new Error('Get web token credentials not found');
-    }
-
     const REGION = window.sessionStorage.getItem('REGION');
 
-    const userManagementUtils = new UserManagementUtils(REGION, await getWebTokenCredentials());
+    const credentials = await getIdentityPoolCredentials();
+
+    const userManagementUtils = new UserManagementUtils(REGION, credentials);
     await userManagementUtils.deleteUser(username, fetchUsers, setUsersError, setDeletingUser, qBusinessClient);
   };
 
@@ -129,13 +120,8 @@ const UserManagement = () => {
         }
       }
 
-      const policy = generateCognitoIdpPolicy({
-        Region: REGION,
-        AccountId: ACCOUNT_ID || window.sessionStorage.getItem('ACCOUNT_ID'),
-        UserPoolId: USER_POOL_ID,
-      });
+      const credentials = await getIdentityPoolCredentials();
 
-      const credentials = await getWebTokenCredentials(policy);
       if (!credentials) {
         throw new Error('Failed to get AWS credentials');
       }
