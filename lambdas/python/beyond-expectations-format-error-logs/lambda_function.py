@@ -149,6 +149,34 @@ def parse_time_window(time_window: str) -> int:
         raise ValueError(f"Could not parse hours in timeWindow: {time_window}") from exc
 
 
+def extract_timestamp_from_filename(filename: str) -> str:
+    """Extract and parse timestamp from new apical log filename format.
+
+    Converts from "2025_05_27_04_27_07 - 2025_05_27_04_49_27.json" format
+    to "2025-05-27-04-27-07" format for comparison purposes.
+
+    Args:
+        filename: The filename to parse
+
+    Returns:
+        Formatted timestamp string for comparison, or empty string if parsing fails
+    """
+    try:
+        # Remove the .json extension
+        base_name = filename.rsplit(".", 1)[0]
+
+        # Split on " - " to get the start timestamp
+        start_part = base_name.split(" - ")[0]
+
+        # Convert underscores to hyphens to match our comparison format
+        formatted_timestamp = start_part.replace("_", "-")
+
+        return formatted_timestamp
+    except (IndexError, ValueError):
+        logger.warning("Could not parse timestamp from filename", filename=filename)
+        return ""
+
+
 def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     """
     FormatErrorLogs Lambda:
@@ -160,10 +188,11 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     Expects event:
       {
         "timeWindow": "24h",                   # lookback window
-        "bucket": "output_bucket",             # S3 bucket name
-        "errorPrefix": "beyond-expectations/error_logs/",
+        "bucket": "output_bucket",             # S3 bucket name for outputs
+        "errorBucket": "apical-log-data",      # S3 bucket name for error logs
+        "errorPrefix": "error-logs/",          # prefix for error log files
         "outputPrefix": "beyond-expectations/logs_to_analyse/",   # base for chunk files
-        "chunkSize": 10                         # optional, default 10
+        "chunkSize": 10                        # optional, default 10
       }
 
     Returns:
@@ -173,6 +202,8 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     helpers.setup_step_function_lambda_logging(event, context)
 
     time_window = event.get("timeWindow", DEFAULT_TIME_WINDOW)
+    bucket = event["bucket"]  # Output bucket
+    error_bucket = event["errorBucket"]  # Error logs bucket
     error_prefix = event["errorPrefix"]
     output_prefix = event["outputPrefix"]
     chunk_size = event.get("chunkSize", DEFAULT_CHUNK_SIZE)
@@ -188,10 +219,13 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         start=start_str,
         end=end_time.strftime("%Y-%m-%d-%H-%M-%S"),
         chunk_size=chunk_size,
+        error_bucket=error_bucket,
+        error_prefix=error_prefix,
+        output_bucket=bucket,
     )
 
-    # List all error-log keys
-    all_keys = s3_helpers.list_objects(prefix=error_prefix)
+    # List all error-log keys from the error bucket
+    all_keys = s3_helpers.list_objects(prefix=error_prefix, bucket=error_bucket)
     selected_logs: List[Dict[str, Any]] = []
 
     for key in all_keys:
@@ -199,13 +233,16 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         if key.endswith("/"):
             continue
         filename = os.path.basename(key)
-        timestamp = filename.rsplit(".", 1)[0]
+
+        # Extract timestamp from the new filename format
+        timestamp = extract_timestamp_from_filename(filename)
+
         # include if within window (lexical compare works for fixed-width)
-        if timestamp >= start_str:
+        if timestamp and timestamp >= start_str:
             try:
-                raw = s3_helpers.read(key)
-                data = json.loads(raw.decode("utf-8"))
-                logs = data.get("logs", [])
+                raw = s3_helpers.read(key, bucket=error_bucket)
+                logs = json.loads(raw.decode("utf-8"))
+
                 # Truncate log entries to prevent exceeding token limits
                 logs = [truncate_log_entry(log) for log in logs]
                 selected_logs.extend(logs)
@@ -235,7 +272,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     date_str = end_time.strftime("%Y-%m-%d")
     chunk_prefix = f"{output_prefix}{date_str}/"
 
-    # Write chunks to S3
+    # Write chunks to S3 (output bucket)
     for idx, chunk in enumerate(chunks):
         chunk_key = f"{chunk_prefix}chunk-{idx}.json"
         body = json.dumps({"logs": chunk}, indent=2)
@@ -244,6 +281,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                 key=chunk_key,
                 content=body.encode("utf-8"),
                 content_type="application/json",
+                bucket=bucket,  # Use output bucket for writing
             )
             logger.info("Wrote chunk", key=chunk_key, entries=len(chunk))
         except Exception:

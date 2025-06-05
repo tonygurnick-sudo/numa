@@ -546,6 +546,7 @@ def generate_email_notification(
     report_data: Dict[str, Any],
     start_time: datetime.datetime,
     end_time: datetime.datetime,
+    sender_email: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Send email notification with report results
 
@@ -562,6 +563,8 @@ def generate_email_notification(
     if not email_addresses:
         logger.info("No email address provided, skipping notification")
         return {"status": "skipped", "reason": "No email address provided"}
+
+    from_email = sender_email or os.environ.get("DEFAULT_SENDER_EMAIL")
 
     # Count notification types by severity
     severity_counts = {"High": 0, "Medium": 0, "Low": 0}
@@ -730,12 +733,10 @@ def generate_email_notification(
     # Prepare email payload with both reports as attachments
     email_payload = {
         "to": email_addresses,
-        "from": os.environ.get("DEFAULT_SENDER_EMAIL", "nathan@arcanum.ai"),
+        "from": from_email,
         "subject": f"Error Log Analysis Report - {end_time.strftime('%Y-%m-%d')}",
         "body_html": email_html_content,
-        "configuration_set": os.environ.get(
-            "SES_CONFIGURATION_SET"
-        ),  # Add the configuration set from environment variable
+        "configuration_set": os.environ.get("SES_CONFIGURATION_SET"),
         "attachments": [
             {
                 "content_type": "text/html",
@@ -850,11 +851,16 @@ def handler(event: dict, context: LambdaContext) -> Dict[str, Any]:
     """
     helpers.setup_step_function_lambda_logging(event, context)
 
+    # Get email configuration from event
+    notification_emails = event.get("notificationEmails", [])
+    sender_email = event.get("senderEmail")  # Get sender email from event
+
+    # If sender email is "null" string, treat as None
+    if sender_email == "null":
+        sender_email = None
+
     # Get configuration from environment or event
     output_bucket = os.environ["BUCKET"]
-    notification_emails = event.get(
-        "notificationEmails", os.environ.get("NOTIFICATION_EMAILS")
-    )
     chunk_prefix: str = event.get("chunkPrefix", "")
 
     # Remove any trailing "/", then split, and take the last segment.
@@ -907,10 +913,15 @@ def handler(event: dict, context: LambdaContext) -> Dict[str, Any]:
     email_result = None
     if notification_emails:
         email_result = generate_email_notification(
-            notification_emails, report_info, report_data, start_time, end_time  # type: ignore
+            notification_emails,
+            report_info,
+            report_data,
+            start_time,
+            end_time,
+            sender_email,
         )
 
-    response = {
+    response: Dict[str, Any] = {
         "statusCode": 200,
         "body": {
             "message": "Successfully summarized and reported on error logs",
@@ -920,8 +931,8 @@ def handler(event: dict, context: LambdaContext) -> Dict[str, Any]:
         },
     }
 
-    # Include email data key in the response if available
-    if email_result and "email_data_key" in email_result:
-        response["body"]["email_data_key"] = email_result["email_data_key"]  # type: ignore
+    # Include email data key in the response if available and successful
+    if email_result and email_result.get("email_data_key"):
+        response["body"]["email_data_key"] = email_result["email_data_key"]
 
     return response
