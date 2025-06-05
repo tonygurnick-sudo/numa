@@ -75,13 +75,6 @@
       "alertThresholds": [100]
     }
   },
-  "arcanum-demo-sebastian": {
-    "allApps": true,
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "devInstance": true,
-    "region": "us-east-1"
-  },
   "arcanum-prod-numa-demo": {
     "apps": {
       "candidate-screening": {},
