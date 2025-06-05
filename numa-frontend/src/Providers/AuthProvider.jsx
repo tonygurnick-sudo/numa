@@ -4,8 +4,11 @@ import { QBusinessClient } from '@aws-sdk/client-qbusiness';
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { QAppsClient } from '@aws-sdk/client-qapps';
-import { fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
+import { fromWebToken, fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
+import { generatePolicy } from '../Modules/QPolicyGenerator';
+import { generateBedrockPolicy } from '../Modules/BedrockPolicyGenerator';
+import { generateDynamoDBPolicy } from '../Modules/DynamoDBPolicyGenerator';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
 import {
   CognitoIdentityProviderClient,
@@ -59,14 +62,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
           console.warn('Failed to decode ID token:', e);
         }
       }
-
-      // Replace manual group and feature extraction with utility function
-      const { groups, features } = extractGroupsAndFeatures(decodedTokensRef.current.idToken);
-      setUser((prev) => ({
-        ...prev,
-        groups,
-        features: features || [],
-      }));
 
       // Log the actual tokens for debugging
       console.debug('Token status:', {
@@ -245,18 +240,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
         },
       }));
 
-      // Use the utility function to extract groups and features
-      const { groups, features } = extractGroupsAndFeatures(newDecodedIdToken);
-      setUser((prev) => ({
-        ...prev,
-        groups,
-        features: features || [],
-      }));
-
-      // Add console log to debug features initialization
-      console.log('Decoded groups:', groups);
-      console.log('Extracted features:', features);
-
       console.log('✅ Tokens refreshed successfully');
       return true;
     } catch (error) {
@@ -283,28 +266,35 @@ export const AuthProvider = ({ children, initialTokens }) => {
     if (!user) return;
 
     const REGION = window.sessionStorage.getItem('REGION');
-    const IDENTITY_POOLS = JSON.parse(window.sessionStorage.getItem('IDENTITY_POOLS'));
-    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+    const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
 
-    const identityPoolId =
-      // IDENTITY_POOLS[(user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard'].id;
-      IDENTITY_POOLS[(user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'admin'].id;
-
     try {
-      const idToken = tokensRef.current.idToken;
+      const idToken = user.tokens.idToken;
 
-      const credentials = await fromCognitoIdentityPool({
+      const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+
+      const accountId = ROLE_ARN.split(':')[4];
+      const policy = generatePolicy({
+        Region: REGION,
+        AccountId: accountId,
+        ApplicationId: Q_APPLICATION_ID,
+      });
+
+      const credentials = fromWebToken({
         client: cognitoIdentity,
-        identityPoolId,
-        logins: {
-          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: idToken,
-        },
-      })();
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: 'numa-frontend-chat',
+        roleArn: ROLE_ARN,
+        policy: JSON.stringify(policy),
+        durationSeconds: 3600,
+        webIdentityToken: idToken,
+      });
 
       const newClient = new QBusinessClient({
         region: REGION,
-        credentials: credentials,
+        credentials: await credentials(),
       });
 
       setQBusinessClient(newClient);
@@ -317,27 +307,28 @@ export const AuthProvider = ({ children, initialTokens }) => {
     if (!user) return;
 
     const REGION = window.sessionStorage.getItem('REGION');
-    const IDENTITY_POOLS = JSON.parse(window.sessionStorage.getItem('IDENTITY_POOLS'));
-    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
 
-    const identityPoolId =
-      // IDENTITY_POOLS[(user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard'].id;
-      IDENTITY_POOLS[(user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'admin'].id;
-
     try {
-      const idToken = tokensRef.current.idToken;
-      const credentials = await fromCognitoIdentityPool({
+      const idToken = user.tokens.idToken;
+      const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+
+      const policy = generateBedrockPolicy();
+
+      const credentials = fromWebToken({
         client: cognitoIdentity,
-        identityPoolId,
-        logins: {
-          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: idToken,
-        },
-      })();
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: 'numa-frontend-bedrock',
+        roleArn: ROLE_ARN,
+        policy: JSON.stringify(policy),
+        durationSeconds: 3600,
+        webIdentityToken: idToken,
+      });
 
       const newClient = new BedrockRuntimeClient({
         region: REGION,
-        credentials: credentials,
+        credentials: await credentials(),
       });
 
       setBedrockRuntimeClient(newClient);
@@ -351,42 +342,38 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const initializeDynamoDBClient = useCallback(async () => {
     if (!user) return;
 
-    // Check if the user has the permissions to Chat
-    if (user && user.features && !user.features.includes('chat')) {
-      console.log('User does not have chat feature');
-      console.log(user.features);
-      return;
-    }
-
     const REGION = window.sessionStorage.getItem('REGION');
-    const IDENTITY_POOLS = JSON.parse(window.sessionStorage.getItem('IDENTITY_POOLS'));
-    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+    const client = window.sessionStorage.getItem('CLIENT_NAME');
+    const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod';
+    const NUMA_CHAT_HISTORY_TABLE_NAME = `numa-${client}${environment !== 'prod' ? `-${environment}` : ''}-chat-history`;
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
 
-    const identityPoolId =
-      // IDENTITY_POOLS[(user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard'].id;
-      IDENTITY_POOLS[(user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'admin'].id;
-
-    if (!identityPoolId) {
-      console.error('No identity pool with chat feature found');
-      return;
-    }
-
     try {
-      const idToken = tokensRef.current.idToken;
-      const credentials = await fromCognitoIdentityPool({
+      const idToken = user.tokens.idToken;
+      const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+
+      const accountId = ROLE_ARN.split(':')[4];
+      const policy = generateDynamoDBPolicy({
+        Region: REGION,
+        AccountId: accountId,
+        NumaChatHistoryTableName: NUMA_CHAT_HISTORY_TABLE_NAME,
+      });
+
+      const credentials = fromWebToken({
         client: cognitoIdentity,
-        identityPoolId,
-        logins: {
-          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: idToken,
-        },
-      })();
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: 'numa-frontend-chat',
+        roleArn: ROLE_ARN,
+        policy: JSON.stringify(policy),
+        durationSeconds: 3600,
+        webIdentityToken: idToken,
+      });
 
       const newClient = new DynamoDBClient({
         region: REGION,
-        credentials: credentials,
+        credentials: await credentials(),
       });
-
       setDynamoDBClient(newClient);
       const utils = new NumaChatDynamoUtils(newClient);
       setNumaChatDynamoUtils(utils);
@@ -399,27 +386,35 @@ export const AuthProvider = ({ children, initialTokens }) => {
     if (!user) return;
 
     const REGION = window.sessionStorage.getItem('REGION');
-    const IDENTITY_POOLS = JSON.parse(window.sessionStorage.getItem('IDENTITY_POOLS'));
-    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+    const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+
     const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
 
-    const identityPoolId =
-      // IDENTITY_POOLS[(user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard'].id;
-      IDENTITY_POOLS[(user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'admin'].id;
+    const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+
+    const accountId = ROLE_ARN.split(':')[4];
+    const policy = generatePolicy({
+      Region: REGION,
+      AccountId: accountId,
+      ApplicationId: Q_APPLICATION_ID,
+    });
 
     try {
-      const idToken = tokensRef.current.idToken;
-      const credentials = await fromCognitoIdentityPool({
+      const idToken = user.tokens.idToken;
+      const credentials = fromWebToken({
         client: cognitoIdentity,
-        identityPoolId,
-        logins: {
-          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: idToken,
-        },
-      })();
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: 'numa-frontend-qapps',
+        roleArn: ROLE_ARN,
+        policy: JSON.stringify(policy),
+        durationSeconds: 3600,
+        webIdentityToken: idToken,
+      });
 
       const newQAppsClient = new QAppsClient({
         region: REGION,
-        credentials: credentials,
+        credentials: await credentials(),
       });
 
       setQAppsClient(newQAppsClient);
@@ -523,8 +518,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
         const decodedAccessToken = decodedTokensRef.current.accessToken;
         const decodedIdToken = decodedTokensRef.current.idToken;
 
-        // Use the utility function to extract groups and features
-        const { groups, features } = extractGroupsAndFeatures(decodedIdToken);
         setUser({
           tokens: {
             accessToken,
@@ -535,8 +528,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
             accessToken: decodedAccessToken,
             idToken: decodedIdToken,
           },
-          groups,
-          features: features || [],
         });
       }
     } else {
@@ -604,6 +595,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const respondToAuthChallengeParams = {
       ChallengeName: 'PASSWORD_VERIFIER',
       ClientId: CLIENT_ID,
+      Session: initiateAuthResponse.Session,
       ChallengeResponses: {
         USERNAME: lowercaseUsername,
         PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
@@ -691,10 +683,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const decodedAccessToken = jwtDecode(tokens.AccessToken);
     const decodedIdToken = jwtDecode(tokens.IdToken);
 
-    // Use the utility function to extract groups and features
-    const { groups, features } = extractGroupsAndFeatures(decodedIdToken);
-    setUser((prev) => ({
-      ...prev,
+    setUser({
       tokens: {
         accessToken: tokens.AccessToken,
         idToken: tokens.IdToken,
@@ -704,9 +693,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         accessToken: decodedAccessToken,
         idToken: decodedIdToken,
       },
-      groups,
-      features: features || [],
-    }));
+    });
   };
 
   // Initialize user state from testConfig if available
@@ -769,36 +756,44 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   };
 
-  const getIdentityPoolCredentials = async () => {
+  const getWebTokenCredentials = async (policy = null) => {
     const REGION = window.sessionStorage.getItem('REGION');
+    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+    const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
 
-    // If the user has a group assigned, use that, otherwise use the default identity pool
-    let identityPoolId = null;
-    const identityPools = JSON.parse(window.sessionStorage.getItem('IDENTITY_POOLS')) || {};
+    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
 
-    if (user.groups.length > 1) {
-      // Get the identity pool id for the matching group
-      identityPoolId = identityPools[user.groups[1]]?.id;
-    } else {
-      // Use the default identity pool
-      // identityPoolId = identityPools['standard']?.id;
-      identityPoolId = identityPools['admin']?.id;
+    const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+
+    const accountId = ROLE_ARN.split(':')[4];
+
+    const idToken = user.tokens.idToken;
+
+    if (!policy) {
+      policy = generatePolicy({
+        Region: REGION,
+        AccountId: accountId,
+        ApplicationId: Q_APPLICATION_ID,
+        UserPoolId: USER_POOL_ID,
+      });
     }
 
-    if (!user) {
-      console.log('No user found');
-      return null;
-    }
+    const credentials = await fromWebToken({
+      client: cognitoIdentity,
+      identityPoolId: IDENTITY_POOL_ID,
+      roleSessionName: 'numa-frontend-chat',
+      roleArn: ROLE_ARN,
+      policy: JSON.stringify(policy),
+      durationSeconds: 3600,
+      webIdentityToken: idToken,
+    });
 
-    // Check if user has the features
+    return credentials;
+  };
 
-    // If there are no features, block the request since we need to wait until the user has features
-    if (user.features.length === 0 || !identityPoolId) {
-      console.log(user.features);
-      console.log(identityPoolId);
-      console.log('No features found or identity pool id not found');
-      return null;
-    }
+  const getIdentityPoolCredentials = async () => {
+    if (!user) return null;
 
     try {
       // Check if tokens are expired or will expire in the next 20 seconds
@@ -816,6 +811,9 @@ export const AuthProvider = ({ children, initialTokens }) => {
         }
       }
 
+      const REGION = window.sessionStorage.getItem('REGION');
+      const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+
       const cognitoIdentity = new CognitoIdentityClient({
         region: REGION,
       });
@@ -823,8 +821,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
       const credentials = await fromCognitoIdentityPool({
         client: cognitoIdentity,
-        identityPoolId: identityPoolId,
-        roleSessionName: 'numa-frontend',
+        identityPoolId: IDENTITY_POOL_ID,
+        roleSessionName: 'numa-frontend-file-uploader',
         logins: {
           [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: tokensRef.current.idToken,
         },
@@ -858,19 +856,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     requestPasswordReset,
     confirmPasswordReset,
     getIdentityPoolCredentials,
+    getWebTokenCredentials,
   };
-
-  useEffect(() => {
-    if (user) {
-      // Use the utility function in useEffect
-      const { groups, features } = extractGroupsAndFeatures(user.decoded_tokens.idToken);
-      setUser((prev) => ({
-        ...prev,
-        groups,
-        features: features || [],
-      }));
-    }
-  }, [loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -891,24 +878,4 @@ export const TestAuthProvider = ({ children, refreshHandler, initialTokens }) =>
       {children}
     </AuthProvider>
   );
-};
-
-const extractGroupsAndFeatures = (decodedIdToken) => {
-  // Ensure IDENTITY_POOLS is fetched from window.sessionStorage before use
-  const IDENTITY_POOLS = JSON.parse(window.sessionStorage.getItem('IDENTITY_POOLS')) || {};
-
-  // Extract groups and features from the decoded token
-  // const groups = ['standard', ...(decodedIdToken['cognito:groups'] || [])];
-  const groups = ['admin', ...(decodedIdToken['cognito:groups'] || [])];
-
-  if (!groups || groups.length === 0) {
-    return { groups: ['admin'], features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'] };
-  }
-
-  const features = groups.reduce((acc, group) => {
-    const groupFeatures = IDENTITY_POOLS[group]?.features || [];
-    return [...acc, ...groupFeatures];
-  }, []);
-
-  return { groups, features };
 };
