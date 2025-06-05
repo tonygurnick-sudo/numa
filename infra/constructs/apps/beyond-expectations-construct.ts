@@ -22,10 +22,9 @@ import { SesEmailConfig } from '../ses-email-construct';
 
 const description = 'Analyse application error logs to identify patterns and issues';
 
-// Configure the SES email identities
-// TODO: Update to be actual emails we use for Beyond Expectations
-const senderEmail = 'nathan@arcanum.ai';
-const receiverEmails = ['nathan@arcanum.ai']; // Supports multiple emails
+// Constants
+const ERROR_LOG_BUCKET = 'apical-log-data';
+const ERROR_LOG_PREFIX = 'error-logs/';
 
 export interface BeyondExpectationsAppProps extends BaseNumaAppProps {
   scheduleExpression?: string;
@@ -54,12 +53,20 @@ export class BeyondExpectations extends BaseNumaApp {
     // Create the helper function
     const addLambdaTaskNoCatch = this.createLambdaTaskNoCatch();
 
-    // Create SES configuration with all email addresses (sender + all receivers)
-    const sesConfig = new SesEmailConfig(this, 'ses-config', {
-      emailAddresses: [senderEmail, ...receiverEmails],
-      resourceNamePrefix: this.appId,
-      configurationSetName: `${props.clientName}-${this.appId}-config-set`,
-    });
+    // Extract email configuration from props with fallback defaults
+    const senderEmail = props.senderEmail && props.senderEmail.trim() !== '' ? props.senderEmail : '';
+    const receiverEmails = props.receiverEmails && props.receiverEmails.length > 0 ? props.receiverEmails : [''];
+
+    // Create SES configuration with all email addresses (sender + all receivers) if they are not empty
+    const validEmails = [senderEmail, ...receiverEmails].filter((email) => email.trim() !== '');
+    const sesConfig =
+      validEmails.length > 0
+        ? new SesEmailConfig(this, 'ses-config', {
+            emailAddresses: validEmails,
+            resourceNamePrefix: this.appId,
+            configurationSetName: `${props.clientName}-${this.appId}-config-set`,
+          })
+        : null;
 
     // Default schedule is 5 pm NZ time (5:00 UTC during NZDT, 4:00 UTC during NZST)
     this.scheduleExpression = props.scheduleExpression || 'cron(0 4 * * ? *)';
@@ -119,30 +126,46 @@ export class BeyondExpectations extends BaseNumaApp {
       },
     ];
 
+    // Additional policy for format-error-logs Lambda to read from apical-log-data bucket
+    const errorLogsPolicyStatements = [
+      ...commonPolicyStatements,
+      {
+        actions: ['s3:GetObject', 's3:ListBucket'],
+        effect: 'Allow',
+        resources: [`arn:aws:s3:::${ERROR_LOG_BUCKET}`, `arn:aws:s3:::${ERROR_LOG_BUCKET}/*`],
+      },
+    ];
+
     const bedrockPolicyStatement = {
       actions: ['bedrock:InvokeModel'],
       resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       effect: 'Allow',
     };
 
-    const sesPolicyStatement = {
-      actions: ['ses:SendEmail', 'ses:SendRawEmail'],
-      resources: [
-        // Include email identity ARNs
-        ...sesConfig.emailIdentities.map((identity) => identity.arn),
-        // Include the configuration set ARN with dynamic region
-        `arn:aws:ses:${this.region}:*:configuration-set/${sesConfig.configurationSet.name}`,
-      ],
-      effect: 'Allow',
-    };
+    // Create SES policy statement only if we have valid email configuration
+    const sesPolicyStatements = sesConfig
+      ? [
+          {
+            actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+            resources: [
+              // Include email identity ARNs
+              ...sesConfig.emailIdentities.map((identity) => identity.arn),
+              // Include the configuration set ARN with dynamic region
+              `arn:aws:ses:${this.region}:*:configuration-set/${sesConfig.configurationSet.name}`,
+            ],
+            effect: 'Allow',
+          },
+        ]
+      : [];
 
     /**
      * Lambdas
      */
     const formatErrorLogsLambda = this.addLambdaFunction(this, 'format-error-logs', {
-      additionalPolicyStatements: commonPolicyStatements,
+      additionalPolicyStatements: errorLogsPolicyStatements,
       environment: { BUCKET: props.outputsBucket.bucket },
       lambdaDirectory: 'python/beyond-expectations-format-error-logs',
+      memorySize: 1024,
       timeout: 900,
     });
 
@@ -157,21 +180,21 @@ export class BeyondExpectations extends BaseNumaApp {
     });
 
     const reportAndEmailLambda = this.addLambdaFunction(this, 'report-and-email', {
-      additionalPolicyStatements: [...commonPolicyStatements, bedrockPolicyStatement, sesPolicyStatement],
+      additionalPolicyStatements: [...commonPolicyStatements, bedrockPolicyStatement, ...sesPolicyStatements],
       environment: {
         BUCKET: props.outputsBucket.bucket,
         DEFAULT_SENDER_EMAIL: senderEmail,
-        SES_CONFIGURATION_SET: sesConfig.configurationSet.name,
+        SES_CONFIGURATION_SET: sesConfig?.configurationSet.name || '',
       },
       lambdaDirectory: 'python/beyond-expectations-report-and-email',
       timeout: 900,
     });
 
     const sendEmailLambda = this.addLambdaFunction(this, 'send-email', {
-      additionalPolicyStatements: [...commonPolicyStatements, sesPolicyStatement],
+      additionalPolicyStatements: [...commonPolicyStatements, ...sesPolicyStatements],
       environment: {
         BUCKET: props.outputsBucket.bucket,
-        SES_CONFIGURATION_SET: sesConfig.configurationSet.name,
+        SES_CONFIGURATION_SET: sesConfig?.configurationSet.name || '',
       },
       lambdaDirectory: 'python/send-email',
       timeout: 900,
@@ -204,7 +227,8 @@ export class BeyondExpectations extends BaseNumaApp {
           {
             'timeWindow.$': '$.timeWindow',
             bucket: props.outputsBucket.bucket,
-            errorPrefix: 'beyond-expectations/error_logs/',
+            errorBucket: ERROR_LOG_BUCKET,
+            errorPrefix: ERROR_LOG_PREFIX,
             outputPrefix: 'beyond-expectations/logs_to_analyse/',
             chunkSize: 50,
             'app_id.$': '$.app_id',
@@ -303,7 +327,7 @@ export class BeyondExpectations extends BaseNumaApp {
             'email_data_s3_key.$': '$.reportResult.Payload.body.email_data_key',
             'app_id.$': '$.app_id',
             'job_id.$': '$.job_id',
-            configuration_set: sesConfig.configurationSet.name, // Explicitly pass the configuration set name
+            configuration_set: sesConfig?.configurationSet.name || '', // Explicitly pass the configuration set name
           },
           'WriteSuccessStatus',
           { ResultPath: '$.emailResult' },

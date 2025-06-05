@@ -26,7 +26,7 @@ The Lambda accepts a JSON event with the following parameters:
 {
   "timeWindow": "24h",
   "bucket": "your-s3-bucket-name",
-  "errorPrefix": "beyond-expectations/error_logs/",
+  "errorPrefix": "apical-log-data/error-logs/",
   "outputPrefix": "logs_to_analyse/",
   "chunkSize": 10
 }

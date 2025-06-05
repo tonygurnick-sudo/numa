@@ -496,11 +496,18 @@ export interface AddStepFunctionProps {
   urlPath: string;
 }
 
-export const userConfigurableBaseNumaAppPropsSchema = z.object({
-  enableJobs: z.boolean().optional(),
-  urlPathPrefix: z.string().optional(),
-  s3KeyPrefix: z.string().optional(),
-});
+export const userConfigurableBaseNumaAppPropsSchema = z
+  .object({
+    enableJobs: z.boolean().optional(),
+    urlPathPrefix: z.string().optional(),
+    s3KeyPrefix: z.string().optional(),
+
+    // Generic email configuration for apps that need email functionality
+    senderEmail: z.string().optional(),
+    receiverEmails: z.array(z.string()).optional(),
+  })
+  .strict();
+
 export type UserConfigurableBaseNumaAppProps = z.infer<typeof userConfigurableBaseNumaAppPropsSchema>;
 
 export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiGatewayLambdaCollectionProps {

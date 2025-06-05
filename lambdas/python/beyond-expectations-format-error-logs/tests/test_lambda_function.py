@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from lambda_function import (
     MAX_MESSAGE_LENGTH,
     MAX_TASK_DESCRIPTION_LENGTH,
+    extract_timestamp_from_filename,
     group_logs_by_content,
     handler,
     parse_time_window,
@@ -172,13 +173,16 @@ class TestHandler(unittest.TestCase):
     def test_handler_with_defaults(self, mock_s3):
         """Test handler with default values"""
         event = {
-            "errorPrefix": "error_logs/",
-            "outputPrefix": "output_logs/",
+            "bucket": "test-output-bucket",  # Output bucket
+            "errorBucket": "apical-log-data",  # Error logs bucket
+            "errorPrefix": "error-logs/",
+            "outputPrefix": "beyond-expectations/logs_to_analyse/",
+            "timeWindow": "24h",
+            "chunkSize": 50,
             "app_id": "test-app-id",
             "job_id": "test-job-id",
         }
         context = MagicMock()
-
         mock_s3.list_objects.return_value = []
 
         with patch("datetime.datetime") as mock_datetime:
@@ -187,9 +191,86 @@ class TestHandler(unittest.TestCase):
 
             result = handler(event, context)
 
-        # Verify defaults were used
-        mock_s3.list_objects.assert_called_once_with(prefix="error_logs/")
+        # Verify that list_objects was called with the error bucket
+        mock_s3.list_objects.assert_called_once_with(
+            prefix="error-logs/", bucket="apical-log-data"
+        )
         self.assertIn("chunkPrefix", result)
+
+
+class TestExtractTimestampFromFilename(unittest.TestCase):
+    def test_new_filename_format(self):
+        """Test parsing new apical log filename format"""
+        filename = "2025_05_26_12_00_00 - 2025_05_27_04_27_07.json"
+        expected = "2025-05-26-12-00-00"
+
+        result = extract_timestamp_from_filename(filename)
+
+        self.assertEqual(result, expected)
+
+    def test_different_timestamp_values(self):
+        """Test parsing with different timestamp values"""
+        test_cases = [
+            ("2024_12_31_23_59_59 - 2025_01_01_00_00_00.json", "2024-12-31-23-59-59"),
+            ("2025_01_01_00_00_00 - 2025_01_01_23_59_59.json", "2025-01-01-00-00-00"),
+            ("2023_06_15_14_30_45 - 2023_06_16_08_15_22.json", "2023-06-15-14-30-45"),
+        ]
+
+        for filename, expected in test_cases:
+            with self.subTest(filename=filename):
+                result = extract_timestamp_from_filename(filename)
+                self.assertEqual(result, expected)
+
+    def test_filename_without_extension(self):
+        """Test parsing filename without .json extension"""
+        filename = "2025_05_26_12_00_00 - 2025_05_27_04_27_07"
+        expected = "2025-05-26-12-00-00"
+
+        result = extract_timestamp_from_filename(filename)
+
+        self.assertEqual(result, expected)
+
+    def test_invalid_filename_format(self):
+        """Test that invalid filename formats are still processed by the current implementation"""
+        invalid_filenames = [
+            "invalid-format.json",
+            "2025-05-26-12-00-00.json",  # Old format
+            "incomplete.json",
+            "2025_05_26.json",
+            "",
+        ]
+
+        expected_results = [
+            "invalid-format",
+            "2025-05-26-12-00-00",
+            "incomplete",
+            "2025-05-26",
+            "",
+        ]
+
+        for filename, expected in zip(invalid_filenames, expected_results):
+            with self.subTest(filename=filename):
+                result = extract_timestamp_from_filename(filename)
+                self.assertEqual(result, expected)
+
+    def test_malformed_timestamp_parts(self):
+        """Test handling of malformed timestamp parts"""
+        invalid_filenames = [
+            "invalid_date_here - 2025_05_27_04_27_07.json",
+            "2025_05_26_12_00_00 - invalid_end.json",
+            "2025_05_26_12_00_00.json",  # Missing end part
+        ]
+
+        expected_results = [
+            "invalid-date-here",
+            "2025-05-26-12-00-00",
+            "2025-05-26-12-00-00",
+        ]
+
+        for filename, expected in zip(invalid_filenames, expected_results):
+            with self.subTest(filename=filename):
+                result = extract_timestamp_from_filename(filename)
+                self.assertEqual(result, expected)
 
 
 if __name__ == "__main__":

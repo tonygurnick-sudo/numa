@@ -332,6 +332,10 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         hideAdmin: z.boolean().optional(),
+
+        // Generic email configuration that can be used by any app
+        senderEmail: z.string().optional(),
+        receiverEmails: z.array(z.string()).optional(),
       })
       .strict(),
   );
