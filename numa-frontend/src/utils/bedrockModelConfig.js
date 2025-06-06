@@ -16,7 +16,7 @@ const REGIONS = { US_EAST_1: 'us-east-1', AP_SOUTHEAST_2: 'ap-southeast-2' };
 const MODEL_TYPES = { DEFAULT: 'default', CLAUDE_HAIKU: 'claude_haiku' };
 const MODEL_MAP = {
   [REGIONS.US_EAST_1]: {
-    [MODEL_TYPES.DEFAULT]: 'us.anthropic.claude-sonnet-4-20250514-v1:0', // "us.anthr..." means cross region inference for us region
+    [MODEL_TYPES.DEFAULT]: 'us.anthropic.claude-3-5-sonnet-20240620-v1:0', // "us.anthr..." means cross region inference for us region
     [MODEL_TYPES.CLAUDE_HAIKU]: 'anthropic.claude-3-haiku-20240307-v1:0',
   },
   [REGIONS.AP_SOUTHEAST_2]: {
