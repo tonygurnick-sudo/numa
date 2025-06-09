@@ -273,6 +273,7 @@ export class BeyondExpectations extends BaseNumaApp {
         // Map → AnalyseLogChunk
         ProcessMap: {
           Type: 'Map',
+          MaxConcurrency: 10,
           ItemsPath: '$.listResult.Contents',
           Parameters: {
             'job_id.$': '$.job_id',
