@@ -1,9 +1,12 @@
 import { RDSDataServiceException, RDSData } from '@aws-sdk/client-rds-data';
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 
+const retryPause = 2000;
+const retryAttempts = 20;
+
 function retryWrapper<I, O>(operation: (input: I) => Promise<O>): typeof operation {
   return async (input: I) => {
-    let attempts = 10;
+    let attempts = retryAttempts;
     let lastError: RDSDataServiceException;
     while (--attempts > 0) {
       try {
@@ -14,7 +17,7 @@ function retryWrapper<I, O>(operation: (input: I) => Promise<O>): typeof operati
         const httpStatusCode = lastError.$metadata.httpStatusCode;
         const errorCode = lastError.name;
         if (httpStatusCode === 400 && errorCode === 'DatabaseResumingException') {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, retryPause));
         } else {
           throw lastError;
         }
