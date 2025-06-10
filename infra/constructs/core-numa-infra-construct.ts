@@ -41,6 +41,7 @@ import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { ConfigBucket } from './config-bucket-construct';
 import { z } from 'zod';
+import { WebCrawlerConstruct } from './web-crawler-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
@@ -57,6 +58,7 @@ export class CoreNumaInfra extends Construct {
   readonly otelConfigPath: string;
   readonly dataBucket: NumaCorsEnabledBucket;
   readonly chatHistoryTable: DynamodbTable;
+  readonly webCrawler: WebCrawlerConstruct;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -303,6 +305,18 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
+    const webCrawlerLogGroup = new CloudwatchLogGroup(this, 'web-crawler-log-group', {
+      name: `/numa/${props.clientName}-web-crawler`,
+    });
+
+    this.webCrawler = new WebCrawlerConstruct(this, 'web-crawler', {
+      clientName: props.clientName,
+      environmentName: props.environmentName,
+      dataBucket: this.dataBucket,
+      logGroup: webCrawlerLogGroup,
+      region: props.region,
+    });
+
     const identityPoolRolePolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-policy', {
       statement: [
         {
@@ -369,6 +383,18 @@ export class CoreNumaInfra extends Construct {
               variable: 'dynamodb:LeadingKeys',
             },
           ],
+        },
+        {
+          effect: 'Allow',
+          actions: [
+            'dynamodb:PutItem',
+            'dynamodb:GetItem',
+            'dynamodb:Query',
+            'dynamodb:Scan',
+            'dynamodb:UpdateItem',
+            'dynamodb:DeleteItem',
+          ],
+          resources: [this.webCrawler.crawlUrlsTable.arn],
         },
       ],
     });
