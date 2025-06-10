@@ -1,47 +1,62 @@
-TEMPLATE_OUTPUT_PROMPT = """The following are some meeting notes and/or transcript from a meeting.
+TEMPLATE_OUTPUT_PROMPT = """The following are meeting notes and/or transcript from a meeting.
 <Meeting notes or transcript>
 {meeting_notes_and_or_transcript}
 </Meeting notes or transcript>
 
-Use the meeting notes or transcript to create a structured output that follows the following template.
+Your task is to fill in the template below using information from the meeting notes/transcript.
 
 <Template>
 {template}
 </Template>
 
-Please also take into consideration meeting context or other notes if applicable.
+Please also consider any additional context provided:
 <Other Notes>
 {other_notes}
 </Other Notes>
 
-Output just the populated template and nothing else. Use subheadings and dot points as applicable. Return your output in markdown format.
+FORMATTING INSTRUCTIONS:
+- Follow the exact structure of the template
+- Use clear markdown formatting with proper headings (# for main headings, ## for subheadings)
+- Use bullet points (* item) for lists
+- Keep the formatting simple and consistent
+- Return ONLY the completed template with no additional text
+
 Result:"""
 
-MEETING_SUMMARY_PROMPT = """Analyse the meeting transcript and/or meeting notes and provide an organised, multi-bullet pointed summary of key discussion points and decisions. Structure the output in markdown format, clearly presenting:
-
-Overview: A brief overview of the meeting’s purpose and key participants.
-
-Key Discussion Points: Bullet points summarizing main topics, issues raised, and insights shared.
-
-Decisions Made (if any): Numbered list of specific decisions agreed upon during the meeting.
-
-Action Items (if any): Bullet points of actionable tasks assigned, including responsible parties and deadlines if mentioned.
-
-Additional Notes: Any other relevant information, such as follow-up requirements or items for future discussion.
-
-Format each section with headings, using markdown syntax for clarity.
-Attendees: List all attendees to the meeting if names are present.
+MEETING_SUMMARY_PROMPT = """Create a concise summary of the following meeting transcript and/or notes.
 
 <Meeting notes or transcript>
 {meeting_notes_and_or_transcript}
 </Meeting notes or transcript>
 
-Please also take into consideration meeting context or other notes if applicable.
+Please also consider any additional context provided:
 <Other Notes>
 {other_notes}
 </Other Notes>
 
-Return just the meeting summary and nothing else. Return your output in markdown format."""
+FORMATTING INSTRUCTIONS:
+- Structure your summary with the following sections using markdown headings:
+  # Meeting Summary
+  ## Overview
+  ## Key Discussion Points
+  ## Decisions Made
+  ## Action Items
+  ## Additional Notes
+  ## Attendees
+
+- For each section:
+  - Overview: Brief description of meeting purpose and context (1-2 sentences)
+  - Key Discussion Points: Use bullet points (* item) for main topics discussed
+  - Decisions Made: Use numbered list (1. decision) if any decisions were made
+  - Action Items: Use bullet points (* person to do task by deadline) for assigned tasks
+  - Additional Notes: Any other relevant information using bullet points
+  - Attendees: Simple list of participants if names are present
+
+- Keep formatting simple and consistent
+- Use only markdown for formatting
+- Return ONLY the meeting summary with no additional text
+
+Return your output in markdown format."""
 
 TOPIC_ANALYSIS_PROMPT = """Analyze the meeting notes and/or transcript to identify and summarize key topics discussed, structured in markdown format. Include:
 
@@ -65,13 +80,17 @@ Please also take into consideration other notes if applicable.
 Return just the topic analysis and nothing else. Return your output in markdown format.
 Topic Analysis:"""
 
-ACTION_ITEMS_PROMPT = """Analyze the meeting notes and/or transcript and extract a concise, bulleted list of key action items. If no specific action items, tasks, or deadlines are directly mentioned, generate a list of potential next steps or action items based on the discussion topics, but make sure they are explicitly stated as potential action items. Structure the output in markdown format, detailing:
+ACTION_ITEMS_PROMPT = """Analyze the meeting notes and/or transcript and extract a concise list of key action items. If no specific action items are mentioned, generate potential next steps based on the discussion topics.
 
-- Action Description: Briefly describe each task or action item discussed or assigned.
-- Assigned To: Indicate the individual(s) responsible for each action, if specified. If unclear, say assignee not specified.
-- Deadline: Note any deadlines or timelines associated with each task, if mentioned. If unclear, say deadline not specified.
+FORMATTING INSTRUCTIONS:
+- Format each action item as a simple bullet point starting with "* " followed by the person's name and the action
+- Include any deadline in the same bullet point
+- Keep all action items in a flat, single-level list
 
-Ensure each action item is clearly outlined, using bullet points and markdown syntax to enhance readability. Keep the output short, concise and to relevant bullet points.
+Examples of correctly formatted action items:
+"* John to prepare project timeline by next Friday"
+"* Sarah to contact vendor regarding pricing"
+"* Team to review documentation before next meeting"
 
 <Meeting notes or transcript>
 {meeting_notes_and_or_transcript}
@@ -83,7 +102,7 @@ Please also take into consideration meeting context or other notes if applicable
 {other_notes}
 </Other Notes>
 
-Please output just the action items and nothing else. Return your output in markdown format.
+Please output just the action items and nothing else. Return your output in markdown format with a simple flat list structure.
 Action Items:"""
 
 FOLLOW_UP_EMAILS_PROMPT = """Using the meeting notes and/or transcript and identified action items, draft personalised follow-up emails for each attendee. Structure the output in markdown format, covering:
