@@ -1,0 +1,34 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
+[tool.poetry]
+name = "add-url-to-dynamodb"
+version = "0.1.0"
+description = "Lambda function for adding URLs to DynamoDB for web crawling"
+authors = ["Sam Bentley <sam@arcanum.ai>"]
+packages = [
+    { include = "**/*.py" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+boto3 = "^1.34.0"
+aws-lambda-powertools = "^2.24.0"
+structlog = "^23.1.0"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = "^1.37.20"
+mypy = "^1.15.0"
+pylint = "^3.3.6"
+pyright = "^1.1.400"
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"

@@ -63,13 +63,16 @@ variables:
         - lambdas/python/contract-analysis
         - lambdas/python/costing-calculator
         - lambdas/python/council-resource-consents
+        - lambdas/python/crawl-page
         - lambdas/python/document-summariser
         - lambdas/python/e2e-test
+        - lambdas/python/enqueue-url
         - lambdas/python/extract-content-from-file
         - lambdas/python/financial-analysis-analysis
         - lambdas/python/financial-analysis-data-extraction
         - lambdas/python/gdsr-assessment
         - lambdas/python/infringement-review
+        - lambdas/python/mark-url-status
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-recent-jobs
         - lambdas/python/policy-builder-completion
@@ -82,6 +85,7 @@ variables:
         - lambdas/python/policy-reviewer
         - lambdas/python/procurement-rfp-assessment
         - lambdas/python/recruitment-job-ad-creation
+        - lambdas/python/restart-crawler
         - lambdas/python/rfp-response-comparison
         - lambdas/python/send-email
         - lambdas/python/step-function-start
