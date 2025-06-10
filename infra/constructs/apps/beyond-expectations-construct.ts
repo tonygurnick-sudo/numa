@@ -68,8 +68,8 @@ export class BeyondExpectations extends BaseNumaApp {
           })
         : null;
 
-    // Default schedule is 5 pm NZ time (5:00 UTC during NZDT, 4:00 UTC during NZST)
-    this.scheduleExpression = props.scheduleExpression || 'cron(0 4 * * ? *)';
+    // Default schedule is 9 am NZ time (not factored for daylight saving)
+    this.scheduleExpression = props.scheduleExpression || 'cron(0 20 * * ? *)';
 
     /**
      * Manifest
