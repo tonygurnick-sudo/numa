@@ -173,11 +173,7 @@ export class WebCrawlerConstruct extends Construct {
         {
           effect: 'Allow',
           actions: ['logs:CreateLogStream', 'logs:PutLogEvents'],
-          resources: [
-            props.logGroup.arn,
-            `${props.logGroup.arn}:*`,
-            `arn:aws:logs:${props.region}:*:log-group:/aws/states/${numaClient}-web-crawler:*`,
-          ],
+          resources: [props.logGroup.arn, `${props.logGroup.arn}:*`],
         },
         {
           effect: 'Allow',
