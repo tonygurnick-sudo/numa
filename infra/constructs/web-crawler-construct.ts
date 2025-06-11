@@ -177,8 +177,17 @@ export class WebCrawlerConstruct extends Construct {
         },
         {
           effect: 'Allow',
-          actions: ['logs:DescribeLogGroups'],
-          resources: [`arn:aws:logs:${props.region}:*:log-group:*`],
+          actions: [
+            'logs:CreateLogDelivery',
+            'logs:GetLogDelivery',
+            'logs:UpdateLogDelivery',
+            'logs:DeleteLogDelivery',
+            'logs:ListLogDeliveries',
+            'logs:PutResourcePolicy',
+            'logs:DescribeResourcePolicies',
+            'logs:DescribeLogGroups',
+          ],
+          resources: ['*'],
         },
       ],
     });
