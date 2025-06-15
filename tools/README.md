@@ -5,6 +5,7 @@ This directory contains several tools for assisting in onboarding customers to N
 - create-users: This tool creates users based on an input.csv file, activates their Q licence using Playwright and outputs a user-details.csv file.
 - upload-files: This tool uploads files to a customer's Q S3 data bucket and triggers a reindex.
 - check-index-progress: This tool looks up the status of an S3 data bucket index and prints it.
+- migrate-urls-to-crawler: This tool migrates URL data sources from client configurations to the web crawler DynamoDB tables.
 
 ## Installation
 
@@ -135,6 +136,34 @@ AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --sy
 ```bash
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --sync-status --data-source-id 70ba69cb-eddd-44b8-89e4-cf888c6343e3
 ```
+
+### migrate-urls-to-crawler
+
+This tool migrates URL data sources from client configurations to the web crawler DynamoDB tables. It uses role assumption to access client accounts and create/update entries in the crawler tables.
+
+```bash
+# Migrate all clients
+yarn migrate-urls-to-crawler
+
+# Test migration for all clients (dry run)
+yarn migrate-urls-to-crawler --dry-run
+
+# Migrate only a specific client
+yarn migrate-urls-to-crawler client-name
+
+# Test migration for a specific client (dry run)
+yarn migrate-urls-to-crawler client-name --dry-run
+
+# Use a specific AWS profile
+yarn migrate-urls-to-crawler --profile=my-aws-profile
+
+# Combine options
+yarn migrate-urls-to-crawler client-name --dry-run --profile=my-aws-profile
+```
+
+By default, the tool uses the `arcanum-q-deployer-prod` AWS profile if no profile is specified. You can override this by:
+1. Using the `--profile=profile-name` command line option
+2. Setting the `AWS_PROFILE` environment variable
 
 6. Start sync for all data sources
 
