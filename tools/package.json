@@ -37,6 +37,7 @@
     "check-user-password-state": "node --import tsx check-user-password-state.ts",
     "retrieve-config": "node --import tsx retrieve-config.ts",
     "write-config": "node --import tsx write-config.ts",
+    "delete-config": "node --import tsx delete-config.ts",
     "list-clients": "node --import tsx list-clients.ts"
   },
   "packageManager": "yarn@4.9.2",
