@@ -4,17 +4,10 @@ import { useAuth } from '../Providers/AuthProvider';
 import { useState, useEffect } from 'react';
 import { Navbar, Button, Dropdown } from 'react-bootstrap';
 
-function useNoChatGroup() {
-  const { user } = useAuth();
-  const groups = user?.decoded_tokens?.idToken?.['cognito:groups'] || [];
-  return Array.isArray(groups) ? groups.includes('no-chat') : false;
-}
-
 const Nav = () => {
   const navigate = useNavigate();
   const { logout: authLogout, user } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  const limitedAccess = useNoChatGroup();
   const [navItems, setNavItems] = useState([]);
 
   const features = user?.features || [];
@@ -67,7 +60,6 @@ const Nav = () => {
           <Dropdown.Menu>
             {navItems.map((item) => {
               if (item.feature && !hasFeature(item.feature)) return null;
-              if (item.to === '/chat' && limitedAccess) return null;
               return (
                 <Dropdown.Item key={item.to} onClick={() => navigate(item.to)}>
                   <i className={`${item.icon} me-2`} style={{ color: 'var(--color-icon)' }}></i>
@@ -102,7 +94,6 @@ const Nav = () => {
             .filter((item) => !item.footerOnly)
             .map((item) => {
               if (item.feature && !hasFeature(item.feature)) return null;
-              if (item.to === '/chat' && limitedAccess) return null;
               return (
                 <li key={item.to}>
                   <div className="nav-link nav-item" onClick={() => navigate(item.to)} title={item.label} role="button">
