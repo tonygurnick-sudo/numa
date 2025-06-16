@@ -152,6 +152,7 @@ export class NumaClientStack extends TerraformStack {
       region: clientConfig.region,
       userPoolClientId: core.userPoolClient.id,
       userPoolClientSecret: core.userPoolClient.clientSecret,
+      webCrawlerStateMachineArn: core.webCrawler.stateMachine.arn,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(

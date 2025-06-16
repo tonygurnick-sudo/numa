@@ -91,26 +91,26 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
-    // URL Scraper API Endpoint
-    this.addLambdaFunction(this, 'url-scraper', {
+    this.addLambdaFunction(this, 'web-crawler-start', {
       addAuthorizer: true,
-      lambdaDirectory: 'python/url-scraper',
-      handler: 'lambda_function.lambda_handler',
+      lambdaDirectory: 'python/web-crawler-start',
+      handler: 'lambda_function.handler',
       route: {
         verb: 'POST',
-        path: 'scrape-urls',
+        path: 'start-web-crawler',
       },
       environment: {
         LOG_LEVEL: 'INFO',
         ALLOWED_ORIGIN: '*',
         CLIENT_NAME: props.clientName,
+        WEB_CRAWLER_STATE_MACHINE_ARN: props.webCrawlerStateMachineArn,
       },
-      timeout: 300, // 5 minutes for scraping multiple URLs
+      timeout: 30,
       additionalPolicyStatements: [
         {
           effect: 'Allow',
-          actions: ['s3:PutObject', 's3:PutObjectTagging'],
-          resources: [`arn:aws:s3:::numa-${props.clientName}-data/*`],
+          actions: ['states:StartExecution'],
+          resources: [props.webCrawlerStateMachineArn],
         },
       ],
     });
@@ -164,4 +164,5 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   userPoolClientSecret: string;
   apiGatewayId: string;
   apiGatewayAuthorizerId: string;
+  webCrawlerStateMachineArn: string;
 }

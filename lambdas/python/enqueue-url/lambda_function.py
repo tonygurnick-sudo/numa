@@ -194,11 +194,11 @@ def handler(
         return {**event, **result}
 
     except ValueError as e:
-        logger.error("Validation error", error=str(e), event=event)
+        logger.error("Validation error", error=str(e), input_event=event)
         return {"status": "error", "message": str(e), "timestamp": _utcnow_iso()}
 
     except Exception as e:  # noqa: BLE001
-        logger.error("Unexpected error", error=str(e), event=event)
+        logger.error("Unexpected error", error=str(e), input_event=event)
         return {
             "status": "error",
             "message": f"Unexpected error: {e}",

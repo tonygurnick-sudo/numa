@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { Container, Row, Col, Card, Button, Form, Alert, Table, Modal } from 'react-bootstrap';
 import { getUrlTagFromS3Object, deleteFileFromS3 } from '../utils/s3Utils';
-import { UrlScraper } from '../Components/UrlScraper';
+import { WebCrawler } from '../Components/WebCrawler';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import {
   ListDataSourcesCommand,
@@ -770,9 +770,9 @@ export function S3Uploader() {
           </Col>
         </Row>
 
-        {/* Upload + Knowledge Base Status */}
+        {/* File Uploader */}
         <Row className="g-4 mb-4">
-          <Col xs={12} lg={6}>
+          <Col xs={12}>
             <Card>
               <Card.Header>
                 <Card.Title className="mb-0">Upload New Files or Folders</Card.Title>
@@ -782,15 +782,12 @@ export function S3Uploader() {
               </Card.Body>
             </Card>
           </Col>
+        </Row>
 
-          {/* URL Scraping Section */}
-          <Col xs={12} lg={6}>
-            <UrlScraper
-              onScrapeSuccess={() => {
-                // Refresh the file list after successful scrape
-                fetchFiles();
-              }}
-            />
+        {/* Web Crawler */}
+        <Row className="g-4 mb-4">
+          <Col xs={12}>
+            <WebCrawler onCrawlerStarted={fetchFiles} />
           </Col>
         </Row>
 
