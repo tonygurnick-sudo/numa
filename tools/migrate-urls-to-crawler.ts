@@ -181,6 +181,7 @@ async function migrateUrlsForClient(clientName: string, config: ClientConfig): P
           url: urlString,
           status: 'pending',
           createdAt: new Date().toISOString(),
+          crawlDepth: 5,
         };
 
         // Put item in DynamoDB
