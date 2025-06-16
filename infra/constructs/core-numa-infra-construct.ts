@@ -292,6 +292,7 @@ export class CoreNumaInfra extends Construct {
       groupName: 'admin',
       username: systemUser.username,
       userPoolId: userPool.id,
+      dependsOn: [this.cognitoIdp.cognitoGroups['admin']],
     });
 
     const webCrawlerLogGroup = new CloudwatchLogGroup(this, 'web-crawler-log-group', {

@@ -28,7 +28,6 @@ const UserManagement = () => {
   const [deletingUser, setDeletingUser] = useState(null);
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
 
-  // --- No Chat Group logic ---
   const navigate = useNavigate();
 
   const noChat = useNoChatGroup();
