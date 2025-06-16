@@ -53,11 +53,6 @@
   },
   "arcanum-demo-nick": {
     "allApps": true,
-    "boxConfigs": [
-      {
-        "enterpriseId": "1235149944"
-      }
-    ],
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "devInstance": true,

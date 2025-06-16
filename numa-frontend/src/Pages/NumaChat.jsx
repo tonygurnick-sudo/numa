@@ -51,6 +51,7 @@ const NumaChat = () => {
     numaChatDynamoUtils,
     getAccessToken,
     getIdentityPoolCredentials,
+    createSubscription,
   } = useAuth();
 
   // Extract user info from token
@@ -444,6 +445,19 @@ const NumaChat = () => {
         } catch (err) {
           console.error('Error querying data sources:', err);
           finalInputText += 'Error querying data sources. Please try again later.';
+          if (err.message == 'aws:PrincipalTag/Email tag is missing from the ID token claims') {
+            try {
+              const createSubscriptionResponse = await createSubscription();
+              console.log('Create subscription response', createSubscriptionResponse);
+            } catch (e) {
+              console.log('Failed to create subscription', e);
+              return;
+            }
+
+            // Try again
+            const dsResponse = await qBusinessClient.send(dsCommand);
+            console.log('Q data sources response:', dsResponse);
+          }
         }
 
         // Also store a 'knowledge' message

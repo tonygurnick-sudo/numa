@@ -18,27 +18,94 @@ const sessionStorageMock = {
 
 global.sessionStorage = sessionStorageMock;
 
+// Mock localStorage
+const localStorageMock = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+};
+
+global.localStorage = localStorageMock;
+
 // Mock the NumaRequestContext
 const mockNumaGet = vi.fn();
 const mockNumaPost = vi.fn();
 const mockNumaPut = vi.fn();
 
+// Test tokens for the new Groups pattern
+const TEST_TOKENS = {
+  accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjk5OTk5OTk5OTl9.mock-signature',
+  idToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjk5OTk5OTk5OTksInN1YiI6InRlc3QtdXNlci1pZCJ9.mock-signature',
+  refreshToken: 'mock-refresh-token',
+  decoded: {
+    accessToken: { exp: 9999999999 },
+    idToken: {
+      exp: 9999999999,
+      sub: 'test-user-id',
+      'cognito:groups': [],
+    },
+  },
+};
+
 // Wrapper component for the hooks
 const wrapper = ({ children }) => {
   // Setup sessionStorage mock
   sessionStorageMock.getItem.mockImplementation((key) => {
-    if (key === 'ROLE_ARN') {
-      return 'arn:aws:iam::123456789012:role/test-role';
+    switch (key) {
+      case 'ROLE_ARN':
+        return 'arn:aws:iam::123456789012:role/test-role';
+      case 'USER_POOL_ID':
+        return 'us-east-1_testpool';
+      case 'API_ENDPOINT':
+        return 'https://api.example.com';
+      case 'CLIENT_ID':
+        return 'test-client-id';
+      case 'REGION':
+        return 'us-east-1';
+      case 'IDENTITY_POOL_ID':
+        return 'us-east-1:test-identity-pool';
+      case 'GROUPS':
+        return JSON.stringify({
+          admin: {
+            roleArn: 'arn:aws:iam::123456789012:role/test-admin-role',
+            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+          },
+          user: {
+            roleArn: 'arn:aws:iam::123456789012:role/test-user-role',
+            features: ['chat', 'useCompanyData'],
+          },
+        });
+      default:
+        return null;
     }
-    return null;
+  });
+
+  // Setup localStorage mock to return test tokens
+  localStorageMock.getItem.mockImplementation((key) => {
+    switch (key) {
+      case 'refreshToken':
+        return TEST_TOKENS.refreshToken;
+      case 'idToken':
+        return TEST_TOKENS.idToken;
+      case 'accessToken':
+        return TEST_TOKENS.accessToken;
+      default:
+        return null;
+    }
   });
 
   return (
     <AuthProvider
       initialTokens={{
-        idToken: {
-          sub: 'test-user-id',
+        tokens: {
+          accessToken: TEST_TOKENS.accessToken,
+          idToken: TEST_TOKENS.idToken,
+          refreshToken: TEST_TOKENS.refreshToken,
         },
+        decoded_tokens: TEST_TOKENS.decoded,
+        groups: ['admin'],
+        features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
       }}
     >
       <NumaRequestContext.Provider
@@ -91,7 +158,7 @@ describe('jobsApi', () => {
         inputs: taskInputs,
         status: 'running',
         manifest: JSON.stringify(numaAppData),
-        userId: undefined,
+        userId: 'test-user-id',
       });
       expect(call[1]).toHaveProperty('startedAt');
       expect(call[1]).toHaveProperty('lastUpdated');
@@ -123,7 +190,7 @@ describe('jobsApi', () => {
       // Check that numaGet was called with the correct parameters
       expect(mockNumaGet).toHaveBeenCalledTimes(1);
       expect(mockNumaGet).toHaveBeenCalledWith(`/api/${numaAppId}/jobs/${jobId}`, {
-        userId: undefined, // The test doesn't pass userId to getJobById
+        userId: 'test-user-id',
       });
     });
   });
@@ -163,6 +230,7 @@ describe('jobsApi', () => {
       expect(mockNumaGet).toHaveBeenCalledTimes(1);
       expect(mockNumaGet).toHaveBeenCalledWith(`/api/${numaAppId}/jobs`, {
         limit: 50, // Default limit in the implementation
+        userId: 'test-user-id',
       });
     });
 
@@ -199,6 +267,7 @@ describe('jobsApi', () => {
       expect(mockNumaGet).toHaveBeenCalledWith(`/api/${numaAppId}/jobs`, {
         limit: 50, // The implementation uses a default limit of 50
         nextToken: '"token"', // The implementation stringifies the nextToken
+        userId: 'test-user-id',
       });
     });
   });

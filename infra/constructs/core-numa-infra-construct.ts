@@ -1,8 +1,7 @@
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
-import { CognitoIdentityPool } from '@cdktf/provider-aws/lib/cognito-identity-pool';
-import { CognitoIdentityPoolRolesAttachment } from '@cdktf/provider-aws/lib/cognito-identity-pool-roles-attachment';
 import { CognitoUser } from '@cdktf/provider-aws/lib/cognito-user';
+import { CognitoUserInGroup } from '@cdktf/provider-aws/lib/cognito-user-in-group';
 import { CognitoUserPool } from '@cdktf/provider-aws/lib/cognito-user-pool';
 import { CognitoUserPoolClient } from '@cdktf/provider-aws/lib/cognito-user-pool-client';
 import { CognitoUserPoolDomain } from '@cdktf/provider-aws/lib/cognito-user-pool-domain';
@@ -42,13 +41,13 @@ import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { ConfigBucket } from './config-bucket-construct';
 import { z } from 'zod';
 import { WebCrawlerConstruct } from './web-crawler-construct';
+import { CognitoIdpConstruct } from './cognito-idp-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly webExUrl: string;
   readonly userPoolId: string;
   readonly userPoolClient: CognitoUserPoolClient;
-  readonly identityPoolId: string;
-  readonly identityPoolArn: string;
+  readonly groups: Record<string, { roleArn: string; features: string[] }>;
   readonly webExperienceRoleArn: string;
   readonly qBusinessApplicationId: string;
   readonly qBusinessIndexId: string;
@@ -59,6 +58,7 @@ export class CoreNumaInfra extends Construct {
   readonly dataBucket: NumaCorsEnabledBucket;
   readonly chatHistoryTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
+  readonly cognitoIdp!: CognitoIdpConstruct;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -121,6 +121,14 @@ export class CoreNumaInfra extends Construct {
     });
     this.userPoolId = userPool.id;
 
+    new LambdaPermission(this, 'cognito-token-adjuster-permission', {
+      statementId: 'cognito-token-adjuster',
+      functionName: at.function.functionName,
+      action: 'lambda:InvokeFunction',
+      principal: 'cognito-idp.amazonaws.com',
+      sourceArn: userPool.arn,
+    });
+
     new TerraformOutput(this, 'user-pool-id', {
       value: userPool.id,
     });
@@ -148,7 +156,7 @@ export class CoreNumaInfra extends Construct {
       minUpper: 5,
     }).result;
     const systemUserEmail = 'numa-system-user@arcanum.ai';
-    new CognitoUser(this, 'system-user', {
+    const systemUser = new CognitoUser(this, 'system-user', {
       enabled: true,
       username: systemUserEmail,
       attributes: {
@@ -191,46 +199,7 @@ export class CoreNumaInfra extends Construct {
       },
     });
 
-    const identityPool = new CognitoIdentityPool(this, 'identity-pool', {
-      identityPoolName: numaClient,
-      allowUnauthenticatedIdentities: false,
-      allowClassicFlow: true,
-      cognitoIdentityProviders: [
-        {
-          clientId: this.userPoolClient.id,
-          providerName: userPool.endpoint,
-        },
-      ],
-    });
-    this.identityPoolId = identityPool.id;
-    this.identityPoolArn = identityPool.arn;
-    const identityPoolRoleTrustPolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-trust-policy', {
-      statement: [
-        {
-          effect: 'Allow',
-          principals: [
-            {
-              type: 'Federated',
-              identifiers: ['cognito-identity.amazonaws.com'],
-            },
-          ],
-          actions: ['sts:AssumeRoleWithWebIdentity'],
-          condition: [
-            {
-              test: 'StringEquals',
-              values: [identityPool.id],
-              variable: 'cognito-identity.amazonaws.com:aud',
-            },
-            {
-              test: 'ForAnyValue:StringLike',
-              values: ['authenticated'],
-              variable: 'cognito-identity.amazonaws.com:amr',
-            },
-          ],
-        },
-      ],
-    });
-
+    // Create data bucket
     this.dataBucket = new NumaCorsEnabledBucket(this, 'data-source-bucket', {
       bucketName: 'data',
       clientName: props.clientName,
@@ -242,6 +211,7 @@ export class CoreNumaInfra extends Construct {
     });
     this.dataBucket.bucket.moveFromId('aws_s3_bucket.data-source-bucket_1F269801');
 
+    // Create company bucket
     const companyBucket = new NumaCorsEnabledBucket(this, 'company-data-bucket', {
       bucketName: 'company',
       clientName: props.clientName,
@@ -252,21 +222,7 @@ export class CoreNumaInfra extends Construct {
       region: props.region,
     });
 
-    const otelConfigKey = 'otel-config.yaml';
-    const configBucket = new ConfigBucket(this, 'config-bucket', {
-      clientName: props.clientName,
-      clientAccountId: props.clientAccountId,
-    });
-
-    const source = path.resolve(import.meta.dirname, '..', 'assets', 'otel-config.yaml');
-    new S3Object(this, 'honeycomb-config-file', {
-      bucket: configBucket.bucket.bucket,
-      key: otelConfigKey,
-      source,
-    });
-
-    this.otelConfigPath = `${configBucket.bucket.bucketRegionalDomainName}/${otelConfigKey}`;
-
+    // Create outputs bucket
     this.outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
       clientName: props.clientName,
       clientAccountId: props.clientAccountId,
@@ -278,6 +234,7 @@ export class CoreNumaInfra extends Construct {
     });
     this.outputsBucket.bucket.moveFromId('aws_s3_bucket.outputs-bucket_1F269801');
 
+    // Create chat history table
     this.chatHistoryTable = new DynamodbTable(this, 'numa-chat-history-table', {
       name: `${numaClient}-chat-history`,
       billingMode: 'PAY_PER_REQUEST',
@@ -295,14 +252,46 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
-    const cognitoPermissionsPolicy = new DataAwsIamPolicyDocument(this, 'cognito-permissions-policy', {
-      statement: [
-        {
-          effect: 'Allow',
-          actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminCreateUser'],
-          resources: [userPool.arn],
-        },
-      ],
+    // Create config bucket and otel config
+    const otelConfigKey = 'otel-config.yaml';
+    const configBucket = new ConfigBucket(this, 'config-bucket', {
+      clientName: props.clientName,
+      clientAccountId: props.clientAccountId,
+    });
+
+    const source = path.resolve(import.meta.dirname, '..', 'assets', 'otel-config.yaml');
+    new S3Object(this, 'honeycomb-config-file', {
+      bucket: configBucket.bucket.bucket,
+      key: otelConfigKey,
+      source,
+    });
+
+    this.otelConfigPath = `${configBucket.bucket.bucketRegionalDomainName}/${otelConfigKey}`;
+
+    // Create the Cognito IDP construct to manage identity pools and groups
+    this.cognitoIdp = new CognitoIdpConstruct(this, 'cognito-idp', {
+      clientName: props.clientName,
+      environmentName: props.environmentName,
+      region: props.region,
+      userPoolId: userPool.id,
+      userPoolEndpoint: userPool.endpoint,
+      userPoolClientId: this.userPoolClient.id,
+      callerAccountId: callerId.accountId,
+      dataBucket: this.dataBucket,
+      outputsBucket: this.outputsBucket,
+      companyBucket: companyBucket,
+      chatHistoryTable: this.chatHistoryTable,
+      featureSets: props.featureSets,
+      groups: props.groups,
+    });
+
+    this.groups = this.cognitoIdp.groups;
+
+    // Add system user to admin group
+    new CognitoUserInGroup(this, 'system-user-admin-group', {
+      groupName: 'admin',
+      username: systemUser.username,
+      userPoolId: userPool.id,
     });
 
     const webCrawlerLogGroup = new CloudwatchLogGroup(this, 'web-crawler-log-group', {
@@ -315,123 +304,6 @@ export class CoreNumaInfra extends Construct {
       dataBucket: this.dataBucket,
       logGroup: webCrawlerLogGroup,
       region: props.region,
-    });
-
-    const identityPoolRolePolicy = new DataAwsIamPolicyDocument(this, 'identity-pool-role-policy', {
-      statement: [
-        {
-          effect: 'Allow',
-          actions: ['cognito-identity:GetCredentialsForIdentity'],
-          resources: ['*'],
-        },
-        {
-          effect: 'Allow',
-          actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminCreateUser'],
-          resources: [userPool.arn],
-          condition: [
-            {
-              test: 'StringEquals',
-              variable: 'aws:RequestedRegion',
-              values: [props.region],
-            },
-            {
-              test: 'StringEquals',
-              variable: 'cognito-identity.amazonaws.com:aud',
-              values: [identityPool.id],
-            },
-            {
-              test: 'ForAnyValue:StringLike',
-              variable: 'cognito-identity.amazonaws.com:amr',
-              values: ['authenticated'],
-            },
-          ],
-        },
-        {
-          actions: ['s3:ListBucket'], // this is required to get a 404 instead of a 403 if object not found
-          effect: 'Allow',
-          resources: [this.outputsBucket.bucket.arn],
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject'],
-          resources: [`${this.outputsBucket.bucket.arn}/*`, this.outputsBucket.bucket.arn],
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:ListBucket', 's3:PutObject', 's3:DeleteObject', 's3:GetObject', 's3:GetObjectTagging'],
-          resources: [`${this.dataBucket.bucket.arn}/*`, this.dataBucket.bucket.arn],
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-          resources: [`${companyBucket.bucket.arn}/*`, companyBucket.bucket.arn],
-        },
-        {
-          effect: 'Allow',
-          actions: [
-            'dynamodb:PutItem',
-            'dynamodb:GetItem',
-            'dynamodb:Query',
-            'dynamodb:UpdateItem',
-            'dynamodb:DeleteItem',
-          ],
-          resources: [this.chatHistoryTable.arn],
-          condition: [
-            {
-              test: 'StringEquals',
-              values: ['$${cognito-identity.amazonaws.com:sub}'],
-              variable: 'dynamodb:LeadingKeys',
-            },
-          ],
-        },
-        {
-          effect: 'Allow',
-          actions: [
-            'dynamodb:PutItem',
-            'dynamodb:GetItem',
-            'dynamodb:Query',
-            'dynamodb:Scan',
-            'dynamodb:UpdateItem',
-            'dynamodb:DeleteItem',
-          ],
-          resources: [this.webCrawler.crawlUrlsTable.arn],
-        },
-      ],
-    });
-
-    const identityPoolRole = new IamRole(this, 'identity-pool-role', {
-      name: `${numaClient}-identity-role`,
-      assumeRolePolicy: identityPoolRoleTrustPolicy.json,
-    });
-
-    // First attach the main role policy
-    new IamRolePolicy(this, 'identity-role-policy', {
-      name: 'policy',
-      role: identityPoolRole.name,
-      policy: identityPoolRolePolicy.json,
-    });
-
-    // Then attach the Cognito permissions policy
-    new IamRolePolicy(this, 'cognito-permissions-role-policy', {
-      name: 'cognito-policy',
-      role: identityPoolRole.name,
-      policy: cognitoPermissionsPolicy.json,
-    });
-
-    new CognitoIdentityPoolRolesAttachment(this, 'identity-pool-role-attachment', {
-      identityPoolId: identityPool.id,
-      roles: {
-        authenticated: identityPoolRole.arn,
-      },
-    });
-
-    new LambdaPermission(this, 'permission', {
-      statementId: 'cognito',
-
-      functionName: at.function.functionName,
-      action: 'lambda:InvokeFunction',
-      principal: 'cognito-idp.amazonaws.com',
-      // TODO: Add suitable condition.
     });
 
     const oidc = new CloudcontrolapiResource(this, 'idp', {
@@ -960,9 +832,14 @@ const _coreNumaInfraPropsSchema = z
   })
   .strict();
 
-export const coreNumaInfraPropsSchema = _coreNumaInfraPropsSchema.merge(
-  qBusinessChatControlConfigurerPropsSchema.omit({ applicationId: true, accountId: true }),
-);
+export const coreNumaInfraPropsSchema = _coreNumaInfraPropsSchema
+  .merge(qBusinessChatControlConfigurerPropsSchema.omit({ applicationId: true, accountId: true }))
+  .merge(
+    z.object({
+      featureSets: z.record(z.array(z.enum(['chat', 'useCompanyData', 'editCompanyData', 'manageUsers']))).optional(),
+      groups: z.record(z.array(z.enum(['chat', 'useCompanyData', 'editCompanyData', 'manageUsers']))).optional(),
+    }),
+  );
 export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {
   clientName: string;
   domainName: string;

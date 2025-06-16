@@ -4,11 +4,7 @@ import { QBusinessClient } from '@aws-sdk/client-qbusiness';
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { QAppsClient } from '@aws-sdk/client-qapps';
-import { fromWebToken, fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
-import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
-import { generatePolicy } from '../Modules/QPolicyGenerator';
-import { generateBedrockPolicy } from '../Modules/BedrockPolicyGenerator';
-import { generateDynamoDBPolicy } from '../Modules/DynamoDBPolicyGenerator';
+import { fromWebToken } from '@aws-sdk/credential-providers';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
 import {
   CognitoIdentityProviderClient,
@@ -40,6 +36,12 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
   // Decode tokens without triggering re-renders
   const decodeTokens = () => {
+    if (!tokensRef.current.idToken) {
+      console.log('❌ No ID token found');
+      setUser(null);
+      return;
+    }
+
     try {
       const { accessToken, idToken } = tokensRef.current;
 
@@ -62,6 +64,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
           console.warn('Failed to decode ID token:', e);
         }
       }
+
+      // Replace manual group and feature extraction with utility function
+      const { groups, features } = extractGroupsAndFeatures(decodedTokensRef.current.idToken);
+      setUser((prev) => ({
+        ...prev,
+        groups,
+        features: features || [],
+      }));
 
       // Log the actual tokens for debugging
       console.debug('Token status:', {
@@ -240,6 +250,18 @@ export const AuthProvider = ({ children, initialTokens }) => {
         },
       }));
 
+      // Use the utility function to extract groups and features
+      const { groups, features } = extractGroupsAndFeatures(newDecodedIdToken);
+      setUser((prev) => ({
+        ...prev,
+        groups,
+        features: features || [],
+      }));
+
+      // Add console log to debug features initialization
+      console.log('Decoded groups:', groups);
+      console.log('Extracted features:', features);
+
       console.log('✅ Tokens refreshed successfully');
       return true;
     } catch (error) {
@@ -266,30 +288,52 @@ export const AuthProvider = ({ children, initialTokens }) => {
     if (!user) return;
 
     const REGION = window.sessionStorage.getItem('REGION');
-    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
-    const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
-    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+    const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS'));
+    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+
+    if (!REGION || !GROUPS || !USER_POOL_ID) {
+      console.error('Missing required session storage values for QBusinessClient initialization');
+      return;
+    }
+
+    // Validate that user has decoded tokens
+    if (!user.decoded_tokens?.idToken) {
+      console.error('User does not have valid decoded tokens');
+      return;
+    }
+
+    // Get role ARN instead of identity pool ID, defaulting to standard group
+    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const roleArn = GROUPS[userGroup]?.roleArn;
+
+    if (!roleArn) {
+      console.error('No role ARN found for user group:', userGroup, 'available groups:', Object.keys(GROUPS));
+      return;
+    }
 
     try {
-      const idToken = user.tokens.idToken;
+      // Check if token is expired before using it
+      const decodedIdToken = decodedTokensRef.current.idToken;
+      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
+        console.log('ID token expired, refreshing before QBusinessClient initialization...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          console.error('Failed to refresh tokens for QBusinessClient initialization');
+          return;
+        }
+      }
 
-      const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
-
-      const accountId = ROLE_ARN.split(':')[4];
-      const policy = generatePolicy({
-        Region: REGION,
-        AccountId: accountId,
-        ApplicationId: Q_APPLICATION_ID,
-      });
+      const idToken = tokensRef.current.idToken;
+      if (!idToken) {
+        console.error('No ID token available for QBusinessClient initialization');
+        return;
+      }
 
       const credentials = fromWebToken({
-        client: cognitoIdentity,
-        identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: 'numa-frontend-chat',
-        roleArn: ROLE_ARN,
-        policy: JSON.stringify(policy),
-        durationSeconds: 3600,
+        roleSessionName: 'numa-qbusiness-client',
+        roleArn: roleArn,
         webIdentityToken: idToken,
+        durationSeconds: 3600,
       });
 
       const newClient = new QBusinessClient({
@@ -300,6 +344,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       setQBusinessClient(newClient);
     } catch (error) {
       console.error('Error in QBusinessClient initialization:', error);
+      // Don't throw the error, just log it and continue
     }
   }, [user]);
 
@@ -307,23 +352,52 @@ export const AuthProvider = ({ children, initialTokens }) => {
     if (!user) return;
 
     const REGION = window.sessionStorage.getItem('REGION');
-    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
-    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+    const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS'));
+    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+
+    if (!REGION || !GROUPS || !USER_POOL_ID) {
+      console.error('Missing required session storage values for BedrockRuntimeClient initialization');
+      return;
+    }
+
+    // Validate that user has decoded tokens
+    if (!user.decoded_tokens?.idToken) {
+      console.error('User does not have valid decoded tokens');
+      return;
+    }
+
+    // Get role ARN instead of identity pool ID, defaulting to standard group
+    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const roleArn = GROUPS[userGroup]?.roleArn;
+
+    if (!roleArn) {
+      console.error('No role ARN found for user group:', userGroup, 'available groups:', Object.keys(GROUPS));
+      return;
+    }
 
     try {
-      const idToken = user.tokens.idToken;
-      const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+      // Check if token is expired before using it
+      const decodedIdToken = decodedTokensRef.current.idToken;
+      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
+        console.log('ID token expired, refreshing before BedrockRuntimeClient initialization...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          console.error('Failed to refresh tokens for BedrockRuntimeClient initialization');
+          return;
+        }
+      }
 
-      const policy = generateBedrockPolicy();
+      const idToken = tokensRef.current.idToken;
+      if (!idToken) {
+        console.error('No ID token available for BedrockRuntimeClient initialization');
+        return;
+      }
 
       const credentials = fromWebToken({
-        client: cognitoIdentity,
-        identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: 'numa-frontend-bedrock',
-        roleArn: ROLE_ARN,
-        policy: JSON.stringify(policy),
-        durationSeconds: 3600,
+        roleSessionName: 'numa-bedrock-client',
+        roleArn: roleArn,
         webIdentityToken: idToken,
+        durationSeconds: 3600,
       });
 
       const newClient = new BedrockRuntimeClient({
@@ -336,49 +410,80 @@ export const AuthProvider = ({ children, initialTokens }) => {
       setNumaChatBedrockUtils(utils);
     } catch (error) {
       console.error('Error in BedrockRuntimeClient initialization:', error);
+      // Don't throw the error, just log it and continue
     }
   }, [user]);
 
   const initializeDynamoDBClient = useCallback(async () => {
     if (!user) return;
 
+    // Check if the user has the permissions to Chat
+    if (user && user.features && !user.features.includes('chat')) {
+      console.log('User does not have chat feature');
+      console.log(user.features);
+      return;
+    }
+
     const REGION = window.sessionStorage.getItem('REGION');
-    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
-    const client = window.sessionStorage.getItem('CLIENT_NAME');
-    const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod';
-    const NUMA_CHAT_HISTORY_TABLE_NAME = `numa-${client}${environment !== 'prod' ? `-${environment}` : ''}-chat-history`;
-    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+    const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS'));
+    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+
+    if (!REGION || !GROUPS || !USER_POOL_ID) {
+      console.error('Missing required session storage values for DynamoDBClient initialization');
+      return;
+    }
+
+    // Validate that user has decoded tokens
+    if (!user.decoded_tokens?.idToken) {
+      console.error('User does not have valid decoded tokens');
+      return;
+    }
+
+    // Get role ARN instead of identity pool ID, defaulting to standard group
+    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const roleArn = GROUPS[userGroup]?.roleArn;
+
+    if (!roleArn) {
+      console.error('No role ARN found for user group:', userGroup, 'available groups:', Object.keys(GROUPS));
+      return;
+    }
 
     try {
-      const idToken = user.tokens.idToken;
-      const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+      // Check if token is expired before using it
+      const decodedIdToken = decodedTokensRef.current.idToken;
+      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
+        console.log('ID token expired, refreshing before DynamoDBClient initialization...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          console.error('Failed to refresh tokens for DynamoDBClient initialization');
+          return;
+        }
+      }
 
-      const accountId = ROLE_ARN.split(':')[4];
-      const policy = generateDynamoDBPolicy({
-        Region: REGION,
-        AccountId: accountId,
-        NumaChatHistoryTableName: NUMA_CHAT_HISTORY_TABLE_NAME,
-      });
+      const idToken = tokensRef.current.idToken;
+      if (!idToken) {
+        console.error('No ID token available for DynamoDBClient initialization');
+        return;
+      }
 
-      const credentials = fromWebToken({
-        client: cognitoIdentity,
-        identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: 'numa-frontend-chat',
-        roleArn: ROLE_ARN,
-        policy: JSON.stringify(policy),
-        durationSeconds: 3600,
+      const credentials = await fromWebToken({
+        roleSessionName: 'numa-dynamo-client',
+        roleArn: roleArn,
         webIdentityToken: idToken,
-      });
+        durationSeconds: 3600,
+      })();
 
       const newClient = new DynamoDBClient({
         region: REGION,
-        credentials: await credentials(),
+        credentials: credentials,
       });
+
       setDynamoDBClient(newClient);
       const utils = new NumaChatDynamoUtils(newClient);
       setNumaChatDynamoUtils(utils);
     } catch (error) {
       console.error('Error in DynamoDBClient initialization:', error);
+      // Don't throw the error, just log it and continue
     }
   }, [user]);
 
@@ -386,49 +491,78 @@ export const AuthProvider = ({ children, initialTokens }) => {
     if (!user) return;
 
     const REGION = window.sessionStorage.getItem('REGION');
-    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
-    const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+    const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS'));
+    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
 
-    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
+    if (!REGION || !GROUPS || !USER_POOL_ID) {
+      console.error('Missing required session storage values for QAppsClient initialization');
+      return;
+    }
 
-    const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
+    // Validate that user has decoded tokens
+    if (!user.decoded_tokens?.idToken) {
+      console.error('User does not have valid decoded tokens');
+      return;
+    }
 
-    const accountId = ROLE_ARN.split(':')[4];
-    const policy = generatePolicy({
-      Region: REGION,
-      AccountId: accountId,
-      ApplicationId: Q_APPLICATION_ID,
-    });
+    // Get role ARN instead of identity pool ID, defaulting to standard group
+    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const roleArn = GROUPS[userGroup]?.roleArn;
+
+    if (!roleArn) {
+      console.error('No role ARN found for user group:', userGroup, 'available groups:', Object.keys(GROUPS));
+      return;
+    }
 
     try {
-      const idToken = user.tokens.idToken;
-      const credentials = fromWebToken({
-        client: cognitoIdentity,
-        identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: 'numa-frontend-qapps',
-        roleArn: ROLE_ARN,
-        policy: JSON.stringify(policy),
-        durationSeconds: 3600,
+      // Check if token is expired before using it
+      const decodedIdToken = decodedTokensRef.current.idToken;
+      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
+        console.log('ID token expired, refreshing before QAppsClient initialization...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          console.error('Failed to refresh tokens for QAppsClient initialization');
+          return;
+        }
+      }
+
+      const idToken = tokensRef.current.idToken;
+      if (!idToken) {
+        console.error('No ID token available for QAppsClient initialization');
+        return;
+      }
+
+      const credentials = await fromWebToken({
+        roleSessionName: 'numa-qapps-client',
+        roleArn: roleArn,
         webIdentityToken: idToken,
-      });
+        durationSeconds: 3600,
+      })();
 
       const newQAppsClient = new QAppsClient({
         region: REGION,
-        credentials: await credentials(),
+        credentials: credentials,
       });
 
       setQAppsClient(newQAppsClient);
     } catch (error) {
       console.error('Error in QAppsClient initialization:', error);
+      // Don't throw the error, just log it and continue
     }
   }, [user]);
 
   useEffect(() => {
-    if (user) {
-      initializeQBusinessClient();
-      initializeQAppsClient();
-      initializeBedrockRuntimeClient();
-      initializeDynamoDBClient();
+    // Only initialize clients after token validation is complete and user is properly loaded
+    if (user && tokenValidationComplete && user.decoded_tokens?.idToken && user.features?.length > 0) {
+      // Add a small delay to ensure tokens are properly set
+      const timer = setTimeout(() => {
+        initializeQBusinessClient();
+        initializeQAppsClient();
+        initializeBedrockRuntimeClient();
+        initializeDynamoDBClient();
+      }, 100);
+
+      return () => clearTimeout(timer);
     } else {
       setQBusinessClient(null);
       setQAppsClient(null);
@@ -439,6 +573,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   }, [
     user,
+    tokenValidationComplete,
     initializeQBusinessClient,
     initializeQAppsClient,
     initializeBedrockRuntimeClient,
@@ -518,6 +653,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
         const decodedAccessToken = decodedTokensRef.current.accessToken;
         const decodedIdToken = decodedTokensRef.current.idToken;
 
+        if (!decodedIdToken) {
+          console.log('❌ No decoded ID token found');
+          setUser(null);
+          return;
+        }
+
+        // Use the utility function to extract groups and features
+        const { groups, features } = extractGroupsAndFeatures(decodedIdToken);
         setUser({
           tokens: {
             accessToken,
@@ -528,6 +671,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
             accessToken: decodedAccessToken,
             idToken: decodedIdToken,
           },
+          groups,
+          features: features || [],
         });
       }
     } else {
@@ -539,7 +684,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   useEffect(() => {
-    decodeTokens();
     loadUserFromTokens();
   }, []);
 
@@ -595,7 +739,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const respondToAuthChallengeParams = {
       ChallengeName: 'PASSWORD_VERIFIER',
       ClientId: CLIENT_ID,
-      Session: initiateAuthResponse.Session,
       ChallengeResponses: {
         USERNAME: lowercaseUsername,
         PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
@@ -683,7 +826,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const decodedAccessToken = jwtDecode(tokens.AccessToken);
     const decodedIdToken = jwtDecode(tokens.IdToken);
 
-    setUser({
+    // Use the utility function to extract groups and features
+    const { groups, features } = extractGroupsAndFeatures(decodedIdToken);
+    setUser((prev) => ({
+      ...prev,
       tokens: {
         accessToken: tokens.AccessToken,
         idToken: tokens.IdToken,
@@ -693,7 +839,9 @@ export const AuthProvider = ({ children, initialTokens }) => {
         accessToken: decodedAccessToken,
         idToken: decodedIdToken,
       },
-    });
+      groups,
+      features: features || [],
+    }));
   };
 
   // Initialize user state from testConfig if available
@@ -756,44 +904,39 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   };
 
-  const getWebTokenCredentials = async (policy = null) => {
+  const getIdentityPoolCredentials = async () => {
     const REGION = window.sessionStorage.getItem('REGION');
-    const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
-    const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
-    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
 
-    const cognitoIdentity = new CognitoIdentityClient({ region: REGION });
-
-    const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
-
-    const accountId = ROLE_ARN.split(':')[4];
-
-    const idToken = user.tokens.idToken;
-
-    if (!policy) {
-      policy = generatePolicy({
-        Region: REGION,
-        AccountId: accountId,
-        ApplicationId: Q_APPLICATION_ID,
-        UserPoolId: USER_POOL_ID,
-      });
+    if (!user) {
+      console.log('No user found');
+      return null;
     }
 
-    const credentials = await fromWebToken({
-      client: cognitoIdentity,
-      identityPoolId: IDENTITY_POOL_ID,
-      roleSessionName: 'numa-frontend-chat',
-      roleArn: ROLE_ARN,
-      policy: JSON.stringify(policy),
-      durationSeconds: 3600,
-      webIdentityToken: idToken,
-    });
+    // If the user has a group assigned, use that, otherwise use the default standard role
+    let roleArn = null;
+    const groups = JSON.parse(window.sessionStorage.getItem('GROUPS')) || {};
 
-    return credentials;
-  };
+    if (user.groups.length > 1) {
+      // Get the role ARN for the matching group
+      roleArn = groups[user.groups[0]]?.roleArn;
+    } else {
+      // Use the default standard role
+      roleArn = groups['standard']?.roleArn;
+    }
 
-  const getIdentityPoolCredentials = async () => {
-    if (!user) return null;
+    // Check if user has the features
+    // If there are no features, block the request since we need to wait until the user has features
+    if (user.features.length === 0 || !roleArn) {
+      console.log('User features:', user.features);
+      console.log('Role ARN:', roleArn);
+      console.log('No features found or role ARN not found');
+      return null;
+    }
+
+    if (!REGION) {
+      console.error('No REGION found in session storage');
+      return null;
+    }
 
     try {
       // Check if tokens are expired or will expire in the next 20 seconds
@@ -811,21 +954,17 @@ export const AuthProvider = ({ children, initialTokens }) => {
         }
       }
 
-      const REGION = window.sessionStorage.getItem('REGION');
-      const IDENTITY_POOL_ID = window.sessionStorage.getItem('IDENTITY_POOL_ID');
+      const idToken = tokensRef.current.idToken;
+      if (!idToken) {
+        console.error('No ID token available for identity pool credentials');
+        return null;
+      }
 
-      const cognitoIdentity = new CognitoIdentityClient({
-        region: REGION,
-      });
-
-      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-      const credentials = await fromCognitoIdentityPool({
-        client: cognitoIdentity,
-        identityPoolId: IDENTITY_POOL_ID,
-        roleSessionName: 'numa-frontend-file-uploader',
-        logins: {
-          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: tokensRef.current.idToken,
-        },
+      const credentials = await fromWebToken({
+        roleSessionName: 'numa-frontend',
+        roleArn: roleArn,
+        webIdentityToken: idToken,
+        durationSeconds: 3600,
       })();
 
       return credentials;
@@ -856,8 +995,19 @@ export const AuthProvider = ({ children, initialTokens }) => {
     requestPasswordReset,
     confirmPasswordReset,
     getIdentityPoolCredentials,
-    getWebTokenCredentials,
   };
+
+  useEffect(() => {
+    if (user) {
+      // Use the utility function in useEffect
+      const { groups, features } = extractGroupsAndFeatures(user.decoded_tokens.idToken);
+      setUser((prev) => ({
+        ...prev,
+        groups,
+        features: features || [],
+      }));
+    }
+  }, [loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -878,4 +1028,25 @@ export const TestAuthProvider = ({ children, refreshHandler, initialTokens }) =>
       {children}
     </AuthProvider>
   );
+};
+
+const extractGroupsAndFeatures = (decodedIdToken) => {
+  // Ensure GROUPS is fetched from window.sessionStorage before use
+  const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS')) || {};
+
+  // Extract groups and features from the decoded token
+  // const groups = ['standard', ...(decodedIdToken['cognito:groups'] || [])];
+  let groups = [...(decodedIdToken['cognito:groups'] || [])];
+
+  if (!groups || groups.length === 0) {
+    // If the user is not in any groups, use the default standard group and the features for that group
+    groups = ['standard'];
+  }
+
+  const features = groups.reduce((acc, group) => {
+    const groupFeatures = GROUPS[group]?.features || [];
+    return [...acc, ...groupFeatures];
+  }, []);
+
+  return { groups, features };
 };

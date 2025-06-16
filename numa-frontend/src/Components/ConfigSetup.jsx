@@ -23,8 +23,6 @@ export const fetchConfigAddtoSession = async () => {
     'Q_APPLICATION_ID',
     'Q_INDEX_ID',
     'Q_RETRIEVER_ID',
-    'IDENTITY_POOL_ID',
-    'IDENTITY_POOL_ROLE_ARN',
     'ROLE_ARN',
     'REGION',
     'API_ENDPOINT',
@@ -43,6 +41,19 @@ export const fetchConfigAddtoSession = async () => {
     console.error(`Missing required properties in config: ${missingProperties.join(', ')}`);
   }
 
+  // Handle IDENTITY_POOLS as a JSON object separately
+  if (configData.GROUPS) {
+    const existing = sessionStorage.getItem('GROUPS');
+    const newValue = JSON.stringify(configData.GROUPS);
+    if (newValue !== existing) {
+      sessionStorage.setItem('GROUPS', newValue);
+      needsRefresh = true;
+    }
+  } else {
+    console.error('Missing required property in config: GROUPS');
+  }
+
+  // Handle regular string properties
   propertiesToAdd.forEach((property) => {
     const existing = sessionStorage.getItem(property);
     const configValue = configData[property];

@@ -2,20 +2,23 @@ import { useNavigate } from 'react-router-dom';
 import Logo from '../../public/numa-logo.svg';
 import { useAuth } from '../Providers/AuthProvider';
 import { useState, useEffect } from 'react';
+import { Navbar, Button, Dropdown } from 'react-bootstrap';
 
 function useNoChatGroup() {
   const { user } = useAuth();
   const groups = user?.decoded_tokens?.idToken?.['cognito:groups'] || [];
   return Array.isArray(groups) ? groups.includes('no-chat') : false;
 }
-import { Navbar, Button, Dropdown } from 'react-bootstrap';
 
 const Nav = () => {
   const navigate = useNavigate();
-  const { logout: authLogout } = useAuth();
+  const { logout: authLogout, user } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const limitedAccess = useNoChatGroup();
-  const [hideAdmin, setHideAdmin] = useState(false);
+  const [navItems, setNavItems] = useState([]);
+
+  const features = user?.features || [];
+  const hasFeature = (feature) => features.includes(feature);
 
   useEffect(() => {
     const handleResize = () => {
@@ -24,11 +27,23 @@ const Nav = () => {
 
     window.addEventListener('resize', handleResize);
 
-    // Check if HIDE_ADMIN flag is set in sessionStorage
-    const hideAdminFlag = sessionStorage.getItem('HIDE_ADMIN');
-    setHideAdmin(hideAdminFlag === 'true');
-
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    import('../utils/routeConfig.jsx').then((mod) => {
+      if (!isMounted) return;
+      const items = mod.ROUTE_CONFIG.filter((r) => r.nav).map((r) => ({
+        to: r.path,
+        label: r.nav.label,
+        icon: r.nav.icon,
+        feature: r.requiredFeature,
+        footerOnly: r.nav.footerOnly,
+      }));
+      setNavItems(items);
+    });
+    return () => (isMounted = false);
   }, []);
 
   const logout = () => {
@@ -50,39 +65,16 @@ const Nav = () => {
           </Dropdown.Toggle>
 
           <Dropdown.Menu>
-            <Dropdown.Item onClick={() => navigate('/dash')}>
-              <i className="bi bi-grid-1x2-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
-              Dashboard
-            </Dropdown.Item>
-            <Dropdown.Item onClick={() => navigate('/favourite-apps')}>
-              <i className="bi bi-star-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
-              Favorites
-            </Dropdown.Item>
-            {!limitedAccess && (
-              <>
-                <Dropdown.Item onClick={() => navigate('/chat')}>
-                  <i className="bi bi-chat-dots-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
-                  Chat
+            {navItems.map((item) => {
+              if (item.feature && !hasFeature(item.feature)) return null;
+              if (item.to === '/chat' && limitedAccess) return null;
+              return (
+                <Dropdown.Item key={item.to} onClick={() => navigate(item.to)}>
+                  <i className={`${item.icon} me-2`} style={{ color: 'var(--color-icon)' }}></i>
+                  {item.label}
                 </Dropdown.Item>
-
-                <Dropdown.Item onClick={() => navigate('/company-info')}>
-                  <i className="bi bi-building-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
-                  Company Info
-                </Dropdown.Item>
-
-                <Dropdown.Item onClick={() => navigate('/upload')}>
-                  <i className="bi bi-cloud-upload-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
-                  Upload Files
-                </Dropdown.Item>
-
-                {!hideAdmin && (
-                  <Dropdown.Item onClick={() => navigate('/user-management')}>
-                    <i className="bi bi-people-fill me-2" style={{ color: 'var(--color-icon)' }}></i>
-                    User Management
-                  </Dropdown.Item>
-                )}
-              </>
-            )}
+              );
+            })}
             <Dropdown.Divider />
             <div className="px-2">
               <Button onClick={logout} className="w-100">
@@ -106,63 +98,39 @@ const Nav = () => {
         <div className="divider"></div>
 
         <ul className="nav-links">
-          <li>
-            <div className="nav-link nav-item" onClick={() => navigate('/dash')} title="Dashboard" role="button">
-              <i className="bi bi-grid-1x2-fill icon" style={{ color: 'var(--color-icon)' }}></i>
-              <span className="icon-label">Dash</span>
-            </div>
-          </li>
-          <li>
-            <div
-              className="nav-link nav-item"
-              onClick={() => navigate('/favourite-apps')}
-              title="Favorite Apps"
-              role="button"
-            >
-              <i className="bi bi-star-fill icon" style={{ color: 'var(--color-icon)' }}></i>
-              <span className="icon-label">Favs</span>
-            </div>
-          </li>
-          {!limitedAccess && (
-            <>
-              <li>
-                <div className="nav-link nav-item" onClick={() => navigate('/chat')} title="Chat" role="button">
-                  <i className="bi bi-chat-dots-fill icon" style={{ color: 'var(--color-icon)' }}></i>
-                  <span className="icon-label">Chat</span>
-                </div>
-              </li>
-              <li>
-                <div
-                  className="nav-link nav-item"
-                  onClick={() => navigate('/company-info')}
-                  title="Company Info"
-                  role="button"
-                >
-                  <i className="bi bi-building-fill icon" style={{ color: 'var(--color-icon)' }}></i>
-                  <span className="icon-label">Company</span>
-                </div>
-              </li>
-              <li>
-                <div className="nav-link nav-item" onClick={() => navigate('/upload')} title="Upload" role="button">
-                  <i className="bi bi-cloud-upload-fill icon" style={{ color: 'var(--color-icon)' }}></i>
-                  <span className="icon-label">Files</span>
-                </div>
-              </li>
-            </>
-          )}
+          {navItems
+            .filter((item) => !item.footerOnly)
+            .map((item) => {
+              if (item.feature && !hasFeature(item.feature)) return null;
+              if (item.to === '/chat' && limitedAccess) return null;
+              return (
+                <li key={item.to}>
+                  <div className="nav-link nav-item" onClick={() => navigate(item.to)} title={item.label} role="button">
+                    <i className={`${item.icon} icon`} style={{ color: 'var(--color-icon)' }}></i>
+                    <span className="icon-label">{item.label}</span>
+                  </div>
+                </li>
+              );
+            })}
         </ul>
 
         <footer className="footer">
-          {!limitedAccess && !hideAdmin && (
-            <div
-              className="nav-link nav-item"
-              onClick={() => navigate('/user-management')}
-              title="User Management"
-              role="button"
-            >
-              <i className="bi bi-people-fill icon" style={{ color: 'var(--color-icon)' }}></i>
-            </div>
-          )}
+          {navItems
+            .filter((item) => item.footerOnly)
+            .map((item) => {
+              if (item.feature && !hasFeature(item.feature)) return null;
+              return (
+                <div
+                  key={item.to}
+                  className="nav-link nav-item"
+                  onClick={() => navigate(item.to)}
+                  title={item.label}
+                  role="button"
+                >
+                  <i className={`${item.icon} icon`} style={{ color: 'var(--color-icon)' }}></i>
+                </div>
+              );
+            })}
           <button onClick={logout} className="btn-logout" title="Logout">
             <div className="icon-with-text">
               <i className="bi bi-box-arrow-right"></i>
