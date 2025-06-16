@@ -91,7 +91,7 @@ variables:
         - lambdas/python/step-function-start
         - lambdas/python/step-function-status
         - lambdas/python/structured-data-extraction
-        - lambdas/python/url-scraper
+        - lambdas/python/web-crawler-start
         - lambdas/python/web-search-proxy
 
 .python-libraries-matrix:
