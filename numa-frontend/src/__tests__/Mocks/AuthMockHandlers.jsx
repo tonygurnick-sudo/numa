@@ -35,6 +35,30 @@ const mockQBusinessClient = {
   }),
 };
 
+// Define different user types
+const createMockUser = (userType) => {
+  const baseUser = {
+    decoded_tokens: {
+      idToken: {
+        'cognito:groups': ['TestGroup'],
+      },
+    },
+  };
+
+  switch (userType) {
+    case 'admin':
+      return {
+        ...baseUser,
+        features: ['editCompanyData', 'chat', 'manageUsers', 'useCompanyData'],
+      };
+    default: // standard user
+      return {
+        ...baseUser,
+        features: ['chat', 'useCompanyData'],
+      };
+  }
+};
+
 // Define all auth handlers
 export const authHandlers = {
   logout: vi.fn(),
@@ -49,13 +73,7 @@ export const authHandlers = {
   isAuthenticated: true,
   loading: false,
   error: null,
-  user: {
-    decoded_tokens: {
-      idToken: {
-        'cognito:groups': ['TestGroup'],
-      },
-    },
-  },
+  user: createMockUser('standard'), // Default to standard user
   qBusinessClient: mockQBusinessClient,
   newPasswordRequired: false,
 };
@@ -66,10 +84,21 @@ export const clearAuthMocks = () => {
       handler.mockReset();
     }
   });
+  // Reset to standard user
+  authHandlers.user = createMockUser('standard');
 };
 
-// Update setupAuthMocks to return the handlers
-export const setupAuthMocks = () => {
+// Update setupAuthMocks to return the handlers and allow setting user type
+export const setupAuthMocks = (userType = 'standard') => {
   clearAuthMocks();
+  authHandlers.user = createMockUser(userType);
   return authHandlers;
 };
+
+// Helper functions to set different user types during tests
+export const setMockUser = (userType) => {
+  authHandlers.user = createMockUser(userType);
+};
+
+export const getMockAdminUser = () => createMockUser('admin');
+export const getMockStandardUser = () => createMockUser('standard');

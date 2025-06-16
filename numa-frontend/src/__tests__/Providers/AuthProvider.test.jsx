@@ -25,6 +25,7 @@ const TEST_TOKENS = {
       idToken: {
         exp: 1640995200,
         sub: 'test-user',
+        'cognito:groups': [],
       },
     },
   },
@@ -37,6 +38,7 @@ const TEST_TOKENS = {
       idToken: {
         exp: 9999999999,
         sub: 'test-user',
+        'cognito:groups': [],
       },
     },
   },
@@ -65,6 +67,16 @@ describe('AuthProvider', () => {
       CLIENT_ID: 'test-client-id',
       REGION: 'us-east-1',
       IDENTITY_POOL_ID: 'us-east-1:test-identity-pool',
+      GROUPS: JSON.stringify({
+        admin: {
+          roleArn: 'arn:aws:iam::123456789012:role/test-admin-role',
+          features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+        },
+        standard: {
+          roleArn: 'arn:aws:iam::123456789012:role/test-standard-role',
+          features: ['chat', 'useCompanyData'],
+        },
+      }),
     };
 
     // Set up sessionStorage mock
@@ -297,6 +309,8 @@ describe('AuthProvider', () => {
               refreshToken: TEST_TOKENS.expired.refreshToken,
             },
             decoded_tokens: TEST_TOKENS.expired.decoded,
+            groups: ['admin'],
+            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -344,6 +358,8 @@ describe('AuthProvider', () => {
               refreshToken: TEST_TOKENS.valid.refreshToken,
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
+            groups: ['admin'],
+            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -409,6 +425,8 @@ describe('AuthProvider', () => {
               refreshToken: TEST_TOKENS.valid.refreshToken,
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
+            groups: ['admin'],
+            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -487,6 +505,8 @@ describe('AuthProvider', () => {
               refreshToken: TEST_TOKENS.valid.refreshToken,
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
+            groups: ['admin'],
+            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -592,6 +612,20 @@ describe('AuthProvider', () => {
     it('should handle QBusinessClient initialization failure', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
+      // Set up localStorage with valid tokens to avoid refresh
+      window.localStorage.getItem.mockImplementation((key) => {
+        switch (key) {
+          case 'refreshToken':
+            return TEST_TOKENS.valid.refreshToken;
+          case 'idToken':
+            return TEST_TOKENS.valid.idToken;
+          case 'accessToken':
+            return TEST_TOKENS.valid.accessToken;
+          default:
+            return null;
+        }
+      });
+
       // Mock the credential provider to throw an error
       vi.mocked(fromWebToken).mockImplementationOnce(() => {
         throw new Error('Failed to initialize QBusinessClient');
@@ -607,6 +641,8 @@ describe('AuthProvider', () => {
               refreshToken: TEST_TOKENS.valid.refreshToken,
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
+            groups: ['admin'],
+            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -622,6 +658,20 @@ describe('AuthProvider', () => {
 
     it('should handle QAppsClient initialization failure', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Set up localStorage with valid tokens to avoid refresh
+      window.localStorage.getItem.mockImplementation((key) => {
+        switch (key) {
+          case 'refreshToken':
+            return TEST_TOKENS.valid.refreshToken;
+          case 'idToken':
+            return TEST_TOKENS.valid.idToken;
+          case 'accessToken':
+            return TEST_TOKENS.valid.accessToken;
+          default:
+            return null;
+        }
+      });
 
       // First call succeeds (QBusinessClient), second call fails (QAppsClient)
       vi.mocked(fromWebToken)
@@ -644,6 +694,8 @@ describe('AuthProvider', () => {
               refreshToken: TEST_TOKENS.valid.refreshToken,
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
+            groups: ['admin'],
+            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -668,6 +720,8 @@ describe('AuthProvider', () => {
               refreshToken: TEST_TOKENS.valid.refreshToken,
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
+            groups: ['admin'],
+            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
