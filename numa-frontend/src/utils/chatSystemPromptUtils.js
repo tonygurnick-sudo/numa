@@ -27,17 +27,17 @@ export const enhanceSystemPromptWithCompanyInfo = (basePrompt, companyProfile) =
  * Loads company profile information from S3
  * @param {string} companyBucket - S3 bucket name for company data
  * @param {string} region - AWS region
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @returns {Promise<string>} - Company profile text or empty string if not available
  */
-export const loadCompanyProfile = async (companyBucket, region, getIdentityPoolCredentials) => {
-  if (!region || !companyBucket || !getIdentityPoolCredentials) {
+export const loadCompanyProfile = async (companyBucket, region, getCredentials) => {
+  if (!region || !companyBucket || !getCredentials) {
     console.log('Missing required parameters for loading company profile');
     return '';
   }
 
   try {
-    const companyInfo = await fetchCompanyInfo(companyBucket, region, getIdentityPoolCredentials);
+    const companyInfo = await fetchCompanyInfo(companyBucket, region, getCredentials);
     return getProfileText(companyInfo);
   } catch (error) {
     console.error('Error loading company profile:', error);

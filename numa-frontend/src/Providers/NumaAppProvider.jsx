@@ -21,7 +21,7 @@ import {
 
 // Provider component
 export const NumaAppProvider = ({ children }) => {
-  const { qAppsClient, getIdentityPoolCredentials, user } = useAuth();
+  const { qAppsClient, getCredentials, user } = useAuth();
   const jobsApi = useJobsApi();
 
   const [loading, setLoading] = useState(false);
@@ -343,7 +343,7 @@ export const NumaAppProvider = ({ children }) => {
       // If the result contains S3 information, fetch and replace the content
       if (outputResult?.output_bucket && outputResult?.output_key) {
         console.log('Found S3 information, fetching content...');
-        const credentials = await getIdentityPoolCredentials();
+        const credentials = await getCredentials();
         const s3Content = await fetchS3Content(outputResult.output_bucket, outputResult.output_key, credentials);
         console.log('Retrieved S3 content:', s3Content);
 

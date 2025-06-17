@@ -10,7 +10,7 @@ import '@testing-library/jest-dom';
 // Mock the useAuth hook
 vi.mock('../../Providers/AuthProvider', () => ({
   useAuth: () => ({
-    getIdentityPoolCredentials: vi.fn(),
+    getCredentials: vi.fn(),
   }),
 }));
 

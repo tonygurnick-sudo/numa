@@ -9,11 +9,11 @@ import { fetchFileFromS3 } from './s3Utils';
  * @param {string} fileInfo.fileType - The type of the file (mime-type or extension)
  * @param {string} fileInfo.fileName - The name of the file
  * @param {Object} authContext - Auth context that provides tokens/credentials
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @param {Function} numaPost - The numaPost function from RequestProvider context
  * @returns {Promise<Object>} - Processed file metadata
  */
-export const processFile = async (fileInfo, authContext, getIdentityPoolCredentials, numaPost) => {
+export const processFile = async (fileInfo, authContext, getCredentials, numaPost) => {
   const { s3Key, s3Bucket, fileName } = fileInfo;
 
   try {
@@ -23,7 +23,7 @@ export const processFile = async (fileInfo, authContext, getIdentityPoolCredenti
       s3Key,
       fileName,
       authContext,
-      getIdentityPoolCredentials,
+      getCredentials,
       numaPost,
     );
 
@@ -44,7 +44,7 @@ export const processFile = async (fileInfo, authContext, getIdentityPoolCredenti
 /**
  * Call the extract-content-from-file lambda function to process a file in S3
  */
-const callExtractContentLambda = async (bucket, key, fileName, authContext, getIdentityPoolCredentials, numaPost) => {
+const callExtractContentLambda = async (bucket, key, fileName, authContext, getCredentials, numaPost) => {
   try {
     // Get API endpoint from session storage
     const API_GATEWAY_URL = window.sessionStorage.getItem('API_ENDPOINT') || '/api';
@@ -85,7 +85,7 @@ const callExtractContentLambda = async (bucket, key, fileName, authContext, getI
     }
 
     // Start polling the S3 location directly
-    return await pollS3ForFile(outputBucket, outputKey, getIdentityPoolCredentials);
+    return await pollS3ForFile(outputBucket, outputKey, getCredentials);
   } catch (error) {
     console.error('Error in extract content lambda process:', error);
     throw new Error(`File processing failed: ${error.message}`);
@@ -95,7 +95,7 @@ const callExtractContentLambda = async (bucket, key, fileName, authContext, getI
 /**
  * Poll S3 directly for the file until it exists
  */
-const pollS3ForFile = async (bucket, key, getIdentityPoolCredentials) => {
+const pollS3ForFile = async (bucket, key, getCredentials) => {
   const POLL_INTERVAL = 10000; // Check every 10 seconds
   const MAX_POLL_TIME = 10 * 60 * 1000; // 10 minutes total polling time
   const region = window.sessionStorage.getItem('REGION');
@@ -115,7 +115,7 @@ const pollS3ForFile = async (bucket, key, getIdentityPoolCredentials) => {
 
     try {
       // Try to fetch the file from S3
-      const contentFile = await fetchFileFromS3(key, bucket, region, getIdentityPoolCredentials);
+      const contentFile = await fetchFileFromS3(key, bucket, region, getCredentials);
 
       if (contentFile) {
         console.log(`Found file in S3: ${bucket}/${key}`);

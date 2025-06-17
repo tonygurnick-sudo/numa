@@ -12,7 +12,7 @@ import { NumaRequestContext } from '../../Providers/NumaRequestContext';
 
 // Mock the auth context
 const mockAuthHandlers = {
-  getIdentityPoolCredentials: vi.fn().mockResolvedValue({}),
+  getCredentials: vi.fn().mockResolvedValue({}),
   qAppsClient: { send: vi.fn() },
   isAuthenticated: true,
   user: { decoded_tokens: { idToken: { 'cognito:groups': ['TestGroup'] } } },

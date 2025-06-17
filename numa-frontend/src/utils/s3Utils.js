@@ -7,8 +7,8 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getIdentityPoolCredentials) => {
-  const credentials = await getIdentityPoolCredentials(); // Fetch credentials from AuthProvider
+export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getCredentials) => {
+  const credentials = await getCredentials(); // Fetch credentials from AuthProvider
 
   if (!credentials?.accessKeyId) {
     throw new Error('AWS Credentials are missing.');
@@ -35,8 +35,8 @@ export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getIdentityPoolCr
   return new Blob([blob], { type: response.headers.get('content-type') });
 };
 
-export const uploadFileToS3 = async (content, contentType, s3Bucket, s3Key, region, getIdentityPoolCredentials) => {
-  const credentials = await getIdentityPoolCredentials();
+export const uploadFileToS3 = async (content, contentType, s3Bucket, s3Key, region, getCredentials) => {
+  const credentials = await getCredentials();
   const s3Client = new S3Client({ region, credentials });
 
   // Upload file to S3
@@ -58,18 +58,12 @@ export const uploadFileToS3 = async (content, contentType, s3Bucket, s3Key, regi
  * @param {string} s3Key - The S3 object key
  * @param {string} s3Bucket - The S3 bucket name
  * @param {string} region - AWS region
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @param {number} expiresIn - URL expiration time in seconds
  * @returns {Promise<string>} - The signed URL
  */
-export const getSignedUrlForS3Object = async (
-  s3Key,
-  s3Bucket,
-  region,
-  getIdentityPoolCredentials,
-  expiresIn = 3600,
-) => {
-  const credentials = await getIdentityPoolCredentials();
+export const getSignedUrlForS3Object = async (s3Key, s3Bucket, region, getCredentials, expiresIn = 3600) => {
+  const credentials = await getCredentials();
 
   if (!credentials?.accessKeyId) {
     throw new Error('AWS Credentials are missing.');
@@ -103,19 +97,13 @@ export const extractFilenameFromPath = (path) => {
  * @param {string} s3Key - The S3 object key
  * @param {string} s3Bucket - The S3 bucket name
  * @param {string} region - AWS region
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @param {string} [customFilename] - Optional custom filename for download
  * @returns {Promise<void>}
  */
-export const downloadFileFromS3 = async (
-  s3Key,
-  s3Bucket,
-  region,
-  getIdentityPoolCredentials,
-  customFilename = null,
-) => {
+export const downloadFileFromS3 = async (s3Key, s3Bucket, region, getCredentials, customFilename = null) => {
   try {
-    const blob = await fetchFileFromS3(s3Key, s3Bucket, region, getIdentityPoolCredentials);
+    const blob = await fetchFileFromS3(s3Key, s3Bucket, region, getCredentials);
     const url = URL.createObjectURL(blob);
     const filename = customFilename || extractFilenameFromPath(s3Key);
 
@@ -140,12 +128,12 @@ export const downloadFileFromS3 = async (
  * @param {string} s3Key - The S3 object key
  * @param {string} s3Bucket - The S3 bucket name
  * @param {string} region - AWS region
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @returns {Promise<void>}
  */
-export const openFileFromS3InNewTab = async (s3Key, s3Bucket, region, getIdentityPoolCredentials) => {
+export const openFileFromS3InNewTab = async (s3Key, s3Bucket, region, getCredentials) => {
   try {
-    const blob = await fetchFileFromS3(s3Key, s3Bucket, region, getIdentityPoolCredentials);
+    const blob = await fetchFileFromS3(s3Key, s3Bucket, region, getCredentials);
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
   } catch (error) {
@@ -159,19 +147,13 @@ export const openFileFromS3InNewTab = async (s3Key, s3Bucket, region, getIdentit
  * @param {string} s3Key - The S3 object key
  * @param {string} s3Bucket - The S3 bucket name
  * @param {string} region - AWS region
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @param {string} [customFilename] - Optional custom filename for download
  * @returns {Promise<void>}
  */
-export const downloadFileWithSignedUrl = async (
-  s3Key,
-  s3Bucket,
-  region,
-  getIdentityPoolCredentials,
-  customFilename = null,
-) => {
+export const downloadFileWithSignedUrl = async (s3Key, s3Bucket, region, getCredentials, customFilename = null) => {
   try {
-    const signedUrl = await getSignedUrlForS3Object(s3Key, s3Bucket, region, getIdentityPoolCredentials);
+    const signedUrl = await getSignedUrlForS3Object(s3Key, s3Bucket, region, getCredentials);
     const filename = customFilename || extractFilenameFromPath(s3Key);
 
     // Create and trigger download link
@@ -192,12 +174,12 @@ export const downloadFileWithSignedUrl = async (
  * @param {string} s3Key - The S3 object key
  * @param {string} s3Bucket - The S3 bucket name
  * @param {string} region - AWS region
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @returns {Promise<string|null>} - The URL from the tag or null if not found
  */
-export const getUrlTagFromS3Object = async (s3Key, s3Bucket, region, getIdentityPoolCredentials) => {
+export const getUrlTagFromS3Object = async (s3Key, s3Bucket, region, getCredentials) => {
   try {
-    const credentials = await getIdentityPoolCredentials();
+    const credentials = await getCredentials();
 
     if (!credentials?.accessKeyId) {
       console.error('AWS Credentials are missing');
@@ -234,12 +216,12 @@ export const getUrlTagFromS3Object = async (s3Key, s3Bucket, region, getIdentity
  * @param {string} s3Key - The S3 object key
  * @param {string} s3Bucket - The S3 bucket name
  * @param {string} region - AWS region
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @returns {Promise<void>}
  */
-export const openFileWithSignedUrl = async (s3Key, s3Bucket, region, getIdentityPoolCredentials) => {
+export const openFileWithSignedUrl = async (s3Key, s3Bucket, region, getCredentials) => {
   try {
-    const signedUrl = await getSignedUrlForS3Object(s3Key, s3Bucket, region, getIdentityPoolCredentials);
+    const signedUrl = await getSignedUrlForS3Object(s3Key, s3Bucket, region, getCredentials);
     window.open(signedUrl, '_blank');
   } catch (error) {
     console.error('Error opening file with signed URL:', error);
@@ -252,12 +234,12 @@ export const openFileWithSignedUrl = async (s3Key, s3Bucket, region, getIdentity
  * @param {string} s3Key
  * @param {string} s3Bucket
  * @param {string} region
- * @param {Function} getIdentityPoolCredentials
+ * @param {Function} getCredentials
  * @returns {Promise<void>}
  */
-export const deleteFileFromS3 = async (s3Key, s3Bucket, region, getIdentityPoolCredentials) => {
+export const deleteFileFromS3 = async (s3Key, s3Bucket, region, getCredentials) => {
   try {
-    const credentials = await getIdentityPoolCredentials();
+    const credentials = await getCredentials();
 
     if (!credentials?.accessKeyId) {
       throw new Error('AWS Credentials are missing.');

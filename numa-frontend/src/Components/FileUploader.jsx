@@ -34,7 +34,7 @@ const FileUploader = ({ onUploadSuccess }) => {
     folders: new Set(),
   });
   const [config, setConfig] = useState(null);
-  const { getIdentityPoolCredentials } = useAuth();
+  const { getCredentials } = useAuth();
 
   useEffect(() => {
     fetch('/config.json')
@@ -123,7 +123,7 @@ const FileUploader = ({ onUploadSuccess }) => {
           const region = window.sessionStorage.getItem('REGION');
 
           // User generates a presigned URL
-          const s3Client = new S3Client({ region: region, credentials: await getIdentityPoolCredentials() });
+          const s3Client = new S3Client({ region: region, credentials: await getCredentials() });
 
           const command = new PutObjectCommand({
             Bucket: `numa-${config.CLIENT_NAME}-data`,

@@ -3,7 +3,7 @@ import { getContentType } from '../utils/fileUtils';
 import { getUrlTagFromS3Object } from '../utils/s3Utils';
 import { Button, Collapse } from 'react-bootstrap';
 
-const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
+const ChatReferencesDropdown = ({ references, getCredentials }) => {
   const [open, setOpen] = useState(false);
   const [processedRefs, setProcessedRefs] = useState([]);
   const [downloadingIndex, setDownloadingIndex] = useState(null);
@@ -117,7 +117,7 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
       setDownloadingIndex(index);
 
       // First try to get the URL from the S3 object's tags
-      const urlFromTag = await getUrlTagFromS3Object(ref.key, ref.bucket, region, getIdentityPoolCredentials);
+      const urlFromTag = await getUrlTagFromS3Object(ref.key, ref.bucket, region, getCredentials);
 
       // If we found a URL in the tags, open it directly
       if (urlFromTag) {
@@ -126,7 +126,7 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
       }
 
       // If no URL tag found, fall back to pre-signed URL
-      const signedUrl = await getPresignedUrl(ref, getIdentityPoolCredentials);
+      const signedUrl = await getPresignedUrl(ref, getCredentials);
       if (!signedUrl) {
         return;
       }
@@ -150,7 +150,7 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
     }
   };
 
-  const getPresignedUrl = async (ref, getIdentityPoolCredentials) => {
+  const getPresignedUrl = async (ref, getCredentials) => {
     try {
       const s3Key = ref.key;
       const s3Bucket = ref.bucket;
@@ -158,7 +158,7 @@ const ChatReferencesDropdown = ({ references, getIdentityPoolCredentials }) => {
       const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
       const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
 
-      const credentials = await getIdentityPoolCredentials();
+      const credentials = await getCredentials();
       if (!credentials) {
         throw new Error('Failed to get AWS credentials');
       }

@@ -37,7 +37,7 @@ describe('ResultsRenderer Component', () => {
   beforeEach(() => {
     // Mock Auth Provider
     useAuth.mockReturnValue({
-      getIdentityPoolCredentials: vi.fn().mockResolvedValue({ accessKeyId: 'test', secretAccessKey: 'test' }),
+      getCredentials: vi.fn().mockResolvedValue({ accessKeyId: 'test', secretAccessKey: 'test' }),
     });
 
     // Mock NumaApp Context
@@ -424,7 +424,7 @@ describe('CsvRenderer Component', () => {
   beforeEach(() => {
     // Mock Auth Provider
     useAuth.mockReturnValue({
-      getIdentityPoolCredentials: vi.fn().mockResolvedValue({ accessKeyId: 'test', secretAccessKey: 'test' }),
+      getCredentials: vi.fn().mockResolvedValue({ accessKeyId: 'test', secretAccessKey: 'test' }),
     });
 
     // Mock window.sessionStorage

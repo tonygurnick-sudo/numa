@@ -143,7 +143,7 @@ vi.mock('../../Providers/AuthProvider', () => ({
       queryConversations: vi.fn().mockResolvedValue([]),
     },
     getAccessToken: vi.fn().mockResolvedValue({}),
-    getIdentityPoolCredentials: vi.fn().mockResolvedValue({}),
+    getCredentials: vi.fn().mockResolvedValue({}),
   }),
 }));
 

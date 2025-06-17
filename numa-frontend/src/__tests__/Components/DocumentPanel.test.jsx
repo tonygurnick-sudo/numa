@@ -9,7 +9,7 @@ import { DocumentPanel } from '../../Components/DocumentPanel';
 // Mock useAuth so that any component calling it (e.g. inside ResultActions) doesn't throw an error.
 vi.mock('../../Providers/AuthProvider', () => ({
   useAuth: () => ({
-    getIdentityPoolCredentials: vi.fn(),
+    getCredentials: vi.fn(),
   }),
 }));
 

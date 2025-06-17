@@ -50,7 +50,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     taskInputValues,
   } = useNumaApp();
   const jobsApi = useJobsApi();
-  const { getIdentityPoolCredentials } = useAuth();
+  const { getCredentials } = useAuth();
 
   // Extract parameters from task with defaults
   const acceptedFileTypes = task?.parameters?.allowedFileTypes ?? [];
@@ -306,7 +306,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
       const s3Client = new S3Client({
         region,
-        credentials: await getIdentityPoolCredentials(),
+        credentials: await getCredentials(),
       });
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i];

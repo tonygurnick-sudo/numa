@@ -50,7 +50,7 @@ const NumaChat = () => {
     bedrockRuntimeClient,
     numaChatDynamoUtils,
     getAccessToken,
-    getIdentityPoolCredentials,
+    getCredentials,
     createSubscription,
   } = useAuth();
 
@@ -170,14 +170,14 @@ const NumaChat = () => {
 
   // Function to load company profile from S3
   const fetchCompanyProfile = async () => {
-    if (!region || !companyBucket || !getIdentityPoolCredentials) {
+    if (!region || !companyBucket || !getCredentials) {
       console.log('Missing required parameters for loading company profile');
       setIsCompanyProfileLoaded(true); // Mark as loaded even if failed to prevent repeated attempts
       return;
     }
 
     try {
-      const profileText = await loadCompanyProfile(companyBucket, region, getIdentityPoolCredentials);
+      const profileText = await loadCompanyProfile(companyBucket, region, getCredentials);
       setCompanyProfile(profileText);
       console.log('Company profile loaded successfully');
     } catch (error) {
@@ -197,7 +197,7 @@ const NumaChat = () => {
     if (!isCompanyProfileLoaded) {
       fetchCompanyProfile();
     }
-  }, [region, companyBucket, getIdentityPoolCredentials, isCompanyProfileLoaded]);
+  }, [region, companyBucket, getCredentials, isCompanyProfileLoaded]);
 
   // Track window width
   useEffect(() => {
@@ -503,10 +503,7 @@ const NumaChat = () => {
         }
       }
 
-      const bedrockMessages = await prepareConversationHistoryForBedrock(
-        conversationHistory,
-        getIdentityPoolCredentials,
-      );
+      const bedrockMessages = await prepareConversationHistoryForBedrock(conversationHistory, getCredentials);
 
       // Validate message format
       const validatedMessages = bedrockMessages.map((msg) => {

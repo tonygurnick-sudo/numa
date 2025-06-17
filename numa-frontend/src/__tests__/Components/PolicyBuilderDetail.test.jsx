@@ -29,7 +29,7 @@ describe('PolicyBuilderDetail Component', () => {
   const authContextValues = {
     loading: false,
     isAuthenticated: true,
-    getIdentityPoolCredentials: vi.fn().mockResolvedValue({
+    getCredentials: vi.fn().mockResolvedValue({
       accessKeyId: 'test-key',
       secretAccessKey: 'test-secret',
     }),

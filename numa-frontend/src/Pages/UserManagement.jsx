@@ -24,7 +24,7 @@ const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState(null);
-  const { getWebTokenCredentials, user, qBusinessClient } = useAuth();
+  const { getCredentials, user, qBusinessClient } = useAuth();
   const [deletingUser, setDeletingUser] = useState(null);
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
 
@@ -59,7 +59,7 @@ const UserManagement = () => {
         UserPoolId: USER_POOL_ID,
       });
 
-      const credentials = await getWebTokenCredentials(policy);
+      const credentials = await getCredentials(policy);
       if (!credentials) {
         throw new Error('Failed to get AWS credentials');
       }
@@ -83,13 +83,13 @@ const UserManagement = () => {
       throw new Error('Q Business client not found');
     }
 
-    if (!getWebTokenCredentials) {
+    if (!getCredentials) {
       throw new Error('Get web token credentials not found');
     }
 
     const REGION = window.sessionStorage.getItem('REGION');
 
-    const userManagementUtils = new UserManagementUtils(REGION, await getWebTokenCredentials());
+    const userManagementUtils = new UserManagementUtils(REGION, await getCredentials());
     await userManagementUtils.deleteUser(username, fetchUsers, setUsersError, setDeletingUser, qBusinessClient);
   };
 
@@ -134,7 +134,7 @@ const UserManagement = () => {
         UserPoolId: USER_POOL_ID,
       });
 
-      const credentials = await getWebTokenCredentials(policy);
+      const credentials = await getCredentials(policy);
       if (!credentials) {
         throw new Error('Failed to get AWS credentials');
       }

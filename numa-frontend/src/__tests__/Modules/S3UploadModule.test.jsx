@@ -209,7 +209,7 @@ describe('S3UploadModule Component', () => {
     // Mock Auth provider
     vi.mock('../../Providers/AuthProvider', () => ({
       useAuth: () => ({
-        getIdentityPoolCredentials: vi.fn().mockResolvedValue({}),
+        getCredentials: vi.fn().mockResolvedValue({}),
       }),
     }));
 
