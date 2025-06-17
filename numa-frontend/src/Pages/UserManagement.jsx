@@ -6,13 +6,6 @@ import { UserManagementUtils } from '../utils/userManagementUtils';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Nav } from '../Components/Nav';
 import { generateCognitoIdpPolicy } from '../Modules/CognitoIdpPolicyGenerator';
-import { useNavigate } from 'react-router-dom';
-
-function useNoChatGroup() {
-  const { user } = useAuth();
-  const groups = user?.decoded_tokens?.idToken?.['cognito:groups'] || [];
-  return Array.isArray(groups) ? groups.includes('no-chat') : false;
-}
 
 const UserManagement = () => {
   const [email, setEmail] = useState('');
@@ -27,10 +20,6 @@ const UserManagement = () => {
   const { getCredentials, user, qBusinessClient } = useAuth();
   const [deletingUser, setDeletingUser] = useState(null);
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
-
-  const navigate = useNavigate();
-
-  const noChat = useNoChatGroup();
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -97,12 +86,6 @@ const UserManagement = () => {
     fetchUsers();
   }, []);
 
-  useEffect(() => {
-    if (noChat && navigate) {
-      navigate('/dash', { replace: true });
-    }
-  }, [noChat, navigate]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -159,8 +142,6 @@ const UserManagement = () => {
       setError(err.message || 'Failed to create user');
     }
   };
-
-  if (noChat) return null;
 
   return (
     <>

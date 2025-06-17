@@ -17,14 +17,6 @@ import ResizableSplitView from '../Components/ResizableSplitView';
 import { loadCompanyProfile, enhanceSystemPromptWithCompanyInfo } from '../utils/chatSystemPromptUtils';
 import { getModelId, MODEL_TYPES } from '../utils/bedrockModelConfig';
 
-import { useNavigate } from 'react-router-dom';
-
-function useNoChatGroup() {
-  const { user } = useAuth();
-  const groups = user?.decoded_tokens?.idToken?.['cognito:groups'] || [];
-  return Array.isArray(groups) ? groups.includes('no-chat') : false;
-}
-
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -72,18 +64,8 @@ const NumaChat = () => {
   const region = window.sessionStorage.getItem('REGION');
   const SYSTEM_MESSAGE = `You are an artificial intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data sources, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorporate other bold and italic styling within your outputs when appropriate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with markdown formatting.\n- Similarly, For any document, report, email, analysis, or other exportable content you generate that a user may want to download or copy (except code), please start it with the following '<!--BEGIN_DOC title="SOME TITLE HERE"-->' (where you infer the title when writing the document), and end it with '<!--END_DOC-->'. This will help me identify documents in post processing using regex looking for the opening '<--' and closing '-->'\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like "Could you provide more details?" or "What specific aspect would you like to focus on?"\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
 
-  // --- No Chat Group logic ---
-  const navigate = useNavigate();
-
-  const noChat = useNoChatGroup();
   // Ref for input textarea
   const inputRef = useRef(null);
-
-  useEffect(() => {
-    if (noChat && navigate) {
-      navigate('/dash', { replace: true });
-    }
-  }, [noChat, navigate]);
 
   /**
    * parseChunkWithoutDocComments(chunk, docStripState)
@@ -568,7 +550,7 @@ const NumaChat = () => {
         }
       }
 
-      // 6) Accumulate the raw text and a “display text” that strips comment tags
+      // 6) Accumulate the raw text and a "display text" that strips comment tags
       // This let's us retrieve doc references and display the message without tags
       // e.g. <!--BEGIN_DOC title="Some Title"-->...<!--END_DOC-->
       let rawAssistantText = '';
@@ -844,8 +826,6 @@ const NumaChat = () => {
     setLeftFraction(0.99); // Reset the split view to fully collapsed
     setInlineDocument(null); // Clear the document content
   }
-
-  if (noChat) return null;
 
   return (
     <div className="dashboard">
