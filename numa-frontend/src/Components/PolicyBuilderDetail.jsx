@@ -44,7 +44,7 @@ export const PolicyBuilderDetail = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const inFlightRequestsRef = useRef({});
 
-  const { loading, isAuthenticated, getIdentityPoolCredentials, user } = useAuth();
+  const { loading, isAuthenticated, getCredentials, user } = useAuth();
   const { numaPost, numaPut, numaGet } = useNumaRequest();
   const jobsApi = useJobsApi();
   const userId = user?.decoded_tokens?.idToken?.['sub'];
@@ -164,7 +164,7 @@ export const PolicyBuilderDetail = () => {
       // Create a sanitized filename
       const sanitizedFileName = schoolName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
-      const credentials = await getIdentityPoolCredentials();
+      const credentials = await getCredentials();
 
       const region = window.sessionStorage.getItem('REGION');
 
@@ -583,7 +583,7 @@ export const PolicyBuilderDetail = () => {
       const sanitizedFileName = schoolName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
       // Get fresh credentials each time instead of caching
-      const credentials = await getIdentityPoolCredentials();
+      const credentials = await getCredentials();
 
       const region = window.sessionStorage.getItem('REGION');
 

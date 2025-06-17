@@ -31,7 +31,7 @@ const truncateConversationHistory = (messages) => {
   return truncatedMessages;
 };
 
-const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) => {
+const formatMessagesForBedrock = async (messages, getCredentials) => {
   return Promise.all(
     messages.map(async (item) => {
       if (item.message_type === 'image_description') {
@@ -57,12 +57,7 @@ const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) =>
         const region = window.sessionStorage.getItem('REGION');
 
         try {
-          const fileContent = await fetchFileFromS3(
-            extractedContentS3Key,
-            s3Bucket,
-            region,
-            getIdentityPoolCredentials,
-          );
+          const fileContent = await fetchFileFromS3(extractedContentS3Key, s3Bucket, region, getCredentials);
 
           // Convert that to text
           let textBody = await fileContent.text();
@@ -111,14 +106,14 @@ const formatMessagesForBedrock = async (messages, getIdentityPoolCredentials) =>
 /**
  * Prepares conversation history for Bedrock
  * @param {Array} conversationHistory - Full conversation history from DynamoDB
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @returns {Promise<Array>} - Formatted and truncated messages for Bedrock
  */
-const prepareConversationHistoryForBedrock = async (conversationHistory, getIdentityPoolCredentials) => {
+const prepareConversationHistoryForBedrock = async (conversationHistory, getCredentials) => {
   const sortedHistory = conversationHistory.sort((a, b) => a.timestamp - b.timestamp);
   const truncatedHistory = truncateConversationHistory(sortedHistory);
 
-  const formattedMessages = await formatMessagesForBedrock(truncatedHistory, getIdentityPoolCredentials);
+  const formattedMessages = await formatMessagesForBedrock(truncatedHistory, getCredentials);
 
   if (truncatedHistory.length < sortedHistory.length) {
     console.log(`Total words exceeded ${MAX_WORDS} or total messages exceeded ${MAX_MESSAGES}`);

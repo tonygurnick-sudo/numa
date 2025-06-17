@@ -50,10 +50,10 @@ describe('S3UploadModule Standardisation', () => {
     );
   });
 
-  // Mock Auth provider with proper implementation of getIdentityPoolCredentials
+  // Mock Auth provider with proper implementation of getCredentials
   vi.mock('../../Providers/AuthProvider', () => ({
     useAuth: () => ({
-      getIdentityPoolCredentials: () =>
+      getCredentials: () =>
         Promise.resolve({
           accessKeyId: 'test-access-key',
           secretAccessKey: 'test-secret-key',

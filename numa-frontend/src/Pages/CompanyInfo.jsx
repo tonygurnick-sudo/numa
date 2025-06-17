@@ -8,7 +8,7 @@ import { saveCompanyInfo, fetchCompanyInfo, getProfileText } from '../utils/comp
 import { useNavigate } from 'react-router-dom';
 
 const CompanyInfo = () => {
-  const { getIdentityPoolCredentials, region: authRegion } = useAuth();
+  const { getCredentials, region: authRegion } = useAuth();
   // Fallback to session storage if region is not available from auth context
   const region = authRegion || window.sessionStorage.getItem('REGION');
   const [companyProfile, setCompanyProfile] = useState('');
@@ -38,7 +38,7 @@ const CompanyInfo = () => {
 
   useEffect(() => {
     // Load existing company info when component mounts
-    if (region && companyBucket && getIdentityPoolCredentials) {
+    if (region && companyBucket && getCredentials) {
       loadCompanyInfo();
     }
   }, []); // Empty dependency array ensures this only runs once on mount
@@ -54,7 +54,7 @@ const CompanyInfo = () => {
   const loadCompanyInfo = async () => {
     setIsLoading(true);
     try {
-      const companyInfo = await fetchCompanyInfo(companyBucket, region, getIdentityPoolCredentials);
+      const companyInfo = await fetchCompanyInfo(companyBucket, region, getCredentials);
 
       // Extract the profile text from the data
       setCompanyProfile(getProfileText(companyInfo));
@@ -86,7 +86,7 @@ const CompanyInfo = () => {
 
     try {
       // Save the profile text directly to S3
-      await saveCompanyInfo(companyProfile, companyBucket, region, getIdentityPoolCredentials);
+      await saveCompanyInfo(companyProfile, companyBucket, region, getCredentials);
 
       // Update the last updated timestamp
       setLastUpdated(new Date().toISOString());

@@ -904,7 +904,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   };
 
-  const getIdentityPoolCredentials = async () => {
+  const getCredentials = async () => {
     const REGION = window.sessionStorage.getItem('REGION');
 
     if (!user) {
@@ -994,7 +994,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     numaChatDynamoUtils,
     requestPasswordReset,
     confirmPasswordReset,
-    getIdentityPoolCredentials,
+    getCredentials,
   };
 
   useEffect(() => {

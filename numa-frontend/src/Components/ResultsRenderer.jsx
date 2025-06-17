@@ -345,7 +345,7 @@ const CsvRenderer = ({ data }) => {
 
   const { headers, rows } = parseCSV(data);
   const [activeRowIndex, setActiveRowIndex] = useState(0);
-  const { getIdentityPoolCredentials } = useAuth();
+  const { getCredentials } = useAuth();
   const [loadingFiles, setLoadingFiles] = useState({});
 
   if (headers.length === 0) {
@@ -380,7 +380,7 @@ const CsvRenderer = ({ data }) => {
 
       const region = window.sessionStorage.getItem('REGION');
 
-      downloadFileFromS3(filePath, bucketName, region, getIdentityPoolCredentials).finally(() => {
+      downloadFileFromS3(filePath, bucketName, region, getCredentials).finally(() => {
         // Clear loading state when done
         setLoadingFiles((prev) => ({ ...prev, [filePath + '-download']: false }));
       });
@@ -403,7 +403,7 @@ const CsvRenderer = ({ data }) => {
 
       const region = window.sessionStorage.getItem('REGION');
 
-      openFileWithSignedUrl(filePath, bucketName, region, getIdentityPoolCredentials).finally(() => {
+      openFileWithSignedUrl(filePath, bucketName, region, getCredentials).finally(() => {
         // Clear loading state when done
         setLoadingFiles((prev) => ({ ...prev, [filePath + '-open']: false }));
       });
@@ -582,7 +582,7 @@ const isCSVContent = (content, contentType) => {
 };
 
 // Shared component for file download/open buttons in ResultsRenderer
-const FileDownloadButtons = ({ output, getIdentityPoolCredentials, loadingActions, setLoadingActions }) => {
+const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadingActions }) => {
   return (
     <div className="btn-group">
       <button
@@ -594,7 +594,7 @@ const FileDownloadButtons = ({ output, getIdentityPoolCredentials, loadingAction
             output.data.key,
             output.data.bucket,
             region,
-            getIdentityPoolCredentials,
+            getCredentials,
             output.title || null,
           ).finally(() => {
             setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-download`]: false }));
@@ -616,7 +616,7 @@ const FileDownloadButtons = ({ output, getIdentityPoolCredentials, loadingAction
         onClick={() => {
           setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-open`]: true }));
           const region = window.sessionStorage.getItem('REGION');
-          openFileWithSignedUrl(output.data.key, output.data.bucket, region, getIdentityPoolCredentials).finally(() => {
+          openFileWithSignedUrl(output.data.key, output.data.bucket, region, getCredentials).finally(() => {
             setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-open`]: false }));
           });
         }}
@@ -639,7 +639,7 @@ export const ResultsRenderer = ({ results }) => {
   const [contents, setContents] = useState({});
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
-  const { getIdentityPoolCredentials } = useAuth();
+  const { getCredentials } = useAuth();
   const { fetchS3Content } = useNumaApp();
   const pendingRequests = useRef({});
   const [loadingActions, setLoadingActions] = useState({});
@@ -688,7 +688,7 @@ export const ResultsRenderer = ({ results }) => {
               setLoading((prev) => ({ ...prev, [key]: true }));
               setErrors((prev) => ({ ...prev, [key]: null }));
 
-              const credentials = await getIdentityPoolCredentials();
+              const credentials = await getCredentials();
               if (!credentials) {
                 throw new Error('Failed to get credentials');
               }
@@ -714,7 +714,7 @@ export const ResultsRenderer = ({ results }) => {
     };
 
     fetchContents();
-  }, [results, getIdentityPoolCredentials, fetchS3Content]);
+  }, [results, getCredentials, fetchS3Content]);
 
   if (!results || !Array.isArray(results) || results.length === 0) {
     return <div>No results to display</div>;
@@ -779,7 +779,7 @@ export const ResultsRenderer = ({ results }) => {
         <div className="s3-link mb-3">
           <FileDownloadButtons
             output={selectedOutput}
-            getIdentityPoolCredentials={getIdentityPoolCredentials}
+            getCredentials={getCredentials}
             loadingActions={loadingActions}
             setLoadingActions={setLoadingActions}
           />
@@ -823,7 +823,7 @@ export const ResultsRenderer = ({ results }) => {
         <div className="s3-link mb-3">
           <FileDownloadButtons
             output={selectedOutput}
-            getIdentityPoolCredentials={getIdentityPoolCredentials}
+            getCredentials={getCredentials}
             loadingActions={loadingActions}
             setLoadingActions={setLoadingActions}
           />

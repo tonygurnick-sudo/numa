@@ -145,7 +145,7 @@ export const PolicyReviewerDetail = () => {
   const [resultsTabView, setResultsTabView] = useState('review'); // 'review' or 'updated'
 
   // Auth / API
-  const { loading, isAuthenticated, getIdentityPoolCredentials, user } = useAuth();
+  const { loading, isAuthenticated, getCredentials, user } = useAuth();
   const { numaPost, numaPut, numaGet } = useNumaRequest();
   const jobsApi = useJobsApi();
   const userId = user?.decoded_tokens?.idToken?.['sub'];
@@ -406,7 +406,7 @@ export const PolicyReviewerDetail = () => {
 
       // upload new file
       if (!isEditing && selectedFile) {
-        const credentials = await getIdentityPoolCredentials();
+        const credentials = await getCredentials();
         const s3Client = new S3Client({
           region: getRegion(),
           credentials,
@@ -470,7 +470,7 @@ export const PolicyReviewerDetail = () => {
    * Downloads          *
    **********************/
   const downloadMarkdown = async (policy, type) => {
-    const credentials = await getIdentityPoolCredentials();
+    const credentials = await getCredentials();
     const s3Client = new S3Client({
       region: getRegion(),
       credentials,
@@ -596,7 +596,7 @@ export const PolicyReviewerDetail = () => {
         throw new Error('Original file not found');
       }
 
-      const credentials = await getIdentityPoolCredentials();
+      const credentials = await getCredentials();
       const s3Client = new S3Client({
         region: getRegion(),
         credentials,

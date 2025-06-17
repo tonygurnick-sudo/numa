@@ -218,7 +218,7 @@ export function S3Uploader() {
 
   const [kbDocuments, setKbDocuments] = useState([]);
 
-  const { getIdentityPoolCredentials, qBusinessClient } = useAuth();
+  const { getCredentials, qBusinessClient } = useAuth();
 
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
   const Q_INDEX_ID = window.sessionStorage.getItem('Q_INDEX_ID');
@@ -252,7 +252,7 @@ export function S3Uploader() {
     setIsLoadingFiles(true);
     try {
       const region = window.sessionStorage.getItem('REGION');
-      const credentials = await getIdentityPoolCredentials();
+      const credentials = await getCredentials();
       const s3Client = new S3Client({
         region: region,
         credentials,
@@ -279,7 +279,7 @@ export function S3Uploader() {
           batch.map(async (file) => {
             try {
               const bucket = `numa-${CLIENT_NAME}-data`;
-              const urlTag = await getUrlTagFromS3Object(file.Key, bucket, region, getIdentityPoolCredentials);
+              const urlTag = await getUrlTagFromS3Object(file.Key, bucket, region, getCredentials);
               return { ...file, urlTag };
             } catch (error) {
               console.error('Error getting URL tag:', error);
@@ -424,7 +424,7 @@ export function S3Uploader() {
       const bucketName = `numa-${CLIENT_NAME}-data`;
 
       // Delete the file from S3
-      await deleteFileFromS3(fileToDelete.originalKey, bucketName, region, getIdentityPoolCredentials);
+      await deleteFileFromS3(fileToDelete.originalKey, bucketName, region, getCredentials);
 
       // Start a sync job to update the index
       if (qBusinessClient && dataSourceId) {

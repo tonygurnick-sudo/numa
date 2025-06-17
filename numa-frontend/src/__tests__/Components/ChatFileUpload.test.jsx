@@ -94,7 +94,7 @@ describe('ChatFileUpload Component', () => {
     ));
 
     useAuth.mockReturnValue({
-      getIdentityPoolCredentials: vi.fn(),
+      getCredentials: vi.fn(),
       bedrockRuntimeClient: {},
       numaChatDynamoUtils: {
         addMessage: mockAddMessage,

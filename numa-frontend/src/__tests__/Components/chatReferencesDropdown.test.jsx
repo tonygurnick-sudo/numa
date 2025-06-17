@@ -47,7 +47,7 @@ describe('ChatReferencesDropdown', () => {
   });
 
   test('should not render anything when no references are provided', () => {
-    const { container } = render(<ChatReferencesDropdown references={[]} getIdentityPoolCredentials={() => {}} />);
+    const { container } = render(<ChatReferencesDropdown references={[]} getCredentials={() => {}} />);
     expect(container.firstChild).toBeNull();
   });
 
@@ -57,7 +57,7 @@ describe('ChatReferencesDropdown', () => {
     // Mock getContentType for this specific test
     fileUtils.getContentType.mockReturnValue('text/plain');
 
-    // Mock getIdentityPoolCredentials to return valid AWS credentials
+    // Mock getCredentials to return valid AWS credentials
     const mockGetIdentityPoolCredentials = vi.fn().mockResolvedValue({
       accessKeyId: 'mockAccessKeyId',
       secretAccessKey: 'mockSecretAccessKey',
@@ -70,12 +70,7 @@ describe('ChatReferencesDropdown', () => {
     mockGetSignedUrl.mockResolvedValue('https://mock-signed-url');
 
     await act(async () => {
-      render(
-        <ChatReferencesDropdown
-          references={mockReferences}
-          getIdentityPoolCredentials={mockGetIdentityPoolCredentials}
-        />,
-      );
+      render(<ChatReferencesDropdown references={mockReferences} getCredentials={mockGetIdentityPoolCredentials} />);
     });
 
     // Check for the presence of the dropdown button
@@ -121,12 +116,7 @@ describe('ChatReferencesDropdown', () => {
     mockGetSignedUrl.mockResolvedValue('https://mock-signed-url');
 
     await act(async () => {
-      render(
-        <ChatReferencesDropdown
-          references={mockReferences}
-          getIdentityPoolCredentials={mockGetIdentityPoolCredentials}
-        />,
-      );
+      render(<ChatReferencesDropdown references={mockReferences} getCredentials={mockGetIdentityPoolCredentials} />);
     });
 
     const showButton = screen.getByText('Show References');
@@ -174,12 +164,7 @@ describe('ChatReferencesDropdown', () => {
     mockGetSignedUrl.mockResolvedValue('https://mock-signed-url');
 
     await act(async () => {
-      render(
-        <ChatReferencesDropdown
-          references={mockReferences}
-          getIdentityPoolCredentials={mockGetIdentityPoolCredentials}
-        />,
-      );
+      render(<ChatReferencesDropdown references={mockReferences} getCredentials={mockGetIdentityPoolCredentials} />);
     });
 
     const button = screen.getByText('Show References');
@@ -222,12 +207,7 @@ describe('ChatReferencesDropdown', () => {
     mockGetSignedUrl.mockResolvedValue('https://mock-signed-url');
 
     await act(async () => {
-      render(
-        <ChatReferencesDropdown
-          references={mockReferences}
-          getIdentityPoolCredentials={mockGetIdentityPoolCredentials}
-        />,
-      );
+      render(<ChatReferencesDropdown references={mockReferences} getCredentials={mockGetIdentityPoolCredentials} />);
     });
 
     const button = screen.getByText('Show References');
@@ -257,12 +237,7 @@ describe('ChatReferencesDropdown', () => {
     });
 
     await act(async () => {
-      render(
-        <ChatReferencesDropdown
-          references={mockReferences}
-          getIdentityPoolCredentials={mockGetIdentityPoolCredentials}
-        />,
-      );
+      render(<ChatReferencesDropdown references={mockReferences} getCredentials={mockGetIdentityPoolCredentials} />);
     });
 
     const fileText = screen.queryByText('file.txt');
@@ -292,12 +267,7 @@ describe('ChatReferencesDropdown', () => {
     mockGetSignedUrl.mockResolvedValue('https://mock-signed-url');
 
     await act(async () => {
-      render(
-        <ChatReferencesDropdown
-          references={mockReferences}
-          getIdentityPoolCredentials={mockGetIdentityPoolCredentials}
-        />,
-      );
+      render(<ChatReferencesDropdown references={mockReferences} getCredentials={mockGetIdentityPoolCredentials} />);
     });
 
     const button = screen.getByText('Show References');

@@ -47,7 +47,7 @@ const convertMarkdownToPlainText = (markdown) => {
 };
 
 const ResultActions = ({ content, title = 'Result' }) => {
-  const { getIdentityPoolCredentials } = useAuth();
+  const { getCredentials } = useAuth();
 
   // Modal states
   const [showModal, setShowModal] = useState(false);
@@ -303,7 +303,7 @@ const ResultActions = ({ content, title = 'Result' }) => {
 
       const arrayBuffer = await blob.arrayBuffer();
 
-      await uploadFileToS3(arrayBuffer, contentType, bucketName, fileName, region, getIdentityPoolCredentials);
+      await uploadFileToS3(arrayBuffer, contentType, bucketName, fileName, region, getCredentials);
 
       setSuccessMessage(
         `Text file "${fileName}" has been added and will be searchable in your Company Knowledge after the next scheduled sync.`,

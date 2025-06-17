@@ -24,7 +24,7 @@ function DocOpenBubble({ docTitle, docContent, onClick }) {
 }
 
 const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDocument }) => {
-  const { getIdentityPoolCredentials } = useAuth();
+  const { getCredentials } = useAuth();
   return (
     <div className="chat-messages" style={{ maxWidth: '100%', overflowX: 'hidden', wordWrap: 'break-word' }}>
       {messages.map((message, index) => {
@@ -96,10 +96,7 @@ const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDo
 
               {/* If there are references, show the dropdown */}
               {message.role === 'assistant' && message.references?.length > 0 && (
-                <ChatReferencesDropdown
-                  references={message.references}
-                  getIdentityPoolCredentials={getIdentityPoolCredentials}
-                />
+                <ChatReferencesDropdown references={message.references} getCredentials={getCredentials} />
               )}
 
               {/* If there's a doc, show the bubble */}

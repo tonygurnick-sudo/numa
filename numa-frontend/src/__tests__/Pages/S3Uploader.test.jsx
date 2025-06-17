@@ -140,7 +140,7 @@ describe('S3Uploader', () => {
 
     // Override useAuth hook for this test to use our mock qBusinessClient
     vi.spyOn(AuthProvider, 'useAuth').mockReturnValue({
-      getIdentityPoolCredentials: vi.fn().mockResolvedValue({}),
+      getCredentials: vi.fn().mockResolvedValue({}),
       qBusinessClient: qBusinessClientMock,
     });
 

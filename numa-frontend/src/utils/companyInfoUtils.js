@@ -8,10 +8,10 @@ const COMPANY_INFO_KEY = 'company-data.json'; // Keep the same file name for bac
  * @param {string} profileText - The company profile text
  * @param {string} s3Bucket - The S3 bucket name
  * @param {string} region - The AWS region
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @returns {Promise<string>} - The S3 URI of the saved data
  */
-export const saveCompanyInfo = async (profileText, s3Bucket, region, getIdentityPoolCredentials) => {
+export const saveCompanyInfo = async (profileText, s3Bucket, region, getCredentials) => {
   try {
     // Validate required parameters
     if (!region) {
@@ -47,7 +47,7 @@ export const saveCompanyInfo = async (profileText, s3Bucket, region, getIdentity
       s3Bucket,
       COMPANY_INFO_KEY,
       region,
-      getIdentityPoolCredentials,
+      getCredentials,
     );
   } catch (error) {
     console.error('Error saving company information:', error);
@@ -59,10 +59,10 @@ export const saveCompanyInfo = async (profileText, s3Bucket, region, getIdentity
  * Fetches the company information from S3
  * @param {string} s3Bucket - The S3 bucket name
  * @param {string} region - The AWS region
- * @param {Function} getIdentityPoolCredentials - Function to get AWS credentials
+ * @param {Function} getCredentials - Function to get AWS credentials
  * @returns {Promise<Object>} - The company info object with profile text and metadata
  */
-export const fetchCompanyInfo = async (s3Bucket, region, getIdentityPoolCredentials) => {
+export const fetchCompanyInfo = async (s3Bucket, region, getCredentials) => {
   try {
     // Validate required parameters
     if (!region) {
@@ -77,7 +77,7 @@ export const fetchCompanyInfo = async (s3Bucket, region, getIdentityPoolCredenti
 
     try {
       // Use the fetchFileFromS3 utility function to get the file
-      const fileBlob = await fetchFileFromS3(COMPANY_INFO_KEY, s3Bucket, region, getIdentityPoolCredentials);
+      const fileBlob = await fetchFileFromS3(COMPANY_INFO_KEY, s3Bucket, region, getCredentials);
 
       // Convert blob to JSON
       const text = await fileBlob.text();

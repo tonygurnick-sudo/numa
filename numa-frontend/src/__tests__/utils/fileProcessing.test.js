@@ -97,9 +97,9 @@ describe('File Processing Utils', () => {
         user: { tokens: { idToken: 'auth-context-token' } },
       };
 
-      const getIdentityPoolCredentials = vi.fn().mockResolvedValue({});
+      const getCredentials = vi.fn().mockResolvedValue({});
 
-      const result = await processFile(fileInfo, authContext, getIdentityPoolCredentials, mockNumaPost);
+      const result = await processFile(fileInfo, authContext, getCredentials, mockNumaPost);
 
       // Verify numaPost was called with correct parameters
       expect(mockNumaPost).toHaveBeenCalledWith(

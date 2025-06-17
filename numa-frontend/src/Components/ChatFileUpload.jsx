@@ -15,7 +15,7 @@ const ChatFileUpload = ({
   setIsFileProcessing,
   createNewConversationIfNeeded,
 }) => {
-  const { numaChatDynamoUtils, user, getIdentityPoolCredentials } = useAuth();
+  const { numaChatDynamoUtils, user, getCredentials } = useAuth();
   const { numaPost } = useNumaRequest();
 
   const handleUploadComplete = async (fileArray) => {
@@ -64,12 +64,7 @@ const ChatFileUpload = ({
         const { filePath: s3Key, fileName, fileType, s3Bucket } = fileObj;
 
         try {
-          const processedFile = await processFile(
-            { s3Key, s3Bucket, fileName },
-            authContext,
-            getIdentityPoolCredentials,
-            numaPost,
-          );
+          const processedFile = await processFile({ s3Key, s3Bucket, fileName }, authContext, getCredentials, numaPost);
 
           // Store the result
           results.push(processedFile);

@@ -18,7 +18,7 @@ vi.mock('../../utils/companyInfoUtils', () => ({
 // Mock the AuthProvider
 vi.mock('../../Providers/AuthProvider', () => ({
   useAuth: () => ({
-    getIdentityPoolCredentials: vi.fn(),
+    getCredentials: vi.fn(),
     region: 'us-east-1',
   }),
 }));
