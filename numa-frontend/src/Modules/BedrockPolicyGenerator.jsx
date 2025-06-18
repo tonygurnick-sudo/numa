@@ -7,6 +7,19 @@ export function generateBedrockPolicy() {
         Action: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
         Resource: [`arn:aws:bedrock:*::foundation-model/*`, 'arn:aws:bedrock:*:*:inference-profile/*'], // All all regions as it routes to multiple us regions cross region (can't just use us-east-1)
       },
+      {
+        Effect: 'Allow',
+        Action: [
+          // Retrieval
+          'bedrock:Retrieve',
+          // Knowledge-base management (read-only)
+          'bedrock:ListKnowledgeBases',
+          'bedrock:ListDataSources',
+          'bedrock:ListIngestionJobs',
+          'bedrock:ListKnowledgeBaseDocuments',
+        ],
+        Resource: ['arn:aws:bedrock:*:*:knowledge-base/*'],
+      },
     ],
   };
 }

@@ -26,6 +26,7 @@ import * as path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 import { NumaLogGroup } from './numa-log-group';
+import { KnowledgeBase } from './knowledge-base-construct';
 
 export class NumaFrontendInfra extends Construct {
   readonly apiGateway: Apigatewayv2Api;
@@ -360,4 +361,5 @@ export interface NumaFrontendInfraProps {
   zoneId: string;
   outputsBucket: NumaCorsEnabledBucket;
   accountId: string;
+  knowledgeBase: KnowledgeBase;
 }

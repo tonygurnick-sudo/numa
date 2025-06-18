@@ -110,10 +110,17 @@ export class NumaClientStack extends TerraformStack {
       defaultTags: defaultProvider.defaultTags,
     });
 
+    const knowledgeBase = new KnowledgeBase(this, 'knowledge-base', {
+      clientName: clientConfig.clientName,
+      region: clientConfig.region,
+      embeddingModel: clientConfig.embeddingModel,
+    });
+
     const core = new CoreNumaInfra(this, 'numa', {
       ...clientConfig,
       environmentName: props.environmentName,
       qBusinessProvider: qBusinessProvider,
+      knowledgeBase: knowledgeBase,
     });
 
     const honeycomb = new Honeycomb(this, 'honeycomb', {
@@ -131,13 +138,7 @@ export class NumaClientStack extends TerraformStack {
       userPoolClientId: core.userPoolClient.id,
       outputsBucket: core.outputsBucket,
       accountId: clientConfig.clientAccountId,
-    });
-
-    new KnowledgeBase(this, 'knowledge-base', {
-      clientName: clientConfig.clientName,
-      region: clientConfig.region,
-      dataBucketArn: core.dataBucket.bucket.arn,
-      embeddingModel: clientConfig.embeddingModel,
+      knowledgeBase: knowledgeBase,
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
@@ -230,6 +231,8 @@ export class NumaClientStack extends TerraformStack {
         DATA_BUCKET: core.dataBucket.bucket.bucket,
         HIDE_ADMIN: clientConfig.hideAdmin ?? false,
         PROVISION_Q_RESOURCES: clientConfig.provisionQResources ?? true,
+        PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'q',
+        BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase.knowledgeBaseId,
       }),
       contentType: 'application/json',
     });
@@ -341,6 +344,13 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default true
          */
         provisionQResources: z.boolean().optional(),
+
+        /**
+         * Preferred knowledge base to use for document retrieval
+         *
+         * @default 'q'
+         */
+        preferredKnowledgeBase: z.enum(['q', 'bedrock']).optional(),
 
         // Generic email configuration that can be used by any app
         senderEmail: z.string().optional(),

@@ -2,6 +2,8 @@ import { createContext, useState, useContext, useRef, useEffect, useCallback } f
 import { jwtDecode } from 'jwt-decode';
 import { QBusinessClient } from '@aws-sdk/client-qbusiness';
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
+import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
+import { BedrockAgentClient } from '@aws-sdk/client-bedrock-agent';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { QAppsClient } from '@aws-sdk/client-qapps';
 import { fromWebToken } from '@aws-sdk/credential-providers';
@@ -108,6 +110,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const [loading, setLoading] = useState(true);
   const [qBusinessClient, setQBusinessClient] = useState(null);
   const [bedrockRuntimeClient, setBedrockRuntimeClient] = useState(null);
+  const [bedrockAgentRuntimeClient, setBedrockAgentRuntimeClient] = useState(null);
+  const [bedrockAgentClient, setBedrockAgentClient] = useState(null);
   const [numaChatBedrockUtils, setNumaChatBedrockUtils] = useState(null);
   const [dynamoDBClient, setDynamoDBClient] = useState(null);
   const [numaChatDynamoUtils, setNumaChatDynamoUtils] = useState(null);
@@ -414,6 +418,132 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   }, [user]);
 
+  const initializeBedrockAgentRuntimeClient = useCallback(async () => {
+    if (!user) return;
+
+    const REGION = window.sessionStorage.getItem('REGION');
+    const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS'));
+    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+
+    if (!REGION || !GROUPS || !USER_POOL_ID) {
+      console.error('Missing required session storage values for BedrockAgentRuntimeClient initialization');
+      return;
+    }
+
+    // Validate that user has decoded tokens
+    if (!user.decoded_tokens?.idToken) {
+      console.error('User does not have valid decoded tokens');
+      return;
+    }
+
+    // Get role ARN instead of identity pool ID, defaulting to standard group
+    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const roleArn = GROUPS[userGroup]?.roleArn;
+
+    if (!roleArn) {
+      console.error('No role ARN found for user group:', userGroup, 'available groups:', Object.keys(GROUPS));
+      return;
+    }
+
+    try {
+      // Check if token is expired before using it
+      const decodedIdToken = decodedTokensRef.current.idToken;
+      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
+        console.log('ID token expired, refreshing before BedrockAgentRuntimeClient initialization...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          console.error('Failed to refresh tokens for BedrockAgentRuntimeClient initialization');
+          return;
+        }
+      }
+
+      const idToken = tokensRef.current.idToken;
+      if (!idToken) {
+        console.error('No ID token available for BedrockAgentRuntimeClient initialization');
+        return;
+      }
+
+      const credentials = fromWebToken({
+        roleSessionName: 'numa-bedrock-agent-runtime-client',
+        roleArn: roleArn,
+        webIdentityToken: idToken,
+        durationSeconds: 3600,
+      });
+
+      const newClient = new BedrockAgentRuntimeClient({
+        region: REGION,
+        credentials: await credentials(),
+      });
+
+      setBedrockAgentRuntimeClient(newClient);
+    } catch (error) {
+      console.error('Error in BedrockAgentRuntimeClient initialization:', error);
+    }
+  }, [user]);
+
+  const initializeBedrockAgentClient = useCallback(async () => {
+    if (!user) return;
+
+    const REGION = window.sessionStorage.getItem('REGION');
+    const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS'));
+    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+
+    if (!REGION || !GROUPS || !USER_POOL_ID) {
+      console.error('Missing required session storage values for BedrockAgentClient initialization');
+      return;
+    }
+
+    // Validate that user has decoded tokens
+    if (!user.decoded_tokens?.idToken) {
+      console.error('User does not have valid decoded tokens');
+      return;
+    }
+
+    // Get role ARN instead of identity pool ID, defaulting to standard group
+    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const roleArn = GROUPS[userGroup]?.roleArn;
+
+    if (!roleArn) {
+      console.error('No role ARN found for user group:', userGroup, 'available groups:', Object.keys(GROUPS));
+      return;
+    }
+
+    try {
+      // Check if token is expired before using it
+      const decodedIdToken = decodedTokensRef.current.idToken;
+      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
+        console.log('ID token expired, refreshing before BedrockAgentClient initialization...');
+        const refreshed = await refreshTokens();
+        if (!refreshed) {
+          console.error('Failed to refresh tokens for BedrockAgentClient initialization');
+          return;
+        }
+      }
+
+      const idToken = tokensRef.current.idToken;
+      if (!idToken) {
+        console.error('No ID token available for BedrockAgentClient initialization');
+        return;
+      }
+
+      const credentials = fromWebToken({
+        roleSessionName: 'numa-bedrock-agent-client',
+        roleArn: roleArn,
+        webIdentityToken: idToken,
+        durationSeconds: 3600,
+      });
+
+      const newClient = new BedrockAgentClient({
+        region: REGION,
+        credentials: await credentials(),
+      });
+
+      setBedrockAgentClient(newClient);
+    } catch (error) {
+      console.error('Error in BedrockAgentClient initialization:', error);
+    }
+  }, [user]);
+
   const initializeDynamoDBClient = useCallback(async () => {
     if (!user) return;
 
@@ -559,6 +689,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
         initializeQBusinessClient();
         initializeQAppsClient();
         initializeBedrockRuntimeClient();
+        initializeBedrockAgentRuntimeClient();
+        initializeBedrockAgentClient();
         initializeDynamoDBClient();
       }, 100);
 
@@ -567,6 +699,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
       setQBusinessClient(null);
       setQAppsClient(null);
       setBedrockRuntimeClient(null);
+      setBedrockAgentRuntimeClient(null);
+      setBedrockAgentClient(null);
       setNumaChatBedrockUtils(null);
       setDynamoDBClient(null);
       setNumaChatDynamoUtils(null);
@@ -577,6 +711,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     initializeQBusinessClient,
     initializeQAppsClient,
     initializeBedrockRuntimeClient,
+    initializeBedrockAgentRuntimeClient,
+    initializeBedrockAgentClient,
     initializeDynamoDBClient,
   ]);
 
@@ -984,6 +1120,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     qBusinessClient,
     qAppsClient,
     bedrockRuntimeClient,
+    bedrockAgentRuntimeClient,
+    bedrockAgentClient,
     numaChatBedrockUtils,
     dynamoDBClient,
     numaChatDynamoUtils,
