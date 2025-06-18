@@ -229,7 +229,6 @@ export class NumaClientStack extends TerraformStack {
         OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
         HONEYCOMB_KEY: honeycomb.frontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
         DATA_BUCKET: core.dataBucket.bucket.bucket,
-        HIDE_ADMIN: clientConfig.hideAdmin ?? false,
         PROVISION_Q_RESOURCES: clientConfig.provisionQResources ?? true,
         PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'q',
         BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase.knowledgeBaseId,
@@ -330,13 +329,6 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * Budget configuration for cost monitoring
          */
         budget: budgetConfigSchema.optional(),
-
-        /**
-         * Flag to hide the User Management icon and other features as needed in the UI
-         *
-         * @default false
-         */
-        hideAdmin: z.boolean().optional(),
 
         /**
          * Whether to provision Q Business resources for this client
