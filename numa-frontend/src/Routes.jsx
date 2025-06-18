@@ -4,6 +4,7 @@ import { ResetPassword } from './Pages/ResetPassword';
 import { useAuth } from './Providers/AuthProvider';
 import { NumaLogin } from './Pages/Login';
 import AppProviders from './Providers/AppProviders';
+import { FeatureWrapper } from './Components/RequiredFeaturesWrapper';
 import { ROUTE_CONFIG } from './utils/routeConfig.jsx';
 
 const NumaRoutes = () => {
@@ -24,24 +25,6 @@ const AppRoutes = () => {
     return <div>Loading...</div>;
   }
 
-  const ProtectedRoute = ({ children, requiredFeature }) => {
-    const features = user?.features;
-    if (loading || !tokenValidationComplete) {
-      return <div>Loading...</div>;
-    }
-
-    if (!user) {
-      return <Navigate to="/login" replace />;
-    }
-
-    if (requiredFeature && !features.includes(requiredFeature)) {
-      // TODO: Display a better message to the user
-      return <div>You do not have access to this feature.</div>;
-    }
-
-    return children;
-  };
-
   return (
     <Routes>
       <Route path="/" element={<Navigate to={user ? '/dash' : '/login'} replace />} />
@@ -53,7 +36,11 @@ const AppRoutes = () => {
         <Route
           key={r.path}
           path={r.path}
-          element={<ProtectedRoute requiredFeature={r.requiredFeature}>{r.element(navigate)}</ProtectedRoute>}
+          element={
+            <FeatureWrapper requiredFeature={r.requiredFeature} requireAuth={true} redirectToLogin={true}>
+              {r.element(navigate)}
+            </FeatureWrapper>
+          }
         />
       ))}
     </Routes>

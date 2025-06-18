@@ -5,9 +5,10 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { saveCompanyInfo, fetchCompanyInfo, getProfileText } from '../utils/companyInfoUtils';
+import { FeatureWrapper } from '../Components/RequiredFeaturesWrapper';
 
 const CompanyInfo = () => {
-  const { getCredentials, region: authRegion } = useAuth();
+  const { getCredentials, region: authRegion, user } = useAuth();
   // Fallback to session storage if region is not available from auth context
   const region = authRegion || window.sessionStorage.getItem('REGION');
   const [companyProfile, setCompanyProfile] = useState('');
@@ -138,6 +139,7 @@ const CompanyInfo = () => {
                         <Form.Label>Company Information</Form.Label>
                         <Form.Control
                           as="textarea"
+                          disabled={!user?.features?.includes('addToCompanyData')}
                           rows={15}
                           value={companyProfile}
                           onChange={(e) => setCompanyProfile(e.target.value)}
@@ -154,16 +156,18 @@ const CompanyInfo = () => {
                         </p>
                       )}
 
-                      <Button variant="primary" onClick={handleSave} disabled={isSaving}>
-                        {isSaving ? (
-                          <>
-                            <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />{' '}
-                            Saving...
-                          </>
-                        ) : (
-                          'Save Information'
-                        )}
-                      </Button>
+                      <FeatureWrapper requiredFeature="addToCompanyData">
+                        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+                          {isSaving ? (
+                            <>
+                              <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />{' '}
+                              Saving...
+                            </>
+                          ) : (
+                            'Save Information'
+                          )}
+                        </Button>
+                      </FeatureWrapper>
                     </Form>
                   )}
                 </Card.Body>

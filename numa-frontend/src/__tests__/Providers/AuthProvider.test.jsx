@@ -70,7 +70,7 @@ describe('AuthProvider', () => {
       GROUPS: JSON.stringify({
         admin: {
           roleArn: 'arn:aws:iam::123456789012:role/test-admin-role',
-          features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+          features: ['chat', 'useCompanyData', 'addToCompanyData', 'deleteFromCompanyData', 'manageUsers'],
         },
         standard: {
           roleArn: 'arn:aws:iam::123456789012:role/test-standard-role',
@@ -310,7 +310,7 @@ describe('AuthProvider', () => {
             },
             decoded_tokens: TEST_TOKENS.expired.decoded,
             groups: ['admin'],
-            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+            features: ['chat', 'useCompanyData', 'addToCompanyData', 'deleteFromCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -359,7 +359,7 @@ describe('AuthProvider', () => {
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
             groups: ['admin'],
-            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+            features: ['chat', 'useCompanyData', 'addToCompanyData', 'deleteFromCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -426,7 +426,7 @@ describe('AuthProvider', () => {
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
             groups: ['admin'],
-            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+            features: ['chat', 'useCompanyData', 'addToCompanyData', 'deleteFromCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -506,7 +506,7 @@ describe('AuthProvider', () => {
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
             groups: ['admin'],
-            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+            features: ['chat', 'useCompanyData', 'addToCompanyData', 'deleteFromCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -642,7 +642,7 @@ describe('AuthProvider', () => {
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
             groups: ['admin'],
-            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+            features: ['chat', 'useCompanyData', 'addToCompanyData', 'deleteFromCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -695,7 +695,7 @@ describe('AuthProvider', () => {
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
             groups: ['admin'],
-            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+            features: ['chat', 'useCompanyData', 'addToCompanyData', 'deleteFromCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />
@@ -721,7 +721,7 @@ describe('AuthProvider', () => {
             },
             decoded_tokens: TEST_TOKENS.valid.decoded,
             groups: ['admin'],
-            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+            features: ['chat', 'useCompanyData', 'addToCompanyData', 'deleteFromCompanyData', 'manageUsers'],
           }}
         >
           <TestComponent onAuth={onAuth} />

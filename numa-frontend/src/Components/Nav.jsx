@@ -3,15 +3,13 @@ import Logo from '../../public/numa-logo.svg';
 import { useAuth } from '../Providers/AuthProvider';
 import { useState, useEffect } from 'react';
 import { Navbar, Button, Dropdown } from 'react-bootstrap';
+import { FeatureWrapper } from './RequiredFeaturesWrapper';
 
 const Nav = () => {
   const navigate = useNavigate();
-  const { logout: authLogout, user } = useAuth();
+  const { logout: authLogout } = useAuth();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [navItems, setNavItems] = useState([]);
-
-  const features = user?.features || [];
-  const hasFeature = (feature) => features.includes(feature);
 
   useEffect(() => {
     const handleResize = () => {
@@ -58,15 +56,14 @@ const Nav = () => {
           </Dropdown.Toggle>
 
           <Dropdown.Menu>
-            {navItems.map((item) => {
-              if (item.feature && !hasFeature(item.feature)) return null;
-              return (
-                <Dropdown.Item key={item.to} onClick={() => navigate(item.to)}>
+            {navItems.map((item) => (
+              <FeatureWrapper key={item.to} requiredFeature={item.feature}>
+                <Dropdown.Item onClick={() => navigate(item.to)}>
                   <i className={`${item.icon} me-2`} style={{ color: 'var(--color-icon)' }}></i>
                   {item.label}
                 </Dropdown.Item>
-              );
-            })}
+              </FeatureWrapper>
+            ))}
             <Dropdown.Divider />
             <div className="px-2">
               <Button onClick={logout} className="w-100">
@@ -92,36 +89,28 @@ const Nav = () => {
         <ul className="nav-links">
           {navItems
             .filter((item) => !item.footerOnly)
-            .map((item) => {
-              if (item.feature && !hasFeature(item.feature)) return null;
-              return (
-                <li key={item.to}>
+            .map((item) => (
+              <FeatureWrapper key={item.to} requiredFeature={item.feature}>
+                <li>
                   <div className="nav-link nav-item" onClick={() => navigate(item.to)} title={item.label} role="button">
                     <i className={`${item.icon} icon`} style={{ color: 'var(--color-icon)' }}></i>
                     <span className="icon-label">{item.label}</span>
                   </div>
                 </li>
-              );
-            })}
+              </FeatureWrapper>
+            ))}
         </ul>
 
         <footer className="footer">
           {navItems
             .filter((item) => item.footerOnly)
-            .map((item) => {
-              if (item.feature && !hasFeature(item.feature)) return null;
-              return (
-                <div
-                  key={item.to}
-                  className="nav-link nav-item"
-                  onClick={() => navigate(item.to)}
-                  title={item.label}
-                  role="button"
-                >
+            .map((item) => (
+              <FeatureWrapper key={item.to} requiredFeature={item.feature}>
+                <div className="nav-link nav-item" onClick={() => navigate(item.to)} title={item.label} role="button">
                   <i className={`${item.icon} icon`} style={{ color: 'var(--color-icon)' }}></i>
                 </div>
-              );
-            })}
+              </FeatureWrapper>
+            ))}
           <button onClick={logout} className="btn-logout" title="Logout">
             <div className="icon-with-text">
               <i className="bi bi-box-arrow-right"></i>
