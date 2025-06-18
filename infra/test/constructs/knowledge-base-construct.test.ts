@@ -10,7 +10,6 @@ class TestStack extends TerraformStack {
     new KnowledgeBase(this, 'test', {
       region: 'ap-southeast-2',
       clientName: props.clientName,
-      dataBucketArn: 'arn:aws:s3:::abcd',
       embeddingModel: 'amazon.titan-embed-text-v2:0',
     });
   }

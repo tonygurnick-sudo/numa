@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { CognitoUserGroup } from '@cdktf/provider-aws/lib/cognito-user-group';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
+import { KnowledgeBase } from './knowledge-base-construct';
 
 // Define the feature set types
 export type FeatureSetName = 'chat' | 'useCompanyData' | 'editCompanyData' | 'manageUsers';
@@ -38,6 +39,7 @@ export const cognitoIdpConstructPropsSchema = z.object({
   featureSets: z.record(z.array(z.enum(['chat', 'useCompanyData', 'editCompanyData', 'manageUsers']))).optional(),
   groups: z.record(z.array(z.enum(['chat', 'useCompanyData', 'editCompanyData', 'manageUsers']))).optional(),
   qBusinessApplicationId: z.string().optional(), // Add optional Q Business application ID
+  knowledgeBase: z.instanceof(KnowledgeBase),
 });
 
 interface PolicyStatement {
@@ -125,6 +127,12 @@ export class CognitoIdpConstruct extends Construct {
           actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
           resources: ['*'], // TODO: Update to specific models and agents when implemented
         },
+        // Bedrock knowledge base retrieval for chat
+        {
+          effect: 'Allow',
+          actions: ['bedrock:Retrieve'],
+          resources: [props.knowledgeBase.knowledgeBaseArn],
+        },
         // KMS permissions (only when invoked by Q)
         {
           effect: 'Allow',
@@ -196,8 +204,25 @@ export class CognitoIdpConstruct extends Construct {
                     },
                   ]
                 : []),
+              // ListDocuments is used in S3 uploader for knowledge base status. All users with data access need it.
+              {
+                effect: 'Allow',
+                actions: ['qbusiness:ListDocuments'],
+                resources: ['*'], // TODO: Change to specific resource
+              },
             ]
           : []),
+        // Bedrock knowledge base read-only permissions for viewing status
+        {
+          effect: 'Allow',
+          actions: [
+            'bedrock:ListKnowledgeBases',
+            'bedrock:ListDataSources',
+            'bedrock:ListIngestionJobs',
+            'bedrock:ListKnowledgeBaseDocuments',
+          ],
+          resources: [props.knowledgeBase.knowledgeBaseArn],
+        },
       ],
 
       // Edit Company Data Feature Set

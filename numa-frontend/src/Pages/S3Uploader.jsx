@@ -3,18 +3,12 @@ import { Container, Row, Col, Card, Button, Form, Alert, Table, Modal } from 're
 import { getUrlTagFromS3Object, deleteFileFromS3 } from '../utils/s3Utils';
 import { WebCrawler } from '../Components/WebCrawler';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
-import {
-  ListDataSourcesCommand,
-  ListDataSourceSyncJobsCommand,
-  ListDocumentsCommand,
-  StartDataSourceSyncJobCommand,
-} from '@aws-sdk/client-qbusiness';
-
 import { useAuth } from '../Providers/AuthProvider';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav as TopNav } from '../Components/Nav';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { FileUploader } from '../Components/FileUploader';
+import { getKnowledgeBaseState } from '../utils/knowledgeBaseUtils';
 
 /**
  * Build a nested folder tree from S3 object keys.
@@ -192,6 +186,64 @@ function documentIdToKey(documentId) {
 }
 
 /**
+ * Get badge variant for data source status
+ */
+function getDataSourceStatusVariant(status) {
+  switch (status?.toUpperCase()) {
+    case 'ACTIVE':
+    case 'AVAILABLE':
+      return 'success';
+    case 'CREATING':
+    case 'UPDATING':
+    case 'PENDING_CREATION':
+      return 'warning';
+    case 'FAILED':
+    case 'DELETING':
+      return 'danger';
+    default:
+      return 'secondary';
+  }
+}
+
+/**
+ * Format data source type for display
+ */
+function formatDataSourceType(type, source) {
+  if (source === 'bedrock') {
+    // Bedrock doesn't provide type in the same way, infer from name or default to S3
+    return type === 'S3' || !type ? 'Numa Bedrock Knowledge Base' : type;
+  }
+  return type === 'S3' ? 'Numa Q Business Knowledge Base' : type || 'Unknown';
+}
+
+/**
+ * Format data source name to be user-friendly
+ * Uses consistent client name format
+ */
+function formatDataSourceName(name, clientName) {
+  if (!name && !clientName) return 'Unnamed Data Source';
+
+  // For consistent naming, use the client name format
+  if (clientName) {
+    // Format the client name to be user-friendly (Title Case)
+    const formattedClientName = clientName
+      .replace(/[-_]/g, ' ') // Replace hyphens and underscores with spaces
+      .split(' ')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
+      .join(' ');
+
+    return `${formattedClientName} Numa Data Source`;
+  }
+
+  // Fallback to original formatting if no client name
+  return name
+    .replace(/[-_]/g, ' ') // Replace hyphens and underscores with spaces
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
+    .join(' ');
+}
+
+/**
  * Main S3Uploader component
  */
 export function S3Uploader() {
@@ -201,11 +253,12 @@ export function S3Uploader() {
   const [fileToDelete, setFileToDelete] = useState(null);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
-  const [dataSourceId, setDataSourceId] = useState(null);
+  const [, setDataSourceId] = useState(null);
 
   const [syncStatus, setSyncStatus] = useState(null);
   const [syncJobStatus, setSyncJobStatus] = useState(null);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const [syncMetrics, setSyncMetrics] = useState(null);
 
@@ -216,13 +269,19 @@ export function S3Uploader() {
   const [expandedFoldersIndexed, setExpandedFoldersIndexed] = useState(new Set());
 
   const [kbDocuments, setKbDocuments] = useState([]);
+  const [kbStateError, setKbStateError] = useState(null);
+  const [kbStateLoading, setKbStateLoading] = useState(false);
+  const [dataSources, setDataSources] = useState([]);
 
-  const { getCredentials, qBusinessClient } = useAuth();
+  const { getCredentials, qBusinessClient, bedrockAgentClient, region: authRegion } = useAuth();
+  // Fallback to session storage if region is not available from auth context
+  const region = authRegion || window.sessionStorage.getItem('REGION');
 
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
   const Q_INDEX_ID = window.sessionStorage.getItem('Q_INDEX_ID');
   const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
-
+  const PREFERRED_KNOWLEDGE_BASE = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'q';
+  const BEDROCK_KNOWLEDGE_BASE_ID = window.sessionStorage.getItem('BEDROCK_KNOWLEDGE_BASE_ID');
   const initialFetchDone = useRef(false);
 
   /**
@@ -291,63 +350,51 @@ export function S3Uploader() {
   }
 
   /**
-   * Check data source, sync status, and fetch KB documents.
+   * Check data source, sync status, and fetch KB documents (via utility).
    */
   async function checkDataSourceSync() {
+    if (kbStateLoading) return; // Prevent concurrent calls
+
+    setKbStateLoading(true);
+    setKbStateError(null);
+
     try {
-      if (!qBusinessClient) return;
-
-      // List data sources
-      const dsCmd = new ListDataSourcesCommand({
-        applicationId: Q_APPLICATION_ID,
-        indexId: Q_INDEX_ID,
+      const state = await getKnowledgeBaseState({
+        preferredKnowledgeBase: PREFERRED_KNOWLEDGE_BASE,
+        qBusinessClient,
+        qApplicationId: Q_APPLICATION_ID,
+        qIndexId: Q_INDEX_ID,
+        bedrockAgentClient,
+        bedrockKnowledgeBaseId: BEDROCK_KNOWLEDGE_BASE_ID,
+        clientDisplayName: `numa-${CLIENT_NAME}`,
+        getCredentials,
+        region,
       });
-      const dsResp = await qBusinessClient.send(dsCmd);
 
-      const s3DataSource = dsResp.dataSources?.find((ds) => ds.displayName === `numa-${CLIENT_NAME}`);
-      if (!s3DataSource) {
+      if (state?.error === 'no-data-source') {
+        console.warn(state.message);
+        setSyncStatus('NOT_CONFIGURED');
         return;
       }
-      setSyncStatus(s3DataSource.status);
-      setDataSourceId(s3DataSource.dataSourceId);
 
-      // List sync jobs
-      const syncCmd = new ListDataSourceSyncJobsCommand({
-        applicationId: Q_APPLICATION_ID,
-        indexId: Q_INDEX_ID,
-        dataSourceId: s3DataSource.dataSourceId,
-        maxResults: 10,
-      });
-      const syncResp = await qBusinessClient.send(syncCmd);
-
-      const latestJob = syncResp.history?.[0];
-      if (latestJob) {
-        setSyncJobStatus(latestJob.status);
-        setSyncMetrics(latestJob.metrics);
+      if (state && !state.error) {
+        setDataSourceId(state.dataSourceId);
+        setSyncStatus(state.syncStatus);
+        setSyncJobStatus(state.syncJobStatus);
+        setLastSuccessfulSync(state.lastSuccessfulSync);
+        setLastUpdated(state.lastUpdated);
+        setSyncMetrics(state.syncMetrics);
+        setKbDocuments(state.documents);
+        setDataSources(state.dataSources || []);
+      } else {
+        console.error('Failed to fetch KB state:', state?.error);
+        setKbStateError(state?.error || 'Unknown error');
       }
-      // Optionally set lastSuccessfulSync for display
-      const lastSuccess = syncResp.history?.find((job) => job.status === 'SUCCEEDED' || job.status === 'INCOMPLETE');
-      if (lastSuccess) {
-        setLastSuccessfulSync(lastSuccess.endTime);
-      }
-
-      // List documents from the Knowledge Base using pagination.
-      let allDocuments = [];
-      let nextToken = undefined;
-      do {
-        const docCmd = new ListDocumentsCommand({
-          applicationId: Q_APPLICATION_ID,
-          indexId: Q_INDEX_ID,
-          dataSourceIds: [s3DataSource.dataSourceId],
-          ...(nextToken ? { nextToken } : {}),
-        });
-        const docResp = await qBusinessClient.send(docCmd);
-        allDocuments = allDocuments.concat(docResp.documentDetailList || []);
-        nextToken = docResp.nextToken;
-      } while (nextToken);
-      setKbDocuments(allDocuments);
     } catch (err) {
-      console.error('Failed to check data source or sync jobs', err);
+      console.error('checkDataSourceSync error:', err);
+      setKbStateError(err.message || 'Failed to check knowledge base state');
+    } finally {
+      setKbStateLoading(false);
     }
   }
 
@@ -355,17 +402,22 @@ export function S3Uploader() {
    * On mount, fetch files & check sync
    */
   useEffect(() => {
-    if (!initialFetchDone.current && qBusinessClient) {
+    if (
+      !initialFetchDone.current &&
+      ((PREFERRED_KNOWLEDGE_BASE === 'q' && qBusinessClient) ||
+        (PREFERRED_KNOWLEDGE_BASE === 'bedrock' && bedrockAgentClient))
+    ) {
       initialFetchDone.current = true;
       fetchFiles();
       checkDataSourceSync();
     }
-  }, [qBusinessClient]);
+  }, []);
 
   /**
    * Refresh status & file list
    */
   async function handleRefreshStatus() {
+    setKbStateError(null); // Clear any previous errors
     await checkDataSourceSync();
     await fetchFiles();
   }
@@ -396,7 +448,7 @@ export function S3Uploader() {
   }
 
   /**
-   * Delete the file from S3 and trigger a sync
+   * Delete the file from S3 (index updates on scheduled sync)
    */
   async function handleDeleteFile() {
     if (!fileToDelete) return;
@@ -410,24 +462,9 @@ export function S3Uploader() {
       // Delete the file from S3
       await deleteFileFromS3(fileToDelete.originalKey, bucketName, region, getCredentials);
 
-      // Start a sync job to update the index
-      if (qBusinessClient && dataSourceId) {
-        try {
-          const syncCmd = new StartDataSourceSyncJobCommand({
-            applicationId: Q_APPLICATION_ID,
-            indexId: Q_INDEX_ID,
-            dataSourceId: dataSourceId,
-          });
-          await qBusinessClient.send(syncCmd);
-          console.log('Knowledge base sync job started');
-        } catch (syncError) {
-          console.error('Failed to start sync job:', syncError);
-          // Continue anyway - the file has been deleted from S3
-        }
-      }
-
-      // Refresh the file list
+      // Refresh the file list and KB state
       await fetchFiles();
+      await checkDataSourceSync();
       setShowDeleteConfirmation(false);
     } catch (error) {
       console.error('Error deleting file:', error);
@@ -552,6 +589,14 @@ export function S3Uploader() {
                   <div className="spinner-border text-primary">
                     <span className="visually-hidden">Loading…</span>
                   </div>
+                  {kbStateLoading && (
+                    <p className="mt-3 text-muted small mb-0">
+                      Checking knowledge base status and comparing with uploaded files...
+                    </p>
+                  )}
+                  {isLoadingFiles && !kbStateLoading && (
+                    <p className="mt-3 text-muted small mb-0">Loading files from S3...</p>
+                  )}
                 </div>
               ) : rows.length === 0 ? (
                 <div className="text-center bg-light rounded" style={{ padding: '1rem' }}>
@@ -657,7 +702,9 @@ export function S3Uploader() {
    * Compute failed documents from KB (documents with an error).
    */
   const failedDocuments = useMemo(() => {
-    return kbDocuments.filter((doc) => doc.error && Object.keys(doc.error).length > 0 && doc.error.errorMessage);
+    return kbDocuments.filter(
+      (doc) => (doc.error && Object.keys(doc.error).length > 0 && doc.error.errorMessage) || doc.status === 'FAILED',
+    );
   }, [kbDocuments]);
 
   /**
@@ -697,17 +744,32 @@ export function S3Uploader() {
                   size="sm"
                   onClick={handleRefreshStatus}
                   className="position-absolute top-0 end-0 m-2"
+                  disabled={kbStateLoading}
                 >
-                  <i className="bi bi-arrow-repeat me-1" />
+                  {kbStateLoading ? (
+                    <span className="spinner-border spinner-border-sm me-1" />
+                  ) : (
+                    <i className="bi bi-arrow-repeat me-1" />
+                  )}
                   Refresh
                 </Button>
+
+                {kbStateError && (
+                  <Alert variant="warning" className="mb-3">
+                    <strong>Knowledge Base Status Error:</strong> {kbStateError}
+                    <br />
+                    <small>Try refreshing or check the console for more details.</small>
+                  </Alert>
+                )}
 
                 <Row>
                   <Col xs={12} md={6}>
                     <div className="mb-2">
                       <strong>Status:</strong>{' '}
-                      {syncStatus === 'ACTIVE' ? (
-                        <span className="badge bg-success ms-1">Active</span>
+                      {syncStatus === 'ACTIVE' || syncStatus === 'AVAILABLE' ? (
+                        <span className="badge bg-success ms-1">
+                          {syncStatus === 'ACTIVE' ? 'Active' : 'Available'}
+                        </span>
                       ) : (
                         <span className="badge bg-secondary ms-1">{syncStatus || 'Unknown'}</span>
                       )}
@@ -715,14 +777,14 @@ export function S3Uploader() {
 
                     {lastSuccessfulSync ? (
                       <p className="text-muted small mb-2">
-                        <strong>Last indexed at:</strong> {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
+                        <strong>Last synced at:</strong> {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
                       </p>
                     ) : (
                       <p className="text-muted small mb-2">No successful sync yet.</p>
                     )}
 
                     <p className="text-muted small mb-2">
-                      <strong>Next scheduled sync:</strong> {getNextSyncTime().toLocaleTimeString()}
+                      <strong>Next scheduled index:</strong> {getNextSyncTime().toLocaleTimeString()}
                     </p>
 
                     {syncJobStatus === 'SYNCING' && (
@@ -737,16 +799,123 @@ export function S3Uploader() {
                       <div className="text-muted small">
                         <strong>Latest Sync Metrics:</strong>
                         <ul className="list-unstyled">
-                          <li>Documents Added: {syncMetrics.documentsAdded}</li>
-                          <li>Documents Deleted: {syncMetrics.documentsDeleted}</li>
-                          <li>Documents Failed: {syncMetrics.documentsFailed}</li>
-                          <li>Documents Modified: {syncMetrics.documentsModified}</li>
-                          <li>Documents Scanned: {syncMetrics.documentsScanned}</li>
+                          <li>
+                            Documents Added:{' '}
+                            {syncMetrics.documentsAdded || syncMetrics.numberOfNewDocumentsIndexed || 0}
+                          </li>
+                          <li>
+                            Documents Deleted:{' '}
+                            {syncMetrics.documentsDeleted || syncMetrics.numberOfDocumentsDeleted || 0}
+                          </li>
+                          <li>
+                            Documents Failed: {syncMetrics.documentsFailed || syncMetrics.numberOfDocumentsFailed || 0}
+                          </li>
+                          <li>
+                            Documents Modified:{' '}
+                            {syncMetrics.documentsModified || syncMetrics.numberOfModifiedDocumentsIndexed || 0}
+                          </li>
+                          <li>
+                            Documents Scanned:{' '}
+                            {syncMetrics.documentsScanned || syncMetrics.numberOfDocumentsScanned || 0}
+                          </li>
                         </ul>
                       </div>
                     )}
                   </Col>
                 </Row>
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+
+        {/* Data Sources Section */}
+        <Row className="g-4 mb-4">
+          <Col xs={12}>
+            <Card>
+              <Card.Header>
+                <Card.Title className="mb-0">Data Sources</Card.Title>
+              </Card.Header>
+              <Card.Body>
+                {kbStateLoading ? (
+                  <div className="text-center p-4">
+                    <div className="spinner-border text-primary">
+                      <span className="visually-hidden">Loading…</span>
+                    </div>
+                    <p className="mt-3 text-muted small mb-0">Loading data sources...</p>
+                  </div>
+                ) : kbStateError ? (
+                  <Alert variant="warning" className="mb-0">
+                    <strong>Error loading data sources:</strong> {kbStateError}
+                  </Alert>
+                ) : dataSources.length === 0 ? (
+                  <div className="text-center bg-light rounded p-4">
+                    <p className="mb-0 text-muted">No data sources found</p>
+                  </div>
+                ) : (
+                  <div className="row">
+                    {dataSources.map((dataSource, index) => (
+                      <div key={dataSource.dataSourceId || index} className="col-md-6 col-lg-4 mb-3">
+                        <div className="card h-100">
+                          <div className="card-body">
+                            <div className="d-flex justify-content-between align-items-start mb-2">
+                              <h6 className="card-title mb-0">
+                                {dataSource.isWebCrawler ? (
+                                  <i className="bi bi-globe2 me-2 text-primary"></i>
+                                ) : (
+                                  <i className="bi bi-database me-2 text-primary"></i>
+                                )}
+                                {formatDataSourceName(dataSource.displayName || dataSource.name, CLIENT_NAME)}
+                              </h6>
+                              <span className={`badge bg-${getDataSourceStatusVariant(dataSource.status)}`}>
+                                {dataSource.status || 'Unknown'}
+                              </span>
+                            </div>
+
+                            <div className="mb-2">
+                              <small className="text-muted">
+                                <strong>Type:</strong> {formatDataSourceType(dataSource.type, PREFERRED_KNOWLEDGE_BASE)}
+                              </small>
+                            </div>
+
+                            {dataSource.dataSourceId && (
+                              <div className="mb-2">
+                                <small className="text-muted">
+                                  <strong>ID:</strong> <code className="small">{dataSource.dataSourceId}</code>
+                                </small>
+                              </div>
+                            )}
+
+                            {/* Web Crawler specific info */}
+                            {dataSource.isWebCrawler && dataSource.pageCount && (
+                              <div className="mb-2">
+                                <small className="text-muted">
+                                  <strong>Pages:</strong> {dataSource.pageCount}
+                                </small>
+                              </div>
+                            )}
+
+                            {dataSource.isWebCrawler && dataSource.lastCrawled && (
+                              <div className="mb-2">
+                                <small className="text-muted">
+                                  <strong>Crawl Date:</strong>{' '}
+                                  {new Date(dataSource.lastCrawled).toLocaleString('en-NZ')}
+                                </small>
+                              </div>
+                            )}
+
+                            {!dataSource.isWebCrawler && lastUpdated && (
+                              <div className="mb-0">
+                                <small className="text-muted">
+                                  <strong>Last Synced:</strong> {new Date(lastUpdated).toLocaleString('en-NZ')}
+                                </small>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </Card.Body>
             </Card>
           </Col>
@@ -779,7 +948,7 @@ export function S3Uploader() {
             {renderTreeTableSection({
               title: `Pending Files (${pendingFiles.length})`,
               rows: pendingRows,
-              isLoading: isLoadingFiles,
+              isLoading: isLoadingFiles || kbStateLoading,
               searchValue: '', // no search for pending files
               setSearchValue: () => {},
               expandedSet: expandedFoldersPending,
@@ -795,7 +964,7 @@ export function S3Uploader() {
             {renderTreeTableSection({
               title: `Your Knowledge Base Files (${indexedFiles.length})`,
               rows: indexedRows,
-              isLoading: isLoadingFiles,
+              isLoading: isLoadingFiles || kbStateLoading,
               searchValue: indexedSearch,
               setSearchValue: setIndexedSearch,
               expandedSet: expandedFoldersIndexed,

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button, Container, Row, Col } from 'react-bootstrap';
 import { ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
-import { SearchRelevantContentCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
+import { queryKnowledgeBase, formatKnowledgeBaseResults, preWarmAuroraDatabase } from '../utils/knowledgeBaseUtils';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
@@ -40,6 +40,7 @@ const NumaChat = () => {
     user,
     qBusinessClient,
     bedrockRuntimeClient,
+    bedrockAgentRuntimeClient,
     numaChatDynamoUtils,
     getAccessToken,
     getCredentials,
@@ -56,6 +57,8 @@ const NumaChat = () => {
   const STREAMING_MODEL_ID = getModelId(REGION, MODEL_TYPES.DEFAULT);
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
   const Q_RETRIEVER_ID = window.sessionStorage.getItem('Q_RETRIEVER_ID');
+  const PREFERRED_KNOWLEDGE_BASE = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'q';
+  const BEDROCK_KNOWLEDGE_BASE_ID = window.sessionStorage.getItem('BEDROCK_KNOWLEDGE_BASE_ID');
   const MAX_DATA_SOURCE_ITEMS = 6;
   const MAX_WEB_SEARCH_RESULTS = 2;
   const TODAY = new Date();
@@ -217,6 +220,18 @@ const NumaChat = () => {
     }
     initializeConversation();
   }, [numaChatDynamoUtils, sub]);
+
+  // Pre-warm Aurora database when component mounts (only for Bedrock knowledge base)
+  useEffect(() => {
+    const warmUpDatabase = async () => {
+      if (PREFERRED_KNOWLEDGE_BASE === 'bedrock' && bedrockAgentRuntimeClient && BEDROCK_KNOWLEDGE_BASE_ID) {
+        console.log('Pre-warming Aurora database on page load...');
+        await preWarmAuroraDatabase(bedrockAgentRuntimeClient, BEDROCK_KNOWLEDGE_BASE_ID);
+      }
+    };
+
+    warmUpDatabase();
+  }, [PREFERRED_KNOWLEDGE_BASE, bedrockAgentRuntimeClient, BEDROCK_KNOWLEDGE_BASE_ID]);
 
   // Helper to refresh sidebar
   const refreshSidebar = () => {
@@ -383,50 +398,73 @@ const NumaChat = () => {
           .catch((err) => console.error('Error storing user message:', err));
       }
 
-      // 3) Potentially retrieve data from Q if queryDataSources is on
+      // 3) Potentially retrieve data from knowledge base if queryDataSources
       stopGenerationRef.current = false;
       if (queryDataSources && qBusinessClient) {
         // Insert ephemeral bubble for 'querying'
         setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'querying' }]);
 
-        const dsInput = {
-          applicationId: Q_APPLICATION_ID,
-          queryText: inputMessage,
-          contentSource: {
-            retriever: { retrieverId: Q_RETRIEVER_ID },
-          },
-          maxResults: MAX_DATA_SOURCE_ITEMS,
+        // Configure the unified knowledge base query
+        const knowledgeBaseConfig = {
+          preferredKnowledgeBase: PREFERRED_KNOWLEDGE_BASE,
+          qBusinessClient,
+          bedrockAgentClient: bedrockAgentRuntimeClient,
+          qApplicationId: Q_APPLICATION_ID,
+          qRetrieverId: Q_RETRIEVER_ID,
+          bedrockKnowledgeBaseId: BEDROCK_KNOWLEDGE_BASE_ID,
         };
-        const dsCommand = new SearchRelevantContentCommand(dsInput);
-
-        let finalInputText = 'Retrieving knowledge from the users data source...\n';
+        console.log('Knowledge base configuration:', {
+          preferredKnowledgeBase: PREFERRED_KNOWLEDGE_BASE,
+          hasQBusinessClient: !!qBusinessClient,
+          hasBedrockAgentClient: !!bedrockAgentRuntimeClient,
+          qApplicationId: Q_APPLICATION_ID,
+          qRetrieverId: Q_RETRIEVER_ID,
+          bedrockKnowledgeBaseId: BEDROCK_KNOWLEDGE_BASE_ID,
+        });
 
         try {
-          const dsResponse = await qBusinessClient.send(dsCommand);
-          console.log('Q data sources response:', dsResponse);
+          // Use the unified knowledge base query function
+          const knowledgeResult = await queryKnowledgeBase(knowledgeBaseConfig, inputMessage, MAX_DATA_SOURCE_ITEMS);
 
-          if (dsResponse.relevantContent && dsResponse.relevantContent.length > 0) {
-            // Build knowledge text
-            const knowledgeText = dsResponse.relevantContent
-              .map((ds) => {
-                const docUri = ds.documentUri || 'N/A';
-                const snippet = ds.content || '';
-                return `${snippet}\nDocument URI: ${docUri}`;
+          console.log('Unified knowledge base response:', knowledgeResult);
+
+          // Format the results for display
+          const finalInputText = formatKnowledgeBaseResults(knowledgeResult);
+
+          // Store references from the result
+          dsReferences = knowledgeResult.references || [];
+
+          // Also store a 'knowledge' message
+          if (numaChatDynamoUtils) {
+            await numaChatDynamoUtils
+              .addMessage({
+                conversationId: cid,
+                userId: sub,
+                messageType: 'knowledge',
+                role: 'assistant',
+                content: finalInputText,
+                metadata: knowledgeResult.metadata,
               })
-              .join('\n\n');
-
-            // Store references in an array
-            dsReferences = dsResponse.relevantContent.filter((ds) => ds.documentUri).map((ds) => ds.documentUri);
-
-            finalInputText += '**Relevant Data Source Content:**\n';
-            finalInputText += knowledgeText;
-            finalInputText += '\n**End of Relevant Data Source Content**';
-          } else {
-            finalInputText += 'No relevant content found in data sources.';
+              .catch((err) => console.error('Error storing knowledge message:', err));
           }
         } catch (err) {
-          console.error('Error querying data sources:', err);
-          finalInputText += 'Error querying data sources. Please try again later.';
+          console.error('Error querying knowledge base:', err);
+          const errorMessage = 'Error querying knowledge base. Please try again later.';
+
+          // Store error message
+          if (numaChatDynamoUtils) {
+            await numaChatDynamoUtils
+              .addMessage({
+                conversationId: cid,
+                userId: sub,
+                messageType: 'knowledge',
+                role: 'assistant',
+                content: errorMessage,
+                metadata: { error: err.message, preferredKnowledgeBase: PREFERRED_KNOWLEDGE_BASE },
+              })
+              .catch((err) => console.error('Error storing error message:', err));
+          }
+
           if (err.message == 'aws:PrincipalTag/Email tag is missing from the ID token claims') {
             try {
               const createSubscriptionResponse = await createSubscription();
@@ -437,22 +475,9 @@ const NumaChat = () => {
             }
 
             // Try again
-            const dsResponse = await qBusinessClient.send(dsCommand);
-            console.log('Q data sources response:', dsResponse);
+            const knowledgeResult = await queryKnowledgeBase(knowledgeBaseConfig, inputMessage, MAX_DATA_SOURCE_ITEMS);
+            console.log('Unified knowledge base response after subscription:', knowledgeResult);
           }
-        }
-
-        // Also store a 'knowledge' message
-        if (numaChatDynamoUtils) {
-          await numaChatDynamoUtils
-            .addMessage({
-              conversationId: cid,
-              userId: sub,
-              messageType: 'knowledge',
-              role: 'assistant',
-              content: finalInputText,
-            })
-            .catch((err) => console.error('Error storing knowledge message:', err));
         }
 
         // Remove ephemeral 'querying' bubble

@@ -42,6 +42,7 @@ import { ConfigBucket } from './config-bucket-construct';
 import { z } from 'zod';
 import { WebCrawlerConstruct } from './web-crawler-construct';
 import { CognitoIdpConstruct } from './cognito-idp-construct';
+import { KnowledgeBase } from './knowledge-base-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly userPoolId: string;
@@ -717,6 +718,7 @@ export class CoreNumaInfra extends Construct {
       featureSets: props.featureSets,
       groups: props.groups,
       qBusinessApplicationId: qBusinessApplicationIdForIdp,
+      knowledgeBase: props.knowledgeBase,
     });
 
     // Expose whichever role Cognito decided should be the default web‑identity role.
@@ -877,4 +879,5 @@ export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {
    * Provider for QBusiness resources.
    */
   qBusinessProvider?: AwsProvider;
+  knowledgeBase: KnowledgeBase;
 };

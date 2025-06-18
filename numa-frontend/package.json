@@ -13,6 +13,8 @@
     "test:e2e:ui": "sh -c 'CLIENT=$1 playwright test --ui'"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-agent": "^3.828.0",
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.787.0",
     "@aws-sdk/client-bedrock-runtime": "^3.751.0",
     "@aws-sdk/client-cognito-identity": "^3.668.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.670.0",
@@ -27,6 +29,7 @@
     "@mdxeditor/editor": "^3.19.3",
     "@opentelemetry/auto-instrumentations-web": "^0.47.0",
     "@popperjs/core": "^2.11.8",
+    "@smithy/core": "^3.5.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
     "amazon-cognito-identity-js": "^6.3.12",

@@ -24,6 +24,9 @@ import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-r
 import { StateMachine } from 'asl-types';
 
 export class KnowledgeBase extends Construct {
+  public readonly knowledgeBaseId: string;
+  public readonly knowledgeBaseArn: string;
+
   constructor(scope: Construct, id: string, props: KnowledgeBaseProps) {
     super(scope, id);
 
@@ -32,6 +35,11 @@ export class KnowledgeBase extends Construct {
     const databaseName = 'arcanum';
     const model = props.embeddingModel;
     const dimensions = 1024;
+
+    // Dynamically generate the bucket ARN based on
+    // client name so it can be defined before the bucket is created
+    // This is a workaround to avoid circular dependencies.
+    const dataBucketArn = `arn:aws:s3:::${props.clientName}-data`;
 
     const vpc = new Vpc(this, 'vpc', {
       cidrBlock,
@@ -140,11 +148,11 @@ export class KnowledgeBase extends Construct {
         statement: [
           {
             actions: ['s3:ListBucket'],
-            resources: [props.dataBucketArn],
+            resources: [dataBucketArn],
           },
           {
             actions: ['s3:GetObject'],
-            resources: [`${props.dataBucketArn}/*`],
+            resources: [`${dataBucketArn}/*`],
           },
         ],
       },
@@ -327,6 +335,10 @@ export class KnowledgeBase extends Construct {
       dependsOn: [invocation, ...policyAttachments],
     });
 
+    // Expose the knowledge base ID for frontend configuration
+    this.knowledgeBaseId = knowledgeBase.id;
+    this.knowledgeBaseArn = knowledgeBase.arn;
+
     const dataSource = new BedrockagentDataSource(this, 'knowledge-base-datasource', {
       name: props.clientName + '-knowledge-base-datasource',
       knowledgeBaseId: knowledgeBase.id,
@@ -335,7 +347,7 @@ export class KnowledgeBase extends Construct {
           type: 'S3',
           s3Configuration: [
             {
-              bucketArn: props.dataBucketArn,
+              bucketArn: dataBucketArn,
             },
           ],
         },
@@ -497,7 +509,7 @@ export class KnowledgeBase extends Construct {
     });
     new SchedulerSchedule(this, 'schedule', {
       name: props.clientName + '-ingestion',
-      scheduleExpression: 'cron(0 * ? * * *)', // TODO: implement expression
+      scheduleExpression: 'cron(0,30 * ? * * *)', // Every 30 minutes
       flexibleTimeWindow: {
         mode: 'OFF',
       },
@@ -518,10 +530,6 @@ interface KnowledgeBaseProps {
    * The client name.
    */
   clientName: string;
-  /**
-   * The ARN of the S3 bucket to import data from.
-   */
-  dataBucketArn: string;
   /**
    * The id of the embedding model to use.
    */

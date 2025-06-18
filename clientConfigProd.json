@@ -49,7 +49,9 @@
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "devInstance": true,
-    "region": "us-east-1"
+    "region": "us-east-1",
+    "provisionQResources": true,
+    "preferredKnowledgeBase": "bedrock"
   },
   "arcanum-demo-nick": {
     "allApps": true,
