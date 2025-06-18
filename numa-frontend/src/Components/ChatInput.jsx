@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { Button, Form, Spinner } from 'react-bootstrap';
 import { Database, Search } from 'react-bootstrap-icons';
+import { FeatureWrapper } from './RequiredFeaturesWrapper';
 
 const ChatInput = ({
   inputMessage,
@@ -65,18 +66,20 @@ const ChatInput = ({
         <div className="input-controls">
           <div className="left-controls">
             {/* Attachment Button */}
-            <Button
-              variant="link"
-              className="attachment-icon"
-              onClick={() => {
-                console.log('Paperclip button clicked');
-                setShowUploadModal(true);
-              }}
-              aria-label="Upload Files"
-              disabled={isInputDisabled}
-            >
-              <i className="bi bi-paperclip"></i>
-            </Button>
+            <FeatureWrapper requiredFeature="useCompanyData">
+              <Button
+                variant="link"
+                className="attachment-icon"
+                onClick={() => {
+                  console.log('Paperclip button clicked');
+                  setShowUploadModal(true);
+                }}
+                aria-label="Upload Files"
+                disabled={isInputDisabled}
+              >
+                <i className="bi bi-paperclip"></i>
+              </Button>
+            </FeatureWrapper>
 
             {/* Data Mode Toggle */}
             <Button

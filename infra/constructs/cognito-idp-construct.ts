@@ -9,7 +9,7 @@ import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy
 import { KnowledgeBase } from './knowledge-base-construct';
 
 // Define the feature set types
-export type FeatureSetName = 'chat' | 'useCompanyData' | 'editCompanyData' | 'manageUsers';
+export type FeatureSetName = 'chat' | 'useCompanyData' | 'deleteFromCompanyData' | 'addToCompanyData' | 'manageUsers';
 
 // Define specific bucket type for AWS S3 buckets
 const bucketSchema = z.object({
@@ -36,9 +36,13 @@ export const cognitoIdpConstructPropsSchema = z.object({
   outputsBucket: bucketSchema,
   companyBucket: bucketSchema,
   chatHistoryTable: tableSchema,
-  featureSets: z.record(z.array(z.enum(['chat', 'useCompanyData', 'editCompanyData', 'manageUsers']))).optional(),
-  groups: z.record(z.array(z.enum(['chat', 'useCompanyData', 'editCompanyData', 'manageUsers']))).optional(),
   qBusinessApplicationId: z.string().optional(), // Add optional Q Business application ID
+  featureSets: z
+    .record(z.array(z.enum(['chat', 'useCompanyData', 'deleteFromCompanyData', 'addToCompanyData', 'manageUsers'])))
+    .optional(),
+  groups: z
+    .record(z.array(z.enum(['chat', 'useCompanyData', 'deleteFromCompanyData', 'addToCompanyData', 'manageUsers'])))
+    .optional(),
   knowledgeBase: z.instanceof(KnowledgeBase),
 });
 
@@ -66,7 +70,7 @@ export class CognitoIdpConstruct extends Construct {
     const defaultGroups: Record<string, FeatureSetName[]> = {
       // The standard group should always be the least privileged group of all groups
       standard: ['chat', 'useCompanyData'],
-      admin: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+      admin: ['chat', 'useCompanyData', 'deleteFromCompanyData', 'addToCompanyData', 'manageUsers'],
     };
 
     // Use props.groups if provided, otherwise use default groups which allows for stack specific permissions
@@ -225,27 +229,27 @@ export class CognitoIdpConstruct extends Construct {
         },
       ],
 
-      // Edit Company Data Feature Set
-      editCompanyData: [
-        ...(props.dataBucket
-          ? [
-              {
-                effect: 'Allow',
-                actions: ['s3:PutObject', 's3:DeleteObject'],
-                resources: [`${props.dataBucket.bucket.arn}/*`],
-              },
-              // Only include Q Business permissions if Q Business is enabled
-              ...(props.qBusinessApplicationId
-                ? [
-                    {
-                      effect: 'Allow',
-                      actions: ['qbusiness:ListDocuments'],
-                      resources: ['*'], // TODO: Change to specific resource
-                    },
-                  ]
-                : []),
-            ]
-          : []),
+      // Delete from Company Data Feature Set
+      deleteFromCompanyData: [
+        {
+          effect: 'Allow',
+          actions: ['s3:DeleteObject'],
+          resources: [`${props.dataBucket.bucket.arn}/*`],
+        },
+      ],
+
+      // Add to Company Data Feature Set
+      addToCompanyData: [
+        {
+          effect: 'Allow',
+          actions: ['s3:PutObject'],
+          resources: [`${props.dataBucket.bucket.arn}/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['qbusiness:ListDocuments'],
+          resources: ['*'],
+        },
       ],
 
       // Manage Users Feature Set

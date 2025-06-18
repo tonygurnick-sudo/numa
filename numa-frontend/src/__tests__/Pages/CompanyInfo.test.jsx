@@ -16,11 +16,23 @@ vi.mock('../../utils/companyInfoUtils', () => ({
 }));
 
 // Mock the AuthProvider
+let mockUser = {
+  features: ['addToCompanyData', 'chat', 'useCompanyData'],
+  decoded_tokens: {
+    idToken: {
+      'cognito:groups': ['TestGroup'],
+    },
+  },
+};
+
 vi.mock('../../Providers/AuthProvider', () => ({
-  useAuth: () => ({
+  useAuth: vi.fn(() => ({
     getCredentials: vi.fn(),
     region: 'us-east-1',
-  }),
+    user: mockUser,
+    loading: false,
+    tokenValidationComplete: true,
+  })),
 }));
 
 // Mock the Breadcrumbs component
@@ -354,5 +366,92 @@ describe('CompanyInfo Component', () => {
 
     // Check that the form is displayed with empty textarea
     expect(textarea).toHaveValue('');
+  });
+
+  describe('Feature Access Control', () => {
+    beforeEach(() => {
+      // Reset to default user with features
+      mockUser = {
+        features: ['addToCompanyData', 'chat', 'useCompanyData'],
+        decoded_tokens: {
+          idToken: {
+            'cognito:groups': ['TestGroup'],
+          },
+        },
+      };
+    });
+
+    it('should hide save button when user lacks addToCompanyData feature', async () => {
+      // Modify the mock to return user without addToCompanyData feature
+      mockUser = {
+        features: ['chat', 'useCompanyData'], // Missing 'addToCompanyData'
+        decoded_tokens: {
+          idToken: {
+            'cognito:groups': ['TestGroup'],
+          },
+        },
+      };
+
+      fetchCompanyInfo.mockResolvedValue(mockCompanyInfo);
+
+      customRender(
+        <MemoryRouter>
+          <CompanyInfo />
+        </MemoryRouter>,
+      );
+
+      // Wait for the textarea to appear
+      await waitFor(() => screen.getByRole('textbox'));
+
+      // Check that the save button is not rendered
+      expect(screen.queryByText('Save Information')).not.toBeInTheDocument();
+      expect(screen.queryByText('Saving...')).not.toBeInTheDocument();
+    });
+
+    it('should disable textarea when user lacks addToCompanyData feature', async () => {
+      // Modify the mock to return user without addToCompanyData feature
+      mockUser = {
+        features: ['chat', 'useCompanyData'], // Missing 'addToCompanyData'
+        decoded_tokens: {
+          idToken: {
+            'cognito:groups': ['TestGroup'],
+          },
+        },
+      };
+
+      fetchCompanyInfo.mockResolvedValue(mockCompanyInfo);
+
+      customRender(
+        <MemoryRouter>
+          <CompanyInfo />
+        </MemoryRouter>,
+      );
+
+      // Wait for the textarea to appear
+      const textarea = await waitFor(() => screen.getByRole('textbox'));
+
+      // Check that the textarea is disabled
+      expect(textarea).toBeDisabled();
+    });
+
+    it('should show save button and enable textarea when user has addToCompanyData feature', async () => {
+      // This test uses the default mock which includes the addToCompanyData feature
+      fetchCompanyInfo.mockResolvedValue(mockCompanyInfo);
+
+      customRender(
+        <MemoryRouter>
+          <CompanyInfo />
+        </MemoryRouter>,
+      );
+
+      // Wait for the textarea to appear
+      const textarea = await waitFor(() => screen.getByRole('textbox'));
+
+      // Check that the textarea is enabled
+      expect(textarea).not.toBeDisabled();
+
+      // Check that the save button is rendered
+      expect(screen.getByText('Save Information')).toBeInTheDocument();
+    });
   });
 });

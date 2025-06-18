@@ -29,7 +29,7 @@ vi.mock('../../utils/routeConfig.jsx', () => ({
     {
       path: '/upload',
       element: () => null,
-      requiredFeature: 'editCompanyData',
+      requiredFeature: 'useCompanyData',
       nav: { label: 'Files', icon: 'bi bi-cloud-upload-fill' },
     },
     {
@@ -41,7 +41,7 @@ vi.mock('../../utils/routeConfig.jsx', () => ({
     {
       path: '/company-info',
       element: () => null,
-      requiredFeature: 'editCompanyData',
+      requiredFeature: 'useCompanyData',
       nav: { label: 'Company', icon: 'bi bi-building-fill' },
     },
     {
@@ -88,8 +88,7 @@ describe('Nav Component', () => {
       expect(screen.getByText('v0.1')).toBeInTheDocument();
 
       // Standard user should NOT see admin features
-      expect(screen.queryByText('Files')).not.toBeInTheDocument();
-      expect(screen.queryByText('Company')).not.toBeInTheDocument();
+      expect(screen.queryByText('User Management')).not.toBeInTheDocument();
     });
 
     it('handles navigation clicks correctly for standard user', async () => {

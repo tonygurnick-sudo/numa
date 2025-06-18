@@ -69,7 +69,7 @@ const wrapper = ({ children }) => {
         return JSON.stringify({
           admin: {
             roleArn: 'arn:aws:iam::123456789012:role/test-admin-role',
-            features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+            features: ['chat', 'useCompanyData', 'addToCompanyData', 'deleteFromCompanyData', 'manageUsers'],
           },
           user: {
             roleArn: 'arn:aws:iam::123456789012:role/test-user-role',
@@ -105,7 +105,7 @@ const wrapper = ({ children }) => {
         },
         decoded_tokens: TEST_TOKENS.decoded,
         groups: ['admin'],
-        features: ['chat', 'useCompanyData', 'editCompanyData', 'manageUsers'],
+        features: ['chat', 'useCompanyData', 'addToCompanyData', 'deleteFromCompanyData', 'manageUsers'],
       }}
     >
       <NumaRequestContext.Provider

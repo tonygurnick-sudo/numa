@@ -8,6 +8,7 @@ import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav as TopNav } from '../Components/Nav';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { FileUploader } from '../Components/FileUploader';
+import { FeatureWrapper } from '../Components/RequiredFeaturesWrapper';
 import { getKnowledgeBaseState } from '../utils/knowledgeBaseUtils';
 
 /**
@@ -616,7 +617,9 @@ export function S3Uploader() {
                         <th style={{ width: '20%', cursor: 'default' }}>Upload Date</th>
                         <th style={{ width: '10%', cursor: 'default' }}>Size (KB)</th>
                         {showErrorColumn && <th style={{ width: '10%', cursor: 'default' }}>Status</th>}
-                        <th style={{ width: '10%', cursor: 'default' }}>Actions</th>
+                        <FeatureWrapper requiredFeature="deleteFromCompanyData">
+                          <th style={{ width: '10%', cursor: 'default' }}>Actions</th>
+                        </FeatureWrapper>
                       </tr>
                     </thead>
                     <tbody>
@@ -671,19 +674,21 @@ export function S3Uploader() {
                                 ) : null}
                               </td>
                             )}
-                            <td>
-                              {!isFolder && (
-                                <Button
-                                  variant="outline-danger"
-                                  size="sm"
-                                  onClick={() => confirmDeleteFile(row)}
-                                  aria-label="Delete file"
-                                  title="Delete file"
-                                >
-                                  <i className="bi bi-trash"></i>
-                                </Button>
-                              )}
-                            </td>
+                            <FeatureWrapper requiredFeature="deleteFromCompanyData">
+                              <td>
+                                {!isFolder && (
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => confirmDeleteFile(row)}
+                                    aria-label="Delete file"
+                                    title="Delete file"
+                                  >
+                                    <i className="bi bi-trash"></i>
+                                  </Button>
+                                )}
+                              </td>
+                            </FeatureWrapper>
                           </tr>
                         );
                       })}
@@ -922,25 +927,29 @@ export function S3Uploader() {
         </Row>
 
         {/* File Uploader */}
-        <Row className="g-4 mb-4">
-          <Col xs={12}>
-            <Card>
-              <Card.Header>
-                <Card.Title className="mb-0">Upload New Files or Folders</Card.Title>
-              </Card.Header>
-              <Card.Body>
-                <FileUploader onUploadSuccess={handleUploadSuccess} />
-              </Card.Body>
-            </Card>
-          </Col>
-        </Row>
+        <FeatureWrapper requiredFeature="addToCompanyData">
+          <Row className="g-4 mb-4">
+            <Col xs={12}>
+              <Card>
+                <Card.Header>
+                  <Card.Title className="mb-0">Upload New Files or Folders</Card.Title>
+                </Card.Header>
+                <Card.Body>
+                  <FileUploader onUploadSuccess={handleUploadSuccess} />
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        </FeatureWrapper>
 
         {/* Web Crawler */}
-        <Row className="g-4 mb-4">
-          <Col xs={12}>
-            <WebCrawler onCrawlerStarted={fetchFiles} />
-          </Col>
-        </Row>
+        <FeatureWrapper requiredFeature="addToCompanyData">
+          <Row className="g-4 mb-4">
+            <Col xs={12}>
+              <WebCrawler onCrawlerStarted={fetchFiles} />
+            </Col>
+          </Row>
+        </FeatureWrapper>
 
         {/* Pending Files */}
         <Row>

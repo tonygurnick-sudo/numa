@@ -868,8 +868,12 @@ export const coreNumaInfraPropsSchema = _coreNumaInfraPropsSchema
   .merge(qBusinessChatControlConfigurerPropsSchema.omit({ applicationId: true, accountId: true }))
   .merge(
     z.object({
-      featureSets: z.record(z.array(z.enum(['chat', 'useCompanyData', 'editCompanyData', 'manageUsers']))).optional(),
-      groups: z.record(z.array(z.enum(['chat', 'useCompanyData', 'editCompanyData', 'manageUsers']))).optional(),
+      featureSets: z
+        .record(z.array(z.enum(['chat', 'useCompanyData', 'deleteFromCompanyData', 'addToCompanyData', 'manageUsers'])))
+        .optional(),
+      groups: z
+        .record(z.array(z.enum(['chat', 'useCompanyData', 'deleteFromCompanyData', 'addToCompanyData', 'manageUsers'])))
+        .optional(),
     }),
   );
 export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {

@@ -24,7 +24,7 @@ export const ROUTE_CONFIG = [
   {
     path: '/upload',
     element: () => <S3Uploader />,
-    requiredFeature: 'editCompanyData',
+    requiredFeature: 'useCompanyData',
     nav: { label: 'Files', icon: 'bi bi-cloud-upload-fill' },
   },
   {
@@ -36,7 +36,7 @@ export const ROUTE_CONFIG = [
   {
     path: '/company-info',
     element: () => <CompanyInfo />,
-    requiredFeature: 'editCompanyData',
+    requiredFeature: 'useCompanyData',
     nav: { label: 'Company', icon: 'bi bi-building-fill' },
   },
   {

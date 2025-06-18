@@ -49,12 +49,12 @@ const createMockUser = (userType) => {
     case 'admin':
       return {
         ...baseUser,
-        features: ['editCompanyData', 'chat', 'manageUsers', 'useCompanyData'],
+        features: ['addToCompanyData', 'deleteFromCompanyData', 'chat', 'manageUsers', 'useCompanyData'],
       };
     default: // standard user
       return {
         ...baseUser,
-        features: ['chat', 'useCompanyData'],
+        features: ['chat', 'useCompanyData', 'addToCompanyData'],
       };
   }
 };
@@ -72,6 +72,7 @@ export const authHandlers = {
   getAccessToken: vi.fn().mockResolvedValue('mock-token'),
   isAuthenticated: true,
   loading: false,
+  tokenValidationComplete: true,
   error: null,
   user: createMockUser('standard'), // Default to standard user
   qBusinessClient: mockQBusinessClient,
