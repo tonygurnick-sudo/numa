@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Container, Form, Button, Alert, Table } from 'react-bootstrap';
+import { Container, Form, Button, Alert, Table, Modal } from 'react-bootstrap';
 import { Preloader } from '../Components/Preloader';
 import { useAuth } from '../Providers/AuthProvider';
 import { UserManagementUtils } from '../utils/userManagementUtils';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Nav } from '../Components/Nav';
-import { generateCognitoIdpPolicy } from '../Modules/CognitoIdpPolicyGenerator';
 
 const UserManagement = () => {
   const [email, setEmail] = useState('');
@@ -19,6 +18,13 @@ const UserManagement = () => {
   const [usersError, setUsersError] = useState(null);
   const { getCredentials, user, qBusinessClient } = useAuth();
   const [deletingUser, setDeletingUser] = useState(null);
+  const [promotingUser, setPromotingUser] = useState(null);
+  const [demotingUser, setDemotingUser] = useState(null);
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const [userToPromote, setUserToPromote] = useState(null);
+  const [showAdminDeleteWarning, setShowAdminDeleteWarning] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
 
   const fetchUsers = async () => {
@@ -42,13 +48,7 @@ const UserManagement = () => {
         }
       }
 
-      const policy = generateCognitoIdpPolicy({
-        Region: REGION,
-        AccountId: ACCOUNT_ID || window.sessionStorage.getItem('ACCOUNT_ID'),
-        UserPoolId: USER_POOL_ID,
-      });
-
-      const credentials = await getCredentials(policy);
+      const credentials = await getCredentials();
       if (!credentials) {
         throw new Error('Failed to get AWS credentials');
       }
@@ -65,21 +65,118 @@ const UserManagement = () => {
     }
   };
 
-  const handleDeleteUser = async (username) => {
-    setDeletingUser(username);
+  const handleDeleteUser = async (user) => {
+    setShowDeleteModal(true);
+    setUserToDelete(user);
+  };
+
+  const confirmDeleteUser = async () => {
+    setShowDeleteModal(false);
+    setDeletingUser(userToDelete.username);
     setUsersError(null);
-    if (!qBusinessClient) {
-      throw new Error('Q Business client not found');
+
+    try {
+      if (!qBusinessClient) {
+        throw new Error('Q Business client not found');
+      }
+
+      if (!getCredentials) {
+        throw new Error('Get web token credentials not found');
+      }
+
+      const REGION = window.sessionStorage.getItem('REGION');
+      const userManagementUtils = new UserManagementUtils(REGION, await getCredentials());
+      await userManagementUtils.deleteUser(
+        userToDelete.email,
+        fetchUsers,
+        setUsersError,
+        setDeletingUser,
+        qBusinessClient,
+      );
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      setUsersError(err.message || 'Failed to delete user');
+      setDeletingUser(null);
+    } finally {
+      setUserToDelete(null);
     }
+  };
 
-    if (!getCredentials) {
-      throw new Error('Get web token credentials not found');
+  const cancelDeleteUser = () => {
+    setShowDeleteModal(false);
+    setUserToDelete(null);
+  };
+
+  const handlePromoteToAdmin = async (user) => {
+    setShowPromoteModal(true);
+    setUserToPromote(user);
+  };
+
+  const confirmPromoteToAdmin = async () => {
+    setShowPromoteModal(false);
+    setPromotingUser(userToPromote.username);
+    setUsersError(null);
+
+    try {
+      const REGION = window.sessionStorage.getItem('REGION');
+      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+
+      const credentials = await getCredentials();
+      if (!credentials) {
+        throw new Error('Failed to get AWS credentials');
+      }
+
+      const userManagementUtils = new UserManagementUtils(REGION, credentials);
+      await userManagementUtils.addUserToGroup(userToPromote.username, 'admin', USER_POOL_ID);
+
+      // Refresh the user list to show updated groups
+      await fetchUsers();
+    } catch (err) {
+      console.error('Error promoting user to admin:', err);
+      setUsersError(err.message || 'Failed to promote user to admin');
+    } finally {
+      setPromotingUser(null);
+      setUserToPromote(null);
     }
+  };
 
-    const REGION = window.sessionStorage.getItem('REGION');
+  const cancelPromoteToAdmin = () => {
+    setShowPromoteModal(false);
+    setUserToPromote(null);
+  };
 
-    const userManagementUtils = new UserManagementUtils(REGION, await getCredentials());
-    await userManagementUtils.deleteUser(username, fetchUsers, setUsersError, setDeletingUser, qBusinessClient);
+  const handleAttemptDeleteAdmin = () => {
+    setShowAdminDeleteWarning(true);
+  };
+
+  const closeAdminDeleteWarning = () => {
+    setShowAdminDeleteWarning(false);
+  };
+
+  const handleDemoteFromAdmin = async (username) => {
+    setDemotingUser(username);
+    setUsersError(null);
+
+    try {
+      const REGION = window.sessionStorage.getItem('REGION');
+      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+
+      const credentials = await getCredentials();
+      if (!credentials) {
+        throw new Error('Failed to get AWS credentials');
+      }
+
+      const userManagementUtils = new UserManagementUtils(REGION, credentials);
+      await userManagementUtils.removeUserFromGroup(username, 'admin', USER_POOL_ID);
+
+      // Refresh the user list to show updated groups
+      await fetchUsers();
+    } catch (err) {
+      console.error('Error demoting user from admin:', err);
+      setUsersError(err.message || 'Failed to demote user from admin');
+    } finally {
+      setDemotingUser(null);
+    }
   };
 
   useEffect(() => {
@@ -111,13 +208,7 @@ const UserManagement = () => {
         }
       }
 
-      const policy = generateCognitoIdpPolicy({
-        Region: REGION,
-        AccountId: ACCOUNT_ID || window.sessionStorage.getItem('ACCOUNT_ID'),
-        UserPoolId: USER_POOL_ID,
-      });
-
-      const credentials = await getCredentials(policy);
+      const credentials = await getCredentials();
       if (!credentials) {
         throw new Error('Failed to get AWS credentials');
       }
@@ -267,6 +358,7 @@ const UserManagement = () => {
                       <tr>
                         <th>Email</th>
                         <th>Status</th>
+                        <th>Role</th>
                         <th>Created</th>
                         <th>Actions</th>
                       </tr>
@@ -274,6 +366,9 @@ const UserManagement = () => {
                     <tbody>
                       {users.map((user) => {
                         const isSystemUser = user.email?.includes('numa-system-user');
+                        const isAdmin = user.groups?.includes('admin');
+                        const isCurrentUser = user.username === currentUserSub;
+
                         return (
                           <tr
                             key={user.username}
@@ -292,6 +387,11 @@ const UserManagement = () => {
                               </span>
                             </td>
                             <td>
+                              <span className={`badge ${isAdmin ? 'bg-primary' : 'bg-secondary'}`}>
+                                {isAdmin ? 'Admin' : 'Standard'}
+                              </span>
+                            </td>
+                            <td>
                               {new Date(user.created).toLocaleDateString('en-US', {
                                 year: 'numeric',
                                 month: 'short',
@@ -299,23 +399,61 @@ const UserManagement = () => {
                               })}
                             </td>
                             <td>
-                              {!isSystemUser && (
-                                <Button
-                                  variant="danger"
-                                  size="sm"
-                                  disabled={deletingUser === user.email || user.username === currentUserSub}
-                                  onClick={() => handleDeleteUser(user.email)}
-                                >
-                                  {deletingUser === user.username ? 'Deleting...' : 'Delete'}
-                                </Button>
-                              )}
+                              <div className="d-flex gap-2">
+                                {!isSystemUser && !isCurrentUser && (
+                                  <>
+                                    {isAdmin ? (
+                                      <Button
+                                        variant="outline-warning"
+                                        size="sm"
+                                        disabled={demotingUser === user.username}
+                                        onClick={() => handleDemoteFromAdmin(user.username)}
+                                        title="Remove admin privileges"
+                                      >
+                                        {demotingUser === user.username ? 'Demoting...' : 'Demote'}
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        variant="outline-primary"
+                                        size="sm"
+                                        disabled={promotingUser === user.username}
+                                        onClick={() => handlePromoteToAdmin(user)}
+                                        title="Grant admin privileges"
+                                      >
+                                        {promotingUser === user.username ? 'Promoting...' : 'Make Admin'}
+                                      </Button>
+                                    )}
+                                    {isAdmin ? (
+                                      <Button
+                                        variant="outline-secondary"
+                                        size="sm"
+                                        onClick={handleAttemptDeleteAdmin}
+                                        title="Admin users must be demoted to standard users before they can be deleted"
+                                      >
+                                        Delete
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        variant="danger"
+                                        size="sm"
+                                        disabled={deletingUser === user.username}
+                                        onClick={() => handleDeleteUser(user)}
+                                        title="Delete user account"
+                                      >
+                                        {deletingUser === user.username ? 'Deleting...' : 'Delete'}
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+                                {isCurrentUser && <small className="text-muted">Current User</small>}
+                              </div>
                             </td>
                           </tr>
                         );
                       })}
                       {users.length === 0 && (
                         <tr>
-                          <td colSpan="4" className="text-center">
+                          <td colSpan="5" className="text-center">
                             No users found
                           </td>
                         </tr>
@@ -328,6 +466,173 @@ const UserManagement = () => {
           </div>
         </Container>
       </LayoutDashboard>
+
+      {/* Admin Promotion Confirmation Modal */}
+      <Modal show={showPromoteModal} onHide={cancelPromoteToAdmin} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Grant Administrator Privileges</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Alert variant="warning" className="mb-4">
+            <Alert.Heading className="h6">⚠️ Important: Administrator Access</Alert.Heading>
+            You are about to grant administrator privileges to <strong>{userToPromote?.email}</strong>. Please review
+            the permissions this will provide before proceeding.
+          </Alert>
+
+          <h6 className="mb-3">Administrator privileges include:</h6>
+          <div className="row">
+            <div className="col-md-6">
+              <h6 className="text-primary mb-2">👥 User Management</h6>
+              <ul className="small mb-3">
+                <li>Create new user accounts</li>
+                <li>Delete existing users</li>
+                <li>Promote/demote other users to admin</li>
+                <li>View all user information</li>
+              </ul>
+
+              <h6 className="text-primary mb-2">📂 Data Management</h6>
+              <ul className="small mb-3">
+                <li>Upload company documents</li>
+                <li>Delete company files</li>
+                <li>Manage data sources</li>
+                <li>Configure document indexing</li>
+              </ul>
+            </div>
+            <div className="col-md-6">
+              <h6 className="text-primary mb-2">⚙️ System Configuration</h6>
+              <ul className="small mb-3">
+                <li>Modify system settings</li>
+                <li>Configure integrations</li>
+                <li>Access administrative tools</li>
+                <li>View system logs and metrics</li>
+              </ul>
+            </div>
+          </div>
+
+          <Alert variant="info" className="mt-3">
+            <strong>Note:</strong> Administrators have significant control over the system and can access all company
+            data. Only grant these privileges to trusted team members who need administrative access to perform their
+            responsibilities.
+          </Alert>
+
+          <p className="mb-0">
+            <strong>Are you sure you want to grant administrator privileges to {userToPromote?.email}?</strong>
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={cancelPromoteToAdmin}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={confirmPromoteToAdmin}
+            disabled={promotingUser === userToPromote?.username}
+          >
+            {promotingUser === userToPromote?.username ? 'Granting Access...' : 'Yes, Grant Admin Access'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Admin Deletion Warning Modal */}
+      <Modal show={showAdminDeleteWarning} onHide={closeAdminDeleteWarning}>
+        <Modal.Header closeButton>
+          <Modal.Title>Cannot Delete Administrator</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Alert variant="warning" className="mb-3">
+            <Alert.Heading className="h6">🚫 Administrator Protection</Alert.Heading>
+            Administrator accounts cannot be deleted directly for security reasons.
+          </Alert>
+
+          <p className="mb-3">To delete an administrator account, you must first:</p>
+
+          <ol className="mb-3">
+            <li className="mb-2">
+              <strong>Demote the user</strong> from administrator to standard user using the &quot;Demote&quot; button
+            </li>
+            <li className="mb-2">
+              <strong>Wait for the change to take effect</strong> (the page will refresh automatically)
+            </li>
+            <li>
+              <strong>Then delete the user</strong> using the &quot;Delete&quot; button (which will now be available)
+            </li>
+          </ol>
+
+          <Alert variant="info" className="mb-0">
+            <strong>Why this protection exists:</strong> This prevents accidental deletion of administrator accounts and
+            ensures that admin privilege removal is a deliberate, two-step process.
+          </Alert>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="primary" onClick={closeAdminDeleteWarning}>
+            I Understand
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Delete User Confirmation Modal */}
+      <Modal show={showDeleteModal} onHide={cancelDeleteUser} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Delete User Account</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Alert variant="danger" className="mb-4">
+            <Alert.Heading className="h6">⚠️ Warning: Permanent Account Deletion</Alert.Heading>
+            You are about to permanently delete the user account for <strong>{userToDelete?.email}</strong>. This action
+            cannot be undone.
+          </Alert>
+
+          <h6 className="mb-3">What will happen when you delete this user:</h6>
+          <div className="row">
+            <div className="col-md-6">
+              <h6 className="text-danger mb-2">🚫 Account Access</h6>
+              <ul className="small mb-3">
+                <li>User will immediately lose access to Numa</li>
+                <li>All login credentials will be revoked</li>
+                <li>User cannot log in or recover their account</li>
+              </ul>
+
+              <h6 className="text-danger mb-2">📊 Data Impact</h6>
+              <ul className="small mb-3">
+                <li>Chat history will be preserved, but inaccessible to the user</li>
+                <li>User activity logs will remain</li>
+                <li>Uploaded documents will not be affected, but will be inaccessible to the user</li>
+              </ul>
+            </div>
+            <div className="col-md-6">
+              <h6 className="text-warning mb-2">⚡ Immediate Effects</h6>
+              <ul className="small mb-3">
+                <li>User removed from all groups</li>
+                <li>All active sessions terminated</li>
+                <li>Account appears as &quot;deleted&quot; in audit logs</li>
+              </ul>
+
+              <h6 className="text-info mb-2">♻️ Recovery Options</h6>
+              <ul className="small mb-3">
+                <li>Account cannot be restored</li>
+                <li>Must create a new account with same email</li>
+                <li>Previous permissions will not be restored</li>
+              </ul>
+            </div>
+          </div>
+
+          <Alert variant="warning" className="mt-3">
+            <strong>Before deleting:</strong> Account deletion is permanent and irreversible.
+          </Alert>
+
+          <p className="mb-0">
+            <strong>Are you sure you want to permanently delete the account for {userToDelete?.email}?</strong>
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={cancelDeleteUser}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={confirmDeleteUser} disabled={deletingUser === userToDelete?.username}>
+            {deletingUser === userToDelete?.username ? 'Deleting Account...' : 'Yes, Delete Account'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 };

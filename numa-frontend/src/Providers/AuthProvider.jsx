@@ -912,23 +912,18 @@ export const AuthProvider = ({ children, initialTokens }) => {
       return null;
     }
 
-    // If the user has a group assigned, use that, otherwise use the default standard role
-    let roleArn = null;
+    // Use the same group selection logic as other functions
     const groups = JSON.parse(window.sessionStorage.getItem('GROUPS')) || {};
-
-    if (user.groups.length > 1) {
-      // Get the role ARN for the matching group
-      roleArn = groups[user.groups[0]]?.roleArn;
-    } else {
-      // Use the default standard role
-      roleArn = groups['standard']?.roleArn;
-    }
+    const userGroup = (user.groups && user.groups[0]) || 'standard';
+    const roleArn = groups[userGroup]?.roleArn;
 
     // Check if user has the features
     // If there are no features, block the request since we need to wait until the user has features
     if (user.features.length === 0 || !roleArn) {
       console.log('User features:', user.features);
       console.log('Role ARN:', roleArn);
+      console.log('User group:', userGroup);
+      console.log('Available groups:', Object.keys(groups));
       console.log('No features found or role ARN not found');
       return null;
     }
@@ -1037,6 +1032,8 @@ const extractGroupsAndFeatures = (decodedIdToken) => {
   // Extract groups and features from the decoded token
   // const groups = ['standard', ...(decodedIdToken['cognito:groups'] || [])];
   let groups = [...(decodedIdToken['cognito:groups'] || [])];
+
+  console.log('decodedIdToken', decodedIdToken);
 
   if (!groups || groups.length === 0) {
     // If the user is not in any groups, use the default standard group and the features for that group

@@ -5,6 +5,9 @@ import {
   AdminGetUserCommand,
   ListUsersCommand,
   AdminSetUserPasswordCommand,
+  AdminAddUserToGroupCommand,
+  AdminRemoveUserFromGroupCommand,
+  AdminListGroupsForUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { DeleteUserCommand, GetUserCommand } from '@aws-sdk/client-qbusiness';
 
@@ -88,9 +91,9 @@ export class UserManagementUtils {
   }
 
   /**
-   * Lists all users in the Cognito User Pool
+   * Lists all users in the Cognito User Pool with their groups
    * @param {string} userPoolId - Cognito User Pool ID
-   * @returns {Promise<Array>} - Array of user objects with basic information
+   * @returns {Promise<Array>} - Array of user objects with basic information and groups
    */
   async listUsers(userPoolId) {
     const command = new ListUsersCommand({
@@ -98,13 +101,86 @@ export class UserManagementUtils {
     });
 
     const response = await this.cognitoClient.send(command);
-    return response.Users.map((user) => ({
-      username: user.Username,
-      email: user.Attributes.find((attr) => attr.Name === 'email')?.Value,
-      enabled: user.Enabled,
-      status: user.UserStatus,
-      created: user.UserCreateDate,
-    }));
+
+    // Get groups for each user
+    const usersWithGroups = await Promise.all(
+      response.Users.map(async (user) => {
+        try {
+          const groupsCommand = new AdminListGroupsForUserCommand({
+            UserPoolId: userPoolId,
+            Username: user.Username,
+          });
+          const groupsResponse = await this.cognitoClient.send(groupsCommand);
+
+          return {
+            username: user.Username,
+            email: user.Attributes.find((attr) => attr.Name === 'email')?.Value,
+            enabled: user.Enabled,
+            status: user.UserStatus,
+            created: user.UserCreateDate,
+            groups: groupsResponse.Groups?.map((group) => group.GroupName) || [],
+          };
+        } catch (error) {
+          console.warn(`Failed to get groups for user ${user.Username}:`, error);
+          return {
+            username: user.Username,
+            email: user.Attributes.find((attr) => attr.Name === 'email')?.Value,
+            enabled: user.Enabled,
+            status: user.UserStatus,
+            created: user.UserCreateDate,
+            groups: [],
+          };
+        }
+      }),
+    );
+
+    return usersWithGroups;
+  }
+
+  /**
+   * Adds a user to a Cognito group
+   * @param {string} username - Username/email of the user
+   * @param {string} groupName - Name of the group to add user to
+   * @param {string} userPoolId - Cognito User Pool ID
+   * @returns {Promise<void>}
+   */
+  async addUserToGroup(username, groupName, userPoolId) {
+    try {
+      const command = new AdminAddUserToGroupCommand({
+        UserPoolId: userPoolId,
+        Username: username,
+        GroupName: groupName,
+      });
+
+      await this.cognitoClient.send(command);
+      console.log(`Successfully added user ${username} to group ${groupName}`);
+    } catch (error) {
+      console.error(`Error adding user ${username} to group ${groupName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Removes a user from a Cognito group
+   * @param {string} username - Username/email of the user
+   * @param {string} groupName - Name of the group to remove user from
+   * @param {string} userPoolId - Cognito User Pool ID
+   * @returns {Promise<void>}
+   */
+  async removeUserFromGroup(username, groupName, userPoolId) {
+    try {
+      const command = new AdminRemoveUserFromGroupCommand({
+        UserPoolId: userPoolId,
+        Username: username,
+        GroupName: groupName,
+      });
+
+      await this.cognitoClient.send(command);
+      console.log(`Successfully removed user ${username} from group ${groupName}`);
+    } catch (error) {
+      console.error(`Error removing user ${username} from group ${groupName}:`, error);
+      throw error;
+    }
   }
 
   async deleteUser(username, fetchUsers, setUsersError, setDeletingUser, qClient) {
