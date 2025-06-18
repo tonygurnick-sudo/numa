@@ -32,7 +32,6 @@ export const fetchConfigAddtoSession = async () => {
     'HONEYCOMB_KEY',
     'OUTPUTS_BUCKET_NAME',
     'DATA_BUCKET',
-    'HIDE_ADMIN',
     'PROVISION_Q_RESOURCES',
     'PREFERRED_KNOWLEDGE_BASE',
     'BEDROCK_KNOWLEDGE_BASE_ID',

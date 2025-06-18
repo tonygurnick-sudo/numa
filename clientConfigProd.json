@@ -24,8 +24,7 @@
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "devInstance": true,
-    "region": "us-east-1",
-    "hideAdmin": true
+    "region": "us-east-1"
   },
   "arcanum-demo": {
     "allApps": true,
@@ -91,8 +90,7 @@
     },
     "clientAccountId": "619071323471",
     "devInstance": true,
-    "region": "us-east-1",
-    "hideAdmin": true
+    "region": "us-east-1"
   },
   "arcanum-prod-trial": {
     "allProdApps": true,
@@ -107,8 +105,7 @@
       {
         "url": "https://orionhealth.com/global/"
       }
-    ],
-    "hideAdmin": true
+    ]
   },
   "dev-hams": {
     "allApps": true,
