@@ -15,6 +15,35 @@ const environmentConfig = {
   environmentName: EnvironmentName.prod,
   hostedZone: 'Z05615802D0KHGAAOFX9U',
 };
+const users = [
+  {
+    email: 'dave@arcanum.ai',
+    givenName: 'Dave',
+    familyName: 'Ball',
+    rootAccess: true,
+  },
+  {
+    email: 'nick@arcanum.ai',
+    givenName: 'Nick',
+    familyName: 'Walton',
+    rootAccess: true,
+  },
+  {
+    email: 'nathan@arcanum.ai',
+    givenName: 'Nathan',
+    familyName: 'Douglas',
+  },
+  {
+    email: 'hamish@arcanum.ai',
+    givenName: 'Hamish',
+    familyName: 'Wadham',
+  },
+  {
+    email: 'sam@arcanum.ai',
+    givenName: 'Sam',
+    familyName: 'Bentley',
+  },
+];
 
 if (override === undefined || override === 'none') {
   new QAppsDeployerStack(app, 'q-apps-deployer', {
@@ -27,36 +56,8 @@ if (override === undefined || override === 'none') {
 
   new NextGenRootStack(app, 'next-gen-root', {
     ...environmentConfig,
-    users: [
-      {
-        email: 'dave@arcanum.ai',
-        givenName: 'Dave',
-        familyName: 'Ball',
-        rootAccess: true,
-      },
-      {
-        email: 'nick@arcanum.ai',
-        givenName: 'Nick',
-        familyName: 'Walton',
-        rootAccess: true,
-      },
-      {
-        email: 'nathan@arcanum.ai',
-        givenName: 'Nathan',
-        familyName: 'Douglas',
-      },
-      {
-        email: 'hamish@arcanum.ai',
-        givenName: 'Hamish',
-        familyName: 'Wadham',
-      },
-      {
-        email: 'sam@arcanum.ai',
-        givenName: 'Sam',
-        familyName: 'Bentley',
-      },
-    ],
-    clientAccounts: [],
+    users,
+    configTable: 'numa-client-config',
   });
 } else if (override !== 'none') {
   for (const clientName of override ? [override] : await listClients()) {

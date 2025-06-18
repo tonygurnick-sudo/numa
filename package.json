@@ -10,6 +10,6 @@
     "lib/client-config-node"
   ],
   "resolutions": {
-    "@smithy/core": "^3.3.1"
+    "@smithy/core": "^3.5.3"
   }
 }
