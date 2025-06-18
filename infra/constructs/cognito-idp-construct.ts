@@ -37,6 +37,7 @@ export const cognitoIdpConstructPropsSchema = z.object({
   chatHistoryTable: tableSchema,
   featureSets: z.record(z.array(z.enum(['chat', 'useCompanyData', 'editCompanyData', 'manageUsers']))).optional(),
   groups: z.record(z.array(z.enum(['chat', 'useCompanyData', 'editCompanyData', 'manageUsers']))).optional(),
+  qBusinessApplicationId: z.string().optional(), // Add optional Q Business application ID
 });
 
 interface PolicyStatement {
@@ -54,6 +55,7 @@ export class CognitoIdpConstruct extends Construct {
   readonly groups: Record<string, { roleArn: string; features: FeatureSetName[] }> = {};
   readonly featureSetPolicies: Record<string, IamPolicy> = {};
   readonly cognitoGroups: Record<string, CognitoUserGroup> = {};
+  readonly defaultWebIdentityRoleArn!: string;
 
   constructor(scope: Construct, name: string, props: CognitoIdpConstructProps) {
     super(scope, name);
@@ -79,7 +81,7 @@ export class CognitoIdpConstruct extends Construct {
           ? [
               {
                 effect: 'Allow',
-                actions: ['s3:PutObject', 's3:GetObject'],
+                actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
                 resources: [`${props.outputsBucket.bucket.arn}/outputs/$\${aws:PrincipalTag/username}/*`],
               },
             ]
@@ -161,29 +163,39 @@ export class CognitoIdpConstruct extends Construct {
               },
               {
                 effect: 'Allow',
-                actions: ['s3:GetObject'],
+                actions: ['s3:GetObject', 's3:GetObjectTagging'],
                 resources: [`${props.dataBucket.bucket.arn}/*`],
               },
-              {
-                effect: 'Allow',
-                actions: ['qbusiness:SearchRelevantContent'],
-                resources: ['*'], // TODO: Change to specific resource
-              },
-              {
-                effect: 'Allow',
-                actions: ['qbusiness:ListDataSources'],
-                resources: ['*'], // TODO: Change to specific resource
-              },
-              {
-                effect: 'Allow',
-                resources: ['*'], // TODO: Change to specific resource
-                actions: ['qbusiness:ListDataSourceSyncJobs'],
-              },
-              {
-                effect: 'Allow',
-                actions: ['user-subscriptions:CreateClaim'],
-                resources: ['*'], // Wild card, because we don't know the user's subscription ID
-              },
+              // Only include Q Business permissions if Q Business is enabled
+              ...(props.qBusinessApplicationId
+                ? [
+                    {
+                      effect: 'Allow',
+                      actions: ['qbusiness:SearchRelevantContent'],
+                      resources: ['*'], // TODO: Change to specific resource
+                    },
+                    {
+                      effect: 'Allow',
+                      actions: ['qbusiness:ListDataSources'],
+                      resources: ['*'], // TODO: Change to specific resource
+                    },
+                    {
+                      effect: 'Allow',
+                      resources: ['*'], // TODO: Change to specific resource
+                      actions: ['qbusiness:ListDataSourceSyncJobs'],
+                    },
+                    {
+                      effect: 'Allow',
+                      actions: ['qbusiness:ListDocuments'],
+                      resources: ['*'], // TODO: Change to specific resource
+                    },
+                    {
+                      effect: 'Allow',
+                      actions: ['user-subscriptions:CreateClaim'],
+                      resources: ['*'], // Wild card, because we don't know the user's subscription ID
+                    },
+                  ]
+                : []),
             ]
           : []),
       ],
@@ -197,12 +209,16 @@ export class CognitoIdpConstruct extends Construct {
                 actions: ['s3:PutObject', 's3:DeleteObject'],
                 resources: [`${props.dataBucket.bucket.arn}/*`],
               },
-              // ListDocuments is only used in company file uploader. Only 'editors' need it.
-              {
-                effect: 'Allow',
-                actions: ['qbusiness:ListDocuments'],
-                resources: ['*'], // TODO: Change to specific resource
-              },
+              // Only include Q Business permissions if Q Business is enabled
+              ...(props.qBusinessApplicationId
+                ? [
+                    {
+                      effect: 'Allow',
+                      actions: ['qbusiness:ListDocuments'],
+                      resources: ['*'], // TODO: Change to specific resource
+                    },
+                  ]
+                : []),
             ]
           : []),
       ],
@@ -224,11 +240,18 @@ export class CognitoIdpConstruct extends Construct {
           ],
           resources: [`arn:aws:cognito-idp:${props.region}:${props.callerAccountId}:userpool/${props.userPoolId}`],
         },
-        {
-          effect: 'Allow',
-          actions: ['qbusiness:DeleteUser', 'qbusiness:GetUser'],
-          resources: [`arn:aws:qbusiness:${props.region}:${props.callerAccountId}:application/${numaClient}`],
-        },
+        // Only include Q Business permissions if Q Business is enabled
+        ...(props.qBusinessApplicationId
+          ? [
+              {
+                effect: 'Allow',
+                actions: ['qbusiness:DeleteUser', 'qbusiness:GetUser'],
+                resources: [
+                  `arn:aws:qbusiness:${props.region}:${props.callerAccountId}:application/${props.qBusinessApplicationId}`,
+                ],
+              },
+            ]
+          : []),
       ],
     };
 
@@ -245,6 +268,35 @@ export class CognitoIdpConstruct extends Construct {
 
       this.featureSetPolicies[featureSetName] = policy;
     }
+
+    // Create the generic identity-pool role (least-privilege, always safe for the front-end to assume)
+    const identityPoolTrustPolicy = new DataAwsIamPolicyDocument(this, `identity-pool-trust-policy`, {
+      statement: [
+        {
+          effect: 'Allow',
+          principals: [
+            {
+              type: 'Federated',
+              identifiers: [props.userPoolEndpoint],
+            },
+          ],
+          actions: ['sts:AssumeRoleWithWebIdentity'],
+          condition: [
+            {
+              test: 'StringEquals',
+              values: [props.userPoolClientId],
+              variable: `${props.userPoolEndpoint}:aud`,
+            },
+          ],
+        },
+      ],
+    });
+    const identityPoolRole = new IamRole(this, 'identity-pool-role', {
+      name: `${numaClient}-identity-pool-role`,
+      assumeRolePolicy: identityPoolTrustPolicy.json,
+    });
+    // This generic role is always safe for the front‑end to assume
+    this.defaultWebIdentityRoleArn = identityPoolRole.arn;
 
     // Create Cognito user groups and roles for each group
     for (const groupName of Object.keys(groups)) {
@@ -344,7 +396,6 @@ export class CognitoIdpConstruct extends Construct {
         features: groups[groupName] as FeatureSetName[],
       };
     }
-
     // Output all roles as a single JSON object
     new TerraformOutput(this, 'roles', {
       value: Object.entries(this.groups).map(([groupName, { roleArn, features }]) => ({
