@@ -126,7 +126,7 @@ export class NumaClientStack extends TerraformStack {
       zoneId: props.hostedZone,
       hostedZoneProvider,
       certificateProvider,
-      webExUrl: core.webExUrl,
+      webExUrl: core.webExUrl ?? '',
       userPoolId: core.userPoolId,
       userPoolClientId: core.userPoolClient.id,
       outputsBucket: core.outputsBucket,
@@ -219,7 +219,7 @@ export class NumaClientStack extends TerraformStack {
         CLIENT_ID: core.userPoolClient?.id,
         GROUPS: core.cognitoIdp.groups,
         REGION: clientConfig.region,
-        ROLE_ARN: core.webExperienceRoleArn,
+        ROLE_ARN: core.defaultWebIdentityRoleArn,
         Q_APPLICATION_ID: core.qBusinessApplicationId,
         Q_INDEX_ID: core.qBusinessIndexId,
         Q_RETRIEVER_ID: core.qBusinessRetrieverId,
@@ -229,6 +229,7 @@ export class NumaClientStack extends TerraformStack {
         HONEYCOMB_KEY: honeycomb.frontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
         DATA_BUCKET: core.dataBucket.bucket.bucket,
         HIDE_ADMIN: clientConfig.hideAdmin ?? false,
+        PROVISION_Q_RESOURCES: clientConfig.provisionQResources ?? true,
       }),
       contentType: 'application/json',
     });
@@ -333,6 +334,13 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         hideAdmin: z.boolean().optional(),
+
+        /**
+         * Whether to provision Q Business resources for this client
+         *
+         * @default true
+         */
+        provisionQResources: z.boolean().optional(),
 
         // Generic email configuration that can be used by any app
         senderEmail: z.string().optional(),

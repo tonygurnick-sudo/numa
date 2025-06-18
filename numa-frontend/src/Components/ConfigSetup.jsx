@@ -33,6 +33,7 @@ export const fetchConfigAddtoSession = async () => {
     'OUTPUTS_BUCKET_NAME',
     'DATA_BUCKET',
     'HIDE_ADMIN',
+    'PROVISION_Q_RESOURCES',
   ];
 
   // Check if all required properties exist
