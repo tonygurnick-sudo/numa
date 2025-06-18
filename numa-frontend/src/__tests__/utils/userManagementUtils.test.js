@@ -251,6 +251,7 @@ describe('UserManagementUtils', () => {
         username: 'user1',
         email: 'user1@example.com',
         enabled: true,
+        groups: [],
         status: 'CONFIRMED',
         created: mockDate1,
       });
@@ -258,6 +259,7 @@ describe('UserManagementUtils', () => {
         username: 'user2',
         email: 'user2@example.com',
         enabled: false,
+        groups: [],
         status: 'FORCE_CHANGE_PASSWORD',
         created: mockDate2,
       });
@@ -286,6 +288,7 @@ describe('UserManagementUtils', () => {
           username: 'testuser@example.com',
           email: 'testuser@example.com',
           enabled: true,
+          groups: [],
           status: 'CONFIRMED',
           created: expect.any(Date),
         },
