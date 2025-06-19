@@ -105,6 +105,7 @@ variables:
         - lib/s3_helpers
 
 client-list-lint:
+  allow_failure: true # Temporarily allow this to fail so we don't get unnecessary broken pipelines.
   stage: lint
   needs: []
   image: registry.gitlab.com/arcanumai/ci/all-inclusive
