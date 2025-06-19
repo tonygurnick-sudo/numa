@@ -105,6 +105,19 @@ const ChatReferencesDropdown = ({ references, getCredentials }) => {
     processReferences();
   }, [references]);
 
+  // Function to extract the original URL from a web crawler key
+  const extractCrawlerUrl = (key) => {
+    const match = key.match(/^web-crawler\/[^/]+\/(.+)$/);
+    if (!match) return null;
+
+    try {
+      return decodeURIComponent(match[1]);
+    } catch (e) {
+      console.error('Failed to decode crawler URL:', e);
+      return null;
+    }
+  };
+
   // Function to handle document access using invisible link approach with pre-signed URLs
   const handleDocumentAccess = async (ref, index) => {
     // For non-S3 URLs, just open the URL directly
@@ -116,7 +129,15 @@ const ChatReferencesDropdown = ({ references, getCredentials }) => {
     try {
       setDownloadingIndex(index);
 
-      // First try to get the URL from the S3 object's tags
+      if (ref.key.startsWith('web-crawler/')) {
+        const crawlerUrl = extractCrawlerUrl(ref.key);
+        if (crawlerUrl) {
+          window.open(crawlerUrl, '_blank');
+          return;
+        }
+      }
+
+      // If not a web crawler URL or extraction failed, try to get URL from tags
       const urlFromTag = await getUrlTagFromS3Object(ref.key, ref.bucket, region, getCredentials);
 
       // If we found a URL in the tags, open it directly
