@@ -1,6 +1,6 @@
 {
   "name": "step-function-shim",
-  "packageManager": "yarn@4.9.1",
+  "packageManager": "yarn@4.9.2",
   "type": "module",
   "main": "index.ts",
   "types": "index.ts",
