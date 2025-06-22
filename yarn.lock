@@ -9627,8 +9627,8 @@ __metadata:
   linkType: hard
 
 "cognito-srp-helper@npm:^2.2.3, cognito-srp-helper@npm:^2.3.1":
-  version: 2.3.3
-  resolution: "cognito-srp-helper@npm:2.3.3"
+  version: 2.3.4
+  resolution: "cognito-srp-helper@npm:2.3.4"
   dependencies:
     "@aws-sdk/client-cognito-identity-provider": "npm:^3.433.0"
     "@types/crypto-js": "npm:3.1.47"
@@ -9637,7 +9637,7 @@ __metadata:
     buffer: "npm:^6.0.3"
     crypto-js: "npm:4.2.0"
     jsbn: "npm:1.1.0"
-  checksum: 10c0/e860fafc0bace3497d7b1c1a8a6440c3496a2422d00a8d13910a36ae90a0d5d25ac34b4596f5a2cbdfe4d9514525f7c7eda04a980049059fced1c3d4ab36600b
+  checksum: 10c0/28d6a73fdd59ab1165a2abf4987edc760c106b04c67e2d9bb58a960e2bf1210d069c769db0907978bdfacd74d6723b4006c7c4bed4cfef3c027706f887116f4d
   languageName: node
   linkType: hard
 
