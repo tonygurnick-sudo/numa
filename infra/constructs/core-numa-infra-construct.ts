@@ -41,7 +41,7 @@ import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { ConfigBucket } from './config-bucket-construct';
 import { z } from 'zod';
 import { WebCrawlerConstruct } from './web-crawler-construct';
-import { CognitoIdpConstruct } from './cognito-idp-construct';
+import { CognitoGroupsConstruct } from './cognito-groups-construct';
 import { KnowledgeBase } from './knowledge-base-construct';
 
 export class CoreNumaInfra extends Construct {
@@ -60,7 +60,7 @@ export class CoreNumaInfra extends Construct {
   readonly dataBucket: NumaCorsEnabledBucket;
   readonly chatHistoryTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
-  readonly cognitoIdp!: CognitoIdpConstruct;
+  readonly cognitoGroups!: CognitoGroupsConstruct;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -703,7 +703,7 @@ export class CoreNumaInfra extends Construct {
 
     // Create the Cognito IDP construct to manage identity pools and groups
     // Pass Q Business application ID only if Q Business resources were created
-    this.cognitoIdp = new CognitoIdpConstruct(this, 'cognito-idp', {
+    this.cognitoGroups = new CognitoGroupsConstruct(this, 'cognito-groups', {
       clientName: props.clientName,
       environmentName: props.environmentName,
       region: props.region,
@@ -722,15 +722,15 @@ export class CoreNumaInfra extends Construct {
     });
 
     // Expose whichever role Cognito decided should be the default web‑identity role.
-    this.defaultWebIdentityRoleArn = this.cognitoIdp.defaultWebIdentityRoleArn;
-    this.groups = this.cognitoIdp.groups;
+    this.defaultWebIdentityRoleArn = this.cognitoGroups.defaultWebIdentityRoleArn;
+    this.groups = this.cognitoGroups.groups;
 
     // Add system user to admin group
     new CognitoUserInGroup(this, 'system-user-admin-group', {
       groupName: 'admin',
       username: systemUser.username,
       userPoolId: userPool.id,
-      dependsOn: [this.cognitoIdp.cognitoGroups['admin']],
+      dependsOn: [this.cognitoGroups.cognitoGroups['admin']],
     });
 
     this.logGroup = new NumaLogGroup(this, 'core-log-group', {
