@@ -4,7 +4,7 @@ import { ResetPassword } from './Pages/ResetPassword';
 import { useAuth } from './Providers/AuthProvider';
 import { NumaLogin } from './Pages/Login';
 import AppProviders from './Providers/AppProviders';
-import { FeatureWrapper } from './Components/RequiredFeaturesWrapper';
+import { ProtectedRoute } from './Components/RequiredFeaturesWrapper';
 import { ROUTE_CONFIG } from './utils/routeConfig.jsx';
 
 const NumaRoutes = () => {
@@ -36,11 +36,7 @@ const AppRoutes = () => {
         <Route
           key={r.path}
           path={r.path}
-          element={
-            <FeatureWrapper requiredFeature={r.requiredFeature} requireAuth={true} redirectToLogin={true}>
-              {r.element(navigate)}
-            </FeatureWrapper>
-          }
+          element={<ProtectedRoute requiredFeature={r.requiredFeature}>{r.element(navigate)}</ProtectedRoute>}
         />
       ))}
     </Routes>
