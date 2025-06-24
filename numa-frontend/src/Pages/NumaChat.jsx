@@ -15,7 +15,13 @@ import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/ChatMessages';
 import ResizableSplitView from '../Components/ResizableSplitView';
 import { loadCompanyProfile, enhanceSystemPromptWithCompanyInfo } from '../utils/chatSystemPromptUtils';
-import { getModelId, MODEL_TYPES } from '../utils/bedrockModelConfig';
+import {
+  getModelId,
+  MODEL_TYPES,
+  isInFallbackMode,
+  setFallbackMode,
+  isQuotaLimitError,
+} from '../utils/bedrockModelConfig';
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
@@ -54,7 +60,17 @@ const NumaChat = () => {
 
   // Constants
   const REGION = window.sessionStorage.getItem('REGION');
-  const STREAMING_MODEL_ID = getModelId(REGION, MODEL_TYPES.DEFAULT);
+  const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
+
+  // Get the appropriate model ID based on fallback status
+  const getAppropriateModelId = () => {
+    if (isInFallbackMode(CLIENT_NAME)) {
+      console.log('Client is in fallback mode, using fallback model');
+      return getModelId(REGION, MODEL_TYPES.FALLBACK);
+    }
+    return getModelId(REGION, MODEL_TYPES.DEFAULT);
+  };
+
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
   const Q_RETRIEVER_ID = window.sessionStorage.getItem('Q_RETRIEVER_ID');
   const PREFERRED_KNOWLEDGE_BASE = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'q';
@@ -62,7 +78,6 @@ const NumaChat = () => {
   const MAX_DATA_SOURCE_ITEMS = 6;
   const MAX_WEB_SEARCH_RESULTS = 2;
   const TODAY = new Date();
-  const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
   const companyBucket = `numa-${CLIENT_NAME}-company`;
   const region = window.sessionStorage.getItem('REGION');
   const SYSTEM_MESSAGE = `You are an artificial intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data sources, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorporate other bold and italic styling within your outputs when appropriate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with markdown formatting.\n- Similarly, For any document, report, email, analysis, or other exportable content you generate that a user may want to download or copy (except code), please start it with the following '<!--BEGIN_DOC title="SOME TITLE HERE"-->' (where you infer the title when writing the document), and end it with '<!--END_DOC-->'. This will help me identify documents in post processing using regex looking for the opening '<--' and closing '-->'\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like "Could you provide more details?" or "What specific aspect would you like to focus on?"\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
@@ -535,8 +550,10 @@ const NumaChat = () => {
       }
 
       // 5) Send to Bedrock
+      const currentModelId = getAppropriateModelId();
+
       const converseInput = {
-        modelId: STREAMING_MODEL_ID,
+        modelId: currentModelId,
         messages: validatedMessages,
         system: [
           {
@@ -565,6 +582,33 @@ const NumaChat = () => {
           response = await bedrockRuntimeClient.send(converseCommand);
           break;
         } catch (err) {
+          console.log('Bedrock error:', err);
+
+          // Check for quota/throttling errors
+          if (isQuotaLimitError(err)) {
+            console.log(`Quota limit exceeded for model ${converseInput.modelId}, switching to fallback model`);
+
+            // Set fallback mode for this client (1 hour by default)
+            setFallbackMode(CLIENT_NAME);
+
+            // Switch to fallback model
+            converseInput.modelId = getModelId(REGION, MODEL_TYPES.FALLBACK);
+            console.log(`Retrying with fallback model ${converseInput.modelId}`);
+
+            // Create new command with updated model
+            const newCommand = new ConverseStreamCommand(converseInput);
+
+            try {
+              // Try with fallback model directly
+              response = await bedrockRuntimeClient.send(newCommand);
+              break;
+            } catch (fallbackErr) {
+              console.error('Error with fallback model:', fallbackErr);
+              // If fallback also fails, throw the original error
+              throw err;
+            }
+          }
+
           if (err.name === 'TypeError' && retryCount < MAX_RETRIES - 1) {
             console.log(`Retry attempt ${retryCount + 1} after error:`, err);
             await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
@@ -752,11 +796,24 @@ const NumaChat = () => {
     } catch (err) {
       console.error('Error invoking Bedrock:', err);
       console.error('Full error details:', JSON.stringify(err, null, 2));
-      const errorMsg = {
-        role: 'system',
-        content: `Error: ${err.message || 'Failed to send message'}. Please try again or refresh page.`,
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+
+      // Check for quota errors in the main catch block
+      if (isQuotaLimitError(err)) {
+        setFallbackMode(CLIENT_NAME);
+
+        const errorMsg = {
+          role: 'system',
+          content: `There was a temporary issue. Please try again in one minute.`,
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+      } else {
+        const errorMsg = {
+          role: 'system',
+          content: `Error: ${err.message || 'Failed to send message'}. Please try again or refresh page.`,
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+      }
+
       setButtonStatus('idle');
     }
   };
