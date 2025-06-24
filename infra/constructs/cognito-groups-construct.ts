@@ -55,7 +55,7 @@ const createFeatureSets = (props: {
     {
       effect: 'Allow',
       actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
-      resources: [`${props.outputsBucket.bucket.arn}/outputs/$\${aws:PrincipalTag/username}/*`],
+      resources: [`${props.outputsBucket.bucket.arn}/outputs/*`],
     },
 
     // Chat history permissions with row-level security
