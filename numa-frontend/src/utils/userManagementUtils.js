@@ -184,13 +184,6 @@ export class UserManagementUtils {
   }
 
   async deleteUser(username, fetchUsers, setUsersError, setDeletingUser, qClient) {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete user ${username}? This will delete all data associated with this user.`,
-      )
-    ) {
-      return;
-    }
     try {
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
       const applicationId = window.sessionStorage.getItem('Q_APPLICATION_ID');

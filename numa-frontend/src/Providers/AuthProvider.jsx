@@ -307,7 +307,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const userGroup =
+      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -371,7 +372,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const userGroup =
+      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -437,7 +439,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const userGroup =
+      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -500,7 +503,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const userGroup =
+      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -570,7 +574,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const userGroup =
+      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -636,7 +641,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup = (user.decoded_tokens.groups && user.decoded_tokens.groups[0]) || 'standard';
+    const userGroup =
+      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -1050,7 +1056,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     // Use the same group selection logic as other functions
     const groups = JSON.parse(window.sessionStorage.getItem('GROUPS')) || {};
-    const userGroup = (user.groups && user.groups[0]) || 'standard';
+    const userGroup =
+      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
     const roleArn = groups[userGroup]?.roleArn;
 
     // Check if user has the features
