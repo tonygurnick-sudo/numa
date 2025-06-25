@@ -7,6 +7,7 @@ import { MarkdownContent } from './MarkdownContent';
 import { useAuth } from '../Providers/AuthProvider';
 import { uploadFileToS3 } from '../utils/s3Utils';
 import { createDocxBlob } from '../Services/fileConverter';
+import { FeatureWrapper } from './RequiredFeaturesWrapper';
 
 // Helper function to convert markdown to formatted plain text
 const convertMarkdownToPlainText = (markdown) => {
@@ -482,17 +483,21 @@ const ResultActions = ({ content, title = 'Result' }) => {
         </Dropdown.Menu>
       </Dropdown>
 
-      <Button variant="btn btn-secondary" onClick={handleShowModal}>
-        <i className="bi bi-database me-2"></i>
-        Add to Company Knowledge
-      </Button>
+      <FeatureWrapper feature="addToCompanyData">
+        <Button variant="btn btn-secondary" onClick={handleShowModal}>
+          <i className="bi bi-database me-2"></i>
+          Add to Company Knowledge
+        </Button>
+      </FeatureWrapper>
 
       <Modal show={showModal} onHide={handleModalCancel} backdrop="static" centered>
         {modalStep === 'confirm' && (
           <>
-            <Modal.Header closeButton>
-              <Modal.Title>Add to Company Knowledge</Modal.Title>
-            </Modal.Header>
+            <FeatureWrapper feature="addToCompanyData">
+              <Modal.Header closeButton>
+                <Modal.Title>Add to Company Knowledge</Modal.Title>
+              </Modal.Header>
+            </FeatureWrapper>
             <Modal.Body>
               <p>
                 You are about to add this to your <strong>company knowledge</strong>. It will be searchable after the
@@ -508,9 +513,11 @@ const ResultActions = ({ content, title = 'Result' }) => {
               <Button variant="secondary" onClick={handleModalCancel}>
                 Cancel
               </Button>
-              <Button variant="primary" onClick={handleModalYes}>
-                Add to Company Knowledge
-              </Button>
+              <FeatureWrapper feature="addToCompanyData">
+                <Button variant="primary" onClick={handleModalYes}>
+                  Add to Company Knowledge
+                </Button>
+              </FeatureWrapper>
             </Modal.Footer>
           </>
         )}

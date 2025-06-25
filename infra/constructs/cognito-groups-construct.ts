@@ -207,6 +207,11 @@ const createFeatureSets = (props: {
       actions: ['qbusiness:ListDocuments'],
       resources: ['*'],
     },
+    {
+      effect: 'Allow',
+      actions: ['s3:PutObject'],
+      resources: [`${props.companyBucket.bucket.arn}/company-data.json`],
+    },
   ],
 
   // Manage Users Feature Set
