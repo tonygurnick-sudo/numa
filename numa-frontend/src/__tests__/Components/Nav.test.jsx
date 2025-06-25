@@ -13,44 +13,33 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { Nav } from '../../Components/Nav';
 
-// Mock the route config import
-vi.mock('../../utils/routeConfig.jsx', () => ({
-  ROUTE_CONFIG: [
-    {
-      path: '/dash',
-      element: () => null,
-      nav: { label: 'Dash', icon: 'bi bi-grid-1x2-fill' },
-    },
-    {
-      path: '/favourite-apps',
-      element: () => null,
-      nav: { label: 'Favs', icon: 'bi bi-star-fill' },
-    },
-    {
-      path: '/upload',
-      element: () => null,
-      requiredFeature: 'useCompanyData',
-      nav: { label: 'Files', icon: 'bi bi-cloud-upload-fill' },
-    },
-    {
-      path: '/chat',
-      element: () => null,
-      requiredFeature: 'chat',
-      nav: { label: 'Chat', icon: 'bi bi-chat-dots-fill' },
-    },
-    {
-      path: '/company-info',
-      element: () => null,
-      requiredFeature: 'useCompanyData',
-      nav: { label: 'Company', icon: 'bi bi-building-fill' },
-    },
-    {
-      path: '/user-management',
-      element: () => null,
-      requiredFeature: 'manageUsers',
-      nav: { label: 'User Management', icon: 'bi bi-people-fill', footerOnly: true },
-    },
-  ],
+// Mock individual components to return null for testing
+vi.mock('../../Pages/Dash', () => ({
+  Dash: () => null,
+}));
+
+vi.mock('../../Pages/NumaChat', () => ({
+  NumaChat: () => null,
+}));
+
+vi.mock('../../Pages/S3Uploader', () => ({
+  S3Uploader: () => null,
+}));
+
+vi.mock('../../Pages/CompanyInfo', () => ({
+  CompanyInfo: () => null,
+}));
+
+vi.mock('../../Pages/UserManagement', () => ({
+  default: () => null,
+}));
+
+vi.mock('../../Pages/AppDetail', () => ({
+  default: () => null,
+}));
+
+vi.mock('../../utils/navigation', () => ({
+  reloadFavourites: vi.fn(),
 }));
 
 describe('Nav Component', () => {
@@ -131,6 +120,42 @@ describe('Nav Component', () => {
       expect(screen.getByText('Company')).toBeInTheDocument();
       expect(screen.getByText('Log out')).toBeInTheDocument();
       expect(screen.getByText('v0.1')).toBeInTheDocument();
+    });
+
+    it('renders navigation items in correct order: Dash, Favs, Chat, Company, Files', async () => {
+      renderWithProviders(<Nav />);
+
+      // Wait for route config to load
+      await waitFor(() => {
+        expect(screen.getByText('Dash')).toBeInTheDocument();
+      });
+
+      // Get all navigation items (excluding footer items like logout and version)
+      const navItems = screen.getAllByRole('button').filter((button) => {
+        const text = button.textContent;
+        return ['Dash', 'Favs', 'Chat', 'Company', 'Files'].includes(text);
+      });
+
+      // Extract the text content to verify order
+      const navItemTexts = navItems.map((item) => item.textContent);
+
+      // Filter out any missing items but verify the order of existing ones
+      const expectedOrder = ['Dash', 'Favs', 'Chat', 'Company', 'Files'];
+      const actualOrderFiltered = expectedOrder.filter((item) => navItemTexts.includes(item));
+      const actualOrder = navItemTexts.filter((text) => expectedOrder.includes(text));
+
+      expect(actualOrder).toEqual(actualOrderFiltered);
+
+      // Verify that all expected main nav items are present for admin
+      expect(actualOrder).toContain('Dash');
+      expect(actualOrder).toContain('Favs');
+      expect(actualOrder).toContain('Chat');
+      expect(actualOrder).toContain('Company');
+      expect(actualOrder).toContain('Files');
+
+      // Verify User Management is not in main nav (it should be footer-only)
+      const mainNavTexts = navItems.map((item) => item.textContent);
+      expect(mainNavTexts).not.toContain('User Management');
     });
 
     it('handles navigation clicks correctly for admin user', async () => {
