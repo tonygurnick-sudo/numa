@@ -356,13 +356,15 @@ export class CognitoGroupsConstruct extends Construct {
 
     // Create Cognito user groups and roles for each group
     for (const groupName of Object.keys(groups)) {
-      // Create the Cognito user group
-      const userGroup = new CognitoUserGroup(this, `${groupName}-group`, {
-        name: groupName,
-        userPoolId: props.userPoolId,
-        description: `${groupName} user group with specific permissions`,
-      });
-      this.cognitoGroups[groupName] = userGroup;
+      // Create the Cognito user group (skip for standard group)
+      if (groupName !== 'standard') {
+        const userGroup = new CognitoUserGroup(this, `${groupName}-group`, {
+          name: groupName,
+          userPoolId: props.userPoolId,
+          description: `${groupName} user group with specific permissions`,
+        });
+        this.cognitoGroups[groupName] = userGroup;
+      }
 
       const groupTrustPolicy = new DataAwsIamPolicyDocument(this, `${groupName}-trust-policy`, {
         statement: [
