@@ -1,7 +1,8 @@
 import {
-  DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   GetObjectTaggingCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -230,14 +231,14 @@ export const openFileWithSignedUrl = async (s3Key, s3Bucket, region, getCredenti
 };
 
 /**
- * Delete a file from S3
- * @param {string} s3Key
- * @param {string} s3Bucket
- * @param {string} region
- * @param {Function} getCredentials
- * @returns {Promise<void>}
+ * List all objects in an S3 folder (prefix)
+ * @param {string} folderPrefix - The folder prefix to list objects from
+ * @param {string} s3Bucket - The S3 bucket name
+ * @param {string} region - AWS region
+ * @param {Function} getCredentials - Function to get AWS credentials
+ * @returns {Promise<Array>} - Array of S3 object keys
  */
-export const deleteFileFromS3 = async (s3Key, s3Bucket, region, getCredentials) => {
+export const listObjectsInFolder = async (folderPrefix, s3Bucket, region, getCredentials) => {
   try {
     const credentials = await getCredentials();
 
@@ -250,15 +251,112 @@ export const deleteFileFromS3 = async (s3Key, s3Bucket, region, getCredentials) 
       credentials,
     });
 
-    const command = new DeleteObjectCommand({
-      Bucket: s3Bucket,
-      Key: s3Key,
+    const objects = [];
+    let continuationToken = null;
+
+    do {
+      const command = new ListObjectsV2Command({
+        Bucket: s3Bucket,
+        Prefix: folderPrefix,
+        ContinuationToken: continuationToken,
+      });
+
+      const response = await s3Client.send(command);
+
+      if (response.Contents) {
+        objects.push(...response.Contents.map((obj) => obj.Key));
+      }
+
+      continuationToken = response.NextContinuationToken;
+    } while (continuationToken);
+
+    return objects;
+  } catch (error) {
+    console.error('Error listing objects in folder:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete multiple objects from S3 using bulk delete (up to 1000 objects per batch)
+ * @param {Array<string>} objectKeys - Array of S3 object keys to delete
+ * @param {string} s3Bucket - The S3 bucket name
+ * @param {string} region - AWS region
+ * @param {Function} getCredentials - Function to get AWS credentials
+ * @param {Function} [onProgress] - Optional progress callback function
+ * @returns {Promise<{successful: Array, failed: Array}>} - Results of deletion
+ */
+export const deleteMultipleObjectsFromS3 = async (objectKeys, s3Bucket, region, getCredentials, onProgress = null) => {
+  try {
+    const credentials = await getCredentials();
+
+    if (!credentials?.accessKeyId) {
+      throw new Error('AWS Credentials are missing.');
+    }
+
+    const s3Client = new S3Client({
+      region,
+      credentials,
     });
 
-    await s3Client.send(command);
-    console.log(`Successfully deleted file: ${s3Key} from bucket: ${s3Bucket}`);
+    const successful = [];
+    const failed = [];
+    const BATCH_SIZE = 1000; // S3 DeleteObjects limit
+
+    // Process in batches of 1000
+    for (let i = 0; i < objectKeys.length; i += BATCH_SIZE) {
+      const batch = objectKeys.slice(i, i + BATCH_SIZE);
+
+      const command = new DeleteObjectsCommand({
+        Bucket: s3Bucket,
+        Delete: {
+          Objects: batch.map((key) => ({ Key: key })),
+          Quiet: false, // Get detailed results
+        },
+      });
+
+      try {
+        const response = await s3Client.send(command);
+
+        if (response.Deleted) {
+          successful.push(...response.Deleted.map((obj) => obj.Key));
+        }
+
+        if (response.Errors) {
+          failed.push(
+            ...response.Errors.map((err) => ({
+              key: err.Key,
+              code: err.Code,
+              message: err.Message,
+            })),
+          );
+        }
+
+        // Call progress callback if provided
+        if (onProgress) {
+          onProgress({
+            processed: Math.min(i + BATCH_SIZE, objectKeys.length),
+            total: objectKeys.length,
+            successful: successful.length,
+            failed: failed.length,
+          });
+        }
+      } catch (error) {
+        console.error(`Error deleting batch ${i / BATCH_SIZE + 1}:`, error);
+        failed.push(
+          ...batch.map((key) => ({
+            key,
+            code: 'BATCH_ERROR',
+            message: error.message,
+          })),
+        );
+      }
+    }
+
+    console.log(`Bulk delete completed: ${successful.length} successful, ${failed.length} failed`);
+    return { successful, failed };
   } catch (error) {
-    console.error('Error deleting file from S3:', error);
+    console.error('Error in bulk delete operation:', error);
     throw error;
   }
 };

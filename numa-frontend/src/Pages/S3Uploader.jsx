@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { Container, Row, Col, Card, Button, Form, Alert, Table, Modal } from 'react-bootstrap';
-import { getUrlTagFromS3Object, deleteFileFromS3 } from '../utils/s3Utils';
+import { getUrlTagFromS3Object, listObjectsInFolder, deleteMultipleObjectsFromS3 } from '../utils/s3Utils';
 import { WebCrawler } from '../Components/WebCrawler';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { useAuth } from '../Providers/AuthProvider';
@@ -250,10 +250,16 @@ function formatDataSourceName(name, clientName) {
 export function S3Uploader() {
   const [files, setFiles] = useState([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
-  const [isDeletingFile, setIsDeletingFile] = useState(false);
-  const [fileToDelete, setFileToDelete] = useState(null);
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+
+  // Bulk selection state
+  const [selectedItemsPending, setSelectedItemsPending] = useState(new Set());
+  const [selectedItemsIndexed, setSelectedItemsIndexed] = useState(new Set());
+  const [showBulkDeleteConfirmation, setShowBulkDeleteConfirmation] = useState(false);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState(null);
+  const [bulkDeleteItemCount, setBulkDeleteItemCount] = useState(0);
+  const [bulkDeleteType, setBulkDeleteType] = useState('pending'); // 'pending' or 'indexed'
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
   const [, setDataSourceId] = useState(null);
 
   const [syncStatus, setSyncStatus] = useState(null);
@@ -431,47 +437,158 @@ export function S3Uploader() {
   }
 
   /**
-   * Handles confirmation of file deletion
+   * Handle checkbox selection for items
    */
-  function confirmDeleteFile(file) {
-    setFileToDelete(file);
-    setShowDeleteConfirmation(true);
-    setDeleteError(null);
+  function handleItemSelection(itemId, itemType, isChecked) {
+    if (itemType === 'pending') {
+      setSelectedItemsPending((prev) => {
+        const newSet = new Set(prev);
+        if (isChecked) {
+          newSet.add(itemId);
+        } else {
+          newSet.delete(itemId);
+        }
+        return newSet;
+      });
+    } else {
+      setSelectedItemsIndexed((prev) => {
+        const newSet = new Set(prev);
+        if (isChecked) {
+          newSet.add(itemId);
+        } else {
+          newSet.delete(itemId);
+        }
+        return newSet;
+      });
+    }
   }
 
   /**
-   * Close the delete confirmation modal
+   * Select all items in a table
    */
-  function handleCloseDeleteModal() {
-    setShowDeleteConfirmation(false);
-    setFileToDelete(null);
-    setDeleteError(null);
+  function handleSelectAll(itemType, rows) {
+    const itemIds = rows.map((row) => row.id);
+    if (itemType === 'pending') {
+      setSelectedItemsPending(new Set(itemIds));
+    } else {
+      setSelectedItemsIndexed(new Set(itemIds));
+    }
   }
 
   /**
-   * Delete the file from S3 (index updates on scheduled sync)
+   * Clear all selections in a table
    */
-  async function handleDeleteFile() {
-    if (!fileToDelete) return;
+  function handleClearSelection(itemType) {
+    if (itemType === 'pending') {
+      setSelectedItemsPending(new Set());
+    } else {
+      setSelectedItemsIndexed(new Set());
+    }
+  }
 
-    setIsDeletingFile(true);
-    setDeleteError(null);
+  /**
+   * Get all S3 object keys that need to be deleted from selected items
+   * Handles both individual files and folders (expands folders to contained files)
+   */
+  async function getItemsToDelete(selectedItems, rows) {
+    const itemsToDelete = new Set();
+    const region = window.sessionStorage.getItem('REGION');
+    const bucketName = `numa-${CLIENT_NAME}-data`;
+
+    for (const itemId of selectedItems) {
+      const item = rows.find((row) => row.id === itemId);
+      if (!item) continue;
+
+      if (item.type === 'folder') {
+        // Expand folder to all contained files
+        const folderPrefix = item.id.endsWith('/') ? item.id : `${item.id}/`;
+        try {
+          const objectKeys = await listObjectsInFolder(folderPrefix, bucketName, region, getCredentials);
+          objectKeys.forEach((key) => itemsToDelete.add(key));
+        } catch (error) {
+          console.error(`Error listing files in folder ${item.id}:`, error);
+        }
+      } else if (item.originalKey) {
+        // Add individual file
+        itemsToDelete.add(item.originalKey);
+      }
+    }
+
+    return Array.from(itemsToDelete);
+  }
+
+  /**
+   * Handle bulk delete confirmation
+   */
+  async function confirmBulkDelete(itemType) {
+    const selectedItems = itemType === 'pending' ? selectedItemsPending : selectedItemsIndexed;
+    const rows = itemType === 'pending' ? pendingRows : indexedRows;
+
+    if (selectedItems.size === 0) return;
+
     try {
+      setDeleteError(null);
+      const itemsToDelete = await getItemsToDelete(selectedItems, rows);
+      setBulkDeleteItemCount(itemsToDelete.length);
+      setBulkDeleteType(itemType);
+      setShowBulkDeleteConfirmation(true);
+    } catch (error) {
+      console.error('Error preparing bulk delete:', error);
+      setDeleteError('Failed to prepare deletion. Please try again.');
+    }
+  }
+
+  /**
+   * Close bulk delete confirmation modal
+   */
+  function handleCloseBulkDeleteModal() {
+    setShowBulkDeleteConfirmation(false);
+    setBulkDeleteProgress(null);
+    setBulkDeleteItemCount(0);
+  }
+
+  /**
+   * Execute bulk delete
+   */
+  async function handleBulkDelete() {
+    const selectedItems = bulkDeleteType === 'pending' ? selectedItemsPending : selectedItemsIndexed;
+    const rows = bulkDeleteType === 'pending' ? pendingRows : indexedRows;
+
+    if (selectedItems.size === 0) return;
+
+    setIsDeletingBulk(true);
+    setDeleteError(null);
+    setBulkDeleteProgress({ processed: 0, total: bulkDeleteItemCount, successful: 0, failed: 0 });
+
+    try {
+      const itemsToDelete = await getItemsToDelete(selectedItems, rows);
       const region = window.sessionStorage.getItem('REGION');
       const bucketName = `numa-${CLIENT_NAME}-data`;
 
-      // Delete the file from S3
-      await deleteFileFromS3(fileToDelete.originalKey, bucketName, region, getCredentials);
+      // Delete all items using bulk delete
+      const result = await deleteMultipleObjectsFromS3(itemsToDelete, bucketName, region, getCredentials, (progress) =>
+        setBulkDeleteProgress(progress),
+      );
 
-      // Refresh the file list and KB state
+      if (result.failed.length > 0) {
+        setDeleteError(
+          `Partially successful: ${result.successful.length} files deleted, ${result.failed.length} failed.`,
+        );
+      }
+
+      // Clear selections and refresh
+      handleClearSelection(bulkDeleteType);
       await fetchFiles();
       await checkDataSourceSync();
-      setShowDeleteConfirmation(false);
+
+      if (result.failed.length === 0) {
+        setShowBulkDeleteConfirmation(false);
+      }
     } catch (error) {
-      console.error('Error deleting file:', error);
-      setDeleteError(error.message || 'Failed to delete file. Please try again.');
+      console.error('Error in bulk delete:', error);
+      setDeleteError(error.message || 'Failed to delete items. Please try again.');
     } finally {
-      setIsDeletingFile(false);
+      setIsDeletingBulk(false);
     }
   }
 
@@ -605,6 +722,60 @@ export function S3Uploader() {
                 </div>
               ) : (
                 <div style={containerStyle}>
+                  <style>{`
+                    .checkbox-purple input[type="checkbox"]:checked {
+                      background-color: #6f42c1 !important;
+                      border-color: #6f42c1 !important;
+                    }
+                    .checkbox-purple input[type="checkbox"]:focus {
+                      border-color: #6f42c1 !important;
+                      box-shadow: 0 0 0 0.25rem rgba(111, 66, 193, 0.25) !important;
+                    }
+                  `}</style>
+                  {/* Bulk Delete Action Bar */}
+                  <FeatureWrapper requiredFeature="deleteFromCompanyData">
+                    {(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed).size >
+                      0 && (
+                      <div className="d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded">
+                        <span className="text-muted">
+                          {(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed).size}{' '}
+                          item(s) selected
+                        </span>
+                        <div>
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            className="me-2"
+                            onClick={() =>
+                              handleClearSelection(expandedSet === expandedFoldersPending ? 'pending' : 'indexed')
+                            }
+                          >
+                            Clear Selection
+                          </Button>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="me-2"
+                            onClick={() =>
+                              handleSelectAll(expandedSet === expandedFoldersPending ? 'pending' : 'indexed', rows)
+                            }
+                          >
+                            Select All
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() =>
+                              confirmBulkDelete(expandedSet === expandedFoldersPending ? 'pending' : 'indexed')
+                            }
+                          >
+                            <i className="bi bi-trash me-1"></i>
+                            Delete Selected
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </FeatureWrapper>
                   <Table
                     hover
                     size="sm"
@@ -618,7 +789,7 @@ export function S3Uploader() {
                         <th style={{ width: '10%', cursor: 'default' }}>Size (KB)</th>
                         {showErrorColumn && <th style={{ width: '10%', cursor: 'default' }}>Status</th>}
                         <FeatureWrapper requiredFeature="deleteFromCompanyData">
-                          <th style={{ width: '10%', cursor: 'default' }}>Actions</th>
+                          <th style={{ width: '10%', cursor: 'default' }}>Select</th>
                         </FeatureWrapper>
                       </tr>
                     </thead>
@@ -675,18 +846,23 @@ export function S3Uploader() {
                               </td>
                             )}
                             <FeatureWrapper requiredFeature="deleteFromCompanyData">
-                              <td>
-                                {!isFolder && (
-                                  <Button
-                                    variant="outline-danger"
-                                    size="sm"
-                                    onClick={() => confirmDeleteFile(row)}
-                                    aria-label="Delete file"
-                                    title="Delete file"
-                                  >
-                                    <i className="bi bi-trash"></i>
-                                  </Button>
-                                )}
+                              <td className="checkbox-purple">
+                                <input
+                                  type="checkbox"
+                                  className="form-check-input"
+                                  checked={(expandedSet === expandedFoldersPending
+                                    ? selectedItemsPending
+                                    : selectedItemsIndexed
+                                  ).has(row.id)}
+                                  onChange={(e) =>
+                                    handleItemSelection(
+                                      row.id,
+                                      expandedSet === expandedFoldersPending ? 'pending' : 'indexed',
+                                      e.target.checked,
+                                    )
+                                  }
+                                  aria-label={`Select ${isFolder ? 'folder' : 'file'}: ${row.name}`}
+                                />
                               </td>
                             </FeatureWrapper>
                           </tr>
@@ -1046,10 +1222,10 @@ export function S3Uploader() {
         )}
       </LayoutDashboard>
 
-      {/* Delete Confirmation Modal */}
-      <Modal show={showDeleteConfirmation} onHide={handleCloseDeleteModal}>
+      {/* Bulk Delete Confirmation Modal */}
+      <Modal show={showBulkDeleteConfirmation} onHide={handleCloseBulkDeleteModal}>
         <Modal.Header closeButton>
-          <Modal.Title>Confirm Deletion</Modal.Title>
+          <Modal.Title>Confirm Bulk Deletion</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {deleteError && (
@@ -1057,29 +1233,52 @@ export function S3Uploader() {
               {deleteError}
             </Alert>
           )}
-          <p>Are you sure you want to delete this file?</p>
-          {fileToDelete && (
-            <p>
-              <strong>{fileToDelete.displayName || fileToDelete.name}</strong>
-            </p>
+          <p>Are you sure you want to delete the selected items?</p>
+          {bulkDeleteItemCount > 0 && (
+            <Alert variant="warning" className="mb-3">
+              <i className="bi bi-exclamation-triangle me-2"></i>
+              This will permanently delete <strong>{bulkDeleteItemCount}</strong> file
+              {bulkDeleteItemCount !== 1 ? 's' : ''} from the selected items.
+            </Alert>
+          )}
+          {bulkDeleteProgress && (
+            <div className="mb-3">
+              <div className="d-flex justify-content-between small text-muted mb-1">
+                <span>
+                  Progress: {bulkDeleteProgress.processed} / {bulkDeleteProgress.total}
+                </span>
+                <span>{Math.round((bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100)}%</span>
+              </div>
+              <div className="progress">
+                <div
+                  className="progress-bar"
+                  style={{ width: `${(bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100}%` }}
+                ></div>
+              </div>
+              {bulkDeleteProgress.failed > 0 && (
+                <small className="text-danger">
+                  {bulkDeleteProgress.failed} failed, {bulkDeleteProgress.successful} successful
+                </small>
+              )}
+            </div>
           )}
           <p className="text-muted small">
-            Note: The file will be removed from S3 immediately. It may take some time (up to 30 minutes) for the change
-            to be reflected in the Knowledge Base index.
+            Note: All files will be removed from S3 immediately. It may take some time (up to 30 minutes) for the
+            changes to be reflected in the Knowledge Base index.
           </p>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={handleCloseDeleteModal} disabled={isDeletingFile}>
+          <Button variant="secondary" onClick={handleCloseBulkDeleteModal} disabled={isDeletingBulk}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={handleDeleteFile} disabled={isDeletingFile}>
-            {isDeletingFile ? (
+          <Button variant="danger" onClick={handleBulkDelete} disabled={isDeletingBulk || bulkDeleteItemCount === 0}>
+            {isDeletingBulk ? (
               <>
                 <span className="spinner-border spinner-border-sm me-2" />
                 Deleting...
               </>
             ) : (
-              'Delete File'
+              `Delete Selected${bulkDeleteItemCount > 0 ? ` (${bulkDeleteItemCount} files)` : ''}`
             )}
           </Button>
         </Modal.Footer>
