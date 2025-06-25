@@ -120,7 +120,7 @@ client-list-lint:
     - chmod +x /usr/local/bin/yq
     - (cd tools && yarn install)
   script:
-    - diff <((cd tools && yarn list-clients) | grep -v 'arcanum-demo$' | grep -v arcanum-prod-numa-demo) <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
+    - diff <((cd tools && yarn list-clients) | grep -v 'arcanum-demo$') <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
 
 .node-job-infra-overrides: &node-job-infra-overrides
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
@@ -279,17 +279,6 @@ deploy-to-arcanum-demo:
     deployment_tier: testing
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-deploy-to-arcanum-prod-numa-demo:
-  extends: .deploy-infra
-  stage: deploy:prod
-  variables:
-    CLIENT_NAME: arcanum-prod-numa-demo
-  environment:
-    deployment_tier: production
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
 
 deploy-to-client:
   extends: .deploy-infra
