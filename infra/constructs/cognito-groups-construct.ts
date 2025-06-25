@@ -51,11 +51,10 @@ const createFeatureSets = (props: {
   // Chat Feature Set
   chat: [
     // Outputs bucket permissions
-
     {
       effect: 'Allow',
       actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
-      resources: [`${props.outputsBucket.bucket.arn}/outputs/*`],
+      resources: [`${props.outputsBucket.bucket.arn}/*`],
     },
 
     // Chat history permissions with row-level security
@@ -115,6 +114,16 @@ const createFeatureSets = (props: {
           values: [`qbusiness.${props.region}.amazonaws.com`, `qapps.${props.region}.amazonaws.com`],
         },
       ],
+    },
+  ],
+
+  // Use Apps Feature Set
+  useApps: [
+    // Outputs bucket permissions for files
+    {
+      effect: 'Allow',
+      actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
+      resources: [`${props.outputsBucket.bucket.arn}/*`],
     },
   ],
 
@@ -272,7 +281,6 @@ export const cognitoGroupsConstructPropsSchema = z.object({
   companyBucket: bucketSchema,
   chatHistoryTable: tableSchema,
   qBusinessApplicationId: z.string().optional(), // Add optional Q Business application ID
-  featureSets: z.record(z.array(z.enum(FEATURE_SET_NAMES as [FeatureSetName, ...FeatureSetName[]]))).optional(),
   groups: z.record(z.array(z.enum(FEATURE_SET_NAMES as [FeatureSetName, ...FeatureSetName[]]))).optional(),
   knowledgeBase: z.instanceof(KnowledgeBase),
 });
@@ -289,7 +297,7 @@ export class CognitoGroupsConstruct extends Construct {
     // Define the groups and their feature sets
     const defaultGroups: Record<string, FeatureSetName[]> = {
       // The standard group should always be the least privileged group of all groups
-      standard: ['chat', 'useCompanyData'],
+      standard: ['chat', 'useCompanyData', 'useApps'],
       admin: FEATURE_SET_NAMES as FeatureSetName[],
     };
 

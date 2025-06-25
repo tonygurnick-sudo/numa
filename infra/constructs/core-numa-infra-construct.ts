@@ -41,7 +41,7 @@ import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { ConfigBucket } from './config-bucket-construct';
 import { z } from 'zod';
 import { WebCrawlerConstruct } from './web-crawler-construct';
-import { CognitoGroupsConstruct } from './cognito-groups-construct';
+import { CognitoGroupsConstruct, FEATURE_SET_NAMES } from './cognito-groups-construct';
 import { KnowledgeBase } from './knowledge-base-construct';
 
 export class CoreNumaInfra extends Construct {
@@ -715,7 +715,6 @@ export class CoreNumaInfra extends Construct {
       outputsBucket: this.outputsBucket,
       companyBucket: companyBucket,
       chatHistoryTable: this.chatHistoryTable,
-      featureSets: props.featureSets,
       groups: props.groups,
       qBusinessApplicationId: qBusinessApplicationIdForIdp,
       knowledgeBase: props.knowledgeBase,
@@ -868,12 +867,7 @@ export const coreNumaInfraPropsSchema = _coreNumaInfraPropsSchema
   .merge(qBusinessChatControlConfigurerPropsSchema.omit({ applicationId: true, accountId: true }))
   .merge(
     z.object({
-      featureSets: z
-        .record(z.array(z.enum(['chat', 'useCompanyData', 'deleteFromCompanyData', 'addToCompanyData', 'manageUsers'])))
-        .optional(),
-      groups: z
-        .record(z.array(z.enum(['chat', 'useCompanyData', 'deleteFromCompanyData', 'addToCompanyData', 'manageUsers'])))
-        .optional(),
+      groups: z.record(z.array(z.enum(FEATURE_SET_NAMES as [string, ...string[]]))).optional(),
     }),
   );
 export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {
