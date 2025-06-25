@@ -2,7 +2,7 @@ import { fetchFileFromS3 } from '../utils/s3Utils';
 
 const MAX_WORDS = 7500; // Maximum number of words to use in prompt
 const MAX_MESSAGES = 30; // Maximum number of messages to use in prompt
-const MAX_DYNAMO_MESSAGES = 30; // Maximum number of messages to fetch from DynamoDB to use in this module. Doesn't need to be above 30 for now as we aren't doing any advanced processing on the messages.
+const MAX_DYNAMO_MESSAGES = 100; // Maximum number of messages to fetch from DynamoDB for UI display (more messages = better chat history visibility)
 
 const wordCount = (str) => str.split(/\s+/).length;
 

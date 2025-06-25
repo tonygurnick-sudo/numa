@@ -84,7 +84,7 @@ class NumaChatDynamoUtils {
           ':u': userId,
           ':c': `${conversationId}#`,
         }),
-        ScanIndexForward: true, // sort ascending by SK
+        ScanIndexForward: false, // sort descending by SK (newest first)
         Limit: limit,
       });
 
