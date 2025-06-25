@@ -4,7 +4,11 @@ import App from './App.jsx';
 import installOpenTelemetry from './otel-config.jsx';
 
 import { fetchConfigAddtoSession } from './Components/ConfigSetup';
-fetchConfigAddtoSession();
+
+// Initialize config with caching
+fetchConfigAddtoSession().catch((error) => {
+  console.error('Failed to initialize config:', error);
+});
 
 // Only install OpenTelemetry if not running on localhost
 if (!window.location.hostname.includes('localhost')) {
