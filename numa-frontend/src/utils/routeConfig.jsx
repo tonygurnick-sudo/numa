@@ -18,16 +18,6 @@ export const ROUTE_CONFIG = [
     nav: { label: 'Favs', icon: 'bi bi-star-fill' },
   },
   {
-    path: '/app/:appId',
-    element: () => <AppDetail />, // no nav entry
-  },
-  {
-    path: '/upload',
-    element: () => <S3Uploader />,
-    requiredFeature: 'useCompanyData',
-    nav: { label: 'Files', icon: 'bi bi-cloud-upload-fill' },
-  },
-  {
     path: '/chat',
     element: () => <NumaChat />,
     requiredFeature: 'chat',
@@ -40,9 +30,19 @@ export const ROUTE_CONFIG = [
     nav: { label: 'Company', icon: 'bi bi-building-fill' },
   },
   {
+    path: '/upload',
+    element: () => <S3Uploader />,
+    requiredFeature: 'useCompanyData',
+    nav: { label: 'Files', icon: 'bi bi-cloud-upload-fill' },
+  },
+  {
     path: '/user-management',
     element: () => <UserManagement />,
     requiredFeature: 'manageUsers',
     nav: { label: 'User Management', icon: 'bi bi-people-fill', footerOnly: true },
+  },
+  {
+    path: '/app/:appId',
+    element: () => <AppDetail />, // no nav entry
   },
 ];
