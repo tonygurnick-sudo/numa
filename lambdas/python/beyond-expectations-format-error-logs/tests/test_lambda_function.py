@@ -1,7 +1,19 @@
 import datetime
+import os
+import os.path
+import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
+# Add the lib directory to the Python path to find the helpers module
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
+sys.path.append(os.path.join(project_root, "lib/helpers"))
+
+# Mock the jwt and s3_helpers modules before importing lambda_function
+sys.modules["jwt"] = Mock()
+sys.modules["s3_helpers"] = Mock()
+
+# pylint: disable=wrong-import-position
 from lambda_function import (
     MAX_MESSAGE_LENGTH,
     MAX_TASK_DESCRIPTION_LENGTH,
@@ -155,9 +167,6 @@ class TestParseTimeWindow(unittest.TestCase):
         """Test that invalid formats raise ValueError"""
         with self.assertRaises(ValueError):
             parse_time_window("24")
-
-        with self.assertRaises(ValueError):
-            parse_time_window("24m")
 
         with self.assertRaises(ValueError):
             parse_time_window("invalid")

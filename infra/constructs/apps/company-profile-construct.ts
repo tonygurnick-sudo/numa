@@ -100,6 +100,7 @@ export class CompanyProfile extends BaseNumaApp {
             'about.$': '$.about',
             'contact_information.$': '$.contact_information',
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'uploaded_files.$': '$.uploaded_files',
           },
           Next: 'ExtractMap',
@@ -109,6 +110,7 @@ export class CompanyProfile extends BaseNumaApp {
           ItemsPath: '$.uploaded_files',
           Parameters: {
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'key.$': '$$.Map.Item.Value.s3_key',
           },
           ItemProcessor: {
@@ -121,6 +123,7 @@ export class CompanyProfile extends BaseNumaApp {
                 extractContentLambda.arn,
                 {
                   'input_key.$': '$.key',
+                  'user_id.$': '$.user_id',
                   'output_key.$': `States.Format('{}.extracted', $.key)`,
                   app_id: this.appId,
                   input_bucket: props.outputsBucket.bucket,
@@ -153,7 +156,8 @@ export class CompanyProfile extends BaseNumaApp {
             'contact_information.$': '$.contact_information',
             'input_keys.$': '$.mapped[*].extracted.output_key',
             'job_id.$': '$.job_id',
-            'output_key.$': `States.Format('${this.appId}/{}/profile.json', $$.Execution.Input.job_id)`,
+            'user_id.$': '$.user_id',
+            'output_key.$': `States.Format('${this.appId}/{}/{}/profile.json', $.user_id, $.job_id)`,
             app_id: this.appId,
           },
           'WriteSuccessStatus',

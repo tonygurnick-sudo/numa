@@ -1,9 +1,20 @@
 import json
 import os
+import os.path
+import sys
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
+# Add the lib directory to the Python path to find the required modules
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
+sys.path.append(os.path.join(project_root, "lib/helpers"))
+
+# Mock the helpers module before importing lambda_function
+sys.modules["helpers"] = Mock()
+sys.modules["helpers"].extract_user_id_from_token = Mock(return_value="test-user-id")  # type: ignore
+
+# pylint: disable=wrong-import-position
 import lambda_function
 
 

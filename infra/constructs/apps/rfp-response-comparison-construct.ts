@@ -93,6 +93,7 @@ export class RfpResponseComparison extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$$.Execution.Input.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
             'responses.$': '$$.Execution.Input.responses',
             'framework.$': '$$.Execution.Input.framework',
           },
@@ -139,7 +140,7 @@ export class RfpResponseComparison extends BaseNumaApp {
             'responses.$': '$$.Execution.Input.responses',
             'framework.$': '$.framework[0].s3_key',
             'job_id.$': '$.job_id',
-            'output_path.$': `States.Format('${this.appId}/{}/comparison', $$.Execution.Input.job_id)`,
+            'output_path.$': `States.Format('${this.appId}/{}/{}/comparison', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
             app_id: this.appId,
           },
           Next: 'ExtractAndCompare',

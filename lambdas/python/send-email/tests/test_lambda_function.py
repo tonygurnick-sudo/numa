@@ -1,8 +1,24 @@
 import json
+import os
+import sys
 import unittest
 from email.mime.multipart import MIMEMultipart
 from unittest.mock import MagicMock, patch
 
+# Add the lib directory to the Python path to find the required modules
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
+sys.path.append(os.path.join(project_root, "lib/helpers"))
+sys.path.append(os.path.join(project_root, "lib/s3_helpers"))
+
+# Mock custom modules that aren't standard Python packages
+# pylint: disable=wrong-import-position
+import unittest.mock
+
+sys.modules["jwt"] = unittest.mock.Mock()  # type: ignore
+sys.modules["helpers"] = unittest.mock.Mock()  # type: ignore
+sys.modules["s3_helpers"] = unittest.mock.Mock()  # type: ignore
+
+# pylint: disable=wrong-import-position
 import lambda_function
 
 

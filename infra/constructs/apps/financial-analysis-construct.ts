@@ -100,6 +100,7 @@ export class FinancialAnalysis extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$$.Execution.Input.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
           },
           Next: 'ExtractAndAnalyseMap',
@@ -109,6 +110,7 @@ export class FinancialAnalysis extends BaseNumaApp {
           ItemsPath: '$.uploaded_files',
           Parameters: {
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'key.$': '$$.Map.Item.Value.s3_key',
             'key_parts.$': `States.StringSplit($$.Map.Item.Value.s3_key, '/')`,
           },
@@ -122,7 +124,7 @@ export class FinancialAnalysis extends BaseNumaApp {
                 extractContentLambda.arn,
                 {
                   'input_key.$': '$.key',
-                  'output_key.$': `States.Format('${this.appId}/{}/extracted/{}.json',  $.job_id, States.ArrayGetItem($.key_parts[-1:], 0))`,
+                  'output_key.$': `States.Format('${this.appId}/{}/{}/extracted/{}.json', $.user_id, $.job_id, States.ArrayGetItem($.key_parts[-1:], 0))`,
                   input_bucket: props.outputsBucket.bucket,
                 },
                 'ExtractFinancialData',
@@ -139,8 +141,9 @@ export class FinancialAnalysis extends BaseNumaApp {
                 {
                   app_id: this.appId,
                   'job_id.$': '$.job_id',
+                  'user_id.$': '$.user_id',
                   'input_key.$': '$.extracted.output_key',
-                  'output_key.$': `States.Format('${this.appId}/{}/structured/{}.json',  $.job_id, States.ArrayGetItem($.key_parts[-1:], 0))`,
+                  'output_key.$': `States.Format('${this.appId}/{}/{}/structured/{}.json', $.user_id, $.job_id, States.ArrayGetItem($.key_parts[-1:], 0))`,
                 },
                 null,
                 {
@@ -168,8 +171,9 @@ export class FinancialAnalysis extends BaseNumaApp {
           {
             app_id: this.appId,
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'inputs.$': '$.mapped',
-            'output_prefix.$': `States.Format('${this.appId}/{}', $$.Execution.Input.job_id)`,
+            'output_prefix.$': `States.Format('${this.appId}/{}/{}', $.user_id, $.job_id)`,
           },
           'WriteSuccessStatus',
           {

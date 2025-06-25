@@ -87,11 +87,12 @@ export class PolicyReviewer extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$$.Execution.Input.original_job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
             'policy_key.$': '$$.Execution.Input.uploaded_files[0].s3_key',
             'legislation_content.$': '$$.Execution.Input.legislation_content',
             'policy_context.$': '$$.Execution.Input.policy_context',
             app_id: this.appId,
-            'output_path.$': `States.Format('${this.appId}/{}', $$.Execution.Input.original_job_id)`,
+            'output_path.$': `States.Format('${this.appId}/{}/{}', $.user_id, $.job_id)`,
           },
           Next: 'ExtractContent',
         },
@@ -101,10 +102,11 @@ export class PolicyReviewer extends BaseNumaApp {
           {
             'input_key.$': '$.extracted.output_key',
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'legislation_content.$': '$.legislation_content',
             'policy_context.$': '$.policy_context',
             app_id: this.appId,
-            'output_path.$': `States.Format('${this.appId}/{}', $.job_id)`,
+            'output_path.$': `States.Format('${this.appId}/{}/{}', $.user_id, $.job_id)`,
           },
           'WriteSuccessStatus',
           {

@@ -2,11 +2,30 @@
 import dataclasses
 import io
 import json
+import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+# Add the lib directory to the Python path to find the modules
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
+sys.path.append(os.path.join(project_root, "lib/bedrock"))
+sys.path.append(os.path.join(project_root, "lib/helpers"))
+sys.path.append(os.path.join(project_root, "lib/pdf"))
+
+# Mock custom modules that aren't standard Python packages
+# pylint: disable=wrong-import-position
+import unittest.mock
+
+# Mock JWT module
+sys.modules["jwt"] = unittest.mock.Mock()  # type: ignore
+sys.modules["aws_transcribe"] = unittest.mock.Mock()  # type: ignore
+
+# pylint: disable=wrong-import-position
 import docx
 from docx.enum.text import WD_BREAK
+
+sys.modules["aws_transcribe"] = unittest.mock.Mock()
 
 import lambda_function
 

@@ -1,34 +1,49 @@
-# pylint: disable=protected-access
+# pylint: disable=protected-access,wrong-import-position,import-error
 import json
+import os
+import os.path
+import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
+
+# Add the lib directory to the Python path to find the helpers module
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
+sys.path.append(os.path.join(project_root, "lib/helpers"))
+sys.path.append(os.path.join(project_root, "lib/bedrock"))
+sys.path.append(os.path.join(project_root, "lib/s3_helpers"))
+
+# Mock the modules before importing lambda_function
+sys.modules["jwt"] = Mock()  # type: ignore
+sys.modules["bedrock"] = Mock()  # type: ignore
+sys.modules["helpers"] = Mock()  # type: ignore
+sys.modules["s3_helpers"] = Mock()  # type: ignore
 
 import lambda_function
 
 
 class TestLambdaFunction(unittest.TestCase):
     @patch("lambda_function.s3_helpers")
-    @patch("lambda_function.bedrock.BedrockClaude3Model.run")
+    @patch("lambda_function.bedrock.BedrockClaude3Model")
     @patch.dict("os.environ", {"AWS_REGION": "us-east-1"})
-    def test_handler(self, mock_bedrock_model, mock_s3_helpers):
-
-        fake_file_data = {"pages": [{"text": "First page text"}]}
-        mock_s3_helpers.read.return_value = json.dumps(fake_file_data).encode("utf-8")
-        mock_bedrock_model.return_value.response = [
+    def test_handler(self, mock_bedrock_model_class, mock_s3_helpers):
+        # Create a mock model instance with properly structured response
+        mock_model = Mock()
+        mock_response = Mock()
+        mock_response.response = [
             {
                 "input": {
                     "data": json.dumps(
-                        [
-                            {
-                                "content": [
-                                    {"text": "mock bedrock response"},
-                                ],
-                            },
-                        ],
-                    ),
-                },
+                        [{"content": [{"text": "mock bedrock response"}]}]
+                    )
+                }
             }
         ]
+        mock_model.run.return_value = mock_response
+        mock_bedrock_model_class.return_value = mock_model
+
+        # Mock S3 response
+        fake_file_data = {"pages": [{"text": "First page text"}]}
+        mock_s3_helpers.read.return_value = json.dumps(fake_file_data).encode("utf-8")
 
         event = {
             "app_id": "test_app_id",
@@ -50,21 +65,26 @@ class TestLambdaFunction(unittest.TestCase):
         self.assertEqual(result["output_key"], "structured/mydoc.json")
 
     @patch("lambda_function.s3_helpers")
-    @patch("lambda_function.bedrock.BedrockClaude3Model.run")
+    @patch("lambda_function.bedrock.BedrockClaude3Model")
     @patch.dict("os.environ", {"AWS_REGION": "us-east-1"})
-    def test_string_extracted_data(self, mock_bedrock_model, mock_s3_helpers):
-
-        fake_file_data = {"pages": [{"text": "First page text"}]}
-        mock_s3_helpers.read.return_value = json.dumps(fake_file_data).encode("utf-8")
-        mock_bedrock_model.return_value.response = [
+    def test_string_extracted_data(self, mock_bedrock_model_class, mock_s3_helpers):
+        # Create a mock model instance with properly structured response
+        mock_model = Mock()
+        mock_response = Mock()
+        mock_response.response = [
             {
                 "input": {
                     "data": json.dumps(
                         [{"content": [{"text": "string mock bedrock response"}]}]
                     )
-                },
+                }
             }
         ]
+        mock_model.run.return_value = mock_response
+        mock_bedrock_model_class.return_value = mock_model
+
+        fake_file_data = {"pages": [{"text": "First page text"}]}
+        mock_s3_helpers.read.return_value = json.dumps(fake_file_data).encode("utf-8")
 
         event = {
             "app_id": "test_app_id",

@@ -98,6 +98,7 @@ export class DocumentSummariser extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$$.Execution.Input.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
           },
           Next: 'ExtractAndSummariseMap',
@@ -107,6 +108,7 @@ export class DocumentSummariser extends BaseNumaApp {
           ItemsPath: '$.uploaded_files',
           Parameters: {
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'key.$': '$$.Map.Item.Value.s3_key',
           },
           ItemProcessor: {
@@ -119,7 +121,7 @@ export class DocumentSummariser extends BaseNumaApp {
                 extractContentLambda.arn,
                 {
                   'input_key.$': '$.key',
-                  'output_key.$': `States.Format('{}${extractedSuffix}', $.key)`,
+                  'output_key.$': `States.Format('${this.appId}/{}/{}/{}${extractedSuffix}', $$.Execution.Input.user_id, $$.Execution.Input.job_id, $.key)`,
                   input_bucket: props.outputsBucket.bucket,
                 },
                 'SummariseDocument',
@@ -136,8 +138,9 @@ export class DocumentSummariser extends BaseNumaApp {
                 {
                   app_id: this.appId,
                   'job_id.$': '$.job_id',
+                  'user_id.$': '$.user_id',
                   'input_key.$': '$.extracted.output_key',
-                  'output_key.$': `States.Format('{}${summarisedSuffix}', $.key)`,
+                  'output_key.$': `States.Format('${this.appId}/{}/{}/{}${summarisedSuffix}', $$.Execution.Input.user_id, $$.Execution.Input.job_id, $.key)`,
                 },
                 null,
                 {
@@ -165,9 +168,10 @@ export class DocumentSummariser extends BaseNumaApp {
           {
             app_id: this.appId,
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'input_keys.$': '$.mapped[*].summarised.output_key',
             key_suffix: summarisedSuffix,
-            'output_key.$': `States.Format('${this.appId}/{}/aggregated.md', $$.Execution.Input.job_id)`,
+            'output_key.$': `States.Format('${this.appId}/{}/{}/aggregated.md', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
           },
           'WriteSuccessStatus',
           {

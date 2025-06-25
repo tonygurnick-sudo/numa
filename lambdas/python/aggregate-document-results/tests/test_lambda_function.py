@@ -1,8 +1,19 @@
+import os
+import os.path
+import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
+# Add the lib directory to the Python path to find the required modules
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
+sys.path.append(os.path.join(project_root, "lib/helpers"))
+
+# Mock the jwt module before importing helpers (which is imported by lambda_function)
+sys.modules["jwt"] = Mock()
+
+# pylint: disable=wrong-import-position
 import lambda_function
 
 CONTEXT = LambdaContext()

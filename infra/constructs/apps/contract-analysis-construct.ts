@@ -95,6 +95,7 @@ export class ContractAnalysis extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
             'contract_key.$': '$.uploaded_files[0].s3_key',
             'contract_context.$': '$.contract_context',
           },
@@ -106,9 +107,10 @@ export class ContractAnalysis extends BaseNumaApp {
           {
             app_id: this.appId,
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'input_key.$': '$.extracted.output_key',
             'contract_context.$': '$.contract_context',
-            'output_path.$': `States.Format('${this.appId}/{}', $$.Execution.Input.job_id)`,
+            'output_path.$': `States.Format('${this.appId}/{}/{}', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
           },
           'WriteSuccessStatus',
           {

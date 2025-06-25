@@ -17,8 +17,8 @@ s3_client = boto3.client("s3")
 SEPARATOR = "--------------------------------\n"
 
 
-def __key(app_id: str, job_id: str, name: str, area: str = "") -> str:
-    key = f"{app_id}/{job_id}/{name}"
+def __key(app_id: str, user_id: str, job_id: str, name: str, area: str = "") -> str:
+    key = f"{app_id}/{user_id}/{job_id}/{name}"
     if area:
         key += f"_{area}"
     return key
@@ -108,18 +108,17 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
     app_id = event["app_id"]
     job_id = event["job_id"]
+    user_id = event.get("user_id", "unknown")
 
-    explainability_markdown_key = __key(app_id, job_id, "explainability.md")
-    app_id = event["app_id"]
-    job_id = event["job_id"]
+    explainability_markdown_key = __key(app_id, user_id, job_id, "explainability.md")
     __write_string_to_s3(explainability, explainability_markdown_key)
 
     explainability_html = markdown_to_pdf.markdown_to_html(explainability)
-    explainability_html_key = __key(app_id, job_id, "explainability.html")
+    explainability_html_key = __key(app_id, user_id, job_id, "explainability.html")
     __write_string_to_s3(explainability_html, explainability_html_key)
 
     explainability_pdf = markdown_to_pdf.html_to_pdf(explainability_html)
-    explainability_pdf_key = __key(app_id, job_id, "explainability.pdf")
+    explainability_pdf_key = __key(app_id, user_id, job_id, "explainability.pdf")
     __write_file_object_to_s3(explainability_pdf, explainability_pdf_key)
 
     return {

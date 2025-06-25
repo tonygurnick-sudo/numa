@@ -21,9 +21,18 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
     try:
         app_id = event["app_id"]
         job_id = event["job_id"]
+        user_id = event["user_id"]
 
-        results_prefix = f"{app_id}/{job_id}/results/"
-        csv_output_key = f"{app_id}/{job_id}/summary/candidate_rankings.csv"
+        logger.info(
+            "Aggregating candidate results",
+            app_id=app_id,
+            job_id=job_id,
+            user_id=user_id,
+        )
+
+        # Use the secure path format with user_id
+        results_prefix = f"{app_id}/{user_id}/{job_id}/results/"
+        csv_output_key = f"{app_id}/{user_id}/{job_id}/summary/candidate_rankings.csv"
 
         screening_results = get_all_screening_results(results_prefix)
 
@@ -92,6 +101,8 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             content_type="text/csv",
         )
 
+        logger.info("Wrote candidate rankings CSV to secure path", key=csv_output_key)
+
         return {
             "results": [
                 {
@@ -119,13 +130,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
 def get_all_screening_results(prefix: str) -> list[dict]:
     try:
         results = []
-
         keys = s3_helpers.list_objects(prefix)
+
         for key in keys:
             content = json.loads(s3_helpers.read(key).decode("utf-8"))
             results.append(content)
+
+        logger.info("Found screening results", count=len(results), prefix=prefix)
         return results
 
     except Exception:
-        logger.exception("Error reading screening results from S3")
+        logger.exception("Error reading screening results from S3", prefix=prefix)
         raise
