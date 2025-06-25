@@ -117,6 +117,10 @@ export class MeetingAnalyser extends BaseNumaApp {
         ExtractContentMap: {
           Type: 'Map',
           ItemsPath: '$.uploaded_files',
+          Parameters: {
+            'item.$': '$$.Map.Item.Value',
+            'user_id.$': '$.user_id',
+          },
           ItemProcessor: {
             ProcessorConfig: {
               Mode: 'INLINE',
@@ -126,7 +130,7 @@ export class MeetingAnalyser extends BaseNumaApp {
               ExtractContent: this.addLambdaTask(
                 extractContentLambda.arn,
                 {
-                  'input_key.$': '$.s3_key',
+                  'input_key.$': '$.item.s3_key',
                   'user_id.$': '$.user_id',
                   input_bucket: props.outputsBucket.bucket,
                   return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
