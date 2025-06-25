@@ -208,7 +208,7 @@ export class CoreNumaInfra extends Construct {
       clientName: props.clientName,
       environmentName: props.environmentName,
       clientAccountId: props.clientAccountId,
-      allowedMethods: ['GET', 'PUT', 'DELETE'],
+      allowedMethods: ['GET', 'PUT', 'POST', 'DELETE'],
       allowLocalhostOrigin: props.devInstance,
       region: props.region,
     });
@@ -220,7 +220,7 @@ export class CoreNumaInfra extends Construct {
       clientName: props.clientName,
       environmentName: props.environmentName,
       clientAccountId: props.clientAccountId,
-      allowedMethods: ['GET', 'PUT', 'DELETE'],
+      allowedMethods: ['GET', 'PUT', 'POST', 'DELETE'],
       allowLocalhostOrigin: props.devInstance,
       region: props.region,
     });
