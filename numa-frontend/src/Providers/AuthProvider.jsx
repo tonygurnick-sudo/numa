@@ -553,8 +553,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     // Check if the user has the permissions to Chat
     if (user && user.features && !user.features.includes('chat')) {
-      console.log('User does not have chat feature');
-      console.log(user.features);
       return;
     }
 
@@ -1177,8 +1175,6 @@ const extractGroupsAndFeatures = (decodedIdToken) => {
   // Extract groups and features from the decoded token
   // const groups = ['standard', ...(decodedIdToken['cognito:groups'] || [])];
   let groups = [...(decodedIdToken['cognito:groups'] || [])];
-
-  console.log('decodedIdToken', decodedIdToken);
 
   if (!groups || groups.length === 0) {
     // If the user is not in any groups, use the default standard group and the features for that group
