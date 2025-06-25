@@ -226,6 +226,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
           Parameters: {
             app_id: this.appId,
             'job_id.$': '$$.Execution.Input.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
             'organisation_context.$': '$$.Execution.Input.organisation_context',
             'organisation_name.$': '$$.Execution.Input.organisation_name',
             additional_comments,

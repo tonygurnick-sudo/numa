@@ -109,6 +109,7 @@ export class MeetingAnalyser extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$$.Execution.Input.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
           },
           Next: 'ExtractContentMap',
@@ -126,6 +127,7 @@ export class MeetingAnalyser extends BaseNumaApp {
                 extractContentLambda.arn,
                 {
                   'input_key.$': '$.s3_key',
+                  'user_id.$': '$.user_id',
                   input_bucket: props.outputsBucket.bucket,
                   return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
                 },
@@ -151,7 +153,7 @@ export class MeetingAnalyser extends BaseNumaApp {
           Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
           Parameters: {
             Bucket: props.outputsBucket.bucket,
-            'Key.$': `States.Format('${this.appId}/{}/extracted_content.json', $$.Execution.Input.job_id)`,
+            'Key.$': `States.Format('${this.appId}/{}/{}/extracted_content.json', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
             'Body.$': '$.extracted[*].Payload.content',
             ContentType: 'text/json',
           },
@@ -170,9 +172,10 @@ export class MeetingAnalyser extends BaseNumaApp {
           {
             app_id: this.appId,
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'meeting_notes_and_or_transcript.$': '$.extracted[*].Payload.content',
             'other_notes.$': '$$.Execution.Input.other_notes',
-            'output_path.$': `States.Format('${this.appId}/{}', $$.Execution.Input.job_id)`,
+            'output_path.$': `States.Format('${this.appId}/{}/{}', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
             'template.$': '$$.Execution.Input.template',
           },
           'WriteSuccessStatus',

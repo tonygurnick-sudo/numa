@@ -86,6 +86,7 @@ export class GdsrAssessment extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
             'application_key.$': '$.uploaded_files[0].s3_key',
           },
           Next: 'ExtractContent',
@@ -96,8 +97,9 @@ export class GdsrAssessment extends BaseNumaApp {
           {
             app_id: this.appId,
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'input_key.$': '$.extracted.output_key',
-            'output_key.$': `States.Format('${this.appId}/{}/assessment.md', $$.Execution.Input.job_id)`,
+            'output_key.$': `States.Format('${this.appId}/{}/{}/assessment.md', $.user_id, $.job_id)`,
           },
           'WriteSuccessStatus',
           {

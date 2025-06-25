@@ -50,7 +50,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     taskInputValues,
   } = useNumaApp();
   const jobsApi = useJobsApi();
-  const { getCredentials } = useAuth();
+  const { getCredentials, user } = useAuth();
 
   // Extract parameters from task with defaults
   const acceptedFileTypes = task?.parameters?.allowedFileTypes ?? [];
@@ -69,6 +69,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
   const fileInputRef = useRef(null);
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
+  const userUuid = user?.decoded_tokens?.idToken?.sub;
 
   // Handle value prop changes
   // Uses standardizeFileFormat to convert any input format to our standard format:
@@ -257,6 +258,11 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   };
 
   const handleUpload = async () => {
+    if (!userUuid) {
+      setError('Authentication required for file uploads');
+      onNotComplete();
+      return;
+    }
     // Check if the task is required (default to false for better user experience)
     const isRequired = task?.required !== undefined ? task.required : false;
 
@@ -326,9 +332,9 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         let s3Key;
         if (isChatFileUpload) {
           const chatId = Math.random().toString(36).substring(2, 10);
-          s3Key = `numa-chat/uploads/${chatId}/${fileName}_${randomId}${fileExt}`;
+          s3Key = `numa-chat/uploads/${userUuid}/${chatId}/${fileName}_${randomId}${fileExt}`;
         } else {
-          s3Key = `${numaAppId}/${jobId}/${fileName}_${randomId}${fileExt}`;
+          s3Key = `${numaAppId}/${userUuid}/${jobId}/${fileName}_${randomId}${fileExt}`;
         }
 
         const command = new PutObjectCommand({

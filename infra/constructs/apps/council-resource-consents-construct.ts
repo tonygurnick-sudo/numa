@@ -120,7 +120,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
                 extractContentLambda.arn,
                 {
                   'input_key.$': '$.key',
-                  'output_key.$': `States.Format('{}${extractedSuffix}', $.key)`,
+                  'output_key.$': `States.Format('${this.appId}/{}/{}/{}${extractedSuffix}', $$.Execution.Input.user_id, $$.Execution.Input.job_id, $.key)`,
                   input_bucket: props.outputsBucket.bucket,
                 },
                 null,
@@ -148,7 +148,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
           extractContentLambda.arn,
           {
             'input_key.$': '$.application[0].s3_key',
-            'output_key.$': `States.Format('{}${extractedSuffix}', $.application[0].s3_key)`,
+            'output_key.$': `States.Format('${this.appId}/{}/{}/{}${extractedSuffix}', $$.Execution.Input.user_id, $$.Execution.Input.job_id, $.application[0].s3_key)`,
             input_bucket: props.outputsBucket.bucket,
           },
           'AnalyzeDocuments',
@@ -167,7 +167,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
             'job_id.$': '$.job_id',
             'council_references_extracted.$': '$.council_references_extracted[*].extracted.output_key',
             'application_extracted.$': '$.application_extracted.output_key',
-            'output_key.$': `States.Format('${this.appId}/{}/analysis.md', $$.Execution.Input.job_id)`,
+            'output_key.$': `States.Format('${this.appId}/{}/{}/analysis.md', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
           },
           'WriteSuccessStatus',
           {

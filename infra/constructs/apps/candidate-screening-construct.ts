@@ -127,6 +127,7 @@ export class CandidateScreening extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'candidate_documents.$': '$.candidate_documents',
             'company_profile.$': '$.company_profile',
             'job_requirements.$': '$.job_requirements',
@@ -143,6 +144,7 @@ export class CandidateScreening extends BaseNumaApp {
             'company_profile.$': '$.company_profile',
             'job_requirements.$': '$.job_requirements',
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'app_id.$': '$.app_id',
           },
           ItemProcessor: {
@@ -156,9 +158,10 @@ export class CandidateScreening extends BaseNumaApp {
                 {
                   input_bucket: props.outputsBucket.bucket,
                   'input_key.$': '$.resume_key',
+                  'user_id.$': '$.user_id',
                   output_bucket: props.outputsBucket.bucket,
                   'output_key.$':
-                    "States.Format('{}/{}/extracted/{}.extracted.json', $.app_id, $.job_id, $.resume_key)",
+                    "States.Format('{}/{}/{}/extracted/{}.extracted.json', $.app_id, $.user_id, $.job_id, $.resume_key)",
                 },
                 'NoCoverLetter',
                 {
@@ -188,7 +191,9 @@ export class CandidateScreening extends BaseNumaApp {
                   cover_letter_key: '',
                   'app_id.$': '$.app_id',
                   'job_id.$': '$.job_id',
-                  'output_key.$': "States.Format('{}/{}/results/{}.json', $.app_id, $.job_id, $.resume_key)",
+                  'user_id.$': '$.user_id',
+                  'output_key.$':
+                    "States.Format('{}/{}/{}/results/{}.json', $.app_id, $.user_id, $.job_id, $.resume_key)",
                 },
                 null,
                 {
@@ -212,6 +217,7 @@ export class CandidateScreening extends BaseNumaApp {
           {
             app_id: this.appId,
             'job_id.$': '$.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
           },
           'WriteSuccessStatus',
           {

@@ -217,6 +217,7 @@ export class BeyondExpectations extends BaseNumaApp {
             notificationEmails: receiverEmails,
             'app_id.$': '$.app_id',
             'job_id.$': '$.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
           },
           Next: 'FormatErrorLogs',
         },
@@ -233,6 +234,7 @@ export class BeyondExpectations extends BaseNumaApp {
             chunkSize: 50,
             'app_id.$': '$.app_id',
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
           },
           'PrepareChunksMap',
           { ResultPath: '$.formatResult' },
@@ -278,6 +280,7 @@ export class BeyondExpectations extends BaseNumaApp {
           Parameters: {
             'job_id.$': '$.job_id',
             'app_id.$': '$.app_id',
+            'user_id.$': '$.user_id',
             'chunkPath.$': '$$.Map.Item.Value.Key',
           },
           // @ts-expect-error - ItemProcessor is valid for Map states in AWS Step Function
@@ -291,6 +294,7 @@ export class BeyondExpectations extends BaseNumaApp {
                   'chunkPath.$': '$.chunkPath',
                   'app_id.$': '$.app_id',
                   'job_id.$': '$.job_id',
+                  'user_id.$': '$.user_id',
                 } as Record<string, string | boolean>,
                 null,
                 { ResultPath: '$.analysisResult' },
@@ -316,6 +320,7 @@ export class BeyondExpectations extends BaseNumaApp {
             'chunkPrefix.$': '$.formatResult.Payload.chunkPrefix',
             'app_id.$': '$.app_id',
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
           },
           'SendEmail',
           { ResultPath: '$.reportResult' },
@@ -328,6 +333,7 @@ export class BeyondExpectations extends BaseNumaApp {
             'email_data_s3_key.$': '$.reportResult.Payload.body.email_data_key',
             'app_id.$': '$.app_id',
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             configuration_set: sesConfig?.configurationSet.name || '', // Explicitly pass the configuration set name
           },
           'WriteSuccessStatus',

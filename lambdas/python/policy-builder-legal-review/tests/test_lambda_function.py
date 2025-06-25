@@ -1,8 +1,17 @@
+import os
+import os.path
+import sys
 import unittest
 from unittest.mock import patch
 
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
+# Add the lib directory to the Python path to find the required modules
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
+sys.path.append(os.path.join(project_root, "lib/helpers"))
+sys.path.append(os.path.join(project_root, "lib/bedrock"))
+
+# pylint: disable=wrong-import-position
 import bedrock
 import lambda_function
 
@@ -27,6 +36,7 @@ EVENT = {
     "organisation_name": "",
     "policy_principles": "",
     "policy_structure_overview": "",
+    "user_id": "test-user-id",
     "policy_structure_list": [
         {
             "policy_area": "one",
@@ -83,15 +93,15 @@ class TestLegalReview(unittest.TestCase):
         self.assertEqual(run_mock.call_count, 2)
         self.assertEqual(
             result["legal_review_feedback_key"],
-            "test_app/test_job/legal_review_feedback_one",
+            "test_app/test-user-id/test_job/legal_review_feedback_one",
         )
         self.assertEqual(
             result["legal_review_implementation_explanation_key"],
-            "test_app/test_job/legal_review_implementation_explanation_one",
+            "test_app/test-user-id/test_job/legal_review_implementation_explanation_one",
         )
         self.assertEqual(
             result["legal_review_implementation_key"],
-            "test_app/test_job/legal_review_implementation_one",
+            "test_app/test-user-id/test_job/legal_review_implementation_one",
         )
 
         self.assertEqual(s3_mock.put_object.call_count, 3)
@@ -100,7 +110,7 @@ class TestLegalReview(unittest.TestCase):
             self.assertEqual(call.kwargs["Bucket"], "test-bucket")
         self.assertEqual(
             calls[0].kwargs["Key"],
-            "test_app/test_job/legal_review_feedback_one",
+            "test_app/test-user-id/test_job/legal_review_feedback_one",
         )
         self.assertEqual(
             calls[0].kwargs["Body"].decode("utf-8"),
@@ -108,7 +118,7 @@ class TestLegalReview(unittest.TestCase):
         )
         self.assertEqual(
             calls[1].kwargs["Key"],
-            "test_app/test_job/legal_review_implementation_one",
+            "test_app/test-user-id/test_job/legal_review_implementation_one",
         )
         self.assertEqual(
             calls[1].kwargs["Body"].decode("utf-8"),
@@ -116,7 +126,7 @@ class TestLegalReview(unittest.TestCase):
         )
         self.assertEqual(
             calls[2].kwargs["Key"],
-            "test_app/test_job/legal_review_implementation_explanation_one",
+            "test_app/test-user-id/test_job/legal_review_implementation_explanation_one",
         )
         self.assertEqual(
             calls[2].kwargs["Body"].decode("utf-8"),

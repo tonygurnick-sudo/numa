@@ -14,8 +14,8 @@ logger = structlog.get_logger()
 s3_client = boto3.client("s3")
 
 
-def __key(app_id: str, job_id: str, name: str, area: str = "") -> str:
-    key = f"{app_id}/{job_id}/{name}"
+def __key(app_id: str, user_id: str, job_id: str, name: str, area: str = "") -> str:
+    key = f"{app_id}/{user_id}/{job_id}/{name}"
     if area:
         key += f"_{area}"
     return key
@@ -87,8 +87,11 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
     app_id = event["app_id"]
     job_id = event["job_id"]
+    user_id = event.get("user_id", "unknown")
 
-    legal_review_feedback_key = __key(app_id, job_id, "legal_review_feedback", area)
+    legal_review_feedback_key = __key(
+        app_id, user_id, job_id, "legal_review_feedback", area
+    )
     __write_string_to_s3(legal_review, legal_review_feedback_key)
 
     board_assurance_statement = __read_string_from_s3(
@@ -121,6 +124,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
     legal_review_implementation_key = __key(
         app_id,
+        user_id,
         job_id,
         "legal_review_implementation",
         area,
@@ -129,6 +133,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
     legal_review_implementation_explanation_key = __key(
         app_id,
+        user_id,
         job_id,
         "legal_review_implementation_explanation",
         area,

@@ -146,6 +146,7 @@ export class CostingCalculator extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
             'specifications.$': '$.specifications',
           },
           Next: 'ProcessCostCalculation',
@@ -155,8 +156,9 @@ export class CostingCalculator extends BaseNumaApp {
           {
             app_id: this.appId,
             'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
             'specifications.$': '$.specifications',
-            'output_key.$': `States.Format('${this.appId}/{}/costing-results.json', $$.Execution.Input.job_id)`,
+            'output_key.$': `States.Format('${this.appId}/{}/{}/costing-results.json', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
           },
           'WriteSuccessStatus',
           {

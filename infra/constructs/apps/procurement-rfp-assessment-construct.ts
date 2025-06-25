@@ -115,6 +115,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
           Type: 'Pass',
           Parameters: {
             'job_id.$': '$.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
             'input_key.$': '$.application_file[0].s3_key',
             'rfp_reference_key.$': '$.rfp_reference_file[0].s3_key',
             'assessment_instructions.$': '$.assessment_instructions',
@@ -135,7 +136,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
             'job_id.$': '$.job_id',
             'input_key.$': '$.rfp_reference_key',
             input_bucket: this.outputsBucket.bucket,
-            'output_key.$': `States.Format('${this.appId}/{}/rfp_reference_extracted.json', $.job_id)`,
+            'output_key.$': `States.Format('${this.appId}/{}/{}/rfp_reference_extracted.json', $$.Execution.Input.user_id, $.job_id)`,
           },
           Next: 'RfpAssessment',
           Catch: [
@@ -154,7 +155,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
             'input_key.$': '$.extracted.output_key',
             'rfp_reference_key.$': '$.rfp_reference_extracted.output_key',
             'assessment_instructions.$': '$.assessment_instructions',
-            'output_path.$': `States.Format('${this.appId}/{}', $$.Execution.Input.job_id)`,
+            'output_path.$': `States.Format('${this.appId}/{}/{}/assessment', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
           },
           'WriteSuccessStatus',
           {

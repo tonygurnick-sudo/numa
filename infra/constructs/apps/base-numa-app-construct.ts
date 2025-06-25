@@ -233,7 +233,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       extractContentLambda.arn,
       {
         'input_key.$': input_key,
-        'output_key.$': `States.Format('${this.appId}/{}/extracted.json', $$.Execution.Input.job_id)`,
+        'output_key.$': `States.Format('${this.appId}/{}/{}/extracted.json', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
         input_bucket: this.outputsBucket.bucket,
       },
       next,
@@ -254,7 +254,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       Parameters: {
         Body: body,
         Bucket: this.outputsBucket.bucket,
-        'Key.$': `States.Format('${this.appId}/{}/status.json', $$.Execution.Input.job_id)`,
+        'Key.$': `States.Format('${this.appId}/{}/{}/status.json', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
       },
       ResultPath: null,
       Next: next,

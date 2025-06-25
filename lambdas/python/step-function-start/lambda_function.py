@@ -13,7 +13,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import helpers
 
-step_function_client = boto3.client("stepfunctions")
+step_functions_client = boto3.client("stepfunctions")
 logger = structlog.get_logger()
 
 
@@ -31,6 +31,12 @@ def handler(
     app_id, job_id, payload = helpers.get_api_gateway_parameters(event)
     helpers.setup_api_gateway_lambda_logging(context, app_id, job_id, payload)
 
+    # Extract user ID from JWT token in Authorization header
+    user_id = helpers.extract_user_id_from_token(event)
+    if user_id:
+        payload["user_id"] = user_id
+        logger.info(f"Added user_id from token: {user_id}")
+
     try:
         step_function_arn = os.environ["STEP_FUNCTION_ARN"]
         logger.info(
@@ -38,16 +44,25 @@ def handler(
             payload=payload,
             step_function_arn=step_function_arn,
         )
-        response: StartExecutionResponse = step_function_client.start_execution(
+        # Ensure user_id is included in the Step Function input
+        step_function_input = {
+            **payload,
+            "app_id": app_id,
+            "job_id": job_id,
+        }
+
+        # Log the input for debugging
+        logger.info(
+            "Step function input",
+            user_id=step_function_input.get("user_id"),
+            app_id=app_id,
+            job_id=job_id,
+        )
+
+        response: StartExecutionResponse = step_functions_client.start_execution(
             stateMachineArn=step_function_arn,
             name=job_id,
-            input=json.dumps(
-                {
-                    **payload,
-                    "app_id": app_id,
-                    "job_id": job_id,
-                }
-            ),
+            input=json.dumps(step_function_input),
         )
         logger.info("Step function started", **response)
         return {

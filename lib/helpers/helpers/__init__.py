@@ -2,7 +2,9 @@ import logging
 import os
 import typing
 import uuid
+from typing import Optional
 
+import jwt
 import structlog
 from aws_lambda_powertools.utilities.data_classes import (
     APIGatewayProxyEvent,
@@ -154,15 +156,98 @@ def setup_api_gateway_lambda_logging(
     logger.info("Execute lambda", payload=payload)
 
 
-def setup_step_function_lambda_logging(event: dict, context: LambdaContext):
-    setup_logging()
+def setup_step_function_lambda_logging(event: dict, context: LambdaContext) -> None:
+    try:
+        app_id = event["app_id"]
+        job_id = event["job_id"]
 
-    app_id = event["app_id"]
-    job_id = event["job_id"]
+        structlog.contextvars.bind_contextvars(
+            app_id=app_id,
+            function_name=context.function_name,
+            job_id=job_id,
+        )
+        logger.info("Execute lambda", lambda_event=event)
+    except Exception:
+        logger.exception("Error setting up logging")
 
-    structlog.contextvars.bind_contextvars(
-        app_id=app_id,
-        function_name=context.function_name,
-        job_id=job_id,
-    )
-    logger.info("Execute lambda", lambda_event=event)
+
+def extract_user_id_from_token(event: APIGatewayProxyEvent) -> Optional[str]:
+    """
+    Extract the user ID from the JWT token in the Authorization header.
+
+    Args:
+        event: The API Gateway event containing the request headers
+
+    Returns:
+        The user ID from the token, or None if not found or invalid
+    """
+    try:
+        # Log all headers for debugging
+        logger.info("API Gateway headers", headers=event.headers)
+
+        auth_header = event.headers.get("Authorization")
+        if not auth_header:
+            logger.warning("No Authorization header found")
+            # Try case-insensitive search
+            for header_name, header_value in event.headers.items():
+                if header_name.lower() == "authorization":
+                    auth_header = header_value
+                    logger.info(
+                        f"Found Authorization header with different case: {header_name}"
+                    )
+                    break
+
+            if not auth_header:
+                logger.warning("No Authorization header found with any case variation")
+                # Default to 'unknown' for now during testing
+                return "unknown"
+
+        # Extract the token from the header
+        token = auth_header
+
+        # Check if the token is in the format "Bearer <token>"
+        if auth_header.lower().startswith("bearer "):
+            token_parts = auth_header.split(" ")
+            if len(token_parts) >= 2:
+                token = token_parts[1]
+
+        # Log the token format for debugging
+        logger.debug("Using token for JWT decode", token_prefix=token[:10] + "...")
+
+        # Decode the token without verification (we just need the user ID)
+        try:
+            decoded = jwt.decode(token, options={"verify_signature": False})
+            logger.debug("Decoded JWT token", claims=decoded.keys())
+
+            # The user ID is typically in the 'sub' claim
+            user_id = decoded.get("sub")
+            if not user_id:
+                logger.warning("No 'sub' claim found in token", claims=decoded)
+                # Try other common claims
+                for claim in ["userId", "user_id", "id", "cognito:username"]:
+                    if claim in decoded:
+                        user_id = decoded[claim]
+                        logger.info(f"Found user ID in alternate claim: {claim}")
+                        break
+
+                if not user_id:
+                    logger.warning("No user ID found in any expected claims")
+                    # Default to 'unknown' for now during testing
+                    return "unknown"
+
+            logger.info("Successfully extracted user ID from token", user_id=user_id)
+            return user_id
+        except jwt.exceptions.DecodeError:
+            logger.warning(
+                "Failed to decode JWT token, may not be a valid JWT",
+                token_prefix=token[:10] + "...",
+            )
+            # Default to 'unknown' for now during testing
+            return "unknown"
+
+    except Exception as e:
+        logger.warning(
+            "Error extracting user ID from token", error=str(e), exc_info=True
+        )
+        # Default to 'unknown' for now during testing
+        return "unknown"

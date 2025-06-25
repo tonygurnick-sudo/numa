@@ -26,24 +26,37 @@ def handler(
     app_id, job_id, payload = helpers.get_api_gateway_parameters(event)
     helpers.setup_api_gateway_lambda_logging(context, app_id, job_id, payload)
 
-    key = f"{app_id}/{job_id}/status.json"
-    try:
-        bucket = os.environ["BUCKET"]
-        logger.info("Get step function status")
-        s3_file_object = s3_client.get_object(Bucket=bucket, Key=key)
+    # Extract user_id from the JWT token in the Authorization header
+    user_id = helpers.extract_user_id_from_token(event)
 
+    # Add user_id to payload for logging
+    if user_id:
+        payload["user_id"] = user_id
+    else:
+        logger.error("User ID is required")
+        return {
+            "statusCode": 401,
+            "body": json.dumps({"error": "User ID is required"}),
+        }
+
+    bucket = os.environ["BUCKET"]
+
+    # Use the path format with user_id
+    key = f"{app_id}/{user_id}/{job_id}/status.json"
+
+    try:
+        s3_file_object = s3_client.get_object(Bucket=bucket, Key=key)
         status_json: str = s3_file_object["Body"].read().decode("utf-8")
         return {
             "statusCode": 200,
             "body": status_json,
         }
-    except exceptions.ClientError as exception:
-        if exception.response.get("Error", {}).get("Code", "") == "NoSuchKey":
-            logger.exception(f"Requested step function status {key} not found")
-            return {"statusCode": 404, "body": __error_json("Job not found")}
-
-        logger.exception("Boto3 error while getting step function status")
-        return {"statusCode": 503, "body": __error_json("")}
+    except exceptions.ClientError as e:
+        logger.error("Error retrieving status file", error=str(e))
+        return {
+            "statusCode": 404,
+            "body": json.dumps({"error": "Status not found"}),
+        }
     except Exception as exception:
         logger.exception("Error while getting step function status")
         message = traceback.format_exception_only(exception)[-1].strip()

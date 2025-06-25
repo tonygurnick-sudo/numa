@@ -1,8 +1,21 @@
-# pylint: disable=protected-access
+# pylint: disable=protected-access,wrong-import-position,import-error
+import os
+import os.path
+import sys
 import unittest
 from unittest.mock import Mock, patch
 
 from aws_lambda_powertools.utilities.typing import LambdaContext
+
+# Add the lib directory to the Python path to find the helpers module
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
+sys.path.append(os.path.join(project_root, "lib/helpers"))
+sys.path.append(os.path.join(project_root, "lib/bedrock"))
+
+# Mock the jwt, s3_helpers, and bedrock modules before importing lambda_function
+sys.modules["jwt"] = Mock()
+sys.modules["s3_helpers"] = Mock()
+sys.modules["bedrock"] = Mock()
 
 import lambda_function
 

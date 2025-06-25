@@ -33,7 +33,8 @@ export const JobStatus = Object.freeze({
  *********************************************************/
 const sanitizeFileName = (name = '') => name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
-const getOutputKey = (type, jobId) => `policy-reviewer/${jobId}/${type}.md`;
+// Include userId in the S3 path for proper data isolation
+const getOutputKey = (type, jobId, userId) => `policy-reviewer/${userId}/${jobId}/${type}.md`;
 
 const normalizeStatus = (status) => (status ? status.toString().toUpperCase() : '');
 
@@ -417,7 +418,8 @@ export const PolicyReviewerDetail = () => {
           ? selectedFile.name.substring(selectedFile.name.lastIndexOf('.'))
           : '';
 
-        const key = `policy-reviewer/${updatedJob.jobId}/${sanitizeFileName(policyName)}_${randomId}${ext}`;
+        // Include userId in the S3 path for proper data isolation
+        const key = `policy-reviewer/${userId}/${updatedJob.jobId}/${sanitizeFileName(policyName)}_${randomId}${ext}`;
 
         const presign = await getSignedUrl(
           s3Client,
@@ -476,7 +478,7 @@ export const PolicyReviewerDetail = () => {
       credentials,
     });
 
-    const key = getOutputKey(type, policy.id);
+    const key = getOutputKey(type, policy.id, userId);
     console.log('Downloading from key:', key);
 
     const url = await getSignedUrl(
