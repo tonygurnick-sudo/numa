@@ -32,7 +32,7 @@ export class NextGenAccount extends Construct {
 
     this.orgData = new OrganizationsOrganization(this, 'arcanum-nextgen-org', {
       enabledPolicyTypes: ['SERVICE_CONTROL_POLICY'],
-      awsServiceAccessPrincipals: ['sso.amazonaws.com'],
+      awsServiceAccessPrincipals: ['sso.amazonaws.com', 'account.amazonaws.com'],
       lifecycle: {
         preventDestroy: true,
       },
