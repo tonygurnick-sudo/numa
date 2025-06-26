@@ -141,6 +141,11 @@ const createFeatureSets = (props: {
     },
     {
       effect: 'Allow',
+      actions: ['s3:GetObject'],
+      resources: [`${props.companyBucket.bucket.arn}/company-data.json`],
+    },
+    {
+      effect: 'Allow',
       actions: ['qbusiness:SearchRelevantContent'],
       resources: ['*'], // TODO: Change to specific resource
     },
@@ -302,7 +307,7 @@ export class CognitoGroupsConstruct extends Construct {
     // Define the groups and their feature sets
     const defaultGroups: Record<string, FeatureSetName[]> = {
       // The standard group should always be the least privileged group of all groups
-      standard: ['chat', 'useCompanyData', 'useApps'],
+      standard: ['chat', 'useCompanyData', 'useApps', 'addToCompanyData'],
       admin: FEATURE_SET_NAMES as FeatureSetName[],
     };
 
