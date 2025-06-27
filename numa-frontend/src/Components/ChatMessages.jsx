@@ -23,8 +23,26 @@ function DocOpenBubble({ docTitle, docContent, onClick }) {
   );
 }
 
-const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDocument }) => {
+const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDocument, isConversationLoading }) => {
   const { getCredentials } = useAuth();
+
+  // Show conversation loading state
+  if (isConversationLoading) {
+    return (
+      <div
+        className="chat-messages d-flex justify-content-center align-items-center h-100"
+        style={{ maxWidth: '100%', overflowX: 'hidden', wordWrap: 'break-word' }}
+      >
+        <div className="text-center">
+          <Spinner animation="border" role="status" className="text-primary">
+            <span className="visually-hidden">Loading conversation...</span>
+          </Spinner>
+        </div>
+        <div ref={messageEndRef} />
+      </div>
+    );
+  }
+
   return (
     <div className="chat-messages" style={{ maxWidth: '100%', overflowX: 'hidden', wordWrap: 'break-word' }}>
       {messages.map((message, index) => {
