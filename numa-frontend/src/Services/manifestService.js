@@ -4,10 +4,10 @@ const CACHE_DURATION = 300000; // 5 minutes
 
 export const manifestService = {
   // Fetch all apps from manifest
-  fetchAppsFromManifest: async () => {
+  fetchAppsFromManifest: async (forceRefresh = false) => {
     const now = Date.now();
-    // Use cache if it's fresh
-    if (manifestCache && now - lastFetchTime < CACHE_DURATION) {
+    // Use cache if it's fresh and not forcing refresh
+    if (!forceRefresh && manifestCache && now - lastFetchTime < CACHE_DURATION) {
       return manifestCache;
     }
 
@@ -29,9 +29,20 @@ export const manifestService = {
         throw new Error('Data must be an array');
       }
 
-      // Update cache
-      manifestCache = appsData;
-      lastFetchTime = now;
+      // Check if the data has actually changed
+      const dataHasChanged = !manifestCache || JSON.stringify(manifestCache) !== JSON.stringify(appsData);
+
+      if (dataHasChanged) {
+        // console.log('Manifest data has changed, updating cache');
+        // Update cache
+        manifestCache = appsData;
+        lastFetchTime = now;
+      } else {
+        // console.log('Manifest data unchanged, keeping existing cache');
+        // Update timestamp even if data hasn't changed
+        lastFetchTime = now;
+      }
+
       return appsData;
     } catch (error) {
       console.error('Error loading apps:', error);
@@ -52,5 +63,10 @@ export const manifestService = {
       console.error('Error loading app:', error);
       throw error;
     }
+  },
+
+  // Force refresh manifest (bypasses cache timer)
+  forceRefreshManifest: async () => {
+    return await manifestService.fetchAppsFromManifest(true);
   },
 };

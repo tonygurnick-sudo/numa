@@ -1,5 +1,22 @@
-const CONFIG_CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+const CONFIG_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 const CONFIG_TIMESTAMP_KEY = 'CONFIG_TIMESTAMP';
+const CONFIG_PROPERTIES = [
+  'Q_APPLICATION_ID',
+  'Q_INDEX_ID',
+  'Q_RETRIEVER_ID',
+  'ROLE_ARN',
+  'REGION',
+  'API_ENDPOINT',
+  'USER_POOL_ID',
+  'CLIENT_ID',
+  'CLIENT_NAME',
+  'HONEYCOMB_KEY',
+  'OUTPUTS_BUCKET_NAME',
+  'DATA_BUCKET',
+  'PROVISION_Q_RESOURCES',
+  'PREFERRED_KNOWLEDGE_BASE',
+  'BEDROCK_KNOWLEDGE_BASE_ID',
+];
 
 export const fetchConfigAddtoSession = async (forceRefresh = false) => {
   // Check if we need to refresh the config
@@ -28,27 +45,8 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
       throw new Error('Config file is empty');
     }
 
-    // Loop through the desired properties and add them to sessionStorage
-    const propertiesToAdd = [
-      'Q_APPLICATION_ID',
-      'Q_INDEX_ID',
-      'Q_RETRIEVER_ID',
-      'ROLE_ARN',
-      'REGION',
-      'API_ENDPOINT',
-      'USER_POOL_ID',
-      'CLIENT_ID',
-      'CLIENT_NAME',
-      'HONEYCOMB_KEY',
-      'OUTPUTS_BUCKET_NAME',
-      'DATA_BUCKET',
-      'PROVISION_Q_RESOURCES',
-      'PREFERRED_KNOWLEDGE_BASE',
-      'BEDROCK_KNOWLEDGE_BASE_ID',
-    ];
-
     // Check if all required properties exist
-    const missingProperties = propertiesToAdd.filter((prop) => !Object.hasOwn(configData, prop));
+    const missingProperties = CONFIG_PROPERTIES.filter((prop) => !Object.hasOwn(configData, prop));
     if (missingProperties.length > 0) {
       console.error(`Missing required properties in config: ${missingProperties.join(', ')}`);
     }
@@ -66,7 +64,7 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
     }
 
     // Handle regular string properties
-    propertiesToAdd.forEach((property) => {
+    CONFIG_PROPERTIES.forEach((property) => {
       const existing = sessionStorage.getItem(property);
       const configValue = configData[property];
 
@@ -88,10 +86,10 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
 
     // reload so the items are available at login.
     if (needsRefresh) {
-      console.log('Config changed, reloading page');
+      // console.log('Config changed, reloading page');
       window.location.reload();
     } else {
-      console.log('Config fetched successfully, no changes detected');
+      // console.log('Config fetched successfully, no changes detected');
     }
   } catch (error) {
     console.error('Error fetching config:', error);
@@ -103,6 +101,11 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
 // Helper function to determine if config should be refreshed
 const shouldRefreshConfig = () => {
   const timestamp = sessionStorage.getItem(CONFIG_TIMESTAMP_KEY);
+
+  if (!hasConfigInSession()) {
+    console.warn('Config is not in session, or is missing required properties');
+    return true;
+  }
 
   if (!timestamp) {
     console.log('No config timestamp found, needs refresh');
@@ -123,8 +126,9 @@ const shouldRefreshConfig = () => {
 
 // Helper function to check if config exists in session storage
 export const hasConfigInSession = () => {
-  const requiredKeys = ['Q_APPLICATION_ID', 'REGION', 'API_ENDPOINT', 'USER_POOL_ID', 'CLIENT_ID'];
-  return requiredKeys.every((key) => sessionStorage.getItem(key) !== null);
+  return (
+    CONFIG_PROPERTIES.every((key) => sessionStorage.getItem(key) !== null) && sessionStorage.getItem('GROUPS') !== null
+  );
 };
 
 // Helper function to force refresh config (useful for debugging or manual refresh)

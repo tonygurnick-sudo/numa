@@ -15,12 +15,19 @@ describe('ConfigSetup', () => {
   const config1 = {
     Q_APPLICATION_ID: 'app-1',
     Q_INDEX_ID: 'index-1',
+    Q_RETRIEVER_ID: 'retriever-1',
     REGION: 'us-east-1',
     API_ENDPOINT: 'https://api1.example.com',
     USER_POOL_ID: 'pool-1',
     CLIENT_ID: 'client-1',
     CLIENT_NAME: 'test-client-1',
     HONEYCOMB_KEY: 'honey-1',
+    ROLE_ARN: 'arn:aws:iam::123456789012:role/test-role-1',
+    OUTPUTS_BUCKET_NAME: 'test-outputs-bucket-1',
+    DATA_BUCKET: 'test-data-bucket-1',
+    PROVISION_Q_RESOURCES: true,
+    PREFERRED_KNOWLEDGE_BASE: 'kb-1',
+    BEDROCK_KNOWLEDGE_BASE_ID: 'bedrock-kb-1',
     GROUPS: {
       admin: { roleArn: 'arn:aws:iam::123:role/admin', features: ['chat'] },
       standard: { roleArn: 'arn:aws:iam::123:role/standard', features: ['chat'] },
@@ -30,9 +37,16 @@ describe('ConfigSetup', () => {
   const config2 = {
     ...config1,
     Q_APPLICATION_ID: 'app-2',
+    Q_RETRIEVER_ID: 'retriever-2',
     API_ENDPOINT: 'https://api2.example.com',
     CLIENT_NAME: 'test-client-2',
     HONEYCOMB_KEY: 'honey-2',
+    ROLE_ARN: 'arn:aws:iam::123456789012:role/test-role-2',
+    OUTPUTS_BUCKET_NAME: 'test-outputs-bucket-2',
+    DATA_BUCKET: 'test-data-bucket-2',
+    PROVISION_Q_RESOURCES: false,
+    PREFERRED_KNOWLEDGE_BASE: 'kb-2',
+    BEDROCK_KNOWLEDGE_BASE_ID: 'bedrock-kb-2',
   };
 
   const CACHE_DURATION_TIMER = 2 * 60 * 60 * 1000; // 2 hours
@@ -179,6 +193,7 @@ describe('ConfigSetup', () => {
   describe('time-based caching behavior', () => {
     it('should demonstrate full cache cycle with different configs', async () => {
       console.log = vi.fn(); // Mock console.log to capture logs
+      console.warn = vi.fn(); // Mock console.warn to capture warnings
 
       // Step 1: Initial config fetch - will trigger reload since storage is empty
       mockFetch.mockResolvedValueOnce({
@@ -189,12 +204,12 @@ describe('ConfigSetup', () => {
       await fetchConfigAddtoSession();
       expect(mockSessionStorage.Q_APPLICATION_ID).toBe('app-1');
       expect(mockSessionStorage.CLIENT_NAME).toBe('test-client-1');
-      expect(console.log).toHaveBeenCalledWith('No config timestamp found, needs refresh');
-      expect(console.log).toHaveBeenCalledWith('Config changed, reloading page');
+      expect(console.warn).toHaveBeenCalledWith('Config is not in session, or is missing required properties');
       expect(mockWindowReload).toHaveBeenCalledTimes(1); // First fetch triggers reload
 
       // Reset mocks for cleaner testing of subsequent steps
       console.log.mockClear();
+      console.warn.mockClear();
       mockWindowReload.mockClear();
 
       // Step 2: Try to fetch again immediately (should use cache)
@@ -233,10 +248,25 @@ describe('ConfigSetup', () => {
 
     it('should return true when all required config keys are present', () => {
       mockSessionStorage.Q_APPLICATION_ID = 'app-1';
+      mockSessionStorage.Q_INDEX_ID = 'index-1';
+      mockSessionStorage.Q_RETRIEVER_ID = 'retriever-1';
+      mockSessionStorage.ROLE_ARN = 'arn:aws:iam::123456789012:role/test-role-1';
       mockSessionStorage.REGION = 'us-east-1';
       mockSessionStorage.API_ENDPOINT = 'https://api.example.com';
       mockSessionStorage.USER_POOL_ID = 'pool-1';
       mockSessionStorage.CLIENT_ID = 'client-1';
+      mockSessionStorage.CLIENT_NAME = 'test-client-1';
+      mockSessionStorage.HONEYCOMB_KEY = 'honey-1';
+      mockSessionStorage.OUTPUTS_BUCKET_NAME = 'test-outputs-bucket-1';
+      mockSessionStorage.DATA_BUCKET = 'test-data-bucket-1';
+      mockSessionStorage.PROVISION_Q_RESOURCES = 'true';
+      mockSessionStorage.PREFERRED_KNOWLEDGE_BASE = 'kb-1';
+      mockSessionStorage.BEDROCK_KNOWLEDGE_BASE_ID = 'bedrock-kb-1';
+      mockSessionStorage.GROUPS = JSON.stringify({
+        admin: { roleArn: 'arn:aws:iam::123:role/admin', features: ['chat'] },
+        standard: { roleArn: 'arn:aws:iam::123:role/standard', features: ['chat'] },
+      });
+      mockSessionStorage.CONFIG_TIMESTAMP = '12345';
       expect(hasConfigInSession()).toBe(true);
     });
   });
@@ -301,6 +331,8 @@ describe('ConfigSetup', () => {
       await fetchConfigAddtoSession();
 
       expect(mockWindowReload).toHaveBeenCalledTimes(1); // Config change triggers reload
+      // GROUPS should be stored as a JSON string, so we need to parse it
+      expect(mockSessionStorage.GROUPS).toBeDefined();
       expect(JSON.parse(mockSessionStorage.GROUPS)).toEqual(updatedConfig.GROUPS);
     });
 

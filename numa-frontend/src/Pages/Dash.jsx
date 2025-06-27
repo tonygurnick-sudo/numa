@@ -34,7 +34,7 @@ export const Dash = ({ showFavorites }) => {
     const loadApps = async () => {
       setLoading(true);
       try {
-        const appsData = await manifestService.fetchAppsFromManifest();
+        const appsData = await manifestService.forceRefreshManifest();
         setNumaApps(appsData);
         const uniqueCategories = [...new Set(appsData.map((app) => app.category).filter(Boolean))];
         setCategories(uniqueCategories);
@@ -48,7 +48,7 @@ export const Dash = ({ showFavorites }) => {
     };
 
     loadApps();
-  }, []); // Only run on mount since we don't need to reload
+  }, []); // Force refresh on mount
 
   // Memoize filtered apps to avoid unnecessary recalculations
   const filteredApps = useMemo(() => {
