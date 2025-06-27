@@ -28,11 +28,24 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
   }
 
   addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): LambdaFunction {
+    const environment = {
+      ...props.environment,
+    };
+    const additionalPolicyStatements = [...(props.additionalPolicyStatements ?? [])];
+    if (this.props.bedrockAccount) {
+      environment['BEDROCK_ACCOUNT'] = this.props.bedrockAccount;
+      additionalPolicyStatements.push({
+        effect: 'Allow',
+        actions: ['sts:AssumeRole'],
+        resources: [`arn:aws:iam::${this.props.bedrockAccount}:role/bedrock-quota-sharing`],
+      });
+    }
+
     const lambda = new NumaLambda(scope, name, {
-      additionalPolicyStatements: props.additionalPolicyStatements,
+      additionalPolicyStatements,
       clientName: this.props.clientName,
       runtime: props.runtime,
-      environment: props.environment,
+      environment,
       handler: props.handler ?? 'lambda_function.handler',
       lambdaDirectory: props.lambdaDirectory,
       logGroup: this.logGroup,
@@ -96,6 +109,7 @@ export interface AddLambdaFunctionProps {
 export interface ApiGatewayLambdaCollectionProps {
   apiGatewayAuthorizerId: string;
   apiGatewayId: string;
+  bedrockAccount?: string;
   clientName: string;
   otelConfig?: OTelConfig;
   resourceNameInfix?: string;

@@ -6,7 +6,7 @@ import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime
 import { BedrockAgentClient } from '@aws-sdk/client-bedrock-agent';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { QAppsClient } from '@aws-sdk/client-qapps';
-import { fromWebToken } from '@aws-sdk/credential-providers';
+import { fromTemporaryCredentials, fromWebToken } from '@aws-sdk/credential-providers';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
 import {
   CognitoIdentityProviderClient,
@@ -382,6 +382,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const REGION = window.sessionStorage.getItem('REGION');
     const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS'));
     const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+    const BEDROCK_ACCOUNT = window.sessionStorage.getItem('BEDROCK_ACCOUNT');
 
     if (!REGION || !GROUPS || !USER_POOL_ID) {
       console.error('Missing required session storage values for BedrockRuntimeClient initialization');
@@ -411,16 +412,27 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return;
       }
 
-      const credentials = fromWebToken({
+      let credentials = await fromWebToken({
         roleSessionName: 'numa-bedrock-client',
         roleArn: roleArn,
         webIdentityToken: idToken,
         durationSeconds: 3600,
-      });
+      })();
+
+      // If BEDROCK_ACCOUNT has been set, we should use another accounts Bedrock, so assume into there.
+      if (BEDROCK_ACCOUNT) {
+        const bedrockRole = `arn:aws:iam::${BEDROCK_ACCOUNT}:role/bedrock-quota-sharing`;
+        credentials = fromTemporaryCredentials({
+          masterCredentials: credentials,
+          params: {
+            RoleArn: bedrockRole,
+          },
+        });
+      }
 
       const newClient = new BedrockRuntimeClient({
         region: REGION,
-        credentials: await credentials(),
+        credentials,
       });
 
       setBedrockRuntimeClient(newClient);

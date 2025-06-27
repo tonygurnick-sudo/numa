@@ -38,6 +38,13 @@ import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { z } from 'zod';
 import { KnowledgeBase } from '../constructs/knowledge-base-construct';
+import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
+import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
+import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+
+const arcanumOrgId = 'o-g8veu85jva';
+const nextGenOrgId = 'o-apdsu3c1a7';
 
 export class NumaClientStack extends TerraformStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
@@ -146,6 +153,7 @@ export class NumaClientStack extends TerraformStack {
     new AppAgnosticApiGatewayLambdaCollection(this, safeConstructId + '-core', {
       apiGatewayAuthorizerId: fe.authorizer.id,
       apiGatewayId: fe.apiGateway.id,
+      bedrockAccount: clientConfig.bedrockAccount,
       chatHistoryTableName: core.chatHistoryTable.name,
       clientName: props.clientName,
       dataBucketName: core.dataBucket.bucket.bucket,
@@ -169,6 +177,7 @@ export class NumaClientStack extends TerraformStack {
         ...appConfig,
         apiGatewayAuthorizerId: fe.authorizer.id,
         apiGatewayId: fe.apiGateway.id,
+        bedrockAccount: clientConfig.bedrockAccount,
         clientName: props.clientName,
         outputsBucket: core.outputsBucket.bucket,
         region: clientConfig.region,
@@ -232,6 +241,7 @@ export class NumaClientStack extends TerraformStack {
         PROVISION_Q_RESOURCES: clientConfig.provisionQResources ?? true,
         PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'q',
         BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase.knowledgeBaseId,
+        BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
       }),
       contentType: 'application/json',
     });
@@ -275,6 +285,56 @@ export class NumaClientStack extends TerraformStack {
         logGroup: core.logGroup,
         budget: clientConfig.budget,
         centralTopicArn: 'arn:aws:sns:us-east-1:207567759910:NumaBudgetAlerts',
+      });
+    }
+
+    if (clientConfig.allowBedrockQuotaSharing) {
+      const quotaSharingRole = new IamRole(this, 'quota-sharing-role', {
+        name: 'bedrock-quota-sharing',
+        assumeRolePolicy: new DataAwsIamPolicyDocument(this, 'quota-sharing-assume-role-policy-statement', {
+          statement: [
+            {
+              actions: ['sts:AssumeRole'],
+              principals: [
+                {
+                  type: 'AWS',
+                  identifiers: ['*'],
+                },
+              ],
+              effect: 'Allow',
+              condition: [
+                {
+                  test: 'StringLike',
+                  values: [arcanumOrgId, nextGenOrgId],
+                  variable: 'aws:PrincipalOrgId',
+                },
+              ],
+            },
+          ],
+        }).json,
+      });
+      const quotaSharingPolicy = new IamPolicy(this, 'quoting-sharing-policy', {
+        name: 'bedrock-quota-sharing',
+        policy: new DataAwsIamPolicyDocument(this, 'quota-sharing-policy-statement', {
+          statement: [
+            {
+              actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+              resources: [
+                'arn:aws:bedrock:*::foundation-model/anthropic.claude-*',
+                'arn:aws:bedrock:*::foundation-model/us.anthropic.claude-*',
+                'arn:aws:bedrock:*::foundation-model/apac.anthropic.claude-*',
+                'arn:aws:bedrock:*:*:inference-profile/anthropic.claude-*',
+                'arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-*',
+                'arn:aws:bedrock:*:*:inference-profile/apac.anthropic.claude-*',
+              ],
+              effect: 'Allow',
+            },
+          ],
+        }).json,
+      });
+      new IamRolePolicyAttachmentsExclusive(this, 'quota-sharing-attachment', {
+        roleName: quotaSharingRole.name,
+        policyArns: [quotaSharingPolicy.arn],
       });
     }
   }
@@ -347,6 +407,14 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         // Generic email configuration that can be used by any app
         senderEmail: z.string().optional(),
         receiverEmails: z.array(z.string()).optional(),
+        bedrockAccount: z.string().optional(),
+        /** Whether to provision the bedrock-quota-sharing role.
+         *
+         * NOTE: Due to needing a predictable name, this can only be enabled on one environment per account.
+         *
+         * @default false
+         */
+        allowBedrockQuotaSharing: z.boolean().optional().default(false),
       })
       .strict(),
   );
