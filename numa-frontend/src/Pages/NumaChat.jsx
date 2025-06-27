@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Button, Container, Row, Col } from 'react-bootstrap';
 import { ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import { useAuth } from '../Providers/AuthProvider';
@@ -37,6 +37,7 @@ const NumaChat = () => {
   const [showSplitView, setShowSplitView] = useState(false);
   const [companyProfile, setCompanyProfile] = useState('');
   const [isCompanyProfileLoaded, setIsCompanyProfileLoaded] = useState(false);
+  const [isConversationLoading, setIsConversationLoading] = useState(true);
   const stopGenerationRef = useRef(false);
   const messageEndRef = useRef(null);
   const chatHistoryRef = useRef(null);
@@ -58,9 +59,10 @@ const NumaChat = () => {
   const sub = idToken.sub;
   const email = idToken.email;
 
-  // Constants
-  const REGION = window.sessionStorage.getItem('REGION');
-  const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
+  // Memoize constants to prevent unnecessary rerenders
+  const REGION = useMemo(() => window.sessionStorage.getItem('REGION'), []);
+  const CLIENT_NAME = useMemo(() => window.sessionStorage.getItem('CLIENT_NAME'), []);
+  const companyBucket = useMemo(() => `numa-${CLIENT_NAME}-company`, [CLIENT_NAME]);
 
   // Get the appropriate model ID based on fallback status
   const getAppropriateModelId = () => {
@@ -78,8 +80,6 @@ const NumaChat = () => {
   const MAX_DATA_SOURCE_ITEMS = 6;
   const MAX_WEB_SEARCH_RESULTS = 2;
   const TODAY = new Date();
-  const companyBucket = `numa-${CLIENT_NAME}-company`;
-  const region = window.sessionStorage.getItem('REGION');
   const SYSTEM_MESSAGE = `You are an artificial intelligence called Numa created by Arcanum AI, a helpful AI assistant who can answer user queries and help with everyday tasks. You may be asked general question, be asked questions about a file, or be given data source content to help answer questions. **General Instructions**\n- If provided with data source content from the users data sources, please use it to help answer the user question.\n- If you cannot find the answer in the data source content, please explicitly state so before using your knowledge to answer the question the best you can. If you can answer the users question using the data source(s), Let them know where you found the answer to the question.\n-Formatting: Always respond using valid Markdown syntax, using styling emphasises and headings appropriately. Incorporate other bold and italic styling within your outputs when appropriate to emphasise certain details.\n- When generating artefacts like documents, email, etc, please never use markdown blocks like '''markdown etc, but instead return as usual with markdown formatting.\n- Similarly, For any document, report, email, analysis, or other exportable content you generate that a user may want to download or copy (except code), please start it with the following '<!--BEGIN_DOC title="SOME TITLE HERE"-->' (where you infer the title when writing the document), and end it with '<!--END_DOC-->'. This will help me identify documents in post processing using regex looking for the opening '<--' and closing '-->'\n- If the users request is ambiguous or lacks details, ask follow-up questions to gather more information before answering.\n- Maintain a Friendly and Professional Tone: Ensure your responses are clear, respectful, and professional while still being conversational.\n- Request Additional Information: If necessary, prompt the user with questions like "Could you provide more details?" or "What specific aspect would you like to focus on?"\n- Be Context Aware: Leverage any provided context (like user details or previous conversation history) to tailor your response appropriately.\n\nHere is some information about the user that you can use to personalise your response:\n\nUser Email: ${email}\nToday's Date: ${TODAY}`;
 
   // Ref for input textarea
@@ -170,14 +170,14 @@ const NumaChat = () => {
 
   // Function to load company profile from S3
   const fetchCompanyProfile = async () => {
-    if (!region || !companyBucket || !getCredentials) {
+    if (!REGION || !companyBucket || !getCredentials) {
       console.log('Missing required parameters for loading company profile');
       setIsCompanyProfileLoaded(true); // Mark as loaded even if failed to prevent repeated attempts
       return;
     }
 
     try {
-      const profileText = await loadCompanyProfile(companyBucket, region, getCredentials);
+      const profileText = await loadCompanyProfile(companyBucket, REGION, getCredentials);
       setCompanyProfile(profileText);
       console.log('Company profile loaded successfully');
     } catch (error) {
@@ -194,10 +194,10 @@ const NumaChat = () => {
 
   // Load company profile when component mounts
   useEffect(() => {
-    if (!isCompanyProfileLoaded) {
+    if (!isCompanyProfileLoaded && REGION && companyBucket) {
       fetchCompanyProfile();
     }
-  }, [region, companyBucket, getCredentials, isCompanyProfileLoaded]);
+  }, [REGION, companyBucket, isCompanyProfileLoaded]);
 
   // Track window width
   useEffect(() => {
@@ -258,6 +258,7 @@ const NumaChat = () => {
     // Stop any ongoing streaming response
     stopGenerationRef.current = true;
     setButtonStatus('idle');
+    setIsConversationLoading(false);
 
     // Clear all states
     setMessages([]);
@@ -821,6 +822,10 @@ const NumaChat = () => {
   // Load single conversation from DB
   const handleLoadConversation = async (selectedConversationId) => {
     if (!numaChatDynamoUtils) return;
+
+    setIsConversationLoading(true);
+    setMessages([]); // Clear current messages immediately
+
     try {
       let retryCount = 0;
       let conversationHistory = [];
@@ -886,6 +891,15 @@ const NumaChat = () => {
       localStorage.setItem('currentConversationId', selectedConversationId);
     } catch (error) {
       console.error('Error loading conversation:', error);
+      // Show error message to user
+      setMessages([
+        {
+          role: 'system',
+          content: 'Error loading conversation. Please try again or select a different conversation.',
+        },
+      ]);
+    } finally {
+      setIsConversationLoading(false);
     }
   };
 
@@ -966,6 +980,7 @@ const NumaChat = () => {
                             setInlineDocument({ title: docTitle, content: docContent });
                             setShowSplitView(true);
                           }}
+                          isConversationLoading={isConversationLoading}
                         />
                       </div>
 

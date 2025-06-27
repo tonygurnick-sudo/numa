@@ -36,6 +36,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
     idToken: null,
   });
 
+  // Add ref to track ongoing refresh operations
+  const refreshInProgressRef = useRef(false);
+  const refreshPromiseRef = useRef(null);
+
   // Decode tokens without triggering re-renders
   const decodeTokens = () => {
     if (!tokensRef.current.idToken) {
@@ -180,99 +184,129 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   const refreshTokens = async () => {
-    try {
-      console.log('🔄 Attempting to refresh tokens...');
-      const refreshToken = tokensRef.current.refreshToken;
-      const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
-      const REGION = window.sessionStorage.getItem('REGION');
+    // Prevent concurrent refresh operations
+    if (refreshInProgressRef.current) {
+      console.log('🔄 Token refresh already in progress, waiting for completion...');
+      return refreshPromiseRef.current;
+    }
 
-      if (!refreshToken) {
-        console.error('No refresh token available');
-        logout();
-        return false;
-      }
+    refreshInProgressRef.current = true;
 
-      const idToken = tokensRef.current.idToken;
-      const decodedIdToken = jwtDecode(idToken);
-      const username = decodedIdToken.sub;
-      if (!username) {
-        console.error('No username available');
-        logout();
-        return false;
-      }
+    const refreshOperation = async () => {
+      try {
+        console.log('🔄 Attempting to refresh tokens...');
+        const refreshToken = tokensRef.current.refreshToken;
+        const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
+        const REGION = window.sessionStorage.getItem('REGION');
 
-      const SECRET_HASH = await fetchSecretHash(username);
+        if (!refreshToken) {
+          console.error('No refresh token available');
+          logout();
+          return false;
+        }
 
-      const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
+        const idToken = tokensRef.current.idToken;
+        const decodedIdToken = jwtDecode(idToken);
+        const username = decodedIdToken.sub;
+        if (!username) {
+          console.error('No username available');
+          logout();
+          return false;
+        }
 
-      const params = {
-        AuthFlow: 'REFRESH_TOKEN_AUTH',
-        ClientId: CLIENT_ID,
-        AuthParameters: {
-          REFRESH_TOKEN: refreshToken,
-          SECRET_HASH: SECRET_HASH,
-        },
-      };
+        const SECRET_HASH = await fetchSecretHash(username);
 
-      const command = new InitiateAuthCommand(params);
-      const response = await cognitoClient.send(command);
+        const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
 
-      if (!response.AuthenticationResult) throw new Error('Token refresh failed');
+        const params = {
+          AuthFlow: 'REFRESH_TOKEN_AUTH',
+          ClientId: CLIENT_ID,
+          AuthParameters: {
+            REFRESH_TOKEN: refreshToken,
+            SECRET_HASH: SECRET_HASH,
+          },
+        };
 
-      const { AccessToken, IdToken } = response.AuthenticationResult;
+        const command = new InitiateAuthCommand(params);
+        const response = await cognitoClient.send(command);
 
-      // Update tokensRef directly
-      tokensRef.current = {
-        ...tokensRef.current,
-        accessToken: AccessToken,
-        idToken: IdToken,
-      };
+        if (!response.AuthenticationResult) throw new Error('Token refresh failed');
 
-      // Update localStorage and decode tokens
-      updateTokens({
-        accessToken: AccessToken,
-        idToken: IdToken,
-        refreshToken,
-      });
+        const { AccessToken, IdToken } = response.AuthenticationResult;
 
-      // Decode the new tokens to update the decoded token references
-      const newDecodedAccessToken = jwtDecode(AccessToken);
-      const newDecodedIdToken = jwtDecode(IdToken);
+        // Update tokensRef directly
+        tokensRef.current = {
+          ...tokensRef.current,
+          accessToken: AccessToken,
+          idToken: IdToken,
+        };
 
-      // Update the user state object with the refreshed tokens
-      // This ensures all AWS clients will be reinitialized with the new tokens
-      setUser((prev) => ({
-        ...prev,
-        tokens: {
+        // Update localStorage and decode tokens
+        updateTokens({
           accessToken: AccessToken,
           idToken: IdToken,
           refreshToken,
-        },
-        decoded_tokens: {
-          accessToken: newDecodedAccessToken,
-          idToken: newDecodedIdToken,
-        },
-      }));
+        });
 
-      // Use the utility function to extract groups and features
-      const { groups, features } = extractGroupsAndFeatures(newDecodedIdToken);
-      setUser((prev) => ({
-        ...prev,
-        groups,
-        features: features || [],
-      }));
+        // Decode the new tokens to update the decoded token references
+        const newDecodedAccessToken = jwtDecode(AccessToken);
+        const newDecodedIdToken = jwtDecode(IdToken);
 
-      // Add console log to debug features initialization
-      console.log('Decoded groups:', groups);
-      console.log('Extracted features:', features);
+        // Update the user state object with the refreshed tokens
+        // This ensures all AWS clients will be reinitialized with the new tokens
+        setUser((prev) => ({
+          ...prev,
+          tokens: {
+            accessToken: AccessToken,
+            idToken: IdToken,
+            refreshToken,
+          },
+          decoded_tokens: {
+            accessToken: newDecodedAccessToken,
+            idToken: newDecodedIdToken,
+          },
+        }));
 
-      console.log('✅ Tokens refreshed successfully');
-      return true;
-    } catch (error) {
-      console.error('❌ Error refreshing tokens:', error);
-      logout();
-      return false;
+        // Use the utility function to extract groups and features
+        const { groups, features } = extractGroupsAndFeatures(newDecodedIdToken);
+        setUser((prev) => ({
+          ...prev,
+          groups,
+          features: features || [],
+        }));
+
+        // Add console log to debug features initialization
+        console.log('Decoded groups:', groups);
+        console.log('Extracted features:', features);
+
+        console.log('✅ Tokens refreshed successfully');
+        return true;
+      } catch (error) {
+        console.error('❌ Error refreshing tokens:', error);
+        logout();
+        return false;
+      } finally {
+        refreshInProgressRef.current = false;
+        refreshPromiseRef.current = null;
+      }
+    };
+
+    refreshPromiseRef.current = refreshOperation();
+    return refreshPromiseRef.current;
+  };
+
+  // Centralized token validation function
+  const ensureValidTokens = async () => {
+    const decodedIdToken = decodedTokensRef.current.idToken;
+    if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
+      console.log('Tokens expired or invalid, refreshing before client initialization...');
+      const refreshed = await refreshTokens();
+      if (!refreshed) {
+        console.error('Failed to refresh tokens for client initialization');
+        return false;
+      }
     }
+    return true;
   };
 
   const getAccessToken = async () => {
@@ -317,17 +351,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      // Check if token is expired before using it
-      const decodedIdToken = decodedTokensRef.current.idToken;
-      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
-        console.log('ID token expired, refreshing before QBusinessClient initialization...');
-        const refreshed = await refreshTokens();
-        if (!refreshed) {
-          console.error('Failed to refresh tokens for QBusinessClient initialization');
-          return;
-        }
-      }
-
       const idToken = tokensRef.current.idToken;
       if (!idToken) {
         console.error('No ID token available for QBusinessClient initialization');
@@ -382,17 +405,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      // Check if token is expired before using it
-      const decodedIdToken = decodedTokensRef.current.idToken;
-      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
-        console.log('ID token expired, refreshing before BedrockRuntimeClient initialization...');
-        const refreshed = await refreshTokens();
-        if (!refreshed) {
-          console.error('Failed to refresh tokens for BedrockRuntimeClient initialization');
-          return;
-        }
-      }
-
       const idToken = tokensRef.current.idToken;
       if (!idToken) {
         console.error('No ID token available for BedrockRuntimeClient initialization');
@@ -449,17 +461,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      // Check if token is expired before using it
-      const decodedIdToken = decodedTokensRef.current.idToken;
-      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
-        console.log('ID token expired, refreshing before BedrockAgentRuntimeClient initialization...');
-        const refreshed = await refreshTokens();
-        if (!refreshed) {
-          console.error('Failed to refresh tokens for BedrockAgentRuntimeClient initialization');
-          return;
-        }
-      }
-
       const idToken = tokensRef.current.idToken;
       if (!idToken) {
         console.error('No ID token available for BedrockAgentRuntimeClient initialization');
@@ -513,17 +514,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      // Check if token is expired before using it
-      const decodedIdToken = decodedTokensRef.current.idToken;
-      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
-        console.log('ID token expired, refreshing before BedrockAgentClient initialization...');
-        const refreshed = await refreshTokens();
-        if (!refreshed) {
-          console.error('Failed to refresh tokens for BedrockAgentClient initialization');
-          return;
-        }
-      }
-
       const idToken = tokensRef.current.idToken;
       if (!idToken) {
         console.error('No ID token available for BedrockAgentClient initialization');
@@ -582,17 +572,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      // Check if token is expired before using it
-      const decodedIdToken = decodedTokensRef.current.idToken;
-      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
-        console.log('ID token expired, refreshing before DynamoDBClient initialization...');
-        const refreshed = await refreshTokens();
-        if (!refreshed) {
-          console.error('Failed to refresh tokens for DynamoDBClient initialization');
-          return;
-        }
-      }
-
       const idToken = tokensRef.current.idToken;
       if (!idToken) {
         console.error('No ID token available for DynamoDBClient initialization');
@@ -649,17 +628,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      // Check if token is expired before using it
-      const decodedIdToken = decodedTokensRef.current.idToken;
-      if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
-        console.log('ID token expired, refreshing before QAppsClient initialization...');
-        const refreshed = await refreshTokens();
-        if (!refreshed) {
-          console.error('Failed to refresh tokens for QAppsClient initialization');
-          return;
-        }
-      }
-
       const idToken = tokensRef.current.idToken;
       if (!idToken) {
         console.error('No ID token available for QAppsClient initialization');
@@ -689,13 +657,18 @@ export const AuthProvider = ({ children, initialTokens }) => {
     // Only initialize clients after token validation is complete and user is properly loaded
     if (user && tokenValidationComplete && user.decoded_tokens?.idToken && user.features?.length > 0) {
       // Add a small delay to ensure tokens are properly set
-      const timer = setTimeout(() => {
-        initializeQBusinessClient();
-        initializeQAppsClient();
-        initializeBedrockRuntimeClient();
-        initializeBedrockAgentRuntimeClient();
-        initializeBedrockAgentClient();
-        initializeDynamoDBClient();
+      const timer = setTimeout(async () => {
+        // Ensure tokens are valid before initializing any clients
+        const tokensValid = await ensureValidTokens();
+        if (tokensValid) {
+          // Initialize all clients after token validation
+          initializeQBusinessClient();
+          initializeQAppsClient();
+          initializeBedrockRuntimeClient();
+          initializeBedrockAgentRuntimeClient();
+          initializeBedrockAgentClient();
+          initializeDynamoDBClient();
+        }
       }, 100);
 
       return () => clearTimeout(timer);
