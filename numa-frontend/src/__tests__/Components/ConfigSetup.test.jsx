@@ -111,7 +111,7 @@ describe('ConfigSetup', () => {
 
     it('should not fetch config again if cache is fresh', async () => {
       // First call
-      mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(config1),
       });
@@ -196,7 +196,7 @@ describe('ConfigSetup', () => {
       console.warn = vi.fn(); // Mock console.warn to capture warnings
 
       // Step 1: Initial config fetch - will trigger reload since storage is empty
-      mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(config1),
       });

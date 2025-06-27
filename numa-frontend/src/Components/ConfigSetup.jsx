@@ -1,6 +1,6 @@
 const CONFIG_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 const CONFIG_TIMESTAMP_KEY = 'CONFIG_TIMESTAMP';
-const CONFIG_PROPERTIES = [
+const CONFIG_REQUIRED_PROPERTIES = [
   'Q_APPLICATION_ID',
   'Q_INDEX_ID',
   'Q_RETRIEVER_ID',
@@ -17,6 +17,8 @@ const CONFIG_PROPERTIES = [
   'PREFERRED_KNOWLEDGE_BASE',
   'BEDROCK_KNOWLEDGE_BASE_ID',
 ];
+const CONFIG_OPTIONAL_PROPERTIES = ['BEDROCK_ACCOUNT'];
+const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
 
 export const fetchConfigAddtoSession = async (forceRefresh = false) => {
   // Check if we need to refresh the config
@@ -46,7 +48,7 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
     }
 
     // Check if all required properties exist
-    const missingProperties = CONFIG_PROPERTIES.filter((prop) => !Object.hasOwn(configData, prop));
+    const missingProperties = CONFIG_REQUIRED_PROPERTIES.filter((prop) => !Object.hasOwn(configData, prop));
     if (missingProperties.length > 0) {
       console.error(`Missing required properties in config: ${missingProperties.join(', ')}`);
     }
@@ -75,7 +77,12 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
           sessionStorage.setItem(property, stringValue);
           needsRefresh = true;
         }
-      } else if ((configValue ?? 'undefined') != existing) {
+      } else if (!configValue && existing) {
+        // If a value has been removed from the config, remove it from session.
+        sessionStorage.removeItem(property);
+        needsRefresh = true;
+      } else if (configValue != existing) {
+        // If a value is different from the config, update it.
         sessionStorage.setItem(property, configValue);
         needsRefresh = true;
       }
@@ -127,7 +134,8 @@ const shouldRefreshConfig = () => {
 // Helper function to check if config exists in session storage
 export const hasConfigInSession = () => {
   return (
-    CONFIG_PROPERTIES.every((key) => sessionStorage.getItem(key) !== null) && sessionStorage.getItem('GROUPS') !== null
+    CONFIG_REQUIRED_PROPERTIES.every((key) => sessionStorage.getItem(key) !== null) &&
+    sessionStorage.getItem('GROUPS') !== null
   );
 };
 

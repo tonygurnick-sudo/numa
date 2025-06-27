@@ -51,7 +51,7 @@ export class NumaLambda extends Construct {
     policyAttachmentBasic.addMoveTarget(scope.node.id + name + '_role-policy-attachment-basic');
     this.policyAttachments.push(policyAttachmentBasic);
 
-    if (props.additionalPolicyStatements) {
+    if (props.additionalPolicyStatements && props.additionalPolicyStatements.length > 0) {
       const additionalPolicy = new IamPolicy(scope, name + '_policy', {
         policy: new DataAwsIamPolicyDocument(scope, name + '_policy-document', {
           statement: props.additionalPolicyStatements,

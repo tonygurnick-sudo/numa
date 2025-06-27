@@ -40,6 +40,29 @@ class BedrockClaude3Model:
         # Convert external string to enum early at the system boundary
         self.bedrock_region = os.environ["AWS_REGION"]
 
+        bedrock_account = os.environ.get("BEDROCK_ACCOUNT")
+        if bedrock_account:
+            sts = boto3.client("sts")
+            credentials = sts.assume_role(
+                RoleArn=f"arn:aws:iam::{bedrock_account}:role/bedrock-quota-sharing",
+                RoleSessionName="bedrock-quota-sharing",
+            )["Credentials"]
+
+            self.bedrock_client = boto3.client(
+                service_name="bedrock-runtime",
+                region_name=self.bedrock_region,
+                config=Config(read_timeout=1000),
+                aws_access_key_id=credentials["AccessKeyId"],
+                aws_secret_access_key=credentials["SecretAccessKey"],
+                aws_session_token=credentials["SessionToken"],
+            )
+        else:
+            self.bedrock_client = boto3.client(
+                service_name="bedrock-runtime",
+                region_name=self.bedrock_region,
+                config=Config(read_timeout=1000),
+            )
+
         # Rest of the function uses properly typed values
         self.model_id = get_model_id(Region(self.bedrock_region), model_type)
 
@@ -50,12 +73,6 @@ class BedrockClaude3Model:
 
         if model_args:
             self.model_args.update(model_args)
-
-        self.bedrock_client = boto3.client(
-            service_name="bedrock-runtime",
-            region_name=self.bedrock_region,
-            config=Config(read_timeout=1000),
-        )
 
     def _invoke_model(self, multimodal_messages: list, name_for_logging: str) -> dict:
         if name_for_logging:
