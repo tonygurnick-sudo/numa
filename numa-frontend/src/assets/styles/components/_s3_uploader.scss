@@ -1,0 +1,170 @@
+// S3Uploader Page Styles
+
+.s3-uploader {
+  padding-bottom: 3rem;
+
+  // File table container
+  .file-table-container {
+    overflow-x: auto;
+    width: 100%;
+
+    &.scrollable {
+      max-height: 500px;
+      overflow-y: auto;
+    }
+  }
+
+  // Search input container
+  .search-container {
+    max-width: 300px;
+  }
+
+  // Empty state styling
+  .empty-state {
+    padding: 1rem;
+  }
+
+  // Main file table
+  .file-table {
+    table-layout: fixed;
+    background-color: #fff;
+    min-width: 100%;
+
+    th {
+      cursor: default;
+
+      &.col-name {
+        width: 60%;
+
+        &.with-error-column {
+          width: 50%;
+        }
+      }
+
+      &.col-date {
+        width: 20%;
+      }
+
+      &.col-size {
+        width: 10%;
+      }
+
+      &.col-status {
+        width: 10%;
+      }
+
+      &.col-select {
+        width: 10%;
+      }
+    }
+  }
+
+  // Tree structure indentation and styling
+  .file-tree-item {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    // Dynamic indentation levels
+    &.depth-0 { margin-left: 0; }
+    &.depth-1 { margin-left: 20px; }
+    &.depth-2 { margin-left: 40px; }
+    &.depth-3 { margin-left: 60px; }
+    &.depth-4 { margin-left: 80px; }
+    &.depth-5 { margin-left: 100px; }
+    &.depth-6 { margin-left: 120px; }
+    &.depth-7 { margin-left: 140px; }
+    &.depth-8 { margin-left: 160px; }
+    &.depth-9 { margin-left: 180px; }
+  }
+
+  // Folder toggle chevron
+  .folder-toggle {
+    cursor: pointer;
+  }
+
+  // Icon spacing
+  .file-icon-spacer {
+    margin-left: 1rem;
+  }
+
+  // File and folder icons
+  .folder-icon {
+    color: #4b007d;
+  }
+
+  .file-icon {
+    color: #000;
+  }
+
+  // Failed documents section
+  .failed-documents-container {
+    overflow-x: auto;
+    width: 100%;
+  }
+
+  .failed-documents-table {
+    table-layout: fixed;
+    background-color: #fff;
+    min-width: 100%;
+
+    th {
+      &.col-failed-name {
+        width: 40%;
+      }
+
+      &.col-failed-error {
+        width: 40%;
+      }
+
+      &.col-failed-date {
+        width: 20%;
+      }
+    }
+
+    .failed-document-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+    }
+
+    .failed-error-message {
+      white-space: nowrap;
+      overflow-x: auto;
+    }
+  }
+
+  // Sticky header for file table
+  .sticky-table-header {
+    position: sticky;
+    top: 0;
+    background-color: #fff;
+    z-index: 10;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  // Sticky action bar for bulk operations
+  .sticky-action-bar {
+    position: sticky;
+    top: 0;
+    background-color: #fff;
+    z-index: 11;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  // Checkbox styling
+  .checkbox-purple {
+    input[type="checkbox"]:checked {
+      background-color: var(--color-primary) !important;
+      border-color: var(--color-primary) !important;
+    }
+
+    input[type="checkbox"]:focus {
+      border-color: var(--color-primary) !important;
+      box-shadow: 0 0 0 0.25rem rgba(142, 80, 167, 0.25) !important;
+    }
+  }
+}

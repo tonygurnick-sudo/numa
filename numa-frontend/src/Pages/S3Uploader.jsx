@@ -10,6 +10,7 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { FileUploader } from '../Components/FileUploader';
 import { FeatureWrapper } from '../Components/RequiredFeaturesWrapper';
 import { getKnowledgeBaseState } from '../utils/knowledgeBaseUtils';
+import '../assets/styles/components/_s3_uploader.scss';
 
 /**
  * Build a nested folder tree from S3 object keys.
@@ -437,29 +438,79 @@ export function S3Uploader() {
   }
 
   /**
+   * Get all child item IDs for a folder (recursively) from nested structure
+   */
+  function getAllChildrenIds(folderId, nestedRows) {
+    const childIds = [];
+
+    function findAndCollectChildren(rows) {
+      for (const row of rows) {
+        if (row.id === folderId && row.type === 'folder' && row.children) {
+          // Found the target folder, collect all its children
+          function collectIds(children) {
+            children.forEach((child) => {
+              childIds.push(child.id);
+              if (child.type === 'folder' && child.children) {
+                collectIds(child.children);
+              }
+            });
+          }
+          collectIds(row.children);
+          return true;
+        }
+
+        // Recursively search in children
+        if (row.type === 'folder' && row.children) {
+          if (findAndCollectChildren(row.children)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    findAndCollectChildren(nestedRows);
+    return childIds;
+  }
+
+  /**
    * Handle checkbox selection for items
    */
   function handleItemSelection(itemId, itemType, isChecked) {
+    const flatRows = itemType === 'pending' ? pendingRows : indexedRows;
+    const nestedRows = itemType === 'pending' ? pendingRowsNested : indexedRowsNested;
+    const targetRow = flatRows.find((row) => row.id === itemId);
+    const isFolder = targetRow?.type === 'folder';
+
+    const updateSelection = (prev) => {
+      const newSet = new Set(prev);
+
+      // Handle the clicked item
+      if (isChecked) {
+        newSet.add(itemId);
+      } else {
+        newSet.delete(itemId);
+      }
+
+      // If it's a folder, handle all children
+      if (isFolder) {
+        const childIds = getAllChildrenIds(itemId, nestedRows);
+        childIds.forEach((childId) => {
+          if (isChecked) {
+            newSet.add(childId);
+          } else {
+            newSet.delete(childId);
+          }
+        });
+      }
+
+      return newSet;
+    };
+
     if (itemType === 'pending') {
-      setSelectedItemsPending((prev) => {
-        const newSet = new Set(prev);
-        if (isChecked) {
-          newSet.add(itemId);
-        } else {
-          newSet.delete(itemId);
-        }
-        return newSet;
-      });
+      setSelectedItemsPending(updateSelection);
     } else {
-      setSelectedItemsIndexed((prev) => {
-        const newSet = new Set(prev);
-        if (isChecked) {
-          newSet.add(itemId);
-        } else {
-          newSet.delete(itemId);
-        }
-        return newSet;
-      });
+      setSelectedItemsIndexed(updateSelection);
     }
   }
 
@@ -676,11 +727,8 @@ export function S3Uploader() {
     const showSearch = !isPending && !customContent;
     const noItemsMsg = isPending ? 'No files waiting to be indexed—everything is up to date!' : 'No files found';
 
-    // If there are 20 or more rows, enable vertical scrolling.
-    const containerStyle =
-      rows.length >= 20
-        ? { maxHeight: '500px', overflowY: 'auto', overflowX: 'auto', width: '100%' }
-        : { overflowX: 'auto', width: '100%' };
+    // Container class for scrolling behavior
+    const containerClass = rows.length >= 20 ? 'file-table-container scrollable' : 'file-table-container';
 
     return (
       <Card className="mb-4">
@@ -691,7 +739,7 @@ export function S3Uploader() {
           {customContent || (
             <>
               {showSearch && (
-                <div className="mb-3" style={{ maxWidth: '300px' }}>
+                <div className="mb-3 search-container">
                   <Form.Control
                     type="text"
                     placeholder="Search..."
@@ -717,26 +765,16 @@ export function S3Uploader() {
                   )}
                 </div>
               ) : rows.length === 0 ? (
-                <div className="text-center bg-light rounded" style={{ padding: '1rem' }}>
+                <div className="text-center bg-light rounded empty-state">
                   <p className="mt-2 text-muted mb-0">{noItemsMsg}</p>
                 </div>
               ) : (
-                <div style={containerStyle}>
-                  <style>{`
-                    .checkbox-purple input[type="checkbox"]:checked {
-                      background-color: #6f42c1 !important;
-                      border-color: #6f42c1 !important;
-                    }
-                    .checkbox-purple input[type="checkbox"]:focus {
-                      border-color: #6f42c1 !important;
-                      box-shadow: 0 0 0 0.25rem rgba(111, 66, 193, 0.25) !important;
-                    }
-                  `}</style>
+                <div className={containerClass}>
                   {/* Bulk Delete Action Bar */}
                   <FeatureWrapper requiredFeature="deleteFromCompanyData">
                     {(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed).size >
                       0 && (
-                      <div className="d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded">
+                      <div className="d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded sticky-action-bar">
                         <span className="text-muted">
                           {(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed).size}{' '}
                           item(s) selected
@@ -776,20 +814,15 @@ export function S3Uploader() {
                       </div>
                     )}
                   </FeatureWrapper>
-                  <Table
-                    hover
-                    size="sm"
-                    className="mb-0"
-                    style={{ tableLayout: 'fixed', backgroundColor: '#fff', minWidth: '100%' }}
-                  >
-                    <thead>
+                  <Table hover size="sm" className="mb-0 file-table">
+                    <thead className="sticky-table-header">
                       <tr>
-                        <th style={{ width: showErrorColumn ? '50%' : '60%', cursor: 'default' }}>Name</th>
-                        <th style={{ width: '20%', cursor: 'default' }}>Upload Date</th>
-                        <th style={{ width: '10%', cursor: 'default' }}>Size (KB)</th>
-                        {showErrorColumn && <th style={{ width: '10%', cursor: 'default' }}>Status</th>}
+                        <th className={`col-name ${showErrorColumn ? 'with-error-column' : ''}`}>Name</th>
+                        <th className="col-date">Upload Date</th>
+                        <th className="col-size">Size (KB)</th>
+                        {showErrorColumn && <th className="col-status">Status</th>}
                         <FeatureWrapper requiredFeature="deleteFromCompanyData">
-                          <th style={{ width: '10%', cursor: 'default' }}>Select</th>
+                          <th className="col-select">Select</th>
                         </FeatureWrapper>
                       </tr>
                     </thead>
@@ -798,36 +831,27 @@ export function S3Uploader() {
                         const { id, type, name, depth, uploadDate, size, kbStatus } = row;
                         const isFolder = type === 'folder';
                         const isExpanded = expandedSet.has(id);
-                        const indentPx = depth * 20;
 
                         return (
                           <tr key={id}>
                             <td>
-                              <div
-                                style={{
-                                  marginLeft: indentPx,
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}
-                              >
+                              <div className={`file-tree-item depth-${depth}`}>
                                 {isFolder ? (
                                   <i
-                                    className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1`}
-                                    style={{ cursor: 'pointer' }}
+                                    className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1 folder-toggle`}
                                     onClick={() => toggleFolderFn(id)}
                                   />
                                 ) : (
-                                  <span style={{ marginLeft: '1rem' }} />
+                                  <span className="file-icon-spacer" />
                                 )}
                                 {isFolder ? (
                                   <>
-                                    <i className="bi bi-folder me-2" style={{ color: '#4b007d' }} />
+                                    <i className="bi bi-folder me-2 folder-icon" />
                                     <strong>{name}</strong>
                                   </>
                                 ) : (
                                   <>
-                                    <i className="bi bi-file-earmark me-2" style={{ color: '#000' }} />
+                                    <i className="bi bi-file-earmark me-2 file-icon" />
                                     {row.displayName || name}
                                     {row.urlTag && <span className="ms-2 badge bg-info">URL</span>}
                                   </>
@@ -892,7 +916,7 @@ export function S3Uploader() {
    * Render the entire S3 Uploader page.
    */
   return (
-    <div className="dashboard" style={{ paddingBottom: '3rem' }}>
+    <div className="dashboard s3-uploader">
       <TopNav />
 
       {/* Header */}
@@ -1169,18 +1193,13 @@ export function S3Uploader() {
                   <Card.Title className="mb-0">Failed Documents</Card.Title>
                 </Card.Header>
                 <Card.Body>
-                  <div style={{ overflowX: 'auto', width: '100%' }}>
-                    <Table
-                      hover
-                      size="sm"
-                      className="mb-0"
-                      style={{ tableLayout: 'fixed', backgroundColor: '#fff', minWidth: '100%' }}
-                    >
+                  <div className="failed-documents-container">
+                    <Table hover size="sm" className="mb-0 failed-documents-table">
                       <thead>
                         <tr>
-                          <th style={{ width: '40%' }}>Name</th>
-                          <th style={{ width: '40%' }}>Error Reason</th>
-                          <th style={{ width: '20%' }}>Last Updated</th>
+                          <th className="col-failed-name">Name</th>
+                          <th className="col-failed-error">Error Reason</th>
+                          <th className="col-failed-date">Last Updated</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1188,25 +1207,9 @@ export function S3Uploader() {
                           const fileName = documentIdToKey(doc.documentId).split('/').pop();
                           return (
                             <tr key={doc.documentId}>
-                              <td
-                                style={{
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  maxWidth: '200px',
-                                }}
-                              >
-                                {fileName.replace(/%20/g, ' ')}
-                              </td>
+                              <td className="failed-document-name">{fileName.replace(/%20/g, ' ')}</td>
                               <td>
-                                <div
-                                  style={{
-                                    whiteSpace: 'nowrap',
-                                    overflowX: 'auto',
-                                  }}
-                                >
-                                  {doc.error.errorMessage}
-                                </div>
+                                <div className="failed-error-message">{doc.error.errorMessage}</div>
                               </td>
                               <td>{new Date(doc.updatedAt).toLocaleString('en-NZ')}</td>
                             </tr>
@@ -1225,7 +1228,7 @@ export function S3Uploader() {
       {/* Bulk Delete Confirmation Modal */}
       <Modal show={showBulkDeleteConfirmation} onHide={handleCloseBulkDeleteModal}>
         <Modal.Header closeButton>
-          <Modal.Title>Confirm Bulk Deletion</Modal.Title>
+          <Modal.Title>Confirm Deletion</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {deleteError && (
