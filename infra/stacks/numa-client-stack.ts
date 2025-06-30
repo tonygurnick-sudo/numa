@@ -64,7 +64,7 @@ export class NumaClientStack extends TerraformStack {
       ...props.clientConfig,
     };
 
-    if (!clientConfig.provisionQResources && clientConfig.preferredKnowledgeBase) {
+    if (!clientConfig.provisionQResources && clientConfig.preferredKnowledgeBase === 'q') {
       throw new Error('Nonsense detected: Q cannot be preferred knowledgebase when resources are not provisioned.');
     }
 
