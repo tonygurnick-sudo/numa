@@ -39,16 +39,8 @@ const standardizeFileFormat = (file) => {
 };
 
 function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChange = noop, value, disabled = false }) {
-  const {
-    loading,
-    numaAppId,
-    appRunning,
-    numaTaskResponses,
-    currentJobId,
-    setCurrentJobId,
-    numaAppData,
-    taskInputValues,
-  } = useNumaApp();
+  const { numaAppId, appRunning, numaTaskResponses, currentJobId, setCurrentJobId, numaAppData, taskInputValues } =
+    useNumaApp();
   const jobsApi = useJobsApi();
   const { getCredentials, user } = useAuth();
 
@@ -183,7 +175,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     onChange(null);
   };
 
-  const handleFileSelection = (fileList) => {
+  const handleFileSelection = async (fileList) => {
     const newFiles = Array.from(fileList);
     const combinedFiles = [...selectedFiles, ...newFiles];
 
@@ -220,6 +212,9 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       setError(null);
       onNotComplete();
       onChange(null);
+
+      // Automatically trigger upload after file selection
+      await handleUpload([...selectedFiles, ...validFiles]);
     }
   };
 
@@ -257,7 +252,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     }
   };
 
-  const handleUpload = async () => {
+  const handleUpload = async (filesToUpload = selectedFiles) => {
     if (!userUuid) {
       setError('Authentication required for file uploads');
       onNotComplete();
@@ -266,7 +261,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     // Check if the task is required (default to false for better user experience)
     const isRequired = task?.required !== undefined ? task.required : false;
 
-    if (!selectedFiles.length) {
+    if (!filesToUpload.length) {
       if (isRequired) {
         setError('Please select at least one file');
         return;
@@ -314,9 +309,9 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         region,
         credentials: await getCredentials(),
       });
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
-        setUploadStatus(`Uploading file ${i + 1} of ${selectedFiles.length}: ${file.name}`);
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
+        setUploadStatus(`Uploading file ${i + 1} of ${filesToUpload.length}: ${file.name}`);
         setUploadProgress(0);
 
         // Generate a random string to prevent name clashes
@@ -508,48 +503,53 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
         {appRunning && !taskResponse?.result && <Preloader overlayParent={true} />}
         {selectedFiles.length > 0 && (
-          <>
-            <div className="selected-files mb-3">
-              <h6 className="text-center">Selected Files:</h6>
+          <div className="s3-files-section">
+            <div className="files-header">
+              <span className="files-count-label">
+                {selectedFiles.length} File{selectedFiles.length !== 1 ? 's' : ''} Selected
+              </span>
+              <button
+                className="clear-all-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const clearedFiles = [];
+                  setSelectedFiles(clearedFiles);
+                  setError(null);
+                  onNotComplete();
+                  onChange(clearedFiles);
+                }}
+              >
+                Clear all
+              </button>
+            </div>
+
+            <div className="files-list">
               {selectedFiles.map((file, index) => (
-                <div key={index} className="d-flex align-items-center justify-content-center mb-1">
-                  <span className="me-2 text-center">{file.name}</span>
-                  <Button
-                    variant="link"
-                    className="p-0 text-danger"
+                <div key={index} className="file-item">
+                  <div className="file-content">
+                    <div className="file-icon">
+                      <i className="bi bi-file-earmark-text" />
+                    </div>
+                    <span className="file-name" title={file.name}>
+                      {file.name}
+                    </span>
+                  </div>
+
+                  <button
+                    className="remove-btn"
                     onClick={(e) => {
                       e.stopPropagation();
                       removeFile(file);
                     }}
                   >
-                    <i className="bi bi-x-circle"></i>
-                  </Button>
+                    <i className="bi bi-x"></i>
+                  </button>
                 </div>
               ))}
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                className="mt-2"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Clear files and notify parent components
-                  const clearedFiles = [];
-                  setSelectedFiles(clearedFiles);
-                  setError(null);
-                  onNotComplete();
-                  onChange(clearedFiles); // Pass empty array instead of null for consistency
-                }}
-              >
-                Clear All Files
-              </Button>
             </div>
-            {selectedFiles.length > 0 && !uploadStatus && (
-              <Button variant="primary" onClick={handleUpload} className="mt-3" disabled={loading || disabled}>
-                Upload
-              </Button>
-            )}
-          </>
+          </div>
         )}
+
         <input
           type="file"
           onChange={handleFileChange}

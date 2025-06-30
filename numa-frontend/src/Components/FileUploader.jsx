@@ -5,17 +5,6 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useAuth } from '../Providers/AuthProvider';
 
-const dashedBorderKeyframes = `
-  @keyframes dashedBorder {
-    0% {
-      background-position: 0 0, 100% 100%, 0 100%, 100% 0;
-    }
-    100% {
-      background-position: 100% 0, 0 100%, 0 0, 100% 100%;
-    }
-  }
-`;
-
 const FileUploader = ({ onUploadSuccess }) => {
   const [files, setFiles] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -41,13 +30,6 @@ const FileUploader = ({ onUploadSuccess }) => {
       .then((response) => response.json())
       .then((data) => setConfig(data))
       .catch((error) => console.error('Error loading config:', error));
-  }, []);
-
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.innerHTML = dashedBorderKeyframes;
-    document.head.appendChild(style);
-    return () => document.head.removeChild(style);
   }, []);
 
   const handleFileSelect = (event) => {
@@ -386,23 +368,22 @@ const FileUploader = ({ onUploadSuccess }) => {
     }, {});
 
     return (
-      <div className="list-group">
+      <div className="files-list">
         {/* Root files first */}
         {groupedFiles['']?.map((file) => (
-          <div
-            key={file.name}
-            className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-          >
-            <div>
-              <i className="bi bi-file-earmark me-2"></i>
-              {file.name}
+          <div key={file.name} className="file-item">
+            <div className="file-content">
+              <div className="file-icon">
+                <i className="bi bi-file-earmark-text" />
+              </div>
+              <span className="file-name" title={file.name}>
+                {file.name}
+              </span>
+              <span className="file-size">{(file.size / 1024).toFixed(2)} KB</span>
             </div>
-            <div className="d-flex align-items-center">
-              <span className="text-muted small me-3">{(file.size / 1024).toFixed(2)} KB</span>
-              <Button variant="link" className="p-0 text-danger" onClick={() => removeFile(file)}>
-                <i className="bi bi-x-circle"></i>
-              </Button>
-            </div>
+            <button className="remove-btn" onClick={() => removeFile(file)}>
+              <i className="bi bi-x"></i>
+            </button>
           </div>
         ))}
 
@@ -417,51 +398,51 @@ const FileUploader = ({ onUploadSuccess }) => {
           .map(([folder, files]) => {
             const depth = folder.split('/').length;
             const folderName = folder.split('/').pop();
-            const indentLevel = Math.max(0, depth - 1);
             const isExpanded = expandedFolders[folder] !== false; // Default to expanded if not set
 
             return (
               <div key={folder}>
                 <div
-                  className="list-group-item bg-light d-flex justify-content-between align-items-center"
-                  style={{ cursor: 'pointer' }}
+                  className={`file-item folder-item tree-item`}
+                  data-depth={Math.max(0, depth - 1)}
                   onClick={() => toggleFolder(folder)}
                 >
-                  <div>
-                    <span style={{ marginLeft: `${indentLevel * 2}rem` }}>
-                      <i className={`bi ${isExpanded ? 'bi-folder-minus' : 'bi-folder-plus'} me-2 text-warning`}></i>
-                      <strong>{folderName}</strong>
-                      <span className="ms-2 text-muted small">({files.length} files)</span>
+                  <div className="file-content">
+                    <div className="file-icon">
+                      <i className={`bi ${isExpanded ? 'bi-folder-minus' : 'bi-folder-plus'}`} />
+                    </div>
+                    <span className="file-name">
+                      {folderName}
+                      <span className="folder-count">({files.length} files)</span>
                     </span>
                   </div>
+                  <button className="toggle-btn">
+                    <i className={`bi ${isExpanded ? 'bi-chevron-up' : 'bi-chevron-down'}`}></i>
+                  </button>
                 </div>
                 {isExpanded &&
                   files.map((file) => {
                     const fileName = file.name.split('/').pop();
                     return (
-                      <div
-                        key={file.name}
-                        className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                      >
-                        <div>
-                          <span style={{ marginLeft: `${(indentLevel + 1) * 2}rem` }}>
-                            <i className="bi bi-file-earmark me-2"></i>
+                      <div key={file.name} className={`file-item tree-item`} data-depth={depth}>
+                        <div className="file-content">
+                          <div className="file-icon">
+                            <i className="bi bi-file-earmark-text" />
+                          </div>
+                          <span className="file-name" title={fileName}>
                             {fileName}
                           </span>
+                          <span className="file-size">{(file.size / 1024).toFixed(2)} KB</span>
                         </div>
-                        <div className="d-flex align-items-center">
-                          <span className="text-muted small me-3">{(file.size / 1024).toFixed(2)} KB</span>
-                          <Button
-                            variant="link"
-                            className="p-0 text-danger"
-                            onClick={(e) => {
-                              e.stopPropagation(); // Prevent folder toggle when clicking remove
-                              removeFile(file);
-                            }}
-                          >
-                            <i className="bi bi-x-circle"></i>
-                          </Button>
-                        </div>
+                        <button
+                          className="remove-btn"
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent folder toggle when clicking remove
+                            removeFile(file);
+                          }}
+                        >
+                          <i className="bi bi-x"></i>
+                        </button>
                       </div>
                     );
                   })}
@@ -503,17 +484,19 @@ const FileUploader = ({ onUploadSuccess }) => {
         </div>
 
         {fileStructure.files.length > 0 && (
-          <>
-            <div className="mb-4">{renderFileTree()}</div>
-
-            <div className="d-flex justify-content-center mb-3">
-              <Button variant="outline-secondary" size="sm" onClick={clearAllFiles} className="me-2">
-                <i className="bi bi-trash me-1"></i>
-                Clear All Files
-              </Button>
+          <div className="s3-files-section">
+            <div className="files-header">
+              <span className="files-count-label">
+                {fileStructure.files.length} File{fileStructure.files.length !== 1 ? 's' : ''} Selected
+              </span>
+              <button className="clear-all-btn" onClick={clearAllFiles}>
+                Clear all
+              </button>
             </div>
 
-            <div className="selected-file">
+            {renderFileTree()}
+
+            <div className="mt-4 text-center">
               {isUploading && (
                 <div className="mb-3">
                   <p className="mb-2">
@@ -542,7 +525,7 @@ const FileUploader = ({ onUploadSuccess }) => {
                 )}
               </Button>
             </div>
-          </>
+          </div>
         )}
       </div>
       {success && (

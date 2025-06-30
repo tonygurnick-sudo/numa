@@ -136,8 +136,6 @@
   }
 }
 
-.uploaded-files-section {
-}
 
 .uploaded-files-list {
   margin: 0;
@@ -198,4 +196,175 @@
   background: #f1f7f2;
   padding: 21px;
   margin-top: 20px;
+}
+
+// Modern S3 Upload Module Styles
+.s3-files-section {
+  margin-top: 1.5rem;
+
+  .files-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+
+    .files-count-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .clear-all-btn {
+      background: none;
+      border: none;
+      color: var(--color-text-muted);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+
+      &:hover {
+        background-color: var(--color-bg-light);
+        color: var(--color-danger);
+      }
+    }
+  }
+
+  .files-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background-color: white;
+    border: 1px solid var(--color-border-light);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+    &:hover {
+      border-color: var(--color-primary);
+      box-shadow: 0 2px 4px rgba(139, 90, 159, 0.1);
+    }
+
+    // Support for tree indentation
+    &.tree-item {
+      margin-left: 0;
+
+      &[data-depth="1"] { margin-left: 24px; }
+      &[data-depth="2"] { margin-left: 48px; }
+      &[data-depth="3"] { margin-left: 72px; }
+      &[data-depth="4"] { margin-left: 96px; }
+      &[data-depth="5"] { margin-left: 120px; }
+    }
+
+    // Folder-specific styling
+    &.folder-item {
+      background-color: #f8f9fa;
+      cursor: pointer;
+
+      &:hover {
+        background-color: #e9ecef;
+      }
+
+      .file-icon {
+        background-color: #fff3cd;
+
+        i {
+          color: #856404;
+        }
+      }
+
+      .file-name {
+        font-weight: 600;
+      }
+
+      .folder-count {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        margin-left: 8px;
+      }
+    }
+
+    .file-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+
+      .file-icon {
+        width: 32px;
+        height: 32px;
+        background-color: #f3f0f7;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+
+        i {
+          font-size: 16px;
+          color: var(--color-primary);
+        }
+      }
+
+      .file-name {
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: var(--color-text-body);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .file-size {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        margin-left: auto;
+        margin-right: 12px;
+        white-space: nowrap;
+      }
+    }
+
+    .remove-btn, .toggle-btn {
+      width: 24px;
+      height: 24px;
+      border: none;
+      background-color: transparent;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--color-text-light);
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+
+      &:hover {
+        background-color: #fee2e2;
+        color: var(--color-danger);
+      }
+
+      i {
+        font-size: 16px;
+      }
+    }
+
+    .toggle-btn {
+      &:hover {
+        background-color: var(--color-bg-light);
+        color: var(--color-text-body);
+      }
+    }
+  }
 }
