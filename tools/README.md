@@ -246,6 +246,57 @@ AWS_PROFILE=arcanum-q-deployer-prod yarn check-email-cases <client-name> --fix
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-email-cases --all --dev --fix
 ```
 
+### update-q-deploy-config
+
+Updates client configurations to enable Q Business resources only for customers who have Microsoft connectors (SharePoint or Teams data sources). This tool ensures that Q resources are provisioned only for clients that actually need them based on their data source configurations.
+
+Usage:
+
+```bash
+# Dry run (default) - analyze all clients and show what changes would be made
+AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config
+
+# Apply changes to all clients
+AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config --apply
+
+# Analyze specific clients only (dry run)
+AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config client1 client2
+
+# Apply changes to specific clients
+AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config client1 client2 --apply
+```
+
+The script will:
+
+1. Retrieve configurations for all clients (or specified clients)
+2. Check each client for Microsoft data source connectors (SharePoint and Teams)
+3. Set `provisionQResources: true` for clients with Microsoft connectors
+4. Set `provisionQResources: false` for clients without Microsoft connectors
+5. Show a detailed summary of changes to be made
+6. Apply changes only when `--apply` flag is used (dry run is the default)
+
+The tool provides detailed output including:
+- Which clients have Microsoft connectors and what type
+- Current vs. new `provisionQResources` settings
+- Summary of total clients analyzed and updated
+- Success/error counts for the update process
+
+Examples:
+
+```bash
+# See what changes would be made to all clients (default dry run)
+AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config
+
+# Actually apply the changes to all clients
+AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config --apply
+
+# Check specific clients without making changes
+AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config acme-corp example-client
+
+# Apply changes to specific clients
+AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config acme-corp example-client --apply
+```
+
 ### check-user-password-state
 
 Checks Cognito user pools for users in the FORCE_CHANGE_PASSWORD state.
