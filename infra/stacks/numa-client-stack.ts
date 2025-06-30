@@ -51,14 +51,22 @@ export class NumaClientStack extends TerraformStack {
     const defaults = {
       domainSuffix: props.domainSuffix,
       embeddingModel: 'amazon.titan-embed-text-v2:0',
+      provisionQResources: true,
     };
     const domainName = props.clientConfig.customDomain ?? `${props.clientName}.${defaults.domainSuffix}`;
+    const preferredKnowledgeBase =
+      (props.clientConfig.provisionQResources ?? defaults.provisionQResources) ? 'q' : 'bedrock';
     const clientConfig = {
       clientName: props.clientName,
       domainName,
+      preferredKnowledgeBase,
       ...defaults,
       ...props.clientConfig,
     };
+
+    if (!clientConfig.provisionQResources && clientConfig.preferredKnowledgeBase) {
+      throw new Error('Nonsense detected: Q cannot be preferred knowledgebase when resources are not provisioned.');
+    }
 
     const deployerRole = `arn:aws:iam::${props.arcanumNumaAccount}:role/admin-delegated-access`;
     const clientRole = `arn:aws:iam::${clientConfig.clientAccountId}:role/ArcanumAIAccess`;
@@ -238,8 +246,8 @@ export class NumaClientStack extends TerraformStack {
         OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
         HONEYCOMB_KEY: honeycomb.frontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
         DATA_BUCKET: core.dataBucket.bucket.bucket,
-        PROVISION_Q_RESOURCES: clientConfig.provisionQResources ?? true,
-        PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'q',
+        PROVISION_Q_RESOURCES: clientConfig.provisionQResources,
+        PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase,
         BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase.knowledgeBaseId,
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
       }),
@@ -400,7 +408,7 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         /**
          * Preferred knowledge base to use for document retrieval
          *
-         * @default 'q'
+         * @default 'q' if provisionQResources is true, else 'bedrock'
          */
         preferredKnowledgeBase: z.enum(['q', 'bedrock']).optional(),
 
