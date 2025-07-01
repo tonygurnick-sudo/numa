@@ -246,8 +246,8 @@ export class NumaClientStack extends TerraformStack {
         OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
         HONEYCOMB_KEY: honeycomb.frontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
         DATA_BUCKET: core.dataBucket.bucket.bucket,
-        PROVISION_Q_RESOURCES: clientConfig.provisionQResources,
-        PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase,
+        PROVISION_Q_RESOURCES: clientConfig.provisionQResources ?? false,
+        PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'q',
         BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase.knowledgeBaseId,
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
       }),
@@ -401,7 +401,7 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         /**
          * Whether to provision Q Business resources for this client
          *
-         * @default true
+         * @default false
          */
         provisionQResources: z.boolean().optional(),
 

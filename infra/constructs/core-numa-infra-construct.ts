@@ -71,7 +71,7 @@ export class CoreNumaInfra extends Construct {
     props.webCrawlerConfigs ??= [];
     props.temporaryPasswordValidityDays ??= 30;
     props.devInstance ??= false;
-    props.provisionQResources ??= true; // true → create Q‑Business resources, false → skip them
+    props.provisionQResources ??= false; // false → skip Q‑Business resources by default
 
     const callerId = new DataAwsCallerIdentity(this, 'caller-id', {});
 
@@ -857,7 +857,7 @@ const _coreNumaInfraPropsSchema = z
     /**
      * When **true**, provision Amazon Q‑Business resources.
      * When **false**, skip Q‑Business resource creation.
-     * Default is `true` (resources ARE created).
+     * Default is `false` (resources are NOT created unless explicitly enabled).
      */
     provisionQResources: z.boolean().optional(),
   })
