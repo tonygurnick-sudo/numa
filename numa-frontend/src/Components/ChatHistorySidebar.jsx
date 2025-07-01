@@ -22,7 +22,7 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
 
   /**
    * Fetch conversation metadata. Just metadata, not the full conversation.
-   * Sort them by latestTimestamp descending.
+   * Now guaranteed to be sorted by latestTimestamp descending from DynamoDBUtils.
    */
   const fetchConversations = async () => {
     if (!numaChatDynamoUtils || !user) return;
@@ -30,7 +30,8 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
     try {
       const userId = sub || 'anonymous';
       const metaItems = await numaChatDynamoUtils.getUserConversationsMeta(userId);
-      metaItems.sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+      // No need to sort here anymore - DynamoDBUtils now returns conversations
+      // sorted by latestTimestamp descending (newest first)
       setConversations(metaItems);
       setLocalError(null);
     } catch (error) {
