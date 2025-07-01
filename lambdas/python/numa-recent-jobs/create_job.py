@@ -35,8 +35,8 @@ def handler(event, _context):
                 "headers": headers,
             }
 
-        # Generate job metadata
-        job_id = str(uuid4())
+        # Use provided jobId if available otherwise generate new
+        job_id = body.get("jobId", str(uuid4()))
         timestamp = datetime.now(UTC).isoformat()
 
         # Create the item with required fields, including all fields from the request body
