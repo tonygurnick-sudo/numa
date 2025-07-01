@@ -244,15 +244,15 @@ class NumaChatDynamoUtils {
   }
 
   /**
-   * Return "meta" items for this user’s conversations.
-   * In this design, we simply Scan all items for user_id
-   * and filter by message_type = meta. (For large-scale apps, a GSI might be better.)
+   * Return "meta" items for this user's conversations.
+   * Returns conversations sorted by latestTimestamp in descending order (newest first).
+   * Limited to a reasonable number to prevent performance issues.
    */
   async getUserConversationsMeta(userId) {
     try {
       // 1. Query all items for the user
       //    We'll do a KeyCondition on user_id = :u, then FilterExpression for meta
-      //    If your data is big, consider a GSI. For moderate size, this is fine.
+      //    Add a reasonable limit to prevent performance issues with users who have many conversations
       const command = new QueryCommand({
         TableName: this.tableName,
         KeyConditionExpression: 'user_id = :u',
@@ -262,19 +262,26 @@ class NumaChatDynamoUtils {
           ':mtype': 'meta',
         }),
         ProjectionExpression: 'sk, conversation_id, user_id, conversationName, latestTimestamp, content',
+        Limit: 100, // Limit to 100 most recent conversations
       });
 
       const response = await this.dynamoDBClient.send(command);
       const items = response.Items.map(unmarshall);
 
-      // 2. Return minimal fields
-      return items.map((it) => ({
+      // 2. Convert to our return format
+      const conversations = items.map((it) => ({
         conversation_id: it.conversation_id,
         conversationName: it.conversationName || null,
         // fallback if no latestTimestamp
         latestTimestamp: it.latestTimestamp || it.timestamp || 0,
         content: it.content || '',
       }));
+
+      // 3. Sort by latestTimestamp in descending order (newest first)
+      // This ensures users see their most recent conversations at the top
+      conversations.sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+
+      return conversations;
     } catch (err) {
       console.error('Error fetching user conversation meta:', err);
       return [];
