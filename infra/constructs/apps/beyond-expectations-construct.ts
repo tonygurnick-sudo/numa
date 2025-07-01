@@ -429,6 +429,7 @@ export class BeyondExpectations extends BaseNumaApp {
           timeWindow: '24h',
           app_id: this.appId,
           job_id: '<evtTime>',
+          user_id: 'numa', // Add user_id for scheduled executions
         }),
       },
     });
