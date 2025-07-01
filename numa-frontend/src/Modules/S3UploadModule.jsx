@@ -277,32 +277,22 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     // Initialize results array at the beginning to ensure it's always available
     const results = [];
 
+    // Declare variables outside try block so they're accessible in catch block
+    const isChatFileUpload = task?.id === 'chatFileUpload';
+    let jobId = currentJobId;
+    let jobCreationPromise = null;
+
     try {
       setError(null);
 
-      // Check if this is a chat file upload (special case that doesn't need a job)
-      const isChatFileUpload = task?.id === 'chatFileUpload';
-
-      // Create a job if we don't have a job ID yet and this is not a chat file upload
-      let jobId = currentJobId;
       if (!isChatFileUpload && !jobId && numaAppData) {
-        setUploadStatus('Creating job for file uploads...');
-        try {
-          // First create a job to get a job ID
-          // We'll upload the files using this job ID, then update the job with the file paths
-          const jobResponse = await jobsApi.createJob(numaAppData, {}, 'files-uploaded');
-          jobId = jobResponse.jobId;
-          setCurrentJobId(jobId);
-        } catch (error) {
-          console.error('Failed to create job for file uploads:', error);
-          setError('Failed to create job for file uploads. Please try again.');
+        jobId = crypto.randomUUID();
+        setCurrentJobId(jobId);
 
-          // Call onComplete with empty array in case of error
-          if (onComplete) {
-            onComplete(results);
-          }
-          return;
-        }
+        // Start job creation in background (parallel to upload)
+        jobCreationPromise = jobsApi.createJob(numaAppData, { jobId }, 'uploading');
+
+        setUploadStatus('Uploading files...');
       }
 
       const s3Client = new S3Client({
@@ -377,6 +367,12 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       // Update the job with the standardized file format only if this is not a chat file upload
       if (!isChatFileUpload) {
         try {
+          // Wait for job creation to complete before updating (if it was started in background)
+          if (jobCreationPromise) {
+            setUploadStatus('Finalising job creation...');
+            await jobCreationPromise;
+          }
+
           // Create an object with just this task's input
           // ALWAYS store the standardized format (array of objects with id, name, s3_key)
           const fileInputs = {
@@ -414,6 +410,18 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       }
     } catch (error) {
       console.error('Error during file upload:', error);
+
+      // Handle job cleanup if upload failed but job creation might have succeeded
+      if (!isChatFileUpload && jobCreationPromise && jobId) {
+        try {
+          await jobCreationPromise;
+
+          await jobsApi.updateJob(numaAppData, jobId, null, {}, 'upload-failed');
+          console.log(`Marked job ${jobId} as failed due to upload error`);
+        } catch (jobError) {
+          console.error('Failed to mark job:', jobError);
+        }
+      }
 
       let errorMessage;
       if (error.response?.status === 403) {

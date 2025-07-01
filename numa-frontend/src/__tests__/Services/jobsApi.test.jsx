@@ -132,9 +132,6 @@ describe('jobsApi', () => {
       const mockJobId = 'new-job-id';
       mockNumaPost.mockResolvedValueOnce({ jobId: mockJobId, status: 'running' });
 
-      // Mock the getJobById call that happens after create
-      mockNumaGet.mockResolvedValueOnce({ jobId: mockJobId, status: 'running' });
-
       // Render the hook
       const { result } = renderHook(() => useJobsApi(), { wrapper });
 

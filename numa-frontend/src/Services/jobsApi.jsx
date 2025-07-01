@@ -36,11 +36,6 @@ export const useJobsApi = () => {
       };
 
       const response = await numaPost(endpoint_call, requestBody);
-      // Verify the inputs were saved correctly
-      if (response && response.jobId) {
-        await getJobById(numaAppData.id, response.jobId);
-      }
-
       // Check if the response is an object
       if (typeof response !== 'object') {
         throw new Error('Invalid job creation response from API');
@@ -89,9 +84,6 @@ export const useJobsApi = () => {
 
       const endpoint = `/api/${numaAppData.id}/jobs/${jobId}`;
       const response = await numaPut(endpoint, updateData);
-
-      // Verify the inputs were saved correctly
-      await getJobById(numaAppData.id, jobId);
 
       return response;
     } catch (error) {
