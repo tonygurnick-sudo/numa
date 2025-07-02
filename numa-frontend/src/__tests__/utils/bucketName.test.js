@@ -32,15 +32,16 @@ describe('bucketNameUtil', () => {
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const jobId = 'job123';
       const stepFunctionJobId = 'step123';
+      const userId = 'user-sub-123';
 
       // Expected result
       const expected = {
         bucketName: 'numa-testclient-outputs',
-        key: 'policy-builder/job123/final_policy.pdf',
+        key: 'policy-builder/user-sub-123/step123/final_policy.pdf',
       };
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client, '.pdf', userId);
 
       // Verify the result
       expect(result).toEqual(expected);
@@ -51,14 +52,15 @@ describe('bucketNameUtil', () => {
       const config = { CLIENT_NAME: 'testclient' };
       const jobId = 'job123';
       const stepFunctionJobId = 'step123';
+      const userId = 'user-sub-123';
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client, '.pdf', userId);
 
       // Verify the result has undefined bucketName but still has paths
       expect(result).toEqual({
         bucketName: undefined,
-        key: 'policy-builder/job123/final_policy.pdf',
+        key: 'policy-builder/user-sub-123/step123/final_policy.pdf',
       });
 
       // Verify warning was logged
@@ -70,14 +72,15 @@ describe('bucketNameUtil', () => {
       const config = { OUTPUTS_BUCKET_NAME: 'numa-outputs' };
       const jobId = 'job123';
       const stepFunctionJobId = 'step123';
+      const userId = 'user-sub-123';
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client, '.pdf', userId);
 
       // Verify the result
       expect(result).toEqual({
         bucketName: 'numa-outputs',
-        key: 'policy-builder/job123/final_policy.pdf',
+        key: 'policy-builder/user-sub-123/step123/final_policy.pdf',
       });
 
       // Verify warning was logged
@@ -89,14 +92,15 @@ describe('bucketNameUtil', () => {
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const jobId = '';
       const stepFunctionJobId = 'step123';
+      const userId = 'user-sub-123';
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client, '.pdf', userId);
 
       // Verify the result
       expect(result).toEqual({
         bucketName: 'numa-testclient-outputs',
-        key: 'policy-builder//final_policy.pdf',
+        key: 'policy-builder/user-sub-123/step123/final_policy.pdf',
       });
     });
 
@@ -104,23 +108,31 @@ describe('bucketNameUtil', () => {
       // Test with null job ID
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const stepFunctionJobId = 'step123';
+      const userId = 'user-sub-123';
 
       // Call with null
-      const resultNull = await getPolicyBuilderBucketInfo(config, null, stepFunctionJobId, s3Client);
+      const resultNull = await getPolicyBuilderBucketInfo(config, null, stepFunctionJobId, s3Client, '.pdf', userId);
 
       // Verify the result
       expect(resultNull).toEqual({
         bucketName: 'numa-testclient-outputs',
-        key: 'policy-builder/null/final_policy.pdf',
+        key: 'policy-builder/user-sub-123/step123/final_policy.pdf',
       });
 
       // Call with undefined
-      const resultUndefined = await getPolicyBuilderBucketInfo(config, undefined, stepFunctionJobId, s3Client);
+      const resultUndefined = await getPolicyBuilderBucketInfo(
+        config,
+        undefined,
+        stepFunctionJobId,
+        s3Client,
+        '.pdf',
+        userId,
+      );
 
       // Verify the result
       expect(resultUndefined).toEqual({
         bucketName: 'numa-testclient-outputs',
-        key: 'policy-builder/undefined/final_policy.pdf',
+        key: 'policy-builder/user-sub-123/step123/final_policy.pdf',
       });
     });
 
@@ -129,18 +141,60 @@ describe('bucketNameUtil', () => {
       const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
       const jobId = 'job123';
       const stepFunctionJobId = 'step123';
+      const userId = 'user-sub-123';
 
       // Expected result with default file name
       const expected = {
         bucketName: 'numa-testclient-outputs',
-        key: 'policy-builder/job123/final_policy.pdf',
+        key: 'policy-builder/user-sub-123/step123/final_policy.pdf',
       };
 
       // Call the function
-      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client);
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client, '.pdf', userId);
 
       // Verify the result
       expect(result).toEqual(expected);
+    });
+
+    it('should handle missing userId', async () => {
+      // Test with missing userId
+      const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
+      const jobId = 'job123';
+      const stepFunctionJobId = 'step123';
+
+      // Call the function without userId
+      const result = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client, '.pdf', undefined);
+
+      // Verify the result
+      expect(result).toEqual({
+        bucketName: 'numa-testclient-outputs',
+        key: 'policy-builder/undefined/step123/final_policy.pdf',
+      });
+
+      // Verify warning was logged
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('userId is not defined'));
+    });
+
+    it('should handle different file extensions', async () => {
+      // Test data
+      const config = { OUTPUTS_BUCKET_NAME: 'numa-testclient-outputs', CLIENT_NAME: 'testclient' };
+      const jobId = 'job123';
+      const stepFunctionJobId = 'step123';
+      const userId = 'user-sub-123';
+
+      // Test with .md extension
+      const resultMd = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client, '.md', userId);
+      expect(resultMd).toEqual({
+        bucketName: 'numa-testclient-outputs',
+        key: 'policy-builder/user-sub-123/step123/final_policy.md',
+      });
+
+      // Test with .docx extension
+      const resultDocx = await getPolicyBuilderBucketInfo(config, jobId, stepFunctionJobId, s3Client, '.docx', userId);
+      expect(resultDocx).toEqual({
+        bucketName: 'numa-testclient-outputs',
+        key: 'policy-builder/user-sub-123/step123/final_policy.docx',
+      });
     });
   });
 });
