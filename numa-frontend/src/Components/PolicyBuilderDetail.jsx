@@ -187,6 +187,7 @@ export const PolicyBuilderDetail = () => {
           policy.jobDetails.stepFunctionJobId,
           s3Client,
           '.pdf',
+          userId,
         );
         bucketName = bucket;
         key = fileKey;
@@ -600,6 +601,7 @@ export const PolicyBuilderDetail = () => {
         policy.jobDetails.stepFunctionJobId, // Pass the step function job ID as the third argument
         s3Client,
         '.md',
+        userId,
       );
 
       // Create the command to get the markdown content

@@ -5,6 +5,7 @@
  * @param {string} stepFunctionJobId - The job ID for the step function
  * @param {S3Client} s3Client - The S3 client instance
  * @param {string} fileExtension - The file extension, default is '.pdf'
+ * @param {string} userId - The user's sub from authentication
  * @returns {Promise<Object>} - An object containing the bucket name and key
  */
 export const getPolicyBuilderBucketInfo = async (
@@ -13,6 +14,7 @@ export const getPolicyBuilderBucketInfo = async (
   stepFunctionJobId,
   s3Client,
   fileExtension = '.pdf',
+  userId,
 ) => {
   // Check if CLIENT_NAME is defined
   if (config.CLIENT_NAME === undefined) {
@@ -34,14 +36,19 @@ export const getPolicyBuilderBucketInfo = async (
     console.warn('S3 client is not defined in the config');
   }
 
+  // Check if userId is defined
+  if (userId === undefined) {
+    console.warn('userId is not defined');
+  }
+
   // Default bucket name from config
   const bucketName = config.OUTPUTS_BUCKET_NAME;
   if (bucketName === undefined) {
     console.warn('OUTPUTS_BUCKET_NAME is not defined in the config');
   }
 
-  // Define the key path
-  const key = `policy-builder/${jobId}/final_policy${fileExtension}`;
+  // Define the key path following the pattern: policy-builder/user-sub/app-run-id/final_policy.extension
+  const key = `policy-builder/${userId}/${stepFunctionJobId}/final_policy${fileExtension}`;
 
   return {
     bucketName,
