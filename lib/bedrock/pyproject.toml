@@ -28,7 +28,7 @@ filetype = "1.2.0"
 structlog = "25.2.0"
 
 [tool.poetry.group.dev.dependencies]
-boto3-stubs = "1.37.20"
-mypy = "1.15.0"
+boto3-stubs = {extras = ["essential"], version = "^1.38.46"}
 pylint = "3.3.7"
 pyright = "1.1.401"
+mypy = "^1.16.1"

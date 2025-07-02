@@ -45,6 +45,7 @@ def __run_model(extracted_content: dict) -> list[dict]:
             "tool_choice": {"type": "tool", "name": "print_data"},
             "max_tokens": MAX_TOKENS,
         },
+        claude_only=True,
     )
 
     prompt = PERSONAL_FINANCE_PROMPT.format(document=extracted_content)
