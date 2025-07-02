@@ -1,6 +1,7 @@
 // ChatFileUpload.jsx
 import { Modal } from 'react-bootstrap';
 import { S3UploadModule } from '../Modules/S3UploadModule';
+import { UploadStatusRow } from './UploadStatusRow';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { processFile } from '../utils/fileProcessing';
@@ -38,13 +39,13 @@ const ChatFileUpload = ({
       // Create auth context to pass to process function
       const authContext = { user };
 
-      // Show a single generic processing message
+      // Show a single generic processing message with spinner
       const processingMessageId = Date.now();
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: `Processing ${fileArray.length} file(s)...`,
+          content: <UploadStatusRow text={`Processing ${fileArray.length} file(s)...`} showSpinner={true} />,
           status: 'processingFile',
           ephemeralId: processingMessageId,
         },
