@@ -6,6 +6,7 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
 import { Preloader } from '../Components/Preloader';
+import { UploadStatusRow } from '../Components/UploadStatusRow';
 import PropTypes from 'prop-types';
 import { useJobsApi } from '../Services/jobsApi';
 
@@ -484,12 +485,25 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           >
             Select Files
           </Button>
-          {error && <div className="alert alert-danger mt-3">{error}</div>}
-          {!error && warning && <div className="alert alert-warning mt-3">{warning}</div>}
+          {error && (
+            <div className="mt-3">
+              <UploadStatusRow text={error} variant="error" className="mb-2" />
+            </div>
+          )}
+          {!error && warning && (
+            <div className="mt-3">
+              <UploadStatusRow text={warning} variant="warning" className="mb-2" />
+            </div>
+          )}
 
           {uploadStatus && (
             <div className="mt-3">
-              <p>{uploadStatus}</p>
+              <UploadStatusRow
+                text={uploadStatus}
+                showSpinner={uploadStatus.includes('Uploading') || uploadStatus.includes('Finalising')}
+                showCheckmark={uploadStatus.includes('successful') || uploadStatus.includes('uploaded:')}
+                className="mb-2"
+              />
               {/* Show progress bar if between 0 and 100 */}
               {uploadProgress > 0 && uploadProgress < 100 && (
                 <div className="progress">

@@ -938,3 +938,76 @@ label {
   border-color: #dc3545;
   color: #fff;
 }
+
+/* Status Indicator Components */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: 12px;
+  font-weight: 500;
+  margin-bottom: 0;
+  transition: var(--transition-default);
+
+  .status-icon {
+    flex-shrink: 0;
+    font-size: 1.1rem;
+  }
+
+  .status-text {
+    margin: 0;
+    font-weight: 500;
+    color: var(--color-text-dark);
+  }
+
+  &.status-loading {
+    .status-text {
+      color: var(--color-text-dark);
+    }
+
+    .status-icon {
+      color: var(--color-primary);
+    }
+  }
+
+  &.status-success {
+    .status-text {
+      color: var(--color-text-dark);
+    }
+
+    .status-icon {
+      color: var(--color-success-text);
+    }
+  }
+
+  &.status-error {
+    .status-text {
+      color: var(--color-text-dark);
+    }
+
+    .status-icon {
+      color: var(--color-error-text);
+    }
+  }
+
+  &.status-warning {
+    .status-text {
+      color: var(--color-text-dark);
+    }
+
+    .status-icon {
+      color: var(--color-orange);
+    }
+  }
+
+  &.status-default {
+    .status-text {
+      color: var(--color-text-dark);
+    }
+
+    .status-icon {
+      color: var(--color-text-secondary);
+    }
+  }
+}

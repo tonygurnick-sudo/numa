@@ -224,7 +224,8 @@ describe('ChatFileUpload Component', () => {
       const updateFunction = mockSetMessages.mock.calls[0][0];
       const result = updateFunction([]);
       expect(result[0].role).toBe('assistant');
-      expect(result[0].content).toBe('Processing 1 file(s)...');
+      expect(result[0].content.props.text).toBe('Processing 1 file(s)...');
+      expect(result[0].content.props.showSpinner).toBe(true);
     });
 
     // Then, wait for the error message to be set
