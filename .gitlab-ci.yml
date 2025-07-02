@@ -74,6 +74,7 @@ variables:
         - lambdas/python/infringement-review
         - lambdas/python/mark-url-status
         - lambdas/python/meeting-analyser
+        - lambdas/python/numa-chat-agent
         - lambdas/python/numa-recent-jobs
         - lambdas/python/policy-builder-completion
         - lambdas/python/policy-builder-expert-review
