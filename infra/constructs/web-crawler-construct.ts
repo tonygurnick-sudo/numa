@@ -271,6 +271,17 @@ export class WebCrawlerConstruct extends Construct {
           Next: 'InitializeCounter',
         },
         InitializeCounter: {
+          Type: 'Choice',
+          Choices: [
+            {
+              Variable: '$.counter',
+              IsPresent: true,
+              Next: 'GetNextPending',
+            },
+          ],
+          Default: 'SetCounterToZero',
+        },
+        SetCounterToZero: {
           Type: 'Pass',
           Result: 0,
           ResultPath: '$.counter',
