@@ -246,7 +246,10 @@ def generate_summary_with_bedrock(aggregated_results: Dict[str, Any]) -> Dict[st
         Dictionary with analysis results including summary
     """
     # Create Bedrock client for summary generation
-    summary_model = bedrock.BedrockClaude3Model(model_args=MODEL_CONFIG)
+    summary_model = bedrock.BedrockClaude3Model(
+        model_args=MODEL_CONFIG,
+        claude_only=True,
+    )
 
     # Filter out recurring logs before summary generation
     all_results = aggregated_results.get("all_results", [])

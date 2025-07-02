@@ -228,24 +228,11 @@ def main() -> None:
 
 
 def __enable(model_id: str, request_function: Callable):
-    list_offers_response = request_function(
-        "GET",
-        "/".join(
-            [
-                "list-foundation-model-agreement-offers",
-                urllib.parse.quote_plus(model_id),
-            ]
-        ),
-        b"",
-    )
-    match list_offers_response.status_code, list_offers_response.json():
-        case 200, _:
-            logger.info("Got offers")
-        case 400, _:
-            raise Exception("Could not find model, is it available in the region?")
-        case bad_status_code, bad_status_json:
-            raise Exception(f"{bad_status_code}: {bad_status_json}")
+    logger.info(f"Attempting to enable model: {model_id}")
 
+    is_first_party = model_id.startswith("amazon.")
+
+    # Step 1: Create use case (required for all models)
     provide_usecase_response = request_function(
         "POST",
         "use-case-for-model-access",
@@ -258,21 +245,49 @@ def __enable(model_id: str, request_function: Callable):
         case bad_status_code, bad_status_json:
             raise Exception(f"{bad_status_code}: {bad_status_json}")
 
-    offer_token = list_offers_response.json()["offers"][0]["offerToken"]
-    create_agreement_response = request_function(
-        "POST",
-        "create-foundation-model-agreement",
-        json.dumps({"modelId": model_id, "offerToken": offer_token}),
-        headers={"content-type": "application/json"},
-    )
-    match create_agreement_response.status_code, create_agreement_response.json():
-        case 202, _:
-            logger.info("Agreement created")
-        case 400, {"message": "Could not create agreement - Agreement already exists"}:
-            logger.info("Agreement already exists")
-        case bad_status_code, bad_status_json:
-            raise Exception(f"{bad_status_code}: {bad_status_json}")
+    # Step 2: Handle agreements (only for third-party models)
+    if not is_first_party:
+        list_offers_response = request_function(
+            "GET",
+            "/".join(
+                [
+                    "list-foundation-model-agreement-offers",
+                    urllib.parse.quote_plus(model_id),
+                ]
+            ),
+            b"",
+        )
 
+        match list_offers_response.status_code, list_offers_response.json():
+            case 200, _:
+                logger.info("Got offers")
+            case 400, response_json:
+                raise Exception(
+                    f"Could not find model {model_id}, is it available in the region? Response: {response_json}"
+                )
+            case bad_status_code, bad_status_json:
+                raise Exception(f"{bad_status_code}: {bad_status_json}")
+
+        offer_token = list_offers_response.json()["offers"][0]["offerToken"]
+        create_agreement_response = request_function(
+            "POST",
+            "create-foundation-model-agreement",
+            json.dumps({"modelId": model_id, "offerToken": offer_token}),
+            headers={"content-type": "application/json"},
+        )
+        match create_agreement_response.status_code, create_agreement_response.json():
+            case 202, _:
+                logger.info("Agreement created")
+            case 400, {
+                "message": "Could not create agreement - Agreement already exists"
+            }:
+                logger.info("Agreement already exists")
+            case bad_status_code, bad_status_json:
+                raise Exception(f"{bad_status_code}: {bad_status_json}")
+    else:
+        logger.info(f"Skipping agreement step for first-party model {model_id}")
+
+    # Step 3: Create entitlement (required for all models)
     create_entitlement_response = request_function(
         "POST",
         "foundation-model-entitlement",

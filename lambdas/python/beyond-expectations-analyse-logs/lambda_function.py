@@ -212,7 +212,8 @@ def analyze_logs_with_bedrock(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
             "tool_choice": {"type": "tool", "name": "categorise_errors"},
             "max_tokens": 4096,
             "temperature": 0.1,
-        }
+        },
+        claude_only=True,
     )
 
     if len(logs) == 0:

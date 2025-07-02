@@ -761,64 +761,46 @@ export class CoreNumaInfra extends Construct {
       resourceNameSuffix: '_bedrock-model-manager',
     });
 
-    // modify trigger to force re-run of lambda
+    // Cross-region inference profiles handle routing automatically - only provision in source region
     const models = [
-      {
-        model_id: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
-        regions: [props.region],
-        trigger: '1',
-      },
-      {
-        model_id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-        regions: [props.region],
-        trigger: '1',
-      },
-      {
-        model_id: 'anthropic.claude-3-haiku-20240307-v1:0',
-        regions: [props.region],
-        trigger: '1',
-      },
-      {
-        model_id: 'anthropic.claude-sonnet-4-20250514-v1:0',
-        regions: [props.region],
-        trigger: '1',
-      },
-      {
-        model_id: 'anthropic.claude-3-7-sonnet-20250219-v1:0',
-        regions: [props.region],
-        trigger: '1',
-      },
+      'anthropic.claude-3-5-sonnet-20240620-v1:0',
+      'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      'anthropic.claude-3-haiku-20240307-v1:0',
+      'anthropic.claude-sonnet-4-20250514-v1:0',
+      'anthropic.claude-3-7-sonnet-20250219-v1:0',
     ];
 
-    for (const model of models) {
-      for (const region of model.regions) {
-        const input = JSON.stringify({
-          model_id: model.model_id,
-          region,
-          trigger: model.trigger,
-        });
+    // Add region-specific models
+    if (props.region === 'us-east-1') {
+      models.push('amazon.nova-pro-v1:0');
+      models.push('amazon.nova-premier-v1:0');
+    }
+    if (props.region === 'ap-southeast-2') {
+      // Nova Premier is not available in ap-southeast-2
+      models.push('amazon.nova-pro-v1:0');
+    }
 
-        new LambdaInvocation(
-          this,
-          `bedrock-model-manager-invocation_${model.model_id.replace(/[.:]/g, '-')}_${region}`,
-          {
-            functionName: bedrockModelManager.lambda.functionName,
-            input,
-            triggers: {
-              bedrockModelManagerSourceHash: bedrockModelManager.lambda.sourceCodeHash,
-              input,
-            },
-            // this should make sure permissions are sorted before calling the
-            // lambda, but there seems to be a problem with eventual
-            // consistency at times
-            dependsOn: [
-              bedrockModelManager.lambda,
-              ...bedrockModelManager.additionalPolicies,
-              ...bedrockModelManager.policyAttachments,
-            ],
-          },
-        );
-      }
+    // Provision each model only in the source region
+    for (const modelId of models) {
+      const input = JSON.stringify({
+        model_id: modelId,
+        region: props.region,
+        trigger: '1',
+      });
+
+      new LambdaInvocation(this, `bedrock-model-manager-invocation_${modelId.replace(/[.:]/g, '-')}_${props.region}`, {
+        functionName: bedrockModelManager.lambda.functionName,
+        input,
+        triggers: {
+          bedrockModelManagerSourceHash: bedrockModelManager.lambda.sourceCodeHash,
+          input,
+        },
+        dependsOn: [
+          bedrockModelManager.lambda,
+          ...bedrockModelManager.additionalPolicies,
+          ...bedrockModelManager.policyAttachments,
+        ],
+      });
     }
   }
 }
