@@ -74,6 +74,8 @@
     "createServiceLinkedRole": false,
     "devInstance": true,
     "region": "us-east-1",
+    "provisionQResources": true,
+    "preferredKnowledgeBase": "bedrock",
     "budget": {
       "name": "monthly-budget",
       "limitAmount": 1500,
