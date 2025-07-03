@@ -39,7 +39,7 @@ export class KnowledgeBase extends Construct {
     // Dynamically generate the bucket ARN based on
     // client name so it can be defined before the bucket is created
     // This is a workaround to avoid circular dependencies.
-    const dataBucketArn = `arn:aws:s3:::${props.clientName}-data`;
+    const dataBucketArn = `arn:aws:s3:::numa-${props.clientName}-data`;
 
     const vpc = new Vpc(this, 'vpc', {
       cidrBlock,
