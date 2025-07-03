@@ -15,6 +15,7 @@ import email_html
 import helpers
 import report_html
 import s3_helpers
+import timezone_utils
 from prompts import ERROR_SUMMARY_PROMPT
 from tools import ERROR_SUMMARY_TOOLS
 
@@ -92,7 +93,7 @@ def load_analyzed_logs(
     """
     # Use current date if not specified
     if not date_str:
-        date_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        date_str = timezone_utils.format_nz_date(timezone_utils.get_current_nz_time())
 
     logger.info("Loading analyzed logs", date=date_str)
 
@@ -152,7 +153,8 @@ def load_analyzed_logs(
 
     # Set default time range if no timestamps were found
     if earliest_timestamp is None:
-        earliest_timestamp = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
+        current_utc = datetime.datetime.utcnow()
+        earliest_timestamp = current_utc - datetime.timedelta(hours=24)
     if latest_timestamp is None:
         latest_timestamp = datetime.datetime.utcnow()
 
@@ -447,14 +449,13 @@ def save_report_to_s3(
     """Save analysis report (HTML + JSON) to S3 and return info."""
 
     # ── 1. human-readable period strings ──────────────────────────────
-    start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S UTC")
-    end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+    start_time_str = timezone_utils.format_nz_datetime(start_time)
+    end_time_str = timezone_utils.format_nz_datetime(end_time)
 
     # ── 2. unique timestamp for filenames ─────────────────────────────
     unique_id = str(uuid.uuid4())[:8]
-    report_time = (
-        datetime.datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S-%f") + f"-{unique_id}"
-    )
+    current_nz_time = timezone_utils.get_current_nz_time()
+    report_time = current_nz_time.strftime("%Y-%m-%d-%H-%M-%S-%f") + f"-{unique_id}"
 
     # ── 3. build the 2-level notification structure ──────────────────
     notif_sets: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
@@ -683,8 +684,8 @@ def generate_email_notification(
     client_count = len(unique_client_ids)
 
     # Format timestamps for the report
-    start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S UTC")
-    end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+    start_time_str = timezone_utils.format_nz_datetime(start_time)
+    end_time_str = timezone_utils.format_nz_datetime(end_time)
 
     # Get the summary sections from the report data
     summary_sections = report_data.get("summary_sections", {})
@@ -728,16 +729,15 @@ def generate_email_notification(
     )
 
     # Generate filenames for the attachments with the current date
-    summary_filename = f"Error_Analysis_Summary_{end_time.strftime('%Y-%m-%d')}.html"
-    notifications_filename = (
-        f"Error_Analysis_Notifications_{end_time.strftime('%Y-%m-%d')}.html"
-    )
+    end_time_nz_date = timezone_utils.format_nz_date(end_time)
+    summary_filename = f"Error_Analysis_Summary_{end_time_nz_date}.html"
+    notifications_filename = f"Error_Analysis_Notifications_{end_time_nz_date}.html"
 
     # Prepare email payload with both reports as attachments
     email_payload = {
         "to": email_addresses,
         "from": from_email,
-        "subject": f"Error Log Analysis Report - {end_time.strftime('%Y-%m-%d')}",
+        "subject": f"Error Log Analysis Report - {end_time_nz_date}",
         "body_html": email_html_content,
         "configuration_set": os.environ.get("SES_CONFIGURATION_SET"),
         "attachments": [
@@ -767,10 +767,8 @@ def generate_email_notification(
     if not report_time:
         # Create a unique timestamp with microseconds and random component like in save_report_to_s3
         unique_id = str(uuid.uuid4())[:8]
-        report_time = (
-            datetime.datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S-%f")
-            + f"-{unique_id}"
-        )
+        current_nz_time = timezone_utils.get_current_nz_time()
+        report_time = current_nz_time.strftime("%Y-%m-%d-%H-%M-%S-%f") + f"-{unique_id}"
 
     # Save the email payload to S3 for later use
     email_key = f"beyond-expectations/emails/email_{report_time}.json"
