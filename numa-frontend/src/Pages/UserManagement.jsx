@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Container, Form, Button, Alert, Table, Modal } from 'react-bootstrap';
+import { Container, Form, Button, Alert, Table, Modal, Pagination } from 'react-bootstrap';
 import { Preloader } from '../Components/Preloader';
 import { useAuth } from '../Providers/AuthProvider';
 import { UserManagementUtils } from '../utils/userManagementUtils';
@@ -12,7 +12,6 @@ const UserManagement = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [createdEmail, setCreatedEmail] = useState('');
-  // These states will be used once ListUsers permission is added
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState(null);
@@ -27,7 +26,90 @@ const UserManagement = () => {
   const [userToDelete, setUserToDelete] = useState(null);
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
 
-  const fetchUsers = async () => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [paginationToken, setPaginationToken] = useState(null);
+  const [tokenHistory, setTokenHistory] = useState([]);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
+  const fetchTotalUsers = async () => {
+    try {
+      const REGION = window.sessionStorage.getItem('REGION');
+      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+
+      const credentials = await getCredentials();
+      if (!credentials) {
+        throw new Error('Failed to get AWS credentials');
+      }
+
+      const userManagementUtils = new UserManagementUtils(REGION, credentials);
+      const poolInfo = await userManagementUtils.describeUserPool(USER_POOL_ID);
+
+      setTotalUsers(poolInfo.estimatedNumberOfUsers);
+      setTotalPages(Math.ceil(poolInfo.estimatedNumberOfUsers / pageSize));
+    } catch (err) {
+      console.error('Error fetching total user count:', err);
+      // Don't set error state for this, as it's not critical
+    }
+  };
+
+  const renderPaginationItems = () => {
+    const items = [];
+
+    if (totalPages <= 1) {
+      return [
+        <Pagination.Item key={1} active={true} onClick={() => handleGoToPage(1)}>
+          1
+        </Pagination.Item>,
+      ];
+    }
+
+    // Show current page and 1 page on either side (3 pages max)
+    const startPage = Math.max(1, currentPage - 1);
+    const endPage = Math.min(totalPages, currentPage + 1);
+
+    // Add the visible page range
+    for (let page = startPage; page <= endPage; page++) {
+      const isClickable =
+        page === currentPage || // Current page (for consistency)
+        page === 1 || // First page (always navigable)
+        (page === currentPage + 1 && hasNextPage) || // Next page (only if hasNextPage)
+        (page === currentPage - 1 && currentPage > 1); // Previous page (only if not on first page)
+
+      items.push(
+        <Pagination.Item
+          key={page}
+          active={currentPage === page}
+          onClick={isClickable ? () => handleGoToPage(page) : undefined}
+          disabled={!isClickable}
+          style={!isClickable ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
+        >
+          {page}
+        </Pagination.Item>,
+      );
+    }
+
+    return items;
+  };
+
+  const handleGoToPage = async (page) => {
+    if (page === currentPage || page < 1 || page > totalPages) {
+      return;
+    }
+
+    // Token-based pagination only supports sequential navigation
+    if (page === 1) {
+      handleFirstPage();
+    } else if (page === currentPage + 1 && hasNextPage) {
+      handleNextPage();
+    } else if (page === currentPage - 1 && currentPage > 1) {
+      handlePrevPage();
+    }
+  };
+
+  const fetchUsers = async (page = 1, token = null) => {
     setLoadingUsers(true);
     setUsersError(null);
     try {
@@ -35,9 +117,7 @@ const UserManagement = () => {
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
       const ACCOUNT_ID = window.sessionStorage.getItem('ACCOUNT_ID');
 
-      // Make sure we have the ACCOUNT_ID in session storage
       if (!ACCOUNT_ID) {
-        // Extract account ID from the role ARN if not directly available
         const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
         const extractedAccountId = ROLE_ARN ? ROLE_ARN.split(':')[4] : null;
 
@@ -54,15 +134,48 @@ const UserManagement = () => {
       }
 
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
-      const userList = await userManagementUtils.listUsers(USER_POOL_ID);
-      setUsers(userList);
-      setLoadingUsers(false);
+      const result = await userManagementUtils.listUsers(USER_POOL_ID, pageSize, token);
+
+      setUsers(result.users);
+      setHasNextPage(result.hasMore);
+      setPaginationToken(result.nextToken);
+
+      if (page > currentPage && result.nextToken) {
+        setTokenHistory((prev) => [...prev, token]);
+      } else if (page < currentPage) {
+        setTokenHistory((prev) => prev.slice(0, -1));
+      }
+
+      setCurrentPage(page);
+
+      // Fetch total users on first load or when page 1 is loaded
+      if (page === 1 && totalUsers === 0) {
+        fetchTotalUsers();
+      }
     } catch (err) {
       console.error('Error fetching users:', err);
       setUsersError(err.message || 'Failed to fetch users');
     } finally {
       setLoadingUsers(false);
     }
+  };
+
+  const handleNextPage = () => {
+    if (hasNextPage && paginationToken) {
+      fetchUsers(currentPage + 1, paginationToken);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      const prevToken = tokenHistory[tokenHistory.length - 1] || null;
+      fetchUsers(currentPage - 1, prevToken);
+    }
+  };
+
+  const handleFirstPage = () => {
+    setTokenHistory([]);
+    fetchUsers(1, null);
   };
 
   const handleDeleteUser = async (user) => {
@@ -129,8 +242,7 @@ const UserManagement = () => {
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
       await userManagementUtils.addUserToGroup(userToPromote.username, 'admin', USER_POOL_ID);
 
-      // Refresh the user list to show updated groups
-      await fetchUsers();
+      await fetchUsers(1);
     } catch (err) {
       console.error('Error promoting user to admin:', err);
       setUsersError(err.message || 'Failed to promote user to admin');
@@ -169,8 +281,7 @@ const UserManagement = () => {
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
       await userManagementUtils.removeUserFromGroup(username, 'admin', USER_POOL_ID);
 
-      // Refresh the user list to show updated groups
-      await fetchUsers();
+      await fetchUsers(1);
     } catch (err) {
       console.error('Error demoting user from admin:', err);
       setUsersError(err.message || 'Failed to demote user from admin');
@@ -180,7 +291,7 @@ const UserManagement = () => {
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchUsers(1);
   }, []);
 
   const handleSubmit = async (e) => {
@@ -195,9 +306,7 @@ const UserManagement = () => {
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
       const ACCOUNT_ID = window.sessionStorage.getItem('ACCOUNT_ID');
 
-      // Make sure we have the ACCOUNT_ID in session storage
       if (!ACCOUNT_ID) {
-        // Extract account ID from the role ARN if not directly available
         const ROLE_ARN = window.sessionStorage.getItem('ROLE_ARN');
         const extractedAccountId = ROLE_ARN ? ROLE_ARN.split(':')[4] : null;
 
@@ -216,17 +325,20 @@ const UserManagement = () => {
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
       const result = await userManagementUtils.createUser(email, USER_POOL_ID);
       console.log('User creation result:', result);
-      // Store the email for display and set success to true
       setCreatedEmail(email);
       setSuccess(true);
       setLoading(false);
-      // Wait a bit before refreshing the list
       setTimeout(() => {
         setLoadingUsers(true);
-        fetchUsers().finally(() => {
-          setLoadingUsers(false);
-          setEmail('');
-        });
+        fetchUsers(1)
+          .then(() => {
+            setLoadingUsers(false);
+            setEmail('');
+          })
+          .catch((err) => {
+            console.error('Error refreshing users:', err);
+            setLoadingUsers(false);
+          });
       }, 1000);
     } catch (err) {
       setLoading(false);
@@ -344,7 +456,29 @@ const UserManagement = () => {
 
           <div className="card shadow-sm">
             <div className="card-body position-relative">
-              <h3 className="h5 card-title">Current Users</h3>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h3 className="h5 mb-0">Current Users</h3>
+                {users.length > 0 && (
+                  <div className="d-flex align-items-center gap-3">
+                    <small className="text-muted">
+                      {currentPage * pageSize - pageSize + 1}-
+                      {Math.min(
+                        currentPage * pageSize,
+                        Math.min(users.length + (currentPage - 1) * pageSize, totalUsers || users.length),
+                      )}{' '}
+                      of {totalUsers || users.length} users
+                    </small>
+                    {(currentPage > 1 || hasNextPage || totalPages > 1) && (
+                      <Pagination size="sm" className="mb-0">
+                        <Pagination.Prev onClick={handlePrevPage} disabled={currentPage === 1} />
+                        {renderPaginationItems()}
+                        <Pagination.Next onClick={handleNextPage} disabled={!hasNextPage} />
+                      </Pagination>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {loadingUsers && <Preloader smallscreen overlayParent />}
               {usersError && (
                 <Alert variant="danger" onClose={() => setUsersError(null)} dismissible>
@@ -352,115 +486,126 @@ const UserManagement = () => {
                 </Alert>
               )}
               {!loadingUsers && !usersError && (
-                <div className="table-responsive">
-                  <Table hover className="align-middle mb-0">
-                    <thead>
-                      <tr>
-                        <th>Email</th>
-                        <th>Status</th>
-                        <th>Role</th>
-                        <th>Created</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.map((user) => {
-                        const isSystemUser = user.email?.includes('numa-system-user');
-                        const isAdmin = user.groups?.includes('admin');
-                        const isCurrentUser = user.username === currentUserSub;
+                <>
+                  <div className="table-responsive">
+                    <Table hover className="align-middle mb-0">
+                      <thead>
+                        <tr>
+                          <th>Email</th>
+                          <th>Status</th>
+                          <th>Role</th>
+                          <th>Created</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map((user) => {
+                          const isSystemUser = user.email?.includes('numa-system-user');
+                          const isAdmin = user.groups?.includes('admin');
+                          const isCurrentUser = user.username === currentUserSub;
 
-                        return (
-                          <tr
-                            key={user.username}
-                            className={isSystemUser ? 'text-muted opacity-50' : ''}
-                            title={isSystemUser ? 'System user - not editable' : ''}
-                          >
-                            <td>
-                              {user.email}
-                              {isSystemUser && <small className="ms-2 fst-italic">(System)</small>}
-                            </td>
-                            <td>
-                              <span
-                                className={`badge bg-${user.enabled ? (user.status === 'CONFIRMED' ? 'success' : 'warning') : 'danger'} ${isSystemUser ? 'opacity-50' : ''}`}
-                              >
-                                {user.status}
-                              </span>
-                            </td>
-                            <td>
-                              <span className={`badge ${isAdmin ? 'bg-primary' : 'bg-secondary'}`}>
-                                {isAdmin ? 'Admin' : 'Standard'}
-                              </span>
-                            </td>
-                            <td>
-                              {new Date(user.created).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                              })}
-                            </td>
-                            <td>
-                              <div className="d-flex gap-2">
-                                {!isSystemUser && !isCurrentUser && (
-                                  <>
-                                    {isAdmin ? (
-                                      <Button
-                                        variant="outline-warning"
-                                        size="sm"
-                                        disabled={demotingUser === user.username}
-                                        onClick={() => handleDemoteFromAdmin(user.username)}
-                                        title="Remove admin privileges"
-                                      >
-                                        {demotingUser === user.username ? 'Demoting...' : 'Demote'}
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        variant="outline-primary"
-                                        size="sm"
-                                        disabled={promotingUser === user.username}
-                                        onClick={() => handlePromoteToAdmin(user)}
-                                        title="Grant admin privileges"
-                                      >
-                                        {promotingUser === user.username ? 'Promoting...' : 'Make Admin'}
-                                      </Button>
-                                    )}
-                                    {isAdmin ? (
-                                      <Button
-                                        variant="outline-secondary"
-                                        size="sm"
-                                        onClick={handleAttemptDeleteAdmin}
-                                        title="Admin users must be demoted to standard users before they can be deleted"
-                                      >
-                                        Delete
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        variant="danger"
-                                        size="sm"
-                                        disabled={deletingUser === user.username}
-                                        onClick={() => handleDeleteUser(user)}
-                                        title="Delete user account"
-                                      >
-                                        {deletingUser === user.username ? 'Deleting...' : 'Delete'}
-                                      </Button>
-                                    )}
-                                  </>
-                                )}
-                                {isCurrentUser && <small className="text-muted">Current User</small>}
-                              </div>
+                          return (
+                            <tr
+                              key={user.username}
+                              className={isSystemUser ? 'text-muted opacity-50' : ''}
+                              title={isSystemUser ? 'System user - not editable' : ''}
+                            >
+                              <td>
+                                {user.email}
+                                {isSystemUser && <small className="ms-2 fst-italic">(System)</small>}
+                              </td>
+                              <td>
+                                <span
+                                  className={`badge bg-${user.enabled ? (user.status === 'CONFIRMED' ? 'success' : 'warning') : 'danger'} ${isSystemUser ? 'opacity-50' : ''}`}
+                                >
+                                  {user.status}
+                                </span>
+                              </td>
+                              <td>
+                                <span className={`badge ${isAdmin ? 'bg-primary' : 'bg-secondary'}`}>
+                                  {isAdmin ? 'Admin' : 'Standard'}
+                                </span>
+                              </td>
+                              <td>
+                                {new Date(user.created).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </td>
+                              <td>
+                                <div className="d-flex gap-2">
+                                  {!isSystemUser && !isCurrentUser && (
+                                    <>
+                                      {isAdmin ? (
+                                        <Button
+                                          variant="outline-warning"
+                                          size="sm"
+                                          disabled={demotingUser === user.username}
+                                          onClick={() => handleDemoteFromAdmin(user.username)}
+                                          title="Remove admin privileges"
+                                        >
+                                          {demotingUser === user.username ? 'Demoting...' : 'Demote'}
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          variant="outline-primary"
+                                          size="sm"
+                                          disabled={promotingUser === user.username}
+                                          onClick={() => handlePromoteToAdmin(user)}
+                                          title="Grant admin privileges"
+                                        >
+                                          {promotingUser === user.username ? 'Promoting...' : 'Make Admin'}
+                                        </Button>
+                                      )}
+                                      {isAdmin ? (
+                                        <Button
+                                          variant="outline-secondary"
+                                          size="sm"
+                                          onClick={handleAttemptDeleteAdmin}
+                                          title="Admin users must be demoted to standard users before they can be deleted"
+                                        >
+                                          Delete
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          variant="danger"
+                                          size="sm"
+                                          disabled={deletingUser === user.username}
+                                          onClick={() => handleDeleteUser(user)}
+                                          title="Delete user account"
+                                        >
+                                          {deletingUser === user.username ? 'Deleting...' : 'Delete'}
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                  {isCurrentUser && <small className="text-muted">Current User</small>}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {users.length === 0 && (
+                          <tr>
+                            <td colSpan="5" className="text-center">
+                              No users found
                             </td>
                           </tr>
-                        );
-                      })}
-                      {users.length === 0 && (
-                        <tr>
-                          <td colSpan="5" className="text-center">
-                            No users found
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </Table>
-                </div>
+                        )}
+                      </tbody>
+                    </Table>
+                  </div>
+                  {users.length > 0 && (currentPage > 1 || hasNextPage || totalPages > 1) && (
+                    <div className="d-flex justify-content-center mt-3">
+                      <Pagination size="sm" className="mb-0">
+                        <Pagination.Prev onClick={handlePrevPage} disabled={currentPage === 1} />
+                        {renderPaginationItems()}
+                        <Pagination.Next onClick={handleNextPage} disabled={!hasNextPage} />
+                      </Pagination>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

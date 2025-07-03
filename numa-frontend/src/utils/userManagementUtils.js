@@ -7,7 +7,8 @@ import {
   AdminSetUserPasswordCommand,
   AdminAddUserToGroupCommand,
   AdminRemoveUserFromGroupCommand,
-  AdminListGroupsForUserCommand,
+  DescribeUserPoolCommand,
+  ListUsersInGroupCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { DeleteUserCommand, GetUserCommand } from '@aws-sdk/client-qbusiness';
 
@@ -32,7 +33,6 @@ export class UserManagementUtils {
       const lowercaseEmail = email.toLowerCase();
       console.log('Creating user with:', { email: lowercaseEmail, userPoolId });
 
-      // Fully random password with all character types
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
       let password = '';
 
@@ -43,7 +43,6 @@ export class UserManagementUtils {
         password += chars.charAt(randomValues[i] % chars.length);
       }
 
-      // Create the user with email verified and a specified password
       const command = new AdminCreateUserCommand({
         UserPoolId: userPoolId,
         Username: lowercaseEmail,
@@ -67,7 +66,6 @@ export class UserManagementUtils {
       console.log('User sub:', response.User.Username);
       console.log('Login username should be:', lowercaseEmail);
 
-      // Set the password as permanent immediately
       const passwordCommand = new AdminSetUserPasswordCommand({
         UserPoolId: userPoolId,
         Username: lowercaseEmail,
@@ -82,7 +80,6 @@ export class UserManagementUtils {
         user: response.User,
       };
     } catch (error) {
-      // Handle specific Cognito errors
       if (error.name === 'UsernameExistsException') {
         throw new Error('A user with this email already exists');
       }
@@ -91,50 +88,74 @@ export class UserManagementUtils {
   }
 
   /**
-   * Lists all users in the Cognito User Pool with their groups
+   * Gets all users in a specific Cognito group
    * @param {string} userPoolId - Cognito User Pool ID
-   * @returns {Promise<Array>} - Array of user objects with basic information and groups
+   * @param {string} groupName - Name of the group to get users from
+   * @returns {Promise<Array>} - Array of usernames in the group
    */
-  async listUsers(userPoolId) {
-    const command = new ListUsersCommand({
-      UserPoolId: userPoolId,
-    });
+  async getUsersInGroup(userPoolId, groupName) {
+    try {
+      const command = new ListUsersInGroupCommand({
+        UserPoolId: userPoolId,
+        GroupName: groupName,
+      });
 
-    const response = await this.cognitoClient.send(command);
+      const response = await this.cognitoClient.send(command);
 
-    // Get groups for each user
-    const usersWithGroups = await Promise.all(
-      response.Users.map(async (user) => {
-        try {
-          const groupsCommand = new AdminListGroupsForUserCommand({
-            UserPoolId: userPoolId,
-            Username: user.Username,
-          });
-          const groupsResponse = await this.cognitoClient.send(groupsCommand);
+      // Return array of usernames
+      return response.Users.map((user) => user.Username);
+    } catch (error) {
+      if (error.name === 'ResourceNotFoundException') {
+        // Group doesn't exist, return empty array
+        console.warn(`Group ${groupName} not found`);
+        return [];
+      }
+      console.error(`Error fetching users in group ${groupName}:`, error);
+      throw error;
+    }
+  }
 
-          return {
-            username: user.Username,
-            email: user.Attributes.find((attr) => attr.Name === 'email')?.Value,
-            enabled: user.Enabled,
-            status: user.UserStatus,
-            created: user.UserCreateDate,
-            groups: groupsResponse.Groups?.map((group) => group.GroupName) || [],
-          };
-        } catch (error) {
-          console.warn(`Failed to get groups for user ${user.Username}:`, error);
-          return {
-            username: user.Username,
-            email: user.Attributes.find((attr) => attr.Name === 'email')?.Value,
-            enabled: user.Enabled,
-            status: user.UserStatus,
-            created: user.UserCreateDate,
-            groups: [],
-          };
-        }
-      }),
-    );
+  /**
+   * Lists users in the Cognito User Pool with their groups
+   * @param {string} userPoolId - Cognito User Pool ID
+   * @param {number} limit - Maximum number of users to return per page (default 20, max 60)
+   * @param {string} paginationToken - Token for pagination (optional)
+   * @returns {Promise<Object>} - Object with users array, pagination info, and metadata
+   */
+  async listUsers(userPoolId, limit = 20, paginationToken = null) {
+    try {
+      const command = new ListUsersCommand({
+        UserPoolId: userPoolId,
+        Limit: Math.min(Math.max(limit, 1), 60), // Cognito limit is 1-60
+        ...(paginationToken && { PaginationToken: paginationToken }),
+      });
 
-    return usersWithGroups;
+      const response = await this.cognitoClient.send(command);
+
+      // Get all users in the admin group
+      const adminUsers = await this.getUsersInGroup(userPoolId, 'admin');
+      const adminUserSet = new Set(adminUsers);
+
+      // Format users with group information
+      const users = response.Users.map((user) => ({
+        username: user.Username,
+        email: user.Attributes.find((attr) => attr.Name === 'email')?.Value,
+        enabled: user.Enabled,
+        status: user.UserStatus,
+        created: user.UserCreateDate,
+        groups: adminUserSet.has(user.Username) ? ['admin'] : [],
+      }));
+
+      return {
+        users: users,
+        nextToken: response.PaginationToken,
+        hasMore: !!response.PaginationToken,
+        total: users.length,
+      };
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      throw error;
+    }
   }
 
   /**
@@ -179,6 +200,31 @@ export class UserManagementUtils {
       console.log(`Successfully removed user ${username} from group ${groupName}`);
     } catch (error) {
       console.error(`Error removing user ${username} from group ${groupName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Describes a Cognito User Pool to get metadata including estimated user count
+   * @param {string} userPoolId - Cognito User Pool ID
+   * @returns {Promise<Object>} - Object containing user pool metadata
+   */
+  async describeUserPool(userPoolId) {
+    try {
+      const command = new DescribeUserPoolCommand({
+        UserPoolId: userPoolId,
+      });
+
+      const response = await this.cognitoClient.send(command);
+      return {
+        estimatedNumberOfUsers: response.UserPool.EstimatedNumberOfUsers,
+        userPoolId: response.UserPool.Id,
+        name: response.UserPool.Name,
+        creationDate: response.UserPool.CreationDate,
+        lastModifiedDate: response.UserPool.LastModifiedDate,
+      };
+    } catch (error) {
+      console.error('Error describing user pool:', error);
       throw error;
     }
   }
@@ -234,7 +280,6 @@ export class UserManagementUtils {
         }
       }
 
-      // Refresh the user list
       await fetchUsers();
     } catch (err) {
       console.error('Error deleting user:', err);

@@ -19,13 +19,30 @@ vi.mock('@aws-sdk/client-cognito-identity-provider', () => {
     return this;
   };
 
+  const mockListUsersCommand = function (params) {
+    this.params = params;
+    return this;
+  };
+
+  const mockListUsersInGroupCommand = function (params) {
+    this.params = params;
+    return this;
+  };
+
+  const mockDescribeUserPoolCommand = function (params) {
+    this.params = params;
+    return this;
+  };
+
   return {
     CognitoIdentityProviderClient: vi.fn().mockImplementation(() => ({
       send: mockSend(),
     })),
     AdminCreateUserCommand: mockAdminCreateUserCommand,
     AdminSetUserPasswordCommand: mockAdminSetUserPasswordCommand,
-    ListUsersCommand: vi.fn(),
+    ListUsersCommand: mockListUsersCommand,
+    ListUsersInGroupCommand: mockListUsersInGroupCommand,
+    DescribeUserPoolCommand: mockDescribeUserPoolCommand,
   };
 });
 
@@ -207,12 +224,13 @@ describe('UserManagementUtils', () => {
   });
 
   describe('listUsers', () => {
-    it('should list users with the correct format', async () => {
+    it('should list users with the correct format and pagination structure', async () => {
       // Setup
       const mockDate1 = new Date('2023-01-01');
       const mockDate2 = new Date('2023-01-02');
 
-      const mockResponse = {
+      // Mock response for ListUsersCommand
+      const mockUsersResponse = {
         Users: [
           {
             Username: 'user1',
@@ -235,39 +253,58 @@ describe('UserManagementUtils', () => {
             UserCreateDate: mockDate2,
           },
         ],
+        PaginationToken: 'next-token-123',
       };
 
-      mockCognitoClient.send.mockResolvedValueOnce(mockResponse);
+      // Mock response for ListUsersInGroupCommand (admin group)
+      const mockAdminUsersResponse = {
+        Users: [
+          {
+            Username: 'user1', // user1 is an admin
+          },
+        ],
+      };
+
+      // Mock both API calls
+      mockCognitoClient.send
+        .mockResolvedValueOnce(mockUsersResponse) // ListUsersCommand
+        .mockResolvedValueOnce(mockAdminUsersResponse); // ListUsersInGroupCommand
 
       // Execute
       const result = await userManagementUtils.listUsers(mockUserPoolId);
 
       // Assert
-      // Verify that send was called
-      expect(mockCognitoClient.send).toHaveBeenCalled();
-
-      expect(result).toHaveLength(2);
-      expect(result[0]).toEqual({
-        username: 'user1',
-        email: 'user1@example.com',
-        enabled: true,
-        groups: [],
-        status: 'CONFIRMED',
-        created: mockDate1,
-      });
-      expect(result[1]).toEqual({
-        username: 'user2',
-        email: 'user2@example.com',
-        enabled: false,
-        groups: [],
-        status: 'FORCE_CHANGE_PASSWORD',
-        created: mockDate2,
+      expect(mockCognitoClient.send).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        users: [
+          {
+            username: 'user1',
+            email: 'user1@example.com',
+            enabled: true,
+            groups: ['admin'], // user1 is admin
+            status: 'CONFIRMED',
+            created: mockDate1,
+          },
+          {
+            username: 'user2',
+            email: 'user2@example.com',
+            enabled: false,
+            groups: [], // user2 is not admin
+            status: 'FORCE_CHANGE_PASSWORD',
+            created: mockDate2,
+          },
+        ],
+        nextToken: 'next-token-123',
+        hasMore: true,
+        total: 2,
       });
     });
 
-    it('should list users with their attributes', async () => {
+    it('should list users with their attributes and pagination support', async () => {
       const userPoolId = 'us-east-1_testpool';
-      const mockResponse = {
+
+      // Mock response for ListUsersCommand
+      const mockUsersResponse = {
         Users: [
           {
             Username: 'testuser@example.com',
@@ -277,22 +314,149 @@ describe('UserManagementUtils', () => {
             Attributes: [{ Name: 'email', Value: 'testuser@example.com' }],
           },
         ],
+        PaginationToken: undefined, // No more pages
       };
 
-      mockCognitoClient.send.mockResolvedValue(mockResponse);
+      // Mock response for ListUsersInGroupCommand (no admin users)
+      const mockAdminUsersResponse = {
+        Users: [],
+      };
+
+      // Mock both API calls
+      mockCognitoClient.send
+        .mockResolvedValueOnce(mockUsersResponse) // ListUsersCommand
+        .mockResolvedValueOnce(mockAdminUsersResponse); // ListUsersInGroupCommand
 
       const result = await userManagementUtils.listUsers(userPoolId);
 
-      expect(result).toEqual([
-        {
-          username: 'testuser@example.com',
-          email: 'testuser@example.com',
-          enabled: true,
-          groups: [],
-          status: 'CONFIRMED',
-          created: expect.any(Date),
-        },
-      ]);
+      expect(mockCognitoClient.send).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        users: [
+          {
+            username: 'testuser@example.com',
+            email: 'testuser@example.com',
+            enabled: true,
+            groups: [], // No admin users
+            status: 'CONFIRMED',
+            created: expect.any(Date),
+          },
+        ],
+        nextToken: undefined,
+        hasMore: false,
+        total: 1,
+      });
+    });
+
+    it('should handle pagination parameters correctly', async () => {
+      const userPoolId = 'us-east-1_testpool';
+      const limit = 10;
+      const paginationToken = 'test-token';
+
+      const mockUsersResponse = {
+        Users: [],
+        PaginationToken: undefined,
+      };
+
+      const mockAdminUsersResponse = {
+        Users: [],
+      };
+
+      // Mock both API calls
+      mockCognitoClient.send
+        .mockResolvedValueOnce(mockUsersResponse) // ListUsersCommand
+        .mockResolvedValueOnce(mockAdminUsersResponse); // ListUsersInGroupCommand
+
+      await userManagementUtils.listUsers(userPoolId, limit, paginationToken);
+
+      // Verify that the ListUsersCommand was called with correct parameters
+      expect(mockCognitoClient.send).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          params: expect.objectContaining({
+            UserPoolId: userPoolId,
+            Limit: limit,
+            PaginationToken: paginationToken,
+          }),
+        }),
+      );
+
+      // Verify that the ListUsersInGroupCommand was called with correct parameters
+      expect(mockCognitoClient.send).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          params: expect.objectContaining({
+            UserPoolId: userPoolId,
+            GroupName: 'admin',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('getUsersInGroup', () => {
+    it('should return users in a specific group', async () => {
+      const userPoolId = 'us-east-1_testpool';
+      const groupName = 'admin';
+
+      const mockResponse = {
+        Users: [{ Username: 'admin1@example.com' }, { Username: 'admin2@example.com' }],
+      };
+
+      mockCognitoClient.send.mockResolvedValueOnce(mockResponse);
+
+      const result = await userManagementUtils.getUsersInGroup(userPoolId, groupName);
+
+      expect(mockCognitoClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          params: expect.objectContaining({
+            UserPoolId: userPoolId,
+            GroupName: groupName,
+          }),
+        }),
+      );
+
+      expect(result).toEqual(['admin1@example.com', 'admin2@example.com']);
+    });
+
+    it('should return empty array when group does not exist', async () => {
+      const userPoolId = 'us-east-1_testpool';
+      const groupName = 'nonexistent';
+
+      const mockError = new Error('Group not found');
+      mockError.name = 'ResourceNotFoundException';
+
+      mockCognitoClient.send.mockRejectedValueOnce(mockError);
+
+      const result = await userManagementUtils.getUsersInGroup(userPoolId, groupName);
+
+      expect(result).toEqual([]);
+    });
+
+    it('should return empty array when group has no users', async () => {
+      const userPoolId = 'us-east-1_testpool';
+      const groupName = 'admin';
+
+      const mockResponse = {
+        Users: [],
+      };
+
+      mockCognitoClient.send.mockResolvedValueOnce(mockResponse);
+
+      const result = await userManagementUtils.getUsersInGroup(userPoolId, groupName);
+
+      expect(result).toEqual([]);
+    });
+
+    it('should propagate non-ResourceNotFoundException errors', async () => {
+      const userPoolId = 'us-east-1_testpool';
+      const groupName = 'admin';
+
+      const mockError = new Error('Access denied');
+      mockError.name = 'AccessDeniedException';
+
+      mockCognitoClient.send.mockRejectedValueOnce(mockError);
+
+      await expect(userManagementUtils.getUsersInGroup(userPoolId, groupName)).rejects.toThrow('Access denied');
     });
   });
 });

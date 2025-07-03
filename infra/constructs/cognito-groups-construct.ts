@@ -224,6 +224,7 @@ const createFeatureSets = (props: {
       effect: 'Allow',
       actions: [
         'cognito-idp:ListUsers',
+        'cognito-idp:ListUsersInGroup',
         'cognito-idp:AdminCreateUser',
         'cognito-idp:AdminDeleteUser',
         'cognito-idp:AdminResetUserPassword',
@@ -231,7 +232,8 @@ const createFeatureSets = (props: {
         'cognito-idp:AdminGetUser',
         'cognito-idp:AdminAddUserToGroup',
         'cognito-idp:AdminRemoveUserFromGroup',
-        'cognito-idp:AdminListGroupsForUser',
+        'cognito-idp:ListGroups',
+        'cognito-idp:DescribeUserPool',
       ],
       resources: [`arn:aws:cognito-idp:${props.region}:${props.callerAccountId}:userpool/${props.userPoolId}`],
     },
