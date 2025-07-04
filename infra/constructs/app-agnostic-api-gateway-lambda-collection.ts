@@ -53,6 +53,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         CLIENT_NAME: props.clientName,
       },
       timeout: 45,
+      memorySize: 512,
       additionalPolicyStatements: [
         {
           effect: 'Allow',

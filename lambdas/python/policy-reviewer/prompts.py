@@ -129,99 +129,97 @@ Create a well-structured document with the following components:
 TECHNICAL NOTE: Your output will be processed programmatically and displayed directly to users. Proper markdown formatting is essential for readability.
 """
 
-UPDATED_POLICY_PROMPT = """You are an expert policy writer with extensive knowledge of regulatory compliance and policy development. Your task is to create an updated version of a policy document that implements all recommendations from a compliance review and format it using clear, structured markdown.
+UPDATED_POLICY_PROMPT = """You are an expert policy analyst with extensive knowledge of regulatory compliance and policy development. Your task is to analyze the original policy and compliance review, then provide a clean, structured table of specific changes required to bring the policy into full compliance.
 
 # INPUT MATERIALS
 
-## Original Policy Document:
+Original Policy Document:
 {policy_content}
 
-## Compliance Review Results:
+Compliance Review Findings:
 {policy_review}
 
 # OUTPUT REQUIREMENTS
 
-Create a complete, updated policy document that incorporates all compliance recommendations while maintaining the original policy's structure and style, formatted in clean, well-structured markdown.
+Create a well-structured document with the following format:
 
-## Document Structure
+## Document Header
+Start with a level 1 heading: `# Required Policy Changes`
 
-1. **Header Section**:
-   - Start with a level 1 heading: `# Updated Policy Document`
-   - Include a status box at the top:
-   ```
-   | 📝 UPDATED POLICY |
-   |:----------------:|
-   | This document incorporates all compliance recommendations from the review. |
-   ```
+Add a status box:
+```
+| 🔧 CHANGES REQUIRED |
+|:------------------:|
+| The following table shows specific changes needed to achieve full compliance. |
+```
 
-2. **Complete Policy Text**:
-   - Include the COMPLETE policy document with all recommended changes implemented
-   - Use the exact same headings, numbering, text, and section structure as the original policy
-   - If there were no compliance issues, include the original policy text unchanged
-   - The output should include no other introductory text or summary of changes
-   - The output should purely consist of the header and the complete policy text
+## Changes Table
+Create a comprehensive table with all required changes:
 
-## Markdown Formatting Requirements
+| Section | Original Text | Required Change | Change Type | Legislation Reference | Priority |
+|---------|---------------|----------------|-------------|----------------------|----------|
+| [Section Name] | [Exact current text] | [Exact new text] | [Replace/Add/Delete] | [Act Name, Section X(Y)] | [🔴/🟠/🟡] |
 
-1. **Headings and Hierarchy**:
-   - Use proper markdown hierarchy for all section headings:
-     - `# Heading 1` for document title and top-level sections
-     - `## Heading 2` for major sections
-     - `### Heading 3` for subsections
-     - `#### Heading 4` for sub-subsections
-     - `##### Heading 5` for detailed points
-   - Match heading levels to the logical document structure:
-     - Main policy sections should be level 2 headings
-     - Subsections should be level 3 headings
-     - Further subdivisions should use appropriate levels 4-5
-   - Never skip heading levels (don't jump from H2 to H4)
-   - Include a blank line before and after each heading
-   - Use sentence case for headings (capitalize first word only, except for proper nouns)
+## Special Cases
 
-2. **Text Formatting**:
-   - Use **bold** (`**text**`) for important terms and emphasis
-   - Use *italics* (`*text*`) for definitions or secondary emphasis
-   - Format paragraphs with proper line breaks and spacing
-   - Indent text consistently where appropriate
+If no changes are required:
+```
+| ✅ NO CHANGES REQUIRED |
+|:----------------------:|
+| This policy meets all compliance standards. |
+```
 
-3. **Lists and Tables**:
-   - Format numbered lists using proper markdown syntax: `1. Item`
-   - Format bullet points using proper markdown syntax: `- Item` or `* Item`
-   - Nest lists with consistent indentation
-   - Format tables using proper markdown table syntax:
-   ```
-   | Header 1 | Header 2 | Header 3 |
-   |----------|:--------:|----------:|
-   | Content | Content | Content |
-   ```
+Then include a summary table:
+```
+| Status | Notes |
+|--------|-------|
+| **Overall Compliance** | ✅ Policy is fully compliant |
+| **Legislative Alignment** | ✅ All requirements met |
+| **Action Required** | None - continue regular review cycle |
+```
 
-4. **Document Organization**:
-   - Use horizontal rules (`---`) to separate major sections
-   - Use consistent spacing between sections (double line breaks)
-   - Format definition lists with consistent indentation
-   - Use block quotes (`> text`) for quoted material or special notes
+For new sections that need to be added:
+- **Change Type**: "Add New Section"
+- **Original Text**: "N/A - New section"
+- **Required Change**: [Complete new section content]
+
+For sections that need to be deleted:
+- **Change Type**: "Delete Section"
+- **Required Change**: "Remove this section entirely"
+
+## Table Formatting Requirements
+
+1. **Section Column**: Use exact section names/headings from the original policy
+2. **Original Text Column**: Include exact current text that needs to be changed
+3. **Required Change Column**: Provide exact replacement text, fully formatted
+4. **Change Type Column**: Use one of: Replace, Add, Delete, Insert
+5. **Legislation Reference Column**: Format as "Act Name, Section X(Y)"
+6. **Priority Column**: Use 🔴 Critical, 🟠 Major, or 🟡 Minor
 
 ## Content Requirements
 
-1. The updated policy MUST include the COMPLETE policy text with all compliance changes implemented
-2. All changes must directly address compliance issues identified in the review
-3. No stylistic or editorial changes should be made unless required for compliance
-4. Policy structure, numbering, and organization must remain consistent with the original
-5. If there were no compliance issues, clearly indicate that no changes were required
-6. Any added content must be seamlessly integrated to match the tone and style of the original
+1. **Precision**: Use exact text from the original policy
+2. **Completeness**: Include every change identified in the compliance review
+3. **Clarity**: Provide exact replacement text that addresses the compliance issue
+4. **Sequence**: Order changes as they appear in the document
+5. **Consistency**: Maintain original policy tone and formatting style
 
-## Technical Output Specifications
+## Markdown Formatting
 
-1. Ensure all markdown syntax is valid and properly formed
-2. Maintain consistent whitespace and line breaks throughout the document
-3. Format all lists, tables, and special elements consistently
-4. Ensure proper nesting of markdown elements
-5. Use escape characters where needed for special symbols
-6. Format code or technical sections with code blocks when appropriate
-7. Preserve document structure while enhancing readability with markdown
-8. Implement appropriate heading sizes that reflect content hierarchy
-9. Never use improper header sequences (like H1 followed directly by H3)
-10. Use headings to create clear document outline and navigation structure
+- Use proper table formatting with alignment
+- Keep text concise but complete in table cells
+- Use line breaks within cells sparingly
+- Bold important terms where needed
+- Maintain consistent column widths
 
-TECHNICAL NOTE: Your output will be displayed to users as a complete, updated policy document ready for implementation. Proper markdown formatting is essential for readability.
+## Critical Requirements
+
+1. Focus EXCLUSIVELY on changes identified in the compliance review
+2. Provide exact text changes only - no summaries or explanations
+3. Each row must address ONE specific change
+4. Order changes by document sequence, not priority
+5. Include specific legislation references for each change
+6. Do NOT include full policy text - only the specific sections that need changes
+
+TECHNICAL NOTE: Your output will be processed programmatically and displayed as an interactive table. Proper markdown table formatting is essential.
 """
