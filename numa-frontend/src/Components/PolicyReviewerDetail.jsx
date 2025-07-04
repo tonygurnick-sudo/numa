@@ -725,7 +725,7 @@ export const PolicyReviewerDetail = () => {
     } else if (resultsTabView === 'updated' && updatedPolicyResults) {
       outputs.push({
         content_type: 'text/markdown',
-        title: 'Updated Policy',
+        title: 'Required Changes',
         location: 'inline',
         data: updatedPolicyResults || '',
       });
@@ -774,7 +774,7 @@ export const PolicyReviewerDetail = () => {
                       className={`nav-link ${resultsTabView === 'updated' ? 'active' : ''}`}
                       onClick={() => setResultsTabView('updated')}
                     >
-                      Updated Policy
+                      Required Changes
                     </button>
                   </li>
                 )}
