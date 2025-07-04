@@ -35,6 +35,6 @@ lxml = "^5.1.0"
 types-requests = "^2.31.0"
 
 [tool.poetry.group.dev.dependencies]
-mypy = "1.15.0"
+mypy = "1.16.1"
 pylint = "3.3.7"
-pyright = "1.1.401"
+pyright = "1.1.402"
