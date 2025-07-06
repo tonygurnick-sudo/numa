@@ -42,6 +42,7 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
     }
 
     const lambda = new NumaLambda(scope, name, {
+      appId: props.appId,
       additionalPolicyStatements,
       clientName: this.props.clientName,
       runtime: props.runtime,
@@ -95,6 +96,7 @@ export interface RouteDefinition {
 }
 
 export interface AddLambdaFunctionProps {
+  appId?: string;
   addAuthorizer?: boolean;
   additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
   environment?: Record<string, string>;

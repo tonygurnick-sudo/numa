@@ -5,6 +5,8 @@ import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { Route53Zone } from '@cdktf/provider-aws/lib/route53-zone';
 import { TerraformOutput } from 'cdktf';
+import { Honeycomb } from '../constructs/honeycomb-construct';
+import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 
 export class QAppsDeployerStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: QAppsDeployerStackProps) {
@@ -44,6 +46,21 @@ export class QAppsDeployerStack extends ArcanumStack {
       lifecycle: {
         preventDestroy: true,
       },
+    });
+
+    const honeycomb = new Honeycomb(this, 'honeycomb', {
+      name: 'numa-' + props.environmentName,
+    });
+
+    new SsmParameter(this, 'frontend-key', {
+      name: '/honeycomb/frontend-key',
+      type: 'SecureString',
+      value: honeycomb.frontendKey,
+    });
+    new SsmParameter(this, 'backend-key', {
+      name: '/honeycomb/backend-key',
+      type: 'SecureString',
+      value: honeycomb.backendKey,
     });
 
     new TerraformOutput(this, 'client-config-table-arn', {

@@ -13,6 +13,7 @@ import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
 import * as asl from 'asl-types';
 import { Construct } from 'constructs';
 import {
+  AddLambdaFunctionProps,
   ApiGatewayLambdaCollection,
   ApiGatewayLambdaCollectionProps,
   RouteDefinition,
@@ -54,6 +55,11 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     if (props.enableJobs) {
       this.setupJobs();
     }
+  }
+
+  addLambdaFunction(scope: Construct, name: string, props: AddLambdaFunctionProps): LambdaFunction {
+    props.appId = this.appId;
+    return super.addLambdaFunction(scope, name, props);
   }
 
   addStepFunction(scope: Construct, name: string, props: AddStepFunctionProps): SfnStateMachine {
