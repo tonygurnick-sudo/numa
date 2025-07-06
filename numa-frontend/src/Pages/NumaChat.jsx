@@ -267,6 +267,11 @@ Today's Date: ${TODAY}`;
     chatHistoryRef.current?.refreshConversations();
   };
 
+  // Toggle chat history sidebar
+  const toggleChatHistory = () => {
+    chatHistoryRef.current?.toggleSidebar();
+  };
+
   // Create a new conversation
   const handleNewChat = async () => {
     // Stop any ongoing streaming response
@@ -967,16 +972,26 @@ Today's Date: ${TODAY}`;
           {/* Main chat content */}
           <div className="flex-grow-1 d-flex contain-width">
             <div className="chat-content flex-grow-1 d-flex flex-column">
-              {/* Header with chat instructions and New Chat button on the right */}
+              {/* Header with chat instructions and buttons on the right */}
               <div className="chat-header d-flex justify-content-between align-items-center mb-3">
                 <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
-                <Button
-                  className="btn btn-primary new-chat-btn"
-                  onClick={handleNewChat}
-                  style={{ marginRight: '15px' }}
-                >
-                  New Chat
-                </Button>
+                <div className="chat-header-buttons d-flex align-items-center gap-2">
+                  <Button
+                    variant="outline-secondary"
+                    className="chat-history-btn"
+                    onClick={toggleChatHistory}
+                    title="Chat History"
+                  >
+                    <i className="bi bi-clock-history"></i>
+                  </Button>
+                  <Button
+                    className="btn btn-primary new-chat-btn"
+                    onClick={handleNewChat}
+                    style={{ marginRight: '15px' }}
+                  >
+                    New Chat
+                  </Button>
+                </div>
               </div>
 
               <div className="chat-container position-relative" style={{ flex: '1 1 auto' }}>

@@ -44,10 +44,13 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
     }
   };
 
-  // Expose refreshConversations() via ref for parent components
+  // Expose refreshConversations() and toggleSidebar() via ref for parent components
   useImperativeHandle(ref, () => ({
     refreshConversations: () => {
       fetchConversations();
+    },
+    toggleSidebar: () => {
+      setShow((prevShow) => !prevShow);
     },
   }));
 
@@ -56,9 +59,13 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
     fetchConversations();
   }, [numaChatDynamoUtils, currentConversationId]);
 
-  // Hide sidebar if user clicks outside
+  // Hide sidebar if user clicks outside (but not on the history button)
   useEffect(() => {
     const handleClickOutside = (event) => {
+      if (event.target.closest('.chat-history-btn')) {
+        return;
+      }
+
       if (sidebarRef.current && !sidebarRef.current.contains(event.target)) {
         setShow(false);
       }
@@ -116,15 +123,6 @@ export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
 
   return (
     <div className="chat-history-sidebar">
-      <Button
-        variant="outline-secondary"
-        className="chat-history-toggle"
-        onClick={handleShow}
-        aria-controls="chat-history-content"
-      >
-        <i className="bi bi-clock-history"></i>
-      </Button>
-
       <div
         ref={sidebarRef}
         className={`chat-history-content ${show ? 'show' : ''}`}
