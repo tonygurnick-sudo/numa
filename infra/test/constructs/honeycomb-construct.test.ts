@@ -44,7 +44,7 @@ describe('Honeycomb construct', () => {
         type: 'ingest',
         permissions: [
           {
-            create_datasets: true,
+            create_datasets: false,
           },
         ],
       }),
@@ -52,21 +52,21 @@ describe('Honeycomb construct', () => {
   });
 
   // TODO: Uncomment this when we need to create the backend key.
-  // it('Adds backend api key', (): void => {
-  //   const app = Testing.app();
-  //   const stack = new TestStack(app, 'test');
-  //   const synthesized = Testing.synth(stack);
+  it('Adds backend api key', (): void => {
+    const app = Testing.app();
+    const stack = new TestStack(app, 'test');
+    const synthesized = Testing.synth(stack);
 
-  //   assert(
-  //     Testing.toHaveResourceWithProperties(synthesized, 'honeycombio_api_key', {
-  //       name: 'Backend Ingest Key',
-  //       type: 'ingest',
-  //       permissions: [
-  //         {
-  //           create_datasets: true,
-  //         },
-  //       ],
-  //     }),
-  //   );
-  // });
+    assert(
+      Testing.toHaveResourceWithProperties(synthesized, 'honeycombio_api_key', {
+        name: 'Backend Ingest Key',
+        type: 'ingest',
+        permissions: [
+          {
+            create_datasets: true,
+          },
+        ],
+      }),
+    );
+  });
 });

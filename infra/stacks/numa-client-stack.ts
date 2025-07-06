@@ -33,7 +33,6 @@ import { RfpResponseComparison } from '../constructs/apps/rfp-response-compariso
 import { CoreNumaInfra, coreNumaInfraPropsSchema } from '../constructs/core-numa-infra-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
-import { Honeycomb } from '../constructs/honeycomb-construct';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { z } from 'zod';
@@ -42,6 +41,7 @@ import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+import { DataAwsSsmParameter } from '@cdktf/provider-aws/lib/data-aws-ssm-parameter';
 
 const arcanumOrgId = 'o-g8veu85jva';
 const nextGenOrgId = 'o-apdsu3c1a7';
@@ -114,6 +114,24 @@ export class NumaClientStack extends TerraformStack {
       alias: 'certificate-provider',
       defaultTags: defaultProvider.defaultTags,
     });
+    const parameterLookupProvider = new AwsProvider(this, 'parameter-lookup-provider', {
+      region: 'us-east-1',
+      assumeRole: [
+        {
+          roleArn: deployerRole,
+        },
+      ],
+      alias: 'parameter-lookup-provider',
+      defaultTags: defaultProvider.defaultTags,
+    });
+    const honeycombFrontendKey = new DataAwsSsmParameter(this, 'honeycomb-frontend-key', {
+      provider: parameterLookupProvider,
+      name: '/honeycomb/frontend-key',
+    }).value;
+    const honeycombBackendKey = new DataAwsSsmParameter(this, 'honeycomb-backend-key', {
+      provider: parameterLookupProvider,
+      name: '/honeycomb/backend-key',
+    }).value;
 
     // QBusiness provider - currently needs to be us-east-1 in most regions
     // When QBusiness becomes available in other regions, this can use the client's region
@@ -136,10 +154,6 @@ export class NumaClientStack extends TerraformStack {
       environmentName: props.environmentName,
       qBusinessProvider: qBusinessProvider,
       knowledgeBase: knowledgeBase,
-    });
-
-    const honeycomb = new Honeycomb(this, 'honeycomb', {
-      name: clientConfig.clientName,
     });
 
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
@@ -191,7 +205,7 @@ export class NumaClientStack extends TerraformStack {
         region: clientConfig.region,
         otelConfig: {
           otelConfigPath: core.otelConfigPath,
-          honeycombIngestKey: honeycomb.backendKey,
+          honeycombIngestKey: honeycombBackendKey,
           region: clientConfig.region,
         },
       });
@@ -244,7 +258,7 @@ export class NumaClientStack extends TerraformStack {
         API_ENDPOINT: '/api',
         CLIENT_NAME: props.clientName,
         OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
-        HONEYCOMB_KEY: honeycomb.frontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
+        HONEYCOMB_KEY: honeycombFrontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
         DATA_BUCKET: core.dataBucket.bucket.bucket,
         PROVISION_Q_RESOURCES: clientConfig.provisionQResources ?? false,
         PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'q',

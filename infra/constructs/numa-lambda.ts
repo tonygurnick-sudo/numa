@@ -12,8 +12,8 @@ import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
 import path from 'node:path';
 
-const OTEL_COLLECTOR_LAYER_VERSION = '0_13_0';
-const OTEL_LANGUAGE_LAYER_VERSION = '0_12_0';
+const OTEL_COLLECTOR_LAYER_VERSION = '0_15_0';
+const OTEL_LANGUAGE_LAYER_VERSION = '0_14_0';
 const OTEL_LAYER_ACCOUNT = '184161586896'; // From: https://github.com/open-telemetry/opentelemetry-lambda/releases
 
 export class NumaLambda extends Construct {
@@ -93,9 +93,23 @@ export class NumaLambda extends Construct {
 
     const honeycombConfig = otelLayersAndEnvironment(props.runtime, props.otelConfig);
 
+    const sourceCodeHash = Fn.filebase64sha256(filename);
+    const otelResourceAttributes: Record<string, string> = {
+      'numa.clientName': props.clientName,
+      'numa.sourceCodeHash': sourceCodeHash,
+    };
+    if (props.appId) otelResourceAttributes['numa.appId'] = props.appId;
+    const otelEnvironmentVariables = {
+      OTEL_SERVICE_NAME: name,
+      OTEL_RESOURCE_ATTRIBUTES: Object.entries(otelResourceAttributes)
+        .map((pair) => pair.join('='))
+        .join(','),
+    };
+
     this.lambda = new LambdaFunction(scope, name + '_lambda', {
       environment: {
         variables: {
+          ...otelEnvironmentVariables,
           ...honeycombConfig.environmentVariables,
           ...props.environment,
         },
@@ -112,7 +126,7 @@ export class NumaLambda extends Construct {
       memorySize: props.memorySize,
       role: role.arn,
       runtime: props.runtime,
-      sourceCodeHash: Fn.filebase64sha256(filename),
+      sourceCodeHash,
       timeout: props.timeout || 900,
       tracingConfig: {
         mode: props.otelConfig?.honeycombIngestKey ? 'PassThrough' : 'Active', // Disable X-Ray sampling when using Honeycomb.
@@ -163,6 +177,7 @@ export interface OTelConfig {
 }
 
 export interface NumaLambdaProps {
+  appId?: string;
   additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
   clientName: string;
   environment?: Record<string, string>;
