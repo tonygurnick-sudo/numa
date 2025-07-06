@@ -16,6 +16,35 @@
     .upload-button {
       white-space: nowrap;
     }
+
+    .chat-header-buttons {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      .chat-history-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 38px;
+        border: 1px solid var(--color-primary);
+        background-color: var(--color-bg-lightest);
+        color: var(--color-primary);
+        border-radius: 0.375rem;
+        transition: all 0.2s ease-in-out;
+
+        &:hover {
+          background-color: var(--color-primary);
+          color: white;
+          border-color: var(--color-primary);
+        }
+
+        i {
+          font-size: 1.1rem;
+        }
+      }
+    }
   }
 
   .chat-mode-selector {
@@ -513,15 +542,6 @@
     }
   }
 
-  .chat-history-toggle {
-    position: fixed;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%) rotate(-90deg);
-    transform-origin: right bottom;
-    border-radius: 4px 4px 0 0;
-    z-index: 1000;
-  }
 
   /* Chat File Upload */
 .chat-file-upload {
