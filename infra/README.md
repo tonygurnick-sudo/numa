@@ -50,11 +50,7 @@ Most stacks require the lambdas to be build, just run `package-all.sh` (requires
 
 The main command to give to `yarn cdktf` is `plan`. This will produce a plan of the changes that the infracode will make to the infrastructure.
 
-Note: The Honeycomb Key must be a management key. This can be created [here](https://ui.honeycomb.io/teams/arcanum-ai/api_keys).
-
 ```bash
-export HONEYCOMB_KEY_ID=hcamk_your_key_id_here
-export HONEYCOMB_KEY_SECRET=your_key_secret_here
 yarn cdktf plan
 ```
 
@@ -71,8 +67,6 @@ Customer accounts grant access to our production deployer account.
 To run the deploy of Numa to a customer account, do the following:
 
 ```bash
-export HONEYCOMB_KEY_ID=hcamk_your_key_id_here
-export HONEYCOMB_KEY_SECRET=your_key_secret_here
 yarn cdktf deploy --auto-approve numa-{client-id}
 ```
 
@@ -82,7 +76,7 @@ The client-id must be the name of an entry from the clientsProd list in numa-cli
 
 Linting can be run with `yarn lint`. This will run eslint and then tsc for type checking.
 
-Tests (TODO) can be run with `yarn test`.
+Tests can be run with `yarn test`.
 
 ## Web Crawler Configuration
 
@@ -171,6 +165,7 @@ Budget alerting can be configured in the client config:(`clientConfigProd.json`)
 ### How It Works
 
 1. When configured, the system creates:
+
    - An AWS Budget in the client account
    - A Lambda function that forwards budget alerts with client metadata
    - An SNS topic that sends alerts to the centralised topic
