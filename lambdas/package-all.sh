@@ -5,12 +5,10 @@ set -o errexit -o nounset -o pipefail -o xtrace
 SCRIPT_DIRECTORY=$(dirname "${BASH_SOURCE:-$0}" | xargs realpath)
 declare -r SCRIPT_DIRECTORY
 
-for directory in "${SCRIPT_DIRECTORY}"/node/*/; do
-    pushd "${directory}";
-        yarn;
-        yarn bundle;
-    popd;
-done;
+pushd "${SCRIPT_DIRECTORY}/.."
+yarn
+yarn workspaces foreach --all run bundle
+popd
 
 # can't double quote so disable the shellcheck
 # shellcheck disable=SC2086

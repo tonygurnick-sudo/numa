@@ -125,6 +125,9 @@ accounts.html
 numa-frontend/coverage
 **/install-state.gz
 
+lambdas/python/*/wheels/
+lambdas/python/*/lambda_function.build/
+
 # Frontend
 /numa-frontend/public/config.json
 /numa-frontend/public/manifest.json
