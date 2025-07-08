@@ -116,7 +116,9 @@
       {
         "url": "https://orionhealth.com/global/"
       }
-    ]
+    ],
+    "provisionQResources": true,
+    "preferredKnowledgeBase": "q"
   },
   "dev-hams": {
     "allApps": true,
