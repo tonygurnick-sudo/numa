@@ -188,6 +188,15 @@ export class NextGenRootStack extends TerraformStack {
           Credentials: {
             'RoleArn.$': `States.Format('arn:aws:iam::{}:role/${organizationRoleName}', $.CreateAccountStatus.AccountId)`,
           },
+          Retry: [
+            {
+              ErrorEquals: ['States.TaskFailed'],
+              BackoffRate: 2,
+              IntervalSeconds: 3,
+              MaxAttempts: 5,
+              Comment: 'Organization access is sometimes not provisioned, so retry if we fail.',
+            },
+          ],
           Next: 'AttachPolicy',
         },
         AttachPolicy: {
