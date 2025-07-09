@@ -11,7 +11,7 @@ import structlog
 from strands.models.bedrock import BedrockModel
 
 # ── Environment Variables & Constants ──────────────────────────────────────
-REGION = os.getenv("REGION", "us-east-1")
+REGION = os.getenv("AWS_REGION", "us-east-1")
 MODEL_ID = os.getenv("MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
 HAIKU_MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
 
