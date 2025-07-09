@@ -94,6 +94,10 @@ variables:
         - lambdas/python/structured-data-extraction
         - lambdas/python/web-crawler-start
         - lambdas/python/web-search-proxy
+        - lambdas/python/ws-authorizer
+        - lambdas/python/ws-connect
+        - lambdas/python/ws-disconnect
+        - lambdas/python/ws-stream-initializer
 
 .python-libraries-matrix:
   matrix:

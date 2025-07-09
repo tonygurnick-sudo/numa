@@ -33,6 +33,7 @@ import { RfpResponseComparison } from '../constructs/apps/rfp-response-compariso
 import { CoreNumaInfra, coreNumaInfraPropsSchema } from '../constructs/core-numa-infra-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
+import { NumaChatAgentWebSocket } from '../constructs/numa-chat-agent-ws-construct';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { z } from 'zod';
@@ -156,6 +157,25 @@ export class NumaClientStack extends TerraformStack {
       knowledgeBase: knowledgeBase,
     });
 
+    // Create Chat Agent WebSocket API
+    const chatAgentDomain = `chat-agent.${domainName}`;
+    const chatAgentWs = new NumaChatAgentWebSocket(this, 'chat-agent-ws', {
+      clientName: props.clientName,
+      region: clientConfig.region,
+      domainName: chatAgentDomain,
+      hostedZoneId: props.hostedZone,
+      hostedZoneProvider: hostedZoneProvider,
+      certificateProvider: certificateProvider,
+      chatAgentConfiguration: {
+        preferredKnowledgeBase: clientConfig.preferredKnowledgeBase as 'q' | 'bedrock',
+        qApplicationId: core.qBusinessApplicationId,
+        qRetrieverId: core.qBusinessRetrieverId,
+        bedrockKnowledgeBaseId: knowledgeBase.knowledgeBaseId,
+      },
+      userPoolId: core.userPoolId,
+      userPoolClientId: core.userPoolClient.id,
+    });
+
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
       ...clientConfig,
       environmentName: props.environmentName,
@@ -264,6 +284,7 @@ export class NumaClientStack extends TerraformStack {
         PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'q',
         BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase.knowledgeBaseId,
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
+        CHAT_AGENT_URL: chatAgentWs.websocketUrl,
       }),
       contentType: 'application/json',
     });
