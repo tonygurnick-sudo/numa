@@ -245,43 +245,63 @@ class NumaChatDynamoUtils {
 
   /**
    * Return "meta" items for this user's conversations.
-   * Returns conversations sorted by latestTimestamp in descending order (newest first).
-   * Limited to a reasonable number to prevent performance issues.
+   * Returns the 25 most recently updated conversations (newest first by latestTimestamp).
    */
-  async getUserConversationsMeta(userId) {
+  async getUserConversationsMeta(userId, limit = 100) {
     try {
-      // 1. Query all items for the user
-      //    We'll do a KeyCondition on user_id = :u, then FilterExpression for meta
-      //    Add a reasonable limit to prevent performance issues with users who have many conversations
-      const command = new QueryCommand({
-        TableName: this.tableName,
-        KeyConditionExpression: 'user_id = :u',
-        FilterExpression: 'message_type = :mtype',
-        ExpressionAttributeValues: marshall({
-          ':u': userId,
-          ':mtype': 'meta',
-        }),
-        ProjectionExpression: 'sk, conversation_id, user_id, conversationName, latestTimestamp, content',
-        Limit: 100, // Limit to 100 most recent conversations
-      });
+      const allMetaItems = [];
+      let lastEvaluatedKey = null;
 
-      const response = await this.dynamoDBClient.send(command);
-      const items = response.Items.map(unmarshall);
+      // Keep querying until we get all meta items (handle pagination)
+      do {
+        const command = new QueryCommand({
+          TableName: this.tableName,
+          KeyConditionExpression: 'user_id = :u',
+          FilterExpression: 'message_type = :mtype',
+          ExpressionAttributeValues: marshall({
+            ':u': userId,
+            ':mtype': 'meta',
+          }),
+          ProjectionExpression: 'sk, conversation_id, user_id, conversationName, latestTimestamp, content',
+          ScanIndexForward: false, // Sort descending by sort key (newest first)
+          ExclusiveStartKey: lastEvaluatedKey,
+        });
 
-      // 2. Convert to our return format
-      const conversations = items.map((it) => ({
+        const response = await this.dynamoDBClient.send(command);
+        const items = response.Items.map(unmarshall);
+
+        // Add meta items to our collection
+        allMetaItems.push(...items);
+
+        // Check if there are more items to fetch
+        lastEvaluatedKey = response.LastEvaluatedKey;
+
+        // Stop if we have enough meta items for our needs (100 + some buffer)
+        if (allMetaItems.length >= limit) {
+          break;
+        }
+      } while (lastEvaluatedKey);
+
+      // Convert to our return format
+      const conversations = allMetaItems.map((it) => ({
         conversation_id: it.conversation_id,
         conversationName: it.conversationName || null,
-        // fallback if no latestTimestamp
+        // Use latestTimestamp for sorting (most recent activity first), fallback to timestamp
         latestTimestamp: it.latestTimestamp || it.timestamp || 0,
+        timestamp: it.timestamp || 0,
         content: it.content || '',
       }));
 
-      // 3. Sort by latestTimestamp in descending order (newest first)
-      // This ensures users see their most recent conversations at the top
+      // Sort by latestTimestamp (most recent activity first) to provide better UX
       conversations.sort((a, b) => b.latestTimestamp - a.latestTimestamp);
 
-      return conversations;
+      // Apply limit of 100 after sorting
+      const limitedConversations = conversations.slice(0, limit);
+
+      console.log(
+        `Retrieved ${limitedConversations.length} conversations for user ${userId} (limited to 25 from ${conversations.length} total)`,
+      );
+      return limitedConversations;
     } catch (err) {
       console.error('Error fetching user conversation meta:', err);
       return [];
