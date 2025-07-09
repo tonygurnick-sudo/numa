@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Any, Dict, NotRequired, Optional, Sequence, TypedDict, cast
+from typing import Any, Dict, NotRequired, Optional, Sequence, TypedDict
 
 import boto3
 import structlog
@@ -109,11 +109,7 @@ def add_url_to_dynamodb(request: CrawlUrlRequest) -> Dict[str, Any]:
             "linksEnqueued": 0,
         }
 
-        table.put_item(
-            Item=item,
-            ConditionExpression="attribute_not_exists(#url)",
-            ExpressionAttributeNames={"#url": "url"},
-        )
+        table.put_item(Item=item)
 
         logger.info("Added URL to DynamoDB", url=request["url"], status="pending")
         return {
@@ -124,15 +120,6 @@ def add_url_to_dynamodb(request: CrawlUrlRequest) -> Dict[str, Any]:
         }
 
     except ClientError as e:
-        code = cast(Dict[str, Any], e.response).get("Error", {}).get("Code", "")
-        if code == "ConditionalCheckFailedException":
-            logger.info("URL already exists in queue", url=request["url"])
-            return {
-                "status": "skipped",
-                "message": "URL already in queue",
-                "url": request["url"],
-            }
-
         logger.error(
             "Error adding URL to DynamoDB",
             url=request["url"],

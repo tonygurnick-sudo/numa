@@ -191,16 +191,12 @@ def enqueue_links(
                     "pagesAttempted": 0,
                     "pagesSuccessful": 0,
                     "linksEnqueued": 0,
-                },
-                ConditionExpression="attribute_not_exists(#url)",
-                ExpressionAttributeNames={"#url": "url"},
+                }
             )
             enqueued += 1
             logger.debug("Enqueued link", url=link, depth=new_depth)
         except ClientError as e:  # noqa: BLE001
-            error_code = e.response.get("Error", {}).get("Code", "")
-            if error_code != "ConditionalCheckFailedException":
-                logger.error("Error enqueueing link", link=link, error=str(e))
+            logger.error("Error enqueueing link", link=link, error=str(e))
 
     return enqueued
 
