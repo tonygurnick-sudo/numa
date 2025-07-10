@@ -12,6 +12,21 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import { DeleteUserCommand, GetUserCommand } from '@aws-sdk/client-qbusiness';
 
+// This is not secure, but will do fine for a temporary password.
+function genPassword(length = 16) {
+  const classes = ['ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz', '0123456789', '!@#$%'];
+  let password = '';
+
+  // Use browser's Web Crypto API instead of Node.js crypto
+  const randomValues = new Uint8Array(32);
+  window.crypto.getRandomValues(randomValues);
+  for (let i = 0; i < length; i++) {
+    const chars = classes[i % classes.length];
+    password += chars.charAt(randomValues[i] % chars.length);
+  }
+  return password;
+}
+
 export class UserManagementUtils {
   constructor(region, credentials) {
     this.cognitoClient = new CognitoIdentityProviderClient({
@@ -31,22 +46,11 @@ export class UserManagementUtils {
   async createUser(email, userPoolId) {
     try {
       const lowercaseEmail = email.toLowerCase();
-      console.log('Creating user with:', { email: lowercaseEmail, userPoolId });
-
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
-      let password = '';
-
-      // Use browser's Web Crypto API instead of Node.js crypto
-      const randomValues = new Uint8Array(16);
-      window.crypto.getRandomValues(randomValues);
-      for (let i = 0; i < 16; i++) {
-        password += chars.charAt(randomValues[i] % chars.length);
-      }
 
       const command = new AdminCreateUserCommand({
         UserPoolId: userPoolId,
         Username: lowercaseEmail,
-        TemporaryPassword: password,
+        TemporaryPassword: genPassword(),
         UserAttributes: [
           {
             Name: 'email',
@@ -60,20 +64,15 @@ export class UserManagementUtils {
         MessageAction: 'SUPPRESS', // New users will be notifed by the user who created them
       });
 
-      console.log('Sending create user command:', JSON.stringify(command, null, 2));
       const response = await this.cognitoClient.send(command);
-      console.log('Cognito create user response:', JSON.stringify(response, null, 2));
-      console.log('User sub:', response.User.Username);
-      console.log('Login username should be:', lowercaseEmail);
 
       const passwordCommand = new AdminSetUserPasswordCommand({
         UserPoolId: userPoolId,
         Username: lowercaseEmail,
-        Password: password,
+        Password: genPassword(), // This cannot be the same as the previous password, so gen a new one.
         Permanent: true,
       });
 
-      console.log('Setting permanent password for user:', lowercaseEmail);
       await this.cognitoClient.send(passwordCommand);
 
       return {
@@ -174,7 +173,6 @@ export class UserManagementUtils {
       });
 
       await this.cognitoClient.send(command);
-      console.log(`Successfully added user ${username} to group ${groupName}`);
     } catch (error) {
       console.error(`Error adding user ${username} to group ${groupName}:`, error);
       throw error;
@@ -197,7 +195,6 @@ export class UserManagementUtils {
       });
 
       await this.cognitoClient.send(command);
-      console.log(`Successfully removed user ${username} from group ${groupName}`);
     } catch (error) {
       console.error(`Error removing user ${username} from group ${groupName}:`, error);
       throw error;
