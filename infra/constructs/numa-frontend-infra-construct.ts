@@ -277,6 +277,7 @@ export class NumaFrontendInfra extends Construct {
       viewerCertificate: {
         acmCertificateArn: certificate.arn,
         sslSupportMethod: 'sni-only',
+        minimumProtocolVersion: 'TLSv1.2_2021',
       },
       orderedCacheBehavior: [
         {
