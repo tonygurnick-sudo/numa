@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Alert, Button, Form } from 'react-bootstrap';
+import { Alert, Button, Form, OverlayTrigger, Popover } from 'react-bootstrap';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { useAuth } from '../Providers/AuthProvider';
 
@@ -85,6 +85,29 @@ const ResetPassword = () => {
     }
   };
 
+  const handleNewPasswordOnChange = async (password) => {
+    setNewPassword(password);
+    setSuccess(null);
+    const errors = [
+      { message: 'at least eight characters', pattern: /.{8,}/ },
+      { message: 'at least one lowercase character', pattern: /[a-z]/ },
+      { message: 'at least one uppercase character', pattern: /[A-Z]/ },
+      { message: 'at least one symbol', pattern: /[\^$*.[\]{}()?"!@#%&\\/\\,><':;|_~`=+-]/ }, // Symbols based on https://docs.aws.amazon.com/cognito/latest/developerguide/managing-users-passwords.html
+      { message: 'at least one number', pattern: /[0-9]/ },
+    ]
+      .map((requirement) => {
+        if (!password.match(requirement.pattern)) {
+          return (
+            <div key={requirement.message}>
+              Password must contain {requirement.message}.<br />
+            </div>
+          );
+        }
+      })
+      .filter((error) => error);
+    setError(errors.length > 0 ? errors : null);
+  };
+
   const getFormTitle = () => (isCreateMode ? 'Create Your Password' : 'Password Reset');
   const getRequestButtonText = () => (isCreateMode ? 'Request Activation Code' : 'Request Password Reset');
   const getCodeLabel = () => (isCreateMode ? 'Activation Code' : 'Reset Code');
@@ -162,15 +185,34 @@ const ResetPassword = () => {
 
               <Form.Group className="mb-3">
                 <Form.Label>New Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  placeholder="Enter your new password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  name="new-password"
-                  autoComplete="new-password"
-                />
+                <OverlayTrigger
+                  placement="right"
+                  overlay={
+                    <Popover>
+                      <Popover.Header>Password requirements</Popover.Header>
+                      <Popover.Body>
+                        <ul>
+                          <li>At least 1 uppercase character.</li>
+                          <li>At least 1 lowercase character.</li>
+                          <li>At least 1 symbol.</li>
+                          <li>At least 1 number.</li>
+                          <li>At least 8 characters.</li>
+                          <li>Cannot have been used before.</li>
+                        </ul>
+                      </Popover.Body>
+                    </Popover>
+                  }
+                >
+                  <Form.Control
+                    type="password"
+                    placeholder="Enter your new password"
+                    value={newPassword}
+                    onChange={(e) => handleNewPasswordOnChange(e.target.value)}
+                    required
+                    name="new-password"
+                    autoComplete="new-password"
+                  />
+                </OverlayTrigger>
               </Form.Group>
 
               <Form.Group className="mb-3">

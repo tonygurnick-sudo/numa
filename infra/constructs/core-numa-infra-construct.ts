@@ -118,6 +118,11 @@ export class CoreNumaInfra extends Construct {
       },
       passwordPolicy: {
         minimumLength: props.passwordLength ?? 8,
+        requireLowercase: true,
+        requireNumbers: true,
+        requireSymbols: true,
+        requireUppercase: true,
+        passwordHistorySize: 18,
         temporaryPasswordValidityDays: props.temporaryPasswordValidityDays,
       },
       ...mfa,
