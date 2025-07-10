@@ -138,6 +138,10 @@ export class KnowledgeBase extends Construct {
           actions: ['bedrock:InvokeModel'],
           resources: [`arn:aws:bedrock:*:*:foundation-model/${model}`],
         },
+        {
+          actions: ['bedrock:InvokeModel'],
+          resources: [`arn:aws:bedrock:*:*:foundation-model/anthropic.claude-3-haiku-20240307-v1:0`],
+        },
       ],
     });
 
@@ -152,6 +156,10 @@ export class KnowledgeBase extends Construct {
           },
           {
             actions: ['s3:GetObject'],
+            resources: [`${dataBucketArn}/*`],
+          },
+          {
+            actions: ['s3:PutObject'],
             resources: [`${dataBucketArn}/*`],
           },
         ],
@@ -348,6 +356,28 @@ export class KnowledgeBase extends Construct {
           s3Configuration: [
             {
               bucketArn: dataBucketArn,
+            },
+          ],
+        },
+      ],
+      vectorIngestionConfiguration: [
+        {
+          parsingConfiguration: [
+            {
+              parsingStrategy: 'BEDROCK_FOUNDATION_MODEL',
+              bedrockFoundationModelConfiguration: [
+                {
+                  modelArn:
+                    'arn:aws:bedrock:' + props.region + '::foundation-model/anthropic.claude-3-haiku-20240307-v1:0',
+                  parsingModality: 'MULTIMODAL',
+                  parsingPrompt: [
+                    {
+                      parsingPromptString:
+                        'Please extract and parse the content from this document, preserving the structure and extracting any tables, figures, or other elements. Return the content in a clear, structured format.',
+                    },
+                  ],
+                } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+              ],
             },
           ],
         },
