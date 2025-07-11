@@ -156,7 +156,7 @@ __metadata:
     "@aws-sdk/client-service-quotas": "npm:^3.738.0"
     "@aws-sdk/client-support": "npm:^3.738.0"
     "@cdktf/node-pty-prebuilt-multiarch": "npm:^0.10.1-pre.11"
-    "@cdktf/provider-aws": "npm:20"
+    "@cdktf/provider-aws": "npm:21.1.0"
     "@cdktf/provider-random": "npm:^11.0.3"
     "@types/fs-extra": "npm:^11"
     "@types/node": "npm:22.16.0"
@@ -2997,13 +2997,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cdktf/provider-aws@npm:20":
-  version: 20.1.0
-  resolution: "@cdktf/provider-aws@npm:20.1.0"
+"@cdktf/provider-aws@npm:21.1.0":
+  version: 21.1.0
+  resolution: "@cdktf/provider-aws@npm:21.1.0"
   peerDependencies:
     cdktf: ^0.21.0
     constructs: ^10.4.2
-  checksum: 10c0/7b4a06c30430f51e67e6859df92ba5192171e637407631fb9500e7144571ef93a5d231f3dec82f9ddb6f9da13ffd9f37a449c4164a3ef4932a47804739c7ad52
+  checksum: 10c0/edad8f9ced7df952de4503c7b26731af51f052cc12dcfaf4181155e9a39f67ec7524d79ad70f06b68bacce05ab4a7d984fa5f43e02e0cb9109e5aaf2468155b2
   languageName: node
   linkType: hard
 
