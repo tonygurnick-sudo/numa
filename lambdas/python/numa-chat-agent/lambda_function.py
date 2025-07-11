@@ -34,6 +34,7 @@ from numa_chat_agent import (
     run_agent_stream,
     set_current_user_auth,
 )
+from numa_chat_agent.config import FALLBACK_MODEL_ID, is_quota_limit_error
 from numa_chat_agent.utils import extract_preview
 from numa_chat_agent.websocket import send_error_message
 
@@ -90,23 +91,70 @@ def handler(event, _ctx):
     )
 
     try:
-        # Create fresh agent with dynamic tool selection and model ID
-        agent = create_fresh_agent(enabled_tools, system_prompt, model_id)
+        # Try with primary model first, fallback if quota errors occur
+        current_model_id = model_id
+        used_fallback = False
 
-        # Run the streaming process with no time constraints
-        asyncio.run(
-            run_agent_stream(
-                agent=agent,
-                prompt=prompt,
-                messages=messages,
-                connection_id=connection_id,
-                endpoint_url=endpoint_url,
+        try:
+            # Create fresh agent with dynamic tool selection and primary model ID
+            agent = create_fresh_agent(enabled_tools, system_prompt, current_model_id)
+
+            # Run the streaming process with no time constraints
+            asyncio.run(
+                run_agent_stream(
+                    agent=agent,
+                    prompt=prompt,
+                    messages=messages,
+                    connection_id=connection_id,
+                    endpoint_url=endpoint_url,
+                )
             )
-        )
+
+        except Exception as primary_error:
+            # Check if this is a quota/throttling error that should trigger fallback
+            if is_quota_limit_error(primary_error):
+                logger.warning(
+                    "Primary model hit quota limit, switching to fallback model",
+                    connection_id=connection_id,
+                    primary_model_id=current_model_id,
+                    fallback_model_id=FALLBACK_MODEL_ID,
+                    error=str(primary_error),
+                )
+
+                # Switch to fallback model and try again
+                current_model_id = FALLBACK_MODEL_ID
+                used_fallback = True
+
+                # Create fresh agent with fallback model
+                agent = create_fresh_agent(
+                    enabled_tools, system_prompt, current_model_id
+                )
+
+                # Run the streaming process with fallback model
+                asyncio.run(
+                    run_agent_stream(
+                        agent=agent,
+                        prompt=prompt,
+                        messages=messages,
+                        connection_id=connection_id,
+                        endpoint_url=endpoint_url,
+                    )
+                )
+
+                logger.info(
+                    "Successfully switched to fallback model",
+                    connection_id=connection_id,
+                    fallback_model_id=current_model_id,
+                )
+            else:
+                # Not a quota error, re-raise the original exception
+                raise primary_error
 
         logger.info(
             "Step Functions agent processing completed successfully",
             connection_id=connection_id,
+            model_id=current_model_id,
+            used_fallback=used_fallback,
         )
 
         # Return success result for Step Functions
@@ -115,6 +163,8 @@ def handler(event, _ctx):
             "connectionId": connection_id,
             "status": "completed",
             "message": "Agent processing completed successfully",
+            "modelUsed": current_model_id,
+            "usedFallback": used_fallback,
         }
 
     except Exception as exc:
