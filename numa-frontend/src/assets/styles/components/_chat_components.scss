@@ -1,5 +1,83 @@
 @use '../abstracts/mixins' as *;
 
+// Variables for consistent styling
+$numa-primary: #8e50a7;
+$numa-secondary: #6c757d;
+$numa-hover-bg: #f8f9fa;
+$numa-active-bg: rgba(142, 80, 167, 0.08);
+$numa-purple-hover: rgba(142, 80, 167, 0.12);
+$transition-smooth: all 0.2s ease-in-out;
+$border-radius-sm: 0.5rem;
+$border-radius-pill: 1rem;
+
+// Mixin for common toggle button styling
+@mixin toggle-button-base {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  border-radius: $border-radius-sm;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: $transition-smooth;
+  text-decoration: none;
+  color: $numa-secondary;
+
+  &:hover:not(:disabled) {
+    background-color: $numa-hover-bg;
+    color: $numa-primary;
+    text-decoration: none;
+  }
+
+  &:focus {
+    outline: none;
+    box-shadow: none;
+    text-decoration: none;
+  }
+
+  &:active {
+    background-color: $numa-hover-bg;
+    color: $numa-primary;
+    text-decoration: none;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.active {
+    color: $numa-primary;
+  }
+}
+
+// Mixin for bubble text styling
+@mixin bubble-text {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: $numa-primary;
+  background-color: $numa-active-bg;
+  border: 1px solid rgba(142, 80, 167, 0.2);
+  border-radius: $border-radius-pill;
+  padding: 0.25rem 0.5rem;
+  white-space: nowrap;
+
+  &:focus {
+    outline: none;
+    box-shadow: none;
+    background-color: $numa-active-bg;
+    color: $numa-primary;
+  }
+
+  &:active {
+    background-color: $numa-active-bg;
+    color: $numa-primary;
+  }
+}
+
 .chat-header {
     display: flex;
     justify-content: space-between;
@@ -177,81 +255,46 @@
           transform: scale(1.1);
         }
       }
-      // Data sources mode toggle button
-      .data-mode-toggle {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        background: transparent;
-        color: black;
-        padding: 8px;
-        border-radius: 20px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        transition: all 0.3s ease-in-out;
 
-        &:hover {
-          background: rgba(106, 13, 173, 0.1); // Light purple hover effect
-          color: black;
-          transform: scale(1.1);
+      // Auto Tools Toggle
+      .auto-tools-toggle {
+        @include toggle-button-base;
+
+        &:focus {
+          outline: none;
+          box-shadow: none;
         }
 
         .bubble-text {
-          display: none;
+          @include bubble-text;
+        }
+      }
+
+      // Data sources mode toggle button
+      .data-mode-toggle {
+        @include toggle-button-base;
+
+        &:focus {
+          outline: none;
+          box-shadow: none;
         }
 
-        &.active {
-          background: rgba(106, 13, 173, 0.1);
-          color: black;
-          padding: 8px 12px;
-          border-radius: 20px;
-          transition: all 0.3s ease-in-out;
-
-          .bubble-text {
-            display: inline-block;
-            opacity: 1;
-            transition: opacity 0.3s ease-in-out;
-          }
+        .bubble-text {
+          @include bubble-text;
         }
       }
 
       // Web search toggle button
       .web-search-toggle {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        background: transparent;
-        color: black;
-        padding: 8px;
-        border-radius: 20px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        transition: all 0.3s ease-in-out;
+        @include toggle-button-base;
 
-        &:hover {
-          background: rgba(106, 13, 173, 0.1); // Light purple hover effect
-          color: black;
-          transform: scale(1.1);
+        &:focus {
+          outline: none;
+          box-shadow: none;
         }
 
         .bubble-text {
-          display: none;
-        }
-
-        &.active {
-          background: rgba(106, 13, 173, 0.1);
-          color: black;
-          padding: 8px 12px;
-          border-radius: 20px;
-          transition: all 0.3s ease-in-out;
-
-          .bubble-text {
-            display: inline-block;
-            opacity: 1;
-            transition: opacity 0.3s ease-in-out;
-          }
+          @include bubble-text;
         }
       }
       // Send Button (Arrow in Circle)
@@ -670,7 +713,6 @@
     }
   }
 
-
 /* Chat Layout Styles */
 .chat-layout {
     position: relative;
@@ -687,7 +729,6 @@
     }
   }
 
-
   #send-message-button {
     position: static;
     margin-top: 0.1rem;
@@ -700,3 +741,165 @@
       float: right;
     }
   }
+
+// Animation for tool components
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// Tool Event Bubble Styling
+.tool-event-bubble {
+  font-size: 0.85rem;
+  background: rgba(142, 80, 167, 0.08);
+  border: 1px solid rgba(142, 80, 167, 0.2);
+  border-radius: 16px;
+  padding: 6px 12px;
+  color: #8e50a7;
+  display: inline-flex;
+  align-items: center;
+  max-width: fit-content;
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+  box-shadow: none;
+  transition: all 0.2s ease;
+
+  &:first-child {
+    margin-top: 0;
+  }
+
+  &:hover {
+    background: rgba(142, 80, 167, 0.12);
+    transform: none;
+    box-shadow: none;
+  }
+
+  .tool-loading-spinner {
+    color: #8e50a7;
+    border-color: #8e50a7 transparent #8e50a7 transparent;
+    margin-left: 8px;
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+  }
+
+  i {
+    margin-right: 6px;
+    color: #8e50a7;
+  }
+}
+
+.tool-events-container {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+// Tool Result Card Styling (from POC)
+.tool-result-card {
+  border: 1px solid rgba(142, 80, 167, 0.15);
+  border-radius: 12px;
+  padding: 1rem;
+  background: rgba(142, 80, 167, 0.02);
+  margin: 0.5rem 0 1rem;
+  transition: all 0.2s ease;
+  box-shadow: none;
+
+  &:hover {
+    background: rgba(142, 80, 167, 0.04);
+    border-color: rgba(142, 80, 167, 0.25);
+    transform: none;
+    box-shadow: none;
+  }
+
+  .d-flex.align-items-center {
+    color: #8e50a7;
+    font-weight: 500;
+    font-size: 0.85rem;
+
+    i {
+      color: #8e50a7;
+    }
+
+    strong {
+      font-weight: 600;
+    }
+  }
+
+  .show-toggle {
+    color: $numa-primary;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0;
+    user-select: none;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: darken($numa-primary, 10%);
+      text-decoration: underline;
+    }
+  }
+
+  .card-summary {
+    margin-bottom: 0.5rem;
+    color: #6c757d;
+    font-style: italic;
+  }
+
+  .card-body-content {
+    margin-top: 0.5rem;
+
+    pre {
+      background: #f1f3f4;
+      border-radius: 4px;
+      padding: 0.75rem;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .ws-query {
+      font-size: 0.9rem;
+
+      strong {
+        color: $numa-primary;
+      }
+    }
+
+    .ws-sources ul {
+      padding-left: 1.25rem;
+      margin: 0.5rem 0;
+
+      li {
+        margin-bottom: 0.25rem;
+
+        a {
+          color: $numa-primary;
+          text-decoration: none;
+
+          &:hover {
+            text-decoration: underline;
+          }
+        }
+      }
+    }
+
+    .ws-summary {
+      font-size: 0.9rem;
+
+      strong {
+        color: $numa-primary;
+      }
+    }
+  }
+}
