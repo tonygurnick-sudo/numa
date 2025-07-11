@@ -14,7 +14,7 @@ export class NumaLogGroup extends Construct {
   constructor(scope: Construct, name: string, props: LogGroupProps) {
     super(scope, name);
 
-    const region = new DataAwsRegion(this, 'current-region', {});
+    const region = new DataAwsRegion(this, 'current-region', {}).region;
     const callerIdentity = new DataAwsCallerIdentity(this, 'current-caller', {});
 
     const logGroupPrefix = '/numa/';
@@ -45,7 +45,7 @@ export class NumaLogGroup extends Construct {
                 type: 'Service',
               },
             ],
-            resources: [`arn:aws:logs:${region.name}:${callerIdentity.accountId}:log-group:${logGroupPrefix}*`],
+            resources: [`arn:aws:logs:${region}:${callerIdentity.accountId}:log-group:${logGroupPrefix}*`],
             condition: [
               {
                 test: 'StringEquals',
@@ -54,7 +54,7 @@ export class NumaLogGroup extends Construct {
               },
               {
                 test: 'ArnLike',
-                values: [`arn:aws:logs:${region.name}:${callerIdentity.accountId}:*`],
+                values: [`arn:aws:logs:${region}:${callerIdentity.accountId}:*`],
                 variable: 'aws:SourceArn',
               },
             ],
