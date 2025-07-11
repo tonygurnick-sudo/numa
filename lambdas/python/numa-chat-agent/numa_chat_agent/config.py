@@ -13,6 +13,9 @@ from strands.models.bedrock import BedrockModel
 # ── Environment Variables & Constants ──────────────────────────────────────
 REGION = os.getenv("AWS_REGION", "us-east-1")
 MODEL_ID = os.getenv("MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+FALLBACK_MODEL_ID = os.getenv(
+    "FALLBACK_MODEL_ID", "us.anthropic.claude-3-5-sonnet-20240620-v1:0"
+)
 HAIKU_MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
 
 # WebSocket Configuration
@@ -77,6 +80,47 @@ def get_bedrock_model(model_id=None, streaming: bool = True, temperature: float 
     )
 
 
+def get_fallback_model(streaming: bool = True, temperature: float = 0.15):
+    """Create BedrockModel instance with fallback model configuration."""
+    logger.debug(
+        "Creating fallback BedrockModel",
+        model_id=FALLBACK_MODEL_ID,
+        streaming=streaming,
+        temperature=temperature,
+    )
+
+    return BedrockModel(
+        model_id=FALLBACK_MODEL_ID,
+        streaming=streaming,
+        temperature=temperature,
+    )
+
+
+def is_quota_limit_error(error) -> bool:
+    """
+    Check if an error is related to quota limits or throttling.
+
+    Args:
+        error: The exception to check
+
+    Returns:
+        bool: True if the error indicates quota/throttling issues
+    """
+    # Check AWS SDK error format first
+    if hasattr(error, "response") and error.response:
+        error_code = error.response.get("Error", {}).get("Code", "")
+        http_status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+
+        # AWS Bedrock standard patterns
+        return error_code == "ThrottlingException" or http_status == 429
+
+    # Fallback check for exception class name
+    if hasattr(error, "__class__"):
+        return error.__class__.__name__ == "ThrottlingException"
+
+    return False
+
+
 # ── Configuration Validation ──────────────────────────────────────────────
 def validate_config():
     """Validate essential configuration values."""
@@ -102,6 +146,7 @@ def validate_config():
     logger.info(
         "Configuration validated successfully",
         model_id=MODEL_ID,
+        fallback_model_id=FALLBACK_MODEL_ID,
         region=REGION,
         preferred_kb=PREFERRED_KNOWLEDGE_BASE,
         connection_table=CONNECTION_TABLE,
@@ -114,6 +159,7 @@ logger = structlog.get_logger()
 logger.info(
     "Configuration loaded",
     model_id=MODEL_ID,
+    fallback_model_id=FALLBACK_MODEL_ID,
     region=REGION,
     preferred_kb=PREFERRED_KNOWLEDGE_BASE,
     qb_configured=bool(QB_APPLICATION_ID and QB_RETRIEVER_ID),
