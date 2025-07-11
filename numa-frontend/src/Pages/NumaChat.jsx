@@ -9,7 +9,7 @@ import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
 import { DataSourcesList } from '../Components/DataSourcesList';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
-import { prepareConversationHistoryForBedrock, MAX_DYNAMO_MESSAGES } from '../utils/bedrockMessageHistoryUtils';
+import { prepareConversationHistoryForChat, MAX_DYNAMO_MESSAGES } from '../utils/bedrockMessageHistoryUtils';
 import { ChatInput } from '../Components/ChatInput';
 import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/ChatMessages';
@@ -545,7 +545,7 @@ Today's Date: ${TODAY}`;
         }
       }
 
-      const bedrockMessages = await prepareConversationHistoryForBedrock(conversationHistory, getCredentials);
+      const bedrockMessages = await prepareConversationHistoryForChat(conversationHistory, getCredentials);
 
       // Validate message format
       const validatedMessages = bedrockMessages.map((msg) => {

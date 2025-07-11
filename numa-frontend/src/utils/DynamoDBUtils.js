@@ -343,6 +343,59 @@ class NumaChatDynamoUtils {
       throw error;
     }
   }
+
+  /**
+   * Add a tool message (tool_call or tool_result) with tool metadata.
+   *
+   * @param {Object} opts
+   * @param {string} opts.conversationId - unique conversation ID
+   * @param {string} opts.userId - unique user ID (Cognito sub)
+   * @param {string} opts.messageType - "tool_call" or "tool_result"
+   * @param {string} opts.toolName - name of the tool (e.g., "query_knowledge_base")
+   * @param {string} opts.toolUseId - unique tool use ID for pairing calls with results
+   * @param {object} opts.toolPayload - the complete tool call or result payload
+   * @param {string} [opts.content] - optional summary text for display
+   */
+  async addToolMessage({
+    conversationId,
+    userId,
+    messageType, // 'tool_call' or 'tool_result'
+    toolName,
+    toolUseId,
+    toolPayload,
+    content = null,
+  }) {
+    try {
+      const timestamp = Date.now();
+      const sk = `${conversationId}#${timestamp}`;
+
+      const item = {
+        // DynamoDB PK and SK:
+        user_id: userId,
+        sk,
+
+        // Additional attributes:
+        conversation_id: conversationId,
+        timestamp,
+        message_type: messageType,
+        role: 'assistant', // Tools are always associated with assistant responses
+        content: content || `${messageType}: ${toolName}`,
+        tool_name: toolName,
+        tool_use_id: toolUseId,
+        tool_payload: toolPayload,
+      };
+
+      const command = new PutItemCommand({
+        TableName: this.tableName,
+        Item: marshall(item, { removeUndefinedValues: true }),
+      });
+
+      await this.dynamoDBClient.send(command);
+      console.log(`Tool message (${messageType}) added to conversation ${conversationId}`);
+    } catch (error) {
+      console.error(`Error adding tool message to conversation ${conversationId}:`, error);
+    }
+  }
 }
 
 export { NumaChatDynamoUtils };
