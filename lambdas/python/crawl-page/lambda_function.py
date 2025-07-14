@@ -84,6 +84,9 @@ def _parse_html(html: str, url: str) -> tuple[str, str, List[str]]:
             link
             and urlparse(link).netloc == base_domain
             and link not in same_host_links
+            and not link.lower().endswith(
+                (".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt")
+            )
         ):
             same_host_links.append(link)
             if len(same_host_links) >= MAX_SAME_HOST_LINKS:

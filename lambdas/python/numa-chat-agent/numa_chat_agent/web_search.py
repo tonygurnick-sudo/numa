@@ -17,13 +17,20 @@ from .summarization import summarize_combined_content
 logger = structlog.get_logger()
 
 
-def google_search(query: str, max_results: int = 2, max_retries: int = 3) -> List[str]:
+def _is_processable_url(url: str) -> bool:
+    """Check if URL should be processed based on file extension."""
+    return not url.lower().endswith(
+        (".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt")
+    )
+
+
+def google_search(query: str, max_results: int = 3, max_retries: int = 3) -> List[str]:
     """
     Perform a Google search with retry logic for rate limiting.
 
     Args:
         query: The search query string
-        max_results: Maximum number of results to return (default: 2)
+        max_results: Maximum number of results to return (default: 3)
         max_retries: Maximum number of retry attempts (default: 3)
 
     Returns:
@@ -94,6 +101,15 @@ def scrape_page(url: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing title, URL, content snippet, and success status
     """
+    if not _is_processable_url(url):
+        logger.info("Skipping non-processable URL in scrape_page", url=url)
+        return {
+            "title": "",
+            "url": url,
+            "snippet": "",
+            "success": False,
+            "error_type": "non_processable_url",
+        }
     # Browser-like headers to improve scraping success
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
@@ -242,14 +258,14 @@ def scrape_page(url: str) -> Dict[str, Any]:
         }
 
 
-def web_search_impl(query: str, user_intent: str, max_results: int = 2):
+def web_search_impl(query: str, user_intent: str, max_results: int = 3):
     """
     Implementation of web search functionality.
 
     Args:
         query: Natural language search query for general information
         user_intent: Description of what the user is trying to accomplish
-        max_results: Maximum number of results to return (default: 2, max: 10)
+        max_results: Maximum number of results to return (default: 3, max: 10)
 
     Returns:
         Dictionary with search results and status
@@ -284,6 +300,10 @@ def web_search_impl(query: str, user_intent: str, max_results: int = 2):
         failed_scrapes = 0
 
         for url in urls:
+            if not _is_processable_url(url):
+                logger.info("Skipping non-processable URL", url=url)
+                continue
+
             result = scrape_page(url)
             # Track success/failure for logging
             if result.get("success"):
