@@ -70,15 +70,38 @@ function filterTree(node, searchTerm) {
 }
 
 /**
- * Sort folders and files by name (alphabetical).
+ * Sort folders and files by specified column and direction.
+ * @param {Object} node - The tree node to sort
+ * @param {string} sortColumn - Column to sort by ('name', 'date', 'size')
+ * @param {string} sortDirection - Direction to sort ('asc', 'desc')
  */
-function sortTree(node) {
+function sortTree(node, sortColumn = 'name', sortDirection = 'asc') {
+  // Sort files based on the specified column and direction
   node.files.sort((a, b) => {
-    const A = a.Key.split('/').pop().toLowerCase();
-    const B = b.Key.split('/').pop().toLowerCase();
-    return A.localeCompare(B);
+    let comparison = 0;
+    const multiplier = sortDirection === 'asc' ? 1 : -1;
+    switch (sortColumn) {
+      case 'date':
+        // Sort by LastModified date
+        comparison = new Date(a.LastModified) - new Date(b.LastModified);
+        break;
+      case 'size':
+        // Sort by Size
+        comparison = a.Size - b.Size;
+        break;
+      case 'name':
+      default: {
+        // Sort by filename (default)
+        const A = a.Key.split('/').pop().toLowerCase();
+        const B = b.Key.split('/').pop().toLowerCase();
+        comparison = A.localeCompare(B);
+        break;
+      }
+    }
+    return comparison * multiplier;
   });
 
+  // Always sort folders alphabetically
   const sortedChildren = {};
   Object.keys(node.children)
     .sort((a, b) => a.localeCompare(b))
@@ -87,8 +110,9 @@ function sortTree(node) {
     });
   node.children = sortedChildren;
 
+  // Recursively sort children
   for (const child of Object.values(node.children)) {
-    sortTree(child);
+    sortTree(child, sortColumn, sortDirection);
   }
 }
 
@@ -275,6 +299,12 @@ export function S3Uploader() {
 
   const [expandedFoldersPending, setExpandedFoldersPending] = useState(new Set());
   const [expandedFoldersIndexed, setExpandedFoldersIndexed] = useState(new Set());
+
+  // Sorting state
+  const [pendingSortColumn, setPendingSortColumn] = useState('name');
+  const [pendingSortDirection, setPendingSortDirection] = useState('asc');
+  const [indexedSortColumn, setIndexedSortColumn] = useState('name');
+  const [indexedSortDirection, setIndexedSortDirection] = useState('asc');
 
   const [kbDocuments, setKbDocuments] = useState([]);
   const [kbStateError, setKbStateError] = useState(null);
@@ -667,16 +697,16 @@ export function S3Uploader() {
   const pendingTree = useMemo(() => {
     const tree = buildFileTree(pendingFiles);
     const filtered = filterTree(tree, pendingSearch);
-    sortTree(filtered);
+    sortTree(filtered, pendingSortColumn, pendingSortDirection);
     return filtered;
-  }, [pendingFiles, pendingSearch]);
+  }, [pendingFiles, pendingSearch, pendingSortColumn, pendingSortDirection]);
 
   const indexedTree = useMemo(() => {
     const tree = buildFileTree(indexedFiles);
     const filtered = filterTree(tree, indexedSearch);
-    sortTree(filtered);
+    sortTree(filtered, indexedSortColumn, indexedSortDirection);
     return filtered;
-  }, [indexedFiles, indexedSearch]);
+  }, [indexedFiles, indexedSearch, indexedSortColumn, indexedSortDirection]);
 
   /**
    * Convert each tree to nested row objects, then flatten them
@@ -705,6 +735,31 @@ export function S3Uploader() {
     const newSet = new Set(expandedFoldersIndexed);
     newSet.has(folderId) ? newSet.delete(folderId) : newSet.add(folderId);
     setExpandedFoldersIndexed(newSet);
+  }
+
+  /**
+   * Handle column sort toggle
+   * @param {string} column - Column to sort by ('name', 'date', 'size')
+   * @param {string} tableType - Table type ('pending' or 'indexed')
+   */
+  function handleSortToggle(column, tableType) {
+    if (tableType === 'pending') {
+      // If clicking the same column, toggle direction; otherwise, set new column with 'asc' direction
+      if (column === pendingSortColumn) {
+        setPendingSortDirection(pendingSortDirection === 'asc' ? 'desc' : 'asc');
+      } else {
+        setPendingSortColumn(column);
+        setPendingSortDirection('asc');
+      }
+    } else {
+      // Same logic for indexed table
+      if (column === indexedSortColumn) {
+        setIndexedSortDirection(indexedSortDirection === 'asc' ? 'desc' : 'asc');
+      } else {
+        setIndexedSortColumn(column);
+        setIndexedSortDirection('asc');
+      }
+    }
   }
 
   /**
@@ -770,56 +825,100 @@ export function S3Uploader() {
                 </div>
               ) : (
                 <div className={containerClass}>
-                  {/* Bulk Delete Action Bar */}
+                  {/* Bulk Delete Action Bar - Always visible but conditionally enabled */}
                   <FeatureWrapper requiredFeature="deleteFromCompanyData">
-                    {(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed).size >
-                      0 && (
-                      <div className="d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded sticky-action-bar">
-                        <span className="text-muted">
-                          {(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed).size}{' '}
-                          item(s) selected
-                        </span>
-                        <div>
-                          <Button
-                            variant="outline-secondary"
-                            size="sm"
-                            className="me-2"
-                            onClick={() =>
-                              handleClearSelection(expandedSet === expandedFoldersPending ? 'pending' : 'indexed')
-                            }
-                          >
-                            Clear Selection
-                          </Button>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            className="me-2"
-                            onClick={() =>
-                              handleSelectAll(expandedSet === expandedFoldersPending ? 'pending' : 'indexed', rows)
-                            }
-                          >
-                            Select All
-                          </Button>
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() =>
-                              confirmBulkDelete(expandedSet === expandedFoldersPending ? 'pending' : 'indexed')
-                            }
-                          >
-                            <i className="bi bi-trash me-1"></i>
-                            Delete Selected
-                          </Button>
-                        </div>
+                    <div
+                      className={`d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded sticky-action-bar ${(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed).size === 0 ? 'no-selection' : ''}`}
+                    >
+                      <span className="text-muted">
+                        {(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed).size ||
+                          0}{' '}
+                        item(s) selected
+                      </span>
+                      <div>
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          className="me-2"
+                          disabled={
+                            (expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
+                              .size === 0
+                          }
+                          onClick={() =>
+                            handleClearSelection(expandedSet === expandedFoldersPending ? 'pending' : 'indexed')
+                          }
+                        >
+                          <i className="bi bi-x-circle me-1"></i>
+                          Clear
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="me-2"
+                          disabled={
+                            (expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
+                              .size === rows.length
+                          }
+                          onClick={() =>
+                            handleSelectAll(expandedSet === expandedFoldersPending ? 'pending' : 'indexed', rows)
+                          }
+                        >
+                          <i className="bi bi-check-all me-1"></i>
+                          Select All
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          disabled={
+                            (expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
+                              .size === 0
+                          }
+                          onClick={() =>
+                            confirmBulkDelete(expandedSet === expandedFoldersPending ? 'pending' : 'indexed')
+                          }
+                        >
+                          <i className="bi bi-trash me-1"></i>
+                          Delete
+                        </Button>
                       </div>
-                    )}
+                    </div>
                   </FeatureWrapper>
                   <Table hover size="sm" className="mb-0 file-table">
                     <thead className="sticky-table-header">
                       <tr>
-                        <th className={`col-name ${showErrorColumn ? 'with-error-column' : ''}`}>Name</th>
-                        <th className="col-date">Upload Date</th>
-                        <th className="col-size">Size (KB)</th>
+                        <th
+                          className={`col-name ${showErrorColumn ? 'with-error-column' : ''} sortable-header`}
+                          onClick={() => handleSortToggle('name', isPending ? 'pending' : 'indexed')}
+                        >
+                          Name
+                          {(isPending ? pendingSortColumn : indexedSortColumn) === 'name' && (
+                            <i
+                              className={`bi bi-arrow-${(isPending ? pendingSortDirection : indexedSortDirection) === 'asc' ? 'up' : 'down'} ms-1`}
+                            ></i>
+                          )}
+                        </th>
+                        <th
+                          className="col-date sortable-header"
+                          onClick={() => handleSortToggle('date', isPending ? 'pending' : 'indexed')}
+                        >
+                          Upload Date
+                          {(isPending ? pendingSortColumn : indexedSortColumn) === 'date' && (
+                            <i
+                              className={`bi bi-arrow-${(isPending ? pendingSortDirection : indexedSortDirection) === 'asc' ? 'up' : 'down'} ms-1`}
+                            ></i>
+                          )}
+                        </th>
+                        <th
+                          className="col-size sortable-header"
+                          onClick={() => handleSortToggle('size', isPending ? 'pending' : 'indexed')}
+                        >
+                          Size (KB)
+                          {(isPending ? pendingSortColumn : indexedSortColumn) === 'size' && (
+                            <i
+                              className={`bi bi-arrow-${(isPending ? pendingSortDirection : indexedSortDirection) === 'asc' ? 'up' : 'down'} ms-1`}
+                            ></i>
+                          )}
+                        </th>
                         {showErrorColumn && <th className="col-status">Status</th>}
                         <FeatureWrapper requiredFeature="deleteFromCompanyData">
                           <th className="col-select">Select</th>
