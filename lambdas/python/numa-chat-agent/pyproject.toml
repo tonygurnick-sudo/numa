@@ -17,7 +17,7 @@ description = "A Python agent for Numa Chat"
 authors = ["ArcanumAI"]
 readme = "README.md"
 packages = [
-  { include = "numa_chat_agent" }
+    { include = "**/*.py" },
 ]
 
 [tool.poetry.dependencies]
