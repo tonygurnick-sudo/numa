@@ -61,7 +61,7 @@ popd
 
 # remove files that aren't required and contain paths that can differ based on clone location
 rm -r "${BUILD_DIR:?}/bin"
-find "${BUILD_DIR}" -type d -name "*.dist-info" -exec rm -r "{}" +
+find "${BUILD_DIR}" -type d -name "*.dist-info" -not -name '*opentelemetry*' -exec rm -r "{}" +
 
 # make sure full history is available to make git log reliable
 if test -f "${GIT_DIR}/shallow"; then
