@@ -11,6 +11,7 @@ import { Apigatewayv2ApiMapping } from '@cdktf/provider-aws/lib/apigatewayv2-api
 import { Apigatewayv2Authorizer } from '@cdktf/provider-aws/lib/apigatewayv2-authorizer';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { AcmCertificate } from '@cdktf/provider-aws/lib/acm-certificate';
+import { AcmCertificateValidation } from '@cdktf/provider-aws/lib/acm-certificate-validation';
 import { Route53Record } from '@cdktf/provider-aws/lib/route53-record';
 import { DataAwsRoute53Zone } from '@cdktf/provider-aws/lib/data-aws-route53-zone';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
@@ -396,17 +397,21 @@ export class NumaChatAgentWebSocket extends Construct {
     const cert = new AcmCertificate(this, `ws-cert`, {
       domainName: props.domainName,
       validationMethod: 'DNS',
-      provider: props.certificateProvider,
     });
 
     const dvo = cert.domainValidationOptions.get(0);
-    const certValidation = new Route53Record(this, 'cert-validation', {
+    const certValidationRecord = new Route53Record(this, 'cert-validation', {
       provider: props.hostedZoneProvider,
       zoneId: zone.zoneId,
       name: dvo.resourceRecordName,
       type: dvo.resourceRecordType,
       ttl: 300,
       records: [dvo.resourceRecordValue],
+    });
+
+    const certValidation = new AcmCertificateValidation(this, 'cert-validation-resource', {
+      certificateArn: cert.arn,
+      dependsOn: [certValidationRecord],
     });
 
     const wsDomain = new Apigatewayv2DomainName(this, 'ws-domain', {
