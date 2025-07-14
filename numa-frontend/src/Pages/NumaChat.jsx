@@ -286,6 +286,10 @@ Today's Date: ${TODAY}`;
     setConversationId(null);
     setInlineDocument(null);
 
+    // Reset split view state - hide document panel
+    setShowSplitView(false);
+    setLeftFraction(0.99); // Reset to full chat view
+
     // Reset the stop generation flag after a short delay
     setTimeout(() => {
       stopGenerationRef.current = false;
