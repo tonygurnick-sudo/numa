@@ -35,7 +35,7 @@ from numa_chat_agent import (
     set_current_user_auth,
 )
 from numa_chat_agent.config import FALLBACK_MODEL_ID, is_quota_limit_error
-from numa_chat_agent.utils import extract_preview
+from numa_chat_agent.utils import convert_tool_blocks_to_text, extract_preview
 from numa_chat_agent.websocket import send_error_message
 
 # Initialize structured logger
@@ -71,6 +71,12 @@ def handler(event, _ctx):
     system_prompt = event.get("systemPrompt", "")
     model_id = event.get("modelId")  # Extract model ID from event, may be None
     user_auth = event.get("userAuth")
+
+    # Convert tool blocks to text when no tools are enabled
+    # This prevents ValidationException when conversation history contains tool blocks
+    # but no toolConfig is provided
+    if not enabled_tools:
+        messages = convert_tool_blocks_to_text(messages)
 
     # Build WebSocket endpoint URL for API Gateway Management API
     endpoint_url = build_websocket_endpoint(request_context)
