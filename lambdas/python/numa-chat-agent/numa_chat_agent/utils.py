@@ -146,3 +146,64 @@ def log_token_usage(model_id: str, usage_stats: dict, context: str = ""):
         output_tokens=output_tokens,
         total_tokens=total_tokens,
     )
+
+
+def convert_tool_blocks_to_text(messages):
+    """
+    Convert toolUse and toolResult blocks to JSON text.
+
+    This prevents AWS Bedrock ValidationException when conversation history contains
+    tool blocks but no toolConfig is provided (which happens when tools are disabled).
+
+    Args:
+        messages (list): List of conversation messages
+
+    Returns:
+        list: Messages with tool blocks converted to text blocks
+    """
+    logger.info("Converting tool blocks to text (tools disabled)")
+    converted_messages = []
+    tool_blocks_converted = 0
+
+    for message in messages:
+        content = message.get("content", [])
+        if not isinstance(content, list):
+            converted_messages.append(message)
+            continue
+
+        converted_content = []
+
+        for block in content:
+            if isinstance(block, dict) and (
+                "toolUse" in block or "toolResult" in block
+            ):
+                # Convert tool block to formatted JSON string
+                converted_content.append(
+                    {
+                        "text": json.dumps(block, indent=2, ensure_ascii=False),
+                    }
+                )
+                tool_blocks_converted += 1
+                logger.debug(
+                    "Converted tool block to text",
+                    block_type="toolUse" if "toolUse" in block else "toolResult",
+                    tool_name=(
+                        block.get("toolUse", {}).get("name", "unknown")
+                        if "toolUse" in block
+                        else "N/A"
+                    ),
+                )
+            else:
+                # Keep non-tool blocks unchanged
+                converted_content.append(block)
+
+        converted_messages.append({**message, "content": converted_content})
+
+    if tool_blocks_converted > 0:
+        logger.info(
+            "Tool block conversion completed",
+            blocks_converted=tool_blocks_converted,
+            total_messages=len(messages),
+        )
+
+    return converted_messages
