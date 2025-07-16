@@ -67,11 +67,14 @@ def should_ignore_log(log_entry: Dict[str, Any], config: Dict[str, Any]) -> bool
     return False
 
 
-def check_for_cached_analysis(log_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def check_for_cached_analysis(
+    log_entry: Dict[str, Any], recent_objects: List[str]
+) -> Optional[Dict[str, Any]]:
     """Check if this log entry has been analyzed before in the last 30 days
 
     Args:
         log_entry: The log entry to check for cached analysis
+        recent_objects: Pre-filtered list of S3 objects from recent analysis runs
 
     Returns:
         The cached analysis result if found, otherwise None
@@ -88,40 +91,10 @@ def check_for_cached_analysis(log_entry: Dict[str, Any]) -> Optional[Dict[str, A
     # Create a composite key for cache lookup
     cache_key = f"{client_id}:{task_description}:{message_start}"
 
-    # Get the current date and the date 30 days ago
-    now = datetime.datetime.utcnow()
-
-    # Use yesterday as the upper bound (exclude today)
-    yesterday = now - datetime.timedelta(days=1)
-    thirty_days_ago = now - datetime.timedelta(days=CACHE_LOOKBACK_DAYS)
-
-    # Format dates for S3 key filtering
-    yesterday_str = yesterday.strftime("%Y-%m-%d")
-    thirty_days_ago_str = thirty_days_ago.strftime("%Y-%m-%d")
-
-    # List objects in the logs_analysed directory for the last 30 days
-    logs_analysed_prefix = "beyond-expectations/logs_analysed/"
-    objects = s3_helpers.list_objects(logs_analysed_prefix)
-
-    # Filter objects to only include those from the previous 30 days (excluding today)
-    recent_objects = []
-    for obj in objects:
-        # Extract date from the key
-        # Format: beyond-expectations/logs_analysed/YYYY-MM-DD/chunk-X.json
-        try:
-            if obj.endswith(".json"):
-                date_part = obj.split("/")[-2]  # e.g., "2025-05-09"
-                # Only include dates up to yesterday (exclude today)
-                if thirty_days_ago_str <= date_part <= yesterday_str:
-                    recent_objects.append(obj)
-        except (IndexError, ValueError):
-            continue
-
-    logger.info(
+    logger.debug(
         "Checking for cached analysis",
         cache_key=cache_key,
         recent_objects_count=len(recent_objects),
-        date_range=f"{thirty_days_ago_str} to {yesterday_str}",
     )
 
     # Look for cached analysis in each file
@@ -225,6 +198,48 @@ def analyze_logs_with_bedrock(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
             "all_results": [],
         }
 
+    # Pre-fetch and filter S3 objects for cache lookups (performance optimization)
+    # This is done once instead of once per log entry
+    try:
+        # Get the current date and the date 30 days ago
+        now = datetime.datetime.utcnow()
+        yesterday = now - datetime.timedelta(days=1)
+        thirty_days_ago = now - datetime.timedelta(days=CACHE_LOOKBACK_DAYS)
+
+        # Format dates for S3 key filtering
+        yesterday_str = yesterday.strftime("%Y-%m-%d")
+        thirty_days_ago_str = thirty_days_ago.strftime("%Y-%m-%d")
+
+        # List objects in the logs_analysed directory for the last 30 days
+        logs_analysed_prefix = "beyond-expectations/logs_analysed/"
+        objects = s3_helpers.list_objects(logs_analysed_prefix)
+
+        # Filter objects to only include those from the previous 30 days (excluding today)
+        recent_objects = []
+        for obj in objects:
+            # Extract date from the key
+            # Format: beyond-expectations/logs_analysed/YYYY-MM-DD/chunk-X.json
+            try:
+                if obj.endswith(".json"):
+                    date_part = obj.split("/")[-2]  # e.g., "2025-05-09"
+                    # Only include dates up to yesterday (exclude today)
+                    if thirty_days_ago_str <= date_part <= yesterday_str:
+                        recent_objects.append(obj)
+            except (IndexError, ValueError):
+                continue
+
+        logger.info(
+            "Pre-fetched S3 objects for cache lookups",
+            recent_objects_count=len(recent_objects),
+            date_range=f"{thirty_days_ago_str} to {yesterday_str}",
+        )
+    except Exception as e:
+        logger.warning(
+            "Error pre-fetching S3 objects for cache, proceeding without cache",
+            error=str(e),
+        )
+        recent_objects = []
+
     # Process logs in batches of 5
     all_results = []
     batch_size = 5
@@ -250,7 +265,7 @@ def analyze_logs_with_bedrock(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
             continue
 
         # Then check if there's a cached analysis for this log
-        cached_result = check_for_cached_analysis(log)
+        cached_result = check_for_cached_analysis(log, recent_objects)
 
         if cached_result:
             # Use the cached result
@@ -286,6 +301,21 @@ def analyze_logs_with_bedrock(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Format log entries for the batch
         formatted_batch = []
         for log in batch:
+            # Truncate message and task description to prevent token limit issues
+            raw_message = log.get("Message", "")
+            raw_task_description = log.get("TaskDescription", "")
+
+            truncated_message = (
+                raw_message[:MAX_MESSAGE_LENGTH] + "..."
+                if len(raw_message) > MAX_MESSAGE_LENGTH
+                else raw_message
+            )
+            truncated_task_description = (
+                raw_task_description[:MAX_TASK_DESCRIPTION_LENGTH] + "..."
+                if len(raw_task_description) > MAX_TASK_DESCRIPTION_LENGTH
+                else raw_task_description
+            )
+
             formatted_log = {
                 "id": log.get("Id"),
                 "timestamp": log.get("DateTimeUtc"),
@@ -294,9 +324,9 @@ def analyze_logs_with_bedrock(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "parent_client_id": log.get("ParentClientId"),
                 "parent_client_name": log.get("ParentClientName"),
                 "task_id": log.get("TaskId"),
-                "task_description": log.get("TaskDescription"),
+                "task_description": truncated_task_description,
                 "admin_only": log.get("AdminOnly"),
-                "message": log.get("Message"),
+                "message": truncated_message,
                 "occurrences": log.get("occurrences", 1),
                 "first_occurrence": log.get("first_occurrence"),
                 "last_occurrence": log.get("last_occurrence"),
