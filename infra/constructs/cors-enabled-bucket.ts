@@ -9,6 +9,7 @@ export interface NumaCorsEnabledBucketProps extends S3BucketConfig {
   environmentName: string;
   bucketName: string;
   clientAccountId: string;
+  origin: string;
   addTestObject?: boolean;
   allowedMethods?: string[];
   /**
@@ -25,7 +26,7 @@ export class NumaCorsEnabledBucket extends PrivateBucket {
     const { clientName, environmentName, bucketName, addTestObject = false, ...bucketConfig } = props;
     const envSuffix = environmentName != 'prod' ? `-${environmentName}` : '';
 
-    const allowedOrigins = [`https://${clientName}.numa.arcanum.ai`];
+    const allowedOrigins = [`https://${props.origin}`];
     if (props.allowLocalhostOrigin ?? false) {
       allowedOrigins.push('http://localhost:5173');
     }

@@ -211,6 +211,7 @@ export class CoreNumaInfra extends Construct {
     this.dataBucket = new NumaCorsEnabledBucket(this, 'data-source-bucket', {
       bucketName: 'data',
       clientName: props.clientName,
+      origin: props.domainName,
       environmentName: props.environmentName,
       clientAccountId: props.clientAccountId,
       allowedMethods: ['GET', 'PUT', 'POST', 'DELETE'],
@@ -223,6 +224,7 @@ export class CoreNumaInfra extends Construct {
     const companyBucket = new NumaCorsEnabledBucket(this, 'company-data-bucket', {
       bucketName: 'company',
       clientName: props.clientName,
+      origin: props.domainName,
       environmentName: props.environmentName,
       clientAccountId: props.clientAccountId,
       allowedMethods: ['GET', 'PUT', 'POST', 'DELETE'],
@@ -233,6 +235,7 @@ export class CoreNumaInfra extends Construct {
     // Create outputs bucket
     this.outputsBucket = new NumaCorsEnabledBucket(this, 'outputs-bucket', {
       clientName: props.clientName,
+      origin: props.domainName,
       clientAccountId: props.clientAccountId,
       environmentName: props.environmentName,
       bucketName: 'outputs',
