@@ -24,6 +24,16 @@
     padding: 1rem;
   }
 
+  // Action bar styling
+  .sticky-action-bar {
+    transition: opacity 0.2s ease-in-out, background-color 0.2s ease-in-out;
+
+    &.no-selection {
+      opacity: 0.7;
+      background-color: #f8f9fa !important;
+    }
+  }
+
   // Main file table
   .file-table {
     table-layout: fixed;
@@ -32,6 +42,25 @@
 
     th {
       cursor: default;
+      position: sticky;
+      top: 0;
+      background-color: #f8f9fa;
+      z-index: 10;
+      border-bottom: 2px solid #dee2e6;
+
+      &.sortable-header {
+        cursor: pointer;
+        user-select: none;
+        transition: background-color 0.2s;
+
+        &:hover {
+          background-color: #e9ecef;
+        }
+
+        i {
+          color: #4b007d;
+        }
+      }
 
       &.col-name {
         width: 60%;
