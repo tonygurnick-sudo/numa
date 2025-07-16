@@ -143,11 +143,20 @@ const CompanyInfo = () => {
                           rows={15}
                           value={companyProfile}
                           onChange={(e) => setCompanyProfile(e.target.value)}
+                          maxLength={10000}
                           placeholder="Enter a detailed description of your company, including its mission, values, and any other information that would be helpful for users interacting with your AI assistant."
                         />
-                        <Form.Text className="text-muted">
+                        <Form.Text className="d-block mt-2 mb-1 text-muted">
+                          Character count: {companyProfile.length}/10000
+                        </Form.Text>
+                        <Form.Text className="d-block mb-1 text-muted">
                           This information will be available to all users in chat interactions.
                         </Form.Text>
+                        {companyProfile.length > 3000 && (
+                          <Form.Text className="d-block mb-1 text-warning">
+                            Note: Only the first ~3000 characters will be used in chat context.
+                          </Form.Text>
+                        )}
                       </Form.Group>
 
                       {lastUpdated && (

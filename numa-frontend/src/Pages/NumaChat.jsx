@@ -582,7 +582,7 @@ Today's Date: ${TODAY}`;
         system: [
           {
             text: isCompanyProfileLoaded
-              ? enhanceSystemPromptWithCompanyInfo(SYSTEM_MESSAGE, companyProfile)
+              ? enhanceSystemPromptWithCompanyInfo(SYSTEM_MESSAGE, companyProfile, 3000)
               : SYSTEM_MESSAGE,
           },
         ],

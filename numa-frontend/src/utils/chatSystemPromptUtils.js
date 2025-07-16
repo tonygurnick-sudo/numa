@@ -4,11 +4,25 @@ import { fetchCompanyInfo, getProfileText } from './companyInfoUtils';
  * Enhances the base system prompt with company profile information
  * @param {string} basePrompt - The base system prompt
  * @param {string} companyProfile - Optional pre-loaded company profile text
+ * @param {number} [maxLength=3000] - Maximum character length for company profile in chat context
  * @returns {string} - Enhanced system prompt with company profile
  */
-export const enhanceSystemPromptWithCompanyInfo = (basePrompt, companyProfile) => {
+export const enhanceSystemPromptWithCompanyInfo = (basePrompt, companyProfile, maxLength = 3000) => {
   if (!companyProfile || companyProfile.trim() === '') {
     return basePrompt;
+  }
+
+  // Truncate company profile if it exceeds the maximum length
+  let truncatedProfile = companyProfile;
+  let truncationNote = '';
+
+  if (companyProfile.length > maxLength) {
+    // Find a good breaking point (end of a sentence) near the maxLength
+    const breakPoint = companyProfile.substring(0, maxLength).lastIndexOf('.');
+    const actualBreakPoint = breakPoint > 0 ? breakPoint + 1 : maxLength;
+
+    truncatedProfile = companyProfile.substring(0, actualBreakPoint).trim();
+    truncationNote = '\n\n[Note: Company profile has been truncated for chat context]';
   }
 
   // Split the base prompt to insert company info before user information
@@ -16,11 +30,11 @@ export const enhanceSystemPromptWithCompanyInfo = (basePrompt, companyProfile) =
 
   if (basePrompt.includes(userInfoSplit)) {
     const [beforeUserInfo, afterUserInfo] = basePrompt.split(userInfoSplit);
-    return `${beforeUserInfo.trim()}\n\n**Company Information:**\n${companyProfile}\n\n${userInfoSplit}${afterUserInfo}`;
+    return `${beforeUserInfo.trim()}\n\n**Company Information:**\n${truncatedProfile}${truncationNote}\n\n${userInfoSplit}${afterUserInfo}`;
   }
 
   // If we can't find the split point, just append company info to the end
-  return `${basePrompt}\n\n**Company Information:**\n${companyProfile}`;
+  return `${basePrompt}\n\n**Company Information:**\n${truncatedProfile}${truncationNote}`;
 };
 
 /**
