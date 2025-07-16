@@ -61,6 +61,8 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   const [region, setRegion] = useState();
 
   const fileInputRef = useRef(null);
+  // Single promise to ensure atomic job creation across concurrent uploads
+  const jobCreationPromiseRef = useRef(null);
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
   const userUuid = user?.decoded_tokens?.idToken?.sub;
 
@@ -281,18 +283,34 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     // Declare variables outside try block so they're accessible in catch block
     const isChatFileUpload = task?.id === 'chatFileUpload';
     let jobId = currentJobId;
-    let jobCreationPromise = null;
 
     try {
       setError(null);
 
-      if (!isChatFileUpload && !jobId && numaAppData) {
-        jobId = crypto.randomUUID();
-        setCurrentJobId(jobId);
+      // For non-chat uploads, ensure we have a job ID
+      if (!isChatFileUpload && numaAppData) {
+        if (!jobId) {
+          // If no job creation is in progress, start it
+          if (!jobCreationPromiseRef.current) {
+            console.log('Creating new job for file upload');
+            jobCreationPromiseRef.current = jobsApi.createJob(numaAppData, {}, 'uploading');
+          }
 
-        // Start job creation in background (parallel to upload)
-        jobCreationPromise = jobsApi.createJob(numaAppData, { jobId }, 'uploading');
-
+          // Wait for job creation to complete (whether started by this upload or another)
+          try {
+            const jobCreationResult = await jobCreationPromiseRef.current;
+            jobId = jobCreationResult.jobId;
+            setCurrentJobId(jobId);
+            console.log(`Using job ID: ${jobId}`);
+          } catch (error) {
+            console.error('Failed to create job:', error);
+            jobCreationPromiseRef.current = null; // Reset on error
+            throw error;
+          }
+        } else {
+          // Use existing job ID
+          console.log(`Using existing job ID: ${jobId}`);
+        }
         setUploadStatus('Uploading files...');
       }
 
@@ -360,34 +378,41 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       // Create the standardized format objects with id, name, s3_key
       // This is the new format required by the task system
       const fileObjects = results.map((r) => ({
-        id: r.randomId,
-        name: r.fileName,
-        s3_key: r.filePath,
+        id: r.id,
+        name: r.name,
+        s3_key: r.s3_key,
       }));
 
       // Update the job with the standardized file format only if this is not a chat file upload
       if (!isChatFileUpload) {
         try {
-          // Wait for job creation to complete before updating (if it was started in background)
-          if (jobCreationPromise) {
-            setUploadStatus('Finalising job creation...');
-            await jobCreationPromise;
-          }
-
           // Create an object with just this task's input
           // ALWAYS store the standardized format (array of objects with id, name, s3_key)
           const fileInputs = {
             [task.id]: fileObjects,
           };
 
-          // Merge with existing task input values
-          const mergedInputs = { ...taskInputValues, ...fileInputs };
+          // Filter out internal fields from taskInputValues before merging
+          // Only include fields that correspond to actual task IDs
+          const filteredTaskInputValues = {};
+          if (numaAppData?.tasks) {
+            const taskIds = new Set(numaAppData.tasks.map((t) => t.id));
+            Object.entries(taskInputValues).forEach(([key, value]) => {
+              if (taskIds.has(key)) {
+                filteredTaskInputValues[key] = value;
+              }
+            });
+          }
+
+          // Merge with existing task input values (filtered)
+          const mergedInputs = { ...filteredTaskInputValues, ...fileInputs };
 
           // Update the job with the standardized format and status, but don't modify results
           await jobsApi.updateJob(numaAppData, jobId, undefined, mergedInputs, 'files-uploaded');
         } catch (updateError) {
           console.error('Failed to save file paths to job:', updateError);
-          // Continue with the upload process even if the update fails
+          // Don't continue if job update fails - this is a critical error
+          throw new Error(`Upload completed but failed to update job status: ${updateError.message}`);
         }
       }
 
@@ -413,10 +438,8 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       console.error('Error during file upload:', error);
 
       // Handle job cleanup if upload failed but job creation might have succeeded
-      if (!isChatFileUpload && jobCreationPromise && jobId) {
+      if (!isChatFileUpload && jobId) {
         try {
-          await jobCreationPromise;
-
           await jobsApi.updateJob(numaAppData, jobId, null, {}, 'upload-failed');
           console.log(`Marked job ${jobId} as failed due to upload error`);
         } catch (jobError) {

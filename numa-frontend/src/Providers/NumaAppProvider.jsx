@@ -21,7 +21,7 @@ import {
 
 // Provider component
 export const NumaAppProvider = ({ children }) => {
-  const { qAppsClient, getCredentials, user } = useAuth();
+  const { qAppsClient, user } = useAuth();
   const jobsApi = useJobsApi();
 
   const [loading, setLoading] = useState(false);
@@ -50,11 +50,10 @@ export const NumaAppProvider = ({ children }) => {
   const [qCardInputValues, setQCardInputValues] = useState({});
 
   const [jobs, setJobs] = useState([]);
-
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [hasRun, setHasRun] = useState(false);
-  const { numaPost, numaGet } = useNumaRequest();
+  const { numaPost } = useNumaRequest();
 
   const resetAppState = () => {
     setLoading(false);
@@ -298,30 +297,20 @@ export const NumaAppProvider = ({ children }) => {
 
     // Initial request should return success status
     try {
-      const response = await makeHttpRequest(requestPayload, request_endpoint);
+      const response = await numaPost(request_endpoint, requestPayload);
       console.log('Initial http-request response:', response);
 
       if (!response || !response.job_id) {
         throw new Error('No job ID received from initial request');
       }
 
-      // Poll for results
-      const { status, result } = await pollJobStatus({
-        jobId: response.job_id,
-        pollInterval: 10000,
-        maxPollingTime: 30 * 60 * 1000, // 30 minutes
-      });
+      // Poll for results using standardized function
+      const { result } = await pollJobForCompletion(response.job_id);
 
-      if (status === 'completed' && result) {
-        console.log('Task completed successfully');
-        console.log('Task result:', result);
-        currentResults[task.id] = result;
-        return currentResults;
-      }
-
-      throw new Error(
-        'The process exceeded the 30-minute timeout limit. Please check again later via the job history tab.',
-      );
+      console.log('Task completed successfully');
+      console.log('Task result:', result);
+      currentResults[task.id] = result;
+      return currentResults;
     } catch (error) {
       // Log the technical error for debugging
       console.error('HTTP Request task error:', error);
@@ -330,129 +319,30 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
-  const processTextOutputTask = async (task, currentResults) => {
+  // Standardized function for polling job completion - used by both initial runs and history jobs
+  const pollJobForCompletion = async (jobId) => {
     try {
-      console.log('Processing text output task:', task);
-      const outputRef = task.params?.dataRef;
-      console.log('Output reference:', outputRef);
+      const { status, result } = await pollJobStatus({
+        jobId: jobId,
+        pollInterval: 10000,
+        maxPollingTime: 30 * 60 * 1000, // 30 minutes
+      });
 
-      // First get the initial result
-      let outputResult = resolveReference(outputRef, currentResults);
-      console.log('Initial resolved reference result:', outputResult);
-
-      // If the result contains S3 information, fetch and replace the content
-      if (outputResult?.output_bucket && outputResult?.output_key) {
-        console.log('Found S3 information, fetching content...');
-        const credentials = await getCredentials();
-        const s3Content = await fetchS3Content(outputResult.output_bucket, outputResult.output_key, credentials);
-        console.log('Retrieved S3 content:', s3Content);
-
-        // Replace the S3 info with the actual content in currentResults
-        const taskId = outputRef.split('/')[0].replace('@', '');
-        currentResults[taskId] = s3Content;
-
-        // Re-resolve to get the specific path from the content
-        outputResult = resolveReference(outputRef, currentResults);
-        console.log('Re-resolved reference after S3 fetch:', outputResult);
+      if (status === 'completed' && result) {
+        console.log('Job completed successfully');
+        console.log('Job result:', result);
+        return { success: true, result };
       }
 
-      if (outputResult) {
-        let resultToDisplay = outputResult;
-        console.log('Processing result for display:', {
-          type: typeof resultToDisplay,
-          value: resultToDisplay,
-        });
-
-        if (typeof outputResult === 'object') {
-          if (Array.isArray(outputResult) && outputResult.length > 0 && typeof outputResult[0] === 'object') {
-            console.log('Converting array of objects to markdown table');
-            const headers = Object.keys(outputResult[0]);
-            const headerRow = `| ${headers.join(' | ')} |`;
-            const separatorRow = `| ${headers.map(() => '---').join(' | ')} |`;
-            const dataRows = outputResult.map(
-              (item) => `| ${headers.map((header) => item[header] || '').join(' | ')} |`,
-            );
-            resultToDisplay = [headerRow, separatorRow, ...dataRows].join('\n');
-          } else {
-            console.log('Converting object to JSON string');
-            resultToDisplay = '```json\n' + JSON.stringify(outputResult, null, 2) + '\n```';
-          }
-        } else if (typeof outputResult === 'string') {
-          console.log('Processing string output:', {
-            startsWithMarkdown: outputResult.startsWith('```markdown'),
-            containsMarkdownChars: /[#*`[\]()|\n]/.test(outputResult),
-            firstFewChars: outputResult.slice(0, 20),
-          });
-
-          // First check if it's a markdown code block and extract its content
-          const markdownBlockMatch = outputResult.match(/^```markdown\n([\s\S]*)\n```$/);
-          if (markdownBlockMatch) {
-            console.log('Extracted content from markdown block');
-            // Extract the content from inside the markdown block
-            resultToDisplay = markdownBlockMatch[1];
-          } else if (outputResult.includes('```markdown')) {
-            // If it contains markdown blocks but isn't a perfect match (might be inside JSON)
-            try {
-              const parsed = JSON.parse(outputResult);
-              if (parsed.value && typeof parsed.value === 'string') {
-                const valueMarkdownMatch = parsed.value.match(/^```markdown\n([\s\S]*)\n```$/);
-                if (valueMarkdownMatch) {
-                  console.log('Extracted markdown from JSON value');
-                  resultToDisplay = valueMarkdownMatch[1];
-                }
-              }
-            } catch (e) {
-              console.log('Not valid JSON with markdown:', e);
-            }
-          } else {
-            // Check if the string already contains markdown-like formatting
-            const hasMarkdown = /[#*`[\]()|\n]/.test(outputResult);
-            if (!hasMarkdown) {
-              // If it doesn't look like markdown, try to detect if it's JSON or code
-              try {
-                JSON.parse(outputResult);
-                // If it parses as JSON, format it as a code block
-                resultToDisplay = '```json\n' + JSON.stringify(JSON.parse(outputResult), null, 2) + '\n```';
-              } catch {
-                // If it's not JSON and doesn't have markdown, wrap paragraphs
-                resultToDisplay = outputResult
-                  .split('\n\n')
-                  .map((para) => para.trim())
-                  .filter((para) => para)
-                  .join('\n\n');
-              }
-            }
-          }
-          console.log('Final processed string:', {
-            firstFewChars: resultToDisplay.slice(0, 20),
-            length: resultToDisplay.length,
-          });
-        }
-
-        console.log('Final result to display:', resultToDisplay);
-        currentResults[task.id] = resultToDisplay;
-
-        // Update numaTaskResponses with the new result
-        setNumaTaskResponses((prevResponses) => {
-          // Remove any existing response for this task
-          const filteredResponses = prevResponses.filter((r) => r.taskId !== task.id);
-          // Add the new response
-          return [
-            ...filteredResponses,
-            {
-              taskId: task.id,
-              result: resultToDisplay,
-            },
-          ];
-        });
-      } else {
-        console.warn('No output result found for task:', task.id);
+      if (status === 'incomplete') {
+        throw new Error(
+          'The process exceeded the 30-minute timeout limit. Please check again later via the job history tab.',
+        );
       }
 
-      console.log('Updated current results:', currentResults);
-      return currentResults;
+      throw new Error('Job did not complete successfully');
     } catch (error) {
-      console.error('Error in processTextOutputTask:', error);
+      console.error('Job polling error:', error);
       throw error;
     }
   };
@@ -460,8 +350,8 @@ export const NumaAppProvider = ({ children }) => {
   // Shared polling function for both initial tasks and history jobs
   const pollJobStatus = async ({
     jobId,
-    pollInterval = 5000,
-    maxPollingTime = 5 * 60 * 1000,
+    pollInterval = 10000, // Changed from 5000 to 10000 for consistency
+    maxPollingTime = 30 * 60 * 1000, // Changed from 5 * 60 * 1000 to 30 * 60 * 1000 for consistency
     initialState = null,
     onPollSuccess = null,
     shouldContinuePolling = null,
@@ -471,42 +361,61 @@ export const NumaAppProvider = ({ children }) => {
 
     try {
       while (true) {
-        const polling_endpoint = `/api/${numaAppData.id}/main?job_id=${jobId}`;
-        console.log('Polling job:', polling_endpoint);
+        console.log('Polling job from DynamoDB:', jobId);
 
-        const pollResponse = await numaPollStatus(polling_endpoint);
-        console.log('Poll response:', pollResponse);
+        // Use jobsApi to get job status directly from DynamoDB
+        const job = await jobsApi.getJobById(numaAppData.id, jobId);
+        console.log('Raw job object from DynamoDB:', JSON.stringify(job, null, 2));
 
         // For history jobs, check for changes
         if (currentState) {
           const hasChanges =
-            pollResponse.status !== currentState.status ||
-            JSON.stringify(pollResponse.result) !== JSON.stringify(currentState.results);
+            job.status !== currentState.status || JSON.stringify(job.results) !== JSON.stringify(currentState.results);
 
           if (hasChanges) {
             // Update the state with new data
             currentState = {
               ...currentState,
-              status: pollResponse.status,
+              status: job.status,
               lastUpdated: new Date().toISOString(),
-              results: pollResponse.result || currentState.results,
+              results: job.results || currentState.results,
             };
 
             // Call success handler if provided
             if (onPollSuccess) {
-              await onPollSuccess(currentState, pollResponse);
+              await onPollSuccess(currentState, job);
             }
           }
         }
 
         // Check completion status
-        if (pollResponse.status === 'SUCCESS') {
-          if (pollResponse.result) {
-            // Just store the original keys, we'll use findValueWithFormatFlexibility for lookups
+        if (job.status === 'SUCCESS' || job.status === 'completed') {
+          if (job.results) {
+            // Parse the result if it's a JSON string
+            let parsedResult = job.results;
+            if (typeof job.results === 'string') {
+              try {
+                console.log('Parsing result string:', job.results);
+                parsedResult = JSON.parse(job.results);
+                console.log('Parsed result:', parsedResult);
+              } catch (parseError) {
+                console.error('Error parsing result JSON:', parseError);
+                // Keep the original string if parsing fails
+                parsedResult = job.results;
+              }
+            }
+
+            // Format the result
             const formattedResult = {};
-            Object.entries(pollResponse.result).forEach(([key, value]) => {
-              formattedResult[key] = value;
-            });
+            if (typeof parsedResult === 'object' && parsedResult !== null) {
+              Object.entries(parsedResult).forEach(([key, value]) => {
+                formattedResult[key] = value;
+              });
+            } else {
+              // Handle non-object results
+              formattedResult.data = parsedResult;
+            }
+
             return {
               status: 'completed',
               result: formattedResult,
@@ -514,8 +423,8 @@ export const NumaAppProvider = ({ children }) => {
             };
           }
           throw new Error('No result data in successful response');
-        } else if (pollResponse.status === 'FAILURE' || pollResponse.status === 'error') {
-          throw new Error(pollResponse.message || 'Task failed');
+        } else if (job.status === 'FAILURE' || job.status === 'error' || job.status === 'failed') {
+          throw new Error(job.error || 'Task failed');
         }
 
         // Check if we should continue polling
@@ -525,13 +434,13 @@ export const NumaAppProvider = ({ children }) => {
             console.log('Stopping poll: Custom condition met');
             break;
           }
-        } else {
-          // Default polling time check
-          const elapsedTime = Date.now() - startTime;
-          if (elapsedTime > maxPollingTime) {
-            console.log('Stopping poll: Max time reached');
-            break;
-          }
+        }
+
+        // Always check default polling time as a safety net
+        const elapsedTime = Date.now() - startTime;
+        if (elapsedTime > maxPollingTime) {
+          console.log('Stopping poll: Max time reached');
+          break;
         }
 
         // Wait before next poll
@@ -550,10 +459,12 @@ export const NumaAppProvider = ({ children }) => {
     if (
       !jobHistoryItem ||
       jobHistoryItem.status === 'completed' ||
+      jobHistoryItem.status === 'SUCCESS' ||
       jobHistoryItem.status === 'error' ||
+      jobHistoryItem.status === 'FAILURE' ||
       jobHistoryItem.status === 'files-uploaded'
     ) {
-      // Skip polling for 'files-uploaded' jobs
+      // Skip polling for completed jobs or 'files-uploaded' jobs
       return jobHistoryItem;
     }
 
@@ -576,7 +487,18 @@ export const NumaAppProvider = ({ children }) => {
       console.log('Loading job inputs:', jobHistoryItem.inputs);
       if (jobHistoryItem.inputs) {
         console.log('Setting taskInputValues from job inputs');
-        setTaskInputValues(jobHistoryItem.inputs);
+        // Filter out internal fields from inputs before setting as task input values
+        // Only include fields that correspond to actual task IDs
+        const filteredInputs = {};
+        if (numaAppData?.tasks) {
+          const taskIds = new Set(numaAppData.tasks.map((t) => t.id));
+          Object.entries(jobHistoryItem.inputs).forEach(([key, value]) => {
+            if (taskIds.has(key)) {
+              filteredInputs[key] = value;
+            }
+          });
+        }
+        setTaskInputValues(filteredInputs);
         numaAppData.tasks.forEach((task) => {
           console.log(`Checking task ${task.id} in inputs:`, !!jobHistoryItem.inputs[task.id]);
           if ((task.type === 'text-input' || task.type === 's3-upload') && jobHistoryItem.inputs[task.id]) {
@@ -598,65 +520,57 @@ export const NumaAppProvider = ({ children }) => {
 
       setTaskCompletionStatus(taskCompletions);
 
-      // Use the same polling logic as initial app run
-      const { status, result } = await pollJobStatus({
-        jobId: jobHistoryItem.jobId,
-        pollInterval: 5000,
-        maxPollingTime: 5 * 60 * 1000,
+      // Use the standardized polling function
+      const { result } = await pollJobForCompletion(jobHistoryItem.jobId);
+
+      // Just store the original keys, we'll use findValueWithFormatFlexibility for lookups
+      const formattedResult = {};
+      Object.entries(result).forEach(([key, value]) => {
+        formattedResult[key] = value;
       });
 
-      if (status === 'completed' && result) {
-        // Just store the original keys, we'll use findValueWithFormatFlexibility for lookups
-        const formattedResult = {};
-        Object.entries(result).forEach(([key, value]) => {
-          formattedResult[key] = value;
+      // DO NOT update job status - the app should handle its own completion
+      // Simply refresh the jobs list to get the updated status from the app
+      await loadAppJobs();
+
+      // Update UI same as initial app run
+      setProcessingProgress(100);
+      setProcessingStatus('Complete!');
+      setHasRun(true);
+
+      // Set task responses
+      if (formattedResult && numaAppData?.tasks) {
+        const outputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
+
+        const responses = outputTasks
+          .map((task) => {
+            // Find the result using format flexibility
+            const result = findValueWithFormatFlexibility(formattedResult, task.id);
+
+            return {
+              taskId: task.id,
+              result: result,
+            };
+          })
+          .filter((r) => r.result !== undefined);
+        setNumaTaskResponses(responses);
+
+        // Mark all tasks as complete since we have results
+        const allTaskCompletions = {};
+        numaAppData.tasks.forEach((task) => {
+          if (task.type === 'text-input' || task.type === 's3-upload') {
+            allTaskCompletions[task.id] = Boolean(jobHistoryItem.inputs?.[task.id]);
+          } else if (task.type === 'text-output') {
+            // Find the result using format flexibility
+            const result = findValueWithFormatFlexibility(formattedResult, task.id);
+
+            allTaskCompletions[task.id] = Boolean(result);
+          }
         });
-
-        // Update job in history with results and completed status, but don't modify inputs
-        await jobsApi.updateJob(numaAppData, jobHistoryItem.jobId, formattedResult, undefined, 'completed');
-        await loadAppJobs();
-
-        // Update UI same as initial app run
-        setProcessingProgress(100);
-        setProcessingStatus('Complete!');
-        setHasRun(true);
-
-        // Set task responses
-        if (formattedResult && numaAppData?.tasks) {
-          const outputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
-
-          const responses = outputTasks
-            .map((task) => {
-              // Find the result using format flexibility
-              const result = findValueWithFormatFlexibility(formattedResult, task.id);
-
-              return {
-                taskId: task.id,
-                result: result,
-              };
-            })
-            .filter((r) => r.result !== undefined);
-          setNumaTaskResponses(responses);
-
-          // Mark all tasks as complete since we have results
-          const allTaskCompletions = {};
-          numaAppData.tasks.forEach((task) => {
-            if (task.type === 'text-input' || task.type === 's3-upload') {
-              allTaskCompletions[task.id] = Boolean(jobHistoryItem.inputs?.[task.id]);
-            } else if (task.type === 'text-output') {
-              // Find the result using format flexibility
-              const result = findValueWithFormatFlexibility(formattedResult, task.id);
-
-              allTaskCompletions[task.id] = Boolean(result);
-            }
-          });
-          setTaskCompletionStatus(allTaskCompletions);
-        }
-
-        return { ...jobHistoryItem, status: 'completed', results: result };
+        setTaskCompletionStatus(allTaskCompletions);
       }
 
-      return jobHistoryItem;
+      return { ...jobHistoryItem, status: 'completed', results: result };
     } catch (error) {
       console.error('Error in history job polling:', error);
       setProcessingStatus('Error');
@@ -772,23 +686,38 @@ export const NumaAppProvider = ({ children }) => {
       let jobResponse;
       if (currentJobId) {
         console.log(`Using existing job ID: ${currentJobId}`);
-        // We already have a job from file uploads, so we need to update its status to 'running'
+
+        // Check if job is already completed - if so, don't update it
         try {
-          const userId = user?.decoded_tokens?.idToken?.['sub'];
-          await jobsApi.updateJob(numaAppData, currentJobId, null, taskInputValues, 'running', userId);
-          console.log(`Updated job ${currentJobId} status to 'running'`);
+          const existingJob = await jobsApi.getJobById(numaAppData.id, currentJobId);
+          if (existingJob && (existingJob.status === 'completed' || existingJob.status === 'SUCCESS')) {
+            console.log(`Job ${currentJobId} is already completed, not updating`);
+            jobResponse = {
+              jobId: currentJobId,
+              startedAt: existingJob.startedAt || new Date().toISOString(),
+            };
+          } else {
+            // Only update to PROCESSING if job is not already completed
+            const userId = user?.decoded_tokens?.idToken?.['sub'];
+            await jobsApi.updateJob(numaAppData, currentJobId, null, taskInputValues, 'PROCESSING', userId);
+            console.log(`Updated job ${currentJobId} status to 'PROCESSING'`);
+            jobResponse = {
+              jobId: currentJobId,
+              startedAt: new Date().toISOString(),
+            };
+          }
         } catch (updateError) {
           console.error('Failed to update job status:', updateError);
           // Continue even if the update fails - we'll still try to use the job
+          jobResponse = {
+            jobId: currentJobId,
+            startedAt: new Date().toISOString(),
+          };
         }
-        jobResponse = {
-          jobId: currentJobId,
-          startedAt: new Date().toISOString(),
-        };
       } else {
-        // No job exists yet, create one with 'running' status
+        // No job exists yet, create one with 'PROCESSING' status
         const userId = user?.decoded_tokens?.idToken?.['sub'];
-        jobResponse = await jobsApi.createJob(numaAppData, taskInputValues, 'running', userId);
+        jobResponse = await jobsApi.createJob(numaAppData, taskInputValues, 'PROCESSING', userId);
         setCurrentJobId(jobResponse.jobId);
         console.log(`Created new job with ID: ${jobResponse.jobId}`);
       }
@@ -802,80 +731,6 @@ export const NumaAppProvider = ({ children }) => {
       setProcessingStatus('Error');
       setProcessingProgress(0);
       throw new Error('Unable to start the process. Please try again.');
-    }
-  };
-
-  const saveJobResults = async (jobId, dateTime, currentResults) => {
-    try {
-      // Get all text-output tasks
-      const textOutputTasks = numaAppData.tasks.filter((task) => task.type === 'text-output');
-
-      console.log('Found text-output tasks to be saved:', textOutputTasks);
-      console.log('Current results structure:', JSON.stringify(currentResults, null, 2));
-
-      // Check if we have the new schema format (results array)
-      // First check if results is directly in currentResults
-      let hasResults = Boolean(currentResults && currentResults.results && Array.isArray(currentResults.results));
-      let resultsArray = hasResults ? currentResults.results : null;
-
-      // If not found directly, check if it's nested in an HTTP request task result
-      if (!hasResults) {
-        // Look for HTTP request tasks that might contain results
-        const httpRequestTasks = numaAppData.tasks.filter((task) => task.type === 'http-request');
-
-        for (const task of httpRequestTasks) {
-          if (
-            currentResults[task.id] &&
-            currentResults[task.id].results &&
-            Array.isArray(currentResults[task.id].results)
-          ) {
-            hasResults = true;
-            resultsArray = currentResults[task.id].results;
-            console.log(`Found results array in task: ${task.id}`);
-            break;
-          }
-        }
-      }
-
-      console.log('Has results array:', hasResults);
-
-      let textOutputResults;
-
-      if (hasResults) {
-        console.log('Using new schema format for results');
-        console.log('Results array:', resultsArray);
-        // For new schema, pass the results array directly without nesting
-        textOutputResults = resultsArray;
-      } else {
-        console.log('Using legacy schema format for results');
-        // Build results object from text-output tasks (legacy format)
-        textOutputResults = textOutputTasks.reduce((acc, task) => {
-          // Get the referenced data using resolveReference
-          const resolvedValue = resolveReference(task.params.dataRef, currentResults);
-          if (resolvedValue !== '') {
-            acc[task.id] = resolvedValue;
-          }
-          return acc;
-        }, {});
-      }
-
-      console.log('Text-output results to be saved:', textOutputResults);
-      // Update the job with results and completed status, but don't modify inputs
-      const userId = user?.decoded_tokens?.idToken?.['sub'];
-      await jobsApi.updateJob(numaAppData, jobId, textOutputResults, undefined, 'completed', userId);
-
-      // Update the job in state
-      setJob((prevJob) => ({
-        ...prevJob,
-        results: textOutputResults,
-        status: 'completed',
-      }));
-
-      // Refresh the jobs list
-      await loadAppJobs();
-    } catch (error) {
-      console.error('Failed to update job:', error);
-      throw error;
     }
   };
 
@@ -1005,7 +860,7 @@ export const NumaAppProvider = ({ children }) => {
     setError(null); // Clear any previous errors
 
     try {
-      const { jobId, dateTime } = await initializeJob();
+      const { jobId } = await initializeJob();
       let currentResults = {};
 
       const orderedTasks = numaAppData.tasks.slice().sort((a, b) => a.order - b.order);
@@ -1052,7 +907,7 @@ export const NumaAppProvider = ({ children }) => {
             break;
 
           case 'text-output':
-            currentResults = await processTextOutputTask(task, currentResults);
+            // Skip text-output tasks during main loop - they'll be processed by loadJobResults
             completedWeight += taskWeight;
             break;
 
@@ -1071,10 +926,10 @@ export const NumaAppProvider = ({ children }) => {
         }));
       }
 
-      // Save final results
-      await saveJobResults(jobId, dateTime, currentResults);
-      setProcessingProgress(100);
-      setProcessingStatus('Complete!');
+      // After all tasks complete successfully, reload the job to get proper output processing
+      // This reuses the existing loadJobResults logic which handles output tasks correctly
+      await loadJobResults(jobId);
+
       return currentResults;
     } catch (error) {
       console.error('Error running app:', error);
@@ -1147,7 +1002,19 @@ export const NumaAppProvider = ({ children }) => {
           });
         }
 
-        setTaskInputValues(processedInputs);
+        // Filter out internal fields from processedInputs before setting as task input values
+        // Only include fields that correspond to actual task IDs
+        const filteredInputs = {};
+        if (numaAppData?.tasks) {
+          const taskIds = new Set(numaAppData.tasks.map((t) => t.id));
+          Object.entries(processedInputs).forEach(([key, value]) => {
+            if (taskIds.has(key)) {
+              filteredInputs[key] = value;
+            }
+          });
+        }
+
+        setTaskInputValues(filteredInputs);
       }
 
       // Set the current job ID so we can use it when running the app
@@ -1174,7 +1041,7 @@ export const NumaAppProvider = ({ children }) => {
 
       // Try to poll for updates if job is incomplete and was actually running
       // If status is 'files-uploaded', we don't need to poll as the app was never run
-      if (job.status === 'running') {
+      if (job.status === 'PROCESSING') {
         job = await pollIncompleteHistoryJob(job);
         console.log('Job after polling:', job);
       } else if (job.status === 'files-uploaded') {
@@ -1324,47 +1191,6 @@ export const NumaAppProvider = ({ children }) => {
       triggerFileUploadValueUpdates();
     } catch (error) {
       console.error('Error loading job results:', error);
-      throw error;
-    }
-  };
-
-  // HTTP request function
-  const makeHttpRequest = async (payload, endpoint) => {
-    try {
-      const response = await numaPost(endpoint, payload);
-
-      if (!response) {
-        throw new Error(`HTTP request failed`);
-      }
-
-      return {
-        success: true,
-        status: response.status || 'PROCESSING',
-        ...response,
-      };
-    } catch (error) {
-      console.error('HTTP request failed:', error);
-      throw error;
-    }
-  };
-
-  const numaPollStatus = async (polling_endpoint) => {
-    try {
-      const response = await numaGet(polling_endpoint);
-      console.log('Poll response:', response);
-
-      if (!response) {
-        throw new Error('Unable to check the status of your request.');
-      }
-
-      // Return both status and result if available
-      return {
-        status: response.status,
-        result: response.result,
-        error: response.error,
-      };
-    } catch (error) {
-      console.error('Error polling job status:', error);
       throw error;
     }
   };

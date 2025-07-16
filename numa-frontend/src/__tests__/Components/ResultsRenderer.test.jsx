@@ -516,7 +516,7 @@ describe('CsvRenderer Component', () => {
     render(<CsvRenderer data={csvData} />);
 
     expect(screen.getByText('Name:')).toBeInTheDocument();
-    expect(screen.getByText('John')).toBeInTheDocument();
+    expect(screen.getAllByText('John').length).toBeGreaterThan(0);
     expect(screen.getByText('Resume:')).toBeInTheDocument();
     expect(screen.getByText('resume.pdf')).toBeInTheDocument();
     expect(screen.getByTitle('Download file')).toBeInTheDocument();

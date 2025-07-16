@@ -217,6 +217,7 @@ const JobHistorySidebar = () => {
                             job.fileUploads || job.files || (job.input && (job.input.files || job.input.fileUploads));
 
                           switch (status) {
+                            case 'SUCCESS':
                             case 'completed':
                               return (
                                 <>
@@ -279,7 +280,7 @@ const JobHistorySidebar = () => {
                       className="shadow-sm"
                       style={(() => {
                         const status = job.status || 'completed';
-                        if (status === 'running' || status === 'in-progress') {
+                        if (status === 'running' || status === 'PROCESSING' || status === 'in-progress') {
                           return {
                             minWidth: '120px',
                             padding: '6px 12px',

@@ -130,7 +130,7 @@ describe('jobsApi', () => {
     it('should create a job with the correct data', async () => {
       // Mock the numaPost response
       const mockJobId = 'new-job-id';
-      mockNumaPost.mockResolvedValueOnce({ jobId: mockJobId, status: 'running' });
+      mockNumaPost.mockResolvedValueOnce({ jobId: mockJobId, status: 'PROCESSING' });
 
       // Render the hook
       const { result } = renderHook(() => useJobsApi(), { wrapper });
@@ -142,7 +142,7 @@ describe('jobsApi', () => {
       // Call createJob
       await act(async () => {
         const response = await result.current.createJob(numaAppData, taskInputs);
-        expect(response).toEqual({ jobId: mockJobId, status: 'running' });
+        expect(response).toEqual({ jobId: mockJobId, status: 'PROCESSING' });
       });
 
       // Check that numaPost was called with the correct parameters
@@ -153,7 +153,7 @@ describe('jobsApi', () => {
         appName: numaAppData.appName,
         appType: numaAppData.type,
         inputs: taskInputs,
-        status: 'running',
+        status: 'PROCESSING',
         manifest: JSON.stringify(numaAppData),
         userId: 'test-user-id',
       });
@@ -198,7 +198,7 @@ describe('jobsApi', () => {
       const mockJobs = {
         items: [
           { jobId: 'job-1', status: 'completed' },
-          { jobId: 'job-2', status: 'running' },
+          { jobId: 'job-2', status: 'PROCESSING' },
         ],
         next_token: null,
         count: 2,
@@ -384,7 +384,7 @@ describe('jobsApi', () => {
       expect(updateData).not.toHaveProperty('results');
 
       // in the updateJob function when undefined is passed
-      expect(updateData.status).toBe('running');
+      expect(updateData.status).toBe('PROCESSING');
     });
   });
 });

@@ -6,6 +6,7 @@
  * @param {S3Client} s3Client - The S3 client instance
  * @param {string} fileExtension - The file extension, default is '.pdf'
  * @param {string} userId - The user's sub from authentication
+ * @param {Object} jobDetails - Optional job details with results field
  * @returns {Promise<Object>} - An object containing the bucket name and key
  */
 export const getPolicyBuilderBucketInfo = async (
@@ -15,6 +16,7 @@ export const getPolicyBuilderBucketInfo = async (
   s3Client,
   fileExtension = '.pdf',
   userId,
+  jobDetails = null,
 ) => {
   // Check if CLIENT_NAME is defined
   if (config.CLIENT_NAME === undefined) {
@@ -47,8 +49,29 @@ export const getPolicyBuilderBucketInfo = async (
     console.warn('OUTPUTS_BUCKET_NAME is not defined in the config');
   }
 
-  // Define the key path following the pattern: policy-builder/user-sub/app-run-id/final_policy.extension
-  const key = `policy-builder/${userId}/${stepFunctionJobId}/final_policy${fileExtension}`;
+  // Try to extract the key from the job results if available
+  let key;
+
+  // Check if we have job details with results
+  if (jobDetails && jobDetails.results) {
+    try {
+      // Parse the results JSON string
+      const resultsObj = typeof jobDetails.results === 'string' ? JSON.parse(jobDetails.results) : jobDetails.results;
+
+      // Check if we have a final_policy_pdf_key in the results
+      if (resultsObj.final_policy_pdf_key) {
+        key = resultsObj.final_policy_pdf_key;
+        console.log('Using S3 key from job results:', key);
+        return { bucketName, key };
+      }
+    } catch (error) {
+      console.error('Error parsing job results:', error);
+    }
+  }
+
+  // Fall back to constructing the key if we couldn't extract it from results
+  key = `policy-builder/${userId}/${stepFunctionJobId}/final_policy${fileExtension}`;
+  console.log('Using fallback S3 key:', key);
 
   return {
     bucketName,

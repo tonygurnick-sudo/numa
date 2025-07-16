@@ -49,6 +49,16 @@ export const PolicyBuilderDetail = () => {
   const jobsApi = useJobsApi();
   const userId = user?.decoded_tokens?.idToken?.['sub'];
 
+  // Helper function to normalize status values
+  const normalizeStatus = (status) => {
+    if (!status) return '';
+    // Convert to uppercase for consistent comparison
+    const upperStatus = status.toUpperCase();
+    // Map 'running' to 'PROCESSING' for backward compatibility
+    if (upperStatus === 'RUNNING') return 'PROCESSING';
+    return upperStatus;
+  };
+
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
@@ -188,6 +198,7 @@ export const PolicyBuilderDetail = () => {
           s3Client,
           '.pdf',
           userId,
+          policy.jobDetails, // Pass the job details to extract the S3 key from results
         );
         bucketName = bucket;
         key = fileKey;
@@ -388,8 +399,16 @@ export const PolicyBuilderDetail = () => {
     inFlightRequestsRef.current[jobId] = true;
 
     try {
-      const response = await numaGet(`${config.API_ENDPOINT}/policy-builder/main?job_id=${job.stepFunctionJobId}`);
-      console.log('Step Function Response:', response);
+      // Use the jobs API to get the current job status from DynamoDB
+      const response = await numaGet(`${config.API_ENDPOINT}/policy-builder/jobs/${jobId}`);
+      console.log('Job status response:', response);
+
+      if (!response || response.error) {
+        console.error(`Error fetching job ${jobId} status:`, response?.error || 'Unknown error');
+        clearPollingForJob(jobId);
+        setErrorMessage('Error fetching job status. Please try again.');
+        return true;
+      }
 
       // Check for unauthorized error
       if (response.status === 401) {
@@ -400,49 +419,19 @@ export const PolicyBuilderDetail = () => {
       }
 
       if (response.status === 'FAILURE') {
-        console.error(`Step Function request failed with status: ${response.status}`);
-
-        // Update job manager with FAILED status
-        const updateResponse = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${jobId}`, {
-          ...job,
-          status: 'FAILED',
-          error: response.message || 'Step function execution failed',
-        });
-
-        console.log('Update Response for failed job:', updateResponse);
-
+        console.error(`Job failed with status: ${response.status}`);
         clearPollingForJob(jobId);
         fetchPolicies(); // Refresh the policies list
         return true;
       }
 
-      const stepFunctionStatus = response.status;
+      const currentStatus = response.status;
 
       // Stop polling if the status is not PROCESSING
-      if (stepFunctionStatus !== 'PROCESSING') {
-        console.log(`Job ${jobId} status changed from PROCESSING to ${stepFunctionStatus}`);
-
-        // Update job manager with new status
-        const updateResponse = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${jobId}`, {
-          ...job,
-          status: stepFunctionStatus,
-        });
-
-        console.log('Update Response:', updateResponse);
-
-        if (updateResponse && updateResponse.error) {
-          console.error(`Failed to update job status in job manager: ${updateResponse.error}`);
-          clearPollingForJob(jobId);
-          return true;
-        }
-
-        console.log(`Successfully updated job ${jobId} in job manager`);
+      if (normalizeStatus(currentStatus) !== 'PROCESSING') {
+        console.log(`Job ${jobId} status changed from PROCESSING to ${currentStatus}`);
         clearPollingForJob(jobId);
-
-        // Only trigger a fetch if the status has actually changed
-        if (job.status !== stepFunctionStatus) {
-          fetchPolicies();
-        }
+        fetchPolicies(); // Refresh the policies list
         return true;
       }
     } catch (error) {

@@ -114,11 +114,11 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'job_id.$': '$.job_id',
+            'job_id.$': '$$.Execution.Input.job_id',
             'user_id.$': '$$.Execution.Input.user_id',
-            'input_key.$': '$.application_file[0].s3_key',
-            'rfp_reference_key.$': '$.rfp_reference_file[0].s3_key',
-            'assessment_instructions.$': '$.assessment_instructions',
+            'input_key.$': '$$.Execution.Input.application_file[0].s3_key',
+            'rfp_reference_key.$': '$$.Execution.Input.rfp_reference_file[0].s3_key',
+            'assessment_instructions.$': '$$.Execution.Input.assessment_instructions',
           },
           Next: 'ExtractApplicationContent',
         },

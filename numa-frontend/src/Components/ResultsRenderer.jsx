@@ -7,8 +7,8 @@ import { MarkdownContent } from './MarkdownContent';
 import { ResultActions } from './ResultActions';
 
 // Shared tab navigation component for both JSON and CSV renderers
-const TabNavigation = ({ items, activeIndex, setActiveIndex, getLabel }) => {
-  if (items.length <= 1) return null;
+const TabNavigation = ({ items, activeIndex, setActiveIndex, getLabel, alwaysShow = false }) => {
+  if (!alwaysShow && items.length <= 1) return null;
 
   // For many items, show a subset with pagination
   const maxVisibleTabs = 5;
@@ -499,7 +499,11 @@ const CsvRenderer = ({ data }) => {
         items={rows}
         activeIndex={activeRowIndex}
         setActiveIndex={setActiveRowIndex}
-        getLabel={(row, index) => row[nameColumnIndex] || `Row ${index + 1}`}
+        getLabel={(row, index) => {
+          const label = row[nameColumnIndex] || `Row ${index + 1}`;
+          return label;
+        }}
+        alwaysShow={true}
       />
       {renderActiveRow()}
       <div className="mt-3 d-flex justify-content-between align-items-center">
@@ -646,8 +650,43 @@ export const ResultsRenderer = ({ results }) => {
   const [selectedOutputIndex, setSelectedOutputIndex] = useState(0);
 
   useEffect(() => {
-    if (!results || !Array.isArray(results)) {
-      console.log('No results or results is not an array:', results);
+    // Parse results if it's a JSON string
+    let parsedResults = results;
+    if (typeof results === 'string') {
+      try {
+        parsedResults = JSON.parse(results);
+      } catch (error) {
+        console.error('Error parsing results JSON:', error);
+        return;
+      }
+    }
+
+    // Extract the actual results array from the nested structure
+    let actualResults = parsedResults;
+
+    // Check for a nested results array THIS IS A HACK AND SHOULD BE REMOVED
+    if (parsedResults && parsedResults.results) {
+      // Handle case where results.results is a JSON string
+      if (typeof parsedResults.results === 'string') {
+        try {
+          const nestedResults = JSON.parse(parsedResults.results);
+          if (nestedResults && nestedResults.results && Array.isArray(nestedResults.results)) {
+            actualResults = nestedResults.results;
+          } else if (Array.isArray(nestedResults)) {
+            actualResults = nestedResults;
+          }
+        } catch (error) {
+          console.error('Error parsing nested results JSON:', error);
+          return;
+        }
+      } else if (Array.isArray(parsedResults.results)) {
+        // Handle case where results.results is already an array
+        actualResults = parsedResults.results;
+      }
+    }
+
+    if (!actualResults || !Array.isArray(actualResults)) {
+      console.log('No results or results is not an array:', parsedResults);
       return;
     }
 
@@ -655,7 +694,7 @@ export const ResultsRenderer = ({ results }) => {
     setSelectedOutputIndex(0);
 
     const fetchContents = async () => {
-      for (const result of results) {
+      for (const result of actualResults) {
         if (!result.outputs || !Array.isArray(result.outputs)) {
           continue;
         }
@@ -716,12 +755,44 @@ export const ResultsRenderer = ({ results }) => {
     fetchContents();
   }, [results, getCredentials, fetchS3Content]);
 
-  if (!results || !Array.isArray(results) || results.length === 0) {
+  // Extract the actual results array for rendering
+  let parsedResults = results;
+  if (typeof results === 'string') {
+    try {
+      parsedResults = JSON.parse(results);
+    } catch (error) {
+      console.error('Error parsing results JSON for rendering:', error);
+      return <div>Error parsing results data</div>;
+    }
+  }
+
+  let actualResults = parsedResults;
+  if (parsedResults && parsedResults.results) {
+    // Handle case where results.results is a JSON string
+    if (typeof parsedResults.results === 'string') {
+      try {
+        const nestedResults = JSON.parse(parsedResults.results);
+        if (nestedResults && nestedResults.results && Array.isArray(nestedResults.results)) {
+          actualResults = nestedResults.results;
+        } else if (Array.isArray(nestedResults)) {
+          actualResults = nestedResults;
+        }
+      } catch (error) {
+        console.error('Error parsing nested results JSON for rendering:', error);
+        return <div>Error parsing nested results data</div>;
+      }
+    } else if (Array.isArray(parsedResults.results)) {
+      // Handle case where results.results is already an array
+      actualResults = parsedResults.results;
+    }
+  }
+
+  if (!actualResults || !Array.isArray(actualResults) || actualResults.length === 0) {
     return <div>No results to display</div>;
   }
 
   // Get the first result
-  const result = results[0];
+  const result = actualResults[0];
   if (!result.outputs || !Array.isArray(result.outputs) || result.outputs.length === 0) {
     return <div>No outputs found in results</div>;
   }

@@ -633,13 +633,7 @@ export const PolicyReviewerDetail = () => {
   };
 
   const pollProcessingPolicy = async (job) => {
-    const { jobId, stepFunctionJobId } = job;
-
-    if (!stepFunctionJobId) {
-      console.warn(`Job ${jobId} missing stepFunctionJobId, stopping polling`);
-      clearPollingForJob(jobId);
-      return true;
-    }
+    const { jobId } = job;
 
     // prevent parallel requests
     if (inFlightRequestsRef.current[jobId]) {
@@ -649,16 +643,20 @@ export const PolicyReviewerDetail = () => {
     inFlightRequestsRef.current[jobId] = true;
 
     try {
-      const res = await numaGet(`${config.API_ENDPOINT}/policy-reviewer/main?job_id=${stepFunctionJobId}`);
+      // Use the jobs API to get the current job status from DynamoDB
+      const res = await numaGet(`${config.API_ENDPOINT}/policy-reviewer/jobs/${jobId}`);
+      console.log('Job status response:', res);
+
+      if (!res || res.error) {
+        console.error(`Error fetching job ${jobId} status:`, res?.error || 'Unknown error');
+        clearPollingForJob(jobId);
+        return true;
+      }
+
       const status = res.status;
 
       if (normalizeStatus(status) !== 'PROCESSING') {
-        console.log(`Job ${jobId} status changed to ${status}, updating...`);
-
-        await numaPut(`${config.API_ENDPOINT}/policy-reviewer/jobs/${jobId}`, {
-          ...job,
-          status,
-        });
+        console.log(`Job ${jobId} status changed to ${status}, updating local state...`);
 
         clearPollingForJob(jobId);
         fetchPolicies();

@@ -126,12 +126,12 @@ export class CandidateScreening extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'job_id.$': '$.job_id',
-            'user_id.$': '$.user_id',
-            'candidate_documents.$': '$.candidate_documents',
-            'company_profile.$': '$.company_profile',
-            'job_requirements.$': '$.job_requirements',
-            'app_id.$': '$.app_id',
+            'job_id.$': '$[0].job_id',
+            'user_id.$': '$[0].user_id',
+            'candidate_documents.$': '$[0].candidate_documents',
+            'company_profile.$': '$[0].company_profile',
+            'job_requirements.$': '$[0].job_requirements',
+            'app_id.$': '$[0].app_id',
           },
           Next: 'LoopThroughCandidates',
         },
