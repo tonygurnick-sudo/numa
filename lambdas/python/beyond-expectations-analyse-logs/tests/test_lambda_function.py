@@ -126,7 +126,12 @@ class TestCheckForCachedAnalysis(unittest.TestCase):
             mock_datetime.datetime.utcnow.return_value = datetime(2025, 1, 2)
             mock_datetime.timedelta = timedelta
 
-            result = lambda_function.check_for_cached_analysis(log_entry)
+            result = lambda_function.check_for_cached_analysis(
+                log_entry,
+                recent_objects=[
+                    "beyond-expectations/logs_analysed/2025-01-01/chunk-1.json"
+                ],
+            )
 
         self.assertIsNotNone(result)
         if result is not None:
@@ -148,7 +153,9 @@ class TestCheckForCachedAnalysis(unittest.TestCase):
             mock_datetime.datetime.utcnow.return_value = datetime(2025, 1, 2)
             mock_datetime.timedelta = timedelta
 
-            result = lambda_function.check_for_cached_analysis(log_entry)
+            result = lambda_function.check_for_cached_analysis(
+                log_entry, recent_objects=[]
+            )
 
         self.assertIsNone(result)
 
@@ -170,7 +177,9 @@ class TestCheckForCachedAnalysis(unittest.TestCase):
             mock_datetime.datetime.utcnow.return_value = datetime(2025, 1, 2)
             mock_datetime.timedelta = timedelta
 
-            result = lambda_function.check_for_cached_analysis(log_entry)
+            result = lambda_function.check_for_cached_analysis(
+                log_entry, recent_objects=[]
+            )
 
         self.assertIsNone(result)
 

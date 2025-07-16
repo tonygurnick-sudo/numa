@@ -176,6 +176,7 @@ export class BeyondExpectations extends BaseNumaApp {
         CONFIG_PATH: 'beyond-expectations/user_config.json',
       },
       lambdaDirectory: 'python/beyond-expectations-analyse-logs',
+      memorySize: 1024,
       timeout: 900,
     });
 
