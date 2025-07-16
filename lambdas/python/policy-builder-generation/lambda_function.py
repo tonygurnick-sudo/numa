@@ -87,7 +87,38 @@ def handler(event: dict, context: LambdaContext) -> dict:
         area,
     )
     __write_string_to_s3(output["explanation"], initial_policy_explanation_key)
+
+    # Create S3 outputs array for DynamoDB status update
+    outputs = [
+        {
+            "content_type": "text/markdown",
+            "data": {
+                "bucket": os.environ["BUCKET"],
+                "key": initial_policy_key,
+            },
+            "location": "S3",
+            "title": "Initial Policy",
+        },
+        {
+            "content_type": "text/markdown",
+            "data": {
+                "bucket": os.environ["BUCKET"],
+                "key": initial_policy_explanation_key,
+            },
+            "location": "S3",
+            "title": "Initial Policy Explanation",
+        },
+    ]
+
+    # Return both the original format (for backward compatibility)
+    # and the new format with results array (for DynamoDB status update)
     return {
         "initial_policy_key": initial_policy_key,
         "initial_policy_explanation_key": initial_policy_explanation_key,
+        "results": [
+            {
+                "input_reference": None,
+                "outputs": outputs,
+            },
+        ],
     }

@@ -1,4 +1,4 @@
-import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
+import { Construct } from 'constructs';
 import {
   DataAwsIamPolicyDocument,
   DataAwsIamPolicyDocumentStatement,
@@ -11,7 +11,7 @@ import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
 import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
 import * as asl from 'asl-types';
-import { Construct } from 'constructs';
+
 import {
   AddLambdaFunctionProps,
   ApiGatewayLambdaCollection,
@@ -67,9 +67,28 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       policy: new DataAwsIamPolicyDocument(this, name + '_policy-document', {
         statement: [
           {
-            actions: ['s3:PutObject'],
-            resources: [`${this.outputsBucket.arn}${this.s3KeyPrefix}/*`],
+            actions: ['lambda:InvokeFunction', 'lambda:InvokeAsync'],
+            resources: ['*'],
           },
+          {
+            actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
+            resources: [this.outputsBucket.arn, `${this.outputsBucket.arn}/*`],
+          },
+          ...(this.jobsTable
+            ? [
+                {
+                  actions: [
+                    'dynamodb:PutItem',
+                    'dynamodb:GetItem',
+                    'dynamodb:UpdateItem',
+                    'dynamodb:DeleteItem',
+                    'dynamodb:Query',
+                    'dynamodb:Scan',
+                  ],
+                  resources: [this.jobsTable.arn, `${this.jobsTable.arn}/index/*`],
+                },
+              ]
+            : []),
           {
             actions: [
               'logs:CreateLogDelivery',
@@ -85,19 +104,28 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
             ],
             resources: ['*'],
           },
-          ...(props.additionalPolicyStatements || []),
         ],
       }).json,
     });
 
-    const stepFunctionRole = new IamRole(scope, name + '_role', {
-      name: this.getResourceName(`_${name}`),
-      assumeRolePolicy: createAssumptionPolicy({
-        Service: 'states.amazonaws.com',
-      }),
+    const stepFunctionRole = new IamRole(this, name + '_role', {
+      name: this.getResourceName(`_${name}_step-function-role`),
+      assumeRolePolicy: new DataAwsIamPolicyDocument(this, name + '_assume-role-policy', {
+        statement: [
+          {
+            actions: ['sts:AssumeRole'],
+            principals: [
+              {
+                type: 'Service',
+                identifiers: ['states.amazonaws.com'],
+              },
+            ],
+          },
+        ],
+      }).json,
     });
 
-    new IamRolePolicyAttachment(scope, name + '_role-policy-attachment', {
+    new IamRolePolicyAttachment(this, name + '_policy-attachment', {
       role: stepFunctionRole.name,
       policyArn: stepFunctionPolicy.arn,
     });
@@ -253,18 +281,155 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     );
   }
 
+  /**
+   * Generate a unique state name prefix to avoid duplicate state names in Step Functions
+   * @returns A unique string to use as a prefix for state names
+   */
+  protected getUniqueStateNamePrefix(): string {
+    return `${Math.random().toString(36).substring(2, 8)}_`;
+  }
+
+  // Write status to either S3 or DynamoDB based on configuration
   writeStatus(body: Record<string, string | Record<string, string>>, next: string): asl.State {
-    return {
-      Type: 'Task',
-      Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
-      Parameters: {
-        Body: body,
-        Bucket: this.outputsBucket.bucket,
-        'Key.$': `States.Format('${this.appId}/{}/{}/status.json', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
-      },
-      ResultPath: null,
-      Next: next,
-    };
+    // If we have a jobs table, write to DynamoDB instead of S3
+    if (this.jobsTable) {
+      // Extract the status string from the body object
+      const statusValue = typeof body.status === 'string' ? body.status : 'UNKNOWN';
+
+      // Prepare update expression and attribute values
+      let updateExpression = 'SET #status = :status, #lastUpdated = :lastUpdated';
+      const expressionAttributeNames: Record<string, string> = {
+        '#status': 'status',
+        '#lastUpdated': 'lastUpdated',
+      };
+      const expressionAttributeValues: Record<
+        string,
+        | { S: string }
+        | { 'S.$': string }
+        | { 'M.$': string }
+        | { 'L.$': string | Record<string, string> }
+        | { M: Record<string, unknown> }
+        | { L: Record<string, unknown> }
+      > = {
+        ':status': {
+          S: statusValue,
+        },
+        ':lastUpdated': {
+          S: new Date().toISOString(),
+        },
+      };
+
+      // Include the results field in the update if present
+      if ('results.$' in body) {
+        updateExpression += ', #results = :results';
+        expressionAttributeNames['#results'] = 'results';
+        // Store results as a JSON string for backward compatibility
+        // The frontend already has logic to parse this string
+        expressionAttributeValues[':results'] = {
+          'S.$': `States.JsonToString(${body['results.$']})`,
+        };
+      }
+
+      // If there's a message field, include it in the update
+      if ('message.$' in body) {
+        updateExpression += ', #message = :message';
+        expressionAttributeNames['#message'] = 'message';
+        expressionAttributeValues[':message'] = {
+          'S.$': `States.JsonToString(${body['message.$']})`,
+        };
+      }
+
+      // Get a unique state name prefix to avoid duplicate state names
+      const statePrefix = this.getUniqueStateNamePrefix();
+
+      // Create a state machine that handles both job_id and original_job_id
+      return {
+        Type: 'Parallel',
+        Branches: [
+          {
+            StartAt: `${statePrefix}CheckOriginalJobId`,
+            States: {
+              [`${statePrefix}CheckOriginalJobId`]: {
+                Type: 'Choice',
+                Choices: [
+                  {
+                    Variable: '$$.Execution.Input.original_job_id',
+                    IsPresent: true,
+                    Next: `${statePrefix}UpdateWithOriginalJobId`,
+                  },
+                ],
+                Default: `${statePrefix}UpdateWithJobId`,
+              },
+              [`${statePrefix}UpdateWithOriginalJobId`]: {
+                Type: 'Task',
+                Resource: 'arn:aws:states:::dynamodb:updateItem',
+                Parameters: {
+                  TableName: this.jobsTable.name,
+                  Key: {
+                    jobId: {
+                      'S.$': '$$.Execution.Input.original_job_id',
+                    },
+                  },
+                  UpdateExpression: updateExpression,
+                  ExpressionAttributeNames: expressionAttributeNames,
+                  ExpressionAttributeValues: expressionAttributeValues,
+                },
+                ResultPath: null,
+                Next: `${statePrefix}SuccessState`,
+                Catch: [
+                  {
+                    ErrorEquals: ['States.ALL'],
+                    ResultPath: null,
+                    Next: `${statePrefix}SuccessState`,
+                  },
+                ],
+              },
+              [`${statePrefix}UpdateWithJobId`]: {
+                Type: 'Task',
+                Resource: 'arn:aws:states:::dynamodb:updateItem',
+                Parameters: {
+                  TableName: this.jobsTable.name,
+                  Key: {
+                    jobId: {
+                      'S.$': '$$.Execution.Input.job_id',
+                    },
+                  },
+                  UpdateExpression: updateExpression,
+                  ExpressionAttributeNames: expressionAttributeNames,
+                  ExpressionAttributeValues: expressionAttributeValues,
+                },
+                ResultPath: null,
+                Next: `${statePrefix}SuccessState`,
+                Catch: [
+                  {
+                    ErrorEquals: ['States.ALL'],
+                    ResultPath: null,
+                    Next: `${statePrefix}SuccessState`,
+                  },
+                ],
+              },
+              [`${statePrefix}SuccessState`]: {
+                Type: 'Succeed',
+              },
+            },
+          },
+        ],
+        Next: next,
+      };
+    } else {
+      // Fall back to S3 if no jobs table is configured
+      return {
+        Type: 'Task',
+        Resource: 'arn:aws:states:::aws-sdk:s3:putObject',
+        Parameters: {
+          Body: body,
+          Bucket: this.outputsBucket.bucket,
+          'Key.$': `States.Format('${this.appId}/{}/{}/status.json', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
+        },
+        ResultPath: null,
+        Next: next,
+      };
+    }
   }
 
   writeProcessingStatus(): asl.State {
@@ -285,7 +450,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     return this.writeStatus(
       {
         status: 'SUCCESS',
-        'result.$': resultPath ?? '$',
+        'results.$': resultPath ?? '$',
       },
       'Success',
     );

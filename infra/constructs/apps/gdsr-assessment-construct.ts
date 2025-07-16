@@ -85,9 +85,9 @@ export class GdsrAssessment extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'job_id.$': '$.job_id',
+            'job_id.$': '$$.Execution.Input.job_id',
             'user_id.$': '$$.Execution.Input.user_id',
-            'application_key.$': '$.uploaded_files[0].s3_key',
+            'application_key.$': '$$.Execution.Input.uploaded_files[0].s3_key',
           },
           Next: 'ExtractContent',
         },

@@ -3,7 +3,7 @@ import { createFormattedDate } from '../utils/dateUtils';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
 
-const createJobData = (numaAppData, taskInputs, jobId = null, status = 'running') => {
+const createJobData = (numaAppData, taskInputs, jobId = null, status = 'PROCESSING') => {
   const { displayDate, isoDate } = createFormattedDate();
 
   return {
@@ -25,7 +25,7 @@ export const useJobsApi = () => {
   const { user } = useAuth();
   const userId = user?.decoded_tokens?.idToken?.['sub'];
 
-  const createJob = async (numaAppData, taskInputs, status = 'running') => {
+  const createJob = async (numaAppData, taskInputs, status = 'PROCESSING') => {
     try {
       const jobData = createJobData(numaAppData, taskInputs, null, status);
       const endpoint_call = `/api/${numaAppData.id}/jobs`;
@@ -56,7 +56,7 @@ export const useJobsApi = () => {
     }
   };
 
-  const updateJob = async (numaAppData, jobId, results, inputs = null, status = 'running') => {
+  const updateJob = async (numaAppData, jobId, results, inputs = null, status = 'PROCESSING') => {
     // User ID is now handled by RequestProvider
     try {
       const { displayDate, isoDate } = createFormattedDate();

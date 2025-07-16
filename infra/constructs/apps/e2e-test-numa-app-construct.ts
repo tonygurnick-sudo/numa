@@ -60,7 +60,8 @@ export class E2ETestNumaApp extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'job_id.$': '$.job_id',
+            'job_id.$': '$$.Execution.Input.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
           },
           Next: 'Test',
         },

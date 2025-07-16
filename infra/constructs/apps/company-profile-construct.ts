@@ -97,11 +97,11 @@ export class CompanyProfile extends BaseNumaApp {
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'about.$': '$.about',
-            'contact_information.$': '$.contact_information',
-            'job_id.$': '$.job_id',
-            'user_id.$': '$.user_id',
-            'uploaded_files.$': '$.uploaded_files',
+            'about.$': '$$.Execution.Input.about',
+            'contact_information.$': '$$.Execution.Input.contact_information',
+            'job_id.$': '$$.Execution.Input.job_id',
+            'user_id.$': '$$.Execution.Input.user_id',
+            'uploaded_files.$': '$$.Execution.Input.uploaded_files',
           },
           Next: 'ExtractMap',
         },
