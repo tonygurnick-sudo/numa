@@ -325,6 +325,7 @@ export class NumaFrontendInfra extends Construct {
 
     new NumaCorsEnabledBucket(this, 'frontend-s3-datasource', {
       clientName: props.clientName,
+      origin: props.domainName,
       clientAccountId: props.accountId,
       environmentName: props.environmentName,
       bucketName: 'frontend-s3-datasource',
