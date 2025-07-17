@@ -350,6 +350,7 @@ export class KnowledgeBase extends Construct {
     const dataSource = new BedrockagentDataSource(this, 'knowledge-base-datasource', {
       name: props.clientName + '-knowledge-base-datasource',
       knowledgeBaseId: knowledgeBase.id,
+      dataDeletionPolicy: 'RETAIN',
       dataSourceConfiguration: [
         {
           type: 'S3',
