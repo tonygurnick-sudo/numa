@@ -92,6 +92,7 @@ variables:
         - lambdas/python/step-function-start
         - lambdas/python/step-function-status
         - lambdas/python/structured-data-extraction
+        - lambdas/python/tor-assessment
         - lambdas/python/web-crawler-start
         - lambdas/python/web-search-proxy
         - lambdas/python/ws-authorizer

@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "tor-assessment"
+version = "0.1.0"
+description = "Terms of Reference (ToR) Assessment Lambda Function"
+authors = ["Arcanum AI"]
+readme = "README.md"
+packages = [
+    { include = "**/*.py" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+aws-lambda-powertools = "3.9.0"
+bedrock = { path = "../../../lib/bedrock", develop = true }
+helpers = { path = "../../../lib/helpers", develop = true }
+s3_helpers = { path = "../../../lib/s3_helpers", develop = true }
+
+[tool.poetry.group.dev.dependencies]
+mypy = "1.16.1"
+pylint = "3.3.7"
+pyright = "1.1.402"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

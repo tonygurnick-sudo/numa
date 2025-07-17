@@ -24,6 +24,7 @@ import { DocumentSummariser } from '../constructs/apps/document-summariser-const
 import { FinancialAnalysis } from '../constructs/apps/financial-analysis-construct';
 import { GdsrAssessment } from '../constructs/apps/gdsr-assessment-construct';
 import { InfringementReview } from '../constructs/apps/infringement-review-construct';
+import { TorAssessment } from '../constructs/apps/tor-assessment-construct';
 import { MeetingAnalyser } from '../constructs/apps/meeting-analyser-construct';
 import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-construct';
 import { PolicyDrafter } from '../constructs/apps/policy-drafter-construct';
@@ -494,6 +495,7 @@ export const appLibrary: Record<string, AppDefinition> = {
   'financial-analysis': { app: FinancialAnalysis, isProdApp: true },
   'gdsr-assessment': { app: GdsrAssessment, isProdApp: false },
   'infringement-review': { app: InfringementReview, isProdApp: false },
+  'tor-assessment': { app: TorAssessment, isProdApp: false },
   'meeting-analyser': { app: MeetingAnalyser, isProdApp: true },
   'nzsba-policy-builder': { app: NZSBAPolicyBuilder, isProdApp: false },
   'policy-drafter': { app: PolicyDrafter, isProdApp: true },
