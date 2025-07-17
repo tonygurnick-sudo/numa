@@ -437,19 +437,20 @@ export function S3Uploader() {
   }
 
   /**
-   * On mount, fetch files & check sync
+   * On mount or auth state change, fetch files & check sync
    */
   useEffect(() => {
+    // Reset initialFetchDone when auth state changes
     if (
-      !initialFetchDone.current &&
-      ((PREFERRED_KNOWLEDGE_BASE === 'q' && qBusinessClient) ||
-        (PREFERRED_KNOWLEDGE_BASE === 'bedrock' && bedrockAgentClient))
+      (PREFERRED_KNOWLEDGE_BASE === 'q' && qBusinessClient) ||
+      (PREFERRED_KNOWLEDGE_BASE === 'bedrock' && bedrockAgentClient)
     ) {
-      initialFetchDone.current = true;
+      // Always fetch data when auth is available, regardless of initialFetchDone state
       fetchFiles();
       checkDataSourceSync();
+      initialFetchDone.current = true;
     }
-  }, []);
+  }, [qBusinessClient, bedrockAgentClient, PREFERRED_KNOWLEDGE_BASE]);
 
   /**
    * Refresh status & file list
