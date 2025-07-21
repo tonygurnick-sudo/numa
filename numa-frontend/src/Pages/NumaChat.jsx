@@ -3,7 +3,6 @@ import { Button, Container, Row, Col } from 'react-bootstrap';
 import { ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import { useAuth } from '../Providers/AuthProvider';
 import { queryKnowledgeBase, formatKnowledgeBaseResults, preWarmAuroraDatabase } from '../utils/knowledgeBaseUtils';
-import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
@@ -947,135 +946,143 @@ Today's Date: ${TODAY}`;
   }
 
   return (
-    <div className="dashboard">
+    <>
       <Nav />
-      <header className="mb-1">
-        <Container fluid>
+      <div className="dashboard" data-testid="layout-dashboard">
+        <header className="mb-1">
+          <Container fluid>
+            <Row>
+              <Col lg={12}>
+                <Breadcrumbs label={'Chat'} clearStack={true} />
+                <h1 className="mb-0 fs-3">Numa Chat</h1>
+              </Col>
+            </Row>
+          </Container>
+        </header>
+
+        {/* Main content */}
+        <div className="container-fluid">
           <Row>
-            <Col lg={12}>
-              <Breadcrumbs label={'Chat'} clearStack={true} />
-              <h1 className="mb-0 fs-3">Numa Chat</h1>
-            </Col>
-          </Row>
-        </Container>
-      </header>
+            <Col xs={12}>
+              <div className="wrapper">
+                {/* Chat layout */}
+                <div className="chat-layout d-flex">
+                  {/* Chat history sidebar */}
+                  <ChatHistorySidebar
+                    ref={chatHistoryRef}
+                    onSelectConversation={handleLoadConversation}
+                    currentConversationId={conversationId}
+                  />
+                  {/* Data sources list */}
+                  <DataSourcesList />
 
-      {/* Main content */}
-      <LayoutDashboard className="flex-grow-1">
-        {/* Chat layout */}
-        <div className="chat-layout d-flex">
-          {/* Chat history sidebar */}
-          <ChatHistorySidebar
-            ref={chatHistoryRef}
-            onSelectConversation={handleLoadConversation}
-            currentConversationId={conversationId}
-          />
-          {/* Data sources list */}
-          <DataSourcesList />
-
-          {/* Main chat content */}
-          <div className="flex-grow-1 d-flex contain-width">
-            <div className="chat-content flex-grow-1 d-flex flex-column">
-              {/* Header with chat instructions and buttons on the right */}
-              <div className="chat-header d-flex justify-content-between align-items-center mb-3">
-                <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
-                <div className="chat-header-buttons d-flex align-items-center gap-2">
-                  <Button
-                    variant="outline-secondary"
-                    className="chat-history-btn"
-                    onClick={toggleChatHistory}
-                    title="Chat History"
-                  >
-                    <i className="bi bi-clock-history"></i>
-                  </Button>
-                  <Button
-                    className="btn btn-primary new-chat-btn"
-                    onClick={handleNewChat}
-                    style={{ marginRight: '15px' }}
-                  >
-                    New Chat
-                  </Button>
-                </div>
-              </div>
-
-              <div className="chat-container position-relative" style={{ flex: '1 1 auto' }}>
-                <ResizableSplitView
-                  left={
-                    /* LEFT PANE: chat messages + input */
-                    <div className="chat-left-pane d-flex flex-column h-100">
-                      <div className="chat-messages flex-grow-1 overflow-auto" style={{ overflowY: 'auto' }}>
-                        <ChatMessages
-                          messages={messages}
-                          messageEndRef={messageEndRef}
-                          loadingIndicatorStyle={loadingIndicatorStyle}
-                          onOpenDocument={(docTitle, docContent) => {
-                            setLeftFraction(0.45);
-                            setInlineDocument({ title: docTitle, content: docContent });
-                            setShowSplitView(true);
-                          }}
-                          isConversationLoading={isConversationLoading}
-                        />
+                  {/* Main chat content */}
+                  <div className="flex-grow-1 d-flex contain-width">
+                    <div className="chat-content flex-grow-1 d-flex flex-column">
+                      {/* Header with chat instructions and buttons on the right */}
+                      <div className="chat-header d-flex justify-content-between align-items-center mb-3">
+                        <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
+                        <div className="chat-header-buttons d-flex align-items-center gap-2">
+                          <Button
+                            variant="outline-secondary"
+                            className="chat-history-btn"
+                            onClick={toggleChatHistory}
+                            title="Chat History"
+                          >
+                            <i className="bi bi-clock-history"></i>
+                          </Button>
+                          <Button
+                            className="btn btn-primary new-chat-btn"
+                            onClick={handleNewChat}
+                            style={{ marginRight: '15px' }}
+                          >
+                            New Chat
+                          </Button>
+                        </div>
                       </div>
 
-                      {/* pinned input at bottom */}
-                      <div style={{ flexShrink: 0, padding: '0.5rem' }}>
-                        <ChatInput
-                          inputMessage={inputMessage}
-                          setInputMessage={setInputMessage}
-                          handleSubmit={handleSubmit}
-                          setShowUploadModal={setShowUploadModal}
-                          buttonStatus={buttonStatus}
-                          handleStopGeneration={handleStopGeneration}
-                          isMobile={isMobile}
-                          queryDataSources={queryDataSources}
-                          setQueryDataSources={setQueryDataSources}
-                          webSearchEnabled={webSearchEnabled}
-                          setWebSearchEnabled={setWebSearchEnabled}
-                          disabled={isFileProcessing}
+                      <div className="chat-container position-relative" style={{ flex: '1 1 auto' }}>
+                        <ResizableSplitView
+                          left={
+                            /* LEFT PANE: chat messages + input */
+                            <div className="chat-left-pane d-flex flex-column h-100">
+                              <div className="chat-messages flex-grow-1 overflow-auto" style={{ overflowY: 'auto' }}>
+                                <ChatMessages
+                                  messages={messages}
+                                  messageEndRef={messageEndRef}
+                                  loadingIndicatorStyle={loadingIndicatorStyle}
+                                  onOpenDocument={(docTitle, docContent) => {
+                                    setLeftFraction(0.45);
+                                    setInlineDocument({ title: docTitle, content: docContent });
+                                    setShowSplitView(true);
+                                  }}
+                                  isConversationLoading={isConversationLoading}
+                                />
+                              </div>
+
+                              {/* pinned input at bottom */}
+                              <div style={{ flexShrink: 0, padding: '0.5rem' }}>
+                                <ChatInput
+                                  inputMessage={inputMessage}
+                                  setInputMessage={setInputMessage}
+                                  handleSubmit={handleSubmit}
+                                  setShowUploadModal={setShowUploadModal}
+                                  buttonStatus={buttonStatus}
+                                  handleStopGeneration={handleStopGeneration}
+                                  isMobile={isMobile}
+                                  queryDataSources={queryDataSources}
+                                  setQueryDataSources={setQueryDataSources}
+                                  webSearchEnabled={webSearchEnabled}
+                                  setWebSearchEnabled={setWebSearchEnabled}
+                                  disabled={isFileProcessing}
+                                />
+                              </div>
+                            </div>
+                          }
+                          right={
+                            /* RIGHT PANE: document panel */
+                            showSplitView && inlineDocument ? (
+                              <DocumentPanel documentContent={inlineDocument} onClose={handleDocClose} />
+                            ) : null
+                          }
+                          showRight={inlineDocument && showSplitView}
+                          leftFraction={leftFraction}
+                          onLeftFractionChange={setLeftFraction}
+                          minLeft={200}
+                          minRight={200}
                         />
+                      </div>
+                      {/* Tips Messages */}
+                      <div className="tips-container">
+                        <p className="datasource-tip text-center small text-muted">
+                          Click the <i className="bi bi-database"></i> to chat against your data sources.
+                        </p>
+                        <p className="websearch-tip text-center small text-muted">
+                          Click the <i className="bi bi-search"></i> to search the web.
+                        </p>
                       </div>
                     </div>
-                  }
-                  right={
-                    /* RIGHT PANE: document panel */
-                    showSplitView && inlineDocument ? (
-                      <DocumentPanel documentContent={inlineDocument} onClose={handleDocClose} />
-                    ) : null
-                  }
-                  showRight={inlineDocument && showSplitView}
-                  leftFraction={leftFraction}
-                  onLeftFractionChange={setLeftFraction}
-                  minLeft={200}
-                  minRight={200}
-                />
+                  </div>
+                </div>
               </div>
-              {/* Tips Messages */}
-              <div className="tips-container">
-                <p className="datasource-tip text-center small text-muted">
-                  Click the <i className="bi bi-database"></i> to chat against your data sources.
-                </p>
-                <p className="websearch-tip text-center small text-muted">
-                  Click the <i className="bi bi-search"></i> to search the web.
-                </p>
-              </div>
-            </div>
-          </div>
+            </Col>
+          </Row>
         </div>
-      </LayoutDashboard>
 
-      {/* File upload */}
-      <ChatFileUpload
-        show={showUploadModal}
-        onHide={() => setShowUploadModal(false)}
-        getAccessToken={getAccessToken}
-        setMessages={setMessages}
-        conversationId={conversationId}
-        sub={sub}
-        refreshSidebar={refreshSidebar}
-        setIsFileProcessing={setIsFileProcessing}
-        createNewConversationIfNeeded={createNewConversationIfNeeded}
-      />
-    </div>
+        {/* File upload */}
+        <ChatFileUpload
+          show={showUploadModal}
+          onHide={() => setShowUploadModal(false)}
+          getAccessToken={getAccessToken}
+          setMessages={setMessages}
+          conversationId={conversationId}
+          sub={sub}
+          refreshSidebar={refreshSidebar}
+          setIsFileProcessing={setIsFileProcessing}
+          createNewConversationIfNeeded={createNewConversationIfNeeded}
+        />
+      </div>
+    </>
   );
 };
 

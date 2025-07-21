@@ -117,12 +117,8 @@ export const WebCrawler = ({ onCrawlerStarted }) => {
         <i className="bi bi-globe2 me-2 text-primary"></i>
         <Card.Title className="mb-0">Website Crawler</Card.Title>
       </Card.Header>
-      <Card.Body className="p-0">
-        <div className="p-3 bg-light border-bottom">
-          <p className="text-muted mb-0">
-            Add content from websites to your knowledge base by specifying URLs to crawl.
-          </p>
-        </div>
+      <Card.Body>
+        <p className="small mt-2">Add content from websites to your knowledge base by specifying URLs to crawl.</p>
 
         <div className="row g-0">
           <div className="col-lg-5 p-4 border-end">

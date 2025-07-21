@@ -141,6 +141,7 @@ export const Dash = ({ showFavorites }) => {
 
   return (
     <>
+      <Nav />
       <div className="dashboard" data-testid="dashboard">
         <header>
           <Container fluid>
@@ -217,7 +218,6 @@ export const Dash = ({ showFavorites }) => {
           </Container>
         </LayoutDashboard>
       </div>
-      <Nav />
     </>
   );
 };
