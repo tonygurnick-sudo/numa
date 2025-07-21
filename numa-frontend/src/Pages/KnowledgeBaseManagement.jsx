@@ -1154,6 +1154,7 @@ export function KnowledgeBaseManagement() {
                     size="sm"
                     onClick={handleRefreshStatus}
                     className="ms-2"
+                    style={{ float: 'right' }}
                     disabled={kbStateLoading}
                   >
                     {kbStateLoading && <span className="spinner-border spinner-border-sm me-1" />}
