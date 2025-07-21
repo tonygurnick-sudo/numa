@@ -214,12 +214,25 @@ label {
   border-right: 1px solid var(--color-mid-gray);
   width: 60px;
   background-color: white;
+  transition: width 0.3s ease;
+  position: fixed;
+  left: 0;
+  top: 0;
+  overflow-x: hidden;
+  z-index: 1030;
+
+  // Expanded state
+  &.expanded {
+    width: 300px;
+    box-shadow: 1px 1px 12px #cccccc;
+  }
 
   .divider {
     width: 80%;
     height: 1px;
     background-color: var(--color-primary);
     margin: 1rem 0;
+    margin-top: 0;
     opacity: 1;
   }
 
@@ -228,31 +241,138 @@ label {
     @include flex-center-column;
     gap: var(--spacing-xs);
     list-style: none;
+    align-items: center; /* Center items when nav is closed */
     padding: 0;
     margin: var(--spacing-xs) 0;
     width: 100%;
   }
 
+  &.expanded .nav-links {
+    align-items: flex-start; /* Left align when expanded */
+    padding-left: 10px;
+  }
+
   .nav-link {
-    @include flex-center-column;
-    justify-content: center;
+    display: flex;
+
     padding: calc(var(--spacing-xs) / 2);
     color: var(--color-primary);
     cursor: pointer;
     width: 100%;
     transition: var(--transition-default);
+
+    .nav-icon-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      min-width: 24px;
+    }
+  }
+
+  // Consistent styling for all nav items
+  .nav-item {
+    display: block;
+    align-items: center;
+    height: 38px;
+    justify-content: center; /* Center when collapsed */
+    width: 100%;
+
+    .nav-icon-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+
+  &.expanded .nav-item {
+    justify-content: flex-start; /* Left align when expanded */
+    padding-left: 10px;
+    display: flex;
+
+    .nav-icon-container {
+      margin-right: 10px;
+    }
   }
 
   .icon {
     font-size: 1.2rem;
   }
 
+  // Logo text styling
+  .btn-home-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    margin-bottom: 0.5rem;
+
+    .logo-text {
+      font-weight: 600;
+      color: var(--color-primary);
+      white-space: nowrap;
+    }
+  }
+
+  // Label styling for expanded state
+  .nav-label {
+    margin-left: 0.75rem;
+    white-space: nowrap;
+    font-size: 0.9rem;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+
+    &.expanded {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
   .footer {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1rem;
-    width: auto;
+    width: 100%;
+    margin-top: auto;
+    padding: 1rem 0;
+
+    .nav-links {
+      width: 100%;
+      padding: 0;
+      margin: 0;
+      align-items: center; /* Center footer items when collapsed */
+    }
+
+    .btn-logout {
+      display: flex;
+      align-items: center;
+      justify-content: center; /* Center when collapsed */
+      width: 100%;
+      background: none;
+      border: none;
+      color: var(--color-primary);
+      padding: calc(var(--spacing-xs) / 2);
+      cursor: pointer;
+
+      .nav-icon-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+    }
+  }
+
+  &.expanded .footer {
+    .nav-links {
+      align-items: flex-start; /* Left align footer items when expanded */
+      padding-left: 10px;
+    }
+
+    .btn-logout {
+      justify-content: flex-start; /* Left align when expanded */
+      padding-left: 10px;
+    }
   }
 
   .version {

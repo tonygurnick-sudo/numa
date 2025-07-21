@@ -3,7 +3,7 @@ import { Dash } from '../Pages/Dash';
 import AppDetail from '../Pages/AppDetail';
 import UserManagement from '../Pages/UserManagement';
 import { NumaChat } from '../Pages/NumaChat';
-import { S3Uploader } from '../Pages/S3Uploader';
+import { KnowledgeBaseManagement } from '../Pages/KnowledgeBaseManagement';
 import { CompanyInfo } from '../Pages/CompanyInfo';
 
 export const ROUTE_CONFIG = [
@@ -30,10 +30,10 @@ export const ROUTE_CONFIG = [
     nav: { label: 'Company', icon: 'bi bi-building-fill' },
   },
   {
-    path: '/upload',
-    element: () => <S3Uploader />,
+    path: '/knowledgebase-management',
+    element: () => <KnowledgeBaseManagement />,
     requiredFeature: 'useCompanyData',
-    nav: { label: 'Files', icon: 'bi bi-cloud-upload-fill' },
+    nav: { label: 'Knowledge Base', icon: 'bi bi-cloud-upload-fill' },
   },
   {
     path: '/user-management',

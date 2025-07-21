@@ -95,97 +95,99 @@ const CompanyInfo = () => {
   };
 
   return (
-    <div className="dashboard">
+    <>
       <Nav />
-      <header className="mb-1">
-        <Container fluid>
-          <Row>
-            <Col lg={12}>
-              <Breadcrumbs items={[{ label: 'Company Info', active: true }]} />
-              <h1 className="mb-0 fs-3">Company Info</h1>
-            </Col>
-          </Row>
-        </Container>
-      </header>
+      <div className="dashboard">
+        <header className="mb-1">
+          <Container fluid>
+            <Row>
+              <Col lg={12}>
+                <Breadcrumbs items={[{ label: 'Company Info', active: true }]} />
+                <h1 className="mb-0 fs-3">Company Info</h1>
+              </Col>
+            </Row>
+          </Container>
+        </header>
 
-      <LayoutDashboard className="flex-grow-1">
-        <Container fluid className="p-4">
-          <Row>
-            <Col lg={12}>
-              <Card>
-                <Card.Body>
-                  <Card.Title>Edit Company Information</Card.Title>
-                  <Card.Text>Enter your company information below. This will be used in chat interactions.</Card.Text>
+        <LayoutDashboard className="flex-grow-1">
+          <Container fluid className="p-4">
+            <Row>
+              <Col lg={12}>
+                <Card>
+                  <Card.Body>
+                    <Card.Title>Edit Company Information</Card.Title>
+                    <Card.Text>Enter your company information below. This will be used in chat interactions.</Card.Text>
 
-                  {saveStatus.show && (
-                    <Alert
-                      variant={saveStatus.type}
-                      dismissible
-                      onClose={() => setSaveStatus({ ...saveStatus, show: false })}
-                    >
-                      {saveStatus.message}
-                    </Alert>
-                  )}
+                    {saveStatus.show && (
+                      <Alert
+                        variant={saveStatus.type}
+                        dismissible
+                        onClose={() => setSaveStatus({ ...saveStatus, show: false })}
+                      >
+                        {saveStatus.message}
+                      </Alert>
+                    )}
 
-                  {isLoading ? (
-                    <div className="text-center my-4">
-                      <Spinner animation="border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </Spinner>
-                    </div>
-                  ) : (
-                    <Form>
-                      <Form.Group className="mb-3">
-                        <Form.Label>Company Information</Form.Label>
-                        <Form.Control
-                          as="textarea"
-                          disabled={!user?.features?.includes('addToCompanyData')}
-                          rows={15}
-                          value={companyProfile}
-                          onChange={(e) => setCompanyProfile(e.target.value)}
-                          maxLength={10000}
-                          placeholder="Enter a detailed description of your company, including its mission, values, and any other information that would be helpful for users interacting with your AI assistant."
-                        />
-                        <Form.Text className="d-block mt-2 mb-1 text-muted">
-                          Character count: {companyProfile.length}/10000
-                        </Form.Text>
-                        <Form.Text className="d-block mb-1 text-muted">
-                          This information will be available to all users in chat interactions.
-                        </Form.Text>
-                        {companyProfile.length > 3000 && (
-                          <Form.Text className="d-block mb-1 text-warning">
-                            Note: Only the first ~3000 characters will be used in chat context.
+                    {isLoading ? (
+                      <div className="text-center my-4">
+                        <Spinner animation="border" role="status">
+                          <span className="visually-hidden">Loading...</span>
+                        </Spinner>
+                      </div>
+                    ) : (
+                      <Form>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Company Information</Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            disabled={!user?.features?.includes('addToCompanyData')}
+                            rows={15}
+                            value={companyProfile}
+                            onChange={(e) => setCompanyProfile(e.target.value)}
+                            maxLength={10000}
+                            placeholder="Enter a detailed description of your company, including its mission, values, and any other information that would be helpful for users interacting with your AI assistant."
+                          />
+                          <Form.Text className="d-block mt-2 mb-1 text-muted">
+                            Character count: {companyProfile.length}/10000
                           </Form.Text>
-                        )}
-                      </Form.Group>
-
-                      {lastUpdated && (
-                        <p className="text-muted small mb-3">
-                          <i className="bi bi-clock"></i> Last updated: {formatLastUpdated(lastUpdated)}
-                        </p>
-                      )}
-
-                      <FeatureWrapper requiredFeature="addToCompanyData">
-                        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
-                          {isSaving ? (
-                            <>
-                              <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />{' '}
-                              Saving...
-                            </>
-                          ) : (
-                            'Save Information'
+                          <Form.Text className="d-block mb-1 text-muted">
+                            This information will be available to all users in chat interactions.
+                          </Form.Text>
+                          {companyProfile.length > 3000 && (
+                            <Form.Text className="d-block mb-1 text-warning">
+                              Note: Only the first ~3000 characters will be used in chat context.
+                            </Form.Text>
                           )}
-                        </Button>
-                      </FeatureWrapper>
-                    </Form>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-          </Row>
-        </Container>
-      </LayoutDashboard>
-    </div>
+                        </Form.Group>
+
+                        {lastUpdated && (
+                          <p className="text-muted small mb-3">
+                            <i className="bi bi-clock"></i> Last updated: {formatLastUpdated(lastUpdated)}
+                          </p>
+                        )}
+
+                        <FeatureWrapper requiredFeature="addToCompanyData">
+                          <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+                            {isSaving ? (
+                              <>
+                                <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />{' '}
+                                Saving...
+                              </>
+                            ) : (
+                              'Save Information'
+                            )}
+                          </Button>
+                        </FeatureWrapper>
+                      </Form>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+          </Container>
+        </LayoutDashboard>
+      </div>
+    </>
   );
 };
 

@@ -59,97 +59,98 @@ const AppDetail = () => {
   };
 
   return (
-    <div className="dashboard">
-      {error && (
-        <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1001 }}>
-          <Alert variant="danger" dismissible className="mb-0 shadow" onClose={() => setError(null)}>
-            {typeof error === 'string' ? error : 'An error occurred while loading the app'}
-          </Alert>
-        </div>
-      )}
-      {/* Hide JobHistorySidebar for policy apps */}
-      {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && <JobHistorySidebar />}
-      <JobIdSidebar />
-      <header>
-        <Container fluid>
-          <Breadcrumbs label={numaAppData?.appName} />
-          <Row>
-            <Col lg={8} className="pe-5">
-              <div className="d-flex align-items-center mb-3">
-                <h1 className="h3 mb-0">{numaAppData?.appName}</h1>
+    <>
+      <Nav nav1on="on" nav2on="" nav3on="" />
+      <div className="dashboard">
+        {error && (
+          <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1001 }}>
+            <Alert variant="danger" dismissible className="mb-0 shadow" onClose={() => setError(null)}>
+              {typeof error === 'string' ? error : 'An error occurred while loading the app'}
+            </Alert>
+          </div>
+        )}
+        {/* Hide JobHistorySidebar for policy apps */}
+        {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && <JobHistorySidebar />}
+        <JobIdSidebar />
+        <header className="mb-1">
+          <Container fluid>
+            <Breadcrumbs label={numaAppData?.appName} />
+            <Row>
+              <Col lg={8} className="pe-5">
+                <div className="d-flex align-items-center mb-3">
+                  <h1 className="h3 mb-0">{numaAppData?.appName}</h1>
 
-                <button onClick={handleFavoriteClick} className="btn btn-link text-warning p-0 ms-2">
-                  {favorite ? <StarFill size={20} /> : <Star size={20} />}
-                </button>
-              </div>
-              {numaAppData?.appDescription && (
-                <p
-                  className="text-muted mb-3"
-                  style={{
-                    fontSize: '0.95rem',
-                    lineHeight: '1.5',
-                    maxWidth: '80ch',
-                    marginTop: '0.5rem',
-                  }}
-                >
-                  {numaAppData.appDescription}
-                </p>
-              )}
-            </Col>
-            <Col lg={4} className="">
-              {numaAppData?.category && (
-                <div className="ms-auto text-end">
-                  <span
-                    className={`text-uppercase category-soft ${numaAppData.category.toLowerCase()}`}
+                  <button onClick={handleFavoriteClick} className="btn btn-link text-warning p-0 ms-2">
+                    {favorite ? <StarFill size={20} /> : <Star size={20} />}
+                  </button>
+                </div>
+                {numaAppData?.appDescription && (
+                  <p
+                    className="text-muted mb-3"
                     style={{
-                      fontSize: '0.75rem',
-                      letterSpacing: '0.5px',
-                      padding: '0.25rem 0.5rem',
-                      borderRadius: '2px',
-                      display: 'inline-block',
-                      fontWeight: 500,
+                      fontSize: '0.95rem',
+                      lineHeight: '1.5',
+                      maxWidth: '80ch',
+                      marginTop: '0.5rem',
                     }}
                   >
-                    {formatCategory(numaAppData.category)}
-                  </span>
-                </div>
-              )}
-              <div className="mt-2 d-flex align-items-center justify-content-end">
-                {numaAppData?.tags?.length > 0 && (
-                  <div className="app-tags text-end">
-                    {numaAppData.tags.map((tag, index) => (
-                      <span key={index} className={`tag-pill tag-${['green', 'purple', 'blue'][index % 3]}`}>
-                        {tag}
-                      </span>
-                    ))}
+                    {numaAppData.appDescription}
+                  </p>
+                )}
+              </Col>
+              <Col lg={4} className="">
+                {numaAppData?.category && (
+                  <div className="ms-auto text-end">
+                    <span
+                      className={`text-uppercase category-soft ${numaAppData.category.toLowerCase()}`}
+                      style={{
+                        fontSize: '0.75rem',
+                        letterSpacing: '0.5px',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '2px',
+                        display: 'inline-block',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {formatCategory(numaAppData.category)}
+                    </span>
                   </div>
                 )}
-              </div>
+                <div className="mt-2 d-flex align-items-center justify-content-end">
+                  {numaAppData?.tags?.length > 0 && (
+                    <div className="app-tags text-end">
+                      {numaAppData.tags.map((tag, index) => (
+                        <span key={index} className={`tag-pill tag-${['green', 'purple', 'blue'][index % 3]}`}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Col>
+            </Row>
+          </Container>
+        </header>
+
+        <Container fluid className="mt-4">
+          <Row>
+            <Col>
+              {loading ? (
+                <div>Loading...</div>
+              ) : numaAppData?.type === 'q-app' ? (
+                <QAppDetail manifest={numaAppData} />
+              ) : numaAppData?.type === 'policy-builder' ? (
+                <PolicyBuilderDetail id={numaAppData.id} />
+              ) : numaAppData?.id === 'policy-reviewer' ? (
+                <PolicyReviewerDetail />
+              ) : numaAppData ? (
+                <AppWizard manifest={numaAppData} />
+              ) : null}
             </Col>
           </Row>
         </Container>
-      </header>
-
-      <Container fluid className="mt-4">
-        <Row>
-          <Col>
-            {loading ? (
-              <div>Loading...</div>
-            ) : numaAppData?.type === 'q-app' ? (
-              <QAppDetail manifest={numaAppData} />
-            ) : numaAppData?.type === 'policy-builder' ? (
-              <PolicyBuilderDetail id={numaAppData.id} />
-            ) : numaAppData?.id === 'policy-reviewer' ? (
-              <PolicyReviewerDetail />
-            ) : numaAppData ? (
-              <AppWizard manifest={numaAppData} />
-            ) : null}
-          </Col>
-        </Row>
-      </Container>
-
-      <Nav nav1on="on" nav2on="" nav3on="" />
-    </div>
+      </div>
+    </>
   );
 };
 
