@@ -243,6 +243,12 @@ const formatMessagesForChat = async (messages, getCredentials) => {
 
       // Move index to the last processed tool result
       i = j - 1;
+    } else if (item.message_type === 'knowledge' && item.content?.trim()) {
+      // Knowledge base results - include as assistant message
+      formattedMessages.push({
+        role: item.role,
+        content: [{ text: item.content }],
+      });
     } else if (item.message_type === 'meta') {
       // Meta messages (like "New conversation started")
       if (item.content && item.content.trim()) {
