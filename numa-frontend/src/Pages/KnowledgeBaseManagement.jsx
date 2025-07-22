@@ -989,7 +989,7 @@ export function KnowledgeBaseManagement() {
                       </div>
                     </div>
                   </FeatureWrapper>
-                  <Table hover size="sm" className="mb-0 file-table">
+                  <Table hover size="sm" className="mb-0 file-table auto-layout">
                     <thead className="sticky-table-header">
                       <tr>
                         <th
@@ -1031,74 +1031,78 @@ export function KnowledgeBaseManagement() {
                         </FeatureWrapper>
                       </tr>
                     </thead>
-                    <tbody>
-                      {rows.map((row) => {
-                        const { id, type, name, depth, uploadDate, size, kbStatus } = row;
-                        const isFolder = type === 'folder';
-                        const isExpanded = expandedSet.has(id);
-
-                        return (
-                          <tr key={id}>
-                            <td>
-                              <div className={`file-tree-item depth-${depth}`}>
-                                {isFolder ? (
-                                  <i
-                                    className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1 folder-toggle`}
-                                    onClick={() => toggleFolderFn(id)}
-                                  />
-                                ) : (
-                                  <span className="file-icon-spacer" />
-                                )}
-                                {isFolder ? (
-                                  <>
-                                    <i className="bi bi-folder me-2 folder-icon" />
-                                    <strong>{name}</strong>
-                                  </>
-                                ) : (
-                                  <>
-                                    <i className="bi bi-file-earmark me-2 file-icon" />
-                                    {row.displayName || name}
-                                    {row.urlTag && <span className="ms-2 badge bg-info">URL</span>}
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                            <td>{uploadDate}</td>
-                            <td>{size}</td>
-                            {showErrorColumn && (
-                              <td>
-                                {kbStatus === 'SUCCESS' ? (
-                                  <span className="badge bg-success">SUCCESS</span>
-                                ) : kbStatus === 'FAILED' ? (
-                                  <span className="badge bg-danger">FAILED</span>
-                                ) : null}
-                              </td>
-                            )}
-                            <FeatureWrapper requiredFeature="deleteFromCompanyData">
-                              <td className="checkbox-purple">
-                                <input
-                                  type="checkbox"
-                                  className="form-check-input"
-                                  checked={(expandedSet === expandedFoldersPending
-                                    ? selectedItemsPending
-                                    : selectedItemsIndexed
-                                  ).has(row.id)}
-                                  onChange={(e) =>
-                                    handleItemSelection(
-                                      row.id,
-                                      expandedSet === expandedFoldersPending ? 'pending' : 'indexed',
-                                      e.target.checked,
-                                    )
-                                  }
-                                  aria-label={`Select ${isFolder ? 'folder' : 'file'}: ${row.name}`}
-                                />
-                              </td>
-                            </FeatureWrapper>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
                   </Table>
+                  <div className="table-body-container">
+                    <Table hover size="sm" className="mb-0 file-table auto-layout">
+                      <tbody>
+                        {rows.map((row) => {
+                          const { id, type, name, depth, uploadDate, size, kbStatus } = row;
+                          const isFolder = type === 'folder';
+                          const isExpanded = expandedSet.has(id);
+
+                          return (
+                            <tr key={id}>
+                              <td>
+                                <div className={`file-tree-item depth-${depth}`}>
+                                  {isFolder ? (
+                                    <i
+                                      className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1 folder-toggle`}
+                                      onClick={() => toggleFolderFn(id)}
+                                    />
+                                  ) : (
+                                    <span className="file-icon-spacer" />
+                                  )}
+                                  {isFolder ? (
+                                    <>
+                                      <i className="bi bi-folder me-2 folder-icon" />
+                                      <strong className="text-truncate">{name}</strong>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="bi bi-file-earmark me-2 file-icon" />
+                                      <span className="text-truncate">{row.displayName || name}</span>
+                                      {row.urlTag && <span className="ms-2 badge bg-info">URL</span>}
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                              <td>{uploadDate}</td>
+                              <td>{size}</td>
+                              {showErrorColumn && (
+                                <td>
+                                  {kbStatus === 'SUCCESS' ? (
+                                    <span className="badge bg-success">SUCCESS</span>
+                                  ) : kbStatus === 'FAILED' ? (
+                                    <span className="badge bg-danger">FAILED</span>
+                                  ) : null}
+                                </td>
+                              )}
+                              <FeatureWrapper requiredFeature="deleteFromCompanyData">
+                                <td className="checkbox-purple">
+                                  <input
+                                    type="checkbox"
+                                    className="form-check-input"
+                                    checked={(expandedSet === expandedFoldersPending
+                                      ? selectedItemsPending
+                                      : selectedItemsIndexed
+                                    ).has(row.id)}
+                                    onChange={(e) =>
+                                      handleItemSelection(
+                                        row.id,
+                                        expandedSet === expandedFoldersPending ? 'pending' : 'indexed',
+                                        e.target.checked,
+                                      )
+                                    }
+                                    aria-label={`Select ${isFolder ? 'folder' : 'file'}: ${row.name}`}
+                                  />
+                                </td>
+                              </FeatureWrapper>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </Table>
+                  </div>
                 </div>
               )}
             </>
@@ -1314,9 +1318,9 @@ export function KnowledgeBaseManagement() {
                         </Row>
                       </div>
 
-                      <div className="table-responsive">
-                        <Table hover className="mb-0">
-                          <thead>
+                      <div className="file-table-container scrollable">
+                        <Table hover className="mb-0 file-table auto-layout">
+                          <thead className="sticky-table-header">
                             <tr>
                               <th>Name</th>
                               <th>Type</th>
@@ -1324,100 +1328,109 @@ export function KnowledgeBaseManagement() {
                               <th>Details</th>
                             </tr>
                           </thead>
-                          <tbody>
-                            {filteredDataSources.length === 0 ? (
-                              <tr>
-                                <td colSpan="4" className="text-center py-3">
-                                  No matching data sources found
-                                </td>
-                              </tr>
-                            ) : (
-                              filteredDataSources.flatMap((dataSource, index) => {
-                                const id = dataSource.dataSourceId || index;
-                                const isExpanded = expandedItems.includes(id);
-                                const lastUpdated = dataSource.lastSynced || dataSource.lastUpdated;
+                        </Table>
+                        <div className="table-body-container">
+                          <Table hover className="mb-0 file-table auto-layout">
+                            <tbody>
+                              {filteredDataSources.length === 0 ? (
+                                <tr>
+                                  <td colSpan="4" className="text-center py-3">
+                                    No matching data sources found
+                                  </td>
+                                </tr>
+                              ) : (
+                                filteredDataSources.flatMap((dataSource, index) => {
+                                  const id = dataSource.dataSourceId || index;
+                                  const isExpanded = expandedItems.includes(id);
+                                  const lastUpdated = dataSource.lastSynced || dataSource.lastUpdated;
 
-                                const rows = [];
+                                  const rows = [];
 
-                                // Main data source row
-                                rows.push(
-                                  <tr key={id}>
-                                    <td>
-                                      <div className="d-flex align-items-center">
-                                        <i className={`${getSourceIcon(dataSource)} me-2 text-primary`}></i>
-                                        {formatDataSourceName(dataSource.displayName || dataSource.name, CLIENT_NAME)}
-                                      </div>
-                                    </td>
-                                    <td>{formatDataSourceType(dataSource.type, dataSource.source)}</td>
-                                    <td>
-                                      <span className={`badge bg-${getDataSourceStatusVariant(dataSource.status)}`}>
-                                        {dataSource.status || 'Unknown'}
-                                      </span>
-                                    </td>
-                                    <td>
-                                      <Button variant="link" size="sm" className="p-0" onClick={() => toggleExpand(id)}>
-                                        {isExpanded ? (
-                                          <i className="bi bi-chevron-up"></i>
-                                        ) : (
-                                          <i className="bi bi-chevron-down"></i>
-                                        )}
-                                      </Button>
-                                    </td>
-                                  </tr>,
-                                );
-
-                                // If expanded, add the details row immediately after
-                                if (isExpanded) {
+                                  // Main data source row
                                   rows.push(
-                                    <tr key={`details-${id}`} className="table-light">
-                                      <td colSpan="4" className="p-3">
-                                        <div className="row">
-                                          <div className="col-md-6 mb-2">
-                                            <strong>ID:</strong> {dataSource.dataSourceId || 'N/A'}
-                                          </div>
-                                          {dataSource.pageCount && (
-                                            <div className="col-md-6 mb-2">
-                                              <strong>Pages:</strong> {dataSource.pageCount}
-                                            </div>
-                                          )}
-                                          {dataSource.isWebCrawler && (
-                                            <div className="col-md-6 mb-2">
-                                              <strong>URL:</strong>{' '}
-                                              {dataSource.url ||
-                                                (dataSource.dataSourceId &&
-                                                dataSource.dataSourceId.startsWith('web-crawler-')
-                                                  ? `${dataSource.dataSourceId.replace('web-crawler-', '')}`
-                                                  : 'N/A')}
-                                            </div>
-                                          )}
-                                          {dataSource.isWebCrawler && dataSource.lastCrawled && (
-                                            <div className="col-md-6 mb-2">
-                                              <strong>Last Crawled:</strong>{' '}
-                                              {new Date(dataSource.lastCrawled).toLocaleString('en-NZ')}
-                                            </div>
-                                          )}
-                                          {!dataSource.isWebCrawler && lastUpdated && (
-                                            <div className="col-md-6 mb-2">
-                                              <strong>Last Synced:</strong>{' '}
-                                              {new Date(lastUpdated).toLocaleString('en-NZ')}
-                                            </div>
-                                          )}
-                                          {dataSource.description && (
-                                            <div className="col-12 mb-2">
-                                              <strong>Description:</strong> {dataSource.description}
-                                            </div>
-                                          )}
+                                    <tr key={id}>
+                                      <td>
+                                        <div className="d-flex align-items-center">
+                                          <i className={`${getSourceIcon(dataSource)} me-2 text-primary`}></i>
+                                          {formatDataSourceName(dataSource.displayName || dataSource.name, CLIENT_NAME)}
                                         </div>
+                                      </td>
+                                      <td>{formatDataSourceType(dataSource.type, dataSource.source)}</td>
+                                      <td>
+                                        <span className={`badge bg-${getDataSourceStatusVariant(dataSource.status)}`}>
+                                          {dataSource.status || 'Unknown'}
+                                        </span>
+                                      </td>
+                                      <td>
+                                        <Button
+                                          variant="link"
+                                          size="sm"
+                                          className="p-0"
+                                          onClick={() => toggleExpand(id)}
+                                        >
+                                          {isExpanded ? (
+                                            <i className="bi bi-chevron-up"></i>
+                                          ) : (
+                                            <i className="bi bi-chevron-down"></i>
+                                          )}
+                                        </Button>
                                       </td>
                                     </tr>,
                                   );
-                                }
 
-                                return rows;
-                              })
-                            )}
-                          </tbody>
-                        </Table>
+                                  // If expanded, add the details row immediately after
+                                  if (isExpanded) {
+                                    rows.push(
+                                      <tr key={`details-${id}`} className="table-light">
+                                        <td colSpan="4" className="p-3">
+                                          <div className="row">
+                                            <div className="col-md-6 mb-2">
+                                              <strong>ID:</strong> {dataSource.dataSourceId || 'N/A'}
+                                            </div>
+                                            {dataSource.pageCount && (
+                                              <div className="col-md-6 mb-2">
+                                                <strong>Pages:</strong> {dataSource.pageCount}
+                                              </div>
+                                            )}
+                                            {dataSource.isWebCrawler && (
+                                              <div className="col-md-6 mb-2">
+                                                <strong>URL:</strong>{' '}
+                                                {dataSource.url ||
+                                                  (dataSource.dataSourceId &&
+                                                  dataSource.dataSourceId.startsWith('web-crawler-')
+                                                    ? `${dataSource.dataSourceId.replace('web-crawler-', '')}`
+                                                    : 'N/A')}
+                                              </div>
+                                            )}
+                                            {dataSource.isWebCrawler && dataSource.lastCrawled && (
+                                              <div className="col-md-6 mb-2">
+                                                <strong>Last Crawled:</strong>{' '}
+                                                {new Date(dataSource.lastCrawled).toLocaleString('en-NZ')}
+                                              </div>
+                                            )}
+                                            {!dataSource.isWebCrawler && lastUpdated && (
+                                              <div className="col-md-6 mb-2">
+                                                <strong>Last Synced:</strong>{' '}
+                                                {new Date(lastUpdated).toLocaleString('en-NZ')}
+                                              </div>
+                                            )}
+                                            {dataSource.description && (
+                                              <div className="col-12 mb-2">
+                                                <strong>Description:</strong> {dataSource.description}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </td>
+                                      </tr>,
+                                    );
+                                  }
+
+                                  return rows;
+                                })
+                              )}
+                            </tbody>
+                          </Table>
+                        </div>
                       </div>
 
                       {/* Accordion for Mobile View */}
