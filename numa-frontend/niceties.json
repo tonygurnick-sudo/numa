@@ -1,0 +1,12 @@
+[
+  {
+    "id": "status-dashboard",
+    "label": "New dashboard element showing job status. ⚠️ Incomplete feature.",
+    "default": false
+  },
+  {
+    "id": "open-job-on-dashboard-click",
+    "label": "Open jobs when they're clicked from the dashboard. ⚠️ Known issues.",
+    "default": false
+  }
+]

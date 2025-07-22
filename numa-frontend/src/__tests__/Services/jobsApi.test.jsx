@@ -196,6 +196,7 @@ describe('jobsApi', () => {
     it('should fetch jobs by app ID with default parameters', async () => {
       // Mock the numaGet response
       const mockJobs = {
+        appId: 'test-app',
         items: [
           { jobId: 'job-1', status: 'completed' },
           { jobId: 'job-2', status: 'PROCESSING' },
@@ -216,6 +217,7 @@ describe('jobsApi', () => {
         const response = await result.current.getJobsByAppId(numaAppId);
         // The implementation returns nextToken as null and next_token as the actual value
         expect(response).toEqual({
+          appId: mockJobs.appId,
           items: mockJobs.items,
           nextToken: null,
           next_token: mockJobs.next_token,
@@ -234,6 +236,7 @@ describe('jobsApi', () => {
     it('should fetch jobs by app ID with custom parameters', async () => {
       // Mock the numaGet response
       const mockJobs = {
+        appId: 'test-app',
         items: [{ jobId: 'job-1', status: 'completed' }],
         next_token: 'next-token-value',
         count: 1,
@@ -252,6 +255,7 @@ describe('jobsApi', () => {
         const response = await result.current.getJobsByAppId(numaAppId, nextToken);
         // The implementation returns nextToken as null and next_token as the actual value
         expect(response).toEqual({
+          appId: mockJobs.appId,
           items: mockJobs.items,
           nextToken: null,
           next_token: mockJobs.next_token,

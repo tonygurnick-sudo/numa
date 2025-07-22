@@ -109,6 +109,7 @@ export const useJobsApi = () => {
       const response = await numaGet(endpoint, params);
 
       return {
+        appId,
         items: response.items || [],
         next_token: response.next_token || null,
         nextToken: response.nextToken || null,
