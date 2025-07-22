@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useContext, useState, useEffect, useMemo } from 'react';
 
 import { Alert, Container, Row, Col } from 'react-bootstrap';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
@@ -9,13 +9,17 @@ import { AppSearch } from '../Components/AppSearch';
 import { AppItem } from '../Components/AppItem';
 import { Pagination } from '../Components/Pagination';
 import { Preloader } from '../Components/Preloader';
+import { StatusDashboard } from '../Components/StatusDashboard';
 import { StarFill } from 'react-bootstrap-icons';
 
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { useFavorites } from '../hooks/useFavorites';
 import { manifestService } from '../Services/manifestService';
+import { NicetyContext } from '../Providers/NicetyContext';
+import { JobStatusProvider } from '../Providers/JobStatusProvider';
 
 export const Dash = ({ showFavorites }) => {
+  const niceties = useContext(NicetyContext);
   const { error, setError, loading, setLoading, setNumaApps, numaApps } = useNumaApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategories, setActiveCategories] = useState(() => {
@@ -164,9 +168,13 @@ export const Dash = ({ showFavorites }) => {
             </Row>
           </Container>
         </header>
-
         <LayoutDashboard>
           <Container fluid className="px-0">
+            {niceties.isEnabled('status-dashboard') && (
+              <JobStatusProvider>
+                <StatusDashboard />
+              </JobStatusProvider>
+            )}
             <AppSearch
               onSearch={handleSearch}
               onCategoryFilter={handleCategoryFilter}

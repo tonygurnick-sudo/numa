@@ -1,0 +1,41 @@
+.status-dashboard-container {
+  width: 100%;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+  .card {
+    border: none;
+  }
+
+  .card-body {
+    min-height: 8lh;
+    display: flex;
+    align-items: center;
+
+    .preloader-wrapper {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+
+  .status-dashboard-table {
+    table {
+      justify-self: left;
+      width: 100%;
+    }
+
+    tr, td, th {
+      text-transform: capitalize;
+      padding-right: 2em;
+    }
+
+    .status-completed {
+      color: var(--color-success-text);
+    }
+
+    .status-error {
+      color: var(--color-error-text);
+    }
+
+  }
+}

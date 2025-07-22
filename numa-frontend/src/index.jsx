@@ -4,6 +4,7 @@ import App from './App.jsx';
 import installOpenTelemetry from './otel-config.jsx';
 
 import { fetchConfigAddtoSession } from './Components/ConfigSetup';
+import { NicetyProvider } from './Providers/NicetyProvider';
 
 // Initialize config with caching
 fetchConfigAddtoSession().catch((error) => {
@@ -17,6 +18,8 @@ if (!window.location.hostname.includes('localhost')) {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <NicetyProvider>
+      <App />
+    </NicetyProvider>
   </StrictMode>,
 );

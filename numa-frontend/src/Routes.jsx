@@ -6,6 +6,7 @@ import { NumaLogin } from './Pages/Login';
 import AppProviders from './Providers/AppProviders';
 import { ProtectedRoute } from './Components/RequiredFeaturesWrapper';
 import { ROUTE_CONFIG } from './utils/routeConfig.jsx';
+import { Ian } from './Pages/Ian.jsx';
 
 const NumaRoutes = () => {
   return (
@@ -31,6 +32,7 @@ const AppRoutes = () => {
       <Route path="/login" element={user ? <Navigate to="/dash" replace /> : <NumaLogin />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/create-password" element={<ResetPassword />} />
+      <Route path="/ian" element={<Ian />} />
       {/* Dynamically render all protected routes from ROUTE_CONFIG */}
       {ROUTE_CONFIG.map((r) => (
         <Route
