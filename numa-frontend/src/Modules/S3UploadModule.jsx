@@ -59,6 +59,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   const [isDragging, setIsDragging] = useState(false);
   const [bucketName, setBucketName] = useState();
   const [region, setRegion] = useState();
+  const [isCreatingJob, setIsCreatingJob] = useState(false);
 
   const fileInputRef = useRef(null);
   // Single promise to ensure atomic job creation across concurrent uploads
@@ -228,13 +229,17 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   const handleDragEnter = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(true);
+    if (!disabled && !isCreatingJob) {
+      setIsDragging(true);
+    }
   };
 
   const handleDragLeave = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    if (!disabled && !isCreatingJob) {
+      setIsDragging(false);
+    }
   };
 
   const handleDragOver = (e) => {
@@ -246,11 +251,13 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    handleFileSelection(e.dataTransfer.files);
+    if (!disabled && !isCreatingJob) {
+      handleFileSelection(e.dataTransfer.files);
+    }
   };
 
   const handleZoneClick = (e) => {
-    if (!selectedFiles.length && e.target === e.currentTarget) {
+    if (!selectedFiles.length && e.target === e.currentTarget && !disabled && !isCreatingJob) {
       fileInputRef.current.click();
     }
   };
@@ -293,6 +300,8 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           // If no job creation is in progress, start it
           if (!jobCreationPromiseRef.current) {
             console.log('Creating new job for file upload');
+            setIsCreatingJob(true);
+            setUploadStatus('Creating job...');
             jobCreationPromiseRef.current = jobsApi.createJob(numaAppData, {}, 'uploading');
           }
 
@@ -301,10 +310,12 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
             const jobCreationResult = await jobCreationPromiseRef.current;
             jobId = jobCreationResult.jobId;
             setCurrentJobId(jobId);
+            setIsCreatingJob(false);
             console.log(`Using job ID: ${jobId}`);
           } catch (error) {
             console.error('Failed to create job:', error);
             jobCreationPromiseRef.current = null; // Reset on error
+            setIsCreatingJob(false);
             throw error;
           }
         } else {
@@ -487,7 +498,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
       <div
         className={`upload-container bg-light p-4 rounded  ${isDragging ? 'dragging' : ''} ${
-          disabled ? 'disabled' : ''
+          disabled || isCreatingJob ? 'disabled' : ''
         }`}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
@@ -504,7 +515,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
             htmlFor={`file-upload-${task?.id}`}
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
             onClick={(e) => e.stopPropagation()}
-            disabled={disabled}
+            disabled={disabled || isCreatingJob}
           >
             Select Files
           </Button>
@@ -604,7 +615,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           style={{ display: 'none' }}
           multiple
           accept={acceptedFileTypes?.join(',')}
-          disabled={disabled}
+          disabled={disabled || isCreatingJob}
         />
       </div>
     </div>
