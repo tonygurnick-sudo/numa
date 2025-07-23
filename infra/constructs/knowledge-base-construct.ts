@@ -140,7 +140,7 @@ export class KnowledgeBase extends Construct {
         },
         {
           actions: ['bedrock:InvokeModel'],
-          resources: [`arn:aws:bedrock:*:*:foundation-model/anthropic.claude-3-haiku-20240307-v1:0`],
+          resources: [`arn:aws:bedrock:*:*:foundation-model/${props.bedrockParserModel}`],
         },
       ],
     });
@@ -368,8 +368,7 @@ export class KnowledgeBase extends Construct {
               parsingStrategy: 'BEDROCK_FOUNDATION_MODEL',
               bedrockFoundationModelConfiguration: [
                 {
-                  modelArn:
-                    'arn:aws:bedrock:' + props.region + '::foundation-model/anthropic.claude-3-haiku-20240307-v1:0',
+                  modelArn: 'arn:aws:bedrock:' + props.region + '::foundation-model/' + props.bedrockParserModel,
                   parsingModality: 'MULTIMODAL',
                   parsingPrompt: [
                     {
@@ -565,4 +564,8 @@ interface KnowledgeBaseProps {
    * The id of the embedding model to use.
    */
   embeddingModel: string;
+  /**
+   * The id of the bedrock model to use for document parsing.
+   */
+  bedrockParserModel: string;
 }

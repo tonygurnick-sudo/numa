@@ -11,6 +11,7 @@ class TestStack extends TerraformStack {
       region: 'ap-southeast-2',
       clientName: props.clientName,
       embeddingModel: 'amazon.titan-embed-text-v2:0',
+      bedrockParserModel: 'anthropic.claude-3-haiku-20240307-v1:0',
     });
   }
 }
