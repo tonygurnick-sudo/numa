@@ -53,6 +53,7 @@ export class NumaClientStack extends TerraformStack {
     const defaults = {
       domainSuffix: props.domainSuffix,
       embeddingModel: 'amazon.titan-embed-text-v2:0',
+      bedrockParserModel: 'anthropic.claude-3-haiku-20240307-v1:0',
       provisionQResources: true,
     };
     const domainName = props.clientConfig.customDomain ?? `${props.clientName}.${defaults.domainSuffix}`;
@@ -149,6 +150,7 @@ export class NumaClientStack extends TerraformStack {
       clientName: clientConfig.clientName,
       region: clientConfig.region,
       embeddingModel: clientConfig.embeddingModel,
+      bedrockParserModel: clientConfig.bedrockParserModel,
     });
 
     const core = new CoreNumaInfra(this, 'numa', {
@@ -453,6 +455,20 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default 'q' if provisionQResources is true, else 'bedrock'
          */
         preferredKnowledgeBase: z.enum(['q', 'bedrock']).optional(),
+
+        /**
+         * Model to use for document embedding in knowledge base
+         *
+         * @default 'amazon.titan-embed-text-v2:0'
+         */
+        embeddingModel: z.string().optional(),
+
+        /**
+         * Bedrock model to use for document parsing in knowledge base
+         *
+         * @default 'anthropic.claude-3-haiku-20240307-v1:0'
+         */
+        bedrockParserModel: z.string().optional(),
 
         // Generic email configuration that can be used by any app
         senderEmail: z.string().optional(),
