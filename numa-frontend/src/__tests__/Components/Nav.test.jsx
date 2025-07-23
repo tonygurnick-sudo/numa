@@ -42,6 +42,40 @@ vi.mock('../../utils/navigation', () => ({
   reloadFavourites: vi.fn(),
 }));
 
+// Mock the route config to make it available synchronously
+vi.mock('../../utils/routeConfig.jsx', () => ({
+  ROUTE_CONFIG: [
+    {
+      path: '/dash',
+      nav: { label: 'Dash', icon: 'bi bi-grid-1x2-fill' },
+    },
+    {
+      path: '/favourite-apps',
+      nav: { label: 'Favs', icon: 'bi bi-star-fill' },
+    },
+    {
+      path: '/chat',
+      requiredFeature: 'chat',
+      nav: { label: 'Chat', icon: 'bi bi-chat-dots-fill' },
+    },
+    {
+      path: '/company-info',
+      requiredFeature: 'useCompanyData',
+      nav: { label: 'Company', icon: 'bi bi-building-fill' },
+    },
+    {
+      path: '/knowledgebase-management',
+      requiredFeature: 'useCompanyData',
+      nav: { label: 'Knowledge Base', icon: 'bi bi-cloud-upload-fill' },
+    },
+    {
+      path: '/user-management',
+      requiredFeature: 'manageUsers',
+      nav: { label: 'User Management', icon: 'bi bi-people-fill', footerOnly: true },
+    },
+  ],
+}));
+
 describe('Nav Component', () => {
   const { mockNavigate } = setupNavigationMocks();
   const { logout: mockLogout } = setupAuthMocks();

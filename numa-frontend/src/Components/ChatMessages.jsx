@@ -4,6 +4,7 @@ import { MarkdownContent } from './MarkdownContent';
 import numaIcon from '../../public/numa-logo.svg';
 import { ChatReferencesDropdown } from '../Components/ChatReferencesDropdown';
 import { useAuth } from '../Providers/AuthProvider';
+import { TOOL_CONFIG } from '../utils/ToolConfig';
 
 /**
  * A small helper bubble for opening doc if docTitle/docContent exist
@@ -25,6 +26,9 @@ function DocOpenBubble({ docTitle, docContent, onClick }) {
 
 const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDocument, isConversationLoading }) => {
   const { getCredentials } = useAuth();
+
+  // Check if agent mode is enabled
+  const useAgentMode = sessionStorage.getItem('NUMA_CHAT_AGENTS') === 'true';
 
   // Show conversation loading state
   if (isConversationLoading) {
@@ -53,17 +57,27 @@ const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDo
             statusText = 'Initializing chat...';
           } else if (message.status === 'processingFile') {
             statusText = 'Processing Upload...';
-          } else if (message.status === 'querying') {
-            statusText = 'Querying data sources...';
           } else if (message.status === 'thinking') {
             statusText = 'Thinking...';
-          } else if (message.status === 'searching') {
+          } else if (!useAgentMode && message.status === 'querying') {
+            statusText = 'Querying data sources...';
+          } else if (!useAgentMode && message.status === 'searching') {
             statusText = 'Searching the web...';
           }
           return (
             <div key={index} className="message assistant ephemeral">
               <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                <img src={numaIcon} alt="Numa" style={{ width: '20px', height: '20px', marginRight: '7px' }} />
+                <img
+                  src={numaIcon}
+                  alt="Numa"
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    marginRight: '7px',
+                    marginBottom: '2px',
+                    verticalAlign: 'middle',
+                  }}
+                />
                 Numa:
               </strong>
               <div className="message-content d-flex align-items-center" style={loadingIndicatorStyle}>
@@ -102,8 +116,54 @@ const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDo
               )}
             </strong>
             <div className="message-content markdown-content">
-              {/* Render the message content */}
-              <MarkdownContent content={message.content} />
+              {useAgentMode ? (
+                // Agent mode: segment-based rendering
+                message.segments ? (
+                  message.segments.map((seg, idx) => {
+                    if (seg.kind === 'text') {
+                      return <MarkdownContent key={idx} content={seg.text} />;
+                    } else if (seg.kind === 'tool') {
+                      return (
+                        <div key={idx} className="tool-event-bubble">
+                          <i className="bi bi-tools me-1" />
+                          {seg.label}
+                          {seg.isLoading && (
+                            <Spinner
+                              animation="border"
+                              size="sm"
+                              className="ms-2 tool-loading-spinner"
+                              style={{ width: '16px', height: '16px' }}
+                            />
+                          )}
+                        </div>
+                      );
+                    } else if (seg.kind === 'result') {
+                      const toolName = seg.toolName || 'unknown';
+                      const descriptor = TOOL_CONFIG[toolName] || TOOL_CONFIG._default;
+                      const Renderer = descriptor.renderer;
+                      return <Renderer key={idx} result={seg.payload} />;
+                    }
+                    return null;
+                  })
+                ) : (
+                  // Fallback for legacy messages without segments in agent mode
+                  <>
+                    {message.content && <MarkdownContent content={message.content} />}
+                    {message.toolEvents?.length > 0 && (
+                      <div className="tool-events-container">
+                        {message.toolEvents.map((evt, idx) => (
+                          <div key={idx} className="tool-event-bubble">
+                            {evt}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              ) : (
+                // Legacy mode: simple message content rendering
+                <MarkdownContent content={message.content} />
+              )}
 
               {/* Show interrupted message indicator */}
               {message.interrupted && (

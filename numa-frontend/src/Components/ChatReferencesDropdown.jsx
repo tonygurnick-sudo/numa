@@ -3,7 +3,7 @@ import { getContentType } from '../utils/fileUtils';
 import { getUrlTagFromS3Object } from '../utils/s3Utils';
 import { Button, Collapse } from 'react-bootstrap';
 
-const ChatReferencesDropdown = ({ references, getCredentials }) => {
+const ChatReferencesDropdown = ({ references, getCredentials, showAsDropdown = true }) => {
   const [open, setOpen] = useState(false);
   const [processedRefs, setProcessedRefs] = useState([]);
   const [downloadingIndex, setDownloadingIndex] = useState(null);
@@ -99,7 +99,9 @@ const ChatReferencesDropdown = ({ references, getCredentials }) => {
           };
         }),
       );
-      setProcessedRefs(processed.filter(Boolean));
+      const finalRefs = processed.filter(Boolean);
+      console.log('[ChatReferencesDropdown] Processed references:', finalRefs);
+      setProcessedRefs(finalRefs);
     };
 
     processReferences();
@@ -207,8 +209,56 @@ const ChatReferencesDropdown = ({ references, getCredentials }) => {
     }
   };
 
+  // Render the reference list items
+  const renderReferenceItems = () => (
+    <ul className="list-unstyled">
+      {processedRefs.map((ref, idx) => (
+        <li key={idx}>
+          <Button
+            variant="link"
+            className="p-0"
+            onClick={() => handleDocumentAccess(ref, idx)}
+            disabled={downloadingIndex === idx}
+            style={{
+              color: ref.error ? '#dc3545' : '#4b007d',
+              textDecoration: ref.error ? 'line-through' : 'underline',
+            }}
+          >
+            {ref.isS3 ? (
+              <>
+                <i className="bi bi-file-earmark-text me-1"></i>
+                {ref.displayName}
+                {downloadingIndex === idx && (
+                  <span className="ms-2">
+                    <i className="bi bi-arrow-down-circle-fill animate-pulse"></i>
+                  </span>
+                )}
+              </>
+            ) : (
+              ref.displayName
+            )}
+          </Button>
+          {ref.error && <span className="text-danger ms-2">(Unable to access file)</span>}
+        </li>
+      ))}
+    </ul>
+  );
+
   if (!references || references.length === 0) return null;
 
+  // Simple list mode (for tool results)
+  if (!showAsDropdown) {
+    return (
+      <div className="references-list mt-2">
+        {/* Invisible link for downloads */}
+        <a ref={downloadLinkRef} style={{ display: 'none' }} />
+        <strong>References:</strong>
+        <div className="ms-3">{renderReferenceItems()}</div>
+      </div>
+    );
+  }
+
+  // Dropdown mode (for main chat)
   return (
     <div className="references-dropdown mt-2">
       {/* Invisible link for downloads */}
@@ -225,37 +275,7 @@ const ChatReferencesDropdown = ({ references, getCredentials }) => {
       </Button>
       <Collapse in={open}>
         <div id="references-collapse" className="ms-3">
-          <ul className="list-unstyled">
-            {processedRefs.map((ref, idx) => (
-              <li key={idx}>
-                <Button
-                  variant="link"
-                  className="p-0"
-                  onClick={() => handleDocumentAccess(ref, idx)}
-                  disabled={downloadingIndex === idx}
-                  style={{
-                    color: ref.error ? '#dc3545' : '#4b007d',
-                    textDecoration: ref.error ? 'line-through' : 'underline',
-                  }}
-                >
-                  {ref.isS3 ? (
-                    <>
-                      <i className="bi bi-file-earmark-text me-1"></i>
-                      {ref.displayName}
-                      {downloadingIndex === idx && (
-                        <span className="ms-2">
-                          <i className="bi bi-arrow-down-circle-fill animate-pulse"></i>
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    ref.displayName
-                  )}
-                </Button>
-                {ref.error && <span className="text-danger ms-2">(Unable to access file)</span>}
-              </li>
-            ))}
-          </ul>
+          {renderReferenceItems()}
         </div>
       </Collapse>
     </div>

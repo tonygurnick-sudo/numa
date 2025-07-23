@@ -288,6 +288,7 @@ export class NumaClientStack extends TerraformStack {
         BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase.knowledgeBaseId,
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
         CHAT_AGENT_URL: chatAgentWs.websocketUrl,
+        NUMA_CHAT_AGENTS: clientConfig.numaChatAgents ?? true,
       }),
       contentType: 'application/json',
     });
@@ -474,6 +475,14 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         senderEmail: z.string().optional(),
         receiverEmails: z.array(z.string()).optional(),
         bedrockAccount: z.string().optional(),
+
+        /**
+         * Whether to enable the new agent-based chat functionality
+         *
+         * @default true
+         */
+        numaChatAgents: z.boolean().optional(),
+
         /** Whether to provision the bedrock-quota-sharing role.
          *
          * NOTE: Due to needing a predictable name, this can only be enabled on one environment per account.
