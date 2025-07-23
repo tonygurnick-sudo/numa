@@ -20,6 +20,11 @@ describe('ChatMessages Component - Additional Tests', () => {
   const dummyRef = React.createRef();
   const noop = () => {};
 
+  beforeEach(() => {
+    // Clear sessionStorage before each test
+    sessionStorage.clear();
+  });
+
   it('renders ephemeral message for "initializing" status', () => {
     const messages = [
       {
@@ -56,25 +61,6 @@ describe('ChatMessages Component - Additional Tests', () => {
       />,
     );
     expect(screen.getByText('Processing Upload...')).toBeInTheDocument();
-  });
-
-  it('renders ephemeral message for "querying" status', () => {
-    const messages = [
-      {
-        role: 'assistant',
-        content: '',
-        status: 'querying',
-      },
-    ];
-    render(
-      <ChatMessages
-        messages={messages}
-        messageEndRef={dummyRef}
-        loadingIndicatorStyle={loadingIndicatorStyle}
-        onOpenDocument={noop}
-      />,
-    );
-    expect(screen.getByText('Querying data sources...')).toBeInTheDocument();
   });
 
   it('renders ephemeral message for "thinking" status', () => {
@@ -155,5 +141,59 @@ describe('ChatMessages Component - Additional Tests', () => {
     // The container should have a message with class "message-with-doc"
     const messageElement = container.querySelector('.message-with-doc');
     expect(messageElement).toBeTruthy();
+  });
+
+  it('renders legacy status messages only in legacy mode', () => {
+    // Test legacy mode
+    sessionStorage.setItem('NUMA_CHAT_AGENTS', 'false');
+    const messages = [
+      {
+        role: 'assistant',
+        content: '',
+        status: 'querying',
+      },
+    ];
+    const { rerender } = render(
+      <ChatMessages
+        messages={messages}
+        messageEndRef={dummyRef}
+        loadingIndicatorStyle={loadingIndicatorStyle}
+        onOpenDocument={noop}
+      />,
+    );
+    expect(screen.getByText('Querying data sources...')).toBeInTheDocument();
+
+    // Test agent mode (should not show legacy status)
+    sessionStorage.setItem('NUMA_CHAT_AGENTS', 'true');
+    rerender(
+      <ChatMessages
+        messages={messages}
+        messageEndRef={dummyRef}
+        loadingIndicatorStyle={loadingIndicatorStyle}
+        onOpenDocument={noop}
+      />,
+    );
+    expect(screen.queryByText('Querying data sources...')).not.toBeInTheDocument();
+  });
+
+  it('renders segment-based content in agent mode', () => {
+    sessionStorage.setItem('NUMA_CHAT_AGENTS', 'true');
+    const messages = [
+      {
+        role: 'assistant',
+        content: 'Fallback content',
+        segments: [{ kind: 'text', text: 'This is segment text' }],
+      },
+    ];
+    render(
+      <ChatMessages
+        messages={messages}
+        messageEndRef={dummyRef}
+        loadingIndicatorStyle={loadingIndicatorStyle}
+        onOpenDocument={noop}
+      />,
+    );
+    expect(screen.getByText('This is segment text')).toBeInTheDocument();
+    expect(screen.queryByText('Fallback content')).not.toBeInTheDocument();
   });
 });

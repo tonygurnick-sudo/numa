@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { Button, Form, Spinner } from 'react-bootstrap';
-import { Database, Search } from 'react-bootstrap-icons';
+import { Database, Search, Gear } from 'react-bootstrap-icons';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
 
 const ChatInput = ({
@@ -14,12 +14,25 @@ const ChatInput = ({
   setQueryDataSources,
   webSearchEnabled,
   setWebSearchEnabled,
+  autoToolsEnabled,
+  setAutoToolsEnabled,
   disabled = false,
+  noToolsActive = false,
 }) => {
   const inputRef = useRef(null);
 
+  // Check if agent mode is enabled
+  const useAgentMode = sessionStorage.getItem('NUMA_CHAT_AGENTS') === 'true';
+
   // Calculate if input should be disabled based on buttonStatus or the disabled prop
   const isInputDisabled = buttonStatus === 'loading' || buttonStatus === 'streaming' || disabled;
+
+  // Dynamic placeholder text based on tool availability (only in agent mode)
+  const placeholderText = isInputDisabled
+    ? 'Processing...'
+    : useAgentMode && noToolsActive
+      ? 'Chat with Numa (no tools active)...'
+      : 'Chat with Numa...';
 
   const handleInputChange = (e) => {
     setInputMessage(e.target.value);
@@ -57,7 +70,7 @@ const ChatInput = ({
           value={inputMessage}
           onInput={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder={isInputDisabled ? 'Processing...' : 'Chat with Numa...'}
+          placeholder={placeholderText}
           disabled={isInputDisabled || buttonStatus === 'loading'}
           className="chat-textarea"
         />
@@ -81,13 +94,27 @@ const ChatInput = ({
               </Button>
             </FeatureWrapper>
 
+            {/* Auto Tools Toggle (Agent mode only) */}
+            {useAgentMode && autoToolsEnabled !== undefined && setAutoToolsEnabled && (
+              <Button
+                variant="link"
+                className={`auto-tools-toggle ${autoToolsEnabled ? 'active' : ''}`}
+                onClick={() => setAutoToolsEnabled(!autoToolsEnabled)}
+                aria-label="Toggle Auto Tools"
+                disabled={isInputDisabled}
+              >
+                <Gear size={25} />
+                {autoToolsEnabled && <span className="bubble-text">Auto Mode</span>}
+              </Button>
+            )}
+
             {/* Data Mode Toggle */}
             <Button
               variant="link"
               className={`data-mode-toggle ${queryDataSources ? 'active' : ''}`}
               onClick={() => setQueryDataSources(!queryDataSources)}
               aria-label="Toggle Data Mode"
-              disabled={isInputDisabled}
+              disabled={isInputDisabled || (useAgentMode && autoToolsEnabled)}
             >
               <Database size={25} />
               {queryDataSources && <span className="bubble-text">Data Sources Enabled</span>}
@@ -99,7 +126,7 @@ const ChatInput = ({
               className={`web-search-toggle ${webSearchEnabled ? 'active' : ''}`}
               onClick={() => setWebSearchEnabled(!webSearchEnabled)}
               aria-label="Toggle Web Search"
-              disabled={isInputDisabled}
+              disabled={isInputDisabled || (useAgentMode && autoToolsEnabled)}
             >
               <Search size={25} />
               {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}

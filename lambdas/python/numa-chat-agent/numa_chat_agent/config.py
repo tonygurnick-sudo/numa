@@ -12,11 +12,35 @@ from strands.models.bedrock import BedrockModel
 
 # ── Environment Variables & Constants ──────────────────────────────────────
 REGION = os.getenv("AWS_REGION", "us-east-1")
-MODEL_ID = os.getenv("MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
-FALLBACK_MODEL_ID = os.getenv(
-    "FALLBACK_MODEL_ID", "us.anthropic.claude-3-5-sonnet-20240620-v1:0"
-)
-HAIKU_MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
+
+# Region-aware model configuration (matches frontend MODEL_MAP)
+REGIONAL_MODEL_MAP = {
+    "us-east-1": {
+        "default": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+        "fallback": "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "haiku": "anthropic.claude-3-haiku-20240307-v1:0",
+    },
+    "ap-southeast-2": {
+        "default": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
+        "fallback": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "haiku": "anthropic.claude-3-haiku-20240307-v1:0",
+    },
+}
+
+
+def get_regional_model(model_type="default"):
+    """Get model ID for the current region and model type."""
+    regional_models = REGIONAL_MODEL_MAP.get(REGION)
+    if not regional_models:
+        # Fall back to us-east-1 for unknown regions
+        regional_models = REGIONAL_MODEL_MAP["us-east-1"]
+    return regional_models.get(model_type, regional_models["default"])
+
+
+# Set model constants with region-aware defaults, allowing env var override
+MODEL_ID = os.getenv("MODEL_ID", get_regional_model("default"))
+FALLBACK_MODEL_ID = os.getenv("FALLBACK_MODEL_ID", get_regional_model("fallback"))
+HAIKU_MODEL_ID = get_regional_model("haiku")
 
 # WebSocket Configuration
 CONNECTION_TABLE = os.getenv("CONNECTION_TABLE")

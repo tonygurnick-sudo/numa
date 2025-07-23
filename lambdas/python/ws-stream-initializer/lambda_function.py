@@ -318,6 +318,7 @@ def handler(event, _):
                 "enabledTools", ["query_knowledge_base", "web_search"]
             ),
             "systemPrompt": body.get("systemPrompt", ""),
+            "modelId": body.get("modelId"),  # Pass through model ID from frontend
             "userAuth": {
                 # Use authenticated user info from DynamoDB connection
                 "sub": user_info.get("sub"),

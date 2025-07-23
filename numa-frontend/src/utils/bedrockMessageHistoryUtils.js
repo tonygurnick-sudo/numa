@@ -249,14 +249,12 @@ const formatMessagesForChat = async (messages, getCredentials) => {
         role: item.role,
         content: [{ text: item.content }],
       });
-    } else if (item.message_type === 'meta') {
+    } else if (item.message_type === 'meta' && item.content?.trim()) {
       // Meta messages (like "New conversation started")
-      if (item.content && item.content.trim()) {
-        formattedMessages.push({
-          role: item.role,
-          content: [{ text: item.content }],
-        });
-      }
+      formattedMessages.push({
+        role: item.role,
+        content: [{ text: item.content }],
+      });
     }
     // Skip any other message types we don't recognize
   }
