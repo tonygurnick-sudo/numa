@@ -54,6 +54,7 @@ export class NumaClientStack extends TerraformStack {
       domainSuffix: props.domainSuffix,
       embeddingModel: 'amazon.titan-embed-text-v2:0',
       bedrockParserModel: 'anthropic.claude-3-haiku-20240307-v1:0',
+      visionModelType: 'haiku',
       provisionQResources: true,
     };
     const domainName = props.clientConfig.customDomain ?? `${props.clientName}.${defaults.domainSuffix}`;
@@ -207,6 +208,7 @@ export class NumaClientStack extends TerraformStack {
       userPoolClientId: core.userPoolClient.id,
       userPoolClientSecret: core.userPoolClient.clientSecret,
       webCrawlerStateMachineArn: core.webCrawler.stateMachine.arn,
+      visionModelType: clientConfig.visionModelType ?? defaults.visionModelType,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(
@@ -470,6 +472,12 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default 'anthropic.claude-3-haiku-20240307-v1:0'
          */
         bedrockParserModel: z.string().optional(),
+        /**
+         * Vision model type for content extraction
+         *
+         * @default 'haiku'
+         */
+        visionModelType: z.enum(['haiku', 'nova-pro']).optional(),
 
         // Generic email configuration that can be used by any app
         senderEmail: z.string().optional(),

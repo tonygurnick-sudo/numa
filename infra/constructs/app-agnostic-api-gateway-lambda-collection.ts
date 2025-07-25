@@ -127,13 +127,20 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       },
       environment: {
         LOG_LEVEL: 'INFO',
+        VISION_MODEL_TYPE: props.visionModelType,
       },
       timeout: 300,
+      memorySize: 1024,
       additionalPolicyStatements: [
         {
           effect: 'Allow',
-          actions: ['s3:GetObject', 's3:PutObject'],
+          actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
           resources: [`arn:aws:s3:::numa-${props.clientName}-outputs/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:ListBucket'],
+          resources: [`arn:aws:s3:::numa-${props.clientName}-outputs`],
         },
         {
           effect: 'Allow',
@@ -166,4 +173,5 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   apiGatewayId: string;
   apiGatewayAuthorizerId: string;
   webCrawlerStateMachineArn: string;
+  visionModelType: string;
 }

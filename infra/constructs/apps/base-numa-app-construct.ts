@@ -31,6 +31,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   readonly appId: string;
   readonly clientName: string;
   readonly region: string;
+  readonly visionModelType?: string;
 
   protected getResourceName(suffix: string): string {
     const appSpecificSuffix = `-${this.appId}${suffix}`;
@@ -43,6 +44,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     this.appId = props.appId;
     this.clientName = props.clientName;
     this.region = props.region;
+    this.visionModelType = props.visionModelType;
     this.outputsBucket = props.outputsBucket;
 
     this.logGroup = new NumaLogGroup(this, 'lambda-log-group', {
@@ -231,9 +233,19 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   addExtractContentLambda(): LambdaFunction {
     const extractContentLambdaPolicyStatements = [
       {
-        actions: ['s3:GetObject', 's3:PutObject'],
+        actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
         effect: 'Allow',
         resources: [`${this.outputsBucket.arn}${this.s3KeyPrefix}/*`],
+      },
+      {
+        actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+        effect: 'Allow',
+        resources: [`${this.outputsBucket.arn}/temp-pdf/*`],
+      },
+      {
+        actions: ['s3:ListBucket'],
+        effect: 'Allow',
+        resources: [this.outputsBucket.arn],
       },
       {
         actions: ['bedrock:InvokeModel'],
@@ -254,6 +266,10 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       additionalPolicyStatements: extractContentLambdaPolicyStatements,
       lambdaDirectory: 'python/extract-content-from-file',
       timeout: 900,
+      memorySize: 1024,
+      environment: {
+        VISION_MODEL_TYPE: this.visionModelType || 'haiku',
+      },
     });
   }
 
@@ -685,6 +701,7 @@ export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiG
   clientName: string;
   outputsBucket: S3Bucket;
   region: string;
+  visionModelType?: string;
 }
 
 export interface AppSpecificBaseNumaAppProps extends BaseNumaAppProps {
