@@ -1,28 +1,53 @@
 # pylint: disable=protected-access
 # pyright: reportIndexIssue=false
+import dataclasses
 import io
 import os
 import sys
 import unittest
+import unittest.mock
+from typing import List
+
+from openpyxl import Workbook
 
 # Add the lib directory to the Python path to find the modules
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
-sys.path.append(os.path.join(project_root, "lib/bedrock"))
+sys.path.append(os.path.join(project_root, "lib/aws-transcribe"))
 sys.path.append(os.path.join(project_root, "lib/helpers"))
-sys.path.append(os.path.join(project_root, "lib/pdf"))
-
-# Mock custom modules that aren't standard Python packages
-# pylint: disable=wrong-import-position
-import unittest.mock
 
 # Mock JWT module
 sys.modules["jwt"] = unittest.mock.Mock()  # type: ignore
 sys.modules["aws_transcribe"] = unittest.mock.Mock()  # type: ignore
 
-from openpyxl import Workbook
+# Create proper mock for fm_vision_extraction with the classes we need
+haiku_mock = unittest.mock.Mock()
 
-# pylint: disable=wrong-import-position
-import lambda_function
+# Create proper dataclasses for inheritance
+
+
+@dataclasses.dataclass
+class MockDocumentPage:
+    page_number: int = 0
+    num_words: int = 0
+    text: str = ""
+
+
+@dataclasses.dataclass
+class MockDocument:
+    name: str = ""
+    num_pages: int = 0
+    total_num_words: int = 0
+    pages: List[MockDocumentPage] = dataclasses.field(default_factory=list)
+
+
+haiku_mock.DocumentPage = MockDocumentPage
+haiku_mock.Document = MockDocument
+haiku_mock.extract_content = unittest.mock.Mock()
+
+sys.modules["fm_vision_extraction"] = haiku_mock
+
+# Import must be after sys.modules setup
+import lambda_function  # pylint: disable=wrong-import-position
 
 
 class TestExcelExtraction(unittest.TestCase):
@@ -96,7 +121,7 @@ class TestExcelExtraction(unittest.TestCase):
         Assumes that lambda_function defines:
           - ExcelDocumentPage (dataclass)
           - ExcelDocument (dataclass)
-          - excel_structure_to_document (function)
+          - _excel_structure_to_document (function)
         """
         file_content = self.create_test_workbook()
         excel_structure = lambda_function.extract_excel_structure(file_content)

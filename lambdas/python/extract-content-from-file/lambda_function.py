@@ -7,7 +7,7 @@ import json
 import os
 import pathlib
 import time
-from typing import Generic, List, TypeVar
+from typing import List, TypeVar
 
 import boto3
 import docx
@@ -16,10 +16,9 @@ from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 import aws_transcribe
-import bedrock
+import fm_vision_extraction
 import helpers
-import pdf
-import textract
+from fm_vision_extraction import Document, DocumentPage
 
 s3_client = boto3.client("s3")
 logger = structlog.get_logger(__name__)
@@ -52,6 +51,26 @@ TEXT_FILE_EXTENSIONS = [
     ".yml",
 ]
 
+# Vision extraction supported file formats
+VISION_SUPPORTED_FORMATS = [
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+]
+
+# Audio/video formats for transcription
+AUDIO_VIDEO_FORMATS = [
+    ".mp3",
+    ".mp4",
+    ".wav",
+    ".flac",
+    ".ogg",
+    ".amr",
+    ".webm",
+    ".m4a",
+]
+
 
 class UnsupportedFileFormat(Exception):
     pass
@@ -59,21 +78,6 @@ class UnsupportedFileFormat(Exception):
 
 # Define a type variable for document pages.
 PageT = TypeVar("PageT", bound="DocumentPage")
-
-
-@dataclasses.dataclass
-class Document(Generic[PageT]):
-    name: str = ""
-    num_pages: int = 0
-    total_num_words: int = 0
-    pages: List[PageT] = dataclasses.field(default_factory=list)
-
-
-@dataclasses.dataclass
-class DocumentPage:
-    page_number: int = 0
-    num_words: int = 0
-    text: str = ""
 
 
 # Excel-specific dataclasses extend the base ones.
@@ -85,21 +89,24 @@ class ExcelDocumentPage(DocumentPage):
 
 
 @dataclasses.dataclass
-class ExcelDocument(Document[ExcelDocumentPage]):
-    pages: List[ExcelDocumentPage] = dataclasses.field(default_factory=list)
+class ExcelDocument(Document):
+    pages: List[ExcelDocumentPage] = dataclasses.field(default_factory=list)  # type: ignore[assignment]
 
 
 def handler(event: dict, _context) -> dict:
     helpers.setup_logging()
 
     if "body" in event:
-        # API Gateway sends the body as a JSON string
         payload = json.loads(event["body"])
     else:
         payload = event
 
     input_bucket = payload.get("input_bucket")
     input_key = payload.get("input_key")
+
+    if not input_bucket or not input_key:
+        raise ValueError("input_bucket and input_key are required")
+
     output_bucket = payload.get("output_bucket", input_bucket)
     output_key = payload.get("output_key", f"{input_key}.json")
     file_name = payload.get("file_name", None)
@@ -107,9 +114,9 @@ def handler(event: dict, _context) -> dict:
     # only set this to true when it's certain this will be less than 256KB
     return_content = event.get("return_content", False)
 
-    document = __generate_document(input_bucket, input_key)  # type: ignore
+    document = _extract_content(input_bucket, input_key)
     if file_name:
-        document.name = file_name  # Set the name if provided (to return original name without unique key)
+        document.name = file_name
 
     content = json.dumps(dataclasses.asdict(document), indent=4).encode("utf-8")
     s3_client.put_object(Body=content, Bucket=output_bucket, Key=output_key)
@@ -121,7 +128,7 @@ def handler(event: dict, _context) -> dict:
         "output_key": output_key,
     }
     if return_content:
-        result["content"] = __document_to_string(document)
+        result["content"] = _document_to_string(document)
 
     logger.info(
         f"Document processed successfully: {input_key} -> {output_bucket}/{output_key}"
@@ -129,7 +136,7 @@ def handler(event: dict, _context) -> dict:
     return result
 
 
-def __generate_document(input_bucket: str, input_key: str) -> Document:
+def _extract_content(input_bucket: str, input_key: str) -> Document:
     suffix = pathlib.PurePosixPath(input_key.lower()).suffix
 
     if not suffix:
@@ -138,7 +145,7 @@ def __generate_document(input_bucket: str, input_key: str) -> Document:
     if suffix in TEXT_FILE_EXTENSIONS:
         s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
         extracted_text = s3_file_object["Body"].read().decode("utf-8")
-        return __text_to_document(extracted_text, input_key)
+        return _text_to_document(extracted_text, input_key)
 
     elif suffix in [
         ".docx",
@@ -147,40 +154,19 @@ def __generate_document(input_bucket: str, input_key: str) -> Document:
         file_content = s3_file_object["Body"].read()
         pages = extract_docx_pages(file_content)
         return _textract_pages_to_document(pages, input_key)
-    elif suffix in [
-        ".xlsx",
-    ]:
+
+    elif suffix in [".xlsx"]:
         s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
         file_content = s3_file_object["Body"].read()
         excel_structure = extract_excel_structure(file_content)
         return _excel_structure_to_document(excel_structure, input_key)
-    elif suffix in [
-        ".png",
-        ".jpg",
-        ".jpeg",
-    ]:
-        extracted_text = bedrock.get_text_from_image(input_bucket, input_key)
-        return __text_to_document(extracted_text, input_key)
-    elif suffix in [
-        ".pdf",
-    ]:
-        pages = pdf.process_pdf_document(input_bucket, input_key)
-        return _textract_pages_to_document(pages, input_key)
-    elif suffix in [
-        ".tiff",
-    ]:
-        pages = textract.get_pages_from_document(input_bucket, input_key)
-        return _textract_pages_to_document(pages, input_key)
-    elif suffix in [
-        ".mp3",
-        ".mp4",
-        ".wav",
-        ".flac",
-        ".ogg",
-        ".amr",
-        ".webm",
-        ".m4a",
-    ]:
+
+    # Vision extraction supported formats - direct processing
+    elif suffix in VISION_SUPPORTED_FORMATS:
+        return fm_vision_extraction.extract_content(input_bucket, input_key)
+
+    # Audio/video files - transcription
+    elif suffix in AUDIO_VIDEO_FORMATS:
         response = aws_transcribe.transcribe(
             input_bucket=input_bucket,
             input_key=input_key,
@@ -189,9 +175,31 @@ def __generate_document(input_bucket: str, input_key: str) -> Document:
             output_key=f"{input_key}.transcription.json",
             name_for_logging=input_key,
         )
-        return __text_to_document(response.text, input_key)
+        return _text_to_document(response.text, input_key)
+
     else:
         raise UnsupportedFileFormat(f"{input_key} has an unsupported file format")
+
+
+def _text_to_document(text: str, key: str) -> Document:
+    """Convert text to Document structure"""
+    page = DocumentPage(
+        num_words=len(text.split()),
+        page_number=1,
+        text=text,
+    )
+
+    return Document(
+        name=os.path.basename(key),
+        num_pages=1,
+        pages=[page],
+        total_num_words=page.num_words,
+    )
+
+
+def _document_to_string(document: Document) -> str:
+    """Convert Document to string"""
+    return "\n".join(page.text for page in document.pages) + "\n"
 
 
 def extract_docx_pages(file_content: bytes) -> dict[int, str]:
@@ -320,29 +328,6 @@ def _textract_pages_to_document(pages: dict[int, str], key: str) -> Document:
     return document
 
 
-def __text_to_document(text: str, key: str) -> Document:
-    page = DocumentPage(
-        num_words=len(text.split()),
-        page_number=1,
-        text=text,
-    )
-
-    document = Document(
-        name=os.path.basename(key),
-        num_pages=1,
-        pages=[page],
-        total_num_words=page.num_words,
-    )
-    return document
-
-
-def __document_to_string(document: Document) -> str:
-    document_string = ""
-    for page in document.pages:
-        document_string += f"{page.text}\n"
-    return document_string
-
-
 def _excel_structure_to_document(structured: dict, key: str) -> ExcelDocument:
     total_num_words = 0
     pages: List[ExcelDocumentPage] = []
@@ -358,6 +343,7 @@ def _excel_structure_to_document(structured: dict, key: str) -> ExcelDocument:
                 rows=sheet_data["rows"],
                 num_words=num_words,
                 page_number=sheet_num,
+                text=sheet_text,
             )
         )
     return ExcelDocument(
@@ -368,13 +354,8 @@ def _excel_structure_to_document(structured: dict, key: str) -> ExcelDocument:
     )
 
 
-def _write_text_to_s3(text: str, bucket_name: str, key: str):
-    file_obj = io.BytesIO(text.encode("utf-8"))
-    s3_client.upload_fileobj(file_obj, bucket_name, key)
-
-
 def main():
-    """Main function for testing the lambda handler."""
+    """Main function for testing the lambda handler"""
     parser = argparse.ArgumentParser(description="Test the lambda handler")
     parser.add_argument("--bucket", required=True, help="S3 bucket name")
     parser.add_argument("--key", required=True, help="S3 key for the file")
@@ -384,8 +365,7 @@ def main():
         "input_bucket": args.bucket,
         "input_key": args.key,
     }
-    test_context = {}
-    result = handler(test_event, test_context)
+    result = handler(test_event, {})
     print(result)
 
 

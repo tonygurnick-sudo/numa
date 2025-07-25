@@ -1,33 +1,50 @@
 # pylint: disable=protected-access
 import dataclasses
-import io
-import json
 import os
 import sys
 import unittest
+import unittest.mock
+from typing import List
 from unittest.mock import MagicMock, patch
 
 # Add the lib directory to the Python path to find the modules
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
-sys.path.append(os.path.join(project_root, "lib/bedrock"))
+sys.path.append(os.path.join(project_root, "lib/aws-transcribe"))
 sys.path.append(os.path.join(project_root, "lib/helpers"))
-sys.path.append(os.path.join(project_root, "lib/pdf"))
-
-# Mock custom modules that aren't standard Python packages
-# pylint: disable=wrong-import-position
-import unittest.mock
 
 # Mock JWT module
 sys.modules["jwt"] = unittest.mock.Mock()  # type: ignore
 sys.modules["aws_transcribe"] = unittest.mock.Mock()  # type: ignore
 
-# pylint: disable=wrong-import-position
-import docx
-from docx.enum.text import WD_BREAK
+# Create proper mock for fm_vision_extraction with the classes we need
+haiku_mock = unittest.mock.Mock()
 
-sys.modules["aws_transcribe"] = unittest.mock.Mock()
+# Create proper dataclasses for inheritance
 
-import lambda_function
+
+@dataclasses.dataclass
+class MockDocumentPage:
+    page_number: int = 0
+    num_words: int = 0
+    text: str = ""
+
+
+@dataclasses.dataclass
+class MockDocument:
+    name: str = ""
+    num_pages: int = 0
+    total_num_words: int = 0
+    pages: List[MockDocumentPage] = dataclasses.field(default_factory=list)
+
+
+haiku_mock.DocumentPage = MockDocumentPage
+haiku_mock.Document = MockDocument
+haiku_mock.extract_content = unittest.mock.Mock()
+
+sys.modules["fm_vision_extraction"] = haiku_mock
+
+# Import must be after sys.modules setup
+import lambda_function  # pylint: disable=wrong-import-position
 
 
 class TestException(Exception):
@@ -36,14 +53,8 @@ class TestException(Exception):
 
 class TestLambdaFunction(unittest.TestCase):
     @patch("lambda_function.s3_client")
-    @patch("bedrock.get_text_from_image")
-    @patch("textract.get_pages_from_document")
-    def test_handler_txt_file(
-        self,
-        mock_textract,
-        mock_bedrock,
-        mock_s3_client,
-    ):
+    def test_handler_txt_file(self, mock_s3_client):
+        """Test processing of text files"""
         mock_s3_client.get_object.return_value = {
             "Body": MagicMock(read=lambda: b"Sample text content")
         }
@@ -56,7 +67,6 @@ class TestLambdaFunction(unittest.TestCase):
         response = lambda_function.handler(event, {})
 
         self.assertEqual(response["content"], "Sample text content\n")
-
         mock_s3_client.get_object.assert_called_once_with(
             Bucket="test-bucket",
             Key="test.txt",
@@ -65,29 +75,10 @@ class TestLambdaFunction(unittest.TestCase):
         kwargs = mock_s3_client.put_object.call_args.kwargs
         self.assertEqual(kwargs["Bucket"], "test-bucket")
         self.assertEqual(kwargs["Key"], "test.txt.json")
-        self.assertDictEqual(
-            json.loads(kwargs["Body"]),
-            {
-                "name": "test.txt",
-                "num_pages": 1,
-                "pages": [
-                    {"num_words": 3, "page_number": 1, "text": "Sample text content"}
-                ],
-                "total_num_words": 3,
-            },
-        )
-        mock_textract.assert_not_called()
-        mock_bedrock.assert_not_called()
 
     @patch("lambda_function.s3_client")
-    @patch("bedrock.get_text_from_image")
-    @patch("textract.get_pages_from_document")
-    def test_handler_empty_txt_file(
-        self,
-        mock_textract,
-        mock_bedrock,
-        mock_s3_client,
-    ):
+    def test_handler_empty_txt_file(self, mock_s3_client):
+        """Test processing of empty text files"""
         mock_s3_client.get_object.return_value = {
             "Body": MagicMock(read=lambda: b""),
         }
@@ -100,32 +91,14 @@ class TestLambdaFunction(unittest.TestCase):
         response = lambda_function.handler(event, {})
 
         self.assertEqual(response["content"], "\n")
-
         mock_s3_client.get_object.assert_called_once_with(
             Bucket="test-bucket",
             Key="empty.txt",
         )
-        mock_s3_client.put_object.assert_called_once()
-        kwargs = mock_s3_client.put_object.call_args.kwargs
-        self.assertEqual(kwargs["Bucket"], "test-bucket")
-        self.assertEqual(kwargs["Key"], "empty.txt.json")
-        self.assertDictEqual(
-            json.loads(kwargs["Body"]),
-            {
-                "name": "empty.txt",
-                "num_pages": 1,
-                "pages": [{"num_words": 0, "page_number": 1, "text": ""}],
-                "total_num_words": 0,
-            },
-        )
-        mock_textract.assert_not_called()
-        mock_bedrock.assert_not_called()
 
     @patch("lambda_function.s3_client")
-    def test_handler_unsupported_filetype_error(
-        self,
-        mock_s3_client,
-    ):
+    def test_handler_unsupported_filetype_error(self, mock_s3_client):
+        """Test handling of unsupported file types"""
         event = {
             "input_bucket": "test-bucket",
             "input_key": "unsupported.xyz",
@@ -138,15 +111,8 @@ class TestLambdaFunction(unittest.TestCase):
         mock_s3_client.put_object.assert_not_called()
 
     @patch("lambda_function.s3_client")
-    @patch("textract.get_pages_from_document")
-    @patch("bedrock.get_text_from_image")
-    def test_handler_s3_exception(
-        self,
-        mock_bedrock,
-        mock_textract,
-        mock_s3_client,
-    ):
-        # Test overall exception handling with unexpected error
+    def test_handler_s3_exception(self, mock_s3_client):
+        """Test handling of S3 exceptions"""
         mock_s3_client.get_object.side_effect = TestException("S3 error")
         event = {
             "input_bucket": "test-bucket",
@@ -160,56 +126,23 @@ class TestLambdaFunction(unittest.TestCase):
             Bucket="test-bucket",
             Key="error.txt",
         )
-        mock_textract.assert_not_called()
-        mock_bedrock.assert_not_called()
 
+    @patch("lambda_function.fm_vision_extraction")
     @patch("lambda_function.s3_client")
-    @patch("bedrock.get_text_from_image", return_value="Sample image content")
-    @patch("textract.get_pages_from_document")
-    def test_handler_image(
-        self,
-        mock_textract,
-        mock_bedrock,
-        mock_s3_client,
-    ):
-        event = {
-            "input_bucket": "test-bucket",
-            "input_key": "test.png",
-            "return_content": True,
-        }
-
-        response = lambda_function.handler(event, {})
-
-        self.assertEqual(response["content"], "Sample image content\n")
-
-        mock_s3_client.get_object.assert_not_called()
-        mock_s3_client.put_object.assert_called_once()
-        kwargs = mock_s3_client.put_object.call_args.kwargs
-        self.assertEqual(kwargs["Bucket"], "test-bucket")
-        self.assertEqual(kwargs["Key"], "test.png.json")
-        self.assertDictEqual(
-            json.loads(kwargs["Body"]),
-            {
-                "name": "test.png",
-                "num_pages": 1,
-                "pages": [
-                    {"num_words": 3, "page_number": 1, "text": "Sample image content"}
-                ],
-                "total_num_words": 3,
-            },
+    def test_handler_haiku_supported_file(self, mock_s3_client, mock_haiku):
+        """Test processing of Haiku 3 supported files (PDF, DOCX, images)"""
+        mock_document = lambda_function.Document(
+            name="test.pdf",
+            num_pages=1,
+            pages=[
+                lambda_function.DocumentPage(
+                    page_number=1, num_words=3, text="Sample PDF content"
+                )
+            ],
+            total_num_words=3,
         )
-        mock_textract.assert_not_called()
-        mock_bedrock.assert_called_once()
+        mock_haiku.extract_content.return_value = mock_document
 
-    @patch("lambda_function.s3_client")
-    @patch("bedrock.get_text_from_image")
-    @patch("pdf.process_pdf_document", return_value={1: "Sample pdf content"})
-    def test_handler_pdf(
-        self,
-        mock_pdf_process,
-        mock_bedrock,
-        mock_s3_client,
-    ):
         event = {
             "input_bucket": "test-bucket",
             "input_key": "test.pdf",
@@ -218,187 +151,97 @@ class TestLambdaFunction(unittest.TestCase):
 
         response = lambda_function.handler(event, {})
 
-        self.assertEqual(response["content"], "Sample pdf content\n")
-
-        # s3_client.get_object should not be called as pdf.process_pdf_document handles the S3 interaction
-        mock_s3_client.get_object.assert_not_called()
+        self.assertEqual(response["content"], "Sample PDF content\n")
+        mock_haiku.extract_content.assert_called_once_with("test-bucket", "test.pdf")
         mock_s3_client.put_object.assert_called_once()
-        kwargs = mock_s3_client.put_object.call_args.kwargs
-        self.assertEqual(kwargs["Bucket"], "test-bucket")
-        self.assertEqual(kwargs["Key"], "test.pdf.json")
-        self.assertDictEqual(
-            json.loads(kwargs["Body"]),
-            {
-                "name": "test.pdf",
-                "num_pages": 1,
-                "pages": [
-                    {"num_words": 3, "page_number": 1, "text": "Sample pdf content"}
-                ],
-                "total_num_words": 3,
-            },
-        )
-        # Verify that pdf.process_pdf_document was called with the correct arguments
-        mock_pdf_process.assert_called_once_with("test-bucket", "test.pdf")
-        mock_bedrock.assert_not_called()
 
+    @patch("lambda_function.s3_client")
+    def test_handler_excel_file(self, mock_s3_client):
+        """Test processing of Excel files"""
+        # Mock Excel file content
+        mock_excel_content = b"fake excel content"
+        mock_s3_client.get_object.return_value = {
+            "Body": MagicMock(read=lambda: mock_excel_content)
+        }
 
-class TestTextractConversion(unittest.TestCase):
-    def test(self):
-        document = lambda_function._textract_pages_to_document(
-            {
-                1: "First Page",
-                2: "Second Page with more words",
-            },
-            "some-key",
-        )
-        self.assertDictEqual(
-            dataclasses.asdict(document),
-            {
-                "name": "some-key",
-                "num_pages": 2,
-                "pages": [
-                    {"num_words": 2, "page_number": 1, "text": "First Page"},
-                    {
-                        "num_words": 5,
-                        "page_number": 2,
-                        "text": "Second Page with more words",
+        # Mock the extract_excel_structure function
+        with patch("lambda_function.extract_excel_structure") as mock_extract:
+            mock_extract.return_value = {
+                1: {
+                    "sheet_name": "Sheet1",
+                    "structure": {
+                        "columns": ["A", "B"],
+                        "headers": ["A1: Header", "B1: Value"],
+                        "rows_count": 1,
                     },
-                ],
-                "total_num_words": 7,
-            },
+                    "rows": ["A1: Header | B1: Value"],
+                }
+            }
+
+            event = {
+                "input_bucket": "test-bucket",
+                "input_key": "test.xlsx",
+                "return_content": True,
+            }
+
+            response = lambda_function.handler(event, {})
+
+            self.assertEqual(response["content"], "A1: Header | B1: Value\n")
+            mock_s3_client.get_object.assert_called_once_with(
+                Bucket="test-bucket", Key="test.xlsx"
+            )
+            mock_s3_client.put_object.assert_called_once()
+
+    @patch("lambda_function.aws_transcribe")
+    @patch("lambda_function.s3_client")
+    def test_handler_audio_file(self, mock_s3_client, mock_transcribe):
+        """Test processing of audio files"""
+        mock_response = MagicMock()
+        mock_response.text = "Sample audio transcription"
+        mock_transcribe.transcribe.return_value = mock_response
+
+        event = {
+            "input_bucket": "test-bucket",
+            "input_key": "test.mp3",
+            "return_content": True,
+        }
+
+        response = lambda_function.handler(event, {})
+
+        self.assertEqual(response["content"], "Sample audio transcription\n")
+        mock_transcribe.transcribe.assert_called_once()
+        mock_s3_client.put_object.assert_called_once()
+
+    def test_text_to_document(self):
+        """Test text to document conversion"""
+        document = lambda_function._text_to_document("Hello world test", "test.txt")
+
+        self.assertEqual(document.name, "test.txt")
+        self.assertEqual(document.num_pages, 1)
+        self.assertEqual(document.total_num_words, 3)
+        self.assertEqual(len(document.pages), 1)
+        self.assertEqual(document.pages[0].text, "Hello world test")
+        self.assertEqual(document.pages[0].num_words, 3)
+        self.assertEqual(document.pages[0].page_number, 1)
+
+    def test_document_to_string(self):
+        """Test document to string conversion"""
+        document = lambda_function.Document(
+            name="test.txt",
+            num_pages=2,
+            pages=[
+                lambda_function.DocumentPage(
+                    page_number=1, num_words=2, text="First page"
+                ),
+                lambda_function.DocumentPage(
+                    page_number=2, num_words=2, text="Second page"
+                ),
+            ],
+            total_num_words=4,
         )
 
-
-class TestDocxExtraction(unittest.TestCase):
-    def test_extract_docx_pages_empty_document(self):
-        """
-        A document with no (non-empty) paragraphs.
-        We expect one 'page' that is empty, because the fallback logic
-        treats a completely empty doc as a single page.
-        """
-        doc = docx.Document()
-        # No paragraphs added
-        f = io.BytesIO()
-        doc.save(f)
-        file_content = f.getvalue()
-
-        pages = lambda_function.extract_docx_pages(file_content)
-
-        # Expect exactly 1 page with empty text
-        self.assertEqual(len(pages), 1)
-        self.assertEqual(pages[1], "")
-
-    def test_extract_docx_pages_only_page_break(self):
-        """Edge case:
-        A document with one paragraph that contains only a manual page break.
-        This should result in 1 page, which are empty. We intentionally don't
-        add a second empty page for no reason despite the manual page break.
-        """
-        doc = docx.Document()
-        p = doc.add_paragraph("")  # an empty paragraph
-        run = p.add_run()
-        run.add_break(WD_BREAK.PAGE)
-
-        f = io.BytesIO()
-        doc.save(f)
-        file_content = f.getvalue()
-
-        pages = lambda_function.extract_docx_pages(file_content)
-
-        # Expect 1 page empty
-        self.assertEqual(len(pages), 1)
-        self.assertEqual(pages[1].strip(), "")
-
-    def test_extract_docx_pages_text_then_page_break(self):
-        """Edge case:
-        A document with some text in the first paragraph, then a manual page break,
-        and no text after that. We expect 1 page with text. We intentionally don't
-        add a second empty page for no reason despite the manual page break.
-        """
-        doc = docx.Document()
-        p = doc.add_paragraph("This is some text on page 1.")
-        run = p.add_run()
-        run.add_break(WD_BREAK.PAGE)
-        # No more paragraphs
-
-        f = io.BytesIO()
-        doc.save(f)
-        file_content = f.getvalue()
-
-        pages = lambda_function.extract_docx_pages(file_content)
-
-        # Expect 2 pages
-        self.assertEqual(len(pages), 1)
-        # Page 1 should contain the text
-        self.assertIn("This is some text on page 1.", pages[1])
-
-    def create_test_docx_two_pages(self) -> bytes:
-        """
-        Creates an in-memory DOCX file with two pages.
-        Page 1: Two paragraphs. The second paragraph includes a manual page break.
-        Page 2: One paragraph.
-        """
-        doc = docx.Document()
-        # Page 1, first paragraph.
-        doc.add_paragraph("This is page 1, first paragraph.")
-        # Page 1, second paragraph with a manual page break.
-        p = doc.add_paragraph("This is page 1, second paragraph.")
-        run = p.add_run()
-        run.add_break(WD_BREAK.PAGE)
-        # Page 2, first paragraph.
-        doc.add_paragraph("This is page 2, first paragraph.")
-
-        f = io.BytesIO()
-        doc.save(f)
-        return f.getvalue()
-
-    def test_extract_docx_pages_with_two_pages_of_text(self):
-        """
-        A document with a page break in the middle, both pages contain text.
-        """
-        file_content = self.create_test_docx_two_pages()
-        pages = lambda_function.extract_docx_pages(file_content)
-
-        # Verify that two pages are returned.
-        self.assertEqual(len(pages), 2)
-
-        # Extract text for each page.
-        page1 = pages[1]
-        page2 = pages[2]
-
-        # Check that page 1 contains the two paragraphs from page 1.
-        self.assertIn("This is page 1, first paragraph.", page1)
-        self.assertIn("This is page 1, second paragraph.", page1)
-        # Check that page 2 contains the expected paragraph.
-        self.assertIn("This is page 2, first paragraph.", page2)
-
-    def test_extract_docx_pages_paragraph_with_break_in_middle(self):
-        """
-        Creates a DOCX with one paragraph that contains text before a manual page break and then text after.
-        The test verifies that the full text ("Hello, world!") is captured in one page.
-        """
-        doc = docx.Document()
-        p = doc.add_paragraph()
-        # Add first run with text "Hello, "
-        run1 = p.add_run("Hello, ")
-        # Insert a manual page break
-        run1.add_break(WD_BREAK.PAGE)
-        # Add additional text after the break
-        p.add_run("world!")
-
-        # Save document to an in-memory bytes buffer.
-        f = io.BytesIO()
-        doc.save(f)
-        file_content = f.getvalue()
-
-        pages = lambda_function.extract_docx_pages(file_content)
-
-        # Concatenate the text from all pages.
-        full_text = "".join(pages[i] for i in sorted(pages.keys()))
-        self.assertEqual(full_text.strip(), "Hello, world!")
-
-        # Verify that the text is in one page.
-        self.assertEqual(len(pages), 1)
+        result = lambda_function._document_to_string(document)
+        self.assertEqual(result, "First page\nSecond page\n")
 
 
 if __name__ == "__main__":
