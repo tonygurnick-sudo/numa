@@ -5,7 +5,7 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useAuth } from '../Providers/AuthProvider';
 
-const FileUploader = ({ onUploadSuccess }) => {
+const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
   const [files, setFiles] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState(null);
@@ -44,6 +44,18 @@ const FileUploader = ({ onUploadSuccess }) => {
       })),
     );
 
+    // Validate files if validateFile function is provided
+    if (validateFile) {
+      const invalidFiles = fileList.filter((file) => !validateFile(file));
+      if (invalidFiles.length > 0) {
+        // Don't add invalid files to the list
+        if (onFileSelect) {
+          onFileSelect(fileList); // Pass files to parent for validation display
+        }
+        return; // Stop processing if there are invalid files
+      }
+    }
+
     // Create a set of unique folder paths
     const combinedFiles = [...files, ...fileList];
     const folders = new Set([...fileStructure.folders]);
@@ -66,12 +78,27 @@ const FileUploader = ({ onUploadSuccess }) => {
     setError(null);
     setSuccess(false);
     setUploadProgress(0);
+
+    // Notify parent component about file selection
+    if (onFileSelect) {
+      onFileSelect(fileList);
+    }
   };
 
   const handleUpload = async () => {
     if (!files.length) {
       setError('Please select files first');
       return;
+    }
+
+    // Additional validation before upload if validateFile function is provided
+    if (validateFile) {
+      const invalidFiles = files.filter((file) => !validateFile(file));
+      if (invalidFiles.length > 0) {
+        const invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
+        setError(`Cannot upload invalid files: ${invalidFileNames}`);
+        return;
+      }
     }
 
     setError(null);

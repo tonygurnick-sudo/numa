@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Container,
   Row,
@@ -18,6 +18,7 @@ import { getUrlTagFromS3Object, listObjectsInFolder, deleteMultipleObjectsFromS3
 import { WebCrawler } from '../Components/WebCrawler';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { useAuth } from '../Providers/AuthProvider';
+import { isFileTypeValidForBedrockKB, getBedrockKBSupportedExtensions } from '../utils/fileUtils';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav as TopNav } from '../Components/Nav';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
@@ -327,6 +328,7 @@ export function KnowledgeBaseManagement() {
   // Category filtering
   const [activeCategory, setActiveCategory] = useState('all');
   const [expandedItems, setExpandedItems] = useState([]);
+  const [fileValidationError, setFileValidationError] = useState(null);
 
   const { getCredentials, qBusinessClient, bedrockAgentClient, region: authRegion } = useAuth();
   // Fallback to session storage if region is not available from auth context
@@ -554,7 +556,43 @@ export function KnowledgeBaseManagement() {
   /**
    * On successful file upload
    */
+  /**
+   * Validates files before upload
+   * @param {File[]} files - Files to validate
+   * @returns {boolean} - Whether all files are valid
+   */
+  function validateFiles(files) {
+    const invalidFiles = files.filter((file) => !isFileTypeValidForBedrockKB(file));
+
+    if (invalidFiles.length > 0) {
+      const invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
+      const supportedExtensions = getBedrockKBSupportedExtensions();
+      setFileValidationError(
+        `The following files are not supported for Bedrock Knowledge Base: ${invalidFileNames}. \n` +
+          'Supported file types: ' +
+          supportedExtensions +
+          '.',
+      );
+      return false;
+    }
+
+    setFileValidationError(null);
+    return true;
+  }
+
+  /**
+   * Handles file selection before upload
+   * @param {File[]} selectedFiles - Files selected by the user
+   */
+  function handleFileSelect(selectedFiles) {
+    validateFiles(selectedFiles);
+  }
+
+  /**
+   * On successful file upload
+   */
   function handleUploadSuccess() {
+    setFileValidationError(null);
     fetchFiles();
   }
 
@@ -1499,7 +1537,17 @@ export function KnowledgeBaseManagement() {
                       Once uploaded, files are automatically indexed every 30 minutes where they will be available for
                       querying in Numa Chat.
                     </p>
-                    <FileUploader onUploadSuccess={handleUploadSuccess} />
+                    {fileValidationError && (
+                      <Alert variant="danger" className="mb-3">
+                        <strong>File Validation Error:</strong>
+                        <p className="mb-0 mt-1">{fileValidationError}</p>
+                      </Alert>
+                    )}
+                    <FileUploader
+                      onUploadSuccess={handleUploadSuccess}
+                      onFileSelect={handleFileSelect}
+                      validateFile={isFileTypeValidForBedrockKB}
+                    />
                   </Card.Body>
                 </Card>
               </Col>
