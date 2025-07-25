@@ -140,7 +140,7 @@ const CompanyInfo = () => {
                           <Form.Label>Company Information</Form.Label>
                           <Form.Control
                             as="textarea"
-                            disabled={!user?.features?.includes('addToCompanyData')}
+                            disabled={!user?.features?.includes('editCompanyProfile')}
                             rows={15}
                             value={companyProfile}
                             onChange={(e) => setCompanyProfile(e.target.value)}
@@ -166,7 +166,7 @@ const CompanyInfo = () => {
                           </p>
                         )}
 
-                        <FeatureWrapper requiredFeature="addToCompanyData">
+                        <FeatureWrapper requiredFeature="editCompanyProfile">
                           <Button variant="primary" onClick={handleSave} disabled={isSaving}>
                             {isSaving ? (
                               <>

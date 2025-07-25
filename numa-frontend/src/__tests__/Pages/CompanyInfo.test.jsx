@@ -17,7 +17,7 @@ vi.mock('../../utils/companyInfoUtils', () => ({
 
 // Mock the AuthProvider
 let mockUser = {
-  features: ['addToCompanyData', 'chat', 'useCompanyData'],
+  features: ['editCompanyProfile', 'chat', 'useCompanyData'],
   decoded_tokens: {
     idToken: {
       'cognito:groups': ['TestGroup'],
@@ -29,7 +29,9 @@ vi.mock('../../Providers/AuthProvider', () => ({
   useAuth: vi.fn(() => ({
     getCredentials: vi.fn(),
     region: 'us-east-1',
-    user: mockUser,
+    get user() {
+      return mockUser;
+    },
     loading: false,
     tokenValidationComplete: true,
   })),
@@ -64,6 +66,15 @@ beforeEach(() => {
 afterEach(() => {
   console.error = originalConsoleError;
   vi.resetAllMocks();
+  // Reset mockUser to default state
+  mockUser = {
+    features: ['editCompanyProfile', 'chat', 'useCompanyData'],
+    decoded_tokens: {
+      idToken: {
+        'cognito:groups': ['TestGroup'],
+      },
+    },
+  };
 });
 
 describe('CompanyInfo Component', () => {
@@ -372,7 +383,7 @@ describe('CompanyInfo Component', () => {
     beforeEach(() => {
       // Reset to default user with features
       mockUser = {
-        features: ['addToCompanyData', 'chat', 'useCompanyData'],
+        features: ['editCompanyProfile', 'chat', 'useCompanyData'],
         decoded_tokens: {
           idToken: {
             'cognito:groups': ['TestGroup'],
@@ -381,10 +392,10 @@ describe('CompanyInfo Component', () => {
       };
     });
 
-    it('should hide save button when user lacks addToCompanyData feature', async () => {
-      // Modify the mock to return user without addToCompanyData feature
+    it('should hide save button when user lacks editCompanyProfile feature', async () => {
+      // Modify the mock to return user without editCompanyProfile feature
       mockUser = {
-        features: ['chat', 'useCompanyData'], // Missing 'addToCompanyData'
+        features: ['chat', 'useCompanyData'], // Missing 'editCompanyProfile'
         decoded_tokens: {
           idToken: {
             'cognito:groups': ['TestGroup'],
@@ -408,10 +419,10 @@ describe('CompanyInfo Component', () => {
       expect(screen.queryByText('Saving...')).not.toBeInTheDocument();
     });
 
-    it('should disable textarea when user lacks addToCompanyData feature', async () => {
-      // Modify the mock to return user without addToCompanyData feature
+    it('should disable textarea when user lacks editCompanyProfile feature', async () => {
+      // Modify the mock to return user without editCompanyProfile feature
       mockUser = {
-        features: ['chat', 'useCompanyData'], // Missing 'addToCompanyData'
+        features: ['chat', 'useCompanyData'], // Missing 'editCompanyProfile'
         decoded_tokens: {
           idToken: {
             'cognito:groups': ['TestGroup'],
@@ -434,8 +445,8 @@ describe('CompanyInfo Component', () => {
       expect(textarea).toBeDisabled();
     });
 
-    it('should show save button and enable textarea when user has addToCompanyData feature', async () => {
-      // This test uses the default mock which includes the addToCompanyData feature
+    it('should show save button and enable textarea when user has editCompanyProfile feature', async () => {
+      // This test uses the default mock which includes the editCompanyProfile feature
       fetchCompanyInfo.mockResolvedValue(mockCompanyInfo);
 
       customRender(

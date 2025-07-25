@@ -211,6 +211,10 @@ const createFeatureSets = (props: {
       actions: ['qbusiness:ListDocuments'],
       resources: ['*'],
     },
+  ],
+
+  // Edit Company Profile Feature Set
+  editCompanyProfile: [
     {
       effect: 'Allow',
       actions: ['s3:PutObject'],
