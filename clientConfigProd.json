@@ -1,21 +1,4 @@
 {
-  "arcanum-demo": {
-    "allApps": true,
-    "apps": {
-      "gdsr-assessment": {},
-      "rfp-response-comparison": {},
-      "procurement-rfp-assessment": {}
-    },
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "devInstance": true,
-    "region": "us-east-1",
-    "webCrawlerConfigs": [
-      {
-        "url": "https://arcanum.ai/"
-      }
-    ]
-  },
   "arcanum-demo-sydney": {
     "allApps": true,
     "clientAccountId": "905418183804",
