@@ -1,13 +1,4 @@
 {
-  "arcanum-dave": {
-    "apps": {
-      "meeting-analyser": {}
-    },
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "devInstance": true,
-    "region": "us-east-1"
-  },
   "arcanum-demo": {
     "allApps": true,
     "apps": {
