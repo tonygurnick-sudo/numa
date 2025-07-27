@@ -8,24 +8,6 @@
     "devInstance": true,
     "region": "us-east-1"
   },
-  "arcanum-council-trial": {
-    "apps": {
-      "candidate-screening": {},
-      "company-profile": {},
-      "contract-analysis": {},
-      "document-summariser": {},
-      "financial-analysis": {},
-      "meeting-analyser": {},
-      "policy-drafter": {},
-      "policy-reviewer": {},
-      "procurement-rfp-assessment": {},
-      "rfp-response-comparison": {}
-    },
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "devInstance": true,
-    "region": "us-east-1"
-  },
   "arcanum-demo": {
     "allApps": true,
     "apps": {
