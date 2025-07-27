@@ -1,13 +1,4 @@
 {
-  "arcanum-demo-sydney": {
-    "allApps": true,
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "devInstance": true,
-    "region": "ap-southeast-2",
-    "provisionQResources": false,
-    "preferredKnowledgeBase": "bedrock"
-  },
   "arcanum-demo-nathan-2": {
     "allApps": true,
     "clientAccountId": "905418183804",
