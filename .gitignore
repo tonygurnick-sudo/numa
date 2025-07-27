@@ -139,3 +139,6 @@ infra/.gen
 
 tools/email-case-report.json
 tools/email-verification-report.json
+
+# Tool Reports
+**/tools/reports/

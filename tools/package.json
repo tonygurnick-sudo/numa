@@ -29,6 +29,7 @@
     "create-users": "node --import tsx create-users.ts",
     "delete-users": "node --import tsx delete-users.ts",
     "downgrade-licences": "node --import tsx downgrade-licences.ts",
+    "generate-usage-report": "node --import tsx generate-usage-report.ts",
     "lint": "eslint . && tsc --noEmit",
     "test": "mkdir -p test-reports; node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml",
     "upload-files": "node --import tsx upload-files.ts",

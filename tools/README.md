@@ -6,6 +6,7 @@ This directory contains several tools for assisting in onboarding customers to N
 - upload-files: This tool uploads files to a customer's Q S3 data bucket and triggers a reindex.
 - check-index-progress: This tool looks up the status of an S3 data bucket index and prints it.
 - migrate-urls-to-crawler: This tool migrates URL data sources from client configurations to the web crawler DynamoDB tables.
+- generate-usage-report: This tool generates comprehensive usage reports for Numa admins, including app runs and chat messages by user by month.
 
 ## Installation
 
@@ -480,3 +481,52 @@ $ yarn write-config arcanum-dave dave-test.json
     message: "Unrecognized key(s) in object: 'a-random-entry'"
   }
 ```
+
+### generate-usage-report
+
+generate-usage-report creates comprehensive usage reports for Numa administrators to track staff usage and get insights for investment optimization.
+
+The script will need to be run with a profile providing access to the arcanum-q-deployer-prod account. From there it will assume access into the customer's account.
+
+#### Usage
+
+```bash
+yarn generate-usage-report <client-name> [time-period] [format]
+```
+
+**Parameters:**
+- `client-name` (required): The client name key from infra/stacks/numa-client-stack.ts:clientsProd, e.g. arcanum-demo
+- `time-period` (optional): Time period to generate reports for (defaults to 'current-year')
+  - `current-year` - Current year (default)
+  - `previous-month` - Previous month
+  - `YYYY` - Specific year (e.g., 2024)
+  - `YYYY-MM` - Specific month (e.g., 2024-03)
+- `format` (optional): Output format - 'csv' (default) or 'json'
+
+**Examples:**
+```bash
+# Generate CSV reports for current year (default)
+yarn generate-usage-report arcanum-demo
+
+# Generate reports for previous month
+yarn generate-usage-report arcanum-demo previous-month
+
+# Generate reports for specific year
+yarn generate-usage-report arcanum-demo 2024
+
+# Generate reports for specific month
+yarn generate-usage-report arcanum-demo 2024-03
+
+# Generate JSON format report for previous month
+yarn generate-usage-report arcanum-demo previous-month json
+```
+
+#### Output Files
+
+**CSV Format (default):**
+- `{client}-app-runs-{period}-{timestamp}.csv` - Detailed app run records
+- `{client}-chat-messages-{period}-{timestamp}.csv` - Detailed chat message records
+- `{client}-usage-summary-{period}-{timestamp}.csv` - Aggregated monthly usage summary
+
+**JSON Format:**
+- `{client}-usage-report-{period}-{timestamp}.json` - Complete report with metadata and all data
