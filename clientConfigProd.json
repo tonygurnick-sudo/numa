@@ -64,27 +64,6 @@
       "alertThresholds": [100]
     }
   },
-  "arcanum-prod-numa-demo": {
-    "apps": {
-      "candidate-screening": {},
-      "company-profile": {},
-      "contract-analysis": {},
-      "costing-calculator": {},
-      "document-summariser": {},
-      "financial-analysis": {},
-      "gdsr-assessment": {},
-      "infringement-review": {},
-      "meeting-analyser": {},
-      "nzsba-policy-builder": {},
-      "policy-drafter": {},
-      "policy-reviewer": {},
-      "rfp-response-comparison": {},
-      "procurement-rfp-assessment": {}
-    },
-    "clientAccountId": "619071323471",
-    "devInstance": true,
-    "region": "us-east-1"
-  },
   "arcanum-prod-trial": {
     "allProdApps": true,
     "clientAccountId": "619071323471",
