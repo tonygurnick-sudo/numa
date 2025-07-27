@@ -64,23 +64,6 @@
       "alertThresholds": [100]
     }
   },
-  "arcanum-prod-trial": {
-    "allProdApps": true,
-    "clientAccountId": "619071323471",
-    "createServiceLinkedRole": false,
-    "devInstance": true,
-    "region": "us-east-1",
-    "webCrawlerConfigs": [
-      {
-        "url": "https://arcanum.ai/"
-      },
-      {
-        "url": "https://orionhealth.com/global/"
-      }
-    ],
-    "provisionQResources": true,
-    "preferredKnowledgeBase": "q"
-  },
   "dev-hams": {
     "allApps": true,
     "clientAccountId": "905418183804",
