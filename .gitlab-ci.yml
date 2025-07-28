@@ -150,6 +150,7 @@ infra-lint:
   rules:
     - changes:
         paths:
+          - lib/client-config-node/**/*
           - infra/**/*
           - style/**/*
           - .gitlab-ci.yml
@@ -157,6 +158,13 @@ infra-lint:
 infra-test:
   extends: .node-test
   <<: *node-job-infra-overrides
+  rules:
+    - changes:
+        paths:
+          - lib/client-config-node/**/*
+          - infra/**/*
+          - style/**/*
+          - .gitlab-ci.yml
 
 infra-build:
   extends: .node-build
@@ -173,6 +181,7 @@ infra-build:
     - changes:
         paths:
           - $PYTHON_WORKING_DIRECTORY/**/*
+          - lib/**/*
           - .gitlab-ci.yml
 
 python-libraries-lint:
@@ -186,10 +195,19 @@ python-lambdas-lint:
 python-libraries-test:
   extends: .python-unittest
   parallel: !reference [.python-libraries-matrix]
+  rules:
+    - changes:
+        - $PYTHON_WORKING_DIRECTORY/**/*
+        - .gitlab-ci.yml
 
 python-lambdas-test:
   extends: .python-unittest
   parallel: !reference [.python-lambdas-matrix]
+  rules:
+    - changes:
+        - $PYTHON_WORKING_DIRECTORY/**/*
+        - lib/**/*
+        - .gitlab-ci.yml
 
 node-lint:
   extends: .node-lint
@@ -201,6 +219,12 @@ node-lint:
 tools-test:
   extends: .node-test
   <<: *node-job-tools-overrides
+  rules:
+    - changes:
+        - lib/client-config-node/**/*
+        - tools/**/*
+        - style/**/*
+        - .gitlab-ci.yml
 
 tools-build:
   extends: .node-build
@@ -209,6 +233,11 @@ tools-build:
 node-test:
   extends: .node-test
   parallel: !reference [.node-matrix]
+  rules:
+    - changes:
+        - $BUILD_DIR/**/*
+        - style/**/*
+        - .gitlab-ci.yml
 
 node-build:
   extends: .node-build
@@ -219,6 +248,11 @@ frontend-test:
   parallel:
     matrix:
       - BUILD_DIR: [numa-frontend]
+  rules:
+    - changes:
+        - numa-frontend/**/*
+        - style/**/*
+        - .gitlab-ci.yml
 
 frontend-build:
   extends: node-build
