@@ -4,8 +4,10 @@ import { QAppsDeployerStack } from './stacks/q-apps-deployer-stack';
 import { ClientConfig, clientConfigSchema, NumaClientStack } from './stacks/numa-client-stack';
 import { getClientConfig, listClients } from '@arcanumai/client-config';
 import { NextGenRootStack } from './stacks/nextgen-root-stack';
+import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
 
 const override = process.env['CLIENT_OVERRIDE'];
+const deployerRole = 'arn:aws:iam::207567759910:role/admin-delegated-access';
 
 const app = new App();
 const bucketSuffix = ''; // we are only deploying `prod` this used to be `-dev` for other environments
@@ -60,8 +62,15 @@ if (override === undefined || override === 'none') {
     configTable: 'numa-client-config',
   });
 } else if (override !== 'none') {
-  for (const clientName of override ? [override] : await listClients()) {
-    const clientConfig = await getClientConfig<ClientConfig>(clientName, clientConfigSchema);
+  // creds
+  const credentials = fromTemporaryCredentials({
+    params: {
+      RoleArn: deployerRole,
+      RoleSessionName: 'client-config',
+    },
+  });
+  for (const clientName of override ? [override] : await listClients({ credentials })) {
+    const clientConfig = await getClientConfig<ClientConfig>({ clientName, schema: clientConfigSchema, credentials });
     new NumaClientStack(app, `numa-${clientName}`, {
       clientName,
       ...environmentConfig,
