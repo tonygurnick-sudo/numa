@@ -1,33 +1,30 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
-import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
+import { RuntimeConfigAwsCredentialIdentityProvider } from '@aws-sdk/types';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ZodTypeAny } from 'zod';
 
 const TableName = 'numa-client-config';
 const ClientKey = 'clientName';
-const deployerRole = `arn:aws:iam::207567759910:role/admin-delegated-access`;
 
-export async function listClients(): Promise<string[]> {
-  return [...new Set([...(await listClientsFromDynamo()), ...listClientsFromJson()])];
+interface ListClientProps {
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider;
+}
+export async function listClients(props?: ListClientProps): Promise<string[]> {
+  return [...new Set([...(await listClientsFromDynamo(props?.credentials)), ...listClientsFromJson()])];
 }
 
-function getDocument(): DynamoDBDocument {
+async function getDocument(credentials?: RuntimeConfigAwsCredentialIdentityProvider): Promise<DynamoDBDocument> {
   const client = new DynamoDBClient({
-    credentials: fromTemporaryCredentials({
-      params: {
-        RoleArn: deployerRole,
-        RoleSessionName: 'client-config',
-      },
-    }),
+    credentials,
     region: 'us-east-1',
   });
   return DynamoDBDocument.from(client);
 }
 
-async function listClientsFromDynamo(): Promise<string[]> {
-  const ddbdc = getDocument();
+async function listClientsFromDynamo(credentials?: RuntimeConfigAwsCredentialIdentityProvider): Promise<string[]> {
+  const ddbdc = await getDocument(credentials);
   const result = await ddbdc.scan({
     TableName,
     ProjectionExpression: ClientKey,
@@ -53,23 +50,55 @@ function loadFromJson<ClientConfig>(): Record<string, ClientConfig> {
   return {} as Record<string, ClientConfig>;
 }
 
-export async function getClientConfig<ClientConfig>(clientName: string, schema?: ZodTypeAny): Promise<ClientConfig> {
-  const config = getClientConfigFromJson(clientName) ?? (await getClientConfigFromDynamo(clientName));
+interface GetClientConfigProps {
+  clientName: string;
+  schema?: ZodTypeAny;
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider;
+}
+export async function getClientConfig<ClientConfig>(props: GetClientConfigProps): Promise<ClientConfig>;
+export async function getClientConfig<ClientConfig>(
+  clientName: string,
+  schema?: ZodTypeAny,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+): Promise<ClientConfig>;
+export async function getClientConfig<ClientConfig>(
+  x: GetClientConfigProps | string,
+  schema?: ZodTypeAny,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+): Promise<ClientConfig> {
+  const props = typeof x === 'string' ? { clientName: x, schema, credentials } : x;
+  const config =
+    getClientConfigFromJson(props.clientName) ?? (await getClientConfigFromDynamo(props.clientName, props.credentials));
   if (!config) {
-    throw new Error(`Client config not found for client: ${clientName}`);
+    throw new Error(`Client config not found for client: ${props.clientName}`);
   }
-  if (!schema) {
+  if (!props.schema) {
     return config as ClientConfig;
   }
-  return schema.parse(config);
+  return props.schema.parse(config);
 }
 
-export async function getClientConfigFromDynamo<ClientConfig>(clientName: string): Promise<ClientConfig | undefined> {
-  const ddbdc = getDocument();
+interface GetClientConfigFromDynamoProps {
+  clientName: string;
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider;
+}
+export async function getClientConfigFromDynamo<ClientConfig>(
+  props: GetClientConfigFromDynamoProps,
+): Promise<ClientConfig | undefined>;
+export async function getClientConfigFromDynamo<ClientConfig>(
+  clientName: string,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+): Promise<ClientConfig | undefined>;
+export async function getClientConfigFromDynamo<ClientConfig>(
+  x: string | GetClientConfigFromDynamoProps,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+): Promise<ClientConfig | undefined> {
+  const props = typeof x === 'string' ? { clientName: x, credentials } : x;
+  const ddbdc = await getDocument(props.credentials);
   const result = await ddbdc.get({
     TableName,
     Key: {
-      clientName,
+      clientName: props.clientName,
     },
     ProjectionExpression: 'config',
   });
@@ -81,20 +110,35 @@ function getClientConfigFromJson<ClientConfig>(clientName: string): ClientConfig
   return data[clientName];
 }
 
+interface PutClientConfigProps<ClientConfig> {
+  clientName: string;
+  config: ClientConfig;
+  schema?: ZodTypeAny;
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider;
+}
+export async function putClientConfig<ClientConfig>(props: PutClientConfigProps<ClientConfig>): Promise<boolean>;
 export async function putClientConfig<ClientConfig>(
   clientName: string,
   config: ClientConfig,
   schema?: ZodTypeAny,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+): Promise<boolean>;
+export async function putClientConfig<ClientConfig>(
+  x: string | PutClientConfigProps<ClientConfig>,
+  config?: ClientConfig,
+  schema?: ZodTypeAny,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
 ): Promise<boolean> {
-  if (schema) {
-    schema.parse(config);
+  const props = typeof x === 'string' ? { clientName: x, config, schema, credentials } : x;
+  if (props.schema) {
+    props.schema.parse(config);
   }
-  const ddbdc = getDocument();
+  const ddbdc = await getDocument(credentials);
   const result = await ddbdc.put({
     TableName,
     Item: {
-      clientName,
-      config,
+      clientName: props.clientName,
+      config: props.config,
     },
   });
   return result.$metadata.httpStatusCode === 200;

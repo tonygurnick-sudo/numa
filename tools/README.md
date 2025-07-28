@@ -163,10 +163,11 @@ yarn migrate-urls-to-crawler client-name --dry-run --profile=my-aws-profile
 ```
 
 By default, the tool uses the `arcanum-q-deployer-prod` AWS profile if no profile is specified. You can override this by:
+
 1. Using the `--profile=profile-name` command line option
 2. Setting the `AWS_PROFILE` environment variable
 
-6. Start sync for all data sources
+3. Start sync for all data sources
 
 ```bash
 AWS_PROFILE=arcanum-q-deployer-prod yarn check-index-progress <client-name> --start-sync --all
@@ -277,6 +278,7 @@ The script will:
 6. Apply changes only when `--apply` flag is used (dry run is the default)
 
 The tool provides detailed output including:
+
 - Which clients have Microsoft connectors and what type
 - Current vs. new `provisionQResources` settings
 - Summary of total clients analyzed and updated
@@ -330,6 +332,7 @@ The script will:
 4. Generate a report of affected users
 
 The report includes:
+
 - Total number of clients checked
 - Number of clients with users in FORCE_CHANGE_PASSWORD state
 - Total number of affected users
@@ -356,7 +359,7 @@ Read and write config.
 The typical workflow is to retrieve the config and write it to a file. The file can then be edited before writing it back.
 
 ```bash
-$ yarn retrieve-config dave-test | tee dave-test.json
+$ AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config dave-test | tee dave-test.json
 {
   "clientAccountId": "905418183804",
   "createServiceLinkedRole": false,
@@ -367,7 +370,7 @@ $ yarn retrieve-config dave-test | tee dave-test.json
   }
 }
 # Edit and save the JSON to add policy-analyser
-$ yarn write-config dave-test dave-test.json
+$ AWS_PROFILE=arcanum-q-deployer-prod yarn write-config dave-test dave-test.json
 Differences: [
   {
     "type": "UPDATE",
@@ -402,7 +405,7 @@ Successfully wrote client config for dave-test:
 Retrieves config from clientConfigProd.json if available, else DynamoDB. Prints to stdout.
 
 ```bash
-yarn retrieve-config dave-test
+$ AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config dave-test
 {
   "clientAccountId": "905418183804",
   "createServiceLinkedRole": false,
@@ -429,7 +432,7 @@ $ cat dave-test.json
     "meeting-analyser": {}
   }
 }
-$ yarn write-config arcanum-dave dave-test.json
+$ AWS_PROFILE=arcanum-q-deployer-prod yarn write-config arcanum-dave dave-test.json
 Differences: [
   {
     "type": "UPDATE",
@@ -472,7 +475,7 @@ $ cat dave-test.json
   },
   "a-random-entry": {}
 }
-$ yarn write-config arcanum-dave dave-test.json
+$ AWS_PROFILE=arcanum-q-deployer-prod yarn write-config arcanum-dave dave-test.json
 [
   {
     code: 'unrecognized_keys',
@@ -480,6 +483,24 @@ $ yarn write-config arcanum-dave dave-test.json
     path: [],
     message: "Unrecognized key(s) in object: 'a-random-entry'"
   }
+```
+
+#### get-system-user-password
+
+Retrieves the system-user-password for a given customer.
+
+```bash
+AWS_PROFILE=arcanum-q-deployer-prod yarn get-system-user-password client-name
+uvto5m!wy0o@cmu5woc#yu5w^pc,uy5-opu,=ywop5uy%5pwyu.5w.9$pu5
+```
+
+#### update-account-name
+
+Updates the name of an AWS account to match the name used in the config.
+
+```bash
+AWS_PROFILE=arcanum-q-deployer-prod yarn update-account-name client-name
+Account name updated from client004 to client-name
 ```
 
 ### generate-usage-report
