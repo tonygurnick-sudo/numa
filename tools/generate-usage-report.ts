@@ -140,7 +140,7 @@ interface ChatMessageRecord {
   conversationId: string;
   messageType: string;
   role: string;
-  timestamp: number;
+  timestamp: string; // Changed from number to string for DD/MM/YYYY format
 }
 
 interface UsageSummary {
@@ -324,13 +324,21 @@ async function getAllChatMessages(
         const messageDate = new Date(item.timestamp);
 
         if (messageDate >= startDate && messageDate < endDate) {
+          // Convert timestamp to NZ date format DD/MM/YYYY
+          const nzDate = new Date(item.timestamp).toLocaleDateString('en-NZ', {
+            timeZone: 'Pacific/Auckland',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+          });
+
           allMessages.push({
             userId: item.user_id || 'unknown',
             month: messageDate.toISOString().substring(0, 7), // YYYY-MM format
             conversationId: item.conversation_id || 'unknown',
             messageType: item.message_type || 'unknown',
             role: item.role || 'unknown',
-            timestamp: item.timestamp,
+            timestamp: nzDate,
           });
         }
       }
