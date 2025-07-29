@@ -372,6 +372,7 @@ export class WebCrawlerConstruct extends Construct {
             'crawlDepth.$': '$.crawlDepth',
             'userId.$': '$.userId',
             'counter.$': '$.counter',
+            'eventCounter.$': '$.eventCounter',
             status: 'failed',
             'error.$': '$.error',
             pagesAttempted: 1,
@@ -403,7 +404,6 @@ export class WebCrawlerConstruct extends Construct {
             'crawlDepth.$': '$.crawlDepth',
             'userId.$': '$.userId',
             'counter.$': '$.counter',
-            'process_result.$': '$.process_result',
             // Increment the event counter (approx. 7 events per URL processed)
             'eventCounter.$': 'States.MathAdd($.eventCounter, 7)',
           },
