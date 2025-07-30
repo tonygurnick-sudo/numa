@@ -8,12 +8,20 @@ import { useAuth } from '../Providers/AuthProvider';
 export const useConversationManager = () => {
   const [conversationId, setConversationId] = useState(null);
   const [isConversationLoading, setIsConversationLoading] = useState(true);
+  const [hasUserStartedNewChat, setHasUserStartedNewChat] = useState(false);
 
   const { numaChatDynamoUtils, user } = useAuth();
 
   // Extract user info from token
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const sub = idToken.sub;
+
+  /**
+   * Reset the user new chat flag when explicitly loading a conversation
+   */
+  const resetUserNewChatFlag = useCallback(() => {
+    setHasUserStartedNewChat(false);
+  }, []);
 
   /**
    * Create a new conversation if needed
@@ -58,6 +66,7 @@ export const useConversationManager = () => {
   const handleNewChat = useCallback(async () => {
     setIsConversationLoading(false);
     setConversationId(null);
+    setHasUserStartedNewChat(true);
     localStorage.removeItem('currentConversationId');
 
     // Reset conversation ID first, then create new one will be handled by createNewConversationIfNeeded
@@ -69,7 +78,7 @@ export const useConversationManager = () => {
    */
   useEffect(() => {
     async function initializeConversation() {
-      if (numaChatDynamoUtils && sub) {
+      if (numaChatDynamoUtils && sub && !hasUserStartedNewChat) {
         try {
           // Fetch the conversation meta items for this user
           const metaItems = await numaChatDynamoUtils.getUserConversationsMeta(sub);
@@ -94,7 +103,7 @@ export const useConversationManager = () => {
       }
     }
     initializeConversation();
-  }, [numaChatDynamoUtils, sub, handleNewChat]);
+  }, [numaChatDynamoUtils, sub, handleNewChat, hasUserStartedNewChat]);
 
   return {
     conversationId,
@@ -103,5 +112,6 @@ export const useConversationManager = () => {
     setIsConversationLoading,
     createNewConversationIfNeeded,
     handleNewChat,
+    resetUserNewChatFlag,
   };
 };
