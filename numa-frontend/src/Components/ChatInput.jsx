@@ -24,11 +24,14 @@ const ChatInput = ({
   // Check if agent mode is enabled
   const useAgentMode = sessionStorage.getItem('NUMA_CHAT_AGENTS') === 'true';
 
-  // Calculate if input should be disabled based on buttonStatus or the disabled prop
-  const isInputDisabled = buttonStatus === 'loading' || buttonStatus === 'streaming' || disabled;
+  // Text input should only be disabled during loading (not streaming) and file processing
+  const isTextInputDisabled = buttonStatus === 'loading' || disabled;
+
+  // Send button should be disabled during loading, streaming, and file processing
+  const isSendDisabled = buttonStatus === 'loading' || buttonStatus === 'streaming' || disabled;
 
   // Dynamic placeholder text based on tool availability (only in agent mode)
-  const placeholderText = isInputDisabled
+  const placeholderText = isTextInputDisabled
     ? 'Processing...'
     : useAgentMode && noToolsActive
       ? 'Chat with Numa (no tools active)...'
@@ -48,8 +51,8 @@ const ChatInput = ({
   }, [inputMessage]);
 
   const handleKeyDown = (e) => {
-    // If disabled or loading, don't process Enter as a submit
-    if (isInputDisabled) {
+    // If send is disabled, don't process Enter as a submit
+    if (isSendDisabled) {
       return;
     }
 
@@ -71,7 +74,7 @@ const ChatInput = ({
           onInput={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder={placeholderText}
-          disabled={isInputDisabled || buttonStatus === 'loading'}
+          disabled={isTextInputDisabled}
           className="chat-textarea"
         />
 
@@ -88,7 +91,7 @@ const ChatInput = ({
                   setShowUploadModal(true);
                 }}
                 aria-label="Upload Files"
-                disabled={isInputDisabled}
+                disabled={isTextInputDisabled}
               >
                 <i className="bi bi-paperclip"></i>
               </Button>
@@ -101,7 +104,7 @@ const ChatInput = ({
                 className={`auto-tools-toggle ${autoToolsEnabled ? 'active' : ''}`}
                 onClick={() => setAutoToolsEnabled(!autoToolsEnabled)}
                 aria-label="Toggle Auto Tools"
-                disabled={isInputDisabled}
+                disabled={isTextInputDisabled}
               >
                 <Gear size={25} />
                 {autoToolsEnabled && <span className="bubble-text">Auto Mode</span>}
@@ -114,7 +117,7 @@ const ChatInput = ({
               className={`data-mode-toggle ${queryDataSources ? 'active' : ''}`}
               onClick={() => setQueryDataSources(!queryDataSources)}
               aria-label="Toggle Data Mode"
-              disabled={isInputDisabled || (useAgentMode && autoToolsEnabled)}
+              disabled={isTextInputDisabled || (useAgentMode && autoToolsEnabled)}
             >
               <Database size={25} />
               {queryDataSources && <span className="bubble-text">Data Sources Enabled</span>}
@@ -126,7 +129,7 @@ const ChatInput = ({
               className={`web-search-toggle ${webSearchEnabled ? 'active' : ''}`}
               onClick={() => setWebSearchEnabled(!webSearchEnabled)}
               aria-label="Toggle Web Search"
-              disabled={isInputDisabled || (useAgentMode && autoToolsEnabled)}
+              disabled={isTextInputDisabled || (useAgentMode && autoToolsEnabled)}
             >
               <Search size={25} />
               {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}
@@ -162,7 +165,7 @@ const ChatInput = ({
                 type="submit"
                 id="send-message-button"
                 className="send-button"
-                disabled={isInputDisabled || !inputMessage.trim()}
+                disabled={isSendDisabled || !inputMessage.trim()}
               >
                 <i className="bi bi-arrow-up-circle-fill" style={{ fontSize: '2.4rem', color: '#4b007d' }}></i>
               </Button>

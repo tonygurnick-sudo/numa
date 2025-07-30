@@ -40,6 +40,7 @@ const NumaChat = () => {
   const stopGenerationRef = useRef(false);
   const messageEndRef = useRef(null);
   const chatHistoryRef = useRef(null);
+  const isSubmittingRef = useRef(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   const {
@@ -335,6 +336,15 @@ Today's Date: ${TODAY}`;
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!inputMessage.trim() && uploadedFiles.length === 0) return;
+
+    // Guard against double submissions - prevent multiple concurrent requests
+    if (isSubmittingRef.current) {
+      console.warn('Request already in progress, ignoring duplicate submission');
+      return;
+    }
+
+    isSubmittingRef.current = true;
+
     setInputMessage('');
     if (inputRef.current) {
       inputRef.current.style.height = '40px';
@@ -838,6 +848,8 @@ Today's Date: ${TODAY}`;
       }
 
       setButtonStatus('idle');
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 
