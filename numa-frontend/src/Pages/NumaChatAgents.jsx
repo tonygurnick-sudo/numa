@@ -60,6 +60,7 @@ const NumaChatAgents = () => {
     setIsConversationLoading,
     createNewConversationIfNeeded,
     handleNewChat,
+    resetUserNewChatFlag,
   } = conversationManager;
   const {
     inlineDocument,
@@ -673,6 +674,7 @@ const NumaChatAgents = () => {
 
     setIsConversationLoading(true);
     setMessages([]); // Clear current messages immediately
+    resetUserNewChatFlag(); // Reset the flag since user is explicitly loading a conversation
 
     try {
       const chatMessages = await loadConversation(selectedConversationId, numaChatDynamoUtils, sub, getAccessToken);

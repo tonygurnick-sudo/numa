@@ -37,6 +37,7 @@ const NumaChat = () => {
   const [companyProfile, setCompanyProfile] = useState('');
   const [isCompanyProfileLoaded, setIsCompanyProfileLoaded] = useState(false);
   const [isConversationLoading, setIsConversationLoading] = useState(true);
+  const [hasUserStartedNewChat, setHasUserStartedNewChat] = useState(false);
   const stopGenerationRef = useRef(false);
   const messageEndRef = useRef(null);
   const chatHistoryRef = useRef(null);
@@ -223,7 +224,7 @@ Today's Date: ${TODAY}`;
   // Attempt to restore last conversation from localStorage
   useEffect(() => {
     async function initializeConversation() {
-      if (numaChatDynamoUtils && sub) {
+      if (numaChatDynamoUtils && sub && !hasUserStartedNewChat) {
         try {
           // Fetch the conversation meta items for this user
           const metaItems = await numaChatDynamoUtils.getUserConversationsMeta(sub);
@@ -248,7 +249,7 @@ Today's Date: ${TODAY}`;
       }
     }
     initializeConversation();
-  }, [numaChatDynamoUtils, sub]);
+  }, [numaChatDynamoUtils, sub, hasUserStartedNewChat]);
 
   // Pre-warm Aurora database when component mounts (only for Bedrock knowledge base)
   useEffect(() => {
@@ -278,6 +279,7 @@ Today's Date: ${TODAY}`;
     stopGenerationRef.current = true;
     setButtonStatus('idle');
     setIsConversationLoading(false);
+    setHasUserStartedNewChat(true);
 
     // Clear all states
     setMessages([]);
@@ -859,7 +861,7 @@ Today's Date: ${TODAY}`;
 
     setIsConversationLoading(true);
     setMessages([]); // Clear current messages immediately
-
+    setHasUserStartedNewChat(false);
     try {
       let retryCount = 0;
       let conversationHistory = [];
