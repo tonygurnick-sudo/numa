@@ -28,7 +28,7 @@ export const useConversationManager = () => {
    */
   const createNewConversationIfNeeded = useCallback(
     async (initialText = '') => {
-      if (conversationId) return conversationId; // Already have one
+      if (conversationId && !hasUserStartedNewChat) return conversationId; // Already have one, but only if not in new chat mode
 
       const newId = `${sub || 'anonymous'}_${Date.now()}`;
       setConversationId(newId);
@@ -57,7 +57,7 @@ export const useConversationManager = () => {
 
       return newId;
     },
-    [conversationId, sub, numaChatDynamoUtils],
+    [conversationId, sub, numaChatDynamoUtils, hasUserStartedNewChat],
   );
 
   /**
@@ -113,5 +113,6 @@ export const useConversationManager = () => {
     createNewConversationIfNeeded,
     handleNewChat,
     resetUserNewChatFlag,
+    hasUserStartedNewChat,
   };
 };
