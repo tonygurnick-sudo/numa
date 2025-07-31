@@ -61,6 +61,7 @@ const NumaChatAgents = () => {
     createNewConversationIfNeeded,
     handleNewChat,
     resetUserNewChatFlag,
+    hasUserStartedNewChat,
   } = conversationManager;
   const {
     inlineDocument,
@@ -115,12 +116,17 @@ const NumaChatAgents = () => {
   }, [PREFERRED_KNOWLEDGE_BASE, bedrockAgentRuntimeClient, BEDROCK_KNOWLEDGE_BASE_ID]);
 
   // Auto-load conversation when conversationId is set by useConversationManager
+  // But skip auto-load if this conversation was just created in this session or if messages already exist
   useEffect(() => {
-    if (conversationId && numaChatDynamoUtils && sub) {
+    if (conversationId && numaChatDynamoUtils && sub && !hasUserStartedNewChat && messages.length === 0) {
       console.log('[NumaChat] Auto-loading conversation:', conversationId);
       handleLoadConversation(conversationId);
+    } else if (conversationId && hasUserStartedNewChat) {
+      console.log('[NumaChat] Skipping auto-load for just-created conversation:', conversationId);
+    } else if (conversationId && messages.length > 0) {
+      console.log('[NumaChat] Skipping auto-load because messages already exist:', messages.length);
     }
-  }, [conversationId, numaChatDynamoUtils, sub]);
+  }, [conversationId, numaChatDynamoUtils, sub, hasUserStartedNewChat, messages.length]);
 
   // Helper to refresh sidebar
   const refreshSidebar = () => {
@@ -439,6 +445,12 @@ const NumaChatAgents = () => {
       refreshSidebar();
       setUploadedFiles([]);
       setInputMessage('');
+
+      // Reset the hasUserStartedNewChat flag after first successful submit
+      if (hasUserStartedNewChat) {
+        resetUserNewChatFlag();
+      }
+
       setTimeout(() => inputRef.current?.focus(), 0);
     };
   };
