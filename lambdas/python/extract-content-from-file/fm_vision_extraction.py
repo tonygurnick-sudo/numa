@@ -48,28 +48,27 @@ vision_model_type = os.environ.get("VISION_MODEL_TYPE", "haiku")
 
 # Map config value to actual model ID
 VISION_MODEL_ID = VISION_MODEL_MAP.get(vision_model_type, VISION_MODEL_MAP["haiku"])
+FALLBACK_MODEL_ID = VISION_MODEL_MAP[
+    "nova-pro" if vision_model_type == "haiku" else "haiku"
+]
 
 # Model-specific configurations
 MODEL_CONFIGS = {
-    "anthropic.claude-3-haiku-20240307-v1:0": {
+    VISION_MODEL_MAP["haiku"]: {
         "max_tokens": 4096,
         "max_images_per_call": 5,
         "anthropic_version": "bedrock-2023-05-31",
     },
-    "amazon.nova-pro-v1:0": {
+    VISION_MODEL_MAP["nova-pro"]: {
         "max_tokens": 4096,
         "max_images_per_call": 5,
         "anthropic_version": None,  # Nova uses different format
     },
 }
 
-# Get current model config
-CURRENT_MODEL_CONFIG = MODEL_CONFIGS.get(
-    VISION_MODEL_ID, MODEL_CONFIGS["anthropic.claude-3-haiku-20240307-v1:0"]
-)
+# Fallback model configuration for quota/throttling errors
+FALLBACK_MODELS = [VISION_MODEL_ID, FALLBACK_MODEL_ID]
 
-MAX_TOKENS = CURRENT_MODEL_CONFIG["max_tokens"]  # type: ignore[index]
-MAX_IMAGES_PER_CALL = CURRENT_MODEL_CONFIG["max_images_per_call"]  # type: ignore[index]
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 MAX_IMAGE_SIZE = 3.75 * 1024 * 1024  # 3.75MB
 MAX_IMAGE_DIMENSION = 8000  # 8000px
@@ -135,17 +134,31 @@ def extract_content(input_bucket: str, input_key: str) -> Document:
         raise ValueError(f"Unsupported format: {file_extension}")
 
 
-def _process_image(file_content: bytes, file_extension: str) -> str:
+def _process_image(
+    file_content: bytes, file_extension: str, model_id: str = VISION_MODEL_ID
+) -> str:
     """Process single image with foundation model"""
-    return _process_image_batch([file_content], [file_extension])
+    return _process_image_batch([file_content], [file_extension], model_id)
 
 
-def _process_image_batch(file_contents: List[bytes], file_extensions: List[str]) -> str:
+def _process_image_batch(
+    file_contents: List[bytes],
+    file_extensions: List[str],
+    model_id: str,
+) -> str:
     """Process multiple images with foundation model in a single API call"""
 
-    if len(file_contents) > MAX_IMAGES_PER_CALL:
+    current_model_id = model_id
+
+    # Get model config for the current model
+    current_model_config = MODEL_CONFIGS.get(
+        current_model_id, MODEL_CONFIGS[VISION_MODEL_MAP["haiku"]]
+    )
+    max_images_per_call = current_model_config["max_images_per_call"]  # type: ignore[index]
+
+    if len(file_contents) > max_images_per_call:
         raise ValueError(
-            f"Cannot process more than {MAX_IMAGES_PER_CALL} images per API call"
+            f"Cannot process more than {max_images_per_call} images per API call"
         )
 
     # Use unified prompt for all cases
@@ -153,7 +166,7 @@ def _process_image_batch(file_contents: List[bytes], file_extensions: List[str])
 
     # Build content based on model type
     content: List[Dict[str, Any]] = []
-    if VISION_MODEL_ID.startswith("amazon.nova"):
+    if current_model_id.startswith("amazon.nova"):
         # Nova format - images with format and source structure
         for file_content, file_extension in zip(file_contents, file_extensions):
             # Map file extension to Nova format
@@ -193,7 +206,7 @@ def _process_image_batch(file_contents: List[bytes], file_extensions: List[str])
     # Content already built above based on model type
 
     # Build request based on model type
-    if VISION_MODEL_ID.startswith("amazon.nova"):
+    if current_model_id.startswith("amazon.nova"):
         request = {
             "schemaVersion": "messages-v1",
             "messages": [
@@ -203,14 +216,14 @@ def _process_image_batch(file_contents: List[bytes], file_extensions: List[str])
                 }
             ],
             "inferenceConfig": {
-                "maxTokens": MAX_TOKENS,
+                "maxTokens": current_model_config["max_tokens"],  # type: ignore[index]
             },
         }
     else:
         # Anthropic format (default)
         request = {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": MAX_TOKENS,
+            "max_tokens": current_model_config["max_tokens"],  # type: ignore[index]
             "messages": [
                 {
                     "role": "user",
@@ -220,13 +233,13 @@ def _process_image_batch(file_contents: List[bytes], file_extensions: List[str])
         }
 
     response = bedrock_client.invoke_model(
-        modelId=VISION_MODEL_ID, body=json.dumps(request)
+        modelId=current_model_id, body=json.dumps(request)
     )
 
     result = json.loads(response["body"].read())
 
     # Extract response based on model type
-    if VISION_MODEL_ID.startswith("amazon.nova"):
+    if current_model_id.startswith("amazon.nova"):
         response_text = result["output"]["message"]["content"][0]["text"]
     else:
         # Anthropic format (default)
@@ -313,18 +326,54 @@ def _process_pages_concurrent(image_uris: List[str]) -> str:
         error_str = str(error).lower()
         return "timeout" in error_str or "connection" in error_str
 
-    def _retry_with_backoff(func, *args, max_retries=3):
-        """Execute function with exponential backoff retry"""
+    def _is_throttling_error(error: Exception) -> bool:
+        """Determine if an error is related to throttling/quota limits"""
+        if isinstance(error, ClientError):
+            http_status = error.response.get("ResponseMetadata", {}).get(
+                "HTTPStatusCode"
+            )
+            if http_status == 429:
+                return True
+            error_code = error.response.get("Error", {}).get("Code", "")
+            throttling_codes = {
+                "ThrottlingException",
+                "RequestLimitExceeded",
+                "QuotaExceeded",
+            }
+            return error_code in throttling_codes
+
+        error_str = str(error).lower()
+        return "throttl" in error_str or "quota" in error_str or "limit" in error_str
+
+    def _retry_with_backoff(func, *args, max_retries=3, use_fallback_models=False):
+        """Execute function with exponential backoff retry and optional model fallback"""
         last_error = None
+        current_model_index = 0
 
         for attempt in range(max_retries + 1):
             try:
-                return func(*args)
+                if use_fallback_models:
+                    model_id = FALLBACK_MODELS[
+                        current_model_index % len(FALLBACK_MODELS)
+                    ]
+                    return func(*args, model_id=model_id)
+                else:
+                    return func(*args)
             except Exception as e:
                 last_error = e
 
                 if attempt == max_retries or not _is_retryable_error(e):
                     raise e
+
+                # Only switch models if fallback is enabled and it's a throttling error
+                if use_fallback_models and _is_throttling_error(e):
+                    current_model_index += 1
+                    next_model = FALLBACK_MODELS[
+                        current_model_index % len(FALLBACK_MODELS)
+                    ]
+                    logger.warning(
+                        f"Throttling detected on attempt {attempt + 1}. Switching to model: {next_model}"
+                    )
 
                 wait_time = (2**attempt) + random.uniform(0.1, 0.5)
                 logger.warning(
@@ -340,9 +389,11 @@ def _process_pages_concurrent(image_uris: List[str]) -> str:
         """Get S3 object with retry logic"""
         return s3_client.get_object(Bucket=bucket, Key=key)
 
-    def _process_image_batch_with_retry(contents: List[bytes], extensions: List[str]):
+    def _process_image_batch_with_retry(
+        contents: List[bytes], extensions: List[str], model_id: str
+    ):
         """Process image batch with retry logic"""
-        return _process_image_batch(contents, extensions)
+        return _process_image_batch(contents, extensions, model_id)
 
     def process_page_batch(batch_data):
         """Process a batch of 5 pages in a single API call"""
@@ -361,7 +412,10 @@ def _process_pages_concurrent(image_uris: List[str]) -> str:
                 extensions.append(".jpg")
 
             batch_text = _retry_with_backoff(
-                _process_image_batch_with_retry, contents, extensions
+                _process_image_batch_with_retry,
+                contents,
+                extensions,
+                use_fallback_models=True,
             )
             return (start_idx, batch_text)
 
