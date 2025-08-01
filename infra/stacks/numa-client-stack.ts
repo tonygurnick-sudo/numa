@@ -178,6 +178,8 @@ export class NumaClientStack extends TerraformStack {
       },
       userPoolId: core.userPoolId,
       userPoolClientId: core.userPoolClient.id,
+      outputsBucketArn: core.outputsBucket.bucket.arn,
+      dataBucketArn: core.dataBucket.bucket.arn,
     });
 
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {

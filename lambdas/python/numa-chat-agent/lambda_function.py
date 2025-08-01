@@ -35,7 +35,11 @@ from numa_chat_agent import (
     set_current_user_auth,
 )
 from numa_chat_agent.config import FALLBACK_MODEL_ID, is_quota_limit_error
-from numa_chat_agent.utils import convert_tool_blocks_to_text, extract_preview
+from numa_chat_agent.utils import (
+    convert_tool_blocks_to_text,
+    extract_preview,
+    process_messages_with_file_refs,
+)
 from numa_chat_agent.websocket import send_error_message
 
 # Initialize structured logger
@@ -77,6 +81,10 @@ def handler(event, _ctx):
     # but no toolConfig is provided
     if not enabled_tools:
         messages = convert_tool_blocks_to_text(messages)
+
+    # Process file references to load content from S3
+    # This prevents large files from being passed through WebSocket, avoiding payload size limits
+    messages = process_messages_with_file_refs(messages)
 
     # Build WebSocket endpoint URL for API Gateway Management API
     endpoint_url = build_websocket_endpoint(request_context)

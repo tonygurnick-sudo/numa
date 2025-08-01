@@ -6,8 +6,11 @@ Contains retry logic, shared helpers, and common functionality.
 
 import json
 import time
+from typing import Any, Dict, List
 
 import structlog
+
+import s3_helpers
 
 logger = structlog.get_logger()
 
@@ -207,3 +210,126 @@ def convert_tool_blocks_to_text(messages):
         )
 
     return converted_messages
+
+
+def load_file_content_from_ref(file_ref: Dict[str, Any]) -> str:
+    """
+    Load file content from S3 using file reference metadata.
+
+    This function loads file content from S3 to avoid passing large files
+    through WebSocket connections, which can hit payload size limits.
+
+    Args:
+        file_ref: Dictionary containing S3 file reference with keys:
+            - s3Bucket: S3 bucket name
+            - extractedContentS3Key: S3 key for extracted content
+            - fileType: File type (for logging)
+            - fileName: Original file name (for logging)
+            - region: AWS region (optional, for logging)
+
+    Returns:
+        str: File content as text, or error message if loading fails
+    """
+    try:
+        s3_bucket = file_ref.get("s3Bucket")
+        s3_key = file_ref.get("extractedContentS3Key")
+        file_name = file_ref.get("fileName", "unknown")
+        file_type = file_ref.get("fileType", "unknown")
+
+        if not s3_bucket or not s3_key:
+            error_msg = f"Missing S3 reference data for file {file_name}"
+            logger.error(error_msg, file_ref=file_ref)
+            return f"Error: {error_msg}"
+
+        logger.info(
+            "Loading file content from S3",
+            bucket=s3_bucket,
+            key=s3_key,
+            file_name=file_name,
+            file_type=file_type,
+        )
+
+        # Load file content using s3_helpers
+        content_bytes = s3_helpers.read(key=s3_key, bucket=s3_bucket)
+        content_text = content_bytes.decode("utf-8")
+
+        if not content_text.strip():
+            content_text = "No content found in file"
+
+        logger.debug(
+            "Successfully loaded file content",
+            file_name=file_name,
+            content_length=len(content_text),
+        )
+
+        return content_text.strip()
+
+    except Exception as error:
+        error_msg = (
+            f"Error loading file {file_ref.get('fileName', 'unknown')}: {str(error)}"
+        )
+        logger.error(
+            "Failed to load file content from S3",
+            error=str(error),
+            file_ref=file_ref,
+            exc_info=True,
+        )
+        return f"Error: {error_msg}"
+
+
+def process_messages_with_file_refs(
+    messages: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Process conversation messages and load file content for any fileRef blocks.
+
+    This function iterates through messages and replaces fileRef blocks with
+    actual file content loaded from S3. This prevents large file content from
+    being passed through the WebSocket, avoiding payload size limits.
+
+    Args:
+        messages: List of conversation messages in Bedrock format
+
+    Returns:
+        List[Dict[str, Any]]: Messages with fileRef blocks replaced by file content
+    """
+    processed_messages = []
+    file_refs_processed = 0
+
+    for message in messages:
+        processed_message = message.copy()
+
+        if "content" in message and isinstance(message["content"], list):
+            processed_content = []
+
+            for content_block in message["content"]:
+                if isinstance(content_block, dict) and "fileRef" in content_block:
+                    # Replace fileRef with actual file content
+                    file_ref = content_block["fileRef"]
+                    file_content = load_file_content_from_ref(file_ref)
+
+                    # Create text block with file content
+                    processed_content.append({"text": file_content})
+
+                    file_refs_processed += 1
+                    logger.info(
+                        "Processed file reference",
+                        file_name=file_ref.get("fileName"),
+                        content_length=len(file_content),
+                    )
+                else:
+                    # Keep non-fileRef blocks as-is
+                    processed_content.append(content_block)
+
+            processed_message["content"] = processed_content
+
+        processed_messages.append(processed_message)
+
+    if file_refs_processed > 0:
+        logger.info(
+            "File reference processing completed",
+            file_refs_processed=file_refs_processed,
+            total_messages=len(messages),
+        )
+
+    return processed_messages

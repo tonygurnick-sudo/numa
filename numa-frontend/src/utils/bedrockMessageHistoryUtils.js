@@ -128,7 +128,7 @@ const truncateConversationHistory = (messages) => {
   return truncatedMessages;
 };
 
-const formatMessagesForChat = async (messages, getCredentials) => {
+const formatMessagesForChat = async (messages, getCredentials, loadFiles = true) => {
   const sortedHistory = messages.sort((a, b) => a.timestamp - b.timestamp);
   const formattedMessages = [];
 
@@ -152,13 +152,39 @@ const formatMessagesForChat = async (messages, getCredentials) => {
       const { s3Bucket, extractedContentS3Key, fileType, fileName } = item.fileInfo || {};
       const region = window.sessionStorage.getItem('REGION');
 
-      try {
-        const fileContent = await fetchFileFromS3(extractedContentS3Key, s3Bucket, region, getCredentials);
-        let textBody = await fileContent.text();
-        if (!textBody.trim()) {
-          textBody = 'No content found in file';
-        }
+      if (loadFiles) {
+        // Load file content directly (original behavior)
+        try {
+          const fileContent = await fetchFileFromS3(extractedContentS3Key, s3Bucket, region, getCredentials);
+          let textBody = await fileContent.text();
+          if (!textBody.trim()) {
+            textBody = 'No content found in file';
+          }
 
+          formattedMessages.push({
+            role: 'assistant',
+            content: [
+              {
+                text: `User has uploaded file:: ${fileName} (${fileType}). Extracting content...`,
+              },
+              {
+                text: textBody.trim() || 'No content found in file',
+              },
+            ],
+          });
+        } catch (error) {
+          console.error('Error formatting file message:', error);
+          formattedMessages.push({
+            role: item.role,
+            content: [
+              {
+                text: `Error processing file ${fileName}: ${error.message}`,
+              },
+            ],
+          });
+        }
+      } else {
+        // Pass file reference instead of content - lambda will load it to avoid WebSocket size limits
         formattedMessages.push({
           role: 'assistant',
           content: [
@@ -166,17 +192,14 @@ const formatMessagesForChat = async (messages, getCredentials) => {
               text: `User has uploaded file:: ${fileName} (${fileType}). Extracting content...`,
             },
             {
-              text: textBody.trim() || 'No content found in file',
-            },
-          ],
-        });
-      } catch (error) {
-        console.error('Error formatting file message:', error);
-        formattedMessages.push({
-          role: item.role,
-          content: [
-            {
-              text: `Error processing file ${fileName}: ${error.message}`,
+              // Pass file reference instead of content - lambda will load it
+              fileRef: {
+                s3Bucket,
+                extractedContentS3Key,
+                fileType,
+                fileName,
+                region,
+              },
             },
           ],
         });
@@ -272,7 +295,11 @@ const prepareConversationHistoryForChat = async (conversationHistory, getCredent
   const sortedHistory = conversationHistory.sort((a, b) => a.timestamp - b.timestamp);
   const truncatedHistory = truncateConversationHistory(sortedHistory);
 
-  const formattedMessages = await formatMessagesForChat(truncatedHistory, getCredentials);
+  // Check if numaChatAgents is enabled - if so, don't load files to avoid WebSocket size limits
+  const numaChatAgentsEnabled = window.sessionStorage.getItem('NUMA_CHAT_AGENTS') === 'true';
+  const loadFiles = !numaChatAgentsEnabled;
+
+  const formattedMessages = await formatMessagesForChat(truncatedHistory, getCredentials, loadFiles);
 
   if (truncatedHistory.length < sortedHistory.length) {
     console.log(`Total words exceeded ${MAX_WORDS} or total messages exceeded ${MAX_MESSAGES}`);
