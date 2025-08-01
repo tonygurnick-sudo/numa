@@ -46,6 +46,9 @@ export interface ChatAgentWsProps {
   // JWT Authorization Configuration
   userPoolId: string;
   userPoolClientId: string;
+  // S3 Buckets for file access
+  outputsBucketArn: string;
+  dataBucketArn: string;
 }
 
 export class NumaChatAgentWebSocket extends Construct {
@@ -189,6 +192,7 @@ export class NumaChatAgentWebSocket extends Construct {
         Q_RETRIEVER_ID: config.qRetrieverId ?? '',
         BEDROCK_KNOWLEDGE_BASE_ID: config.bedrockKnowledgeBaseId ?? '',
         PREFERRED_KNOWLEDGE_BASE: config.preferredKnowledgeBase,
+        BUCKET: props.outputsBucketArn.split(':').pop() ?? '', // Extract bucket name from ARN for s3_helpers
       },
       logGroup: agentLogGroup,
       resourceNameSuffix: '_ws_agent',
@@ -222,6 +226,11 @@ export class NumaChatAgentWebSocket extends Construct {
           effect: 'Allow',
           actions: ['sts:AssumeRoleWithWebIdentity'],
           resources: [`arn:aws:iam::*:role/*NumaRole*`, `arn:aws:iam::*:role/*numa-role*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject'],
+          resources: [`${props.outputsBucketArn}/*`, `${props.dataBucketArn}/*`],
         },
       ]
         .concat(
