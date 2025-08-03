@@ -164,7 +164,13 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
               }
             } else if (item.message_type === 'tool_call') {
               // Reconstruct tool call segment
-              const toolLabel = TOOL_CONFIG[item.toolName]?.label || item.toolName;
+              // Extract tool name from DynamoDB record
+              let toolName = item.tool_name;
+              if (!toolName && item.tool_payload?.name) {
+                toolName = item.tool_payload.name;
+              }
+
+              const toolLabel = TOOL_CONFIG[toolName]?.label || toolName || 'Unknown Tool';
               segments.push({
                 kind: 'tool',
                 label: `Calling ${toolLabel} tool`,
@@ -173,13 +179,21 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
               });
             } else if (item.message_type === 'tool_result') {
               // Reconstruct tool result segment with full payload
+              // Extract tool name from DynamoDB record
+              let toolName = item.tool_name;
+              if (!toolName && item.tool_payload?.name) {
+                toolName = item.tool_payload.name;
+              }
+
+              // Use the tool_payload directly - it contains the complete tool result structure
+              const payload = item.tool_payload || {};
+              // Ensure the name property is set for renderer selection
+              payload.name = toolName || 'unknown';
+
               segments.push({
                 kind: 'result',
-                toolName: item.toolName,
-                payload: {
-                  ...item.toolPayload,
-                  name: item.toolName, // Ensure name is set for renderer selection
-                },
+                toolName: toolName || 'unknown',
+                payload: payload,
               });
             } else if (item.message_type === 'document_metadata') {
               // Extract document metadata and apply to the message
