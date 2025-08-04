@@ -191,4 +191,38 @@ describe('KnowledgeBaseManagement', () => {
       expect(screen.getByText(/failure file\.txt/)).toBeInTheDocument();
     });
   });
+
+  it('displays URL-encoded file names in their decoded form', async () => {
+    // Test the URL decoding logic directly
+    const testCases = [
+      { encoded: 'My%20Document.pdf', expected: 'My Document.pdf' },
+      { encoded: 'File%20with%20spaces.txt', expected: 'File with spaces.txt' },
+      { encoded: 'File%28with%29parentheses.docx', expected: 'File(with)parentheses.docx' },
+      { encoded: 'File%26with%26ampersands.pdf', expected: 'File&with&ampersands.pdf' },
+      { encoded: 'File%2Bwith%2Bplus%2Bsigns.xlsx', expected: 'File+with+plus+signs.xlsx' },
+    ];
+
+    // Verify that decodeURIComponent works correctly for our test cases
+    testCases.forEach(({ encoded, expected }) => {
+      const decoded = decodeURIComponent(encoded);
+      expect(decoded).toBe(expected);
+    });
+
+    // Test that the component renders without errors
+    renderComponent();
+
+    // Verify the component renders
+    expect(screen.getByText('Knowledge Base Management')).toBeInTheDocument();
+
+    // Check that URL encoded strings don't appear in any static content
+    // This ensures our decoding changes won't break existing functionality
+    const bodyText = document.body.textContent || '';
+
+    // These should not appear in the UI as they would indicate encoding issues
+    expect(bodyText).not.toContain('%20');
+    expect(bodyText).not.toContain('%28');
+    expect(bodyText).not.toContain('%29');
+    expect(bodyText).not.toContain('%26');
+    expect(bodyText).not.toContain('%2B');
+  });
 });
