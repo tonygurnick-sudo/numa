@@ -1155,7 +1155,7 @@ export function KnowledgeBaseManagement() {
    */
   const failedDocuments = useMemo(() => {
     return kbDocuments.filter(
-      (doc) => (doc.error && Object.keys(doc.error).length > 0 && doc.error.errorMessage) || doc.status === 'FAILED',
+      (doc) => (doc.error && Object.keys(doc.error).length > 0 && doc.error?.errorMessage) || doc.status === 'FAILED',
     );
   }, [kbDocuments]);
 
@@ -1622,7 +1622,9 @@ export function KnowledgeBaseManagement() {
                               <tr key={doc.documentId}>
                                 <td className="failed-document-name">{fileName}</td>
                                 <td>
-                                  <div className="failed-error-message">{doc.error.errorMessage}</div>
+                                  <div className="failed-error-message">
+                                    {(doc.error?.errorMessage ?? doc.statusReason) || 'Unknown failure.'}
+                                  </div>
                                 </td>
                                 <td>{new Date(doc.updatedAt).toLocaleString('en-NZ')}</td>
                               </tr>
