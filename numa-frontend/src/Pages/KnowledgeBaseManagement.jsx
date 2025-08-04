@@ -70,7 +70,7 @@ function filterTree(node, searchTerm) {
   };
 
   // Filter files
-  filtered.files = node.files.filter((f) => f.Key.split('/').pop().toLowerCase().includes(lower));
+  filtered.files = node.files.filter((f) => decodeURIComponent(f.Key.split('/').pop()).toLowerCase().includes(lower));
 
   // Recurse into subfolders
   for (const [folderName, folderNode] of Object.entries(node.children)) {
@@ -107,8 +107,8 @@ function sortTree(node, sortColumn = 'name', sortDirection = 'asc') {
       case 'name':
       default: {
         // Sort by filename (default)
-        const A = a.Key.split('/').pop().toLowerCase();
-        const B = b.Key.split('/').pop().toLowerCase();
+        const A = decodeURIComponent(a.Key.split('/').pop()).toLowerCase();
+        const B = decodeURIComponent(b.Key.split('/').pop()).toLowerCase();
         comparison = A.localeCompare(B);
         break;
       }
@@ -156,7 +156,7 @@ function buildRowsForTree(node, depth, parentPath) {
 
   // Process files and attach KB status if available
   node.files.forEach((f) => {
-    const fileName = f.Key.split('/').pop().replace(/%20/g, ' '); // Replace %20 with space
+    const fileName = decodeURIComponent(f.Key.split('/').pop());
     const rowId = parentPath ? `${parentPath}/${fileName}` : fileName;
     const kbStatus = f.kbDoc ? (f.kbDoc.error && Object.keys(f.kbDoc.error).length > 0 ? 'FAILED' : 'SUCCESS') : null;
     const errorMessage = f.kbDoc ? f.kbDoc.error?.errorMessage : null;
@@ -1616,12 +1616,11 @@ export function KnowledgeBaseManagement() {
                         </thead>
                         <tbody>
                           {failedDocuments.map((doc) => {
-                            const fileName = documentIdToKey(doc.documentId).split('/').pop();
-                            // Properly decode the URL to show a readable filename
-                            const decodedFileName = decodeURIComponent(fileName);
+                            const fileName = decodeURIComponent(documentIdToKey(doc.documentId).split('/').pop());
+                            // File name is already properly decoded
                             return (
                               <tr key={doc.documentId}>
-                                <td className="failed-document-name">{decodedFileName}</td>
+                                <td className="failed-document-name">{fileName}</td>
                                 <td>
                                   <div className="failed-error-message">{doc.error.errorMessage}</div>
                                 </td>
