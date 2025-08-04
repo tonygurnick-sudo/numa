@@ -163,35 +163,6 @@ const NumaChatAgents = () => {
     setMessages([greeting]);
   };
 
-  // Validate input and prepare UI state for submission
-  const validateAndPrepareInput = (
-    e,
-    inputMessage,
-    uploadedFiles,
-    isProcessingRef,
-    setInputMessage,
-    inputRef,
-    setButtonStatus,
-  ) => {
-    e.preventDefault();
-    if (!inputMessage.trim() && uploadedFiles.length === 0) return false;
-
-    // Prevent duplicate submissions (React StrictMode protection)
-    if (isProcessingRef.current) {
-      console.log('[NumaChat] Ignoring duplicate handleSubmit call');
-      return false;
-    }
-    isProcessingRef.current = true;
-
-    setInputMessage('');
-    if (inputRef.current) {
-      inputRef.current.style.height = '40px';
-    }
-    setButtonStatus('loading');
-
-    return true;
-  };
-
   // Prepare conversation context and add user message
   const prepareConversationContext = async (
     inputMessage,
@@ -457,19 +428,27 @@ const NumaChatAgents = () => {
 
   // Submit user input
   const handleSubmit = async (e) => {
-    if (
-      !validateAndPrepareInput(
-        e,
-        inputMessage,
-        uploadedFiles,
-        isProcessingRef,
-        setInputMessage,
-        inputRef,
-        setButtonStatus,
-      )
-    ) {
+    e.preventDefault();
+
+    // Prevent duplicate submissions (React StrictMode protection) - check FIRST
+    if (isProcessingRef.current) {
+      console.log('[NumaChat] Ignoring duplicate handleSubmit call');
       return;
     }
+    isProcessingRef.current = true;
+
+    // Validate input
+    if (!inputMessage.trim() && uploadedFiles.length === 0) {
+      isProcessingRef.current = false; // Reset flag on early return
+      return;
+    }
+
+    // Prepare UI
+    setInputMessage('');
+    if (inputRef.current) {
+      inputRef.current.style.height = '40px';
+    }
+    setButtonStatus('loading');
 
     try {
       /* ────────────────────────────────
