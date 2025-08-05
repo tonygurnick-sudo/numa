@@ -108,7 +108,13 @@ export const DataSourcesList = () => {
                 >
                   <div className="source-name fw-bold">{source.displayName}</div>
                   <div className="d-flex justify-content-between align-items-center mt-1">
-                    {source.type && <span className="source-type text-muted small">({source.type})</span>}
+                    {source.type === 'S3' && source.displayName?.toLowerCase().includes('knowledge-base-datasource') ? (
+                      <span className="source-type text-muted small">(BEDROCK)</span>
+                    ) : source.type ? (
+                      <span className="source-type text-muted small">({source.type})</span>
+                    ) : (
+                      <span className="source-type text-muted small">(Unknown)</span>
+                    )}
                     <span
                       className={`source-status badge tag-pill ${source.status === 'ACTIVE' ? 'tag-green' : 'tag-blue'}`}
                     >
