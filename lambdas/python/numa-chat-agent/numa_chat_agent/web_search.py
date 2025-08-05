@@ -20,7 +20,32 @@ logger = structlog.get_logger()
 def _is_processable_url(url: str) -> bool:
     """Check if URL should be processed based on file extension."""
     return not url.lower().endswith(
-        (".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt")
+        (
+            ".pdf",
+            ".docx",
+            ".doc",
+            ".xlsx",
+            ".xls",
+            ".pptx",
+            ".ppt",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".bmp",
+            ".tiff",
+            ".svg",
+            ".webp",
+            ".zip",
+            ".rar",
+            ".7z",
+            ".tar",
+            ".gz",
+            ".bz2",
+            ".dmg",
+            ".exe",
+            ".msi",
+        )
     )
 
 
