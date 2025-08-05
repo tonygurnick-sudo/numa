@@ -85,7 +85,32 @@ def _parse_html(html: str, url: str) -> tuple[str, str, List[str]]:
             and urlparse(link).netloc == base_domain
             and link not in same_host_links
             and not link.lower().endswith(
-                (".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt")
+                (
+                    ".pdf",
+                    ".docx",
+                    ".doc",
+                    ".xlsx",
+                    ".xls",
+                    ".pptx",
+                    ".ppt",
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".gif",
+                    ".bmp",
+                    ".tiff",
+                    ".svg",
+                    ".webp",
+                    ".zip",
+                    ".rar",
+                    ".7z",
+                    ".tar",
+                    ".gz",
+                    ".bz2",
+                    ".dmg",
+                    ".exe",
+                    ".msi",
+                )
             )
         ):
             same_host_links.append(link)
