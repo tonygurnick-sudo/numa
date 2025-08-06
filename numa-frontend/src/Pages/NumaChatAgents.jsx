@@ -924,6 +924,7 @@ const NumaChatAgents = () => {
         refreshSidebar={refreshSidebar}
         setIsFileProcessing={setIsFileProcessing}
         createNewConversationIfNeeded={createNewConversationIfNeeded}
+        resetUserNewChatFlag={resetUserNewChatFlag}
       />
     </div>
   );
