@@ -25,7 +25,7 @@
     "@aws-sdk/credential-providers": "^3.670.0",
     "@aws-sdk/s3-request-presigner": "^3.738.0",
     "@aws-sdk/util-dynamodb": "3.817.0",
-    "@honeycombio/opentelemetry-web": "^0.17.0",
+    "@honeycombio/opentelemetry-web": "^0.21.0",
     "@mdxeditor/editor": "^3.19.3",
     "@opentelemetry/auto-instrumentations-web": "^0.47.0",
     "@popperjs/core": "^2.11.8",
