@@ -13,17 +13,35 @@ from strands.models.bedrock import BedrockModel
 # ── Environment Variables & Constants ──────────────────────────────────────
 REGION = os.getenv("AWS_REGION", "us-east-1")
 
-# Region-aware model configuration (matches frontend MODEL_MAP)
+# Region-aware model configuration with max_tokens limits
 REGIONAL_MODEL_MAP = {
     "us-east-1": {
-        "default": "us.anthropic.claude-sonnet-4-20250514-v1:0",
-        "fallback": "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
-        "haiku": "anthropic.claude-3-haiku-20240307-v1:0",
+        "default": {
+            "model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+            "max_tokens": 64000,  # Sonnet 4 limit
+        },
+        "fallback": {
+            "model_id": "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+            "max_tokens": 4096,  # Claude 3.5 v1 limit
+        },
+        "haiku": {
+            "model_id": "anthropic.claude-3-haiku-20240307-v1:0",
+            "max_tokens": 4096,  # Haiku limit
+        },
     },
     "ap-southeast-2": {
-        "default": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
-        "fallback": "anthropic.claude-3-5-sonnet-20241022-v2:0",
-        "haiku": "anthropic.claude-3-haiku-20240307-v1:0",
+        "default": {
+            "model_id": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
+            "max_tokens": 64000,  # Sonnet 4 limit
+        },
+        "fallback": {
+            "model_id": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "max_tokens": 8192,  # Claude 3.5 v2 limit
+        },
+        "haiku": {
+            "model_id": "anthropic.claude-3-haiku-20240307-v1:0",
+            "max_tokens": 4096,  # Haiku limit
+        },
     },
 }
 
@@ -34,7 +52,20 @@ def get_regional_model(model_type="default"):
     if not regional_models:
         # Fall back to us-east-1 for unknown regions
         regional_models = REGIONAL_MODEL_MAP["us-east-1"]
-    return regional_models.get(model_type, regional_models["default"])
+
+    model_config = regional_models.get(model_type, regional_models["default"])
+    return model_config["model_id"]
+
+
+def get_regional_model_max_tokens(model_type="default"):
+    """Get max tokens for the current region and model type."""
+    regional_models = REGIONAL_MODEL_MAP.get(REGION)
+    if not regional_models:
+        # Fall back to us-east-1 for unknown regions
+        regional_models = REGIONAL_MODEL_MAP["us-east-1"]
+
+    model_config = regional_models.get(model_type, regional_models["default"])
+    return model_config["max_tokens"]
 
 
 # Set model constants with region-aware defaults, allowing env var override
@@ -87,36 +118,52 @@ def get_apigateway_management_client(endpoint_url: str):
 
 
 # ── Model Configuration ───────────────────────────────────────────────────
-def get_bedrock_model(model_id=None, streaming: bool = True, temperature: float = 0.15):
+def get_bedrock_model(
+    model_id=None,
+    streaming: bool = True,
+    temperature: float = 0.15,
+):
     """Create BedrockModel instance with specified or default model configuration."""
     effective_model_id = model_id or MODEL_ID
+
+    # Use model-specific max_tokens
+    max_tokens = get_regional_model_max_tokens("default")
+
     logger.debug(
         "Creating BedrockModel",
         model_id=effective_model_id,
         streaming=streaming,
         temperature=temperature,
+        max_tokens=max_tokens,
     )
 
     return BedrockModel(
         model_id=effective_model_id,
         streaming=streaming,
         temperature=temperature,
+        max_tokens=max_tokens,
     )
 
 
 def get_fallback_model(streaming: bool = True, temperature: float = 0.15):
     """Create BedrockModel instance with fallback model configuration."""
+
+    # Use model-specific max_tokens
+    max_tokens = get_regional_model_max_tokens("fallback")
+
     logger.debug(
         "Creating fallback BedrockModel",
         model_id=FALLBACK_MODEL_ID,
         streaming=streaming,
         temperature=temperature,
+        max_tokens=max_tokens,
     )
 
     return BedrockModel(
         model_id=FALLBACK_MODEL_ID,
         streaming=streaming,
         temperature=temperature,
+        max_tokens=max_tokens,
     )
 
 

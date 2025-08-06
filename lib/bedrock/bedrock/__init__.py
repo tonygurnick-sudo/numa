@@ -18,6 +18,7 @@ from .bedrock_model_config import (
     Region,
     get_fallback_sequence,
     get_model_id,
+    get_model_max_tokens,
     is_quota_limit_error,
 )
 from .model_providers import NormalizedContent, provider_registry
@@ -123,7 +124,7 @@ class BedrockClaude3Model:
 
         self.model_args = {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 2048,
+            "max_tokens": 8000,  # Improved default
         }
 
         if model_args:
@@ -166,10 +167,27 @@ class BedrockClaude3Model:
                         name_for_logging=name_for_logging,
                     )
 
-                # Get the appropriate provider and build request
+                # Get the appropriate provider and build request with model-specific validation
                 provider = provider_registry.get_provider(model_id)
+
+                # Create a copy of model_args with max_tokens capped to the model's limit
+                model_specific_args = self.model_args.copy()
+                requested_max_tokens = model_specific_args.get("max_tokens", 8000)
+                model_max_tokens = get_model_max_tokens(model_id)
+
+                # Cap the requested tokens to the model's maximum
+                if requested_max_tokens > model_max_tokens:  # type: ignore
+                    model_specific_args["max_tokens"] = model_max_tokens
+                    if attempt == 0:
+                        logger.info(
+                            f"Capping max_tokens from {requested_max_tokens} to {model_max_tokens} for model {model_id}",
+                            model_id=model_id,
+                            requested_max_tokens=requested_max_tokens,
+                            model_max_tokens=model_max_tokens,
+                        )
+
                 request_body = provider.normalize_request(
-                    messages=multimodal_messages, model_args=self.model_args
+                    messages=multimodal_messages, model_args=model_specific_args
                 )
 
                 # Attempt to invoke the model
@@ -251,10 +269,22 @@ class BedrockClaude3Model:
                                 )
                                 time.sleep(self.retry_delay)
 
-                            # Rebuild request body for retry
+                            # Rebuild request body for retry with model-specific validation
                             provider = provider_registry.get_provider(model_id)
+
+                            # Apply the same max_tokens capping logic for retries
+                            retry_model_args = self.model_args.copy()
+                            requested_max_tokens = retry_model_args.get(
+                                "max_tokens", 8000
+                            )
+                            model_max_tokens = get_model_max_tokens(model_id)
+
+                            if requested_max_tokens > model_max_tokens:  # type: ignore
+                                retry_model_args["max_tokens"] = model_max_tokens
+
                             retry_request_body = provider.normalize_request(
-                                messages=multimodal_messages, model_args=self.model_args
+                                messages=multimodal_messages,
+                                model_args=retry_model_args,
                             )
                             response = self.bedrock_client.invoke_model(
                                 modelId=model_id,
