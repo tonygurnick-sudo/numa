@@ -129,7 +129,9 @@ async def run_agent_stream(
         async for event in agent.stream_async(prompt, messages=messages):
             # Forward every Strands event with type wrapper
             if isinstance(event, dict):
-                event_with_type = {"type": "event", **event}
+                # Remove 'messages' field to prevent large payloads (frontend doesn't need it)
+                filtered_event = {k: v for k, v in event.items() if k != "messages"}
+                event_with_type = {"type": "event", **filtered_event}
                 success = post_to_connection(
                     connection_id, event_with_type, endpoint_url
                 )
