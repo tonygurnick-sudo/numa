@@ -38,6 +38,7 @@ class ModelInfo:
     name: str = ""
     input_cost: float = 0.0
     output_cost: float = 0.0
+    max_tokens: int = 4096
 
 
 # Define fallback sequences for each region
@@ -51,6 +52,7 @@ FALLBACK_SEQUENCES = {
             name="Claude 3.7 Sonnet",
             input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
             output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
+            max_tokens=64000,
         ),
         ModelInfo(
             model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -58,6 +60,7 @@ FALLBACK_SEQUENCES = {
             name="Claude 3.5 Sonnet V2",
             input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
             output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
+            max_tokens=8192,
         ),
         ModelInfo(
             model_id="us.amazon.nova-premier-v1:0",  # Primary model (most preferred)
@@ -65,6 +68,7 @@ FALLBACK_SEQUENCES = {
             name="Nova Premier (Primary)",
             input_cost=0.0025,  # $2.50 per 1 M → $0.0025 per 1 k tokens
             output_cost=0.0125,  # $12.50 per 1 M → $0.0125 per 1 k tokens
+            max_tokens=10000,
         ),
         ModelInfo(
             model_id="us.amazon.nova-pro-v1:0",
@@ -72,6 +76,7 @@ FALLBACK_SEQUENCES = {
             name="Nova Pro",
             input_cost=0.0008,  # $0.80 per 1 M → $0.0008 per 1 k
             output_cost=0.0032,  # $3.20 per 1 M → $0.0032 per 1 k
+            max_tokens=10000,
         ),
         ModelInfo(
             model_id="us.anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -79,6 +84,7 @@ FALLBACK_SEQUENCES = {
             name="Claude 3.5 Sonnet (v1)",
             input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
             output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
+            max_tokens=4096,
         ),
     ],
     Region.AP_SOUTHEAST_2: [
@@ -88,6 +94,7 @@ FALLBACK_SEQUENCES = {
             name="Claude 3.7 Sonnet",
             input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
             output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
+            max_tokens=64000,
         ),
         ModelInfo(
             model_id="apac.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -95,6 +102,7 @@ FALLBACK_SEQUENCES = {
             name="Claude 3.5 Sonnet V2",
             input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
             output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
+            max_tokens=8192,
         ),
         ModelInfo(
             model_id="apac.amazon.nova-pro-v1:0",  # Primary model (most preferred)
@@ -102,6 +110,7 @@ FALLBACK_SEQUENCES = {
             name="Nova Pro (Primary)",
             input_cost=0.0008,  # $0.80 per 1 M → $0.0008 per 1 k tokens
             output_cost=0.0032,  # $3.20 per 1 M → $0.0032 per 1 k tokens
+            max_tokens=10000,
         ),
         ModelInfo(
             model_id="apac.anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -109,6 +118,7 @@ FALLBACK_SEQUENCES = {
             name="Claude 3.5 Sonnet (v1)",
             input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
             output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
+            max_tokens=4096,
         ),
         ModelInfo(
             model_id="anthropic.claude-3-haiku-20240307-v1:0",
@@ -116,6 +126,7 @@ FALLBACK_SEQUENCES = {
             name="Claude 3 Haiku",
             input_cost=0.00025,  # $0.25 per 1 M → $0.00025 per 1 k tokens
             output_cost=0.00125,  # $1.25 per 1 M → $0.00125 per 1 k tokens
+            max_tokens=4096,
         ),
     ],
 }
@@ -145,6 +156,25 @@ def get_model_id(region: Region, model_type: ModelTypes = ModelTypes.DEFAULT) ->
         raise ValueError(
             f"No model configured for region '{region}' and type '{model_type}'"
         ) from exc
+
+
+def get_model_max_tokens(model_id: str) -> int:
+    """
+    Get the maximum tokens for a specific model ID.
+
+    Args:
+        model_id: The model ID to look up
+
+    Returns:
+        int: Maximum tokens for the model, or 4096 as default if not found
+    """
+    for region_sequence in FALLBACK_SEQUENCES.values():
+        for model_info in region_sequence:
+            if model_info.model_id == model_id:
+                return model_info.max_tokens
+
+    # Default fallback for unknown models
+    return 4096
 
 
 def get_fallback_sequence(region: Region, claude_only: bool = False) -> List[ModelInfo]:
