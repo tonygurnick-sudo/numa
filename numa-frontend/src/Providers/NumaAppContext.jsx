@@ -53,6 +53,8 @@ export const NumaAppContext = createContext({
   loadJobResults: async () => {},
   currentJobId: null,
   setCurrentJobId: () => {},
+  loadingJobId: null,
+  setLoadingJobId: () => {},
 
   // UI states
   numaTaskResponses: [],

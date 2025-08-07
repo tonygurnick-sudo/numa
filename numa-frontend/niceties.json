@@ -1,12 +1,7 @@
 [
   {
-    "id": "status-dashboard",
-    "label": "New dashboard element showing job status. ⚠️ Incomplete feature.",
-    "default": false
-  },
-  {
-    "id": "open-job-on-dashboard-click",
-    "label": "Open jobs when they're clicked from the dashboard. ⚠️ Known issues.",
+    "id": "job-status-dashboard",
+    "label": "Job status dashboard with clickable jobs. Shows current and recent jobs with ability to open them directly. ⚠️ All known issues are fixed, report any new issues as a bug.",
     "default": false
   }
 ]
