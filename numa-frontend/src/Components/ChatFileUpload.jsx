@@ -15,6 +15,7 @@ const ChatFileUpload = ({
   refreshSidebar,
   setIsFileProcessing,
   createNewConversationIfNeeded,
+  resetUserNewChatFlag,
 }) => {
   const { numaChatDynamoUtils, user, getCredentials } = useAuth();
   const { numaPost } = useNumaRequest();
@@ -34,6 +35,8 @@ const ChatFileUpload = ({
       let cid = conversationId;
       if (!cid) {
         cid = await createNewConversationIfNeeded();
+        // Reset the new chat flag when creating conversation from file upload
+        resetUserNewChatFlag();
       }
 
       // Create auth context to pass to process function
