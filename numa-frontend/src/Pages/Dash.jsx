@@ -170,7 +170,7 @@ export const Dash = ({ showFavorites }) => {
         </header>
         <LayoutDashboard>
           <Container fluid className="px-0">
-            {niceties.isEnabled('status-dashboard') && (
+            {niceties.isEnabled('job-status-dashboard') && (
               <JobStatusProvider>
                 <StatusDashboard />
               </JobStatusProvider>

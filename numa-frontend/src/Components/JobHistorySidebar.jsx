@@ -6,10 +6,16 @@ import { Preloader } from './Preloader';
 import { CheckCircleFill, ArrowClockwise, ExclamationCircleFill, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 
 const JobHistorySidebar = () => {
-  const { getAppJobs, loadAppJobs, loadJobResults, numaAppData, jobHistorySidebarOpen, setJobHistorySidebarOpen } =
-    useNumaApp();
+  const {
+    getAppJobs,
+    loadAppJobs,
+    loadJobResults,
+    numaAppData,
+    jobHistorySidebarOpen,
+    setJobHistorySidebarOpen,
+    loadingJobId,
+  } = useNumaApp();
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingJobId, setLoadingJobId] = useState(null);
   const [nextToken, setNextToken] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -30,11 +36,15 @@ const JobHistorySidebar = () => {
   };
 
   const handleViewResults = async (jobId) => {
-    setLoadingJobId(jobId);
     try {
+      // Set the jobId as a query parameter in the URL
+      const url = new URL(window.location);
+      url.searchParams.set('jobId', jobId);
+      window.history.pushState({}, '', url);
+
       await loadJobResults(jobId);
-    } finally {
-      setLoadingJobId(null);
+    } catch (error) {
+      console.error('Error loading job results:', error);
     }
   };
 
@@ -77,7 +87,6 @@ const JobHistorySidebar = () => {
         }
 
         if (!isSameToken) {
-          console.log('newNextToken', newNextToken);
           setNextToken(newNextToken);
           setHasMore(true);
         } else {

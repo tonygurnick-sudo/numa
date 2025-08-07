@@ -33,6 +33,7 @@ const AppWizard = ({ manifest }) => {
     hasRun,
     setHasRun,
     job,
+    loadingJobId,
   } = useNumaApp();
 
   const [activeTab, setActiveTab] = useState(() => {
@@ -303,6 +304,18 @@ const AppWizard = ({ manifest }) => {
     return (
       <div>
         <Preloader smallscreen={true} overlayParent={true} />
+      </div>
+    );
+  }
+
+  // Show loading state when fetching a job
+  if (loadingJobId) {
+    return (
+      <div>
+        <Preloader smallscreen={true} overlayParent={true} />
+        <div className="text-center mt-3">
+          <p>Loading job results...</p>
+        </div>
       </div>
     );
   }

@@ -39,6 +39,7 @@ export const NumaAppProvider = ({ children }) => {
   const [appRunning, setAppRunning] = useState(false);
   const [job, setJob] = useState(null);
   const [currentJobId, setCurrentJobId] = useState(null);
+  const [loadingJobId, setLoadingJobId] = useState(null);
 
   // New states for processing progress
   const [processingProgress, setProcessingProgress] = useState(0);
@@ -80,6 +81,7 @@ export const NumaAppProvider = ({ children }) => {
     setHasRun(false);
     setCurrentJobId(null);
     setJob(null);
+    setLoadingJobId(null);
   };
 
   // We now create a job directly when uploading files instead of using a session ID
@@ -129,6 +131,18 @@ export const NumaAppProvider = ({ children }) => {
       loadAppJobs();
     }
   }, [numaAppId]);
+
+  // Auto-load job if jobId query parameter is present
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const jobIdParam = urlParams.get('jobId');
+    if (jobIdParam && numaAppId && numaAppData) {
+      loadJobResults(jobIdParam).catch((error) => {
+        console.error('Failed to auto-load job from query parameter:', error);
+        setError(error);
+      });
+    }
+  }, [numaAppId, numaAppData]);
 
   const getAppJobs = () => jobs;
 
@@ -213,8 +227,6 @@ export const NumaAppProvider = ({ children }) => {
     // Check if the task is required (default to false for better user experience)
     const isRequired = task.required !== undefined ? task.required : false;
 
-    console.log('Uploaded isRequired:', isRequired);
-
     // Check if we have valid uploads in either format:
     // 1. Standardized format (array of objects with id, name, s3_key)
     // 2. Legacy format (string or array of strings)
@@ -277,8 +289,6 @@ export const NumaAppProvider = ({ children }) => {
         ];
       }
     }
-
-    console.log(`S3 upload result: ${JSON.stringify(currentResults[task.id])}`);
     return currentResults;
   };
 
@@ -292,13 +302,10 @@ export const NumaAppProvider = ({ children }) => {
       ...payload,
       jobId: jobId,
     };
-    console.log('Generated Payload for http-request:', requestPayload);
-    console.log('Endpoint for http-request:', request_endpoint);
 
     // Initial request should return success status
     try {
       const response = await numaPost(request_endpoint, requestPayload);
-      console.log('Initial http-request response:', response);
 
       if (!response || !response.job_id) {
         throw new Error('No job ID received from initial request');
@@ -307,8 +314,7 @@ export const NumaAppProvider = ({ children }) => {
       // Poll for results using standardized function
       const { result } = await pollJobForCompletion(response.job_id);
 
-      console.log('Task completed successfully');
-      console.log('Task result:', result);
+      console.log('Task completed - result:', result);
       currentResults[task.id] = result;
       return currentResults;
     } catch (error) {
@@ -329,8 +335,7 @@ export const NumaAppProvider = ({ children }) => {
       });
 
       if (status === 'completed' && result) {
-        console.log('Job completed successfully');
-        console.log('Job result:', result);
+        console.log('Job completed - result:', result);
         return { success: true, result };
       }
 
@@ -361,11 +366,8 @@ export const NumaAppProvider = ({ children }) => {
 
     try {
       while (true) {
-        console.log('Polling job from DynamoDB:', jobId);
-
         // Use jobsApi to get job status directly from DynamoDB
         const job = await jobsApi.getJobById(numaAppData.id, jobId);
-        console.log('Raw job object from DynamoDB:', JSON.stringify(job, null, 2));
 
         // For history jobs, check for changes
         if (currentState) {
@@ -395,9 +397,7 @@ export const NumaAppProvider = ({ children }) => {
             let parsedResult = job.results;
             if (typeof job.results === 'string') {
               try {
-                console.log('Parsing result string:', job.results);
                 parsedResult = JSON.parse(job.results);
-                console.log('Parsed result:', parsedResult);
               } catch (parseError) {
                 console.error('Error parsing result JSON:', parseError);
                 // Keep the original string if parsing fails
@@ -431,7 +431,6 @@ export const NumaAppProvider = ({ children }) => {
         if (shouldContinuePolling) {
           const shouldContinue = shouldContinuePolling(currentState, startTime);
           if (!shouldContinue) {
-            console.log('Stopping poll: Custom condition met');
             break;
           }
         }
@@ -469,7 +468,7 @@ export const NumaAppProvider = ({ children }) => {
     }
 
     if (!jobHistoryItem.jobId) {
-      console.log('No jobId available for polling incomplete job');
+      // console.log('No jobId available for polling incomplete job');
       return jobHistoryItem;
     }
 
@@ -484,9 +483,7 @@ export const NumaAppProvider = ({ children }) => {
       const taskCompletions = {};
 
       // Mark input tasks complete if they have values
-      console.log('Loading job inputs:', jobHistoryItem.inputs);
       if (jobHistoryItem.inputs) {
-        console.log('Setting taskInputValues from job inputs');
         // Filter out internal fields from inputs before setting as task input values
         // Only include fields that correspond to actual task IDs
         const filteredInputs = {};
@@ -500,13 +497,10 @@ export const NumaAppProvider = ({ children }) => {
         }
         setTaskInputValues(filteredInputs);
         numaAppData.tasks.forEach((task) => {
-          console.log(`Checking task ${task.id} in inputs:`, !!jobHistoryItem.inputs[task.id]);
           if ((task.type === 'text-input' || task.type === 's3-upload') && jobHistoryItem.inputs[task.id]) {
             taskCompletions[task.id] = true;
           }
         });
-      } else {
-        console.log('No inputs found in job history item');
       }
 
       // Mark output tasks complete if they have results
@@ -583,35 +577,27 @@ export const NumaAppProvider = ({ children }) => {
 
   // Fetch content from S3
   const fetchS3Content = async (bucket, key, credentials) => {
-    console.log('Fetching S3 content:', { bucket, key });
-
     try {
-      console.log('Creating S3 client with provided credentials...');
       const region = window.sessionStorage.getItem('REGION');
       const s3Client = new S3Client({
         region: region,
         credentials,
       });
 
-      console.log('Creating GetObject command...');
       const command = new GetObjectCommand({
         Bucket: bucket,
         Key: key,
       });
 
-      console.log('Getting signed URL...');
       const signedUrl = await getSignedUrl(s3Client, command, {
         expiresIn: 3600,
       });
-      console.log('Got signed URL:', signedUrl);
 
-      console.log('Fetching content...');
       const response = await fetch(signedUrl);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.text();
-      console.log('S3 content retrieved:', data);
 
       return data;
     } catch (error) {
@@ -621,13 +607,11 @@ export const NumaAppProvider = ({ children }) => {
   };
 
   const pollQAppSession = async (sessionId, updateProgress) => {
-    console.log('Starting to poll Q-App session:', sessionId);
     let polling = true;
     let sessionResponse = null;
 
     while (polling) {
       try {
-        console.log('Polling Q-App session...');
         sessionResponse = await getSessionQApp({
           qAppsClient,
           sessionId,
@@ -637,7 +621,6 @@ export const NumaAppProvider = ({ children }) => {
           polling = false;
           return { ...sessionResponse, progress: 100 };
         } else if (sessionResponse?.status === 'FAILED') {
-          console.log('Q-App session failed');
           polling = false;
           throw new Error('Q App session failed');
         }
@@ -661,7 +644,7 @@ export const NumaAppProvider = ({ children }) => {
             console.warn('No progress update callback provided');
           }
         } else {
-          console.log('No card status in session response');
+          // console.log('No card status in session response');
         }
 
         sessionResponse.progress = progress || 5; // Minimum 5% progress
@@ -685,13 +668,10 @@ export const NumaAppProvider = ({ children }) => {
       // Otherwise, create a new job
       let jobResponse;
       if (currentJobId) {
-        console.log(`Using existing job ID: ${currentJobId}`);
-
         // Check if job is already completed - if so, don't update it
         try {
           const existingJob = await jobsApi.getJobById(numaAppData.id, currentJobId);
           if (existingJob && (existingJob.status === 'completed' || existingJob.status === 'SUCCESS')) {
-            console.log(`Job ${currentJobId} is already completed, not updating`);
             jobResponse = {
               jobId: currentJobId,
               startedAt: existingJob.startedAt || new Date().toISOString(),
@@ -700,7 +680,6 @@ export const NumaAppProvider = ({ children }) => {
             // Only update to PROCESSING if job is not already completed
             const userId = user?.decoded_tokens?.idToken?.['sub'];
             await jobsApi.updateJob(numaAppData, currentJobId, null, taskInputValues, 'PROCESSING', userId);
-            console.log(`Updated job ${currentJobId} status to 'PROCESSING'`);
             jobResponse = {
               jobId: currentJobId,
               startedAt: new Date().toISOString(),
@@ -719,7 +698,6 @@ export const NumaAppProvider = ({ children }) => {
         const userId = user?.decoded_tokens?.idToken?.['sub'];
         jobResponse = await jobsApi.createJob(numaAppData, taskInputValues, 'PROCESSING', userId);
         setCurrentJobId(jobResponse.jobId);
-        console.log(`Created new job with ID: ${jobResponse.jobId}`);
       }
 
       return {
@@ -944,20 +922,18 @@ export const NumaAppProvider = ({ children }) => {
 
   // Load and display historical job results
   const loadJobResults = async (jobId) => {
+    setLoadingJobId(jobId);
     try {
       let job = await jobsApi.getJobById(numaAppId, jobId);
       if (!job) {
         throw new Error('Job not found');
       }
 
-      console.log('Initial job:', job);
-
       setJob(job);
 
       // Try to poll for updates if job is incomplete
       if (job.status !== 'completed') {
         job = await pollIncompleteHistoryJob(job);
-        console.log('Job after polling:', job);
       }
 
       // Reset states before polling
@@ -973,7 +949,6 @@ export const NumaAppProvider = ({ children }) => {
         setAppRunning(false);
         setHasRun(false);
         setJobHistorySidebarOpen(false); // Close the sidebar for files-uploaded jobs
-        console.log('Setting app state for files-uploaded job');
       } else {
         // For completed or running jobs, show post-run navigation
         setAppRunning(true);
@@ -1043,9 +1018,7 @@ export const NumaAppProvider = ({ children }) => {
       // If status is 'files-uploaded', we don't need to poll as the app was never run
       if (job.status === 'PROCESSING') {
         job = await pollIncompleteHistoryJob(job);
-        console.log('Job after polling:', job);
       } else if (job.status === 'files-uploaded') {
-        console.log('Job has files uploaded but was never run, skipping polling');
         // Set app as not running since we're just loading files
         setAppRunning(false);
         setHasRun(false);
@@ -1069,7 +1042,6 @@ export const NumaAppProvider = ({ children }) => {
 
         // Schedule updates to be applied after the component has rendered
         if (fileUploadTasks.length > 0) {
-          console.log('Scheduling file upload value updates for tasks:', fileUploadTasks);
           setTimeout(() => {
             fileUploadTasks.forEach(({ taskId, value }) => {
               // Force a re-render of the task value to trigger the useEffect in S3UploadModule
@@ -1084,7 +1056,6 @@ export const NumaAppProvider = ({ children }) => {
                   ...prev,
                   [taskId]: value,
                 }));
-                console.log(`Triggered value update for s3-upload task ${taskId} with value:`, value);
               }, 50);
             });
           }, 100);
@@ -1098,10 +1069,8 @@ export const NumaAppProvider = ({ children }) => {
           if (job.status === 'files-uploaded') {
             // For 'files-uploaded' jobs, only mark input tasks as complete if they have values
             if (task.type === 'text-input' && job.inputs && job.inputs[task.id]) {
-              console.log(`Marking text-input task ${task.id} as complete`);
               updatedStatus[task.id] = true;
             } else if (task.type === 's3-upload' && job.inputs && job.inputs[task.id]) {
-              console.log(`Marking s3-upload task ${task.id} as complete with value:`, job.inputs[task.id]);
               updatedStatus[task.id] = true;
             }
           } else {
@@ -1192,6 +1161,8 @@ export const NumaAppProvider = ({ children }) => {
     } catch (error) {
       console.error('Error loading job results:', error);
       throw error;
+    } finally {
+      setLoadingJobId(null);
     }
   };
 
@@ -1262,6 +1233,8 @@ export const NumaAppProvider = ({ children }) => {
     setCurrentJobId,
     job,
     fetchS3Content,
+    loadingJobId,
+    setLoadingJobId,
   };
 
   return <NumaAppContext.Provider value={contextValue}>{children}</NumaAppContext.Provider>;
