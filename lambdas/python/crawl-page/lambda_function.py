@@ -29,6 +29,7 @@ class CrawlPageEvent(TypedDict, total=False):
     crawlDepth: int
     userId: str
     title: str
+    crawlSessionId: str
 
 
 USER_AGENT = (
@@ -194,7 +195,11 @@ async def fetch_page(url: str) -> Optional[ScrapedContent]:
 
 
 def enqueue_links(
-    links: Sequence[str], user_id: str, current_depth: int, table_name: str
+    links: Sequence[str],
+    user_id: str,
+    current_depth: int,
+    table_name: str,
+    crawl_session_id: str,
 ) -> int:
     """Push *links* into DynamoDB with decremented depth; returns count enqueued."""
     if current_depth <= 1:
@@ -213,6 +218,7 @@ def enqueue_links(
                     "url": link,
                     "title": link,
                     "crawlDepth": new_depth,
+                    "crawlSessionId": crawl_session_id,
                     "status": "pending",
                     "createdAt": now,
                     "updatedAt": now,
@@ -258,6 +264,7 @@ async def process_url(
     user_id: str,
     crawl_depth: int,
     prefix: str,
+    crawl_session_id: str,
 ) -> Dict[str, Any]:
     """Fetch, store, and enqueue a single URL."""
     start = datetime.utcnow()
@@ -301,7 +308,9 @@ async def process_url(
         }
 
     links_enqueued = (
-        enqueue_links(scraped.get("links", []), user_id, crawl_depth, table_name)
+        enqueue_links(
+            scraped.get("links", []), user_id, crawl_depth, table_name, crawl_session_id
+        )
         if crawl_depth > 1
         else 0
     )
@@ -351,6 +360,7 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
 
     crawl_depth = int(event.get("crawlDepth", 1))
     user_id = event.get("userId", "anonymous")
+    crawl_session_id = event.get("crawlSessionId", "unknown")
     # Use a consistent prefix for all web crawler content
     prefix = "web-crawler/"
 
@@ -363,6 +373,7 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
                 user_id=user_id,
                 crawl_depth=crawl_depth,
                 prefix=prefix,
+                crawl_session_id=crawl_session_id,
             )
         )
         return {

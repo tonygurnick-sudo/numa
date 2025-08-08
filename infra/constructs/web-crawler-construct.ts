@@ -58,6 +58,10 @@ export class WebCrawlerConstruct extends Construct {
           name: 'crawlDepth',
           type: 'N',
         },
+        {
+          name: 'crawlSessionId',
+          type: 'S',
+        },
       ],
       globalSecondaryIndex: [
         {
@@ -69,6 +73,12 @@ export class WebCrawlerConstruct extends Construct {
         {
           name: 'crawl-depth-index',
           hashKey: 'crawlDepth',
+          projectionType: 'ALL',
+        },
+        {
+          name: 'crawlSessionId-status-index',
+          hashKey: 'crawlSessionId',
+          rangeKey: 'status',
           projectionType: 'ALL',
         },
       ],
@@ -292,10 +302,13 @@ export class WebCrawlerConstruct extends Construct {
           Resource: 'arn:aws:states:::aws-sdk:dynamodb:query',
           Parameters: {
             TableName: this.crawlUrlsTable.name,
-            IndexName: 'status-createdAt-index',
-            KeyConditionExpression: '#s = :pending',
-            ExpressionAttributeNames: { '#s': 'status' },
-            ExpressionAttributeValues: { ':pending': { S: 'pending' } },
+            IndexName: 'crawlSessionId-status-index',
+            KeyConditionExpression: '#csid = :crawlSessionId AND #s = :pending',
+            ExpressionAttributeNames: { '#csid': 'crawlSessionId', '#s': 'status' },
+            ExpressionAttributeValues: {
+              ':crawlSessionId': { 'S.$': '$.crawlSessionId' },
+              ':pending': { S: 'pending' },
+            },
             Limit: 1,
             ScanIndexForward: true,
           },
@@ -317,6 +330,7 @@ export class WebCrawlerConstruct extends Construct {
             'title.$': '$.next.Items[0].title.S',
             'crawlDepth.$': '$.next.Items[0].crawlDepth.N',
             'userId.$': '$.next.Items[0].userId.S',
+            'crawlSessionId.$': '$.next.Items[0].crawlSessionId.S',
             'counter.$': '$.counter',
             'eventCounter.$': '$.eventCounter',
           },
@@ -371,6 +385,7 @@ export class WebCrawlerConstruct extends Construct {
             'title.$': '$.title',
             'crawlDepth.$': '$.crawlDepth',
             'userId.$': '$.userId',
+            'crawlSessionId.$': '$.crawlSessionId',
             'counter.$': '$.counter',
             'eventCounter.$': '$.eventCounter',
             status: 'failed',
@@ -403,6 +418,7 @@ export class WebCrawlerConstruct extends Construct {
             'title.$': '$.title',
             'crawlDepth.$': '$.crawlDepth',
             'userId.$': '$.userId',
+            'crawlSessionId.$': '$.crawlSessionId',
             'counter.$': '$.counter',
             // Increment the event counter (approx. 7 events per URL processed)
             'eventCounter.$': 'States.MathAdd($.eventCounter, 7)',

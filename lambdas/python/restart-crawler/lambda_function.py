@@ -47,11 +47,12 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
     # Set the continuation flag
     input_data["continue"] = True
 
-    # Keep the URLs, userId, crawlDepth, and counter, but start a new event counter
+    # Keep the URLs, userId, crawlSessionId, crawlDepth, and counter, but start a new event counter
     # We remove process_result and other temporary state data
     clean_input = {
         "continue": True,
         "userId": input_data.get("userId", "anonymous"),
+        "crawlSessionId": input_data.get("crawlSessionId", "unknown"),
         "counter": input_data.get("counter", 0),
     }
 
@@ -70,6 +71,7 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
             "Started new crawler execution",
             execution_arn=response["executionArn"],
             execution_name=execution_name,
+            crawl_session_id=clean_input.get("crawlSessionId"),
         )
 
         return {
