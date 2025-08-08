@@ -52,7 +52,8 @@ def handler(
                 ),
             }
 
-        execution_name = f"web-crawler-{str(uuid.uuid4())}"
+        crawl_session_id = str(uuid.uuid4())
+        execution_name = f"web-crawler-{crawl_session_id}"
 
         try:
             state_machine_arn = os.environ["WEB_CRAWLER_STATE_MACHINE_ARN"]
@@ -76,10 +77,12 @@ def handler(
                     "url": url,
                     "crawlDepth": min(int(url_depth_map.get(url, max_depth)), 5),
                     "userId": user_id,
+                    "crawlSessionId": crawl_session_id,
                 }
                 for url in urls
             ],
             "userId": user_id,
+            "crawlSessionId": crawl_session_id,
             "maxPages": max_pages,
             "maxDepth": max_depth,
         }
@@ -95,6 +98,7 @@ def handler(
                 "Started web crawler execution",
                 execution_arn=response["executionArn"],
                 execution_name=execution_name,
+                crawl_session_id=crawl_session_id,
             )
         except Exception as e:
             logger.error("Failed to start step function", error=str(e), exc_info=True)
