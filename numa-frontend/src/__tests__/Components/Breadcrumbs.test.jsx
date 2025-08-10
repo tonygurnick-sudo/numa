@@ -255,4 +255,62 @@ describe('Breadcrumbs Component', () => {
       expect(navigationStack[0].path).toBe('/dash');
     });
   });
+
+  it('should prevent empty labels from causing separator-only breadcrumbs', () => {
+    // Setup navigation stack with empty/undefined labels that would cause >>>>> issue
+    mockSessionStorage['navigation_stack'] = JSON.stringify([
+      { path: '/dash', label: 'Dashboard' },
+      { path: '/app/1', label: '' }, // Empty label
+      { path: '/app/1/settings', label: undefined }, // Undefined label
+      { path: '/app/1/settings/advanced', label: null }, // Null label
+    ]);
+
+    renderBreadcrumbs({}, '/app/1/settings/advanced');
+
+    // Verify that empty labels are replaced with fallback text
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+
+    // Check that we have multiple "No label" elements (proving fallbacks work)
+    const noLabelElements = screen.getAllByText('No label');
+    expect(noLabelElements).toHaveLength(3); // 3 breadcrumbs with fallback labels
+
+    // Check that we don't have just separators - each breadcrumb should have text
+    const breadcrumbItems = screen.getAllByRole('listitem');
+    expect(breadcrumbItems).toHaveLength(4);
+
+    // Verify no empty breadcrumbs exist
+    breadcrumbItems.forEach((item) => {
+      expect(item.textContent.trim()).not.toBe('');
+      expect(item.textContent.trim()).not.toBe('>');
+    });
+
+    // Verify the navigation stack has fallback labels
+    const navigationStack = JSON.parse(mockSessionStorage['navigation_stack'] || '[]');
+    expect(navigationStack).toEqual([
+      { path: '/dash', label: 'Dashboard' },
+      { path: '/app/1', label: '' }, // Original empty label preserved in storage
+      { path: '/app/1/settings', label: undefined }, // Original undefined label preserved in storage
+      { path: '/app/1/settings/advanced', label: null }, // Original null label preserved in storage
+    ]);
+  });
+
+  it('should handle undefined label prop gracefully', () => {
+    // Render with undefined label prop
+    renderBreadcrumbs({ label: undefined }, '/some/path');
+
+    // Should use fallback label for the current page
+    const noLabelElements = screen.getAllByText('No label');
+    expect(noLabelElements).toHaveLength(1); // Only the current page should have fallback label
+
+    // Verify navigation stack has fallback label
+    const navigationStack = JSON.parse(mockSessionStorage['navigation_stack'] || '[]');
+    expect(navigationStack).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: '/some/path',
+          label: 'No label',
+        }),
+      ]),
+    );
+  });
 });
