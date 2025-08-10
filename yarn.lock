@@ -150,13 +150,13 @@ __metadata:
     "@aws-sdk/client-support": "npm:^3.738.0"
     "@cdktf/node-pty-prebuilt-multiarch": "npm:^0.10.1-pre.11"
     "@cdktf/provider-aws": "npm:21.1.0"
-    "@cdktf/provider-random": "npm:^11.0.3"
+    "@cdktf/provider-random": "npm:12.0.0"
     "@types/fs-extra": "npm:^11"
     "@types/node": "npm:22.16.0"
     "@typescript-eslint/eslint-plugin": "npm:8.39.0"
     "@typescript-eslint/parser": "npm:8.39.0"
     asl-types: "npm:^1.2.1"
-    cdktf: "npm:~0.20.0"
+    cdktf: "npm:0.21.0"
     cdktf-cli: "npm:0.21.0"
     constructs: "npm:~10"
     eslint: "npm:^9.20.1"
@@ -3425,13 +3425,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cdktf/provider-random@npm:^11.0.3":
-  version: 11.1.1
-  resolution: "@cdktf/provider-random@npm:11.1.1"
+"@cdktf/provider-random@npm:12.0.0":
+  version: 12.0.0
+  resolution: "@cdktf/provider-random@npm:12.0.0"
   peerDependencies:
-    cdktf: ^0.20.0
-    constructs: ^10.3.0
-  checksum: 10c0/52368e6122d7af60b1db20966187d708c7660fdc8d9431d3f2baeee9d233e60494e4c762b74f94379422659a3196c704e3563f4a0f3189cb38485abfdef7a667
+    cdktf: ^0.21.0
+    constructs: ^10.4.2
+  checksum: 10c0/d8fa210d7895e90309f1fbc2d2e3391c5d3ec4cd332d1052eb43ca3be8bee13c3218d9680c4fe0eb76ff403347bdf3326983d37997ae3c862109bdbbe66762ab
   languageName: node
   linkType: hard
 
@@ -9863,19 +9863,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cdktf@npm:~0.20.0":
-  version: 0.20.12
-  resolution: "cdktf@npm:0.20.12"
-  dependencies:
-    archiver: "npm:7.0.1"
-    json-stable-stringify: "npm:1.2.1"
-    semver: "npm:7.7.1"
-  peerDependencies:
-    constructs: ^10.3.0
-  checksum: 10c0/157540b4c80b07531e9fc43b9d8e6f0b65dc391552d8223458513c22bdc290c4c1e7d7de83a36eabf4f92350637357821111d85dbada4601cbe38bfc2d10c0df
-  languageName: node
-  linkType: hard
-
 "chai@npm:^5.2.0":
   version: 5.2.0
   resolution: "chai@npm:5.2.0"
@@ -13826,19 +13813,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"json-stable-stringify@npm:1.2.1":
-  version: 1.2.1
-  resolution: "json-stable-stringify@npm:1.2.1"
-  dependencies:
-    call-bind: "npm:^1.0.8"
-    call-bound: "npm:^1.0.3"
-    isarray: "npm:^2.0.5"
-    jsonify: "npm:^0.0.1"
-    object-keys: "npm:^1.1.1"
-  checksum: 10c0/e623e7ce89282f089d56454087edb717357e8572089b552fbc6980fb7814dc3943f7d0e4f1a19429a36ce9f4428b6c8ee6883357974457aaaa98daba5adebeea
-  languageName: node
-  linkType: hard
-
 "json-stable-stringify@npm:1.3.0":
   version: 1.3.0
   resolution: "json-stable-stringify@npm:1.3.0"
@@ -17280,15 +17254,6 @@ __metadata:
   dependencies:
     semver: "npm:^6.3.0"
   checksum: 10c0/7cc8840207a19280bb831f104032e45ba676869e39c89675dd179df83cdfdb64516f7927f657dbb0e65a463c5918b1edad8f9fe613c1123a2d39b181e6d28ed8
-  languageName: node
-  linkType: hard
-
-"semver@npm:7.7.1":
-  version: 7.7.1
-  resolution: "semver@npm:7.7.1"
-  bin:
-    semver: bin/semver.js
-  checksum: 10c0/fd603a6fb9c399c6054015433051bdbe7b99a940a8fb44b85c2b524c4004b023d7928d47cb22154f8d054ea7ee8597f586605e05b52047f048278e4ac56ae958
   languageName: node
   linkType: hard
 
