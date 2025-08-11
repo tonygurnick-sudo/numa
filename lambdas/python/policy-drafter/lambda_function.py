@@ -13,7 +13,7 @@ from prompts import (
 )
 from tools import POLICY_GENERATION_TOOL
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 
 logger = structlog.get_logger(__name__)
 

@@ -7,7 +7,7 @@ import s3_helpers
 from prompts import DOCUMENT_SUMMARY_PROMPT
 from tools import DOCUMENT_SUMMARY_TOOL
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 
 logger = structlog.get_logger()
 

@@ -9,7 +9,7 @@ import prompts
 import s3_helpers
 from tools import MEETING_ANALYSIS_TOOL
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 
 logger = structlog.get_logger()
 

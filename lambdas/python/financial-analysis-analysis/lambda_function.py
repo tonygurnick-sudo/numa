@@ -12,7 +12,7 @@ import helpers
 import s3_helpers
 from prompts import DOCUMENTS_SUMMARY_PROMPT, FINANCIAL_ANALYSIS_PROMPT
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 
 logger = structlog.get_logger()
 

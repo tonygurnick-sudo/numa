@@ -4,7 +4,7 @@ import json
 import bedrock
 from config import configurations
 
-MAX_TOKENS = 8000
+MAX_TOKENS = 16000
 MAX_PAGES = 30
 
 

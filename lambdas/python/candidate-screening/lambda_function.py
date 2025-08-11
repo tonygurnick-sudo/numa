@@ -9,7 +9,7 @@ import s3_helpers
 from prompts import CANDIDATE_SCREENING_PROMPT
 from tools import CANDIDATE_SCREENING_TOOL
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 logger = structlog.get_logger()
 
 
