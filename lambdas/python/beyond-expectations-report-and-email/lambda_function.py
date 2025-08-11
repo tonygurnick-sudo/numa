@@ -30,7 +30,7 @@ MAX_RESULTS_FOR_SUMMARY = 200
 MODEL_CONFIG = {
     "tools": ERROR_SUMMARY_TOOLS,
     "tool_choice": {"type": "tool", "name": "generate_structured_summary"},
-    "max_tokens": 4096,
+    "max_tokens": 16000,
     "temperature": 0.1,
 }
 

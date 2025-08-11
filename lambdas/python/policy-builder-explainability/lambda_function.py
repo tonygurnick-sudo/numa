@@ -81,7 +81,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
     model = bedrock.BedrockClaude3Model(
         model_args={
-            "max_tokens": 8000,
+            "max_tokens": 16000,
         },
     )
     result = model.run(

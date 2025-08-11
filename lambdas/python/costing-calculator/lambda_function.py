@@ -13,7 +13,7 @@ from prompts import CALCULATION_DETAIL_PROMPT, QUOTE_GENERATION_PROMPT
 from tools import PARAMETER_EXTRACTION_TOOL
 
 # Constants
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 
 logger = structlog.get_logger(__name__)
 

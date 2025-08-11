@@ -183,7 +183,7 @@ def analyze_logs_with_bedrock(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_args={
             "tools": ERROR_ANALYSIS_TOOLS,
             "tool_choice": {"type": "tool", "name": "categorise_errors"},
-            "max_tokens": 4096,
+            "max_tokens": 16000,
             "temperature": 0.1,
         },
         claude_only=True,

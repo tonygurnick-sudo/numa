@@ -65,7 +65,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
         model_args={
             "tools": claude_tools.INTRODUCTION_CONCLUSION_TOOLS,
             "tool_choice": {"type": "tool", "name": "print_policy"},
-            "max_tokens": 8000,
+            "max_tokens": 16000,
         },
     )
     policies = ""

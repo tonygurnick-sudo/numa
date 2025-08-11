@@ -13,7 +13,7 @@ from prompts import (
     RISK_ASSESSMENT_PROMPT,
 )
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 
 logger = structlog.get_logger()
 

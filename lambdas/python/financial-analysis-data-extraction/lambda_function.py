@@ -9,7 +9,7 @@ import s3_helpers
 from prompts import PERSONAL_FINANCE_PROMPT
 from tools import PERSONAL_FINANCE_TOOLS
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 MAX_PAGES = 60
 
 logger = structlog.get_logger()

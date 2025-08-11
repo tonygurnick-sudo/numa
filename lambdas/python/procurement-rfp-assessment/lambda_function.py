@@ -8,7 +8,7 @@ import helpers
 import s3_helpers
 from prompts import ELIGIBILITY_ASSESSMENT_PROMPT, RFP_ASSESSMENT_PROMPT
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 
 logger = structlog.get_logger()
 

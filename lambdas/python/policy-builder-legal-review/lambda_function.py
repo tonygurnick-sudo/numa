@@ -58,7 +58,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
         model_args={
             "tools": claude_tools.LEGAL_REVIEW_TOOLS,
             "tool_choice": {"type": "tool", "name": "print_policy_review"},
-            "max_tokens": 8000,
+            "max_tokens": 16000,
         },
     )
     expert_review = __read_string_from_s3(data_single_area["expert_review_key"])
@@ -102,7 +102,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
         model_args={
             "tools": claude_tools.IMPLEMENT_LEGAL_REVIEW_TOOLS,
             "tool_choice": {"type": "tool", "name": "print_policy_review"},
-            "max_tokens": 8000,
+            "max_tokens": 16000,
         },
     )
 

@@ -8,7 +8,7 @@ import helpers
 import s3_helpers
 from prompts import ASSESSMENT_TEMPLATE, GDSR_ASSESSMENT_PROMPT, GDSR_REFERENCE
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 
 logger = structlog.get_logger()
 

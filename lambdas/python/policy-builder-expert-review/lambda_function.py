@@ -52,7 +52,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
         model_args={
             "tools": claude_tools.REVIEW_POLICY_TOOLS,
             "tool_choice": {"type": "tool", "name": "print_policy_review"},
-            "max_tokens": 8000,
+            "max_tokens": 16000,
         },
     )
     area_policy = __read_string_from_s3(data_single_area["initial_policy_key"])

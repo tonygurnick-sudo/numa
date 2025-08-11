@@ -6,7 +6,7 @@ import bedrock
 from prompts import JOB_AD_CREATION_PROMPT
 from tools import JOB_AD_CREATION_TOOL
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 16000
 s3 = boto3.client("s3")
 
 
