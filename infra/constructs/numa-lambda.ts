@@ -12,8 +12,8 @@ import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
 import path from 'node:path';
 
-const OTEL_COLLECTOR_LAYER_VERSION = '0_15_0';
-const OTEL_LANGUAGE_LAYER_VERSION = '0_14_0';
+const OTEL_COLLECTOR_LAYER_VERSION = '0_16_0';
+const OTEL_LANGUAGE_LAYER_VERSION = '0_15_0';
 const OTEL_LAYER_ACCOUNT = '184161586896'; // From: https://github.com/open-telemetry/opentelemetry-lambda/releases
 
 export class NumaLambda extends Construct {
@@ -158,11 +158,10 @@ function otelLayersAndEnvironment(
     layers.push(collectorLayer);
     if (runtime.match(/^python/)) {
       layers.push(otelLanguageLayer('python', props.region));
-      environmentVariables['AWS_LAMBDA_EXEC_WRAPPER'] = '/opt/otel-instrument';
     } else {
       layers.push(otelLanguageLayer('nodejs', props.region));
-      environmentVariables['AWS_LAMBDA_EXEC_WRAPPER'] = '/opt/otel-handler';
     }
+    environmentVariables['AWS_LAMBDA_EXEC_WRAPPER'] = '/opt/otel-handler';
     environmentVariables['HONEYCOMB_INGEST_KEY'] = props.honeycombIngestKey;
     environmentVariables['OPENTELEMETRY_COLLECTOR_CONFIG_URI'] = `s3://${props.otelConfigPath}`;
   }
