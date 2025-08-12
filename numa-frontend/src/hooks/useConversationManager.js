@@ -90,6 +90,7 @@ export const useConversationManager = () => {
             // If there is a saved conversation and it exists in the meta, load it.
             const savedConvoId = localStorage.getItem('currentConversationId');
             if (savedConvoId && metaItems.some((item) => item.conversation_id === savedConvoId)) {
+              console.log('Loading saved conversation:', savedConvoId);
               setConversationId(savedConvoId);
             } else {
               // Otherwise, load the most recent conversation (or choose one as needed)

@@ -42,6 +42,7 @@ const NumaChatAgents = () => {
   const [buttonStatus, setButtonStatus] = useState('idle');
   const [isFileProcessing, setIsFileProcessing] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isManuallyLoading, setIsManuallyLoading] = useState(false);
 
   // Refs
   const messageEndRef = useRef(null);
@@ -116,17 +117,26 @@ const NumaChatAgents = () => {
   }, [PREFERRED_KNOWLEDGE_BASE, bedrockAgentRuntimeClient, BEDROCK_KNOWLEDGE_BASE_ID]);
 
   // Auto-load conversation when conversationId is set by useConversationManager
-  // But skip auto-load if this conversation was just created in this session or if messages already exist
+  // But skip auto-load if this conversation was just created in this session, messages already exist, or manual loading is in progress
   useEffect(() => {
-    if (conversationId && numaChatDynamoUtils && sub && !hasUserStartedNewChat && messages.length === 0) {
+    if (
+      conversationId &&
+      numaChatDynamoUtils &&
+      sub &&
+      !hasUserStartedNewChat &&
+      messages.length === 0 &&
+      !isManuallyLoading
+    ) {
       console.log('[NumaChat] Auto-loading conversation:', conversationId);
       handleLoadConversation(conversationId);
     } else if (conversationId && hasUserStartedNewChat) {
       console.log('[NumaChat] Skipping auto-load for just-created conversation:', conversationId);
     } else if (conversationId && messages.length > 0) {
       console.log('[NumaChat] Skipping auto-load because messages already exist:', messages.length);
+    } else if (conversationId && isManuallyLoading) {
+      console.log('[NumaChat] Skipping auto-load because manual loading is in progress:', conversationId);
     }
-  }, [conversationId, numaChatDynamoUtils, sub, hasUserStartedNewChat, messages.length]);
+  }, [conversationId, numaChatDynamoUtils, sub, hasUserStartedNewChat, messages.length, isManuallyLoading]);
 
   // Helper to refresh sidebar
   const refreshSidebar = () => {
@@ -154,6 +164,9 @@ const NumaChatAgents = () => {
     // Reset split view state - hide document panel
     setShowSplitView(false);
     setLeftFraction(0.99); // Reset to full chat view
+
+    // Clear manual loading state to prevent conflicts
+    setIsManuallyLoading(false);
 
     // Use the hook's new chat handler
     await handleNewChat();
@@ -663,6 +676,7 @@ const NumaChatAgents = () => {
   const handleLoadConversation = async (selectedConversationId) => {
     if (!numaChatDynamoUtils) return;
 
+    setIsManuallyLoading(true);
     setIsConversationLoading(true);
     setMessages([]); // Clear current messages immediately
     resetUserNewChatFlag(); // Reset the flag since user is explicitly loading a conversation
@@ -683,6 +697,7 @@ const NumaChatAgents = () => {
       ]);
     } finally {
       setIsConversationLoading(false);
+      setIsManuallyLoading(false);
     }
   };
 
