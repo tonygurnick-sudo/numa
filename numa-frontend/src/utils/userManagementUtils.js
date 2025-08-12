@@ -230,30 +230,31 @@ export class UserManagementUtils {
     try {
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
       const applicationId = window.sessionStorage.getItem('Q_APPLICATION_ID');
+      const provisionQResources = window.sessionStorage.getItem('PROVISION_Q_RESOURCES') === 'true';
 
-      if (!applicationId) {
-        throw new Error('Q application ID not found');
-      }
+      // Only attempt Q user deletion if Q resources are provisioned and we have a Q application ID
+      if (provisionQResources && applicationId && qClient) {
+        try {
+          const getQCommand = new GetUserCommand({
+            applicationId,
+            userId: username,
+          });
+          await qClient.send(getQCommand);
 
-      // Get and delete Q user, skipping if not found
-      try {
-        const getQCommand = new GetUserCommand({
-          applicationId,
-          userId: username,
-        });
-        await qClient.send(getQCommand);
-
-        const deleteQCommand = new DeleteUserCommand({
-          applicationId,
-          userId: username,
-        });
-        await qClient.send(deleteQCommand);
-      } catch (err) {
-        if (err.name === 'ResourceNotFoundException' || err.$metadata?.httpStatusCode === 404) {
-          console.warn(`Q user ${username} not found, skipping Q get/delete`);
-        } else {
-          throw err;
+          const deleteQCommand = new DeleteUserCommand({
+            applicationId,
+            userId: username,
+          });
+          await qClient.send(deleteQCommand);
+        } catch (err) {
+          if (err.name === 'ResourceNotFoundException' || err.$metadata?.httpStatusCode === 404) {
+            console.warn(`Q user ${username} not found, skipping Q get/delete`);
+          } else {
+            throw err;
+          }
         }
+      } else {
+        console.log('Q resources not provisioned or Q client not available, skipping Q user deletion');
       }
 
       // Get and delete Cognito user, skipping if not found
