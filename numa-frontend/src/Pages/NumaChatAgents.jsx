@@ -211,12 +211,6 @@ const NumaChatAgents = () => {
     // Prepare conversation history using the proper formatting (handles tools correctly)
     const agentMessages = await prepareConversationHistoryForChat(conversationHistory, getCredentials);
 
-    // Add the current user message to agent messages
-    agentMessages.push({
-      role: 'user',
-      content: [{ text: userMsg }],
-    });
-
     return { cid, userMsg, agentMessages };
   };
 
