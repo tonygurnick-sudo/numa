@@ -53,7 +53,7 @@ export class NumaClientStack extends TerraformStack {
     const defaults = {
       domainSuffix: props.domainSuffix,
       embeddingModel: 'amazon.titan-embed-text-v2:0',
-      bedrockParserModel: 'amazon.nova-pro-v1:0',
+      bedrockParserModel: 'amazon.nova-lite-v1:0',
       visionModelType: 'haiku',
       provisionQResources: true,
     };
@@ -471,7 +471,7 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         /**
          * Bedrock model to use for document parsing in knowledge base
          *
-         * @default 'amazon.nova-pro-v1:0'
+         * @default 'amazon.nova-lite-v1:0'
          */
         bedrockParserModel: z.string().optional(),
         /**

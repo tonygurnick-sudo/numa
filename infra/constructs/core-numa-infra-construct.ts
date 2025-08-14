@@ -781,11 +781,13 @@ export class CoreNumaInfra extends Construct {
 
     // Add region-specific models
     if (props.region === 'us-east-1') {
+      models.push('amazon.nova-lite-v1:0');
       models.push('amazon.nova-pro-v1:0');
       models.push('amazon.nova-premier-v1:0');
     }
     if (props.region === 'ap-southeast-2') {
       // Nova Premier is not available in ap-southeast-2
+      models.push('amazon.nova-lite-v1:0');
       models.push('amazon.nova-pro-v1:0');
     }
 
