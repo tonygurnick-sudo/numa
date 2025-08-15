@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { Col, Row, Badge, Table, Card } from 'react-bootstrap';
+import { Col, Row, Badge, Table, Card, Button, Spinner } from 'react-bootstrap';
 import { JobStatusContext } from '../Providers/JobStatusContext';
 import { useNavigate } from 'react-router-dom';
 import { useNumaApp } from '../Providers/NumaAppContext';
@@ -8,19 +8,42 @@ import { NicetyContext } from '../Providers/NicetyContext';
 const JOB_DISPLAY_LIMIT = 5;
 
 export const StatusDashboard = () => {
-  const jobStatus = useContext(JobStatusContext);
-
-  const jobs = jobStatus.jobs;
+  const { jobs, loading, hasLoaded, refreshJobs, nextRefreshIn } = useContext(JobStatusContext);
 
   return (
     <Row className="g-4">
       <Col xs={12}>
         <Card>
-          <Card.Header>
+          <Card.Header className="d-flex justify-content-between align-items-center">
             <Card.Title className="mb-0">Current and recent jobs</Card.Title>
+            <div className="d-flex align-items-center">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={refreshJobs}
+                disabled={loading && !hasLoaded}
+                className="d-flex align-items-center me-2"
+              >
+                {loading && !hasLoaded ? (
+                  <div className="d-flex align-items-center">
+                    <Spinner animation="border" size="sm" />
+                    <span className="ms-2">Loading...</span>
+                  </div>
+                ) : (
+                  <>
+                    <span className="ms-1">Refresh</span>
+                  </>
+                )}
+              </Button>
+              {nextRefreshIn && (
+                <small className="text-muted">
+                  Auto-refresh in {Math.floor(nextRefreshIn / 60)}:{(nextRefreshIn % 60).toString().padStart(2, '0')}
+                </small>
+              )}
+            </div>
           </Card.Header>
           <Card.Body>
-            {jobStatus.jobs.length === 0 && !jobStatus.loading ? (
+            {jobs.length === 0 && !loading ? (
               <div className="text-center bg-light rounded empty-state">
                 <p className="mt-2 text-muted mb-0">No recent jobs to display.</p>
               </div>
@@ -41,7 +64,7 @@ export const StatusDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {jobStatus.loading && !jobStatus.hasLoaded
+                    {loading && !hasLoaded
                       ? Array.from({ length: JOB_DISPLAY_LIMIT }).map((_, index) => (
                           <StatusDashboardJobSkeleton key={index} />
                         ))

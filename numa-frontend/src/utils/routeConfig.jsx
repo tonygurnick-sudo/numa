@@ -6,6 +6,7 @@ import { NumaChat } from '../Pages/NumaChat';
 import { NumaChatAgents } from '../Pages/NumaChatAgents';
 import { KnowledgeBaseManagement } from '../Pages/KnowledgeBaseManagement';
 import { CompanyInfo } from '../Pages/CompanyInfo';
+import JobHistoryManager from '../Pages/JobHistoryManager';
 
 export const ROUTE_CONFIG = [
   {
@@ -17,6 +18,11 @@ export const ROUTE_CONFIG = [
     path: '/favourite-apps',
     element: (navigate) => <Dash onClick={() => reloadFavourites(navigate)} showFavorites />,
     nav: { label: 'Favs', icon: 'bi bi-star-fill' },
+  },
+  {
+    path: '/job-history',
+    element: () => <JobHistoryManager />,
+    nav: { label: 'Job History', icon: 'bi bi-clock-history' },
   },
   {
     path: '/chat',

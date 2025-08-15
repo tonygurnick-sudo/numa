@@ -1,0 +1,39 @@
+// Common table styles for Numa application
+// These styles can be used across different components
+
+// Table header styling with purple background
+.numa-table-header {
+  th {
+    cursor: default;
+    position: sticky;
+    top: 0;
+    background-color: var(--color-eggplant-100);
+    z-index: 10;
+    border-bottom: 2px solid var(--color-eggplant-200);
+    color: var(--color-eggplant-900);
+    font-weight: 600;
+
+    &.sortable-header {
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.2s;
+
+      &:hover {
+        background-color: #e9ecef;
+      }
+    }
+  }
+}
+
+// Table container with scrolling
+.numa-table-container {
+  overflow-x: auto;
+  max-height: calc(100vh - 300px);
+
+  .file-table {
+    table-layout: fixed;
+    background-color: #fff;
+    min-width: 100%;
+    margin-bottom: 0;
+  }
+}

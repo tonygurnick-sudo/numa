@@ -136,13 +136,24 @@ export const NumaAppProvider = ({ children }) => {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const jobIdParam = urlParams.get('jobId');
-    if (jobIdParam && numaAppId && numaAppData) {
-      loadJobResults(jobIdParam).catch((error) => {
-        console.error('Failed to auto-load job from query parameter:', error);
-        setError(error);
-      });
+
+    // Clear current job data if no jobId in URL
+    if (!jobIdParam && currentJobId) {
+      setCurrentJobId(null);
+      setJob(null);
     }
-  }, [numaAppId, numaAppData]);
+
+    // Load job data if jobId is present
+    if (jobIdParam && numaAppId && numaAppData) {
+      // Only load if the job ID has changed or we don't have a job loaded
+      if (jobIdParam !== currentJobId || !job) {
+        loadJobResults(jobIdParam).catch((error) => {
+          console.error('Failed to auto-load job from query parameter:', error);
+          setError(error);
+        });
+      }
+    }
+  }, [numaAppId, numaAppData, window.location.search, currentJobId, job]);
 
   const getAppJobs = () => jobs;
 
