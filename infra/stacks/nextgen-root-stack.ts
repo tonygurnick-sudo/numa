@@ -144,6 +144,24 @@ export class NextGenRootStack extends TerraformStack {
               IsPresent: true,
               Next: 'MoveAccount',
             },
+            {
+              Next: 'Success',
+              And: [
+                {
+                  Variable: '$.CreateAccountStatus.State',
+                  StringEquals: 'FAILED',
+                },
+                {
+                  Variable: '$.CreateAccountStatus.FailureReason',
+                  StringEquals: 'EMAIL_ALREADY_EXISTS',
+                },
+              ],
+            },
+            {
+              Variable: '$.CreateAccountStatus.State',
+              StringEquals: 'FAILED',
+              Next: 'Failure',
+            },
           ],
           Default: 'Sleep5',
         },
@@ -210,7 +228,22 @@ export class NextGenRootStack extends TerraformStack {
           Credentials: {
             'RoleArn.$': `States.Format('arn:aws:iam::{}:role/${organizationRoleName}', $.CreateAccountStatus.AccountId)`,
           },
+          Retry: [
+            {
+              ErrorEquals: ['States.TaskFailed'],
+              BackoffRate: 2,
+              IntervalSeconds: 3,
+              MaxAttempts: 5,
+              Comment: 'Organization access is sometimes not provisioned, so retry if we fail.',
+            },
+          ],
           End: true,
+        },
+        Success: {
+          Type: 'Succeed',
+        },
+        Failure: {
+          Type: 'Fail',
         },
       },
     };
