@@ -31,7 +31,7 @@ structlog = "25.2.0"
 
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.37.20"
-mypy = "1.16.1"
-pylint = "3.3.7"
-pyright = "1.1.402"
-types-requests = "2.32.4.20250611"
+mypy = "1.17.1"
+pylint = "3.3.8"
+pyright = "1.1.403"
+types-requests = "2.32.4.20250809"

@@ -19,6 +19,6 @@ helpers = { path = "../../../lib/helpers", develop = true }
 s3_helpers = { path = "../../../lib/s3_helpers", develop = true }
 
 [tool.poetry.group.dev.dependencies]
-mypy = "1.16.1"
-pylint = "3.3.7"
-pyright = "1.1.402"
+mypy = "1.17.1"
+pylint = "3.3.8"
+pyright = "1.1.403"

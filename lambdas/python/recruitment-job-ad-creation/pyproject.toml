@@ -27,6 +27,6 @@ boto3 = "1.37.20"
 
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.37.20"
-mypy = "1.16.1"
-pylint = "3.3.7"
-pyright = "1.1.402"
+mypy = "1.17.1"
+pylint = "3.3.8"
+pyright = "1.1.403"
