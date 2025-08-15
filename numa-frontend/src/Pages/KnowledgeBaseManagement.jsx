@@ -25,6 +25,7 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { FileUploader } from '../Components/FileUploader';
 import { FeatureWrapper } from '../Components/RequiredFeaturesWrapper';
 import { getKnowledgeBaseState } from '../utils/knowledgeBaseUtils';
+// Knowledge Base Management specific styles
 import '../assets/styles/components/_knowledge_base_management.scss';
 
 /**
@@ -1028,7 +1029,7 @@ export function KnowledgeBaseManagement() {
                     </div>
                   </FeatureWrapper>
                   <Table hover size="sm" className="mb-0 file-table auto-layout">
-                    <thead className="sticky-table-header">
+                    <thead className="sticky-table-header numa-table-header">
                       <tr>
                         <th
                           className={`col-name ${showErrorColumn ? 'with-error-column' : ''} sortable-header`}
@@ -1358,7 +1359,7 @@ export function KnowledgeBaseManagement() {
 
                       <div className="file-table-container scrollable">
                         <Table hover className="mb-0 file-table auto-layout">
-                          <thead className="sticky-table-header">
+                          <thead className="sticky-table-header numa-table-header">
                             <tr>
                               <th>Name</th>
                               <th>Type</th>
@@ -1607,7 +1608,7 @@ export function KnowledgeBaseManagement() {
                   <Card.Body>
                     <div className="failed-documents-container">
                       <Table hover size="sm" className="mb-0 failed-documents-table">
-                        <thead>
+                        <thead className="numa-table-header">
                           <tr>
                             <th className="col-failed-name">Name</th>
                             <th className="col-failed-error">Error Reason</th>

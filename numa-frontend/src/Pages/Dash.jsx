@@ -16,7 +16,6 @@ import { useNumaApp } from '../Providers/NumaAppContext';
 import { useFavorites } from '../hooks/useFavorites';
 import { manifestService } from '../Services/manifestService';
 import { NicetyContext } from '../Providers/NicetyContext';
-import { JobStatusProvider } from '../Providers/JobStatusProvider';
 
 export const Dash = ({ showFavorites }) => {
   const niceties = useContext(NicetyContext);
@@ -170,11 +169,7 @@ export const Dash = ({ showFavorites }) => {
         </header>
         <LayoutDashboard>
           <Container fluid className="px-0">
-            {niceties.isEnabled('job-status-dashboard') && (
-              <JobStatusProvider>
-                <StatusDashboard />
-              </JobStatusProvider>
-            )}
+            {niceties.isEnabled('job-status-dashboard') && <StatusDashboard />}
             <AppSearch
               onSearch={handleSearch}
               onCategoryFilter={handleCategoryFilter}
