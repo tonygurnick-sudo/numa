@@ -9,7 +9,7 @@ import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
 import { DataSourcesList } from '../Components/DataSourcesList';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
 import { MAX_DYNAMO_MESSAGES, prepareConversationHistoryForChat } from '../utils/bedrockMessageHistoryUtils';
-import { callChatAgentStreaming } from '../Services/chatAgentService';
+import { callChatAgentStreaming, connectChatAgent, isChatAgentAvailable } from '../Services/chatAgentService';
 import { ChatInput } from '../Components/ChatInput';
 import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/ChatMessages';
@@ -106,14 +106,34 @@ const NumaChatAgents = () => {
 
   // Pre-warm Aurora database when component mounts (only for Bedrock knowledge base)
   useEffect(() => {
-    const warmUpDatabase = async () => {
-      if (PREFERRED_KNOWLEDGE_BASE === 'bedrock' && bedrockAgentRuntimeClient && BEDROCK_KNOWLEDGE_BASE_ID) {
-        console.log('Pre-warming Aurora database on page load...');
-        await preWarmAuroraDatabase(bedrockAgentRuntimeClient, BEDROCK_KNOWLEDGE_BASE_ID);
-      }
+    const initializeServices = async () => {
+      const warmUpDatabase = async () => {
+        if (PREFERRED_KNOWLEDGE_BASE === 'bedrock' && bedrockAgentRuntimeClient && BEDROCK_KNOWLEDGE_BASE_ID) {
+          console.log('Pre-warming Aurora database on page load...');
+          await preWarmAuroraDatabase(bedrockAgentRuntimeClient, BEDROCK_KNOWLEDGE_BASE_ID);
+        }
+      };
+
+      // Start WebSocket pre-connection
+      const preConnectWebSocket = async () => {
+        if (isChatAgentAvailable()) {
+          try {
+            console.log('Pre-connecting to Chat Agent WebSocket...');
+            await connectChatAgent();
+            console.log('WebSocket pre-connection successful');
+          } catch (error) {
+            console.warn('WebSocket pre-connection failed:', error);
+          }
+        }
+      };
+
+      // Run both
+      Promise.all([warmUpDatabase(), preConnectWebSocket()]).catch((error) => {
+        console.warn('Service initialization error:', error);
+      });
     };
 
-    warmUpDatabase();
+    initializeServices();
   }, [PREFERRED_KNOWLEDGE_BASE, bedrockAgentRuntimeClient, BEDROCK_KNOWLEDGE_BASE_ID]);
 
   // Auto-load conversation when conversationId is set by useConversationManager
