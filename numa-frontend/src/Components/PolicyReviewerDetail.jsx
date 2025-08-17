@@ -107,8 +107,6 @@ const validateUrl = (url) => {
  * Component                                             *
  *********************************************************/
 export const PolicyReviewerDetail = () => {
-  console.log('PolicyReviewerDetail component rendering');
-
   /**********************
    * State & Refs       *
    **********************/
@@ -166,11 +164,9 @@ export const PolicyReviewerDetail = () => {
   }, []);
 
   useEffect(() => {
-    console.log('Loading config...');
     fetch('/config.json')
       .then((r) => r.json())
       .then((data) => {
-        console.log('Config loaded:', data);
         setConfig(data);
       })
       .catch((error) => {
@@ -181,15 +177,7 @@ export const PolicyReviewerDetail = () => {
 
   useEffect(() => {
     if (config && isAuthenticated && !loading && config.API_ENDPOINT) {
-      console.log('Dependencies ready, fetching policies');
       fetchPolicies();
-    } else {
-      console.log('Not ready to fetch policies:', {
-        config: !!config,
-        isAuthenticated,
-        loading,
-        endpoint: config?.API_ENDPOINT,
-      });
     }
   }, [config, isAuthenticated, loading]); // Removed fetchPolicies from deps
 
@@ -210,11 +198,9 @@ export const PolicyReviewerDetail = () => {
    * Policy Fetching    *
    **********************/
   const fetchPolicies = async () => {
-    console.log('Fetching policies...');
     setIsLoadingPolicies(true);
     try {
       const resp = await jobsApi.getJobsByAppId('policy-reviewer', { limit: 50 });
-      console.log('Job response:', resp);
 
       const items = resp?.items || [];
       const filtered = items
@@ -239,8 +225,6 @@ export const PolicyReviewerDetail = () => {
           };
         })
         .sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
-
-      console.log('Processed policies:', filtered);
       setPolicies(filtered);
     } catch (error) {
       console.error('Error fetching policies:', error);
@@ -479,7 +463,6 @@ export const PolicyReviewerDetail = () => {
     });
 
     const key = getOutputKey(type, policy.id, userId);
-    console.log('Downloading from key:', key);
 
     const url = await getSignedUrl(
       s3Client,
@@ -645,7 +628,6 @@ export const PolicyReviewerDetail = () => {
     try {
       // Use the jobs API to get the current job status from DynamoDB
       const res = await numaGet(`${config.API_ENDPOINT}/policy-reviewer/jobs/${jobId}`);
-      console.log('Job status response:', res);
 
       if (!res || res.error) {
         console.error(`Error fetching job ${jobId} status:`, res?.error || 'Unknown error');
@@ -656,8 +638,6 @@ export const PolicyReviewerDetail = () => {
       const status = res.status;
 
       if (normalizeStatus(status) !== 'PROCESSING') {
-        console.log(`Job ${jobId} status changed to ${status}, updating local state...`);
-
         clearPollingForJob(jobId);
         fetchPolicies();
         return true;
@@ -676,11 +656,8 @@ export const PolicyReviewerDetail = () => {
   const startPollingForJob = (job) => {
     const { jobId } = job;
     if (pollingPoliciesRef.current.has(jobId)) {
-      console.log(`Already polling job ${jobId}`);
       return;
     }
-
-    console.log(`Starting polling for job ${jobId}`);
     pollingPoliciesRef.current.add(jobId);
 
     pollingIntervalsRef.current[jobId] = setInterval(() => {
