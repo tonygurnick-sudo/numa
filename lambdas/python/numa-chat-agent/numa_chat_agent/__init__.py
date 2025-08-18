@@ -7,9 +7,10 @@ Provides clean interfaces for agent creation, tool management, and WebSocket str
 
 import os
 import uuid
+from typing import List, Optional
 
 import structlog
-from strands import Agent
+from strands import Agent  # type: ignore
 
 from .auth import clear_current_user_auth, set_current_user_auth
 
@@ -55,8 +56,10 @@ def create_fresh_agent(enabled_tools=None, system_prompt=None, model_id=None):
         system_prompt = (
             "You are Numa, an AI assistant that intelligently uses available tools to provide accurate information. "
             "The user can enable or disable your access to tools - respect these preferences. "
-            "When tools are available, use them strategically: query_knowledge_base for organizational information, "
-            "web_search for current external information."
+            "When tools are available, use them strategically: query_knowledge_base for organisational information, "
+            "web_search for current external information. "
+            "Use web_search when the user explicitly asks you to look online or check a website, or when the information is time-sensitive, likely to change, or you are uncertain. "
+            "Prefer query_knowledge_base for organisational content. When web_search is enabled, do not apologise about browsing limitations; when it is disabled but would help, explain briefly and offer to proceed without it."
         )
 
     # Get tool instances based on enabled tools

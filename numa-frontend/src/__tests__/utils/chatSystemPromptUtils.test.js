@@ -2,7 +2,12 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { enhanceSystemPromptWithCompanyInfo, loadCompanyProfile } from '../../utils/chatSystemPromptUtils';
+import {
+  enhanceSystemPromptWithCompanyInfo,
+  loadCompanyProfile,
+  getEnabledTools,
+  generateSystemPrompt,
+} from '../../utils/chatSystemPromptUtils';
 import { fetchCompanyInfo, getProfileText } from '../../utils/companyInfoUtils';
 
 // Mock the companyInfoUtils functions
@@ -127,6 +132,55 @@ describe('chatSystemPromptUtils', () => {
 
       // Check the result is an empty string
       expect(result).toBe('');
+    });
+  });
+
+  describe('getEnabledTools', () => {
+    it('enables both tools in auto mode', () => {
+      const tools = getEnabledTools(true, false, false);
+      expect(tools).toEqual(['query_knowledge_base', 'web_search']);
+    });
+
+    it('enables only query_knowledge_base when selected in manual mode', () => {
+      const tools = getEnabledTools(false, true, false);
+      expect(tools).toEqual(['query_knowledge_base']);
+    });
+
+    it('enables only web_search when selected in manual mode', () => {
+      const tools = getEnabledTools(false, false, true);
+      expect(tools).toEqual(['web_search']);
+    });
+
+    it('enables both when both selected in manual mode', () => {
+      const tools = getEnabledTools(false, true, true);
+      expect(tools).toEqual(['query_knowledge_base', 'web_search']);
+    });
+
+    it('enables none when none selected in manual mode', () => {
+      const tools = getEnabledTools(false, false, false);
+      expect(tools).toEqual([]);
+    });
+  });
+
+  describe('generateSystemPrompt', () => {
+    it('includes rubric-based web_search guidance when web_search is enabled', () => {
+      const email = 'test@example.com';
+      const prompt = generateSystemPrompt(['web_search'], email, '');
+      expect(prompt).toContain('Decision rubric: Use web_search when the user explicitly asks you to look online');
+      expect(prompt).toContain('do not apologise');
+    });
+
+    it('omits rubric guidance when web_search is not enabled', () => {
+      const email = 'test@example.com';
+      const prompt = generateSystemPrompt(['query_knowledge_base'], email, '');
+      expect(prompt).not.toContain('Decision rubric: Use web_search');
+    });
+
+    it('includes user email and date metadata', () => {
+      const email = 'user@org.co.nz';
+      const prompt = generateSystemPrompt(['query_knowledge_base', 'web_search'], email, '');
+      expect(prompt).toContain(`User Email: ${email}`);
+      expect(prompt).toContain("Today's Date:");
     });
   });
 });
