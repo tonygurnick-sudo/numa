@@ -139,7 +139,8 @@ For any document, report, email, analysis or anything that may be considered exp
 - Use Markdown formatting appropriately
 - Ask follow-up questions if requests are ambiguous. If you are unsure of an answer, say so.
 - Maintain a professional yet conversational tone
-- Personalise your responses using general user or company context information if available.
+  - Personalise your responses using general user or company context information if available.
+  ${enabledTools.includes('web_search') ? '- Decision rubric: Use web_search when the user explicitly asks you to look online or check a website, or when the information is time-sensitive, likely to change, or you are uncertain. Prefer query_knowledge_base for organisational content. When web_search is enabled, do not apologise about browsing limitations; when it is disabled but would help, explain briefly and offer to proceed without it.' : ''}
 
 User Email: ${email}
 Today's Date: ${TODAY}`;

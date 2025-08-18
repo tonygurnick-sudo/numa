@@ -1,7 +1,25 @@
+import sys
+import types
 import unittest
 from unittest.mock import patch
 
-from numa_chat_agent.utils import (
+# Some utils may import modules that indirectly import 'strands'; stub it defensively
+if "strands" not in sys.modules:
+    strands_mod = types.ModuleType("strands")
+
+    def _noop_tool_decorator(func=None, **_kwargs):
+        if func is None:
+
+            def wrapper(f):
+                return f
+
+            return wrapper
+        return func
+
+    setattr(strands_mod, "tool", _noop_tool_decorator)
+    sys.modules["strands"] = strands_mod
+
+from numa_chat_agent.utils import (  # pylint: disable=wrong-import-position
     extract_preview,
     retry_aurora_operation,
     safe_json_convert,
