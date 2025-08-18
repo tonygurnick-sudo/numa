@@ -6,7 +6,7 @@ import { manifestService } from '../Services/manifestService';
 import { Nav } from '../Components/Nav';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNavigate } from 'react-router-dom';
-import { Search, FileEarmarkArrowUp, ArrowClockwise } from 'react-bootstrap-icons';
+import { Search, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 import { JobStatusContext } from '../Providers/JobStatusContext';
 
 const JobHistoryManager = () => {
@@ -16,7 +16,6 @@ const JobHistoryManager = () => {
 
   // Access job status from the global context
   const {
-    jobs: jobStatusJobs,
     loading: jobStatusLoading,
     hasLoaded: jobStatusHasLoaded,
     refreshJobs,
@@ -50,28 +49,7 @@ const JobHistoryManager = () => {
     loadApps();
   }, []);
 
-  // Use JobStatusContext data when available
-  useEffect(() => {
-    if (jobStatusHasLoaded) {
-      // Filter jobs based on selected app
-      const filteredJobs =
-        selectedApp === 'all' ? jobStatusJobs : jobStatusJobs.filter((job) => job.app === selectedApp);
-
-      // Transform jobs to match our expected format
-      const formattedJobs = filteredJobs.map((job) => ({
-        jobId: job.id,
-        appName: job.appName || job.app,
-        appId: job.app,
-        displayId: job.id?.substring(0, 8) || 'Unknown',
-        status: job.status || 'Unknown',
-        date: job.started || new Date().toISOString(),
-        startedAt: job.started,
-      }));
-
-      setJobs(formattedJobs);
-      setIsLoading(false);
-    }
-  }, [jobStatusJobs, jobStatusLoading, jobStatusHasLoaded, selectedApp]);
+  // Removed: mapping jobs from JobStatusContext directly because it lacks duration/end timestamps
 
   // Set loading state based on JobStatusContext loading state
   useEffect(() => {
@@ -92,15 +70,60 @@ const JobHistoryManager = () => {
         const response = await jobsApi.getJobsByAppId(selectedApp, null);
         const appJobs = response?.items || [];
 
-        const formattedJobs = appJobs.map((job) => ({
-          ...job,
-          appName: manifestApps.find((app) => app.id === selectedApp)?.appName || selectedApp,
-          appId: selectedApp,
-          displayId: job.jobId?.substring(0, 8) || 'Unknown',
-          status: job.status || 'Unknown',
-          date: job.startedAt || job.dateTime || new Date().toISOString(),
-          startedAt: job.startedAt || job.dateTime || new Date().toISOString(),
-        }));
+        const formattedJobs = appJobs.map((job) => {
+          // Get the start time
+          const startedAt = job.startedAt || job.dateTime || job.createdAt || null;
+
+          // Determine job status
+          const status = (job.status || '').toUpperCase();
+          const isRunning = status === 'RUNNING' || status === 'IN-PROGRESS' || status === 'PROCESSING';
+          const isFilesUploaded = status === 'FILES-UPLOADED';
+          const isFailed = status === 'FAILED' || status === 'ERROR' || status === 'FAILURE';
+
+          // Get the end time reference
+          const endTimeStr = job.completedAt || job.finishedAt || job.lastUpdated || null;
+
+          // Calculate duration
+          let duration = null;
+
+          // For completed jobs with both start and end times
+          if (!isRunning && !isFilesUploaded && !isFailed && startedAt && endTimeStr) {
+            try {
+              const startTime = new Date(startedAt);
+              const endTime = new Date(endTimeStr);
+              if (!isNaN(startTime) && !isNaN(endTime)) {
+                duration = Math.max(0, (endTime - startTime) / 1000);
+              }
+            } catch (error) {
+              console.error(`Error calculating duration for job ${job.jobId}:`, error);
+            }
+          }
+
+          // For running jobs with start time
+          if (isRunning && startedAt) {
+            try {
+              const startTime = new Date(startedAt);
+              const now = new Date();
+              if (!isNaN(startTime)) {
+                duration = Math.max(0, (now - startTime) / 1000);
+              }
+            } catch (error) {
+              console.error(`Error calculating running duration for job ${job.jobId}:`, error);
+            }
+          }
+
+          return {
+            ...job,
+            appName: manifestApps.find((app) => app.id === selectedApp)?.appName || selectedApp,
+            appId: selectedApp,
+            displayId: job.jobId?.substring(0, 8) || 'Unknown',
+            status: job.status || 'Unknown',
+            date: startedAt,
+            startedAt: startedAt,
+            completedAt: endTimeStr,
+            duration: duration,
+          };
+        });
         setJobs(formattedJobs);
       } catch (error) {
         console.error('Error fetching jobs:', error);
@@ -225,7 +248,7 @@ const JobHistoryManager = () => {
     }
   };
 
-  // Setup effect to load jobs when component mounts or when selected app changes
+  // Setup effect to load jobs when component mounts or when selected app/manifests/context state changes
   useEffect(() => {
     let isMounted = true;
     let abortController = new AbortController();
@@ -239,10 +262,8 @@ const JobHistoryManager = () => {
       }
     }, 35000);
 
-    // Only load jobs if JobStatusContext hasn't loaded yet
-    if (!jobStatusHasLoaded) {
-      loadJobs();
-    }
+    // Always load jobs so we compute durations with full job records
+    loadJobs();
     // Cleanup function to prevent state updates after unmount and abort any pending requests
     return () => {
       isMounted = false;
@@ -250,6 +271,16 @@ const JobHistoryManager = () => {
       clearTimeout(loadingTimeout);
     };
   }, [selectedApp, manifestApps, jobStatusHasLoaded]);
+
+  // Refresh handler to force both context refresh and local job reload
+  const onRefreshClick = () => {
+    try {
+      refreshJobs();
+    } catch {
+      // no-op
+    }
+    loadJobs();
+  };
 
   // Handle app selection change
   const handleAppChange = (e) => {
@@ -407,10 +438,15 @@ const JobHistoryManager = () => {
 
   // Format duration for display
   const formatDuration = (durationInSeconds, job) => {
-    if (durationInSeconds === null || durationInSeconds === undefined) {
-      // Check if the job status indicates it hasn't started or failed
-      const jobStatus = job?.status?.toUpperCase() || '';
+    const jobStatus = job?.status?.toUpperCase() || '';
 
+    // If API didn't provide duration, try to compute it for completed jobs
+    if (durationInSeconds === null || durationInSeconds === undefined) {
+      // Map of possible end timestamps we may get back from API
+      const endTs = job?.completedAt || job?.endedAt || job?.finishedAt || job?.lastUpdated || job?.dateTime;
+      const startTs = job?.startedAt || job?.createdAt || job?.date || job?.started;
+
+      // Failed, error, or only files uploaded: show dash
       if (
         jobStatus === 'FILES-UPLOADED' ||
         jobStatus === 'FAILED' ||
@@ -420,34 +456,47 @@ const JobHistoryManager = () => {
         return '-';
       }
 
-      return 'In progress';
-    }
+      // If completed and we have timestamps, compute duration
+      if ((jobStatus === 'SUCCESS' || jobStatus === 'COMPLETED') && startTs && endTs) {
+        const start = new Date(startTs).getTime();
+        const end = new Date(endTs).getTime();
+        const seconds = Math.max(0, Math.round((end - start) / 1000));
+        if (seconds < 60) {
+          return `${seconds}s`;
+        }
+        if (seconds < 3600) {
+          return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+        }
+        return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+      }
 
-    // Handle zero or near-zero durations
-    if (durationInSeconds < 1) {
-      return '<1s';
-    }
+      // If running or processing, show in-progress
+      if (
+        jobStatus === 'RUNNING' ||
+        jobStatus === 'IN-PROGRESS' ||
+        jobStatus === 'PROCESSING' ||
+        jobStatus === 'PENDING' ||
+        jobStatus === 'QUEUED'
+      ) {
+        return 'In progress';
+      }
 
-    // Handle negative durations (could happen with clock skew)
-    if (durationInSeconds < 0) {
+      // Otherwise we cannot compute
       return '-';
     }
 
-    // Format the duration
-    if (durationInSeconds < 60) {
-      // Less than a minute
-      return `${Math.round(durationInSeconds)}s`;
-    } else if (durationInSeconds < 3600) {
-      // Less than an hour
+    // Provided by API: normal formatting
+    if (durationInSeconds < 1) return '<1s';
+    if (durationInSeconds < 0) return '-';
+    if (durationInSeconds < 60) return `${Math.round(durationInSeconds)}s`;
+    if (durationInSeconds < 3600) {
       const minutes = Math.floor(durationInSeconds / 60);
       const seconds = Math.round(durationInSeconds % 60);
       return `${minutes}m ${seconds}s`;
-    } else {
-      // Hours or more
-      const hours = Math.floor(durationInSeconds / 3600);
-      const minutes = Math.floor((durationInSeconds % 3600) / 60);
-      return `${hours}h ${minutes}m`;
     }
+    const hours = Math.floor(durationInSeconds / 3600);
+    const minutes = Math.floor((durationInSeconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
   };
 
   // Render status badge
@@ -582,7 +631,7 @@ const JobHistoryManager = () => {
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={refreshJobs}
+                    onClick={onRefreshClick}
                     disabled={jobStatusLoading}
                     className="d-flex align-items-center me-3"
                   >
@@ -592,10 +641,7 @@ const JobHistoryManager = () => {
                         <span className="ms-2">Loading...</span>
                       </div>
                     ) : (
-                      <>
-                        <ArrowClockwise className={jobStatusLoading ? 'spin' : ''} />
-                        <span className="ms-1">Refresh Now</span>
-                      </>
+                      <span className="ms-1">Refresh</span>
                     )}
                   </Button>
                   {nextRefreshIn && (
