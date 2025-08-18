@@ -77,6 +77,7 @@ export class MeetingAnalyser extends BaseNumaApp {
           order: 4,
         },
       ],
+      typicalDurationMinutes: 3,
     };
 
     const extractContentLambda = this.addExtractContentLambda();

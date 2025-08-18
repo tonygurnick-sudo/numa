@@ -155,6 +155,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
           order: 4,
         },
       ],
+      typicalDurationMinutes: 3,
     };
 
     const policyStatements = [

@@ -114,6 +114,7 @@ export class CostingCalculator extends BaseNumaApp {
           order: 2,
         },
       ],
+      typicalDurationMinutes: 5,
     };
 
     const costingCalculatorLambdaPolicyStatements = [

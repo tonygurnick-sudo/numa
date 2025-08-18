@@ -53,6 +53,7 @@ export class GdsrAssessment extends BaseNumaApp {
           order: 2,
         },
       ],
+      typicalDurationMinutes: 1,
     };
 
     const extractContentLambda = this.addExtractContentLambda();

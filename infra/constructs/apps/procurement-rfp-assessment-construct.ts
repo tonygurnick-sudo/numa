@@ -81,6 +81,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
           order: 4,
         },
       ],
+      typicalDurationMinutes: 5,
     };
 
     const extractContentLambda = this.addExtractContentLambda();

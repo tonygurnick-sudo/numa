@@ -65,6 +65,7 @@ export class CompanyProfile extends BaseNumaApp {
           order: 4,
         },
       ],
+      typicalDurationMinutes: 1,
     };
 
     const extractContentLambda = this.addExtractContentLambda();

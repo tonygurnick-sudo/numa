@@ -14,6 +14,7 @@ const WizardNavigation = ({
   processingProgress,
   processingStatus,
   hasRun,
+  typicalDurationMinutes,
 }) => {
   const { resetAppState } = useNumaApp();
   const { isRunning, disabled, onClick, ...otherRunButtonProps } = runButtonProps;
@@ -95,7 +96,23 @@ const WizardNavigation = ({
                 </div>
               )}
             </Button>
-            <div className="run-status-text">{!isRunning && disabled && <>Complete the required inputs to run</>}</div>
+            <div className="run-status-text">
+              {!isRunning && (
+                <>
+                  {disabled && (
+                    <>
+                      Complete the required inputs to run.
+                      <br />
+                    </>
+                  )}
+                  {typicalDurationMinutes && (
+                    <>
+                      This app typically takes {typicalDurationMinutes} minute{typicalDurationMinutes > 1 ? 's' : ''}.
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -113,7 +130,15 @@ const WizardNavigation = ({
                 margin: '0 auto 10px auto',
               }}
             />
-            <div className="processing-status">{processingStatus}</div>
+            <div className="processing-status">
+              {processingStatus}
+              {typicalDurationMinutes && (
+                <>
+                  <br />
+                  This app typically takes {typicalDurationMinutes} minute{typicalDurationMinutes > 1 ? 's' : ''}.
+                </>
+              )}
+            </div>
           </div>
         )}
 

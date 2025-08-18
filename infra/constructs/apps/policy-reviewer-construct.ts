@@ -51,6 +51,7 @@ export class PolicyReviewer extends BaseNumaApp {
           order: 3,
         },
       ],
+      typicalDurationMinutes: 3,
     };
 
     const extractContentLambda = this.addExtractContentLambda();

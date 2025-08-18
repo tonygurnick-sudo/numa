@@ -674,6 +674,7 @@ export interface NumaAppManifest {
   createdDate: string;
   appDescription: string;
   tasks: NumaAppManifestTask[];
+  typicalDurationMinutes: number;
 }
 
 export interface AddStepFunctionProps {

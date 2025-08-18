@@ -225,7 +225,7 @@ describe('WizardNavigation Component', () => {
     };
 
     const { getByText } = render(<WizardNavigation {...disabledProps} />);
-    expect(getByText('Complete the required inputs to run')).toBeInTheDocument();
+    expect(getByText('Complete the required inputs to run.')).toBeInTheDocument();
   });
 
   it('should handle run button click', () => {
