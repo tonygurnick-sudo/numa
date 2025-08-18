@@ -82,6 +82,7 @@ export class PolicyDrafter extends BaseNumaApp {
           order: 5,
         },
       ],
+      typicalDurationMinutes: 3,
     };
 
     const extractContentLambda = this.addExtractContentLambda();

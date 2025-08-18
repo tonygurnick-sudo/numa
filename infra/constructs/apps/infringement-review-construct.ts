@@ -115,6 +115,7 @@ export class InfringementReview extends BaseNumaApp {
           order: 3,
         },
       ],
+      typicalDurationMinutes: 3,
     };
 
     const extractContentLambda = this.addExtractContentLambda();

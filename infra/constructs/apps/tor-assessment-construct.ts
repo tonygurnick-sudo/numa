@@ -53,6 +53,7 @@ export class TorAssessment extends BaseNumaApp {
           order: 2,
         },
       ],
+      typicalDurationMinutes: 3,
     };
 
     const extractContentLambda = this.addExtractContentLambda();

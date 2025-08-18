@@ -63,6 +63,7 @@ export class RfpResponseComparison extends BaseNumaApp {
           order: 3,
         },
       ],
+      typicalDurationMinutes: 3,
     };
 
     const extract = this.addExtractContentLambda();

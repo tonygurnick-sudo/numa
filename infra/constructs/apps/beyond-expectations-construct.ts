@@ -108,6 +108,7 @@ export class BeyondExpectations extends BaseNumaApp {
           order: 2,
         },
       ],
+      typicalDurationMinutes: 0, // Background only app.
     };
 
     /**

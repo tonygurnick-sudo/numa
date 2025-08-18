@@ -344,6 +344,7 @@ const AppWizard = ({ manifest }) => {
             processingStatus={processingStatus}
             hasRun={hasRun}
             results={job?.results}
+            typicalDurationMinutes={manifest.typicalDurationMinutes}
           />
         </Col>
       </Row>

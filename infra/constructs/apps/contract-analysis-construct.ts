@@ -62,6 +62,7 @@ export class ContractAnalysis extends BaseNumaApp {
           order: 3,
         },
       ],
+      typicalDurationMinutes: 5,
     };
 
     const extractContentLambda = this.addExtractContentLambda();

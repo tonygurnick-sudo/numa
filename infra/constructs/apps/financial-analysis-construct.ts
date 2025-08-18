@@ -48,6 +48,7 @@ export class FinancialAnalysis extends BaseNumaApp {
           order: 2,
         },
       ],
+      typicalDurationMinutes: 3,
     };
 
     const extractContentLambda = this.addExtractContentLambda();

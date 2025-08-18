@@ -46,6 +46,7 @@ export class E2ETestNumaApp extends BaseNumaApp {
           order: 2,
         },
       ],
+      typicalDurationMinutes: 1,
     };
 
     const e2eTestLambda = this.addLambdaFunction(this, 'test', {
