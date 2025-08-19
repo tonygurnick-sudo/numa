@@ -10,6 +10,8 @@ from typing import List
 
 from openpyxl import Workbook
 
+import lambda_function  # pylint: disable=wrong-import-position
+
 # Add the lib directory to the Python path to find the modules
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
 sys.path.append(os.path.join(project_root, "lib/aws-transcribe"))
@@ -47,7 +49,6 @@ haiku_mock.extract_content = unittest.mock.Mock()
 sys.modules["fm_vision_extraction"] = haiku_mock
 
 # Import must be after sys.modules setup
-import lambda_function  # pylint: disable=wrong-import-position
 
 
 class TestExcelExtraction(unittest.TestCase):
@@ -127,7 +128,7 @@ class TestExcelExtraction(unittest.TestCase):
         excel_structure = lambda_function.extract_excel_structure(file_content)
         # Convert structured output into a dataclass instance.
         document = lambda_function._excel_structure_to_document(
-            excel_structure, "test.xlsx"
+            excel_structure, "test.xlsx", None
         )
 
         # Check that document is an instance of ExcelDocument.
