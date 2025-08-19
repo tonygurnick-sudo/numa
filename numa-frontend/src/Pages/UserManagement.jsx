@@ -33,6 +33,8 @@ const UserManagement = () => {
   const [hasNextPage, setHasNextPage] = useState(false);
   const [totalUsers, setTotalUsers] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [copiedInstructions, setCopiedInstructions] = useState(false);
 
   const fetchTotalUsers = async () => {
     try {
@@ -290,6 +292,27 @@ const UserManagement = () => {
     }
   };
 
+  const handleCopyEmail = async () => {
+    try {
+      await navigator.clipboard.writeText(createdEmail);
+      setCopiedEmail(true);
+      setTimeout(() => setCopiedEmail(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy email:', err);
+    }
+  };
+
+  const handleCopyInstructions = async () => {
+    try {
+      const instructions = `Welcome to Numa!\n\nYour account has been created with the following email address: ${createdEmail}\n\nTo set up your password and access the system, please:\n1. Go to ${window.location.origin}/create-password\n2. Enter your email address: ${createdEmail}\n3. Follow the instructions to create your password\n\nIf you have any questions, please contact your administrator.`;
+      await navigator.clipboard.writeText(instructions);
+      setCopiedInstructions(true);
+      setTimeout(() => setCopiedInstructions(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy instructions:', err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers(1);
   }, []);
@@ -415,27 +438,11 @@ const UserManagement = () => {
                         <p className="mb-0">If you have any questions, please contact your administrator.</p>
                       </div>
                       <div className="d-flex justify-content-end mt-3">
-                        <Button
-                          variant="outline-secondary"
-                          size="sm"
-                          className="me-2"
-                          onClick={() => {
-                            navigator.clipboard.writeText(createdEmail);
-                            alert('Email copied to clipboard!');
-                          }}
-                        >
-                          Copy Email
+                        <Button variant="outline-secondary" size="sm" className="me-2" onClick={handleCopyEmail}>
+                          {copiedEmail ? 'Copied!' : 'Copy Address'}
                         </Button>
-                        <Button
-                          variant="outline-primary"
-                          size="sm"
-                          onClick={() => {
-                            const instructions = `Welcome to Numa!\n\nYour account has been created with the following email address: ${createdEmail}\n\nTo set up your password and access the system, please:\n1. Go to ${window.location.origin}/create-password\n2. Enter your email address: ${createdEmail}\n3. Follow the instructions to create your password\n\nIf you have any questions, please contact your administrator.`;
-                            navigator.clipboard.writeText(instructions);
-                            alert('Instructions copied to clipboard!');
-                          }}
-                        >
-                          Copy All Instructions
+                        <Button variant="outline-primary" size="sm" onClick={handleCopyInstructions}>
+                          {copiedInstructions ? 'Copied!' : 'Copy User Instructions'}
                         </Button>
                       </div>
                     </div>
