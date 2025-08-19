@@ -6,7 +6,6 @@ import { queryKnowledgeBase, formatKnowledgeBaseResults, preWarmAuroraDatabase }
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
-import { DataSourcesList } from '../Components/DataSourcesList';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
 import { prepareConversationHistoryForChat, MAX_DYNAMO_MESSAGES } from '../utils/bedrockMessageHistoryUtils';
 import { ChatInput } from '../Components/ChatInput';
@@ -987,8 +986,6 @@ Today's Date: ${TODAY}`;
                     onSelectConversation={handleLoadConversation}
                     currentConversationId={conversationId}
                   />
-                  {/* Data sources list */}
-                  <DataSourcesList />
 
                   {/* Main chat content */}
                   <div className="flex-grow-1 d-flex contain-width">

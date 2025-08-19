@@ -6,7 +6,6 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
-import { DataSourcesList } from '../Components/DataSourcesList';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
 import { MAX_DYNAMO_MESSAGES, prepareConversationHistoryForChat } from '../utils/bedrockMessageHistoryUtils';
 import { callChatAgentStreaming, connectChatAgent, isChatAgentAvailable } from '../Services/chatAgentService';
@@ -841,8 +840,6 @@ const NumaChatAgents = () => {
             onSelectConversation={handleLoadConversation}
             currentConversationId={conversationId}
           />
-          {/* Data sources list */}
-          <DataSourcesList />
 
           {/* Main chat content */}
           <div className="flex-grow-1 d-flex contain-width">
