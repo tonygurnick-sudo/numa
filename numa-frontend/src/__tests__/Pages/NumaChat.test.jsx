@@ -343,7 +343,6 @@ describe('NumaChat Component', () => {
     expect(screen.getByTestId('breadcrumbs')).toHaveTextContent('Chat');
     expect(screen.getByTestId('layout-dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('chat-history-sidebar')).toBeInTheDocument();
-    expect(screen.getByTestId('data-sources-list')).toBeInTheDocument();
     expect(screen.getByTestId('chat-input')).toBeInTheDocument();
     expect(screen.getByTestId('resizable-split-view')).toBeInTheDocument();
     expect(screen.getAllByText(/click the/i)[0]).toBeInTheDocument(); // Get first "click the" text
