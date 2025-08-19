@@ -7,13 +7,14 @@ import json
 import os
 import pathlib
 import time
-from typing import List, TypeVar
+from typing import List, Sequence, TypeVar
 
 import boto3
 import docx
 import structlog
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
+from opentelemetry import trace
 
 import aws_transcribe
 import fm_vision_extraction
@@ -22,6 +23,7 @@ from fm_vision_extraction import Document, DocumentPage
 
 s3_client = boto3.client("s3")
 logger = structlog.get_logger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 # File extension constants
@@ -88,9 +90,9 @@ class ExcelDocumentPage(DocumentPage):
     rows: List[str] = dataclasses.field(default_factory=list)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ExcelDocument(Document):
-    pages: List[ExcelDocumentPage] = dataclasses.field(default_factory=list)  # type: ignore[assignment]
+    pages: Sequence[ExcelDocumentPage] = dataclasses.field(default_factory=list)
 
 
 def handler(event: dict, _context) -> dict:
@@ -114,9 +116,7 @@ def handler(event: dict, _context) -> dict:
     # only set this to true when it's certain this will be less than 256KB
     return_content = event.get("return_content", False)
 
-    document = _extract_content(input_bucket, input_key)
-    if file_name:
-        document.name = file_name
+    document = _extract_content(input_bucket, input_key, file_name)
 
     content = json.dumps(dataclasses.asdict(document), indent=4).encode("utf-8")
     s3_client.put_object(Body=content, Bucket=output_bucket, Key=output_key)
@@ -136,7 +136,10 @@ def handler(event: dict, _context) -> dict:
     return result
 
 
-def _extract_content(input_bucket: str, input_key: str) -> Document:
+@tracer.start_as_current_span("_extract_content")
+def _extract_content(
+    input_bucket: str, input_key: str, file_name: str | None
+) -> Document:
     suffix = pathlib.PurePosixPath(input_key.lower()).suffix
 
     if not suffix:
@@ -145,25 +148,26 @@ def _extract_content(input_bucket: str, input_key: str) -> Document:
     if suffix in TEXT_FILE_EXTENSIONS:
         s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
         extracted_text = s3_file_object["Body"].read().decode("utf-8")
-        return _text_to_document(extracted_text, input_key)
+        return _text_to_document(extracted_text, input_key, file_name)
 
     elif suffix in [
         ".docx",
     ]:
         s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
-        file_content = s3_file_object["Body"].read()
+        with tracer.start_as_current_span("read_file_content"):
+            file_content = s3_file_object["Body"].read()
         pages = extract_docx_pages(file_content)
-        return _textract_pages_to_document(pages, input_key)
+        return _textract_pages_to_document(pages, input_key, file_name)
 
     elif suffix in [".xlsx"]:
         s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
         file_content = s3_file_object["Body"].read()
         excel_structure = extract_excel_structure(file_content)
-        return _excel_structure_to_document(excel_structure, input_key)
+        return _excel_structure_to_document(excel_structure, input_key, file_name)
 
     # Vision extraction supported formats - direct processing
     elif suffix in VISION_SUPPORTED_FORMATS:
-        return fm_vision_extraction.extract_content(input_bucket, input_key)
+        return fm_vision_extraction.extract_content(input_bucket, input_key, file_name)
 
     # Audio/video files - transcription
     elif suffix in AUDIO_VIDEO_FORMATS:
@@ -175,13 +179,13 @@ def _extract_content(input_bucket: str, input_key: str) -> Document:
             output_key=f"{input_key}.transcription.json",
             name_for_logging=input_key,
         )
-        return _text_to_document(response.text, input_key)
+        return _text_to_document(response.text, input_key, file_name)
 
     else:
         raise UnsupportedFileFormat(f"{input_key} has an unsupported file format")
 
 
-def _text_to_document(text: str, key: str) -> Document:
+def _text_to_document(text: str, key: str, file_name: str | None) -> Document:
     """Convert text to Document structure"""
     page = DocumentPage(
         num_words=len(text.split()),
@@ -190,7 +194,7 @@ def _text_to_document(text: str, key: str) -> Document:
     )
 
     return Document(
-        name=os.path.basename(key),
+        name=file_name or os.path.basename(key),
         num_pages=1,
         pages=[page],
         total_num_words=page.num_words,
@@ -202,6 +206,7 @@ def _document_to_string(document: Document) -> str:
     return "\n".join(page.text for page in document.pages) + "\n"
 
 
+@tracer.start_as_current_span("extract_docx_pages")
 def extract_docx_pages(file_content: bytes) -> dict[int, str]:
     """
     Extracts text from a DOCX file.
@@ -308,7 +313,10 @@ def extract_excel_structure(file_content: bytes) -> dict:
     return result
 
 
-def _textract_pages_to_document(pages: dict[int, str], key: str) -> Document:
+@tracer.start_as_current_span("_textract_pages_to_document")
+def _textract_pages_to_document(
+    pages: dict[int, str], key: str, file_name: str | None
+) -> Document:
     document_pages: list[DocumentPage] = []
     for page, text in pages.items():
         document_pages.append(
@@ -320,7 +328,7 @@ def _textract_pages_to_document(pages: dict[int, str], key: str) -> Document:
         )
 
     document = Document(
-        name=os.path.basename(key),
+        name=file_name or os.path.basename(key),
         num_pages=max([0, *pages.keys()]),
         pages=document_pages,
         total_num_words=sum(page.num_words for page in document_pages),
@@ -328,7 +336,9 @@ def _textract_pages_to_document(pages: dict[int, str], key: str) -> Document:
     return document
 
 
-def _excel_structure_to_document(structured: dict, key: str) -> ExcelDocument:
+def _excel_structure_to_document(
+    structured: dict, key: str, file_name: str | None
+) -> ExcelDocument:
     total_num_words = 0
     pages: List[ExcelDocumentPage] = []
     for sheet_num, sheet_data in structured.items():
@@ -347,7 +357,7 @@ def _excel_structure_to_document(structured: dict, key: str) -> ExcelDocument:
             )
         )
     return ExcelDocument(
-        name=os.path.basename(key),
+        name=file_name or os.path.basename(key),
         num_pages=len(pages),
         total_num_words=total_num_words,
         pages=pages,

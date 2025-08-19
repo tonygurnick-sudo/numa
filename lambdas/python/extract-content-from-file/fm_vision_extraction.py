@@ -9,7 +9,7 @@ import random
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence, Union
 from urllib.parse import urlparse
 
 import boto3
@@ -17,7 +17,12 @@ import fitz  # type: ignore[import-untyped]  # PyMuPDF
 import structlog
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from opentelemetry import trace
+from opentelemetry.instrumentation.threading import ThreadingInstrumentor
 from PIL import Image
+
+tracer = trace.get_tracer(__name__)
+ThreadingInstrumentor().instrument()
 
 
 @dataclasses.dataclass
@@ -27,12 +32,19 @@ class DocumentPage:
     text: str = ""
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Document:
     name: str = ""
     num_pages: int = 0
     total_num_words: int = 0
-    pages: List[DocumentPage] = dataclasses.field(default_factory=list)
+    pages: Sequence[DocumentPage] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass
+class ModelConfig:
+    max_tokens: int = 4096
+    max_images_per_call: int = 5
+    anthropic_version: Union[str, None] = "bedrock-2023-05-31"
 
 
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
@@ -54,16 +66,9 @@ FALLBACK_MODEL_ID = VISION_MODEL_MAP[
 
 # Model-specific configurations
 MODEL_CONFIGS = {
-    VISION_MODEL_MAP["haiku"]: {
-        "max_tokens": 4096,
-        "max_images_per_call": 5,
-        "anthropic_version": "bedrock-2023-05-31",
-    },
-    VISION_MODEL_MAP["nova-pro"]: {
-        "max_tokens": 4096,
-        "max_images_per_call": 5,
-        "anthropic_version": None,  # Nova uses different format
-    },
+    VISION_MODEL_MAP["haiku"]: ModelConfig(),
+    # Nova uses different format
+    VISION_MODEL_MAP["nova-pro"]: ModelConfig(anthropic_version=None),
 }
 
 # Fallback model configuration for quota/throttling errors
@@ -115,7 +120,10 @@ def _parse_s3_uri(s3_uri: str) -> tuple[str, str]:
     return bucket, key
 
 
-def extract_content(input_bucket: str, input_key: str) -> Document:
+@tracer.start_as_current_span("extract_content")
+def extract_content(
+    input_bucket: str, input_key: str, file_name: str | None
+) -> Document:
     """Extract text from PDF or image files using Claude Haiku 3"""
 
     s3_response = s3_client.get_object(Bucket=input_bucket, Key=input_key)
@@ -127,9 +135,9 @@ def extract_content(input_bucket: str, input_key: str) -> Document:
 
     if file_extension in [".png", ".jpg", ".jpeg"]:
         text = _process_image(file_content, file_extension)
-        return _create_document(text, input_key)
+        return _create_document(text, input_key, file_name)
     elif file_extension == ".pdf":
-        return _process_pdf(file_content, input_key, input_bucket)
+        return _process_pdf(file_content, input_key, input_bucket, file_name)
     else:
         raise ValueError(f"Unsupported format: {file_extension}")
 
@@ -141,6 +149,7 @@ def _process_image(
     return _process_image_batch([file_content], [file_extension], model_id)
 
 
+@tracer.start_as_current_span("_process_image_batch")
 def _process_image_batch(
     file_contents: List[bytes],
     file_extensions: List[str],
@@ -154,7 +163,7 @@ def _process_image_batch(
     current_model_config = MODEL_CONFIGS.get(
         current_model_id, MODEL_CONFIGS[VISION_MODEL_MAP["haiku"]]
     )
-    max_images_per_call = current_model_config["max_images_per_call"]  # type: ignore[index]
+    max_images_per_call = current_model_config.max_images_per_call
 
     if len(file_contents) > max_images_per_call:
         raise ValueError(
@@ -205,6 +214,7 @@ def _process_image_batch(
 
     # Content already built above based on model type
 
+    request: Dict[str, Any]
     # Build request based on model type
     if current_model_id.startswith("amazon.nova"):
         request = {
@@ -216,20 +226,20 @@ def _process_image_batch(
                 }
             ],
             "inferenceConfig": {
-                "maxTokens": current_model_config["max_tokens"],  # type: ignore[index]
+                "maxTokens": current_model_config.max_tokens,
             },
         }
     else:
         # Anthropic format (default)
         request = {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": current_model_config["max_tokens"],  # type: ignore[index]
             "messages": [
                 {
                     "role": "user",
                     "content": content,
                 }
             ],
+            "max_tokens": current_model_config.max_tokens,
         }
 
     response = bedrock_client.invoke_model(
@@ -273,7 +283,10 @@ def _calculate_optimal_scaling(total_pages: int) -> tuple[int, List[int]]:
     return 1, [total_pages]
 
 
-def _process_pdf(file_content: bytes, input_key: str, input_bucket: str) -> Document:
+@tracer.start_as_current_span("_process_pdf")
+def _process_pdf(
+    file_content: bytes, input_key: str, input_bucket: str, file_name: str | None
+) -> Document:
     """Process PDF with concurrent page processing"""
 
     batch_id = str(uuid.uuid4())
@@ -288,7 +301,7 @@ def _process_pdf(file_content: bytes, input_key: str, input_bucket: str) -> Docu
         )
 
         return Document(
-            name=os.path.basename(input_key),
+            name=file_name or os.path.basename(input_key),
             num_pages=len(image_uris),
             pages=[document_page],
             total_num_words=total_words,
@@ -298,6 +311,7 @@ def _process_pdf(file_content: bytes, input_key: str, input_bucket: str) -> Docu
         _cleanup_s3_files(input_bucket, temp_prefix)
 
 
+@tracer.start_as_current_span("_process_pages_concurrent")
 def _process_pages_concurrent(image_uris: List[str]) -> str:
     """Process PDF pages concurrently with adaptive batching and worker scaling"""
 
@@ -395,6 +409,7 @@ def _process_pages_concurrent(image_uris: List[str]) -> str:
         """Process image batch with retry logic"""
         return _process_image_batch(contents, extensions, model_id)
 
+    @tracer.start_as_current_span("process_page_batch")
     def process_page_batch(batch_data):
         """Process a batch of 5 pages in a single API call"""
         start_idx, batch_uris = batch_data
@@ -466,6 +481,7 @@ def _process_pages_concurrent(image_uris: List[str]) -> str:
     return combined_text
 
 
+@tracer.start_as_current_span("_pdf_to_images")
 def _pdf_to_images(file_content: bytes, bucket: str, temp_prefix: str) -> List[str]:
     """Convert PDF pages to optimized images in S3"""
 
@@ -502,6 +518,7 @@ def _pdf_to_images(file_content: bytes, bucket: str, temp_prefix: str) -> List[s
         pdf.close()
 
 
+@tracer.start_as_current_span("_compress_image")
 def _compress_image(img: Image.Image) -> bytes:
     """Compress image to meet Bedrock size limits"""
 
@@ -516,6 +533,7 @@ def _compress_image(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
+@tracer.start_as_current_span("_cleanup_s3_files")
 def _cleanup_s3_files(bucket: str, prefix: str):
     """Clean up temporary S3 files"""
 
@@ -531,14 +549,14 @@ def _cleanup_s3_files(bucket: str, prefix: str):
         logger.warning(f"Cleanup failed: {e}")
 
 
-def _create_document(text: str, input_key: str) -> Document:
+def _create_document(text: str, input_key: str, file_name: str | None) -> Document:
     """Create Document from text"""
 
     words = len(text.split())
     page = DocumentPage(page_number=1, num_words=words, text=text)
 
     return Document(
-        name=os.path.basename(input_key),
+        name=file_name or os.path.basename(input_key),
         num_pages=1,
         pages=[page],
         total_num_words=words,

@@ -7,6 +7,8 @@ import unittest.mock
 from typing import List
 from unittest.mock import MagicMock, patch
 
+import lambda_function  # pylint: disable=wrong-import-position
+
 # Add the lib directory to the Python path to find the modules
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
 sys.path.append(os.path.join(project_root, "lib/aws-transcribe"))
@@ -44,7 +46,6 @@ haiku_mock.extract_content = unittest.mock.Mock()
 sys.modules["fm_vision_extraction"] = haiku_mock
 
 # Import must be after sys.modules setup
-import lambda_function  # pylint: disable=wrong-import-position
 
 
 class TestException(Exception):
@@ -152,7 +153,9 @@ class TestLambdaFunction(unittest.TestCase):
         response = lambda_function.handler(event, {})
 
         self.assertEqual(response["content"], "Sample PDF content\n")
-        mock_haiku.extract_content.assert_called_once_with("test-bucket", "test.pdf")
+        mock_haiku.extract_content.assert_called_once_with(
+            "test-bucket", "test.pdf", None
+        )
         mock_s3_client.put_object.assert_called_once()
 
     @patch("lambda_function.s3_client")
@@ -214,7 +217,9 @@ class TestLambdaFunction(unittest.TestCase):
 
     def test_text_to_document(self):
         """Test text to document conversion"""
-        document = lambda_function._text_to_document("Hello world test", "test.txt")
+        document = lambda_function._text_to_document(
+            "Hello world test", "test.txt", None
+        )
 
         self.assertEqual(document.name, "test.txt")
         self.assertEqual(document.num_pages, 1)
