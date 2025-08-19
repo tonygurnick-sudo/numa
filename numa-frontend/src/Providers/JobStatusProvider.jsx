@@ -18,8 +18,13 @@ export const JobStatusProvider = ({ children }) => {
   const { isAuthenticated } = useAuth();
 
   const fetchStatus = async () => {
-    // Don't fetch if not authenticated or already loading with data
-    if (!isAuthenticated || (loading && jobs.length > 0)) {
+    // Don't fetch if not authenticated
+    if (!isAuthenticated) {
+      return;
+    }
+
+    // Prevent overlapping fetches only if we already have data shown
+    if (loading && jobs.length > 0 && hasLoaded) {
       return;
     }
 
@@ -110,6 +115,8 @@ export const JobStatusProvider = ({ children }) => {
 
   // Manual refresh function
   const refreshJobs = () => {
+    // Indicate a refresh and let fetchStatus flip loading to true
+    setHasLoaded(false);
     setRefresh((prev) => prev + 1);
     setNextRefreshIn(REFRESH_INTERVAL / 1000);
   };
