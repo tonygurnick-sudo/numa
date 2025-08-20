@@ -307,6 +307,7 @@ export function KnowledgeBaseManagement() {
   const [syncJobStatus, setSyncJobStatus] = useState(null);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [lastSyncStartTime, setLastSyncStartTime] = useState(null);
 
   const [syncMetrics, setSyncMetrics] = useState(null);
 
@@ -514,6 +515,7 @@ export function KnowledgeBaseManagement() {
         setSyncJobStatus(state.syncJobStatus);
         setLastSuccessfulSync(state.lastSuccessfulSync);
         setLastUpdated(state.lastUpdated);
+        setLastSyncStartTime(state.lastSyncStartTime);
         setSyncMetrics(state.syncMetrics);
         setKbDocuments(state.documents);
         setDataSources(state.dataSources || []);
@@ -804,21 +806,74 @@ export function KnowledgeBaseManagement() {
   }
 
   /**
+   * Determine likely failed files based on upload time vs last sync start time (with buffer)
+   */
+  const likelyFailedFiles = useMemo(() => {
+    if (!lastSyncStartTime) return [];
+
+    const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
+
+    // Use sync start time with a 1-minute safety buffer
+    // This prevents marking files as failed if they were uploaded during the sync
+    const syncStartTime = new Date(lastSyncStartTime);
+    const bufferMinutes = 1;
+    const cutoffTime = new Date(syncStartTime.getTime() - bufferMinutes * 60 * 1000);
+
+    const likelyFailed = files
+      .filter((file) => {
+        // Must not be in KB documents (pending)
+        if (kbFileKeys.has(file.Key)) return false;
+
+        // Must have been uploaded well before the sync started (with buffer)
+        const uploadTime = new Date(file.LastModified);
+        return uploadTime < cutoffTime;
+      })
+      .map((file) => {
+        // Create a failed document object
+        const fileName = decodeURIComponent(file.Key.split('/').pop());
+        return {
+          documentId: `s3://numa-${CLIENT_NAME}-data/${file.Key}`,
+          status: 'FAILED',
+          updatedAt: lastSuccessfulSync,
+          error: {
+            errorMessage: 'Processing failed during indexing',
+          },
+          fileName,
+          isInferred: true,
+        };
+      });
+
+    return likelyFailed;
+  }, [files, kbDocuments, lastSyncStartTime, CLIENT_NAME]);
+
+  /**
    * Determine pending vs. indexed files by comparing S3 files with KB documents.
    */
   const pendingFiles = useMemo(() => {
     const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
-    return files.filter((file) => !kbFileKeys.has(file.Key));
-  }, [files, kbDocuments]);
+    const likelyFailedKeys = new Set(likelyFailedFiles.map((doc) => documentIdToKey(doc.documentId)));
+
+    const pending = files.filter((file) => {
+      // Exclude if in KB documents (indexed)
+      if (kbFileKeys.has(file.Key)) return false;
+      // Exclude if likely failed (will show in failed documents section)
+      if (likelyFailedKeys.has(file.Key)) return false;
+      return true;
+    });
+
+    return pending;
+  }, [files, kbDocuments, likelyFailedFiles]);
 
   const indexedFiles = useMemo(() => {
     const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
-    return files
+    const indexed = files
       .filter((file) => kbFileKeys.has(file.Key))
       .map((file) => {
         const kbDoc = kbDocuments.find((doc) => documentIdToKey(doc.documentId) === file.Key);
         return { ...file, kbDoc };
       });
+
+    return indexed;
   }, [files, kbDocuments]);
 
   /**
@@ -1152,13 +1207,19 @@ export function KnowledgeBaseManagement() {
   }
 
   /**
-   * Compute failed documents from KB (documents with an error).
+   * Compute failed documents from KB (documents with an error) + likely failed files.
    */
   const failedDocuments = useMemo(() => {
-    return kbDocuments.filter(
+    // Get actual failed documents from KB API
+    const actualFailed = kbDocuments.filter(
       (doc) => (doc.error && Object.keys(doc.error).length > 0 && doc.error?.errorMessage) || doc.status === 'FAILED',
     );
-  }, [kbDocuments]);
+
+    // Combine with likely failed files (inferred)
+    const allFailed = [...actualFailed, ...likelyFailedFiles];
+
+    return allFailed;
+  }, [kbDocuments, likelyFailedFiles]);
 
   /**
    * Render the entire S3 Uploader page.

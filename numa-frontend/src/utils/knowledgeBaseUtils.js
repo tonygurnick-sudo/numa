@@ -606,6 +606,7 @@ export const getKnowledgeBaseState = async (config) => {
         syncJobStatus: mapBedrockJobStatus(latestJob?.status),
         lastSuccessfulSync: lastSuccess?.updatedAt,
         lastUpdated: latestJob?.updatedAt || latestJob?.startedAt, // Use sync job time as "last updated"
+        lastSyncStartTime: latestJob?.startedAt, // Sync start time for better failed file detection
         syncMetrics: latestJob?.statistics, // Bedrock uses statistics instead of metrics
         documents: normalizedDocs,
         dataSources: combinedDataSources,
