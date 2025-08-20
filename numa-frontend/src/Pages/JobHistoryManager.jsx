@@ -9,6 +9,8 @@ import { useNavigate } from 'react-router-dom';
 import { Search, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 import { JobStatusContext } from '../Providers/JobStatusContext';
 
+import { getDisplayStatusUpper, formatDuration } from '../utils/jobStatus';
+
 const JobHistoryManager = () => {
   useAuth();
   const { setNumaAppId } = useNumaApp();
@@ -347,27 +349,7 @@ const JobHistoryManager = () => {
     setCurrentPage(1); // Reset to first page when search changes
   };
 
-  // Display-only status override: mark long-running running jobs as failed (stuck)
-  const STALE_RUNNING_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
-  const getDisplayStatusUpper = (job) => {
-    const raw = (job?.status || '').toUpperCase();
-    const startedAt = job?.startedAt || job?.started || job?.dateTime || job?.createdAt || job?.date;
-    const isRunningState = ['RUNNING', 'IN-PROGRESS', 'PROCESSING', 'PENDING', 'QUEUED'].includes(raw);
-    if (isRunningState && startedAt) {
-      const start = new Date(startedAt);
-      if (!Number.isNaN(start.getTime())) {
-        const age = Date.now() - start.getTime();
-        if (age > STALE_RUNNING_THRESHOLD_MS) {
-          return 'FAILED-STUCK'; // display-only failure for stale running jobs
-        }
-      }
-    }
-    // Fallback: if it's a running state and API provided an excessively large duration, mark as failed-stuck
-    if (isRunningState && typeof job?.duration === 'number' && job.duration * 1000 > STALE_RUNNING_THRESHOLD_MS) {
-      return 'FAILED-STUCK';
-    }
-    return raw || 'COMPLETED';
-  };
+  // Status logic centralised in utils/jobStatus.js via getDisplayStatusUpper
 
   // Filter and sort jobs
   const filteredJobs = jobs
@@ -418,8 +400,8 @@ const JobHistoryManager = () => {
         return sortDirection === 'asc' ? idA.localeCompare(idB) : idB.localeCompare(idA);
       }
       if (sortField === 'status') {
-        const statusA = (a.status || 'completed').toLowerCase();
-        const statusB = (b.status || 'completed').toLowerCase();
+        const statusA = (getDisplayStatusUpper(a) || 'UNKNOWN').toLowerCase();
+        const statusB = (getDisplayStatusUpper(b) || 'UNKNOWN').toLowerCase();
         return sortDirection === 'asc' ? statusA.localeCompare(statusB) : statusB.localeCompare(statusA);
       }
       if (sortField === 'duration') {
@@ -458,87 +440,11 @@ const JobHistoryManager = () => {
     }
   };
 
-  // Format duration for display
-  const formatDuration = (durationInSeconds, job) => {
-    const jobStatus = getDisplayStatusUpper(job) || '';
-
-    // If we've classified it as failed-stuck, always show dash regardless of provided duration
-    if (jobStatus === 'FAILED-STUCK') return '-';
-
-    // For any running/queued state, prefer a friendly label over raw huge durations
-    if (
-      jobStatus === 'RUNNING' ||
-      jobStatus === 'IN-PROGRESS' ||
-      jobStatus === 'PROCESSING' ||
-      jobStatus === 'PENDING' ||
-      jobStatus === 'QUEUED'
-    ) {
-      return 'In progress';
-    }
-
-    // If API didn't provide duration, try to compute it for completed jobs
-    if (durationInSeconds === null || durationInSeconds === undefined) {
-      // Map of possible end timestamps we may get back from API
-      const endTs = job?.completedAt || job?.endedAt || job?.finishedAt || job?.lastUpdated || job?.dateTime;
-      const startTs = job?.startedAt || job?.createdAt || job?.date || job?.started;
-
-      // Failed, error, or only files uploaded: show dash
-      if (
-        jobStatus === 'FILES-UPLOADED' ||
-        jobStatus === 'FAILED' ||
-        jobStatus === 'ERROR' ||
-        jobStatus === 'FAILURE' ||
-        jobStatus === 'FAILED-STUCK'
-      ) {
-        return '-';
-      }
-
-      // If completed and we have timestamps, compute duration
-      if ((jobStatus === 'SUCCESS' || jobStatus === 'COMPLETED') && startTs && endTs) {
-        const start = new Date(startTs).getTime();
-        const end = new Date(endTs).getTime();
-        const seconds = Math.max(0, Math.round((end - start) / 1000));
-        if (seconds < 60) {
-          return `${seconds}s`;
-        }
-        if (seconds < 3600) {
-          return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-        }
-        return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-      }
-
-      // If running or processing, show in-progress
-      if (
-        jobStatus === 'RUNNING' ||
-        jobStatus === 'IN-PROGRESS' ||
-        jobStatus === 'PROCESSING' ||
-        jobStatus === 'PENDING' ||
-        jobStatus === 'QUEUED'
-      ) {
-        return 'In progress';
-      }
-
-      // Otherwise we cannot compute
-      return '-';
-    }
-
-    // Provided by API: normal formatting
-    if (durationInSeconds < 1) return '<1s';
-    if (durationInSeconds < 0) return '-';
-    if (durationInSeconds < 60) return `${Math.round(durationInSeconds)}s`;
-    if (durationInSeconds < 3600) {
-      const minutes = Math.floor(durationInSeconds / 60);
-      const seconds = Math.round(durationInSeconds % 60);
-      return `${minutes}m ${seconds}s`;
-    }
-    const hours = Math.floor(durationInSeconds / 3600);
-    const minutes = Math.floor((durationInSeconds % 3600) / 60);
-    return `${hours}h ${minutes}m`;
-  };
+  // Duration formatting centralised in utils/jobStatus.js via formatDuration
 
   // Render status badge
   const renderStatusBadge = (job) => {
-    const status = getDisplayStatusUpper(job) || 'COMPLETED';
+    const status = getDisplayStatusUpper(job) || 'UNKNOWN';
 
     // Check if job has file uploads
     const hasFileUploads = job.fileUploads || job.files || (job.input && (job.input.files || job.input.fileUploads));
