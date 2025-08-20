@@ -132,7 +132,48 @@ const ChatFileUpload = ({
       </Modal.Header>
       <Modal.Body data-testid="upload-modal-body">
         <S3UploadModule
-          task={{ id: 'chatFileUpload' }}
+          task={{
+            id: 'chatFileUpload',
+            parameters: {
+              allowedFileTypes: [
+                // PDF
+                'application/pdf',
+                // Documents
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
+                'text/plain',
+                // Spreadsheets
+                'text/csv',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
+                // Images
+                'image/jpeg',
+                'image/png',
+                'image/tiff',
+                // Audio/Video
+                'audio/mpeg',
+                'video/mp4',
+                'audio/wav',
+                'audio/flac',
+                'audio/ogg',
+                'audio/amr',
+                'video/webm',
+                'audio/mp4',
+                'audio/x-m4a',
+                // Markdown
+                'text/markdown',
+                // Other text files
+                'application/json',
+                'text/xml',
+                'application/xml',
+                'text/html',
+                'text/x-python',
+                'application/x-python-code',
+                'text/javascript',
+                'application/javascript',
+                'text/typescript',
+                'application/typescript',
+              ],
+            },
+          }}
           onComplete={handleUploadComplete}
           onNotComplete={() => {}}
           onChange={() => {}}
@@ -143,9 +184,10 @@ const ChatFileUpload = ({
             <li>PDF (pdf)</li>
             <li>Documents (docx, txt)</li>
             <li>Spreadsheets (csv, xlsx)</li>
-            <li>Images (jpg, jpeg, png)</li>
+            <li>Images (jpg, jpeg, png, tiff)</li>
+            <li>Audio/Video (mp3, mp4, wav, flac, ogg, amr, webm, m4a)</li>
             <li>Markdown (md)</li>
-            <li>Other (json, xml, html, tiff, py, js, ts)</li>
+            <li>Other (json, xml, html, py, js, ts)</li>
           </ul>
         </div>
       </Modal.Body>
