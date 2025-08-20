@@ -347,22 +347,44 @@ const JobHistoryManager = () => {
     setCurrentPage(1); // Reset to first page when search changes
   };
 
+  // Display-only status override: mark long-running running jobs as failed (stuck)
+  const STALE_RUNNING_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
+  const getDisplayStatusUpper = (job) => {
+    const raw = (job?.status || '').toUpperCase();
+    const startedAt = job?.startedAt || job?.started || job?.dateTime || job?.createdAt || job?.date;
+    const isRunningState = ['RUNNING', 'IN-PROGRESS', 'PROCESSING', 'PENDING', 'QUEUED'].includes(raw);
+    if (isRunningState && startedAt) {
+      const start = new Date(startedAt);
+      if (!Number.isNaN(start.getTime())) {
+        const age = Date.now() - start.getTime();
+        if (age > STALE_RUNNING_THRESHOLD_MS) {
+          return 'FAILED-STUCK'; // display-only failure for stale running jobs
+        }
+      }
+    }
+    // Fallback: if it's a running state and API provided an excessively large duration, mark as failed-stuck
+    if (isRunningState && typeof job?.duration === 'number' && job.duration * 1000 > STALE_RUNNING_THRESHOLD_MS) {
+      return 'FAILED-STUCK';
+    }
+    return raw || 'COMPLETED';
+  };
+
   // Filter and sort jobs
   const filteredJobs = jobs
     .filter((job) => {
       // Apply status filter
       if (filterStatus !== 'all') {
-        const status = job.status || 'completed';
-        if (filterStatus === 'completed' && status !== 'SUCCESS' && status !== 'completed') {
+        const statusUpper = getDisplayStatusUpper(job);
+        if (filterStatus === 'completed' && statusUpper !== 'SUCCESS' && statusUpper !== 'COMPLETED') {
           return false;
         }
-        if (filterStatus === 'running' && status !== 'running' && status !== 'in-progress' && status !== 'PROCESSING') {
+        if (filterStatus === 'running' && !['RUNNING', 'IN-PROGRESS', 'PROCESSING'].includes(statusUpper)) {
           return false;
         }
-        if (filterStatus === 'failed' && status !== 'failed' && status !== 'error' && status !== 'FAILURE') {
+        if (filterStatus === 'failed' && !['FAILED', 'ERROR', 'FAILURE', 'FAILED-STUCK'].includes(statusUpper)) {
           return false;
         }
-        if (filterStatus === 'files-uploaded' && status !== 'files-uploaded') {
+        if (filterStatus === 'files-uploaded' && !['FILES-UPLOADED', 'FILES_UPLOADED'].includes(statusUpper)) {
           return false;
         }
       }
@@ -438,7 +460,21 @@ const JobHistoryManager = () => {
 
   // Format duration for display
   const formatDuration = (durationInSeconds, job) => {
-    const jobStatus = job?.status?.toUpperCase() || '';
+    const jobStatus = getDisplayStatusUpper(job) || '';
+
+    // If we've classified it as failed-stuck, always show dash regardless of provided duration
+    if (jobStatus === 'FAILED-STUCK') return '-';
+
+    // For any running/queued state, prefer a friendly label over raw huge durations
+    if (
+      jobStatus === 'RUNNING' ||
+      jobStatus === 'IN-PROGRESS' ||
+      jobStatus === 'PROCESSING' ||
+      jobStatus === 'PENDING' ||
+      jobStatus === 'QUEUED'
+    ) {
+      return 'In progress';
+    }
 
     // If API didn't provide duration, try to compute it for completed jobs
     if (durationInSeconds === null || durationInSeconds === undefined) {
@@ -451,7 +487,8 @@ const JobHistoryManager = () => {
         jobStatus === 'FILES-UPLOADED' ||
         jobStatus === 'FAILED' ||
         jobStatus === 'ERROR' ||
-        jobStatus === 'FAILURE'
+        jobStatus === 'FAILURE' ||
+        jobStatus === 'FAILED-STUCK'
       ) {
         return '-';
       }
@@ -501,7 +538,7 @@ const JobHistoryManager = () => {
 
   // Render status badge
   const renderStatusBadge = (job) => {
-    const status = job.status || 'completed';
+    const status = getDisplayStatusUpper(job) || 'COMPLETED';
 
     // Check if job has file uploads
     const hasFileUploads = job.fileUploads || job.files || (job.input && (job.input.files || job.input.fileUploads));
@@ -523,6 +560,7 @@ const JobHistoryManager = () => {
         case 'FAILURE':
         case 'FAILED':
         case 'ERROR':
+        case 'FAILED-STUCK':
           return { variant: 'danger', text: 'Failed' };
 
         // Processing states
@@ -562,21 +600,23 @@ const JobHistoryManager = () => {
 
   // Render action button
   const renderActionButton = (job) => {
-    const status = job.status || 'completed';
+    const statusUpper = getDisplayStatusUpper(job);
 
     return (
       <Button
         variant={(() => {
-          switch (status) {
-            case 'running':
-            case 'in-progress':
+          switch (statusUpper) {
+            case 'RUNNING':
+            case 'IN-PROGRESS':
             case 'PROCESSING':
               return 'primary';
-            case 'files-uploaded':
+            case 'FILES-UPLOADED':
+            case 'FILES_UPLOADED':
               return 'primary';
-            case 'failed':
-            case 'error':
+            case 'FAILED':
+            case 'ERROR':
             case 'FAILURE':
+            case 'FAILED-STUCK':
               return 'primary';
             default:
               return 'primary';
@@ -596,16 +636,18 @@ const JobHistoryManager = () => {
         ) : (
           <>
             {(() => {
-              switch (status) {
-                case 'running':
-                case 'in-progress':
+              switch (statusUpper) {
+                case 'RUNNING':
+                case 'IN-PROGRESS':
                 case 'PROCESSING':
                   return <>View Progress</>;
-                case 'files-uploaded':
+                case 'FILES-UPLOADED':
+                case 'FILES_UPLOADED':
                   return <>View Files</>;
-                case 'failed':
-                case 'error':
+                case 'FAILED':
+                case 'ERROR':
                 case 'FAILURE':
+                case 'FAILED-STUCK':
                   return <>View Error</>;
                 default:
                   return <>View Results</>;
@@ -765,7 +807,7 @@ const JobHistoryManager = () => {
                       </thead>
                       <tbody>
                         {currentJobs.map((job) => (
-                          <tr key={job.jobId}>
+                          <tr key={`${job.appId}-${job.jobId}`}>
                             <td>
                               <div className="text-muted">
                                 {manifestApps.find((app) => app.id === job.appId)?.appName || job.appId || 'Unknown'}
