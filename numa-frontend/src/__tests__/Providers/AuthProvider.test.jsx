@@ -26,6 +26,11 @@ const TEST_TOKENS = {
         exp: 1640995200,
         sub: 'test-user',
         'cognito:groups': [],
+        'https://aws.amazon.com/tags': {
+          principal_tags: {
+            Groups: ['admin'],
+          },
+        },
       },
     },
   },
@@ -39,6 +44,11 @@ const TEST_TOKENS = {
         exp: 9999999999,
         sub: 'test-user',
         'cognito:groups': [],
+        'https://aws.amazon.com/tags': {
+          principal_tags: {
+            Groups: ['admin'],
+          },
+        },
       },
     },
   },

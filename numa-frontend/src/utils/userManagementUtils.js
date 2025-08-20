@@ -9,6 +9,7 @@ import {
   AdminRemoveUserFromGroupCommand,
   DescribeUserPoolCommand,
   ListUsersInGroupCommand,
+  AdminUserGlobalSignOutCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { DeleteUserCommand, GetUserCommand } from '@aws-sdk/client-qbusiness';
 
@@ -195,6 +196,36 @@ export class UserManagementUtils {
       });
 
       await this.cognitoClient.send(command);
+
+      // Globally sign out the user to invalidate their tokens
+      let signOutSuccess = false;
+      let signOutError = null;
+
+      try {
+        const globalSignOutCommand = new AdminUserGlobalSignOutCommand({
+          UserPoolId: userPoolId,
+          Username: username,
+        });
+        await this.cognitoClient.send(globalSignOutCommand);
+        signOutSuccess = true;
+        console.log(`Successfully signed out user ${username} globally`);
+      } catch (error) {
+        signOutError = error;
+        console.error(`Failed to globally sign out user ${username}:`, error);
+
+        // For admin group removal, this is critical - throw the error
+        if (groupName === 'admin') {
+          throw new Error(
+            `User removed from ${groupName} group but failed to force logout: ${error.message}. The user may still have elevated privileges until they manually log out.`,
+          );
+        }
+      }
+
+      return {
+        success: true,
+        signOutSuccess,
+        signOutError: signOutError?.message,
+      };
     } catch (error) {
       console.error(`Error removing user ${username} from group ${groupName}:`, error);
       throw error;
@@ -226,35 +257,47 @@ export class UserManagementUtils {
     }
   }
 
+  /**
+   * Deletes a user from both Q Business and Cognito services
+   * Handles cases where user may exist in one or both services
+   * Q Business is conditionally deployed, so deletion is attempted only if provisioned
+   * @param {string} username - Username/email of the user to delete
+   * @param {Function} fetchUsers - Function to refresh user list after deletion
+   * @param {Function} setUsersError - Function to set error state
+   * @param {Function} setDeletingUser - Function to set deleting user state
+   * @param {Object} qClient - Q Business client instance (may be null if not provisioned)
+   */
   async deleteUser(username, fetchUsers, setUsersError, setDeletingUser, qClient) {
     try {
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-      const applicationId = window.sessionStorage.getItem('Q_APPLICATION_ID');
-      const provisionQResources = window.sessionStorage.getItem('PROVISION_Q_RESOURCES') === 'true';
+      const APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
+      const PROVISION_Q_RESOURCES = window.sessionStorage.getItem('PROVISION_Q_RESOURCES') === 'true';
 
       // Only attempt Q user deletion if Q resources are provisioned and we have a Q application ID
-      if (provisionQResources && applicationId && qClient) {
+      if (PROVISION_Q_RESOURCES && APPLICATION_ID && qClient) {
         try {
           const getQCommand = new GetUserCommand({
-            applicationId,
+            applicationId: APPLICATION_ID,
             userId: username,
           });
           await qClient.send(getQCommand);
 
+          // If user exists, delete them from Q Business
           const deleteQCommand = new DeleteUserCommand({
-            applicationId,
+            applicationId: APPLICATION_ID,
             userId: username,
           });
           await qClient.send(deleteQCommand);
         } catch (err) {
           if (err.name === 'ResourceNotFoundException' || err.$metadata?.httpStatusCode === 404) {
-            console.warn(`Q user ${username} not found, skipping Q get/delete`);
+            console.warn(`Q Business user ${username} not found, skipping Q deletion`);
           } else {
+            console.error(`Error deleting Q Business user ${username}:`, err);
             throw err;
           }
         }
       } else {
-        console.log('Q resources not provisioned or Q client not available, skipping Q user deletion');
+        console.log('Q Business resources not provisioned or client unavailable, skipping Q user deletion');
       }
 
       // Get and delete Cognito user, skipping if not found
@@ -272,8 +315,9 @@ export class UserManagementUtils {
         await this.cognitoClient.send(deleteCognitoCommand);
       } catch (err) {
         if (err.name === 'UserNotFoundException') {
-          console.warn(`Cognito user ${username} not found, skipping Cognito get/delete`);
+          console.warn(`Cognito user ${username} not found, skipping Cognito deletion`);
         } else {
+          console.error(`Error deleting Cognito user ${username}:`, err);
           throw err;
         }
       }

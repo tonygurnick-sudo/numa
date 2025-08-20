@@ -1,6 +1,17 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
 import { Container, Row, Col, Card, Button } from 'react-bootstrap';
+import { useEffect, useState } from 'react';
+
+// Hook to safely use location outside of router context
+const useSafeLocation = () => {
+  try {
+    return useLocation();
+  } catch {
+    // Return a mock location object when not in router context
+    return { pathname: '/' };
+  }
+};
 
 /**
  * Default access denied component that shows when user lacks required feature
@@ -50,10 +61,37 @@ export const FeatureWrapper = ({
   redirectToLogin = false,
   showAccessDenied = false, // Default to false to maintain existing behavior for components
 }) => {
-  const { user, loading, tokenValidationComplete } = useAuth();
+  const { user, loading, tokenValidationComplete, forceTokenValidation } = useAuth();
+  const [isValidatingTokens, setIsValidatingTokens] = useState(false);
+  const location = useSafeLocation();
+
+  // Check if user has the required feature (calculated early for hooks)
+  const hasFeature = user?.features?.includes(requiredFeature);
+
+  // Force token validation on navigation to protected routes
+  useEffect(() => {
+    const validateTokensOnNavigation = async () => {
+      // Validate tokens for any protected route that requires auth
+      if (requireAuth && forceTokenValidation) {
+        setIsValidatingTokens(true);
+        try {
+          const isValid = await forceTokenValidation();
+          if (!isValid) {
+            // forceTokenValidation already calls logout() internally if tokens are invalid
+          }
+        } catch (error) {
+          console.error('❌ FeatureWrapper: Token validation failed on navigation:', error);
+        } finally {
+          setIsValidatingTokens(false);
+        }
+      }
+    };
+
+    validateTokensOnNavigation();
+  }, [requireAuth, forceTokenValidation, location.pathname]); // Include location.pathname to trigger on navigation
 
   // Handle loading states
-  if (loading || !tokenValidationComplete) {
+  if (loading || !tokenValidationComplete || isValidatingTokens) {
     return loadingFallback;
   }
 
@@ -66,9 +104,6 @@ export const FeatureWrapper = ({
   if (!requiredFeature) {
     return children;
   }
-
-  // Check if user has the required feature
-  const hasFeature = user?.features?.includes(requiredFeature);
 
   if (!hasFeature) {
     // If a custom fallback is provided, use it

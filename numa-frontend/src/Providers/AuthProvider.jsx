@@ -14,14 +14,29 @@ import {
   InitiateAuthCommand,
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
+  GetUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { NumaChatDynamoUtils } from '../utils/DynamoDBUtils';
 import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
+import Notification from '../Components/Notification';
 
 const AuthContext = createContext(null);
 
+const MINUTE = 1000 * 60;
+
+const REFRESH_PERIOD = 5 * MINUTE;
+
 export const AuthProvider = ({ children, initialTokens }) => {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
+
+  // Token revocation notification state
+  const [tokenRevocationState, setTokenRevocationState] = useState({
+    show: false,
+    timer: null,
+  });
+
   const tokensRef = useRef(
     initialTokens || {
       accessToken: localStorage.getItem('accessToken'),
@@ -40,10 +55,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const refreshInProgressRef = useRef(false);
   const refreshPromiseRef = useRef(null);
 
+  // Ref to track previous groups for change detection
+  const previousGroupsRef = useRef(null);
+
+  // Ref to track last check/refresh time for accurate time tracking
+  const lastRefreshTimeRef = useRef(0);
+
   // Decode tokens without triggering re-renders
-  const decodeTokens = () => {
+  const decodeTokens = async () => {
     if (!tokensRef.current.idToken) {
-      console.log('❌ No ID token found');
+      console.error('❌ No ID token found');
       setUser(null);
       return;
     }
@@ -72,20 +93,9 @@ export const AuthProvider = ({ children, initialTokens }) => {
       }
 
       // Replace manual group and feature extraction with utility function
-      const { groups, features } = extractGroupsAndFeatures(decodedTokensRef.current.idToken);
-      setUser((prev) => ({
-        ...prev,
-        groups,
-        features: features || [],
-      }));
+      const { groups } = extractGroupsAndFeatures(decodedTokensRef.current.idToken, setAuthError);
 
-      // Log the actual tokens for debugging
-      console.debug('Token status:', {
-        hasAccessToken: !!accessToken,
-        hasIdToken: !!idToken,
-        decodedAccess: !!decodedTokensRef.current.accessToken,
-        decodedId: !!decodedTokensRef.current.idToken,
-      });
+      detectAndHandleGroupChanges(groups);
     } catch (error) {
       console.error('Error in decodeTokens:', error);
       decodedTokensRef.current = { accessToken: null, idToken: null };
@@ -93,7 +103,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   // Update tokens without triggering re-renders
-  const updateTokens = (newTokens) => {
+  const updateTokens = async (newTokens) => {
     if (newTokens.accessToken) {
       tokensRef.current.accessToken = newTokens.accessToken;
       localStorage.setItem('accessToken', newTokens.accessToken);
@@ -107,11 +117,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
       localStorage.setItem('refreshToken', newTokens.refreshToken);
     }
     // Update decoded tokens after updating the tokens
-    decodeTokens();
+    await decodeTokens();
   };
 
   const [qAppsClient, setQAppsClient] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [qBusinessClient, setQBusinessClient] = useState(null);
   const [bedrockRuntimeClient, setBedrockRuntimeClient] = useState(null);
   const [bedrockAgentRuntimeClient, setBedrockAgentRuntimeClient] = useState(null);
@@ -126,6 +135,120 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const currentTime = Math.floor(Date.now() / 1000);
     return decodedToken.exp <= currentTime + 300;
   };
+
+  // Check if token is revoked by validating with Cognito
+  const validateTokenWithCognito = async (accessToken) => {
+    if (!accessToken) {
+      console.error('🚫 validateTokenWithCognito: No access token provided');
+      return false;
+    }
+
+    try {
+      const REGION = window.sessionStorage.getItem('REGION');
+      if (!REGION) {
+        console.error('🚫 validateTokenWithCognito: No REGION in session storage');
+        return false;
+      }
+
+      const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
+
+      // Use GetUser to validate the token - this will fail if token is revoked
+      const getUserCommand = new GetUserCommand({
+        AccessToken: accessToken,
+      });
+
+      await cognitoClient.send(getUserCommand);
+      return true;
+    } catch (error) {
+      console.warn(
+        '🚫 validateTokenWithCognito: Token validation failed with Cognito:',
+        error.message,
+        'Error name:',
+        error.name,
+      );
+
+      // Common errors when token is revoked or invalid
+      if (
+        error.name === 'NotAuthorizedException' ||
+        error.name === 'UserNotFoundException' ||
+        error.name === 'TokenRefreshException'
+      ) {
+        console.error('🚫 validateTokenWithCognito: Token is invalid/revoked, returning false');
+        return false;
+      }
+
+      // For other errors, assume token is still valid to avoid false positives
+      console.warn('⚠️ validateTokenWithCognito: Unknown error, assuming token is still valid');
+      return true;
+    }
+  };
+
+  // Group change detection and immediate action
+  const detectAndHandleGroupChanges = async (currentGroups) => {
+    if (!previousGroupsRef.current) {
+      previousGroupsRef.current = currentGroups;
+      return false;
+    }
+
+    const previousGroups = previousGroupsRef.current;
+    const hasAdmin = currentGroups.includes('admin');
+    const hadAdmin = previousGroups.includes('admin');
+
+    if (hasAdmin !== hadAdmin) {
+      // Update previousGroupsRef immediately to prevent repeated detection
+      previousGroupsRef.current = currentGroups;
+
+      if (hasAdmin) {
+        // Promoted - refresh tokens to get new permissions immediately
+        console.log('🔄 User promoted to admin, refreshing tokens for new permissions');
+        console.log('Previous groups:', previousGroups);
+        console.log('Current groups from token:', currentGroups);
+        await refreshTokens();
+
+        // Log the user state after refresh to verify the promotion took effect
+        setTimeout(() => {
+          console.log('📊 User state after promotion refresh:', {
+            userGroups: user?.groups,
+            userFeatures: user?.features,
+            hasAdminGroup: user?.groups?.includes('admin'),
+            totalFeatures: user?.features?.length,
+          });
+        }, 100);
+      } else {
+        // Demoted - logout immediately
+        console.log('🚪 User demoted from admin, logging out immediately');
+        logout();
+      }
+      return true; // Group change was handled
+    }
+
+    return false; // No group change
+  };
+
+  // Token revocation notification functions
+  const showTokenRevocationNotification = useCallback(() => {
+    setTokenRevocationState({
+      show: true,
+      timer: null,
+    });
+
+    // Auto-dismiss after 5 seconds
+    const timer = setTimeout(() => {
+      setTokenRevocationState((prev) => ({ ...prev, show: false }));
+    }, 5000);
+
+    setTokenRevocationState((prev) => ({ ...prev, timer }));
+  }, []);
+
+  const dismissTokenRevocationNotification = useCallback(() => {
+    if (tokenRevocationState.timer) {
+      clearTimeout(tokenRevocationState.timer);
+    }
+    setTokenRevocationState({
+      show: false,
+      timer: null,
+    });
+  }, [tokenRevocationState.timer]);
 
   const isValidEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -186,7 +309,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const refreshTokens = async () => {
     // Prevent concurrent refresh operations
     if (refreshInProgressRef.current) {
-      console.log('🔄 Token refresh already in progress, waiting for completion...');
       return refreshPromiseRef.current;
     }
 
@@ -194,7 +316,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     const refreshOperation = async () => {
       try {
-        console.log('🔄 Attempting to refresh tokens...');
         const refreshToken = tokensRef.current.refreshToken;
         const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
         const REGION = window.sessionStorage.getItem('REGION');
@@ -242,7 +363,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         };
 
         // Update localStorage and decode tokens
-        updateTokens({
+        await updateTokens({
           accessToken: AccessToken,
           idToken: IdToken,
           refreshToken,
@@ -251,6 +372,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
         // Decode the new tokens to update the decoded token references
         const newDecodedAccessToken = jwtDecode(AccessToken);
         const newDecodedIdToken = jwtDecode(IdToken);
+
+        const { groups, features } = extractGroupsAndFeatures(newDecodedIdToken, setAuthError);
 
         // Update the user state object with the refreshed tokens
         // This ensures all AWS clients will be reinitialized with the new tokens
@@ -265,21 +388,11 @@ export const AuthProvider = ({ children, initialTokens }) => {
             accessToken: newDecodedAccessToken,
             idToken: newDecodedIdToken,
           },
-        }));
-
-        // Use the utility function to extract groups and features
-        const { groups, features } = extractGroupsAndFeatures(newDecodedIdToken);
-        setUser((prev) => ({
-          ...prev,
           groups,
-          features: features || [],
+          features,
         }));
 
-        // Add console log to debug features initialization
-        console.log('Decoded groups:', groups);
-        console.log('Extracted features:', features);
-
-        console.log('✅ Tokens refreshed successfully');
+        lastRefreshTimeRef.current = Date.now();
         return true;
       } catch (error) {
         console.error('❌ Error refreshing tokens:', error);
@@ -298,14 +411,61 @@ export const AuthProvider = ({ children, initialTokens }) => {
   // Centralized token validation function
   const ensureValidTokens = async () => {
     const decodedIdToken = decodedTokensRef.current.idToken;
+    const accessToken = tokensRef.current.accessToken;
+
+    // Check expiration first (quick local check)
     if (!decodedIdToken || isTokenExpired(decodedIdToken)) {
-      console.log('Tokens expired or invalid, refreshing before client initialization...');
       const refreshed = await refreshTokens();
       if (!refreshed) {
         console.error('Failed to refresh tokens for client initialization');
         return false;
       }
     }
+
+    // Periodically validate against Cognito (check revocation)
+    // Only do this every 30 seconds to avoid excessive API calls
+    const now = Date.now();
+    const lastValidation = localStorage.getItem('lastTokenValidation');
+    const shouldValidate = !lastValidation || now - parseInt(lastValidation) > 30000;
+
+    if (shouldValidate && accessToken) {
+      const isValid = await validateTokenWithCognito(accessToken);
+      if (!isValid) {
+        console.error('Token has been revoked, forcing logout');
+        showTokenRevocationNotification();
+        logout();
+        return false;
+      }
+      localStorage.setItem('lastTokenValidation', now.toString());
+    }
+
+    return true;
+  };
+
+  // Force immediate token validation (bypasses cache)
+  const forceTokenValidation = async () => {
+    if (!user) {
+      console.error('🚫 forceTokenValidation: No user, returning false');
+      return false;
+    }
+
+    const accessToken = tokensRef.current.accessToken;
+    if (!accessToken) {
+      console.error('🚫 forceTokenValidation: No access token, returning false');
+      return false;
+    }
+
+    const isValid = await validateTokenWithCognito(accessToken);
+
+    if (!isValid) {
+      console.error('Token has been revoked during forced validation, forcing logout');
+      showTokenRevocationNotification();
+      logout();
+      return false;
+    }
+
+    // Update validation timestamp
+    localStorage.setItem('lastTokenValidation', Date.now().toString());
     return true;
   };
 
@@ -340,9 +500,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
       return;
     }
 
-    // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup =
-      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
+    // Get user's actual groups from principal tags
+    const userGroups = getGroupsFromToken(user.decoded_tokens.idToken);
+    if (!userGroups || userGroups.length === 0) {
+      console.error('No groups found for user - cannot initialize QBusinessClient');
+      return;
+    }
+
+    const userGroup = userGroups[0];
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -361,7 +526,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         roleSessionName: 'numa-qbusiness-client',
         roleArn: roleArn,
         webIdentityToken: idToken,
-        durationSeconds: 3600,
+        durationSeconds: 900,
       });
 
       const newClient = new QBusinessClient({
@@ -395,9 +560,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
       return;
     }
 
-    // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup =
-      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
+    // Get user's actual groups from principal tags
+    const userGroups = getGroupsFromToken(user.decoded_tokens.idToken);
+    if (!userGroups || userGroups.length === 0) {
+      console.error('No groups found for user - cannot initialize BedrockRuntimeClient');
+      return;
+    }
+
+    const userGroup = userGroups[0];
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -416,7 +586,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         roleSessionName: 'numa-bedrock-client',
         roleArn: roleArn,
         webIdentityToken: idToken,
-        durationSeconds: 3600,
+        durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
       })();
 
       // If BEDROCK_ACCOUNT has been set, we should use another accounts Bedrock, so assume into there.
@@ -462,9 +632,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
       return;
     }
 
-    // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup =
-      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
+    // Get user's actual groups from principal tags
+    const userGroups = getGroupsFromToken(user.decoded_tokens.idToken);
+    if (!userGroups || userGroups.length === 0) {
+      console.error('No groups found for user - cannot initialize BedrockAgentRuntimeClient');
+      return;
+    }
+
+    const userGroup = userGroups[0];
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -483,7 +658,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         roleSessionName: 'numa-bedrock-agent-runtime-client',
         roleArn: roleArn,
         webIdentityToken: idToken,
-        durationSeconds: 3600,
+        durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
       });
 
       const newClient = new BedrockAgentRuntimeClient({
@@ -515,9 +690,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
       return;
     }
 
-    // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup =
-      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
+    // Get user's actual groups from principal tags
+    const userGroups = getGroupsFromToken(user.decoded_tokens.idToken);
+    if (!userGroups || userGroups.length === 0) {
+      console.error('No groups found for user - cannot initialize BedrockAgentClient');
+      return;
+    }
+
+    const userGroup = userGroups[0];
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -536,7 +716,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         roleSessionName: 'numa-bedrock-agent-client',
         roleArn: roleArn,
         webIdentityToken: idToken,
-        durationSeconds: 3600,
+        durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
       });
 
       const newClient = new BedrockAgentClient({
@@ -573,9 +753,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
       return;
     }
 
-    // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup =
-      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
+    // Get user's actual groups from principal tags
+    const userGroups = getGroupsFromToken(user.decoded_tokens.idToken);
+    if (!userGroups || userGroups.length === 0) {
+      console.error('No cognito groups found for user - cannot initialize DynamoDBClient');
+      return;
+    }
+
+    const userGroup = userGroups[0];
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -629,9 +814,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
       return;
     }
 
-    // Get role ARN instead of identity pool ID, defaulting to standard group
-    const userGroup =
-      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
+    // Get user's actual groups from principal tags
+    const userGroups = getGroupsFromToken(user.decoded_tokens.idToken);
+    if (!userGroups || userGroups.length === 0) {
+      console.error('No groups found for user - cannot initialize QAppsClient');
+      return;
+    }
+
+    const userGroup = userGroups[0];
     const roleArn = GROUPS[userGroup]?.roleArn;
 
     if (!roleArn) {
@@ -706,24 +896,64 @@ export const AuthProvider = ({ children, initialTokens }) => {
   ]);
 
   const checkAndRefreshTokens = async () => {
-    const { accessToken } = tokensRef.current;
-    if (!accessToken) {
-      console.log('No access token available');
+    const { accessToken, idToken, refreshToken } = tokensRef.current;
+    if (!accessToken || !idToken || !refreshToken) {
+      console.debug('No access token, ID token, or refresh token available');
       return false;
     }
 
     try {
-      const decodedAccessToken = jwtDecode(accessToken);
-      if (isTokenExpired(decodedAccessToken)) {
-        console.log('🕒 Token check: Token expired, attempting refresh...');
-        const refreshed = await refreshTokens();
-        if (!refreshed) {
+      const now = Date.now();
+
+      // Check if tokens are actually expired or will expire soon
+      const isAccessTokenExpired = isTokenExpired(decodedTokensRef.current.accessToken);
+      const isIdTokenExpired = isTokenExpired(decodedTokensRef.current.idToken);
+
+      // Check token revocation periodically (every 2 minutes during regular checks)
+      const lastValidation = localStorage.getItem('lastTokenValidation');
+      const shouldValidateRevocation = !lastValidation || now - parseInt(lastValidation) > 120000;
+
+      if (shouldValidateRevocation) {
+        const isValid = await validateTokenWithCognito(accessToken);
+        if (!isValid) {
+          console.error('Token has been revoked during periodic check, forcing logout');
+          showTokenRevocationNotification();
           logout();
           return false;
         }
+        localStorage.setItem('lastTokenValidation', now.toString());
+      }
+
+      // Check for group changes every 30 seconds by refreshing tokens
+      const lastGroupCheck = localStorage.getItem('lastGroupCheck');
+      const shouldCheckGroups = !lastGroupCheck || now - parseInt(lastGroupCheck) > 30000;
+
+      // Refresh if tokens expired OR if it's time to check for group changes
+      const needsRefresh = isAccessTokenExpired || isIdTokenExpired || shouldCheckGroups;
+
+      if (!needsRefresh) {
+        // Update last check time even when not refreshing (for accurate time tracking)
+        lastRefreshTimeRef.current = now;
         return true;
       }
 
+      if (isAccessTokenExpired || isIdTokenExpired) {
+        console.debug('🔄 Token refresh: Tokens expired');
+      } else if (shouldCheckGroups) {
+        console.log('🔄 Periodic group check: Refreshing tokens to check for group changes');
+        console.log('Current user groups before check:', user?.groups);
+        localStorage.setItem('lastGroupCheck', now.toString());
+      }
+
+      const refreshed = await refreshTokens();
+      if (refreshed) {
+        lastRefreshTimeRef.current = now;
+      }
+
+      if (!refreshed) {
+        logout();
+        return false;
+      }
       return true;
     } catch (error) {
       console.error('Error decoding token during check:', error);
@@ -732,20 +962,15 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   useEffect(() => {
-    // Skip refresh interval in test mode
     if (!user || initialTokens) return;
 
-    // Check tokens every 10 seconds
-    const intervalId = setInterval(checkAndRefreshTokens, 10 * 1000);
-
-    // Also check immediately when this effect runs
-    checkAndRefreshTokens();
+    // Check tokens every REFRESH_PERIOD
+    const intervalId = setInterval(checkAndRefreshTokens, REFRESH_PERIOD);
 
     return () => clearInterval(intervalId);
   }, [user]);
 
   const loadUserFromTokens = async () => {
-    console.log('🔍 Checking token status...');
     const accessToken = localStorage.getItem('accessToken');
     const idToken = localStorage.getItem('idToken');
     const refreshToken = localStorage.getItem('refreshToken');
@@ -758,7 +983,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     };
 
     // Decode tokens after updating tokensRef
-    decodeTokens();
+    await decodeTokens();
 
     if (refreshToken) {
       if (
@@ -767,25 +992,24 @@ export const AuthProvider = ({ children, initialTokens }) => {
         isTokenExpired(decodedTokensRef.current.accessToken) ||
         isTokenExpired(decodedTokensRef.current.idToken)
       ) {
-        console.log('⚠️ Tokens expired or missing, attempting refresh...');
+        console.debug('⚠️ Tokens expired, attempting refresh...');
         const refreshed = await refreshTokens();
         if (!refreshed) {
-          console.log('❌ Token refresh failed, logging out');
+          console.error('❌ Token refresh failed, logging out');
           setUser(null);
         }
       } else {
-        console.log('✅ Tokens are valid');
         const decodedAccessToken = decodedTokensRef.current.accessToken;
         const decodedIdToken = decodedTokensRef.current.idToken;
 
         if (!decodedIdToken) {
-          console.log('❌ No decoded ID token found');
+          console.error('❌ No decoded ID token found');
           setUser(null);
           return;
         }
 
         // Use the utility function to extract groups and features
-        const { groups, features } = extractGroupsAndFeatures(decodedIdToken);
+        const { groups, features } = extractGroupsAndFeatures(decodedIdToken, setAuthError);
         setUser({
           tokens: {
             accessToken,
@@ -801,7 +1025,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         });
       }
     } else {
-      console.log('❌ No refresh token found');
+      console.error('❌ No refresh token found');
       setUser(null);
     }
     setLoading(false);
@@ -821,10 +1045,29 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   const logout = () => {
+    console.log('🚪 logout: Starting logout process');
+
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('idToken');
+    localStorage.removeItem('lastTokenValidation');
+    tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
+    decodedTokensRef.current = { accessToken: null, idToken: null };
+    previousGroupsRef.current = null;
+
+    // Clear all AWS clients to force re-authentication
+    setQBusinessClient(null);
+    setQAppsClient(null);
+    setBedrockRuntimeClient(null);
+    setBedrockAgentRuntimeClient(null);
+    setBedrockAgentClient(null);
+    setNumaChatBedrockUtils(null);
+    setDynamoDBClient(null);
+    setNumaChatDynamoUtils(null);
+
     setUser(null);
+    setAuthError(null);
+    setLoading(false);
   };
 
   const performSrpAuthentication = async (username, password) => {
@@ -887,6 +1130,9 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
   const login = async (username, password) => {
     try {
+      // Clear any previous auth errors when attempting login
+      setAuthError(null);
+
       const { response } = await performSrpAuthentication(username, password);
 
       if (response.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
@@ -951,8 +1197,27 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const decodedAccessToken = jwtDecode(tokens.AccessToken);
     const decodedIdToken = jwtDecode(tokens.IdToken);
 
+    // Update decodedTokensRef to prevent unnecessary refresh in ensureValidTokens
+    decodedTokensRef.current = {
+      accessToken: decodedAccessToken,
+      idToken: decodedIdToken,
+    };
+
+    // Debug: Log token contents to understand what claims are available
+    console.log('🔍 Login Success - Token debugging:', {
+      decodedAccessTokenKeys: Object.keys(decodedAccessToken),
+      decodedIdTokenKeys: Object.keys(decodedIdToken),
+      accessTokenGroups: decodedAccessToken['cognito:groups'],
+      idTokenGroups: decodedIdToken['cognito:groups'],
+      accessTokenUsername: decodedAccessToken['username'],
+      idTokenUsername: decodedIdToken['cognito:username'] || decodedIdToken['username'],
+      accessTokenSub: decodedAccessToken['sub'],
+      idTokenSub: decodedIdToken['sub'],
+    });
+
     // Use the utility function to extract groups and features
-    const { groups, features } = extractGroupsAndFeatures(decodedIdToken);
+    const { groups, features } = extractGroupsAndFeatures(decodedIdToken, setAuthError);
+
     setUser((prev) => ({
       ...prev,
       tokens: {
@@ -1033,24 +1298,26 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const REGION = window.sessionStorage.getItem('REGION');
 
     if (!user) {
-      console.log('No user found');
+      console.debug('No user found');
       return null;
     }
 
-    // Use the same group selection logic as other functions
+    // Get user's actual Cognito group - no defaulting to 'standard'
     const groups = JSON.parse(window.sessionStorage.getItem('GROUPS')) || {};
-    const userGroup =
-      (user.decoded_tokens.idToken['cognito:groups'] && user.decoded_tokens.idToken['cognito:groups'][0]) || 'standard';
+    const cognitoGroups = getGroupsFromToken(user.decoded_tokens.idToken);
+
+    // Check if user has the features and proper cognito groups
+    // If there are no features or groups, block the request since we need to wait until the user has features
+    if (user.features.length === 0 || !cognitoGroups || cognitoGroups.length === 0) {
+      console.debug('No features or cognito groups found:', { features: user.features, cognitoGroups });
+      return null;
+    }
+
+    const userGroup = cognitoGroups[0];
     const roleArn = groups[userGroup]?.roleArn;
 
-    // Check if user has the features
-    // If there are no features, block the request since we need to wait until the user has features
-    if (user.features.length === 0 || !roleArn) {
-      console.log('User features:', user.features);
-      console.log('Role ARN:', roleArn);
-      console.log('User group:', userGroup);
-      console.log('Available groups:', Object.keys(groups));
-      console.log('No features found or role ARN not found');
+    if (!roleArn) {
+      console.debug('No role ARN found for user group:', { userGroup, availableGroups: Object.keys(groups) });
       return null;
     }
 
@@ -1066,8 +1333,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       const willExpireSoon = decodedIdToken?.exp && decodedIdToken.exp <= currentTime + 20;
 
       if (!decodedIdToken || willExpireSoon) {
-        console.log('Token expired or will expire soon, token time is:', decodedIdToken?.exp);
-        console.log('🔄 Refreshing tokens before getting identity pool credentials...');
+        console.debug('Refreshing tokens before getting credentials');
         const refreshed = await refreshTokens();
         if (!refreshed) {
           console.error('Failed to refresh tokens for identity pool credentials');
@@ -1085,7 +1351,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         roleSessionName: 'numa-frontend',
         roleArn: roleArn,
         webIdentityToken: idToken,
-        durationSeconds: 3600,
+        durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
       })();
 
       return credentials;
@@ -1099,6 +1365,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     isAuthenticated: !!user,
     user,
     loading,
+    authError,
     tokenValidationComplete,
     login,
     logout,
@@ -1107,6 +1374,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     getAccessToken,
     getUserInfo,
     checkAndRefreshTokens,
+    forceTokenValidation,
     qBusinessClient,
     qAppsClient,
     bedrockRuntimeClient,
@@ -1120,25 +1388,36 @@ export const AuthProvider = ({ children, initialTokens }) => {
     getCredentials,
   };
 
-  useEffect(() => {
-    if (user) {
-      // Use the utility function in useEffect
-      const { groups, features } = extractGroupsAndFeatures(user.decoded_tokens.idToken);
-      setUser((prev) => ({
-        ...prev,
-        groups,
-        features: features || [],
-      }));
-    }
-  }, [loading]);
+  // Token revocation notification component
+  const TokenRevocationNotificationComponent = () => {
+    if (!tokenRevocationState.show) return null;
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    return (
+      <Notification
+        show={tokenRevocationState.show}
+        variant="warning"
+        title="Session Expired"
+        message="Your session has been terminated by an administrator. You will be redirected to the login page."
+        onDismiss={dismissTokenRevocationNotification}
+        autoDismiss={true}
+        autoDismissDelay={5000}
+      />
+    );
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      <TokenRevocationNotificationComponent />
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
+    console.error('useAuth called outside AuthProvider. Stack trace:', new Error().stack);
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
@@ -1153,23 +1432,41 @@ export const TestAuthProvider = ({ children, refreshHandler, initialTokens }) =>
   );
 };
 
+// Helper function to extract groups from principal tags
+const getGroupsFromToken = (decodedIdToken) => {
+  const awsTags = decodedIdToken?.['https://aws.amazon.com/tags'];
+  return awsTags?.principal_tags?.Groups || [];
+};
+
 const extractGroupsAndFeatures = (decodedIdToken) => {
   // Ensure GROUPS is fetched from window.sessionStorage before use
   const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS')) || {};
 
-  // Extract groups and features from the decoded token
-  // const groups = ['standard', ...(decodedIdToken['cognito:groups'] || [])];
-  let groups = [...(decodedIdToken['cognito:groups'] || [])];
+  // Extract groups from AWS Tags principal_tags.Groups
+  const groups = getGroupsFromToken(decodedIdToken);
+
+  console.log('🔍 extractGroupsAndFeatures called with:', {
+    decodedIdToken: decodedIdToken,
+    principalTagGroups: groups,
+    availableGroupsConfig: Object.keys(GROUPS),
+    allTokenClaims: Object.keys(decodedIdToken),
+  });
 
   if (!groups || groups.length === 0) {
-    // If the user is not in any groups, use the default standard group and the features for that group
-    groups = ['standard'];
+    // If the user is not in any groups, they should have no access - don't default to standard
+    console.error('🚫 No groups found for user - access denied');
+    console.error('🔍 Full decoded ID token:', decodedIdToken);
+
+    return { groups: [], features: [] };
   }
 
   const features = groups.reduce((acc, group) => {
     const groupFeatures = GROUPS[group]?.features || [];
+    console.log(`🔍 Group "${group}" features:`, groupFeatures);
     return [...acc, ...groupFeatures];
   }, []);
+
+  console.log('✅ Groups and features extracted successfully:', { groups, features });
 
   return { groups, features };
 };

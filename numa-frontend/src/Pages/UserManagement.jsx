@@ -15,7 +15,7 @@ const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState(null);
-  const { getCredentials, user, qBusinessClient } = useAuth();
+  const { getCredentials, user, qBusinessClient, forceTokenValidation } = useAuth();
   const [deletingUser, setDeletingUser] = useState(null);
   const [promotingUser, setPromotingUser] = useState(null);
   const [demotingUser, setDemotingUser] = useState(null);
@@ -233,6 +233,12 @@ const UserManagement = () => {
     setUsersError(null);
 
     try {
+      // Force immediate token validation to ensure current user still has admin privileges
+      const isValid = await forceTokenValidation();
+      if (!isValid) {
+        return; // User will be logged out by forceTokenValidation
+      }
+
       const REGION = window.sessionStorage.getItem('REGION');
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
 
@@ -272,6 +278,12 @@ const UserManagement = () => {
     setUsersError(null);
 
     try {
+      // Force immediate token validation to ensure current user still has admin privileges
+      const isValid = await forceTokenValidation();
+      if (!isValid) {
+        return; // User will be logged out by forceTokenValidation
+      }
+
       const REGION = window.sessionStorage.getItem('REGION');
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
 
@@ -281,7 +293,17 @@ const UserManagement = () => {
       }
 
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
-      await userManagementUtils.removeUserFromGroup(username, 'admin', USER_POOL_ID);
+      const result = await userManagementUtils.removeUserFromGroup(username, 'admin', USER_POOL_ID);
+
+      if (result && !result.signOutSuccess) {
+        // User was demoted but signout failed
+        setUsersError(
+          `User ${username} was demoted from admin but their session could not be terminated. They may still have admin privileges until they manually log out. Ask them to log out and log back in.`,
+        );
+      }
+
+      console.log('result', result);
+      console.log('result.signOutSuccess', result.signOutSuccess);
 
       await fetchUsers(1);
     } catch (err) {
@@ -325,6 +347,13 @@ const UserManagement = () => {
     setCreatedEmail('');
 
     try {
+      // Force immediate token validation to ensure current user still has admin privileges
+      const isValid = await forceTokenValidation();
+      if (!isValid) {
+        setLoading(false);
+        return; // User will be logged out by forceTokenValidation
+      }
+
       const REGION = window.sessionStorage.getItem('REGION');
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
       const ACCOUNT_ID = window.sessionStorage.getItem('ACCOUNT_ID');

@@ -93,6 +93,31 @@ export const mockCredentialProviders = {
   })),
 };
 
+// Mock JWT Decode
+export const mockJwtDecode = vi.fn().mockImplementation((token) => {
+  // Check if this is an expired token (based on the token content)
+  const isExpiredToken = token && token.includes('eyJleHAiOjE2NDA5OTUyMDB9');
+
+  const baseToken = {
+    exp: isExpiredToken ? 1640995200 : 9999999999, // Use expired timestamp for expired tokens
+    sub: 'test-user',
+  };
+
+  // If it's an ID token (contains more claims), add AWS tags structure
+  if (token && token.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9')) {
+    return {
+      ...baseToken,
+      'https://aws.amazon.com/tags': {
+        principal_tags: {
+          Groups: ['admin'],
+        },
+      },
+    };
+  }
+
+  return baseToken;
+});
+
 // Mock Cognito Identity Provider Client
 export const mockCognitoIdentityProviderClient = {
   CognitoIdentityProviderClient: vi.fn().mockImplementation(() => ({
@@ -116,4 +141,5 @@ export const setupAwsMocks = () => {
   vi.mock('@aws-sdk/client-qapps', () => mockQAppsClient);
   vi.mock('@aws-sdk/credential-providers', () => mockCredentialProviders);
   vi.mock('@aws-sdk/client-cognito-identity-provider', () => mockCognitoIdentityProviderClient);
+  vi.mock('jwt-decode', () => ({ jwtDecode: mockJwtDecode }));
 };
