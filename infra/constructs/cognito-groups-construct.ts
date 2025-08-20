@@ -222,6 +222,15 @@ const createFeatureSets = (props: {
     },
   ],
 
+  // Self Service Feature Set
+  selfService: [
+    {
+      effect: 'Allow',
+      actions: ['cognito-idp:GetUser'],
+      resources: [`arn:aws:cognito-idp:${props.region}:${props.callerAccountId}:userpool/${props.userPoolId}`],
+    },
+  ],
+
   // Manage Users Feature Set
   manageUsers: [
     {
@@ -238,6 +247,7 @@ const createFeatureSets = (props: {
         'cognito-idp:AdminRemoveUserFromGroup',
         'cognito-idp:ListGroups',
         'cognito-idp:DescribeUserPool',
+        'cognito-idp:AdminUserGlobalSignOut',
       ],
       resources: [`arn:aws:cognito-idp:${props.region}:${props.callerAccountId}:userpool/${props.userPoolId}`],
     },
@@ -312,7 +322,7 @@ export class CognitoGroupsConstruct extends Construct {
     // Define the groups and their feature sets
     const defaultGroups: Record<string, FeatureSetName[]> = {
       // The standard group should always be the least privileged group of all groups
-      standard: ['chat', 'useCompanyData', 'useApps', 'addToCompanyData'],
+      standard: ['chat', 'useCompanyData', 'useApps', 'addToCompanyData', 'selfService'],
       admin: FEATURE_SET_NAMES as FeatureSetName[],
     };
 

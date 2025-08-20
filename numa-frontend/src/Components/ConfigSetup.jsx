@@ -1,4 +1,4 @@
-const CONFIG_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CONFIG_CACHE_DURATION = 7 * 60 * 1000; // 7 minutes (offset from 5-minute token refresh)
 const CONFIG_TIMESTAMP_KEY = 'CONFIG_TIMESTAMP';
 const CONFIG_REQUIRED_PROPERTIES = [
   'ROLE_ARN',
@@ -27,7 +27,7 @@ const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PRO
 export const fetchConfigAddtoSession = async (forceRefresh = false) => {
   // Check if we need to refresh the config
   if (!forceRefresh && !shouldRefreshConfig()) {
-    console.log('Config is still fresh, skipping fetch');
+    console.debug('Config is still fresh, skipping fetch');
     return;
   }
 
@@ -119,7 +119,7 @@ const shouldRefreshConfig = () => {
   }
 
   if (!timestamp) {
-    console.log('No config timestamp found, needs refresh');
+    console.debug('No config timestamp found, needs refresh');
     return true;
   }
 
@@ -128,7 +128,7 @@ const shouldRefreshConfig = () => {
   const timeDifference = currentTime - lastFetchTime;
 
   if (timeDifference > CONFIG_CACHE_DURATION) {
-    console.log(`Config is ${Math.round(timeDifference / (60 * 1000))} minutes old, needs refresh`);
+    console.debug(`Config is ${Math.round(timeDifference / (60 * 1000))} minutes old, needs refresh`);
     return true;
   }
 
@@ -151,5 +151,5 @@ export const forceRefreshConfig = () => {
 // Helper function to clear config cache (useful for logout or debugging)
 export const clearConfigCache = () => {
   sessionStorage.removeItem(CONFIG_TIMESTAMP_KEY);
-  console.log('Config cache cleared');
+  console.debug('Config cache cleared');
 };

@@ -220,7 +220,6 @@ describe('ConfigSetup', () => {
       // Step 2: Try to fetch again immediately (should use cache)
       await fetchConfigAddtoSession();
       expect(mockFetch).toHaveBeenCalledTimes(1); // Still only 1 call
-      expect(console.log).toHaveBeenCalledWith('Config is still fresh, skipping fetch');
 
       // Step 3: Advance time by 2 hours (way past 1 hour cache duration)
       vi.advanceTimersByTime(CACHE_DURATION_TIMER);
