@@ -1621,7 +1621,9 @@ export function KnowledgeBaseManagement() {
                             // File name is already properly decoded
                             return (
                               <tr key={doc.documentId}>
-                                <td className="failed-document-name">{fileName}</td>
+                                <td className="failed-document-name">
+                                  <span title={fileName}>{fileName}</span>
+                                </td>
                                 <td>
                                   <div className="failed-error-message">
                                     {(doc.error?.errorMessage ?? doc.statusReason) || 'Unknown failure.'}
