@@ -120,6 +120,7 @@ export class WebCrawlerConstruct extends Construct {
         TABLE_NAME: this.crawlUrlsTable.name,
       },
       timeout: 300,
+      memorySize: 512,
     });
     this.crawlPageLambda = crawlPageLambda.lambda;
 
