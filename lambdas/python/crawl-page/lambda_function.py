@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+import pathlib
 import urllib.parse
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence, TypedDict
+from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, TypedDict
 from urllib.parse import urldefrag, urljoin, urlparse
 
 import boto3
@@ -40,6 +41,18 @@ USER_AGENT = (
 HTTP_TIMEOUT_SECONDS = 8
 MAX_CONTENT_BYTES = 5_242_880  # 5 MiB
 MAX_SAME_HOST_LINKS = 40  # Maximum number of same-host links to collect
+
+# File streaming constants
+CHUNK_SIZE = 8 * 1024 * 1024  # 8MB chunks for faster downloads
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB limit
+
+# Supported file types for knowledge base ingestion
+EXTRACTABLE_FILE_TYPES = {
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+}
 
 
 logger = structlog.get_logger()
@@ -87,16 +100,12 @@ def _parse_html(html: str, url: str) -> tuple[str, str, List[str]]:
             and link not in same_host_links
             and not link.lower().endswith(
                 (
-                    ".pdf",
                     ".docx",
                     ".doc",
                     ".xlsx",
                     ".xls",
                     ".pptx",
                     ".ppt",
-                    ".jpg",
-                    ".jpeg",
-                    ".png",
                     ".gif",
                     ".bmp",
                     ".tiff",
@@ -256,6 +265,143 @@ def upload_to_s3(
         return {"success": False, "message": "Unexpected error", "error": str(exc)}
 
 
+async def _stream_chunks(response, chunk_size: int) -> AsyncIterator[bytes]:
+    """Stream HTTP response in chunks."""
+    async for chunk in response.aiter_bytes(chunk_size):
+        yield chunk
+
+
+async def stream_url_to_s3(
+    url: str,
+    bucket: str,
+    key: str,
+    max_size: int = MAX_FILE_SIZE,
+    content_type: str = "application/octet-stream",
+) -> Dict[str, Any]:
+    """Stream URL content directly to S3 without loading into memory."""
+
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+            async with client.stream(
+                "GET", url, headers={"User-Agent": USER_AGENT}
+            ) as response:
+
+                if response.status_code != 200:
+                    return {"success": False, "error": f"HTTP {response.status_code}"}
+
+                # Check content length if provided
+                content_length = response.headers.get("content-length")
+                if content_length and int(content_length) > max_size:
+                    return {
+                        "success": False,
+                        "error": f"File too large: {content_length} bytes",
+                    }
+
+                # Use S3 multipart upload for streaming
+                upload_id = s3.create_multipart_upload(
+                    Bucket=bucket,
+                    Key=key,
+                    ContentType=response.headers.get("content-type", content_type),
+                )["UploadId"]
+
+                parts = []
+                part_number = 1
+                total_size = 0
+
+                try:
+                    async for chunk in _stream_chunks(response, CHUNK_SIZE):
+                        total_size += len(chunk)
+
+                        # Safety check during streaming
+                        if total_size > max_size:
+                            # Abort upload and cleanup
+                            s3.abort_multipart_upload(
+                                Bucket=bucket, Key=key, UploadId=upload_id
+                            )
+                            return {
+                                "success": False,
+                                "error": f"File exceeded size limit: {total_size} bytes",
+                            }
+
+                        # Upload part
+                        part_response = s3.upload_part(
+                            Bucket=bucket,
+                            Key=key,
+                            PartNumber=part_number,
+                            UploadId=upload_id,
+                            Body=chunk,
+                        )
+
+                        parts.append(
+                            {"ETag": part_response["ETag"], "PartNumber": part_number}
+                        )
+                        part_number += 1
+
+                    # Complete multipart upload
+                    s3.complete_multipart_upload(
+                        Bucket=bucket,
+                        Key=key,
+                        UploadId=upload_id,
+                        MultipartUpload={"Parts": parts},
+                    )
+
+                    return {
+                        "success": True,
+                        "file_size": total_size,
+                        "parts_uploaded": len(parts),
+                    }
+
+                except Exception as e:
+                    # Cleanup on error
+                    s3.abort_multipart_upload(
+                        Bucket=bucket, Key=key, UploadId=upload_id
+                    )
+                    raise e
+
+    except Exception as e:
+        logger.error(f"Error streaming {url} to S3: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def process_file_url(
+    url: str, bucket: str, user_id: str, prefix: str, crawl_session_id: str
+) -> Dict[str, Any]:
+    """Download file to S3 via streaming, return metadata."""
+
+    s3_key = sanitise_url_for_s3_key(url, prefix)
+
+    # Stream download to S3
+    upload_result = await stream_url_to_s3(url, bucket, s3_key)
+
+    if not upload_result["success"]:
+        return {
+            "url": url,
+            "status": "failed",
+            "reason": f"Download failed: {upload_result['error']}",
+            "links_enqueued": 0,
+        }
+
+    file_extension = pathlib.Path(url).suffix.lower()
+
+    logger.info(
+        "File download completed",
+        url=url,
+        user_id=user_id,
+        crawl_session_id=crawl_session_id,
+        file_type=file_extension,
+        file_size=upload_result["file_size"],
+    )
+
+    return {
+        "url": url,
+        "status": "success",
+        "s3_key": s3_key,
+        "file_type": file_extension,
+        "file_size": upload_result["file_size"],
+        "links_enqueued": 0,
+    }
+
+
 async def process_url(
     *,
     url: str,
@@ -276,6 +422,14 @@ async def process_url(
             "URL normalized with https:// prefix", original_url=url, normalized_url=url
         )
 
+    # File type detection - route to appropriate handler
+    file_extension = pathlib.Path(url).suffix.lower()
+
+    if file_extension in EXTRACTABLE_FILE_TYPES:
+        # Route to file download handler
+        return await process_file_url(url, bucket, user_id, prefix, crawl_session_id)
+
+    # Existing HTML processing logic (unchanged)
     scraped = await fetch_page(url)
     if not scraped:
         return {
