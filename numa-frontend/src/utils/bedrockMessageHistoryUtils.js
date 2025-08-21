@@ -4,7 +4,97 @@ const MAX_WORDS = 7500; // Maximum number of words to use in prompt
 const MAX_MESSAGES = 30; // Maximum number of messages to use in prompt
 const MAX_DYNAMO_MESSAGES = 100; // Maximum number of messages to fetch from DynamoDB for UI display (more messages = better chat history visibility)
 
-const wordCount = (str) => str.split(/\s+/).length;
+const wordCount = (str) => {
+  if (!str || typeof str !== 'string') {
+    return 0; // Return 0 words for tool blocks (tool_call/tool_result) which don't have content field, or other non-string content
+  }
+  return str.split(/\s+/).length;
+};
+
+/**
+ * Validates message-level tool block count matching between consecutive assistant/user messages.
+ * AWS Bedrock requires that each assistant message with toolUse blocks is followed by a user message
+ * with exactly matching toolResult blocks (same count and IDs).
+ *
+ * @param {Array} messages - Array of formatted message objects
+ * @returns {Array} - Messages with invalid tool conversation sequences removed
+ */
+const validateMessageLevelToolCounts = (messages) => {
+  const validatedMessages = [];
+  let removedMessagePairs = 0;
+
+  for (let i = 0; i < messages.length; i++) {
+    const currentMessage = messages[i];
+
+    // Check if current message is assistant with tool calls
+    if (currentMessage.role === 'assistant' && currentMessage.content && Array.isArray(currentMessage.content)) {
+      const toolUseBlocks = currentMessage.content.filter((block) => block.toolUse);
+
+      if (toolUseBlocks.length > 0) {
+        // Look for the next user message with tool results
+        const nextMessage = i + 1 < messages.length ? messages[i + 1] : null;
+
+        if (!nextMessage || nextMessage.role !== 'user') {
+          console.warn(
+            '[bedrockMessageHistoryUtils] Assistant message with tool calls not followed by user message, removing tool call message',
+            { messageIndex: i, toolCount: toolUseBlocks.length },
+          );
+          removedMessagePairs++;
+          continue; // Skip this assistant message
+        }
+
+        const toolResultBlocks =
+          nextMessage.content && Array.isArray(nextMessage.content)
+            ? nextMessage.content.filter((block) => block.toolResult)
+            : [];
+
+        // Validate tool block counts and IDs match
+        const toolUseIds = new Set(toolUseBlocks.map((block) => block.toolUse.toolUseId));
+        const toolResultIds = new Set(toolResultBlocks.map((block) => block.toolResult.toolUseId));
+
+        const countsMatch = toolUseBlocks.length === toolResultBlocks.length;
+        const idsMatch = toolUseIds.size === toolResultIds.size && [...toolUseIds].every((id) => toolResultIds.has(id));
+
+        if (!countsMatch || !idsMatch) {
+          console.warn(
+            '[bedrockMessageHistoryUtils] Tool block count/ID mismatch between consecutive messages, removing message pair',
+            {
+              messageIndex: i,
+              toolUseCount: toolUseBlocks.length,
+              toolResultCount: toolResultBlocks.length,
+              toolUseIds: Array.from(toolUseIds),
+              toolResultIds: Array.from(toolResultIds),
+              countsMatch,
+              idsMatch,
+            },
+          );
+          removedMessagePairs += 2;
+          i++; // Skip the next message too since we're removing the pair
+          continue;
+        }
+
+        // Both messages are valid, add them
+        validatedMessages.push(currentMessage);
+        validatedMessages.push(nextMessage);
+        i++; // Skip the next message since we already processed it
+      } else {
+        // No tool calls, add normally
+        validatedMessages.push(currentMessage);
+      }
+    } else {
+      // Non-assistant message or already processed, add normally
+      validatedMessages.push(currentMessage);
+    }
+  }
+
+  if (removedMessagePairs > 0) {
+    console.warn(
+      `[bedrockMessageHistoryUtils] Message-level validation removed ${removedMessagePairs} messages due to tool block mismatches`,
+    );
+  }
+
+  return validatedMessages;
+};
 
 /**
  * Validates and cleans tool call/result pairs to prevent Chat validation errors.
@@ -33,9 +123,7 @@ const validateAndCleanToolPairs = (messages) => {
     }
   });
 
-  console.log(
-    `[bedrockMessageHistoryUtils] Tool validation - Found ${toolUseIds.size} toolUse blocks and ${toolResultIds.size} toolResult blocks`,
-  );
+  // Tool validation - Found ${toolUseIds.size} toolUse blocks and ${toolResultIds.size} toolResult blocks
 
   let removedToolUse = 0;
   let removedToolResult = 0;
@@ -100,7 +188,10 @@ const validateAndCleanToolPairs = (messages) => {
     );
   }
 
-  return cleanedMessages;
+  // Third pass: Validate message-level tool block count matching
+  const finalMessages = validateMessageLevelToolCounts(cleanedMessages);
+
+  return finalMessages;
 };
 
 /**
@@ -124,7 +215,6 @@ const truncateConversationHistory = (messages) => {
     totalWords += messageWords;
     truncatedMessages.unshift(message);
   }
-  console.log(`Total words returned in conversation: ${totalWords}`);
   return truncatedMessages;
 };
 
@@ -301,10 +391,7 @@ const prepareConversationHistoryForChat = async (conversationHistory, getCredent
 
   const formattedMessages = await formatMessagesForChat(truncatedHistory, getCredentials, loadFiles);
 
-  if (truncatedHistory.length < sortedHistory.length) {
-    console.log(`Total words exceeded ${MAX_WORDS} or total messages exceeded ${MAX_MESSAGES}`);
-    console.log(`Conversation truncated from ${sortedHistory.length} to ${truncatedHistory.length} messages`);
-  }
+  // Note: Conversation truncation from ${sortedHistory.length} to ${truncatedHistory.length} messages if limits exceeded
 
   // Validate and clean tool call/result pairs to prevent Chat validation errors
   const cleanedMessages = validateAndCleanToolPairs(formattedMessages);
