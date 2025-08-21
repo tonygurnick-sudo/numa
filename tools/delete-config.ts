@@ -19,7 +19,7 @@ function getDocument(): DynamoDBDocument {
   return DynamoDBDocument.from(client);
 }
 
-async function deleteClientConfig(clientName: string): Promise<boolean> {
+export async function deleteClientConfig(clientName: string, yes = false): Promise<boolean> {
   const ddbdc = getDocument();
 
   // First check if the client exists
@@ -38,18 +38,18 @@ async function deleteClientConfig(clientName: string): Promise<boolean> {
   console.log(`Found client config for '${clientName}':`);
   console.log(JSON.stringify(existingResult.Item.config, null, 2));
 
-  // Confirm deletion
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const confirm = await rl.question(`Are you sure you want to delete the config for '${clientName}'? [y/N] `);
-  rl.close();
-
-  if (confirm.toLowerCase() !== 'y') {
-    console.log('Deletion cancelled.');
-    return false;
+  // Confirm deletion unless yes=true
+  if (!yes) {
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const confirm = await rl.question(`Are you sure you want to delete the config for '${clientName}'? [y/N] `);
+    rl.close();
+    if (confirm.toLowerCase() !== 'y') {
+      console.log('Deletion cancelled.');
+      return false;
+    }
   }
 
   // Delete the item
@@ -63,14 +63,14 @@ async function deleteClientConfig(clientName: string): Promise<boolean> {
   return result.$metadata.httpStatusCode === 200;
 }
 
-async function main(clientName: string): Promise<void> {
+async function main(clientName: string, yes = false): Promise<void> {
   if (!clientName) {
     console.error('Usage: yarn delete-config <client-name>');
     process.exit(1);
   }
 
   try {
-    const success = await deleteClientConfig(clientName);
+    const success = await deleteClientConfig(clientName, yes);
     if (success) {
       console.log(`Successfully deleted client config for '${clientName}'`);
     } else {
@@ -85,5 +85,6 @@ async function main(clientName: string): Promise<void> {
 
 if (import.meta.filename === process.argv[1]) {
   const clientName = process.argv[2];
-  main(clientName);
+  const yes = process.argv.includes('--yes');
+  main(clientName, yes);
 }

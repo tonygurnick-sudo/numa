@@ -7,9 +7,12 @@
     "@arcanumai/client-config": "workspace:^",
     "@aws-sdk/client-account": "^3.848.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.675.0",
+    "@aws-sdk/client-iam": "^3.738.0",
     "@aws-sdk/client-qbusiness": "^3.675.0",
+    "@aws-sdk/client-rds": "^3.738.0",
     "@aws-sdk/client-s3": "^3.676.0",
     "@aws-sdk/client-service-quotas": "^3.738.0",
+    "@aws-sdk/client-sfn": "^3.738.0",
     "@aws-sdk/client-support": "^3.738.0",
     "@aws-sdk/credential-providers": "^3.679.0",
     "@aws-sdk/lib-storage": "^3.676.0",
@@ -44,7 +47,8 @@
     "migrate-urls-to-crawler": "node --import tsx migrate-urls-to-crawler.ts",
     "get-system-user-password": "node --import tsx get-system-user-password.ts",
     "update-account-name": "node --import tsx update-account-name.ts",
-    "update-q-deploy-config": "node --import tsx update-q-deploy-config.ts"
+    "update-q-deploy-config": "node --import tsx update-q-deploy-config.ts",
+    "teardown-client": "node --import tsx teardown-client.ts"
   },
   "packageManager": "yarn@4.9.2",
   "devDependencies": {

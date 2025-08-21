@@ -298,7 +298,83 @@ AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config acme-corp exampl
 
 # Apply changes to specific clients
 AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config acme-corp example-client --apply
+
+### teardown-client
+
+Safely tears down client data and dependent resources prior to destroying infrastructure. Supports a dry-run to preview actions.
+
+Prerequisites:
+- An AWS profile with access to the `arcanum-q-deployer-prod` account (delegated admin).
+- A valid client config accessible by the tools (see Verify client config below).
+
+Verify client config:
+```bash
+# List available clients (from config store)
+AWS_PROFILE=arcanum-q-deployer-prod yarn list-clients
+
+# Retrieve a specific client's config to confirm access
+AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config <client-name>
 ```
+
+Usage:
+```bash
+# Dry run (no changes): shows what would be deleted/stopped/detached
+AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client --check <client-name>
+
+# Execute (perform deletions/stops/detaches)
+AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client <client-name>
+
+# Keep a final snapshot when deleting RDS cluster (default is skip)
+AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client --no-skip-final-snapshot <client-name>
+
+# Override region (uses client config region by default; falls back to us-east-1)
+AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client --region us-east-1 <client-name>
+
+# Skip interactive confirmations (DANGEROUS)
+AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client --yes <client-name>
+
+# Delete client config from DynamoDB after successful teardown
+AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client --delete-config <client-name>
+
+# Destroy infra with CDKTF after successful teardown (streams output)
+AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client --destroy-infra <client-name>
+
+# Destroy infra for a specific CDKTF stack name
+# (use when your stacks are environment-based, not per-client)
+AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client --destroy-infra --stack <stack-name> <client-name>
+
+# Combine options (non-interactive teardown + delete config + destroy infra)
+AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client --yes --delete-config --destroy-infra <client-name>
+```
+
+What it does:
+- S3: empties client buckets `numa-<client>-data`, `numa-<client>-outputs`, `numa-<client>-fe`.
+- Step Functions: stops RUNNING executions on state machines matching the client name.
+- IAM: detaches known client policies from roles/users/groups.
+- RDS: deletes knowledge base Aurora instance(s) and cluster (respects `--no-skip-final-snapshot`).
+
+Notes:
+- The script uses optional AWS SDK clients for SFN/IAM/RDS. If a client library is not installed, that section will be skipped with a log message.
+- For CDKTF destroy, the default stack is `numa-<client>`. Many deployments use shared environment stacks instead (e.g., `numa-dev-hams`). In that case, pass `--stack <name>`.
+
+Find your CDKTF stack name:
+- Using Yarn from repo root: `yarn -C infra cdktf list`
+- Or check existing outputs: `ls infra/cdktf.out/*/stacks`
+- After it completes, destroy remaining infra via CDKTF, e.g.:
+  ```bash
+  cd ../infra
+  yarn cdktf destroy numa-<client-name>
+  ```
+- Common error: `Requested resource not found` usually means the client config cannot be found. Use `list-clients`/`retrieve-config` to verify.
+
+Safety & confirmation:
+- By default (non `--check`), the script requires interactive confirmation before performing destructive actions. You must type `<client> <accountId>` exactly to proceed (e.g., `bendigo-council 183295422459`).
+- Use `--yes` to skip confirmation for automation. Be careful.
+- You do not need per-client AWS config profiles. Use `--profile` to select the delegated admin profile (defaults to `arcanum-q-deployer-prod`). Per-client profiles will also work if preferred.
+
+Post-teardown options:
+- `--delete-config`: deletes the client config from the `numa-client-config` DynamoDB table (uses admin-delegated-access role in us-east-1). Honors `--yes` to skip that tool's prompt.
+- `--destroy-infra`: runs `yarn cdktf destroy --auto-approve numa-<client-name>` from `infra/` and streams output, printing clear success/failure.
 
 ### check-user-password-state
 
@@ -306,6 +382,7 @@ Checks Cognito user pools for users in the FORCE_CHANGE_PASSWORD state.
 
 When run, the default developer account will be used to get the client configs, but then
 when editing the passwords in the customer account the profile `arcanum-q-deployer-prod`
+{{ ... }}
 will be used.
 
 Usage:
