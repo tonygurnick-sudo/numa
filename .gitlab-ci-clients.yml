@@ -2,7 +2,6 @@
   matrix:
     - CLIENT_NAME:
         - 30-seconds
-        - accumen
         - arcanum-council-trial
         - arcanum-dave
         - arcanum-demo-nathan-2
@@ -13,7 +12,6 @@
         - arcanum-prod-numa-demo
         - arcanum-prod-trial
         - av-media
-        - bendigo-council
         - beyond-expectations
         - broken-hill-city-council
         - capitalfootball
@@ -54,4 +52,3 @@
         - uplift-admin
         - uplift-education
         - w-advisory
-        - warrnambool-city-council
