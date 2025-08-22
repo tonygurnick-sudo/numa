@@ -33,11 +33,15 @@ class CrawlPageEvent(TypedDict, total=False):
     crawlSessionId: str
 
 
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+# User agents for retry logic
+PRIMARY_USER_AGENT = "curl/8.7.1"
+FALLBACK_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/91.0.4472.124 Safari/537.36"
+    "Chrome/128.0.0.0 Safari/537.36"
 )
+
+USER_AGENT = PRIMARY_USER_AGENT
 HTTP_TIMEOUT_SECONDS = 8
 MAX_CONTENT_BYTES = 5_242_880  # 5 MiB
 MAX_SAME_HOST_LINKS = 40  # Maximum number of same-host links to collect
@@ -168,39 +172,80 @@ def _get_required_env(*names: str) -> Dict[str, str]:
 
 async def fetch_page(url: str) -> Optional[ScrapedContent]:
     """Download *url* and return structured information or None on error."""
-    try:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-            r = await client.get(
-                url, headers={"User-Agent": USER_AGENT}, follow_redirects=True
+    user_agents = [PRIMARY_USER_AGENT, FALLBACK_USER_AGENT]
+
+    for attempt, user_agent in enumerate(user_agents, 1):
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+                r = await client.get(
+                    url, headers={"User-Agent": user_agent}, follow_redirects=True
+                )
+
+            if r.status_code == 200:
+                # Process content immediately inside the successful attempt
+                try:
+                    if int(r.headers.get("content-length", 0)) > MAX_CONTENT_BYTES:
+                        logger.warning("Content too large", url=url)
+                        return None
+
+                    title, text, links = _parse_html(r.text, url)
+                    content = f"Title: {title}\nURL: {url}\n\n{text}"
+
+                    if attempt > 1:
+                        logger.info(
+                            "Retry successful",
+                            url=url,
+                            attempt=attempt,
+                            user_agent=user_agent,
+                        )
+
+                    return {
+                        "title": title,
+                        "url": url,
+                        "content": content,
+                        "content_type": "text/html",
+                        "metadata": {
+                            "source": url,
+                            "scraped_at": datetime.utcnow().isoformat(),
+                            "content_type": r.headers.get("content-type", "text/html"),
+                        },
+                        "links": links,
+                    }
+
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "Error processing page content",
+                        url=url,
+                        error=str(exc),
+                        exc_info=True,
+                    )
+                    return None
+            else:
+                logger.warning(
+                    "Non-200 status code",
+                    url=url,
+                    status_code=r.status_code,
+                    attempt=attempt,
+                    user_agent=user_agent,
+                )
+                if attempt == len(user_agents):
+                    return None
+                continue  # Try next user agent
+
+        except Exception as exc:
+            logger.error(
+                "Error in fetch attempt",
+                url=url,
+                attempt=attempt,
+                user_agent=user_agent,
+                error=str(exc),
             )
+            if attempt == len(user_agents):
+                return None
+            continue
 
-        if r.status_code != 200:
-            logger.warning("Non-200 status code", url=url, status_code=r.status_code)
-            return None
-
-        if int(r.headers.get("content-length", 0)) > MAX_CONTENT_BYTES:
-            logger.warning("Content too large", url=url)
-            return None
-
-        title, text, links = _parse_html(r.text, url)
-        content = f"Title: {title}\nURL: {url}\n\n{text}"
-
-        return {
-            "title": title,
-            "url": url,
-            "content": content,
-            "content_type": "text/html",
-            "metadata": {
-                "source": url,
-                "scraped_at": datetime.utcnow().isoformat(),
-                "content_type": r.headers.get("content-type", "text/html"),
-            },
-            "links": links,
-        }
-
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Error fetching page", url=url, error=str(exc), exc_info=True)
-        return None
+    # This should never be reached, but added for safety
+    return None
 
 
 def enqueue_links(
@@ -280,14 +325,29 @@ async def stream_url_to_s3(
 ) -> Dict[str, Any]:
     """Stream URL content directly to S3 without loading into memory."""
 
-    try:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-            async with client.stream(
-                "GET", url, headers={"User-Agent": USER_AGENT}
-            ) as response:
+    user_agents = [PRIMARY_USER_AGENT, FALLBACK_USER_AGENT]
 
-                if response.status_code != 200:
-                    return {"success": False, "error": f"HTTP {response.status_code}"}
+    for attempt, user_agent in enumerate(user_agents, 1):
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+                async with client.stream(
+                    "GET", url, headers={"User-Agent": user_agent}
+                ) as response:
+
+                    if response.status_code != 200:
+                        logger.warning(
+                            "Non-200 status code in file download",
+                            url=url,
+                            status_code=response.status_code,
+                            attempt=attempt,
+                            user_agent=user_agent,
+                        )
+                        if attempt == len(user_agents):
+                            return {
+                                "success": False,
+                                "error": f"HTTP {response.status_code}",
+                            }
+                        continue  # Try next user agent
 
                 # Check content length if provided
                 content_length = response.headers.get("content-length")
@@ -345,6 +405,14 @@ async def stream_url_to_s3(
                         MultipartUpload={"Parts": parts},
                     )
 
+                    if attempt > 1:
+                        logger.info(
+                            "File download retry successful",
+                            url=url,
+                            attempt=attempt,
+                            user_agent=user_agent,
+                        )
+
                     return {
                         "success": True,
                         "file_size": total_size,
@@ -358,9 +426,19 @@ async def stream_url_to_s3(
                     )
                     raise e
 
-    except Exception as e:
-        logger.error(f"Error streaming {url} to S3: {e}")
-        return {"success": False, "error": str(e)}
+        except Exception as e:
+            logger.error(
+                "Error in file download attempt",
+                url=url,
+                attempt=attempt,
+                user_agent=user_agent,
+                error=str(e),
+            )
+            if attempt == len(user_agents):
+                return {"success": False, "error": str(e)}
+            continue
+
+    return {"success": False, "error": "All download attempts failed"}
 
 
 async def process_file_url(

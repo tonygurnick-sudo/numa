@@ -16,6 +16,14 @@ from .summarization import summarize_combined_content
 
 logger = structlog.get_logger()
 
+# User agents for retry logic
+PRIMARY_USER_AGENT = "curl/8.7.1"
+FALLBACK_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/128.0.0.0 Safari/537.36"
+)
+
 
 def _is_processable_url(url: str) -> bool:
     """Check if URL should be processed based on file extension."""
@@ -136,8 +144,7 @@ def scrape_page(url: str) -> Dict[str, Any]:
             "error_type": "non_processable_url",
         }
     # Browser-like headers to improve scraping success
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    base_headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
         "Accept-Encoding": "gzip, deflate",
@@ -149,8 +156,11 @@ def scrape_page(url: str) -> Dict[str, Any]:
         "Cache-Control": "max-age=0",
     }
 
-    def attempt_scrape(url: str, timeout: int = 12) -> Dict[str, Any]:
+    user_agents = [PRIMARY_USER_AGENT, FALLBACK_USER_AGENT]
+
+    def attempt_scrape(url: str, user_agent: str, timeout: int = 12) -> Dict[str, Any]:
         """Single scraping attempt with detailed error tracking"""
+        headers = {**base_headers, "User-Agent": user_agent}
         try:
             response = httpx.get(
                 url, headers=headers, timeout=timeout, follow_redirects=True
@@ -172,6 +182,7 @@ def scrape_page(url: str) -> Dict[str, Any]:
                     title_length=len(title),
                     content_length=len(snippet),
                     status_code=response.status_code,
+                    user_agent=user_agent,
                 )
 
                 return {
@@ -188,6 +199,7 @@ def scrape_page(url: str) -> Dict[str, Any]:
                         "Site blocking access (403 Forbidden) - likely anti-bot protection",
                         url=url,
                         status_code=response.status_code,
+                        user_agent=user_agent,
                     )
                 elif response.status_code == 429:
                     logger.warning(
@@ -218,6 +230,7 @@ def scrape_page(url: str) -> Dict[str, Any]:
                     "snippet": "",
                     "success": False,
                     "status_code": response.status_code,
+                    "user_agent": user_agent,
                 }
 
         except httpx.TimeoutException as e:
@@ -255,32 +268,72 @@ def scrape_page(url: str) -> Dict[str, Any]:
                 "error_type": type(e).__name__,
             }
 
-    # Try scraping with retry logic for better success rate
-    try:
-        # First attempt
-        result = attempt_scrape(url)
-        if result.get("success"):  # Successful scrape
-            return result
+    for attempt, user_agent in enumerate(user_agents, 1):
+        try:
+            result = attempt_scrape(url, user_agent)
 
-        # If first attempt failed and it was a server error (5xx), try again
-        if result.get("status_code", 0) >= 500:
-            logger.info("Retrying server error with longer timeout", url=url)
-            time.sleep(1)  # Brief delay for server errors
-            result = attempt_scrape(url, timeout=15)
-            return result
+            if result.get("success"):
+                if attempt > 1:
+                    logger.info(
+                        "Web scrape retry successful",
+                        url=url,
+                        attempt=attempt,
+                        user_agent=user_agent,
+                    )
+                return result
 
-        # For client errors (4xx) like 403, don't retry - it won't help
-        return result
+            if result.get("status_code", 0) >= 500:
+                logger.info(
+                    "Retrying server error with longer timeout",
+                    url=url,
+                    attempt=attempt,
+                    user_agent=user_agent,
+                )
+                time.sleep(1)
+                retry_result = attempt_scrape(url, user_agent, timeout=15)
+                if retry_result.get("success"):
+                    return retry_result
 
-    except Exception as e:
-        logger.error("Page scraping failed completely", url=url, error=str(e))
-        return {
-            "title": "",
-            "url": url,
-            "snippet": "",
-            "success": False,
-            "error_type": "complete_failure",
-        }
+            if result.get("status_code") == 403 and attempt < len(user_agents):
+                logger.info(
+                    "403 error with user agent, trying fallback",
+                    url=url,
+                    attempt=attempt,
+                    current_user_agent=user_agent,
+                    next_user_agent=(
+                        user_agents[attempt] if attempt < len(user_agents) else None
+                    ),
+                )
+                continue
+
+            if attempt == len(user_agents):
+                return result
+
+        except Exception as e:
+            logger.error(
+                "Error in scrape attempt",
+                url=url,
+                attempt=attempt,
+                user_agent=user_agent,
+                error=str(e),
+            )
+            if attempt == len(user_agents):
+                return {
+                    "title": "",
+                    "url": url,
+                    "snippet": "",
+                    "success": False,
+                    "error_type": "complete_failure",
+                }
+            continue
+
+    return {
+        "title": "",
+        "url": url,
+        "snippet": "",
+        "success": False,
+        "error_type": "complete_failure",
+    }
 
 
 def web_search_impl(query: str, user_intent: str, max_results: int = 3):
