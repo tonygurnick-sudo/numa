@@ -9,7 +9,6 @@ const ChatInput = ({
   handleSubmit,
   setShowUploadModal,
   buttonStatus,
-  handleStopGeneration,
   queryDataSources,
   setQueryDataSources,
   webSearchEnabled,
@@ -136,11 +135,7 @@ const ChatInput = ({
             </Button>
           </div>
           <div className="right-controls">
-            {buttonStatus === 'streaming' ? (
-              <Button onClick={handleStopGeneration} className="stop-button">
-                <i className="bi bi-stop-circle-fill" style={{ fontSize: '2.4rem', color: '#4b007d' }}></i>
-              </Button>
-            ) : buttonStatus === 'loading' ? (
+            {buttonStatus === 'loading' || buttonStatus === 'streaming' ? (
               <Button
                 variant="primary"
                 type="submit"

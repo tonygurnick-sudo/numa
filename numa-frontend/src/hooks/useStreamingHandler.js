@@ -11,8 +11,6 @@ export const useStreamingHandler = () => {
   const processedEventIdsRef = useRef(new Set());
   const toolUseMapRef = useRef(new Map());
   const finalFlushPerformedRef = useRef(false);
-  const stopGenerationRef = useRef(false);
-  const currentAbortRef = useRef(null);
 
   /**
    * Reset streaming state for a new conversation turn
@@ -22,8 +20,6 @@ export const useStreamingHandler = () => {
     processedEventIdsRef.current.clear();
     toolUseMapRef.current.clear();
     finalFlushPerformedRef.current = false;
-    stopGenerationRef.current = false;
-    currentAbortRef.current = null;
   }, []);
 
   /**
@@ -45,12 +41,6 @@ export const useStreamingHandler = () => {
       const docStripState = createDocStripState();
 
       const onChunk = (chunk) => {
-        // Check if stream was stopped by user
-        if (stopGenerationRef.current) {
-          console.log('[StreamingHandler] Stream stopped by user in onChunk');
-          return;
-        }
-
         if (!hasStreamingStarted) {
           // Remove 'thinking' status, set 'streaming' status
           setMessages((prev) => {
@@ -108,54 +98,20 @@ export const useStreamingHandler = () => {
         );
 
         // Clean up abort function reference
-        currentAbortRef.current = null;
-
-        // Check if this was a user-initiated stop
-        const wasInterrupted = stopGenerationRef.current;
-        if (wasInterrupted) {
-          console.log('[StreamingHandler] Stream was interrupted by user');
-          // Mark the last message as interrupted
-          setMessages((prev) => {
-            if (prev.length === 0) return prev;
-            const updated = [...prev];
-            const lastIdx = updated.length - 1;
-            if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-              updated[lastIdx].interrupted = true;
-            }
-            return updated;
-          });
-        }
 
         setButtonStatus('idle');
-        stopGenerationRef.current = false; // Reset stop flag
-
         // Flush any remaining text to save the final segment with content preservation
         console.log('[StreamingHandler] Stream completion - flushing final text buffer');
         flushPendingText(conversationId, true); // preserveContent=true to prevent race condition
 
         // Call completion callback with accumulated response
         if (onStreamComplete) {
-          onStreamComplete(accumulatedResponse, wasInterrupted);
+          onStreamComplete(accumulatedResponse, false);
         }
       };
 
       const onError = (error) => {
         console.error('Error in streaming handler:', error);
-
-        // Clean up abort function reference
-        currentAbortRef.current = null;
-
-        // Check if this was a user-initiated stop (which might trigger an "error")
-        const wasInterrupted = stopGenerationRef.current;
-        if (wasInterrupted) {
-          console.log('[StreamingHandler] Stream was stopped by user (via error callback)');
-          // Don't show error message for user-initiated stops
-          setButtonStatus('idle');
-          stopGenerationRef.current = false;
-          return;
-        }
-
-        stopGenerationRef.current = false; // Reset stop flag
 
         // Call error callback
         if (onStreamError) {
@@ -176,29 +132,11 @@ export const useStreamingHandler = () => {
   );
 
   /**
-   * Stop the current streaming generation
-   */
-  const handleStopGeneration = useCallback(() => {
-    console.log('[StreamingHandler] Stop button pressed');
-    stopGenerationRef.current = true;
-
-    // Abort the current stream if one is active
-    if (currentAbortRef.current) {
-      console.log('[StreamingHandler] Aborting active stream');
-      try {
-        currentAbortRef.current();
-      } catch (error) {
-        console.error('[StreamingHandler] Error aborting stream:', error);
-      }
-      currentAbortRef.current = null;
-    }
-  }, []);
-
-  /**
    * Set the current abort function
    */
   const setCurrentAbort = useCallback((abortFn) => {
-    currentAbortRef.current = abortFn;
+    // This is used for cleanup purposes, not user-initiated stopping
+    console.log('[StreamingHandler] Setting abort function:', !!abortFn);
   }, []);
 
   return {
@@ -207,12 +145,10 @@ export const useStreamingHandler = () => {
     processedEventIdsRef,
     toolUseMapRef,
     finalFlushPerformedRef,
-    stopGenerationRef,
 
     // Functions
     resetStreamingState,
     createStreamingCallbacks,
-    handleStopGeneration,
     setCurrentAbort,
   };
 };

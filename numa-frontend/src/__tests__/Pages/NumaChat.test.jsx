@@ -229,11 +229,9 @@ vi.mock('../../hooks/useConversationManager', () => ({
 
 vi.mock('../../hooks/useStreamingHandler', () => ({
   useStreamingHandler: () => ({
-    handleStopGeneration: vi.fn(),
     setCurrentAbort: vi.fn(),
     resetStreamingState: vi.fn(),
     textBufferRef: { current: '' },
-    stopGenerationRef: { current: false },
     processedEventIdsRef: { current: new Set() },
     toolUseMapRef: { current: new Map() },
     finalFlushPerformedRef: { current: false },

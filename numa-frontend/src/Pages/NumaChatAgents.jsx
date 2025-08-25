@@ -72,7 +72,7 @@ const NumaChatAgents = () => {
     openDocument,
     closeDocument,
   } = documentProcessor;
-  const { handleStopGeneration, setCurrentAbort, resetStreamingState } = streamingHandler;
+  const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
   const { user, bedrockAgentRuntimeClient, numaChatDynamoUtils, getCredentials, getAccessToken } = useAuth();
 
@@ -170,7 +170,6 @@ const NumaChatAgents = () => {
   // New chat handler that clears UI state
   const handleNewChatClick = async () => {
     // Stop any ongoing streaming response
-    streamingHandler.stopGenerationRef.current = true;
     setButtonStatus('idle');
     resetStreamingState();
 
@@ -279,11 +278,6 @@ const NumaChatAgents = () => {
 
     return {
       onChunk: (chunk) => {
-        // Check if stream was stopped by user
-        if (streamingHandler.stopGenerationRef.current) {
-          console.log('[NumaChat] Stream stopped by user in onChunk');
-          return;
-        }
         if (!hasStreamingStarted) {
           // Remove 'thinking' status, set 'streaming' status
           setMessages((prev) => {
@@ -340,7 +334,6 @@ const NumaChatAgents = () => {
 
   // Handle stream completion
   const createStreamCompleteHandler = (
-    streamingHandler,
     setCurrentAbort,
     setMessages,
     setButtonStatus,
@@ -366,25 +359,8 @@ const NumaChatAgents = () => {
       // Clean up abort function reference
       setCurrentAbort(null);
 
-      // Check if this was a user-initiated stop
-      const wasInterrupted = streamingHandler.stopGenerationRef.current;
-      if (wasInterrupted) {
-        console.log('[NumaChat] Stream was interrupted by user');
-        // Mark the last message as interrupted
-        setMessages((prev) => {
-          if (prev.length === 0) return prev;
-          const updated = [...prev];
-          const lastIdx = updated.length - 1;
-          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-            updated[lastIdx].interrupted = true;
-          }
-          return updated;
-        });
-      }
-
       setButtonStatus('idle');
       isProcessingRef.current = false; // Reset processing flag
-      streamingHandler.stopGenerationRef.current = false; // Reset stop flag
 
       // Flush any remaining text to save the final segment with content preservation
       console.log('[NumaChat] Stream completion - flushing final text buffer');
@@ -513,7 +489,6 @@ const NumaChatAgents = () => {
       // Create streaming handlers
       const chunkHandler = createStreamChunkHandler(streamingHandler, setMessages, setButtonStatus);
       const completeHandler = createStreamCompleteHandler(
-        streamingHandler,
         setCurrentAbort,
         setMessages,
         setButtonStatus,
@@ -545,19 +520,7 @@ const NumaChatAgents = () => {
             // Clean up abort function reference
             setCurrentAbort(null);
 
-            // Check if this was a user-initiated stop (which might trigger an "error")
-            const wasInterrupted = streamingHandler.stopGenerationRef.current;
-            if (wasInterrupted) {
-              console.log('[NumaChat] Stream was stopped by user (via error callback)');
-              // Don't show error message for user-initiated stops
-              setButtonStatus('idle');
-              isProcessingRef.current = false;
-              streamingHandler.stopGenerationRef.current = false;
-              return;
-            }
-
             isProcessingRef.current = false; // Reset processing flag on error
-            streamingHandler.stopGenerationRef.current = false; // Reset stop flag
 
             // Check for quota/throttling errors and set fallback mode
             if (isQuotaLimitError(error)) {
@@ -604,7 +567,6 @@ const NumaChatAgents = () => {
               {
                 processedEventIds: streamingHandler.processedEventIdsRef.current,
                 toolUseMap: streamingHandler.toolUseMapRef.current,
-                stopGenerationRef: streamingHandler.stopGenerationRef,
                 hasStreamingStarted: chunkHandler.getHasStreamingStarted(),
                 setHasStreamingStarted: chunkHandler.setHasStreamingStarted,
               },
@@ -652,7 +614,6 @@ const NumaChatAgents = () => {
       } catch (agentErr) {
         console.error('Error initiating Chat Agent stream:', agentErr);
         isProcessingRef.current = false; // Reset processing flag on error
-        streamingHandler.stopGenerationRef.current = false; // Reset stop flag
         setCurrentAbort(null); // Clear abort reference
         setMessages((prev) => {
           const updated = [...prev];
@@ -674,7 +635,6 @@ const NumaChatAgents = () => {
       console.error('Error invoking Chat Agent:', err);
       console.error('Full error details:', JSON.stringify(err, null, 2));
       isProcessingRef.current = false; // Reset processing flag on error
-      streamingHandler.stopGenerationRef.current = false; // Reset stop flag
       setCurrentAbort(null); // Clear abort reference
       const errorMsg = {
         role: 'system',
@@ -788,34 +748,6 @@ const NumaChatAgents = () => {
     }
   };
 
-  // Enhanced stop generation handler that clears tool states
-  const handleStopGenerationClick = () => {
-    handleStopGeneration();
-
-    // Clear any loading tool states
-    setMessages((prev) => {
-      if (prev.length === 0) return prev;
-      const updated = [...prev];
-      const lastIdx = updated.length - 1;
-      if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-        const lastMsg = { ...updated[lastIdx] };
-        const segs = [...(lastMsg.segments || [])];
-
-        // Set all tool segments to not loading
-        const updatedSegs = segs.map((seg) => (seg.kind === 'tool' ? { ...seg, isLoading: false } : seg));
-
-        lastMsg.segments = updatedSegs;
-        lastMsg.interrupted = true;
-        updated[lastIdx] = lastMsg;
-      }
-      return updated;
-    });
-
-    // Update UI state
-    setButtonStatus('idle');
-    isProcessingRef.current = false;
-  };
-
   return (
     <div className="dashboard">
       <Nav />
@@ -898,7 +830,6 @@ const NumaChatAgents = () => {
                           handleSubmit={handleSubmit}
                           setShowUploadModal={setShowUploadModal}
                           buttonStatus={buttonStatus}
-                          handleStopGeneration={handleStopGenerationClick}
                           isMobile={isMobile}
                           queryDataSources={queryDataSources}
                           setQueryDataSources={setQueryDataSources}
