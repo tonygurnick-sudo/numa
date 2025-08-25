@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 import { JobStatusContext } from '../Providers/JobStatusContext';
 
-import { getDisplayStatusUpper, formatDuration } from '../utils/jobStatus';
+import { getDisplayStatusUpper } from '../utils/jobStatus';
 
 const JobHistoryManager = () => {
   useAuth();
@@ -76,43 +76,37 @@ const JobHistoryManager = () => {
           // Get the start time
           const startedAt = job.startedAt || job.dateTime || job.createdAt || null;
 
-          // Determine job status
-          const status = (job.status || '').toUpperCase();
-          const isRunning = status === 'RUNNING' || status === 'IN-PROGRESS' || status === 'PROCESSING';
-          const isFilesUploaded = status === 'FILES-UPLOADED';
-          const isFailed = status === 'FAILED' || status === 'ERROR' || status === 'FAILURE';
-
           // Get the end time reference
           const endTimeStr = job.completedAt || job.finishedAt || job.lastUpdated || null;
 
           // Calculate duration
           let duration = null;
 
-          // For completed jobs with both start and end times
-          if (!isRunning && !isFilesUploaded && !isFailed && startedAt && endTimeStr) {
-            try {
-              const startTime = new Date(startedAt);
-              const endTime = new Date(endTimeStr);
-              if (!isNaN(startTime) && !isNaN(endTime)) {
-                duration = Math.max(0, (endTime - startTime) / 1000);
-              }
-            } catch (error) {
-              console.error(`Error calculating duration for job ${job.jobId}:`, error);
-            }
-          }
+          // // For completed jobs with both start and end times
+          // if (!isRunning && !isFilesUploaded && !isFailed && startedAt && endTimeStr) {
+          //   try {
+          //     const startTime = new Date(startedAt);
+          //     const endTime = new Date(endTimeStr);
+          //     if (!isNaN(startTime) && !isNaN(endTime)) {
+          //       duration = Math.max(0, (endTime - startTime) / 1000);
+          //     }
+          //   } catch (error) {
+          //     console.error(`Error calculating duration for job ${job.jobId}:`, error);
+          //   }
+          // }
 
-          // For running jobs with start time
-          if (isRunning && startedAt) {
-            try {
-              const startTime = new Date(startedAt);
-              const now = new Date();
-              if (!isNaN(startTime)) {
-                duration = Math.max(0, (now - startTime) / 1000);
-              }
-            } catch (error) {
-              console.error(`Error calculating running duration for job ${job.jobId}:`, error);
-            }
-          }
+          // // For running jobs with start time
+          // if (isRunning && startedAt) {
+          //   try {
+          //     const startTime = new Date(startedAt);
+          //     const now = new Date();
+          //     if (!isNaN(startTime)) {
+          //       duration = Math.max(0, (now - startTime) / 1000);
+          //     }
+          //   } catch (error) {
+          //     console.error(`Error calculating running duration for job ${job.jobId}:`, error);
+          //   }
+          // }
 
           return {
             ...job,
@@ -167,44 +161,38 @@ const JobHistoryManager = () => {
                   // Get the start time
                   const startedAt = job.startedAt || job.dateTime || job.createdAt || null;
 
-                  // Determine job status
-                  const status = (job.status || '').toUpperCase();
-                  const isRunning = status === 'RUNNING' || status === 'IN-PROGRESS' || status === 'PROCESSING';
-                  const isFilesUploaded = status === 'FILES-UPLOADED';
-                  const isFailed = status === 'FAILED' || status === 'ERROR' || status === 'FAILURE';
-
                   // Get the end time reference
                   const endTimeStr = job.completedAt || job.finishedAt || job.lastUpdated || null;
 
                   // Calculate duration
                   let duration = null;
 
-                  // For completed jobs with both start and end times
-                  if (!isRunning && !isFilesUploaded && !isFailed && startedAt && endTimeStr) {
-                    try {
-                      const startTime = new Date(startedAt);
-                      const endTime = new Date(endTimeStr);
+                  // // For completed jobs with both start and end times
+                  // if (!isRunning && !isFilesUploaded && !isFailed && startedAt && endTimeStr) {
+                  //   try {
+                  //     const startTime = new Date(startedAt);
+                  //     const endTime = new Date(endTimeStr);
 
-                      if (!isNaN(startTime) && !isNaN(endTime)) {
-                        duration = Math.max(0, (endTime - startTime) / 1000); // Duration in seconds, minimum 0
-                      }
-                    } catch (error) {
-                      console.error(`Error calculating duration for job ${job.jobId}:`, error);
-                    }
-                  }
+                  //     if (!isNaN(startTime) && !isNaN(endTime)) {
+                  //       duration = Math.max(0, (endTime - startTime) / 1000); // Duration in seconds, minimum 0
+                  //     }
+                  //   } catch (error) {
+                  //     console.error(`Error calculating duration for job ${job.jobId}:`, error);
+                  //   }
+                  // }
 
-                  // For running jobs with start time
-                  if (isRunning && startedAt) {
-                    try {
-                      const startTime = new Date(startedAt);
-                      const now = new Date();
-                      if (!isNaN(startTime)) {
-                        duration = Math.max(0, (now - startTime) / 1000); // Running duration in seconds
-                      }
-                    } catch (error) {
-                      console.error(`Error calculating running duration for job ${job.jobId}:`, error);
-                    }
-                  }
+                  // // For running jobs with start time
+                  // if (isRunning && startedAt) {
+                  //   try {
+                  //     const startTime = new Date(startedAt);
+                  //     const now = new Date();
+                  //     if (!isNaN(startTime)) {
+                  //       duration = Math.max(0, (now - startTime) / 1000); // Running duration in seconds
+                  //     }
+                  //   } catch (error) {
+                  //     console.error(`Error calculating running duration for job ${job.jobId}:`, error);
+                  //   }
+                  // }
 
                   return {
                     ...job,
@@ -684,12 +672,12 @@ const JobHistoryManager = () => {
                               <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                             )}
                           </th>
-                          <th onClick={() => handleSort('jobId')} className="sortable-header">
+                          {/* <th onClick={() => handleSort('jobId')} className="sortable-header">
                             Job ID{' '}
                             {sortField === 'jobId' && (
                               <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                             )}
-                          </th>
+                          </th> */}
                           <th onClick={() => handleSort('startedAt')} className="sortable-header">
                             Started{' '}
                             {sortField === 'startedAt' && (
@@ -702,12 +690,12 @@ const JobHistoryManager = () => {
                               <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                             )}
                           </th>
-                          <th onClick={() => handleSort('duration')} className="sortable-header">
+                          {/* <th onClick={() => handleSort('duration')} className="sortable-header">
                             Duration{' '}
                             {sortField === 'duration' && (
                               <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                             )}
-                          </th>
+                          </th> */}
                           <th className="sortable-header">Actions</th>
                         </tr>
                       </thead>
@@ -719,19 +707,19 @@ const JobHistoryManager = () => {
                                 {manifestApps.find((app) => app.id === job.appId)?.appName || job.appId || 'Unknown'}
                               </div>
                             </td>
-                            <td>
+                            {/* <td>
                               <div className="text-primary">
                                 {job.displayId || job.jobId?.substring(0, 8) || 'Unknown'}
                               </div>
-                            </td>
+                            </td> */}
 
                             <td>
                               <div className="text-muted small">{formatDate(job.startedAt || job.dateTime)}</div>
                             </td>
                             <td>{renderStatusBadge(job)}</td>
-                            <td>
+                            {/* <td>
                               <div className="text-muted small">{formatDuration(job.duration, job)}</div>
-                            </td>
+                            </td> */}
                             <td className="text-end align-middle">{renderActionButton(job)}</td>
                           </tr>
                         ))}
