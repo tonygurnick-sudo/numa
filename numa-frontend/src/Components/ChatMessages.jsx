@@ -91,7 +91,7 @@ const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDo
         return (
           <div
             key={index}
-            className={`message ${message.role} ${message.role === 'assistant' && message.docTitle && message.docContent ? 'message-with-doc' : ''} ${message.interrupted ? 'message-interrupted' : ''}`}
+            className={`message ${message.role} ${message.role === 'assistant' && message.docTitle && message.docContent ? 'message-with-doc' : ''}`}
           >
             <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
               {message.role === 'assistant' ? (
@@ -163,13 +163,6 @@ const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDo
               ) : (
                 // Legacy mode: simple message content rendering
                 <MarkdownContent content={message.content} />
-              )}
-
-              {/* Show interrupted message indicator */}
-              {message.interrupted && (
-                <div className="message-interrupted-indicator">
-                  <i className="bi bi-exclamation-triangle-fill"></i> Message interrupted
-                </div>
               )}
 
               {/* If there are references, show the dropdown */}

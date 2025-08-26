@@ -93,7 +93,6 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
             role: item.role,
             content: item.content || '',
             references: item.references || [],
-            interrupted: item.interrupted || false,
           };
 
           // Extract document info BEFORE stripping tags
@@ -132,7 +131,6 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
           const references = [];
           let docTitle = null;
           let docContent = null;
-          let interrupted = false;
 
           // Process items in the order they appear from DynamoDB (already chronologically sorted by sort key)
           group.items.forEach((item) => {
@@ -157,10 +155,6 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
 
               if (item.references) {
                 references.push(...item.references);
-              }
-
-              if (item.interrupted) {
-                interrupted = true;
               }
             } else if (item.message_type === 'tool_call') {
               // Reconstruct tool call segment
@@ -212,7 +206,6 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
             content,
             segments: segments.length > 0 ? segments : undefined,
             references,
-            interrupted,
             docTitle,
             docContent,
           };

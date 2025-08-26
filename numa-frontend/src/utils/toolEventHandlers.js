@@ -210,15 +210,9 @@ export function handleToolResults(
  * Main tool event processor
  */
 export function processToolEvent(eventMsg, context, callbacks) {
-  const { processedEventIds, toolUseMap, stopGenerationRef, hasStreamingStarted, setHasStreamingStarted } = context;
+  const { processedEventIds, toolUseMap, hasStreamingStarted, setHasStreamingStarted } = context;
 
   const { setMessages, setButtonStatus, flushPendingText, saveToolCall, saveToolResult, conversationId } = callbacks;
-
-  // Check if stream was stopped by user
-  if (stopGenerationRef.current) {
-    console.log('[ToolEventHandlers] Stream stopped by user in onEvent');
-    return;
-  }
 
   // ----- Deduplicate tool events (StrictMode-safe) -----
   const eventKey = extractEventKey(eventMsg);

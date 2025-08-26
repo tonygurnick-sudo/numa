@@ -37,7 +37,6 @@ const NumaChat = () => {
   const [isCompanyProfileLoaded, setIsCompanyProfileLoaded] = useState(false);
   const [isConversationLoading, setIsConversationLoading] = useState(true);
   const [hasUserStartedNewChat, setHasUserStartedNewChat] = useState(false);
-  const stopGenerationRef = useRef(false);
   const messageEndRef = useRef(null);
   const chatHistoryRef = useRef(null);
   const isSubmittingRef = useRef(false);
@@ -275,7 +274,6 @@ Today's Date: ${TODAY}`;
   // Create a new conversation
   const handleNewChat = async () => {
     // Stop any ongoing streaming response
-    stopGenerationRef.current = true;
     setButtonStatus('idle');
     setIsConversationLoading(false);
     setHasUserStartedNewChat(true);
@@ -290,11 +288,6 @@ Today's Date: ${TODAY}`;
     // Reset split view state - hide document panel
     setShowSplitView(false);
     setLeftFraction(0.99); // Reset to full chat view
-
-    // Reset the stop generation flag after a short delay
-    setTimeout(() => {
-      stopGenerationRef.current = false;
-    }, 200);
 
     // Add an initial greeting from the assistant
     const greeting = { role: 'assistant', content: 'How can I help you today?' };
@@ -448,7 +441,6 @@ Today's Date: ${TODAY}`;
       }
 
       // 3) Potentially retrieve data from knowledge base if queryDataSources
-      stopGenerationRef.current = false;
       if (queryDataSources && qBusinessClient) {
         // Insert ephemeral bubble for 'querying'
         setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'querying' }]);
@@ -663,51 +655,6 @@ Today's Date: ${TODAY}`;
       let tokenUsage = null;
 
       for await (const event of response.stream) {
-        if (stopGenerationRef.current) {
-          console.log('Generation stopped by user.');
-
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastMsgIndex = updated.length - 1;
-            if (lastMsgIndex >= 0 && updated[lastMsgIndex].role === 'assistant') {
-              updated[lastMsgIndex].interrupted = true;
-            }
-            return updated;
-          });
-
-          // Save message to DynamoDB immediately
-          if (numaChatDynamoUtils) {
-            try {
-              const interruptedMessagePayload = {
-                conversationId: cid,
-                userId: sub,
-                messageType: 'text',
-                role: 'assistant',
-                content: rawAssistantText,
-                interrupted: true,
-                references: dsReferences.length > 0 ? dsReferences : undefined,
-              };
-
-              numaChatDynamoUtils
-                .addMessage(interruptedMessagePayload)
-                .catch((err) => console.error('Error storing interrupted message:', err));
-
-              numaChatDynamoUtils
-                .updateMetaItem(cid, sub, {
-                  latestTimestamp: Date.now(),
-                  latestMessage: inputMessage,
-                })
-                .catch((err) => console.error('Error updating meta item:', err));
-
-              console.log('Interrupted message saved to database');
-            } catch (err) {
-              console.error('Failed to save interrupted message:', err);
-            }
-          }
-
-          break;
-        }
-
         // Look for token usage metadata
         if (event.metadata?.usage) {
           tokenUsage = event.metadata.usage;
@@ -772,7 +719,7 @@ Today's Date: ${TODAY}`;
         assistantMessagePayload.references = dsReferences;
       }
 
-      if (numaChatDynamoUtils && !stopGenerationRef.current) {
+      if (numaChatDynamoUtils) {
         // Asynchronous store
         numaChatDynamoUtils
           .addMessage(assistantMessagePayload)
@@ -891,7 +838,6 @@ Today's Date: ${TODAY}`;
           role: item.role,
           content: item.content || '',
           references: item.references || [],
-          interrupted: item.interrupted || false,
         };
 
         // Replace doc tags when loading conversation history
@@ -936,11 +882,6 @@ Today's Date: ${TODAY}`;
     } finally {
       setIsConversationLoading(false);
     }
-  };
-
-  // Handler for the Stop button during streaming
-  const handleStopGeneration = () => {
-    stopGenerationRef.current = true;
   };
 
   // Add a CSS class for the loading indicator
@@ -1039,7 +980,6 @@ Today's Date: ${TODAY}`;
                                   handleSubmit={handleSubmit}
                                   setShowUploadModal={setShowUploadModal}
                                   buttonStatus={buttonStatus}
-                                  handleStopGeneration={handleStopGeneration}
                                   isMobile={isMobile}
                                   queryDataSources={queryDataSources}
                                   setQueryDataSources={setQueryDataSources}
