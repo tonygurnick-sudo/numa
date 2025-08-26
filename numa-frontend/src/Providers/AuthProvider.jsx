@@ -306,7 +306,33 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   };
 
-  const refreshTokens = async () => {
+  const logout = () => {
+    console.log('🚪 logout: Starting logout process');
+
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('idToken');
+    localStorage.removeItem('lastTokenValidation');
+    tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
+    decodedTokensRef.current = { accessToken: null, idToken: null };
+    previousGroupsRef.current = null;
+
+    // Clear all AWS clients to force re-authentication
+    setQBusinessClient(null);
+    setQAppsClient(null);
+    setBedrockRuntimeClient(null);
+    setBedrockAgentRuntimeClient(null);
+    setBedrockAgentClient(null);
+    setNumaChatBedrockUtils(null);
+    setDynamoDBClient(null);
+    setNumaChatDynamoUtils(null);
+
+    setUser(null);
+    setAuthError(null);
+    setLoading(false);
+  };
+
+  const refreshTokens = useCallback(async () => {
     // Prevent concurrent refresh operations
     if (refreshInProgressRef.current) {
       return refreshPromiseRef.current;
@@ -375,22 +401,43 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
         const { groups, features } = extractGroupsAndFeatures(newDecodedIdToken, setAuthError);
 
-        // Update the user state object with the refreshed tokens
-        // This ensures all AWS clients will be reinitialized with the new tokens
-        setUser((prev) => ({
-          ...prev,
-          tokens: {
-            accessToken: AccessToken,
-            idToken: IdToken,
-            refreshToken,
-          },
-          decoded_tokens: {
+        // Save old tokens before comparison to prevent race condition
+        const oldGroups = user?.groups || [];
+
+        // Only call setUser() when groups actually change, not during routine refresh
+        const groupsChanged = JSON.stringify(oldGroups.sort()) !== JSON.stringify(groups.sort());
+
+        if (groupsChanged || !user) {
+          // Update the user state object with the refreshed tokens
+          // This ensures all AWS clients will be reinitialized with the new tokens
+          setUser((prev) => ({
+            ...prev,
+            tokens: {
+              accessToken: AccessToken,
+              idToken: IdToken,
+              refreshToken,
+            },
+            decoded_tokens: {
+              accessToken: newDecodedAccessToken,
+              idToken: newDecodedIdToken,
+            },
+            groups,
+            features,
+          }));
+        } else {
+          console.log('🔄 Groups/features unchanged during refresh, updating tokens silently');
+          // Update decoded tokens ref for future comparisons
+          decodedTokensRef.current = {
             accessToken: newDecodedAccessToken,
             idToken: newDecodedIdToken,
-          },
-          groups,
-          features,
-        }));
+          };
+          // Update tokensRef directly
+          tokensRef.current = {
+            ...tokensRef.current,
+            accessToken: AccessToken,
+            idToken: IdToken,
+          };
+        }
 
         lastRefreshTimeRef.current = Date.now();
         return true;
@@ -406,7 +453,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     refreshPromiseRef.current = refreshOperation();
     return refreshPromiseRef.current;
-  };
+  }, [user, logout]);
 
   // Centralized token validation function
   const ensureValidTokens = async () => {
@@ -1042,32 +1089,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
       tokens: user.tokens,
       decoded_tokens: user.decoded_tokens,
     };
-  };
-
-  const logout = () => {
-    console.log('🚪 logout: Starting logout process');
-
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('idToken');
-    localStorage.removeItem('lastTokenValidation');
-    tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
-    decodedTokensRef.current = { accessToken: null, idToken: null };
-    previousGroupsRef.current = null;
-
-    // Clear all AWS clients to force re-authentication
-    setQBusinessClient(null);
-    setQAppsClient(null);
-    setBedrockRuntimeClient(null);
-    setBedrockAgentRuntimeClient(null);
-    setBedrockAgentClient(null);
-    setNumaChatBedrockUtils(null);
-    setDynamoDBClient(null);
-    setNumaChatDynamoUtils(null);
-
-    setUser(null);
-    setAuthError(null);
-    setLoading(false);
   };
 
   const performSrpAuthentication = async (username, password) => {
