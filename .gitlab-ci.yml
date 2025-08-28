@@ -110,10 +110,35 @@ variables:
         - lib/markdown-to-pdf
         - lib/s3_helpers
 
+.node_job:
+  before_script:
+    - corepack enable
+    - cd $BUILD_DIR
+
+.node-lint:
+  needs:
+
+.node-test:
+  needs:
+
+.node-build:
+  needs:
+
+install-common-dependencies:
+  stage: setup
+  image: node:lts
+  before_script:
+    - !reference [.yarn, setup-private-auth]
+    - !reference [.yarn, install]
+  script:
+    - yarn
+  artifacts:
+    paths:
+      - node_modules
+
 client-list-lint:
   allow_failure: true # Temporarily allow this to fail so we don't get unnecessary broken pipelines.
   stage: lint
-  needs: []
   image: registry.gitlab.com/arcanumai/ci/all-inclusive
   variables:
     AWS_REGION: us-east-1
@@ -128,21 +153,23 @@ client-list-lint:
   script:
     - diff <((cd tools && yarn list-clients) | grep -v 'arcanum-demo$') <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
 
+.node-job-cdktf-get-before-script: &node-job-cdktf-get-before-script
+  before_script:
+    - corepack enable
+    - (cd infra && yarn exec cdktf get)
+    - cd $BUILD_DIR
+
 .node-job-infra-overrides: &node-job-infra-overrides
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
-  before_script:
-    - cd infra
-    - !reference [.yarn, setup-private-auth]
-    - !reference [.yarn, install]
-    - yarn exec cdktf get
+  variables:
+    BUILD_DIR: infra
+  <<: *node-job-cdktf-get-before-script
 
 .node-job-tools-overrides: &node-job-tools-overrides
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
   variables:
     BUILD_DIR: tools
-  before_script:
-    - !reference [.node_job, before_script]
-    - (cd ../infra && yarn exec cdktf get)
+  <<: *node-job-cdktf-get-before-script
 
 infra-lint:
   extends: .node-lint
@@ -280,7 +307,7 @@ node-package:
   extends: .node_job
   stage: package
   before_script:
-    - !reference [.node_job, before_script]
+    - cd $BUILD_DIR
     - apt update && apt install -y zip
   script:
     - yarn bundle
