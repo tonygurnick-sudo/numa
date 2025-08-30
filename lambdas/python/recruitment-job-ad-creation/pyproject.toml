@@ -23,10 +23,10 @@ packages = [
 [tool.poetry.dependencies]
 python = "~3.13.0"
 bedrock = {path = "../../../lib/bedrock", develop = true}
-boto3 = "1.37.20"
+boto3 = "1.40.21"
 
 [tool.poetry.group.dev.dependencies]
-boto3-stubs = "1.37.20"
+boto3-stubs = "1.40.21"
 mypy = "1.17.1"
 pylint = "3.3.8"
 pyright = "1.1.403"
