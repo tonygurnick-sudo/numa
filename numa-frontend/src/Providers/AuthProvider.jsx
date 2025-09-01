@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useRef, useEffect, useCallback } from 'react';
+import { createContext, useState, useContext, useRef, useEffect, useCallback, useMemo } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import { QBusinessClient } from '@aws-sdk/client-qbusiness';
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
@@ -55,10 +55,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const refreshInProgressRef = useRef(false);
   const refreshPromiseRef = useRef(null);
 
-  // Ref to track previous groups for change detection
-  const previousGroupsRef = useRef(null);
-
-  // Ref to track last check/refresh time for accurate time tracking
   const lastRefreshTimeRef = useRef(0);
 
   // Decode tokens without triggering re-renders
@@ -91,11 +87,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
           console.warn('Failed to decode ID token:', e);
         }
       }
-
-      // Replace manual group and feature extraction with utility function
-      const { groups } = extractGroupsAndFeatures(decodedTokensRef.current.idToken, setAuthError);
-
-      detectAndHandleGroupChanges(groups);
     } catch (error) {
       console.error('Error in decodeTokens:', error);
       decodedTokensRef.current = { accessToken: null, idToken: null };
@@ -183,48 +174,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   };
 
-  // Group change detection and immediate action
-  const detectAndHandleGroupChanges = async (currentGroups) => {
-    if (!previousGroupsRef.current) {
-      previousGroupsRef.current = currentGroups;
-      return false;
-    }
-
-    const previousGroups = previousGroupsRef.current;
-    const hasAdmin = currentGroups.includes('admin');
-    const hadAdmin = previousGroups.includes('admin');
-
-    if (hasAdmin !== hadAdmin) {
-      // Update previousGroupsRef immediately to prevent repeated detection
-      previousGroupsRef.current = currentGroups;
-
-      if (hasAdmin) {
-        // Promoted - refresh tokens to get new permissions immediately
-        console.log('🔄 User promoted to admin, refreshing tokens for new permissions');
-        console.log('Previous groups:', previousGroups);
-        console.log('Current groups from token:', currentGroups);
-        await refreshTokens();
-
-        // Log the user state after refresh to verify the promotion took effect
-        setTimeout(() => {
-          console.log('📊 User state after promotion refresh:', {
-            userGroups: user?.groups,
-            userFeatures: user?.features,
-            hasAdminGroup: user?.groups?.includes('admin'),
-            totalFeatures: user?.features?.length,
-          });
-        }, 100);
-      } else {
-        // Demoted - logout immediately
-        console.log('🚪 User demoted from admin, logging out immediately');
-        logout();
-      }
-      return true; // Group change was handled
-    }
-
-    return false; // No group change
-  };
-
   // Token revocation notification functions
   const showTokenRevocationNotification = useCallback(() => {
     setTokenRevocationState({
@@ -306,7 +255,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     console.log('🚪 logout: Starting logout process');
 
     localStorage.removeItem('accessToken');
@@ -315,7 +264,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     localStorage.removeItem('lastTokenValidation');
     tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
     decodedTokensRef.current = { accessToken: null, idToken: null };
-    previousGroupsRef.current = null;
 
     // Clear all AWS clients to force re-authentication
     setQBusinessClient(null);
@@ -330,7 +278,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     setUser(null);
     setAuthError(null);
     setLoading(false);
-  };
+  }, []);
 
   const refreshTokens = useCallback(async () => {
     // Prevent concurrent refresh operations
@@ -404,40 +352,64 @@ export const AuthProvider = ({ children, initialTokens }) => {
         // Save old tokens before comparison to prevent race condition
         const oldGroups = user?.groups || [];
 
-        // Only call setUser() when groups actually change, not during routine refresh
+        // Check if groups actually changed, not just tokens refreshed
         const groupsChanged = JSON.stringify(oldGroups.sort()) !== JSON.stringify(groups.sort());
 
-        if (groupsChanged || !user) {
-          // Update the user state object with the refreshed tokens
-          // This ensures all AWS clients will be reinitialized with the new tokens
-          setUser((prev) => ({
-            ...prev,
-            tokens: {
-              accessToken: AccessToken,
-              idToken: IdToken,
-              refreshToken,
-            },
-            decoded_tokens: {
-              accessToken: newDecodedAccessToken,
-              idToken: newDecodedIdToken,
-            },
-            groups,
-            features,
-          }));
-        } else {
-          console.log('🔄 Groups/features unchanged during refresh, updating tokens silently');
-          // Update decoded tokens ref for future comparisons
-          decodedTokensRef.current = {
-            accessToken: newDecodedAccessToken,
-            idToken: newDecodedIdToken,
-          };
-          // Update tokensRef directly
-          tokensRef.current = {
-            ...tokensRef.current,
+        // Handle group changes (admin promotion/demotion)
+        if (groupsChanged && user) {
+          const hasAdmin = groups.includes('admin');
+          const hadAdmin = oldGroups.includes('admin');
+
+          if (hasAdmin !== hadAdmin) {
+            if (!hasAdmin && hadAdmin) {
+              // Demoted from admin - logout immediately
+              logout();
+              return false;
+            } else if (hasAdmin && !hadAdmin) {
+              // Promoted - refresh tokens to get new permissions immediately
+              console.log('🔄 User promoted to admin, refreshing tokens for new permissions');
+              console.log('Previous groups:', oldGroups);
+              console.log('Current groups from token:', groups);
+              await refreshTokens();
+
+              // Log the user state after refresh to verify the promotion took effect
+              setTimeout(() => {
+                console.log('📊 User state after promotion refresh:', {
+                  userGroups: user?.groups,
+                  userFeatures: user?.features,
+                  hasAdminGroup: user?.groups?.includes('admin'),
+                  totalFeatures: user?.features?.length,
+                });
+              }, 100);
+            }
+          }
+        }
+
+        // Update user state with fresh tokens and groups/features
+        const userUpdate = {
+          tokens: {
             accessToken: AccessToken,
             idToken: IdToken,
-          };
-        }
+            refreshToken,
+          },
+          decoded_tokens: {
+            accessToken: newDecodedAccessToken,
+            idToken: newDecodedIdToken,
+          },
+          groups,
+          features,
+        };
+
+        // Update decoded tokens ref for future comparisons
+        decodedTokensRef.current = {
+          accessToken: newDecodedAccessToken,
+          idToken: newDecodedIdToken,
+        };
+
+        setUser((prevUser) => ({
+          ...prevUser,
+          ...userUpdate,
+        }));
 
         lastRefreshTimeRef.current = Date.now();
         return true;
@@ -453,7 +425,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     refreshPromiseRef.current = refreshOperation();
     return refreshPromiseRef.current;
-  }, [user, logout]);
+  }, [logout]);
 
   // Centralized token validation function
   const ensureValidTokens = async () => {
@@ -490,15 +462,12 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   // Force immediate token validation (bypasses cache)
-  const forceTokenValidation = async () => {
-    if (!user) {
-      console.error('🚫 forceTokenValidation: No user, returning false');
-      return false;
-    }
-
+  const forceTokenValidation = useCallback(async () => {
+    // Use tokensRef instead of user to avoid stale closures
     const accessToken = tokensRef.current.accessToken;
-    if (!accessToken) {
-      console.error('🚫 forceTokenValidation: No access token, returning false');
+    const idToken = tokensRef.current.idToken;
+    if (!accessToken || !idToken) {
+      console.error('🚫 forceTokenValidation: No access token or ID token available, returning false');
       return false;
     }
 
@@ -514,9 +483,9 @@ export const AuthProvider = ({ children, initialTokens }) => {
     // Update validation timestamp
     localStorage.setItem('lastTokenValidation', Date.now().toString());
     return true;
-  };
+  }, [showTokenRevocationNotification, logout]);
 
-  const getAccessToken = async () => {
+  const getAccessToken = useCallback(async () => {
     if (!user) return null;
 
     // Check if token is expired or about to expire
@@ -527,7 +496,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     // Return the current access token from tokensRef instead of user.tokens
     return tokensRef.current.accessToken;
-  };
+  }, [refreshTokens]);
 
   const initializeQBusinessClient = useCallback(async () => {
     if (!user) return;
@@ -826,7 +795,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         roleSessionName: 'numa-dynamo-client',
         roleArn: roleArn,
         webIdentityToken: idToken,
-        durationSeconds: 3600,
+        durationSeconds: 900,
       })();
 
       const newClient = new DynamoDBClient({
@@ -887,7 +856,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         roleSessionName: 'numa-qapps-client',
         roleArn: roleArn,
         webIdentityToken: idToken,
-        durationSeconds: 3600,
+        durationSeconds: 900,
       })();
 
       const newQAppsClient = new QAppsClient({
@@ -941,8 +910,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     initializeBedrockAgentClient,
     initializeDynamoDBClient,
   ]);
-
-  const checkAndRefreshTokens = async () => {
+  const checkAndRefreshTokens = useCallback(async () => {
     const { accessToken, idToken, refreshToken } = tokensRef.current;
     if (!accessToken || !idToken || !refreshToken) {
       console.debug('No access token, ID token, or refresh token available');
@@ -1006,7 +974,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       console.error('Error decoding token during check:', error);
       return false;
     }
-  };
+  }, [refreshTokens, showTokenRevocationNotification, logout]);
 
   useEffect(() => {
     if (!user || initialTokens) return;
@@ -1015,7 +983,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const intervalId = setInterval(checkAndRefreshTokens, REFRESH_PERIOD);
 
     return () => clearInterval(intervalId);
-  }, [user]);
+  }, [user, checkAndRefreshTokens]);
 
   const loadUserFromTokens = async () => {
     const accessToken = localStorage.getItem('accessToken');
@@ -1083,13 +1051,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
     loadUserFromTokens();
   }, []);
 
-  const getUserInfo = () => {
+  const getUserInfo = useCallback(() => {
     if (!user) return null;
     return {
       tokens: user.tokens,
       decoded_tokens: user.decoded_tokens,
     };
-  };
+  }, [user]);
 
   const performSrpAuthentication = async (username, password) => {
     const REGION = window.sessionStorage.getItem('REGION');
@@ -1149,7 +1117,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     };
   };
 
-  const login = async (username, password) => {
+  const login = useCallback(async (username, password) => {
     try {
       // Clear any previous auth errors when attempting login
       setAuthError(null);
@@ -1166,41 +1134,44 @@ export const AuthProvider = ({ children, initialTokens }) => {
       console.error('Error during authentication:', error);
       throw error;
     }
-  };
+  }, []);
 
-  const setNewPassword = async (username, oldPassword, newPassword) => {
-    try {
-      const { response, cognitoClient, lowercaseUsername, SECRET_HASH, CLIENT_ID } = await performSrpAuthentication(
-        username,
-        oldPassword,
-      );
+  const setNewPassword = useCallback(
+    async (username, oldPassword, newPassword) => {
+      try {
+        const { response, cognitoClient, lowercaseUsername, SECRET_HASH, CLIENT_ID } = await performSrpAuthentication(
+          username,
+          oldPassword,
+        );
 
-      if (response.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
-        // Handle new password challenge
-        const newPasswordChallengeParams = {
-          ClientId: CLIENT_ID,
-          ChallengeName: 'NEW_PASSWORD_REQUIRED',
-          Session: response.Session,
-          ChallengeResponses: {
-            USERNAME: lowercaseUsername,
-            NEW_PASSWORD: newPassword,
-            SECRET_HASH: SECRET_HASH,
-          },
-        };
+        if (response.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+          // Handle new password challenge
+          const newPasswordChallengeParams = {
+            ClientId: CLIENT_ID,
+            ChallengeName: 'NEW_PASSWORD_REQUIRED',
+            Session: response.Session,
+            ChallengeResponses: {
+              USERNAME: lowercaseUsername,
+              NEW_PASSWORD: newPassword,
+              SECRET_HASH: SECRET_HASH,
+            },
+          };
 
-        const newPasswordChallengeCommand = new RespondToAuthChallengeCommand(newPasswordChallengeParams);
-        await cognitoClient.send(newPasswordChallengeCommand);
+          const newPasswordChallengeCommand = new RespondToAuthChallengeCommand(newPasswordChallengeParams);
+          await cognitoClient.send(newPasswordChallengeCommand);
 
-        // Login with new password
-        return await login(lowercaseUsername, newPassword);
-      } else {
-        throw new Error('Unexpected authentication response');
+          // Login with new password
+          return await login(lowercaseUsername, newPassword);
+        } else {
+          throw new Error('Unexpected authentication response');
+        }
+      } catch (error) {
+        console.error('Error during setNewPassword:', error);
+        throw error;
       }
-    } catch (error) {
-      console.error('Error during setNewPassword:', error);
-      throw error;
-    }
-  };
+    },
+    [login],
+  );
 
   const handleLoginSuccess = async (tokens) => {
     // Update tokensRef directly
@@ -1262,7 +1233,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   }, [initialTokens]);
 
-  const requestPasswordReset = async (email, mode = 'reset') => {
+  const requestPasswordReset = useCallback(async (email, mode = 'reset') => {
     try {
       const lowercaseEmail = email.toLowerCase();
       const SECRET_HASH = await fetchSecretHash(lowercaseEmail);
@@ -1289,9 +1260,9 @@ export const AuthProvider = ({ children, initialTokens }) => {
     } catch (error) {
       throw new Error(`Error requesting password reset: ${error.message}`);
     }
-  };
+  }, []);
 
-  const confirmPasswordReset = async (email, code, newPassword) => {
+  const confirmPasswordReset = useCallback(async (email, code, newPassword) => {
     try {
       const SECRET_HASH = await fetchSecretHash(email);
       const REGION = window.sessionStorage.getItem('REGION');
@@ -1313,9 +1284,9 @@ export const AuthProvider = ({ children, initialTokens }) => {
     } catch (error) {
       throw new Error(`Error resetting password: ${error.message}`);
     }
-  };
+  }, []);
 
-  const getCredentials = async () => {
+  const getCredentials = useCallback(async () => {
     const REGION = window.sessionStorage.getItem('REGION');
 
     if (!user) {
@@ -1380,11 +1351,36 @@ export const AuthProvider = ({ children, initialTokens }) => {
       console.error('Error getting credentials:', error);
       throw error;
     }
-  };
+  }, [user, refreshTokens]);
 
-  const value = {
-    isAuthenticated: !!user,
-    user,
+  const value = useMemo(() => {
+    return {
+      isAuthenticated: !!user,
+      user,
+      loading,
+      authError,
+      tokenValidationComplete,
+      login,
+      logout,
+      setNewPassword,
+      refreshTokens,
+      getAccessToken,
+      getUserInfo,
+      checkAndRefreshTokens,
+      forceTokenValidation,
+      qBusinessClient,
+      qAppsClient,
+      bedrockRuntimeClient,
+      bedrockAgentRuntimeClient,
+      bedrockAgentClient,
+      numaChatBedrockUtils,
+      dynamoDBClient,
+      numaChatDynamoUtils,
+      requestPasswordReset,
+      confirmPasswordReset,
+      getCredentials,
+    };
+  }, [
     loading,
     authError,
     tokenValidationComplete,
@@ -1407,7 +1403,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     requestPasswordReset,
     confirmPasswordReset,
     getCredentials,
-  };
+    numaChatDynamoUtils, // Include numaChatDynamoUtils so conversation manager gets notified when it becomes available
+  ]);
 
   // Token revocation notification component
   const TokenRevocationNotificationComponent = () => {

@@ -333,10 +333,9 @@ describe('AuthProvider', () => {
 
       const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
 
-      // Get the access token which should trigger a refresh
-      let token;
+      // Call refreshTokens directly to test the refresh functionality
       await act(async () => {
-        token = await auth.getAccessToken();
+        await auth.refreshTokens();
       });
 
       // Verify the fetch call was made with userSub
@@ -353,8 +352,13 @@ describe('AuthProvider', () => {
       expect(window.localStorage.setItem).toHaveBeenCalledWith('accessToken', TEST_TOKENS.valid.accessToken);
       expect(window.localStorage.setItem).toHaveBeenCalledWith('idToken', TEST_TOKENS.valid.idToken);
 
-      // Verify the returned token is the new valid token
-      expect(token).toBe(TEST_TOKENS.valid.accessToken);
+      // Wait for the user state to be updated with new tokens after refresh
+      await waitFor(() => {
+        const updatedAuth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+        const userInfo = updatedAuth.getUserInfo();
+        // Verify that user info now contains the new valid tokens
+        expect(userInfo.tokens.accessToken).toBe(TEST_TOKENS.valid.accessToken);
+      });
     });
 
     it('should handle logout correctly', async () => {
