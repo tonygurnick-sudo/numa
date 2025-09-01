@@ -307,6 +307,7 @@ node-package:
   extends: .node_job
   stage: package
   before_script:
+    - corepack enable
     - cd $BUILD_DIR
     - apt update && apt install -y zip
   script:
