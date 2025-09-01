@@ -1,4 +1,4 @@
-import { listClients, getClientConfig, putClientConfig } from '../index';
+import { listClients, getClientConfig, putClientConfig, getAllClientConfigs } from '../index';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import fs from 'node:fs';
@@ -188,5 +188,77 @@ describe('putClientConfig', () => {
     assert.strictEqual(ddbMock.commandCalls(PutCommand).length, 1);
     const call = ddbMock.commandCalls(PutCommand)[0];
     assert.deepStrictEqual(call.args[0].input.Item, { clientName: 'def', config });
+  });
+});
+
+describe('getAllClientConfigs', () => {
+  beforeEach(() => {
+    ddbMock.on(ScanCommand).resolves({
+      Items: [],
+    });
+    mock.method(fs, 'readFileSync', () => {
+      return JSON.stringify({});
+    });
+  });
+  afterEach(() => {
+    ddbMock.reset();
+    mock.reset();
+  });
+  it('should return client configs', async () => {
+    ddbMock.on(ScanCommand).resolves({
+      Items: [
+        { clientName: 'def', config: { region: 'us-east-1' } },
+        { clientName: 'abc', config: { region: 'ap-southeast-2' } },
+      ],
+    });
+    const clients = await getAllClientConfigs<ClientConfig>();
+    assert.deepStrictEqual(clients, { abc: { region: 'ap-southeast-2' }, def: { region: 'us-east-1' } });
+  });
+  it('should return client configs from json file', async () => {
+    mock.method(fs, 'readFileSync', () => {
+      return JSON.stringify({ abc: {}, def: {} });
+    });
+    const clients = await getAllClientConfigs<ClientConfig>();
+    assert.deepStrictEqual(clients, { abc: {}, def: {} });
+  });
+  it('should read clients from the correct json file', async () => {
+    const readMock = mock.method(fs, 'readFileSync', () => {
+      return JSON.stringify({});
+    });
+    const expectedPath = path.join(import.meta.dirname, '..', '..', '..', 'clientConfigProd.json');
+    await getAllClientConfigs<ClientConfig>();
+    const call = readMock.mock.calls[0];
+    assert.strictEqual(call.arguments[0], expectedPath);
+  });
+  it('should return an empty dict when json file not found and Dynamo empty', async () => {
+    mock.method(fs, 'readFileSync', () => {
+      throw new Error('File not found');
+    });
+    const warnMock = mock.method(console, 'warn', () => {});
+    const clients = await getAllClientConfigs<ClientConfig>();
+    assert.strictEqual(warnMock.mock.callCount(), 1);
+    assert.deepStrictEqual(clients, {});
+  });
+  it('should return an empty dict when no clients', async () => {
+    const clients = await getAllClientConfigs<ClientConfig>();
+    assert.deepStrictEqual(clients, {});
+  });
+  it('should return an empty dict when items not returned', async () => {
+    ddbMock.on(ScanCommand).resolves({});
+    const clients = await getAllClientConfigs<ClientConfig>();
+    assert.deepStrictEqual(clients, {});
+  });
+  it('dedupes clients from Dynamo and json file', async () => {
+    ddbMock.on(ScanCommand).resolves({
+      Items: [
+        { clientName: 'def', config: { region: 'us-east-1' } },
+        { clientName: 'abc', config: { region: 'ap-southeast-2' } },
+      ],
+    });
+    mock.method(fs, 'readFileSync', () => {
+      return JSON.stringify({ abc: { region: 'ap-southeast-2' }, def: { region: 'us-east-1' } });
+    });
+    const clients = await getAllClientConfigs<ClientConfig>();
+    assert.deepStrictEqual(clients, { abc: { region: 'ap-southeast-2' }, def: { region: 'us-east-1' } });
   });
 });
