@@ -43,7 +43,7 @@ export const useCompanyProfile = () => {
     if (!isCompanyProfileLoaded && REGION && companyBucket) {
       fetchCompanyProfile();
     }
-  }, [REGION, companyBucket, getCredentials, isCompanyProfileLoaded]);
+  }, [REGION, companyBucket, isCompanyProfileLoaded]);
 
   return {
     companyProfile,

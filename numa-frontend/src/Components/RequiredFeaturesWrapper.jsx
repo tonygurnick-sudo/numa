@@ -72,7 +72,8 @@ export const FeatureWrapper = ({
   useEffect(() => {
     const validateTokensOnNavigation = async () => {
       // Validate tokens for any protected route that requires auth
-      if (requireAuth && forceTokenValidation) {
+      // Only validate tokens if user is properly loaded and we have the validation function
+      if (requireAuth && forceTokenValidation && user && tokenValidationComplete) {
         setIsValidatingTokens(true);
         try {
           const isValid = await forceTokenValidation();
@@ -88,7 +89,7 @@ export const FeatureWrapper = ({
     };
 
     validateTokensOnNavigation();
-  }, [requireAuth, forceTokenValidation, location.pathname]); // Include location.pathname to trigger on navigation
+  }, [requireAuth, forceTokenValidation, tokenValidationComplete, location.pathname]); // Include location.pathname to trigger on navigation
 
   // Handle loading states
   if (loading || !tokenValidationComplete || isValidatingTokens) {
