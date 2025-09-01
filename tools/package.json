@@ -6,6 +6,7 @@
   "dependencies": {
     "@arcanumai/client-config": "workspace:^",
     "@aws-sdk/client-account": "^3.848.0",
+    "@aws-sdk/client-cloudformation": "^3.840.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.675.0",
     "@aws-sdk/client-iam": "^3.738.0",
     "@aws-sdk/client-qbusiness": "^3.675.0",
@@ -19,7 +20,8 @@
     "adm-zip": "^0.5.16",
     "chalk": "^5.3.0",
     "commander": "^13.0.0",
-    "csv": "^6.3.10",
+    "csv": "^6.3.11",
+    "flat-cache": "^6.1.10",
     "generate-password": "^1.7.1",
     "inquirer": "^12.0.0",
     "json-diff-ts": "^4.3.0",
@@ -37,6 +39,7 @@
     "lint": "eslint . && tsc --noEmit",
     "test": "mkdir -p test-reports; node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml",
     "upload-files": "node --import tsx upload-files.ts",
+    "check-access": "node --import tsx check-access.ts",
     "check-email-cases": "node --import tsx check-email-cases.ts",
     "check-email-verified": "node --import tsx check-email-verified.ts",
     "check-user-password-state": "node --import tsx check-user-password-state.ts",
@@ -48,7 +51,9 @@
     "get-system-user-password": "node --import tsx get-system-user-password.ts",
     "update-account-name": "node --import tsx update-account-name.ts",
     "update-q-deploy-config": "node --import tsx update-q-deploy-config.ts",
-    "teardown-client": "node --import tsx teardown-client.ts"
+    "teardown-client": "node --import tsx teardown-client.ts",
+    "provision-access": "node --import tsx provision-access.ts",
+    "quota-report": "node --import tsx quota-report.ts"
   },
   "packageManager": "yarn@4.9.2",
   "devDependencies": {

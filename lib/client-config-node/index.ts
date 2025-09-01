@@ -7,6 +7,7 @@ import { ZodTypeAny } from 'zod';
 
 const TableName = 'numa-client-config';
 const ClientKey = 'clientName';
+const ConfigKey = 'config';
 
 interface ListClientProps {
   credentials?: RuntimeConfigAwsCredentialIdentityProvider;
@@ -108,6 +109,32 @@ export async function getClientConfigFromDynamo<ClientConfig>(
 function getClientConfigFromJson<ClientConfig>(clientName: string): ClientConfig | undefined {
   const data = loadFromJson<ClientConfig>();
   return data[clientName];
+}
+
+async function getAllClientsFromDynamo<ClientConfig>(
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+): Promise<Record<string, ClientConfig>> {
+  const ddbdc = await getDocument(credentials);
+  const result = await ddbdc.scan({
+    TableName,
+  });
+  if (!result.Items) {
+    return {};
+  }
+  return Object.fromEntries(result.Items.map((item) => [item[ClientKey], item[ConfigKey]]));
+}
+
+function getAllClientsFromJSON<ClientConfig>(): Record<string, ClientConfig> {
+  return loadFromJson();
+}
+
+interface GetAllClientConfigsProps {
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider;
+}
+export async function getAllClientConfigs<ClientConfig>(
+  props?: GetAllClientConfigsProps,
+): Promise<Record<string, ClientConfig>> {
+  return { ...(await getAllClientsFromDynamo(props?.credentials)), ...getAllClientsFromJSON() };
 }
 
 interface PutClientConfigProps<ClientConfig> {
