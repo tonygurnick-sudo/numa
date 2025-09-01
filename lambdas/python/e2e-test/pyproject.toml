@@ -25,14 +25,14 @@ python = "~3.13.0"
 
 aws-transcribe = {path = "../../../lib/aws-transcribe", develop = true}
 bedrock = {path = "../../../lib/bedrock", develop = true}
-boto3 = "1.37.20"
+boto3 = "1.40.21"
 helpers = {path = "../../../lib/helpers", develop = true}
 structlog = "25.2.0"
 openpyxl = "^3.1.5"
 python-docx = "^1.1.2"
 
 [tool.poetry.group.dev.dependencies]
-boto3-stubs = "1.37.20"
+boto3-stubs = "1.40.21"
 mypy = "1.17.1"
 pylint = "3.3.8"
 pyright = "1.1.403"
