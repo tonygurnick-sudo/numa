@@ -123,11 +123,9 @@ if (import.meta.filename == process.argv[1]) {
   const quotas = await getQuotas();
 
   console.log('Retrieving quotas...');
-  const result = (
-    await Promise.all(Object.keys(accounts).map(async (account) => checkAccount(account, regions, quotas)))
-  )
-    .flat()
-    .filter((r) => r);
+  const result = await Promise.all(
+    Object.keys(accounts).map(async (account) => checkAccount(account, regions, quotas)),
+  ).then((r) => r.flat().filter((r) => r));
 
   console.log('Producing report...');
   const reportPath = './quota-report.csv';
