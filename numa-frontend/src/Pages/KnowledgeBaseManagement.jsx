@@ -86,6 +86,29 @@ function filterTree(node, searchTerm) {
 }
 
 /**
+ * Collect all folder paths that should be expanded to show search results.
+ * This recursively traverses the filtered tree and returns folder paths that contain matching content.
+ */
+function collectFoldersToExpand(node, currentPath = '', foldersToExpand = new Set()) {
+  // Check each child folder
+  for (const [folderName, folderNode] of Object.entries(node.children)) {
+    const folderPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+
+    // If this folder has files or nested content, it should be expanded
+    const hasFiles = folderNode.files.length > 0;
+    const hasNestedContent = Object.keys(folderNode.children).length > 0;
+
+    if (hasFiles || hasNestedContent) {
+      foldersToExpand.add(folderPath);
+      // Recursively expand nested folders
+      collectFoldersToExpand(folderNode, folderPath, foldersToExpand);
+    }
+  }
+
+  return foldersToExpand;
+}
+
+/**
  * Sort folders and files by specified column and direction.
  * @param {Object} node - The tree node to sort
  * @param {string} sortColumn - Column to sort by ('name', 'date', 'size')
@@ -894,6 +917,17 @@ export function KnowledgeBaseManagement() {
   }, [indexedFiles, indexedSearch, indexedSortColumn, indexedSortDirection]);
 
   /**
+   * Auto-expand folders when search finds nested files
+   */
+  useEffect(() => {
+    if (indexedSearch && indexedSearch.trim()) {
+      // When there's a search term, expand all folders that contain matching results
+      const foldersToExpand = collectFoldersToExpand(indexedTree);
+      setExpandedFoldersIndexed(foldersToExpand);
+    }
+  }, [indexedSearch, indexedTree]);
+
+  /**
    * Convert each tree to nested row objects, then flatten them
    */
   const pendingRowsNested = useMemo(() => buildRowsForTree(pendingTree, 0, ''), [pendingTree]);
@@ -992,212 +1026,222 @@ export function KnowledgeBaseManagement() {
                     <p className="mt-3 text-muted small mb-0">Loading files from S3...</p>
                   )}
                 </div>
-              ) : rows.length === 0 ? (
-                <div className="text-center bg-light rounded empty-state">
-                  <p className="mt-2 text-muted mb-0">{noItemsMsg}</p>
-                </div>
               ) : (
-                <div className={containerClass}>
-                  {/* Bulk Delete Action Bar - Always visible but conditionally enabled */}
-                  <FeatureWrapper requiredFeature="deleteFromCompanyData">
-                    <div
-                      className={`d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded sticky-action-bar ${(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed).size === 0 ? 'no-selection' : ''}`}
-                    >
-                      {/* Left side - Search input */}
-                      <div>
-                        {showSearch && (
-                          <div className="search-container" data-testid="kb-search-container">
-                            <Form.Control
-                              type="text"
-                              placeholder="Search..."
-                              value={searchValue}
-                              onChange={(e) => setSearchValue(e.target.value)}
-                              data-testid="kb-search-input"
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Right side - Selection info and buttons */}
-                      <div className="d-flex align-items-center ms-auto">
-                        <span className="text-muted me-3">
-                          {(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
-                            .size || 0}{' '}
-                          item(s) selected
-                        </span>
-                        <div>
-                          <Button
-                            variant="outline-secondary"
-                            size="sm"
-                            className="me-2"
-                            disabled={
-                              (expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
-                                .size === 0
-                            }
-                            onClick={() =>
-                              handleClearSelection(expandedSet === expandedFoldersPending ? 'pending' : 'indexed')
-                            }
-                          >
-                            <i className="bi bi-x-circle me-1"></i>
-                            Clear
-                          </Button>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            className="me-2"
-                            disabled={
-                              (expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
-                                .size === rows.length
-                            }
-                            onClick={() =>
-                              handleSelectAll(expandedSet === expandedFoldersPending ? 'pending' : 'indexed', rows)
-                            }
-                          >
-                            <i className="bi bi-check-all me-1"></i>
-                            Select All
-                          </Button>
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            disabled={
-                              (expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
-                                .size === 0
-                            }
-                            onClick={() =>
-                              confirmBulkDelete(expandedSet === expandedFoldersPending ? 'pending' : 'indexed')
-                            }
-                          >
-                            <i className="bi bi-trash me-1"></i>
-                            Delete
-                          </Button>
-                        </div>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={handleRefreshStatus}
-                          className="ms-2"
-                          disabled={kbStateLoading}
-                        >
-                          <div>Refresh</div>
-                        </Button>
-                      </div>
+                <>
+                  {rows.length === 0 && !showSearch && (
+                    <div className="text-center bg-light rounded empty-state">
+                      <p className="mt-2 text-muted mb-0">{noItemsMsg}</p>
                     </div>
-                  </FeatureWrapper>
-                  <Table hover size="sm" className="mb-0 file-table auto-layout">
-                    <thead className="sticky-table-header numa-table-header">
-                      <tr>
-                        <th
-                          className={`col-name ${showErrorColumn ? 'with-error-column' : ''} sortable-header`}
-                          onClick={() => handleSortToggle('name', isPending ? 'pending' : 'indexed')}
+                  )}
+                  {(rows.length > 0 || showSearch) && (
+                    <div className={containerClass}>
+                      {/* Bulk Delete Action Bar - Always visible but conditionally enabled */}
+                      <FeatureWrapper requiredFeature="deleteFromCompanyData">
+                        <div
+                          className={`d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded sticky-action-bar ${(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed).size === 0 ? 'no-selection' : ''}`}
                         >
-                          Name
-                          {(isPending ? pendingSortColumn : indexedSortColumn) === 'name' && (
-                            <i
-                              className={`bi bi-arrow-${(isPending ? pendingSortDirection : indexedSortDirection) === 'asc' ? 'up' : 'down'} ms-1`}
-                            ></i>
-                          )}
-                        </th>
-                        <th
-                          className="col-date sortable-header"
-                          onClick={() => handleSortToggle('date', isPending ? 'pending' : 'indexed')}
-                        >
-                          Upload Date
-                          {(isPending ? pendingSortColumn : indexedSortColumn) === 'date' && (
-                            <i
-                              className={`bi bi-arrow-${(isPending ? pendingSortDirection : indexedSortDirection) === 'asc' ? 'up' : 'down'} ms-1`}
-                            ></i>
-                          )}
-                        </th>
-                        <th
-                          className="col-size sortable-header"
-                          onClick={() => handleSortToggle('size', isPending ? 'pending' : 'indexed')}
-                        >
-                          Size (KB)
-                          {(isPending ? pendingSortColumn : indexedSortColumn) === 'size' && (
-                            <i
-                              className={`bi bi-arrow-${(isPending ? pendingSortDirection : indexedSortDirection) === 'asc' ? 'up' : 'down'} ms-1`}
-                            ></i>
-                          )}
-                        </th>
-                        {showErrorColumn && <th className="col-status">Status</th>}
-                        <FeatureWrapper requiredFeature="deleteFromCompanyData">
-                          <th className="col-select">Select</th>
-                        </FeatureWrapper>
-                      </tr>
-                    </thead>
-                  </Table>
-                  <div className="table-body-container">
-                    <Table hover size="sm" className="mb-0 file-table auto-layout">
-                      <tbody>
-                        {rows.map((row) => {
-                          const { id, type, name, depth, uploadDate, size, kbStatus } = row;
-                          const isFolder = type === 'folder';
-                          const isExpanded = expandedSet.has(id);
+                          {/* Left side - Search input */}
+                          <div>
+                            {showSearch && (
+                              <div className="search-container" data-testid="kb-search-container">
+                                <Form.Control
+                                  type="text"
+                                  placeholder="Search..."
+                                  value={searchValue}
+                                  onChange={(e) => setSearchValue(e.target.value)}
+                                  data-testid="kb-search-input"
+                                />
+                              </div>
+                            )}
+                          </div>
 
-                          return (
-                            <tr key={id}>
-                              <td>
-                                <div className={`file-tree-item depth-${depth}`}>
-                                  {isFolder ? (
-                                    <i
-                                      className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1 folder-toggle`}
-                                      onClick={() => toggleFolderFn(id)}
-                                    />
-                                  ) : (
-                                    <span className="file-icon-spacer" />
-                                  )}
-                                  {isFolder ? (
-                                    <>
-                                      <i className="bi bi-folder me-2 folder-icon" />
-                                      <strong className="text-truncate">{name}</strong>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <i className="bi bi-file-earmark me-2 file-icon" />
-                                      <span className="text-truncate">{row.displayName || name}</span>
-                                      {row.urlTag && <span className="ms-2 badge bg-info">URL</span>}
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                              <td>{uploadDate}</td>
-                              <td>{size}</td>
-                              {showErrorColumn && (
-                                <td>
-                                  {kbStatus === 'SUCCESS' ? (
-                                    <span className="badge bg-success">SUCCESS</span>
-                                  ) : kbStatus === 'FAILED' ? (
-                                    <span className="badge bg-danger">FAILED</span>
-                                  ) : null}
-                                </td>
+                          {/* Right side - Selection info and buttons */}
+                          <div className="d-flex align-items-center ms-auto">
+                            <span className="text-muted me-3">
+                              {(expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
+                                .size || 0}{' '}
+                              item(s) selected
+                            </span>
+                            <div>
+                              <Button
+                                variant="outline-secondary"
+                                size="sm"
+                                className="me-2"
+                                disabled={
+                                  (expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
+                                    .size === 0
+                                }
+                                onClick={() =>
+                                  handleClearSelection(expandedSet === expandedFoldersPending ? 'pending' : 'indexed')
+                                }
+                              >
+                                <i className="bi bi-x-circle me-1"></i>
+                                Clear
+                              </Button>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                className="me-2"
+                                disabled={
+                                  (expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
+                                    .size === rows.length
+                                }
+                                onClick={() =>
+                                  handleSelectAll(expandedSet === expandedFoldersPending ? 'pending' : 'indexed', rows)
+                                }
+                              >
+                                <i className="bi bi-check-all me-1"></i>
+                                Select All
+                              </Button>
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                disabled={
+                                  (expandedSet === expandedFoldersPending ? selectedItemsPending : selectedItemsIndexed)
+                                    .size === 0
+                                }
+                                onClick={() =>
+                                  confirmBulkDelete(expandedSet === expandedFoldersPending ? 'pending' : 'indexed')
+                                }
+                              >
+                                <i className="bi bi-trash me-1"></i>
+                                Delete
+                              </Button>
+                            </div>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={handleRefreshStatus}
+                              className="ms-2"
+                              disabled={kbStateLoading}
+                            >
+                              <div>Refresh</div>
+                            </Button>
+                          </div>
+                        </div>
+                      </FeatureWrapper>
+                      <Table hover size="sm" className="mb-0 file-table auto-layout">
+                        <thead className="sticky-table-header numa-table-header">
+                          <tr>
+                            <th
+                              className={`col-name ${showErrorColumn ? 'with-error-column' : ''} sortable-header`}
+                              onClick={() => handleSortToggle('name', isPending ? 'pending' : 'indexed')}
+                            >
+                              Name
+                              {(isPending ? pendingSortColumn : indexedSortColumn) === 'name' && (
+                                <i
+                                  className={`bi bi-arrow-${(isPending ? pendingSortDirection : indexedSortDirection) === 'asc' ? 'up' : 'down'} ms-1`}
+                                ></i>
                               )}
-                              <FeatureWrapper requiredFeature="deleteFromCompanyData">
-                                <td className="checkbox-purple">
-                                  <input
-                                    type="checkbox"
-                                    className="form-check-input"
-                                    checked={(expandedSet === expandedFoldersPending
-                                      ? selectedItemsPending
-                                      : selectedItemsIndexed
-                                    ).has(row.id)}
-                                    onChange={(e) =>
-                                      handleItemSelection(
-                                        row.id,
-                                        expandedSet === expandedFoldersPending ? 'pending' : 'indexed',
-                                        e.target.checked,
-                                      )
-                                    }
-                                    aria-label={`Select ${isFolder ? 'folder' : 'file'}: ${row.name}`}
-                                  />
-                                </td>
-                              </FeatureWrapper>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </Table>
-                  </div>
-                </div>
+                            </th>
+                            <th
+                              className="col-date sortable-header"
+                              onClick={() => handleSortToggle('date', isPending ? 'pending' : 'indexed')}
+                            >
+                              Upload Date
+                              {(isPending ? pendingSortColumn : indexedSortColumn) === 'date' && (
+                                <i
+                                  className={`bi bi-arrow-${(isPending ? pendingSortDirection : indexedSortDirection) === 'asc' ? 'up' : 'down'} ms-1`}
+                                ></i>
+                              )}
+                            </th>
+                            <th
+                              className="col-size sortable-header"
+                              onClick={() => handleSortToggle('size', isPending ? 'pending' : 'indexed')}
+                            >
+                              Size (KB)
+                              {(isPending ? pendingSortColumn : indexedSortColumn) === 'size' && (
+                                <i
+                                  className={`bi bi-arrow-${(isPending ? pendingSortDirection : indexedSortDirection) === 'asc' ? 'up' : 'down'} ms-1`}
+                                ></i>
+                              )}
+                            </th>
+                            {showErrorColumn && <th className="col-status">Status</th>}
+                            <FeatureWrapper requiredFeature="deleteFromCompanyData">
+                              <th className="col-select">Select</th>
+                            </FeatureWrapper>
+                          </tr>
+                        </thead>
+                      </Table>
+                      <div className="table-body-container">
+                        <Table hover size="sm" className="mb-0 file-table auto-layout">
+                          <tbody>
+                            {rows.map((row) => {
+                              const { id, type, name, depth, uploadDate, size, kbStatus } = row;
+                              const isFolder = type === 'folder';
+                              const isExpanded = expandedSet.has(id);
+
+                              return (
+                                <tr key={id}>
+                                  <td>
+                                    <div className={`file-tree-item depth-${depth}`}>
+                                      {isFolder ? (
+                                        <i
+                                          className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1 folder-toggle`}
+                                          onClick={() => toggleFolderFn(id)}
+                                        />
+                                      ) : (
+                                        <span className="file-icon-spacer" />
+                                      )}
+                                      {isFolder ? (
+                                        <>
+                                          <i className="bi bi-folder me-2 folder-icon" />
+                                          <strong className="text-truncate">{name}</strong>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <i className="bi bi-file-earmark me-2 file-icon" />
+                                          <span className="text-truncate">{row.displayName || name}</span>
+                                          {row.urlTag && <span className="ms-2 badge bg-info">URL</span>}
+                                        </>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td>{uploadDate}</td>
+                                  <td>{size}</td>
+                                  {showErrorColumn && (
+                                    <td>
+                                      {kbStatus === 'SUCCESS' ? (
+                                        <span className="badge bg-success">SUCCESS</span>
+                                      ) : kbStatus === 'FAILED' ? (
+                                        <span className="badge bg-danger">FAILED</span>
+                                      ) : null}
+                                    </td>
+                                  )}
+                                  <FeatureWrapper requiredFeature="deleteFromCompanyData">
+                                    <td className="checkbox-purple">
+                                      <input
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        checked={(expandedSet === expandedFoldersPending
+                                          ? selectedItemsPending
+                                          : selectedItemsIndexed
+                                        ).has(row.id)}
+                                        onChange={(e) =>
+                                          handleItemSelection(
+                                            row.id,
+                                            expandedSet === expandedFoldersPending ? 'pending' : 'indexed',
+                                            e.target.checked,
+                                          )
+                                        }
+                                        aria-label={`Select ${isFolder ? 'folder' : 'file'}: ${row.name}`}
+                                      />
+                                    </td>
+                                  </FeatureWrapper>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </Table>
+                      </div>
+                      {rows.length === 0 && showSearch && (
+                        <div className="text-center p-4">
+                          <p className="text-muted mb-0">No files match your search.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
