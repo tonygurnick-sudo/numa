@@ -8,8 +8,30 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { S3UploadModule } from '../../Modules/S3UploadModule';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 
+// Mock AWS S3 Client
+vi.mock('@aws-sdk/client-s3', () => ({
+  S3Client: vi.fn().mockImplementation(() => ({})),
+  PutObjectCommand: vi.fn().mockImplementation(() => ({})),
+}));
+
+// Mock S3 presigner
+vi.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: vi.fn().mockResolvedValue('https://test-presigned-url.com'),
+}));
+
+// Mock axios
+vi.mock('axios', () => ({
+  default: {
+    put: vi.fn().mockResolvedValue({}),
+  },
+}));
+
 // Define mock data for NumaAppContext
-const mockNumaAppData = { id: 'test-app-id', appName: 'Test App' };
+const mockNumaAppData = {
+  id: 'test-app-id',
+  appName: 'Test App',
+  tasks: [{ id: 'test-task-id', title: 'Test Task' }],
+};
 
 // Create mock functions that we can reference later for assertions
 const createJobMock = vi.fn().mockResolvedValue({ jobID: 'test-job-id' });
@@ -92,7 +114,8 @@ describe('S3UploadModule Component', () => {
   });
 
   it('should handle single file upload', async () => {
-    renderWithProviders(<S3UploadModule />);
+    const task = { id: 'test-task-id', title: 'Test Task' };
+    renderWithProviders(<S3UploadModule task={task} />);
 
     const fileInput = screen.getByTestId('file-upload-input');
 
@@ -135,9 +158,15 @@ describe('S3UploadModule Component', () => {
     const mockOnComplete = vi.fn();
     const mockOnNotComplete = vi.fn();
     const mockOnChange = vi.fn();
+    const task = { id: 'test-task-id', title: 'Test Task' };
 
     renderWithProviders(
-      <S3UploadModule onComplete={mockOnComplete} onNotComplete={mockOnNotComplete} onChange={mockOnChange} />,
+      <S3UploadModule
+        task={task}
+        onComplete={mockOnComplete}
+        onNotComplete={mockOnNotComplete}
+        onChange={mockOnChange}
+      />,
     );
 
     const fileInput = screen.getByTestId('file-upload-input');
@@ -174,25 +203,6 @@ describe('S3UploadModule Component', () => {
     // Mock URL.createObjectURL
     global.URL.createObjectURL = vi.fn();
 
-    // Mock AWS S3 client
-    const mockPutCommand = { input: { Key: 'test-app-id/test-job-id/test.pdf' } };
-    vi.mock('@aws-sdk/client-s3', () => ({
-      S3Client: vi.fn().mockImplementation(() => ({})),
-      PutObjectCommand: vi.fn().mockImplementation(() => mockPutCommand),
-    }));
-
-    // Mock S3 presigner
-    vi.mock('@aws-sdk/s3-request-presigner', () => ({
-      getSignedUrl: vi.fn().mockResolvedValue('https://test-presigned-url.com'),
-    }));
-
-    // Mock axios
-    vi.mock('axios', () => ({
-      default: {
-        put: vi.fn().mockResolvedValue({}),
-      },
-    }));
-
     // Reset our mock functions before the test
     createJobMock.mockClear();
     updateJobMock.mockClear();
@@ -205,13 +215,6 @@ describe('S3UploadModule Component', () => {
       setCurrentJobId: vi.fn(),
       taskInputValues: {},
     });
-
-    // Mock Auth provider
-    vi.mock('../../Providers/AuthProvider', () => ({
-      useAuth: () => ({
-        getCredentials: vi.fn().mockResolvedValue({}),
-      }),
-    }));
 
     // We need to skip actually rendering the component since we can't easily mock
     // all the required dependencies in this test environment

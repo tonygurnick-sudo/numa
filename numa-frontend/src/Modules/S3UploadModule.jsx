@@ -136,14 +136,6 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     }
   }, []);
 
-  // Only enforce maxFiles; minFiles will be shown as a warning
-  const validateFileCount = (files) => {
-    if (maxFiles && files.length > maxFiles) {
-      return `Maximum of ${maxFiles} file${maxFiles > 1 ? 's' : ''} allowed`;
-    }
-    return null;
-  };
-
   // Warning when fewer than minFiles have been selected (only after initial selection)
   const warning =
     minFiles > 0 && selectedFiles.length > 0 && selectedFiles.length < minFiles
@@ -173,19 +165,22 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   };
 
   const removeFile = (fileToRemove) => {
-    setSelectedFiles((prev) => prev.filter((file) => file.name !== fileToRemove.name));
+    setSelectedFiles((prev) => {
+      const updated = prev.filter((file) => file.name !== fileToRemove.name);
+      onChange(updated);
+      return updated;
+    });
     setError(null);
     onNotComplete();
-    onChange(null);
   };
 
   const handleFileSelection = async (fileList) => {
     const newFiles = Array.from(fileList);
-    const combinedFiles = [...selectedFiles, ...newFiles];
+    const totalFileCount = selectedFiles.length + newFiles.length;
 
-    // Check file count constraints with combined files
-    const fileCountError = validateFileCount(combinedFiles);
-    if (fileCountError) {
+    // Check file count constraints with total count
+    if (maxFiles && totalFileCount > maxFiles) {
+      const fileCountError = `Maximum of ${maxFiles} file${maxFiles > 1 ? 's' : ''} allowed`;
       setError(fileCountError);
       return;
     }
@@ -210,7 +205,6 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     }
 
     if (validFiles.length > 0) {
-      setSelectedFiles((prev) => [...prev, ...validFiles]);
       setUploadStatus(null);
       setUploadProgress(0);
       setError(null);
@@ -218,7 +212,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       onChange(null);
 
       // Automatically trigger upload after file selection
-      await handleUpload([...selectedFiles, ...validFiles]);
+      await handleUpload(validFiles);
     }
   };
 
@@ -429,11 +423,13 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
       setUploadStatus(`Upload successful!`);
 
-      // Pass the standardized format (array of objects with id, name, s3_key) to the task system
-      onChange(fileObjects);
-
-      // Store the file objects in the component state for UI display
-      setSelectedFiles(fileObjects.map((obj) => ({ name: obj.name })));
+      // Store the file objects in the component state and pass to task system
+      setSelectedFiles((prev) => {
+        const updatedFiles = [...prev, ...fileObjects];
+        // Pass the accumulated files to the task system
+        onChange(updatedFiles);
+        return updatedFiles;
+      });
 
       // Pass the raw results to onComplete for chat page compatibility
       // ALWAYS ensure we pass a valid array, even if results is undefined
