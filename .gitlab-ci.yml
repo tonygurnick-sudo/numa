@@ -129,9 +129,8 @@ install-common-dependencies:
   image: node:lts
   before_script:
     - !reference [.yarn, setup-private-auth]
-    - !reference [.yarn, install]
   script:
-    - yarn
+    - !reference [.yarn, install]
   artifacts:
     paths:
       - node_modules
