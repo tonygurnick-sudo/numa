@@ -138,7 +138,8 @@ export const NumaAppProvider = ({ children }) => {
     const jobIdParam = urlParams.get('jobId');
 
     // Clear current job data if no jobId in URL
-    if (!jobIdParam && currentJobId) {
+    // But only clear if the current job doesn't have results (to avoid clearing completed jobs)
+    if (!jobIdParam && currentJobId && (!job || !job.results)) {
       setCurrentJobId(null);
       setJob(null);
     }
