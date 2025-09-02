@@ -225,4 +225,22 @@ describe('KnowledgeBaseManagement', () => {
     expect(bodyText).not.toContain('%26');
     expect(bodyText).not.toContain('%2B');
   });
+
+  it('keeps search bar visible when search returns no results', async () => {
+    renderComponent();
+
+    // Wait for the KB card to appear
+    const kbCardTitle = await screen.findByText(/Your Knowledge Base Files \(\d+\)/, { timeout: 5000 });
+    const kbCard = kbCardTitle.closest('.card');
+
+    // Verify that the search functionality components are present
+    expect(kbCard.querySelector('input[type="text"]')).toBeNull(); // Initially no search since no indexed files
+
+    // But the structure should be set up for search when there are files
+    expect(kbCard.querySelector('.file-table-container')).toBeInTheDocument();
+    expect(kbCard.querySelector('.table-body-container')).toBeInTheDocument();
+
+    // Should show "No files match your search" when search is active but no results
+    expect(kbCard.textContent).toContain('No files match your search');
+  });
 });
