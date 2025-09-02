@@ -2,6 +2,7 @@
   matrix:
     - CLIENT_NAME:
         - 30-seconds
+        - alexandergroup
         - arcanum-council-trial
         - arcanum-dave
         - arcanum-demo-nathan-2
