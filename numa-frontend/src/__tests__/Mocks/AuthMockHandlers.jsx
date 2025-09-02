@@ -1,4 +1,5 @@
 import { ListDataSourcesCommand, ListDataSourceSyncJobsCommand } from '@aws-sdk/client-qbusiness';
+import { vi } from 'vitest';
 
 // Mock data for QBusiness responses
 const mockDataSource = {
@@ -41,6 +42,7 @@ const createMockUser = (userType) => {
     decoded_tokens: {
       idToken: {
         'cognito:groups': ['TestGroup'],
+        sub: 'test-user-uuid',
       },
     },
   };
@@ -70,6 +72,11 @@ export const authHandlers = {
   setLoading: vi.fn(),
   setNewPasswordRequired: vi.fn(),
   getAccessToken: vi.fn().mockResolvedValue('mock-token'),
+  getCredentials: vi.fn().mockResolvedValue({
+    accessKeyId: 'test-key',
+    secretAccessKey: 'test-secret',
+    sessionToken: 'test-token',
+  }),
   isAuthenticated: true,
   loading: false,
   tokenValidationComplete: true,
