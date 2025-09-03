@@ -78,7 +78,7 @@ export default defineConfig({
     alias: {
       'node_modules/@popperjs/core': '@popperjs/core/dist/umd/popper.min.js',
     },
-    extensions: ['.js', '.jsx'],
+    extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
   },
   assetsInclude: ['**/*.md'],
   // HTML to DOCX needs a browser environment, so we need to define process.env

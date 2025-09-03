@@ -1,6 +1,12 @@
 import { vi } from 'vitest';
 
-export const setupNavigationMocks = (initialLocation) => {
+interface LocationType {
+  pathname: string;
+  search?: string;
+  hash?: string;
+}
+
+export const setupNavigationMocks = (initialLocation?: LocationType) => {
   // If initialLocation is not provided, use the current route
   navigationHandlers.currentLocation = initialLocation || {
     pathname: navigationHandlers.currentRoute,

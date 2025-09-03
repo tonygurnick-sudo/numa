@@ -60,6 +60,25 @@ const derivedConfig = {
  * @property {string} [refreshToken]
  */
 
+// TypeScript interfaces for better type safety
+interface DecodedJWTToken {
+  sub: string;
+  'cognito:groups'?: string[];
+  'https://aws.amazon.com/tags'?: {
+    principal_tags?: {
+      username?: string[];
+      Groups?: string[];
+    };
+  };
+  [key: string]: unknown;
+}
+
+interface AWSOperationResult<T = unknown> {
+  success: boolean;
+  result?: T;
+  error?: unknown;
+}
+
 // Test user configurations - these should match your actual test users
 const TEST_USERS = {
   standard: {
@@ -208,7 +227,7 @@ async function authenticateUser(userType: 'standard' | 'admin') {
 }
 
 // Extract groups and features from decoded token (same as AuthProvider)
-function extractGroupsAndFeatures(decodedIdToken: any) {
+function extractGroupsAndFeatures(decodedIdToken: DecodedJWTToken) {
   let groups = [...(decodedIdToken['cognito:groups'] || [])];
 
   if (!groups || groups.length === 0) {
@@ -247,15 +266,15 @@ async function getAWSCredentials(idToken: string, userGroups: string[] = ['stand
     }
 
     // Decode the JWT token to get user information
-    const decodedToken = jwtDecode(idToken);
+    const decodedToken = jwtDecode<DecodedJWTToken>(idToken);
 
     // Extract username from the AWS tags claim that the token-adjuster sets
-    const awsTags = (decodedToken as any)['https://aws.amazon.com/tags'];
+    const awsTags = decodedToken['https://aws.amazon.com/tags'];
     const principalTags = awsTags?.principal_tags;
 
     // The token-adjuster sets username to sub in the principal_tags
-    const username = principalTags?.username?.[0] || (decodedToken as any).sub;
-    const groups = principalTags?.Groups || (decodedToken as any)['cognito:groups'] || [];
+    const username = principalTags?.username?.[0] || decodedToken.sub;
+    const decodedUserGroups = principalTags?.Groups || decodedToken['cognito:groups'] || [];
 
     if (!username) {
       throw new Error('No username found in JWT token');
@@ -268,7 +287,7 @@ async function getAWSCredentials(idToken: string, userGroups: string[] = ['stand
       durationSeconds: 3600,
     })();
 
-    const result = { credentials, username, expiration: Date.now() + 50 * 60 * 1000 }; // Cache for 50 minutes
+    const result = { credentials, username, userGroups: decodedUserGroups, expiration: Date.now() + 50 * 60 * 1000 }; // Cache for 50 minutes
     credentialsCache.set(cacheKey, result);
 
     return result;
@@ -293,7 +312,11 @@ function checkEnvVariables() {
 }
 
 // Helper function to safely test AWS operations
-async function testAWSOperation(operation: () => Promise<any>, operationName: string, shouldSucceed: boolean = true) {
+async function testAWSOperation<T = unknown>(
+  operation: () => Promise<T>,
+  operationName: string,
+  shouldSucceed: boolean = true,
+): Promise<AWSOperationResult<T>> {
   try {
     const result = await operation();
     if (!shouldSucceed) {
