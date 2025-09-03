@@ -5,6 +5,8 @@ include:
     file: libraries/node.yml
   - project: arcanumai/ci
     file: libraries/python.yml
+  - project: arcanumai/ci
+    file: libraries/misc.yml
   - .gitlab-ci-clients.yml
 
 workflow:
@@ -14,6 +16,9 @@ workflow:
       when: never
     - if: $CI_PIPELINE_SOURCE == "push"
     - if: $CI_PIPELINE_SOURCE == "web"
+
+services:
+  - docker:dind
 
 variables:
   PYTHON_VER: 3.13
@@ -316,6 +321,32 @@ node-package:
     paths:
       - $BUILD_DIR/dist
       - $BUILD_DIR/lambda_function.zip
+  rules:
+    - !reference [.rules, if-main]
+
+build-deployment-container:
+  stage: image-build
+  image: registry.gitlab.com/arcanumai/ci/all-inclusive # don't need a lot of this, but it gets us started
+  tags:
+    - aws # need to use our AWS workers as TLS docker doesn't seem to work on hosted runners
+  environment:
+    name: prod-images
+  variables:
+    BUILD_DIR: .
+    ECR_REPO: ${ECR_BASE}/numa-deploy
+  before_script:
+    - !reference [.node_job, before_script]
+    - (cd infra && yarn exec cdktf get)
+  script:
+    # possibly swap to kaniko to remove need for dind
+    - docker build --build-arg GIT_HASH=${CI_COMMIT_SHORT_SHA} --build-arg GIT_BRANCH=${CI_COMMIT_BRANCH} --build-arg CI_PROJECT_PATH=$CI_PROJECT_PATH -f infra/container/Dockerfile . -t deploy:${CI_COMMIT_SHORT_SHA}
+    - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:latest
+    - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:${CI_COMMIT_SHORT_SHA}
+    - export AWS_ROLE=${AWS_CLIENT_ROLE_ARN}
+    - !reference [.common-steps, aws-assume-role]
+    - aws ecr get-login-password | docker login -u AWS --password-stdin "https://${ECR_REPO}"
+    - docker push ${ECR_REPO}:latest
+    - docker push ${ECR_REPO}:${CI_COMMIT_SHORT_SHA}
   rules:
     - !reference [.rules, if-main]
 
