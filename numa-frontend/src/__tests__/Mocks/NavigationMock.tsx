@@ -3,10 +3,16 @@ import React from 'react';
 import { navigationHandlers } from './NavigationMockHandlers';
 
 // Create Router context
-const RouterContext = React.createContext(null);
+interface RouterContextType {
+  navigator: {
+    push: () => void;
+  };
+}
+
+const RouterContext = React.createContext<RouterContextType | null>(null);
 
 // Create a mock MemoryRouter component that provides navigation context
-export const MockMemoryRouter = ({ children }) => (
+export const MockMemoryRouter = ({ children }: { children: React.ReactNode }) => (
   <RouterContext.Provider value={{ navigator: { push: navigationHandlers.mockNavigate } }}>
     <div data-testid="mock-memory-router">{children}</div>
   </RouterContext.Provider>
@@ -18,7 +24,7 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useNavigate: () => navigationHandlers.mockNavigate,
-    MemoryRouter: ({ children }) => children,
+    MemoryRouter: ({ children }: { children: React.ReactNode }) => children,
     useLocation: () => {
       // Get the current location from navigationHandlers
       const currentLocation = navigationHandlers.currentLocation || {

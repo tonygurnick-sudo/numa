@@ -148,11 +148,11 @@ describe('AuthProvider', () => {
         Session: 'mock-session',
       }),
     };
-    global.fetch.mockResolvedValue(mockResponse);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as Response);
 
     const onAuth = vi.fn();
     render(
-      <AuthProvider>
+      <AuthProvider initialTokens={null}>
         <TestComponent onAuth={onAuth} />
       </AuthProvider>,
       { container },
@@ -185,11 +185,11 @@ describe('AuthProvider', () => {
         __type: 'NotAuthorizedException',
       }),
     };
-    global.fetch.mockResolvedValue(mockResponse);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as Response);
 
     const onAuth = vi.fn();
     render(
-      <AuthProvider>
+      <AuthProvider initialTokens={null}>
         <TestComponent onAuth={onAuth} />
       </AuthProvider>,
       { container },
@@ -222,7 +222,7 @@ describe('AuthProvider', () => {
     }));
 
     // Set up localStorage with expired tokens
-    window.localStorage.getItem.mockImplementation((key) => {
+    vi.mocked(window.localStorage.getItem).mockImplementation((key) => {
       switch (key) {
         case 'refreshToken':
           return TEST_TOKENS.expired.refreshToken;
@@ -238,6 +238,7 @@ describe('AuthProvider', () => {
     const onAuth = vi.fn();
     render(
       <TestAuthProvider
+        refreshHandler={vi.fn()}
         initialTokens={{
           tokens: {
             accessToken: TEST_TOKENS.expired.accessToken,
@@ -296,7 +297,7 @@ describe('AuthProvider', () => {
       }));
 
       // Set up localStorage with expired tokens
-      window.localStorage.getItem.mockImplementation((key) => {
+      vi.mocked(window.localStorage.getItem).mockImplementation((key) => {
         switch (key) {
           case 'refreshToken':
             return TEST_TOKENS.expired.refreshToken;
@@ -312,6 +313,7 @@ describe('AuthProvider', () => {
       const onAuth = vi.fn();
       render(
         <TestAuthProvider
+          refreshHandler={vi.fn()}
           initialTokens={{
             tokens: {
               accessToken: TEST_TOKENS.expired.accessToken,
@@ -365,6 +367,7 @@ describe('AuthProvider', () => {
       const onAuth = vi.fn();
       render(
         <TestAuthProvider
+          refreshHandler={vi.fn()}
           initialTokens={{
             tokens: {
               accessToken: TEST_TOKENS.valid.accessToken,
@@ -403,7 +406,7 @@ describe('AuthProvider', () => {
 
       const onAuth = vi.fn();
       render(
-        <TestAuthProvider>
+        <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -416,7 +419,7 @@ describe('AuthProvider', () => {
 
     it('should handle valid tokens', async () => {
       // Set up localStorage with valid tokens
-      window.localStorage.getItem.mockImplementation((key) => {
+      vi.mocked(window.localStorage.getItem).mockImplementation((key) => {
         switch (key) {
           case 'refreshToken':
             return TEST_TOKENS.valid.refreshToken;
@@ -432,6 +435,7 @@ describe('AuthProvider', () => {
       const onAuth = vi.fn();
       render(
         <TestAuthProvider
+          refreshHandler={vi.fn()}
           initialTokens={{
             tokens: {
               accessToken: TEST_TOKENS.valid.accessToken,
@@ -463,11 +467,11 @@ describe('AuthProvider', () => {
     it('should handle expired tokens and no refresh token', async () => {
       // Test Case 3: No refresh token
       vi.clearAllMocks();
-      window.localStorage.getItem.mockImplementation(() => null);
+      vi.mocked(window.localStorage.getItem).mockImplementation(() => null);
       const onAuth = vi.fn();
 
       render(
-        <TestAuthProvider>
+        <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -496,7 +500,7 @@ describe('AuthProvider', () => {
       }));
 
       // Set up localStorage with valid tokens
-      window.localStorage.getItem.mockImplementation((key) => {
+      vi.mocked(window.localStorage.getItem).mockImplementation((key) => {
         switch (key) {
           case 'refreshToken':
             return TEST_TOKENS.valid.refreshToken;
@@ -512,6 +516,7 @@ describe('AuthProvider', () => {
       const onAuth = vi.fn();
       render(
         <TestAuthProvider
+          refreshHandler={vi.fn()}
           initialTokens={{
             tokens: {
               accessToken: TEST_TOKENS.valid.accessToken,
@@ -579,7 +584,7 @@ describe('AuthProvider', () => {
       });
 
       // Mock localStorage with expired tokens
-      window.localStorage.getItem.mockImplementation((key) => {
+      vi.mocked(window.localStorage.getItem).mockImplementation((key) => {
         return authTestTokens.expired.tokens[key];
       });
 
@@ -627,7 +632,7 @@ describe('AuthProvider', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       // Set up localStorage with valid tokens to avoid refresh
-      window.localStorage.getItem.mockImplementation((key) => {
+      vi.mocked(window.localStorage.getItem).mockImplementation((key) => {
         switch (key) {
           case 'refreshToken':
             return TEST_TOKENS.valid.refreshToken;
@@ -648,6 +653,7 @@ describe('AuthProvider', () => {
       const onAuth = vi.fn();
       render(
         <TestAuthProvider
+          refreshHandler={vi.fn()}
           initialTokens={{
             tokens: {
               idToken: TEST_TOKENS.valid.idToken,
@@ -674,7 +680,7 @@ describe('AuthProvider', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       // Set up localStorage with valid tokens to avoid refresh
-      window.localStorage.getItem.mockImplementation((key) => {
+      vi.mocked(window.localStorage.getItem).mockImplementation((key) => {
         switch (key) {
           case 'refreshToken':
             return TEST_TOKENS.valid.refreshToken;
@@ -701,6 +707,7 @@ describe('AuthProvider', () => {
       const onAuth = vi.fn();
       render(
         <TestAuthProvider
+          refreshHandler={vi.fn()}
           initialTokens={{
             tokens: {
               idToken: TEST_TOKENS.valid.idToken,
@@ -727,6 +734,7 @@ describe('AuthProvider', () => {
       const onAuth = vi.fn();
       render(
         <TestAuthProvider
+          refreshHandler={vi.fn()}
           initialTokens={{
             tokens: {
               idToken: TEST_TOKENS.valid.idToken,
@@ -766,10 +774,10 @@ describe('AuthProvider', () => {
   describe('Password Reset Functions', () => {
     beforeEach(() => {
       // Mock fetch for secret hash
-      global.fetch.mockResolvedValue({
+      vi.mocked(global.fetch).mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ hash: 'mock-secret-hash' }),
-      });
+      } as Response);
     });
 
     it('should handle password reset request successfully', async () => {
@@ -782,7 +790,7 @@ describe('AuthProvider', () => {
 
       const onAuth = vi.fn();
       render(
-        <TestAuthProvider>
+        <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -812,7 +820,7 @@ describe('AuthProvider', () => {
 
       const onAuth = vi.fn();
       render(
-        <TestAuthProvider>
+        <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -834,7 +842,7 @@ describe('AuthProvider', () => {
 
       const onAuth = vi.fn();
       render(
-        <TestAuthProvider>
+        <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -864,7 +872,7 @@ describe('AuthProvider', () => {
 
       const onAuth = vi.fn();
       render(
-        <TestAuthProvider>
+        <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
         </TestAuthProvider>,
       );
@@ -894,11 +902,11 @@ describe('AuthProvider', () => {
         Session: 'mock-session',
       }),
     };
-    global.fetch.mockResolvedValue(mockResponse);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as Response);
 
     const onAuth = vi.fn();
     render(
-      <AuthProvider>
+      <AuthProvider initialTokens={null}>
         <TestComponent onAuth={onAuth} />
       </AuthProvider>,
       { container },
@@ -934,11 +942,11 @@ describe('AuthProvider', () => {
       status: 200,
       json: vi.fn().mockResolvedValue({ hash: 'mock-hash' }),
     };
-    global.fetch.mockResolvedValue(mockResponse);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as Response);
 
     const onAuth = vi.fn();
     render(
-      <AuthProvider>
+      <AuthProvider initialTokens={null}>
         <TestComponent onAuth={onAuth} />
       </AuthProvider>,
       { container },
@@ -984,11 +992,11 @@ describe('AuthProvider', () => {
         Session: 'mock-session',
       }),
     };
-    global.fetch.mockResolvedValue(mockResponse);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as Response);
 
     const onAuth = vi.fn();
     render(
-      <AuthProvider>
+      <AuthProvider initialTokens={null}>
         <TestComponent onAuth={onAuth} />
       </AuthProvider>,
       { container },

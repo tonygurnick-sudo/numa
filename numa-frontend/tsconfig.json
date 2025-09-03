@@ -1,0 +1,64 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Migration-friendly settings - warnings instead of errors */
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitReturns": false,
+    "noImplicitThis": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": false,
+
+    /* Additional lenient settings for gradual migration */
+    "noErrorTruncation": true,
+    "skipDefaultLibCheck": true,
+
+    /* Path mapping */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/components/*": ["./src/Components/*"],
+      "@/pages/*": ["./src/Pages/*"],
+      "@/utils/*": ["./src/utils/*"],
+      "@/services/*": ["./src/Services/*"],
+      "@/providers/*": ["./src/Providers/*"],
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/modules/*": ["./src/Modules/*"],
+      "@/layouts/*": ["./src/Layouts/*"]
+    },
+
+    /* Additional options for React development */
+    "allowJs": true,
+    "checkJs": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    /* Type checking enhancements - relaxed for migration */
+    "exactOptionalPropertyTypes": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src/**/*", "src/**/*.json", "src/**/__tests__/**/*"],
+  "exclude": ["node_modules", "dist", "coverage", "playwright-report", "test-results", "**/*.js", "**/*.jsx"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}

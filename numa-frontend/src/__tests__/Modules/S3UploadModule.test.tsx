@@ -208,7 +208,7 @@ describe('S3UploadModule Component', () => {
     updateJobMock.mockClear();
 
     // Update the mock for this test
-    vi.mocked(useNumaApp).mockReturnValue({
+    vi.mocked<typeof useNumaApp>(useNumaApp).mockReturnValue({
       numaAppId: 'test-app-id',
       numaAppData: { id: 'test-app-id', appName: 'Test App' },
       currentJobId: null,
@@ -256,7 +256,7 @@ describe('S3UploadModule Component', () => {
     const mockTaskInputValues = { 'existing-task': 'existing-value' };
 
     // Update the mock for this test
-    vi.mocked(useNumaApp).mockReturnValue({
+    vi.mocked<typeof useNumaApp>(useNumaApp).mockReturnValue({
       numaAppId: 'test-app-id',
       numaAppData: { id: 'test-app-id', appName: 'Test App' },
       currentJobId: existingJobId, // Existing job ID
