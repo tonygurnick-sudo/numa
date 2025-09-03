@@ -8,6 +8,7 @@ import { useAuth } from '../Providers/AuthProvider';
 import { uploadFileToS3 } from '../utils/s3Utils';
 import { createDocxBlob } from '../Services/fileConverter';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
+import { getExportOptionsForApp } from '../config/exportConfig';
 
 // Helper function to convert markdown to formatted plain text
 const convertMarkdownToPlainText = (markdown) => {
@@ -47,8 +48,10 @@ const convertMarkdownToPlainText = (markdown) => {
   return plainText.trim();
 };
 
-const ResultActions = ({ content, title = 'Result' }) => {
+const ResultActions = ({ content, title = 'Result', appType = null }) => {
   const { getCredentials } = useAuth();
+
+  const exportOptions = getExportOptionsForApp(appType);
 
   // Modal states
   const [showModal, setShowModal] = useState(false);
@@ -443,22 +446,30 @@ const ResultActions = ({ content, title = 'Result' }) => {
           Download
         </Dropdown.Toggle>
         <Dropdown.Menu>
-          <Dropdown.Item onClick={handleDownloadPDF}>
-            <i className="bi bi-file-pdf me-2"></i>
-            PDF
-          </Dropdown.Item>
-          <Dropdown.Item onClick={handleDownloadCSV}>
-            <i className="bi bi-file-spreadsheet me-2"></i>
-            CSV
-          </Dropdown.Item>
-          <Dropdown.Item onClick={handleDownloadJSON}>
-            <i className="bi bi-file-code me-2"></i>
-            JSON
-          </Dropdown.Item>
-          <Dropdown.Item onClick={handleDownloadDocx}>
-            <i className="bi bi-file-earmark-word me-2"></i>
-            DOCX
-          </Dropdown.Item>
+          {exportOptions.pdf && (
+            <Dropdown.Item onClick={handleDownloadPDF}>
+              <i className="bi bi-file-pdf me-2"></i>
+              PDF
+            </Dropdown.Item>
+          )}
+          {exportOptions.csv && (
+            <Dropdown.Item onClick={handleDownloadCSV}>
+              <i className="bi bi-file-spreadsheet me-2"></i>
+              CSV
+            </Dropdown.Item>
+          )}
+          {exportOptions.json && (
+            <Dropdown.Item onClick={handleDownloadJSON}>
+              <i className="bi bi-file-code me-2"></i>
+              JSON
+            </Dropdown.Item>
+          )}
+          {exportOptions.docx && (
+            <Dropdown.Item onClick={handleDownloadDocx}>
+              <i className="bi bi-file-earmark-word me-2"></i>
+              DOCX
+            </Dropdown.Item>
+          )}
         </Dropdown.Menu>
       </Dropdown>
 
