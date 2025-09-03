@@ -304,8 +304,9 @@ export class NumaClientStack extends TerraformStack {
       contentType: 'application/json',
     });
 
-    const gitHash = execSync('git rev-parse --short HEAD').toString().trim();
-    const gitBranch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
+    // When building in a container, we don't have access to the git repo, so need to pass through the values as environment variables.
+    const gitHash = process.env['GIT_HASH'] ?? execSync('git rev-parse --short HEAD').toString().trim();
+    const gitBranch = process.env['GIT_BRANCH'] ?? execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
     const deployTime = new Date();
     const version = new S3Object(this, 'version-file', {
       bucket: fe.frontendBucket.bucket,
