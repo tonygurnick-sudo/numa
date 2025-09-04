@@ -155,7 +155,7 @@ client-list-lint:
     - chmod +x /usr/local/bin/yq
     - (cd tools && yarn install)
   script:
-    - diff <((cd tools && yarn list-clients) | grep -v 'arcanum-demo$') <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
+    - diff <((cd tools && yarn list-clients) | grep -v 'arcanum-demo$' | grep -v '^median$' ) <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
 
 .node-job-cdktf-get-before-script: &node-job-cdktf-get-before-script
   before_script:
@@ -373,6 +373,15 @@ deploy-to-arcanum-demo:
     when: on_failure
   variables:
     CLIENT_NAME: arcanum-demo
+  environment:
+    deployment_tier: testing
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+deploy-to-median:
+  extends: .deploy-infra
+  variables:
+    CLIENT_NAME: median
   environment:
     deployment_tier: testing
   rules:
