@@ -56,11 +56,11 @@ pushd "${LAMBDA_DIRECTORY}"
         --no-cache-dir \
         --no-compile \
         --find-links "${WHEEL_DIR}" \
-        . $(poetry show --without dev | sed 's|(!)|   |'| grep -v "../" | awk '{print $1 "==" $2}')
+        . $(poetry show --only main | sed 's|(!)|   |'| grep -v "../" | awk '{print $1 "==" $2}')
 popd
 
 # remove files that aren't required and contain paths that can differ based on clone location
-rm -r "${BUILD_DIR:?}/bin"
+rm -rf "${BUILD_DIR:?}/bin"
 find "${BUILD_DIR}" -type d -name "*.dist-info" -not -name '*opentelemetry*' -exec rm -r "{}" +
 
 # make sure full history is available to make git log reliable
@@ -78,5 +78,5 @@ pushd "${BUILD_DIR}";
     # that would make the zip file non-deterministic
     # use find with sort to ensure order
     # shellcheck disable=SC2046
-    zip --quiet -X ../lambda_function.zip $(find . | sort)
+    zip --quiet -X ../lambda_function.zip $(find . -not -path './boto*' | sort)
 popd

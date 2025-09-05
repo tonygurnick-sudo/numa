@@ -29,10 +29,11 @@ python = "^3.13"
 pyjwt = {extras = ["crypto"], version = "^2.8.0"}
 requests = "^2.31.0"
 structlog = "^23.2.0"
-boto3 = "^1.34.0"
 
 [tool.poetry.group.dev.dependencies]
 types-requests = "^2.31.0"
 mypy = "1.17.1"
 pylint = "3.3.8"
 pyright = "1.1.403"
+[tool.poetry.group.boto.dependencies]
+boto3 = "1.40.21"
