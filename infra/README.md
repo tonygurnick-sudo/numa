@@ -72,6 +72,63 @@ yarn cdktf deploy --auto-approve numa-{client-id}
 
 The client-id must be the name of an entry from the clientsProd list in numa-client-stack.ts.
 
+### Deploying the Pipedream Proxy Stack
+
+The Pipedream proxy stack provides secure cross-account access to Pipedream integrations. It is deployed to a dedicated AWS account to isolate Pipedream credentials from client accounts.
+
+**Secrets Management:**
+This account stores Pipedream OAuth credentials in AWS Secrets Manager. The secret is named `pipedream/credentials-prod` and is read by the proxy lambda in `us-east-1`.
+
+Pipedream Credentials Secret Format
+- `client_id`: string — Pipedream OAuth client ID
+- `client_secret`: string — Pipedream OAuth client secret
+- `project_id`: string — Pipedream Connect project ID
+- `environment`: string — Pipedream environment, by default we are using `production`
+
+# To update the secret (multi‑line)
+```bash
+# Make sure you have the AWS CLI configured with access to the Pipedream proxy account
+aws secretsmanager update-secret \
+  --secret-id "pipedream/credentials-prod \
+  --secret-string '{
+    "client_id": "YOUR_ACTUAL_CLIENT_ID",
+    "client_secret": "YOUR_ACTUAL_CLIENT_SECRET",
+    "project_id": "YOUR_ACTUAL_PROJECT_ID",
+    "environment": "production"
+  }'
+```
+
+**Deployment:**
+```bash
+# Package the relavant lambdas before deployment
+bash package-python-lambda.sh lambdas/python/pipedream-proxy
+bash package-python-lambda.sh lambdas/python/pipedream-account-sync
+
+# Deploy the proxy infrastructure to the dedicated proxy account
+unset CLIENT_OVERRIDE
+export TF_ENVIRONMENT=prod
+export AWS_REGION=us-east-1
+yarn cdktf deploy --auto-approve pipedream-proxy
+```
+
+  **Architecture:**
+  - **DynamoDB Tables**:
+    - `pipedream-user-mappings` - Security mapping table that tracks account-to-user relationships
+    - `pipedream-allowed-accounts` - Authorized client accounts synced from deployer account
+  - **Lambda Functions**:
+    - `pipedream-proxy` - Generic proxy that validates requests and calls Pipedream APIs
+    - `pipedream-account-sync` - Hourly sync of allowed client accounts from deployer account
+  - **EventBridge**: Hourly schedule for account synchronization
+  - **Secrets Manager**: Stores Pipedream OAuth credentials securely
+  - **IAM Roles**: Minimal permissions for lambda operations and cross-account access
+  - **CloudWatch**: Log groups for both lambda functions
+
+**Security Model:**
+- Caller validation via presigned STS GetCallerIdentity URL (generated in the caller account). The proxy verifies the URL over HTTPS and parses the STS XML.
+- Role name validation against allowlist
+- First-request registration with negative case handling
+- Cross-account trust relationships for client account access
+
 ## Development
 
 Linting can be run with `yarn lint`. This will run eslint and then tsc for type checking.
