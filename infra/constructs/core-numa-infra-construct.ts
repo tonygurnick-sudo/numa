@@ -860,7 +860,7 @@ export const coreNumaInfraPropsSchema = _coreNumaInfraPropsSchema
   .merge(qBusinessChatControlConfigurerPropsSchema.omit({ applicationId: true, accountId: true }))
   .merge(
     z.object({
-      groups: z.record(z.array(z.enum(FEATURE_SET_NAMES as [string, ...string[]]))).optional(),
+      groups: z.record(z.string(), z.array(z.enum(FEATURE_SET_NAMES as [string, ...string[]]))).optional(),
     }),
   );
 export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {

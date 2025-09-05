@@ -76,7 +76,7 @@ export async function getClientConfig<ClientConfig>(
   if (!props.schema) {
     return config as ClientConfig;
   }
-  return props.schema.parse(config);
+  return props.schema.parse(config) as ClientConfig;
 }
 
 interface GetClientConfigFromDynamoProps {
