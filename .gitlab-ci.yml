@@ -81,6 +81,7 @@ variables:
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-chat-agent
         - lambdas/python/numa-recent-jobs
+        - lambdas/python/pipedream-account-sync
         - lambdas/python/policy-builder-completion
         - lambdas/python/policy-builder-expert-review
         - lambdas/python/policy-builder-explainability
