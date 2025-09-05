@@ -340,6 +340,8 @@ build-deployment-container:
     - !reference [.node_job, before_script]
     - (cd infra && yarn exec cdktf get)
   script:
+    # install only the infra deps
+    - yarn workspaces focus @arcanumai/q-apps-deployer-infra
     # possibly swap to kaniko to remove need for dind
     - docker build --build-arg GIT_HASH=${CI_COMMIT_SHORT_SHA} --build-arg GIT_BRANCH=${CI_COMMIT_BRANCH} --build-arg CI_PROJECT_PATH=$CI_PROJECT_PATH -f infra/container/Dockerfile . -t deploy:${CI_COMMIT_SHORT_SHA}
     - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:latest

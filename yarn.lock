@@ -151,6 +151,7 @@ __metadata:
     "@arcanumai/typescript-lambda-construct": "npm:^1.2.4"
     "@aws-sdk/client-service-quotas": "npm:^3.738.0"
     "@aws-sdk/client-support": "npm:^3.738.0"
+    "@aws-sdk/credential-providers": "npm:^3.880.0"
     "@cdktf/node-pty-prebuilt-multiarch": "npm:^0.10.1-pre.11"
     "@cdktf/provider-aws": "npm:21.1.0"
     "@cdktf/provider-random": "npm:12.0.0"
@@ -167,6 +168,7 @@ __metadata:
     tsx: "npm:^4.19.0"
     typescript: "npm:5.9.2"
     uuid: "npm:^11.0.5"
+    zod: "npm:3.24.4"
   languageName: unknown
   linkType: soft
 
@@ -1668,6 +1670,33 @@ __metadata:
     "@smithy/types": "npm:^4.3.2"
     tslib: "npm:^2.6.2"
   checksum: 10c0/561920731dc9eb2cde051d10f1ec90eaa6526f74afdb69a74bc80a2a281346e207e4951598f1c79bae0a674ba03699eff21f2e179399912ce6def66b014a4c06
+  languageName: node
+  linkType: hard
+
+"@aws-sdk/credential-providers@npm:^3.880.0":
+  version: 3.880.0
+  resolution: "@aws-sdk/credential-providers@npm:3.880.0"
+  dependencies:
+    "@aws-sdk/client-cognito-identity": "npm:3.879.0"
+    "@aws-sdk/core": "npm:3.879.0"
+    "@aws-sdk/credential-provider-cognito-identity": "npm:3.879.0"
+    "@aws-sdk/credential-provider-env": "npm:3.879.0"
+    "@aws-sdk/credential-provider-http": "npm:3.879.0"
+    "@aws-sdk/credential-provider-ini": "npm:3.879.0"
+    "@aws-sdk/credential-provider-node": "npm:3.879.0"
+    "@aws-sdk/credential-provider-process": "npm:3.879.0"
+    "@aws-sdk/credential-provider-sso": "npm:3.879.0"
+    "@aws-sdk/credential-provider-web-identity": "npm:3.879.0"
+    "@aws-sdk/nested-clients": "npm:3.879.0"
+    "@aws-sdk/types": "npm:3.862.0"
+    "@smithy/config-resolver": "npm:^4.1.5"
+    "@smithy/core": "npm:^3.9.0"
+    "@smithy/credential-provider-imds": "npm:^4.0.7"
+    "@smithy/node-config-provider": "npm:^4.1.4"
+    "@smithy/property-provider": "npm:^4.0.5"
+    "@smithy/types": "npm:^4.3.2"
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/a54ab828a6374e4ff14ba34e52e5eb2cc583bec59037d1ef7ab6d9a636820236fd66db87a64af75d5b696092ce9a0b8386107a582bb7c8f3a82c38bf25fca947
   languageName: node
   linkType: hard
 
