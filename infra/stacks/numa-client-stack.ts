@@ -441,7 +441,7 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          *
          * @default {}
          */
-        apps: z.record(userConfigurableBaseNumaAppPropsSchema).optional(),
+        apps: z.record(z.string(), userConfigurableBaseNumaAppPropsSchema).optional(),
 
         /**
          * Budget configuration for cost monitoring

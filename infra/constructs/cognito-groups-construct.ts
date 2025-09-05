@@ -306,7 +306,7 @@ export const cognitoGroupsConstructPropsSchema = z.object({
   companyBucket: bucketSchema,
   chatHistoryTable: tableSchema,
   qBusinessApplicationId: z.string().optional(), // Add optional Q Business application ID
-  groups: z.record(z.array(z.enum(FEATURE_SET_NAMES as [FeatureSetName, ...FeatureSetName[]]))).optional(),
+  groups: z.record(z.string(), z.array(z.enum(FEATURE_SET_NAMES as [FeatureSetName, ...FeatureSetName[]]))).optional(),
   knowledgeBase: z.instanceof(KnowledgeBase),
 });
 
