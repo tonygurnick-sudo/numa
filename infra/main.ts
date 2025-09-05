@@ -2,6 +2,7 @@ import { App } from 'cdktf';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { QAppsDeployerStack } from './stacks/q-apps-deployer-stack';
 import { ClientConfig, clientConfigSchema, NumaClientStack } from './stacks/numa-client-stack';
+import { PipedreamProxyStack } from './stacks/pipedream-proxy-stack';
 import { getClientConfig, listClients } from '@arcanumai/client-config';
 import { NextGenRootStack } from './stacks/nextgen-root-stack';
 import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
@@ -60,6 +61,12 @@ if (override === undefined || override === 'none') {
     ...environmentConfig,
     users,
     configTable: 'numa-client-config',
+  });
+
+  // Pipedream Proxy Stack - deployed to dedicated pipedream proxy account
+  new PipedreamProxyStack(app, 'pipedream-proxy', {
+    ...environmentConfig,
+    region: 'us-east-1',
   });
 } else if (override !== 'none') {
   // creds
