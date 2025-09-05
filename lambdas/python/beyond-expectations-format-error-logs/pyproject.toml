@@ -26,10 +26,11 @@ python = "~3.13.0"
 aws-lambda-powertools = "3.9.0"
 helpers = {path = "../../../lib/helpers", develop = true}
 s3_helpers = {path = "../../../lib/s3_helpers", develop = true}
-boto3 = "^1.28.0"
 structlog = "^25.0.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.17.1"
 pylint = "3.3.8"
 pyright = "1.1.403"
+[tool.poetry.group.boto.dependencies]
+boto3 = "1.37.20"

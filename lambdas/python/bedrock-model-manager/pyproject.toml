@@ -24,7 +24,6 @@ packages = [
 python = "~3.13.0"
 
 aws-lambda-powertools = "3.9.0"
-boto3 = "1.40.21"
 helpers = {path = "../../../lib/helpers", develop = true}
 requests = "2.32.3"
 structlog = "25.2.0"
@@ -35,3 +34,5 @@ mypy = "1.17.1"
 pylint = "3.3.8"
 pyright = "1.1.403"
 types-requests = "2.32.4.20250809"
+[tool.poetry.group.boto.dependencies]
+boto3 = "1.40.21"
