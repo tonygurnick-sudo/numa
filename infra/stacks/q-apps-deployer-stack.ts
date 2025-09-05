@@ -3,6 +3,8 @@ import { Construct } from 'constructs';
 import { PublicS3Bucket } from '../constructs/public-s3-bucket-construct';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
+import { DynamodbResourcePolicy } from '@cdktf/provider-aws/lib/dynamodb-resource-policy';
+import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { Route53Zone } from '@cdktf/provider-aws/lib/route53-zone';
 import { TerraformOutput } from 'cdktf';
 import { Honeycomb } from '../constructs/honeycomb-construct';
@@ -46,6 +48,29 @@ export class QAppsDeployerStack extends ArcanumStack {
       lifecycle: {
         preventDestroy: true,
       },
+    });
+
+    // Resource policy to allow pipedream-account-sync lambda access from proxy account
+    const clientConfigResourcePolicyDoc = new DataAwsIamPolicyDocument(this, 'client-config-resource-policy-doc', {
+      statement: [
+        {
+          sid: 'AllowPipedreamProxyAccountAccess',
+          effect: 'Allow',
+          principals: [
+            {
+              type: 'AWS',
+              identifiers: ['arn:aws:iam::965745962688:role/pipedream-account-sync-lambda-role'],
+            },
+          ],
+          actions: ['dynamodb:Scan', 'dynamodb:Query'],
+          resources: [clientConfigTable.arn],
+        },
+      ],
+    });
+
+    new DynamodbResourcePolicy(this, 'client-config-resource-policy', {
+      resourceArn: clientConfigTable.arn,
+      policy: clientConfigResourcePolicyDoc.json,
     });
 
     const honeycomb = new Honeycomb(this, 'honeycomb', {
