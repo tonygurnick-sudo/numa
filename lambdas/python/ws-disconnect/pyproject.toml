@@ -33,4 +33,4 @@ mypy = "1.17.1"
 pylint = "3.3.8"
 pyright = "1.1.403"
 [tool.poetry.group.boto.dependencies]
-boto3 = "1.40.21"
+boto3 = "1.40.25"
