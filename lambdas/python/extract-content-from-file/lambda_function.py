@@ -95,7 +95,59 @@ class ExcelDocument(Document):
     pages: Sequence[ExcelDocumentPage] = dataclasses.field(default_factory=list)
 
 
-def handler(event: dict, _context) -> dict:
+def _status_payload(
+    *,
+    status: str,
+    input_bucket: str,
+    input_key: str,
+    output_bucket: str,
+    output_key: str,
+    file_name: str | None,
+    started_at: int,
+    request_id: str | None,
+    include_completion: bool = False,
+    error_message: str | None = None,
+) -> dict:
+    """Build a consistent status JSON payload."""
+    payload: dict = {
+        "version": 1,
+        "status": status,
+        "input_bucket": input_bucket,
+        "input_key": input_key,
+        "output_bucket": output_bucket,
+        "output_key": output_key,
+        "file_name": file_name,
+        "started_at": started_at,
+        "request_id": request_id,
+    }
+    if include_completion:
+        now = int(time.time())
+        payload["updated_at"] = now
+        payload["duration_ms"] = int((now - started_at) * 1000)
+    if error_message:
+        payload["error_message"] = error_message
+    return payload
+
+
+def _write_status_json(bucket: str, key: str, payload: dict) -> None:
+    """Write the status file to S3; log warnings on failure."""
+    try:
+        s3_client.put_object(
+            Body=json.dumps(payload).encode("utf-8"),
+            Bucket=bucket,
+            Key=key,
+            ContentType="application/json",
+        )
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning(
+            "Failed to write status file",
+            error=str(e),
+            status=payload.get("status"),
+            key=key,
+        )
+
+
+def handler(event: dict, context) -> dict:
     helpers.setup_logging()
 
     if "body" in event:
@@ -115,25 +167,86 @@ def handler(event: dict, _context) -> dict:
 
     # only set this to true when it's certain this will be less than 256KB
     return_content = event.get("return_content", False)
+    # Derive a status file key alongside the output
+    if output_key.endswith(".json"):
+        status_key = output_key[: -len(".json")] + ".status.json"
+    else:
+        status_key = f"{output_key}.status.json"
 
-    document = _extract_content(input_bucket, input_key, file_name)
+    started_at = int(time.time())
+    request_id = getattr(context, "aws_request_id", None)
 
-    content = json.dumps(dataclasses.asdict(document), indent=4).encode("utf-8")
-    s3_client.put_object(Body=content, Bucket=output_bucket, Key=output_key)
-
-    result = {
-        "input_bucket": input_bucket,
-        "input_key": input_key,
-        "output_bucket": output_bucket,
-        "output_key": output_key,
-    }
-    if return_content:
-        result["content"] = _document_to_string(document)
-
-    logger.info(
-        f"Document processed successfully: {input_key} -> {output_bucket}/{output_key}"
+    # Write initial IN_PROGRESS status (Numa chat polls for updates)
+    _write_status_json(
+        output_bucket,
+        status_key,
+        _status_payload(
+            status="IN_PROGRESS",
+            input_bucket=input_bucket,
+            input_key=input_key,
+            output_bucket=output_bucket,
+            output_key=output_key,
+            file_name=file_name,
+            started_at=started_at,
+            request_id=request_id,
+        ),
     )
-    return result
+
+    try:
+        document = _extract_content(input_bucket, input_key, file_name)
+
+        content = json.dumps(dataclasses.asdict(document), indent=4).encode("utf-8")
+        s3_client.put_object(Body=content, Bucket=output_bucket, Key=output_key)
+
+        # Write SUCCEEDED status (Numa chat polls for updates)
+        _write_status_json(
+            output_bucket,
+            status_key,
+            _status_payload(
+                status="SUCCEEDED",
+                input_bucket=input_bucket,
+                input_key=input_key,
+                output_bucket=output_bucket,
+                output_key=output_key,
+                file_name=file_name,
+                started_at=started_at,
+                request_id=request_id,
+                include_completion=True,
+            ),
+        )
+
+        result = {
+            "input_bucket": input_bucket,
+            "input_key": input_key,
+            "output_bucket": output_bucket,
+            "output_key": output_key,
+        }
+        if return_content:
+            result["content"] = _document_to_string(document)
+
+        logger.info(
+            f"Document processed successfully: {input_key} -> {output_bucket}/{output_key}"
+        )
+        return result
+    except Exception as e:
+        # Write FAILED status (Numa chat polls for updates)
+        _write_status_json(
+            output_bucket,
+            status_key,
+            _status_payload(
+                status="FAILED",
+                input_bucket=input_bucket,
+                input_key=input_key,
+                output_bucket=output_bucket,
+                output_key=output_key,
+                file_name=file_name,
+                started_at=started_at,
+                request_id=request_id,
+                include_completion=True,
+                error_message=str(e),
+            ),
+        )
+        raise
 
 
 @tracer.start_as_current_span("_extract_content")

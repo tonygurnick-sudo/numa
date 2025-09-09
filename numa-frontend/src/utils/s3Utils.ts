@@ -2,6 +2,7 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   GetObjectTaggingCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -34,6 +35,34 @@ export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getCredentials) =
 
   const blob = await response.blob();
   return new Blob([blob], { type: response.headers.get('content-type') });
+};
+
+/**
+ * Check if an S3 object exists using a HEAD request.
+ */
+export const doesObjectExist = async (s3Key, s3Bucket, region, getCredentials) => {
+  const credentials = await getCredentials();
+
+  if (!credentials?.accessKeyId) {
+    throw new Error('AWS Credentials are missing.');
+  }
+
+  const s3Client = new S3Client({ region, credentials });
+
+  try {
+    await s3Client.send(
+      new HeadObjectCommand({
+        Bucket: s3Bucket,
+        Key: s3Key,
+      }),
+    );
+    return true;
+  } catch (error) {
+    if (error?.name === 'NotFound' || error?.Code === 'NotFound') {
+      return false;
+    }
+    throw error;
+  }
 };
 
 export const uploadFileToS3 = async (content, contentType, s3Bucket, s3Key, region, getCredentials) => {

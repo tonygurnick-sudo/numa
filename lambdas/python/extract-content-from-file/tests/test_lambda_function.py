@@ -72,10 +72,11 @@ class TestLambdaFunction(unittest.TestCase):
             Bucket="test-bucket",
             Key="test.txt",
         )
-        mock_s3_client.put_object.assert_called_once()
+        # Should be called 3 times: initial status, main output, final status
+        self.assertEqual(mock_s3_client.put_object.call_count, 3)
         kwargs = mock_s3_client.put_object.call_args.kwargs
         self.assertEqual(kwargs["Bucket"], "test-bucket")
-        self.assertEqual(kwargs["Key"], "test.txt.json")
+        self.assertEqual(kwargs["Key"], "test.txt.status.json")
 
     @patch("lambda_function.s3_client")
     def test_handler_empty_txt_file(self, mock_s3_client):
@@ -109,7 +110,8 @@ class TestLambdaFunction(unittest.TestCase):
             lambda_function.handler(event, {})
 
         mock_s3_client.get_object.assert_not_called()
-        mock_s3_client.put_object.assert_not_called()
+        # Should be called 2 times: initial status, final error status
+        self.assertEqual(mock_s3_client.put_object.call_count, 2)
 
     @patch("lambda_function.s3_client")
     def test_handler_s3_exception(self, mock_s3_client):
@@ -156,7 +158,8 @@ class TestLambdaFunction(unittest.TestCase):
         mock_haiku.extract_content.assert_called_once_with(
             "test-bucket", "test.pdf", None
         )
-        mock_s3_client.put_object.assert_called_once()
+        # Should be called 3 times: initial status, main output, final status
+        self.assertEqual(mock_s3_client.put_object.call_count, 3)
 
     @patch("lambda_function.s3_client")
     def test_handler_excel_file(self, mock_s3_client):
@@ -193,7 +196,8 @@ class TestLambdaFunction(unittest.TestCase):
             mock_s3_client.get_object.assert_called_once_with(
                 Bucket="test-bucket", Key="test.xlsx"
             )
-            mock_s3_client.put_object.assert_called_once()
+            # Should be called 3 times: initial status, main output, final status
+            self.assertEqual(mock_s3_client.put_object.call_count, 3)
 
     @patch("lambda_function.aws_transcribe")
     @patch("lambda_function.s3_client")
@@ -213,7 +217,8 @@ class TestLambdaFunction(unittest.TestCase):
 
         self.assertEqual(response["content"], "Sample audio transcription\n")
         mock_transcribe.transcribe.assert_called_once()
-        mock_s3_client.put_object.assert_called_once()
+        # Should be called 3 times: initial status, main output, final status
+        self.assertEqual(mock_s3_client.put_object.call_count, 3)
 
     def test_text_to_document(self):
         """Test text to document conversion"""

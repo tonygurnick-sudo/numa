@@ -41,8 +41,9 @@ export class NumaCorsEnabledBucket extends PrivateBucket {
       corsRule: [
         {
           allowedHeaders: ['*'],
-          allowedMethods: props.allowedMethods ?? ['GET'],
+          allowedMethods: props.allowedMethods ?? ['GET', 'HEAD'],
           allowedOrigins,
+          exposeHeaders: ['Content-Type'],
           maxAgeSeconds: 3000,
         },
       ],

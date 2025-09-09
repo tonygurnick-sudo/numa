@@ -75,7 +75,7 @@ def __wait_for_completion(job_name: str, timeout: int = 900) -> dict:
             logger.error(f"Transcription job failed: {reason}")
             raise TranscriptionError(f"Transcription failed: {reason}")
 
-        time.sleep(30)
+        time.sleep(10)
 
     raise TranscriptionError("Transcription timed out")
 
