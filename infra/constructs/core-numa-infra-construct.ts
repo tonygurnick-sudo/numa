@@ -239,7 +239,7 @@ export class CoreNumaInfra extends Construct {
       clientAccountId: props.clientAccountId,
       environmentName: props.environmentName,
       bucketName: 'outputs',
-      allowedMethods: ['GET', 'PUT'],
+      allowedMethods: ['GET', 'HEAD', 'PUT'],
       allowLocalhostOrigin: props.devInstance,
       region: props.region,
     });

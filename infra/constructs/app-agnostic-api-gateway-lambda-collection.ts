@@ -129,7 +129,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         LOG_LEVEL: 'INFO',
         VISION_MODEL_TYPE: props.visionModelType,
       },
-      timeout: 300,
+      timeout: 900,
       memorySize: 1024,
       additionalPolicyStatements: [
         {

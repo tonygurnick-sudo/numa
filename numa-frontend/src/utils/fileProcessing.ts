@@ -1,4 +1,4 @@
-import { fetchFileFromS3 } from './s3Utils';
+import { fetchFileFromS3, doesObjectExist } from './s3Utils';
 
 /**
  * Process a file by calling the extract-content-from-file lambda
@@ -104,29 +104,59 @@ const pollS3ForFile = async (bucket, key, getCredentials) => {
   const maxEndTime = startTime + MAX_POLL_TIME;
   let attempt = 0;
 
+  // Derive status file key from output key
+  const statusKey = key.endsWith('.json') ? key.replace(/\.json$/, '.status.json') : `${key}.status.json`;
+
   console.log(
-    `Starting polling for ${key} with ${POLL_INTERVAL / 1000} second intervals (max ${MAX_POLL_TIME / 60000} minutes)`,
+    `Starting polling for ${key} (status: ${statusKey}) with ${POLL_INTERVAL / 1000}s intervals (max ${MAX_POLL_TIME / 60000}m)`,
   );
 
   while (Date.now() < maxEndTime) {
     attempt++;
-
-    console.log(`Polling attempt ${attempt} for ${key} (${Math.round((maxEndTime - Date.now()) / 1000)}s remaining)`);
+    const remaining = Math.round((maxEndTime - Date.now()) / 1000);
+    console.log(`Polling attempt ${attempt} for ${key} (${remaining}s remaining)`);
 
     try {
-      // Try to fetch the file from S3
-      const contentFile = await fetchFileFromS3(key, bucket, region, getCredentials);
+      // Quietly check for status file existence first (HEAD)
+      const statusExists = await doesObjectExist(statusKey, bucket, region, getCredentials);
 
-      if (contentFile) {
-        console.log(`Found file in S3: ${bucket}/${key}`);
-        return {
-          output_key: key,
-          output_bucket: bucket,
-        };
+      if (statusExists) {
+        // Fetch and inspect status JSON
+        const statusBlob = await fetchFileFromS3(statusKey, bucket, region, getCredentials);
+        const statusText = await statusBlob.text();
+        try {
+          const status = JSON.parse(statusText);
+          const state = (status?.status || '').toUpperCase();
+          if (state === 'SUCCEEDED') {
+            const outKey = status?.output_key || key;
+            const outBucket = status?.output_bucket || bucket;
+            console.log(`Processing succeeded per status file: ${outBucket}/${outKey}`);
+            return { output_key: outKey, output_bucket: outBucket };
+          }
+          if (state === 'FAILED') {
+            const msg = status?.error_message || 'File processing failed';
+            throw new Error(msg);
+          }
+          // IN_PROGRESS or unknown -> keep waiting
+        } catch (parseErr) {
+          // If status is malformed, log and continue polling
+          console.debug('Unable to parse status JSON; continuing to poll.', parseErr);
+        }
+      } else {
+        // If no status file yet, check if output exists directly
+        try {
+          const outputExists = await doesObjectExist(key, bucket, region, getCredentials);
+          if (outputExists) {
+            console.log(`Found output in S3 (no status): ${bucket}/${key}`);
+            return { output_key: key, output_bucket: bucket };
+          }
+        } catch (headErr) {
+          console.debug('HEAD check encountered an error; will retry.', headErr);
+        }
       }
     } catch (error) {
-      console.warn(`Error checking S3 (attempt ${attempt}):`, error);
-      // Continue to wait - file might not exist yet
+      // Avoid noisy console errors during normal polling
+      console.debug(`S3 check encountered an error on attempt ${attempt}:`, error);
     }
 
     // Wait for fixed interval before next check

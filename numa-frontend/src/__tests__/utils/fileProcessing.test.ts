@@ -6,13 +6,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { processFile } from '../../utils/fileProcessing';
 
 // Hoist mocks before imports are processed
-const { fetchFileFromS3 } = vi.hoisted(() => ({
+const { fetchFileFromS3, doesObjectExist } = vi.hoisted(() => ({
   fetchFileFromS3: vi.fn(),
+  doesObjectExist: vi.fn(),
 }));
 
 // Mock dependencies
 vi.mock('../../utils/s3Utils', () => ({
   fetchFileFromS3,
+  doesObjectExist,
 }));
 
 describe('File Processing Utils', () => {
@@ -71,6 +73,15 @@ describe('File Processing Utils', () => {
       }),
     );
 
+    // Mock doesObjectExist to simulate polling behavior
+    // First few calls return false, then return true to simulate file becoming available
+    let callCount = 0;
+    doesObjectExist.mockImplementation(() => {
+      callCount++;
+      // Return true after 3 attempts to simulate the file becoming available
+      return Promise.resolve(callCount > 3);
+    });
+
     // Mock setTimeout to avoid actual waiting in tests
     vi.spyOn(global, 'setTimeout').mockImplementation((callback) => {
       callback();
@@ -114,7 +125,7 @@ describe('File Processing Utils', () => {
       );
 
       // Verify S3 polling was attempted
-      expect(fetchFileFromS3).toHaveBeenCalled();
+      expect(doesObjectExist).toHaveBeenCalled();
 
       // Check result structure reflects polling success
       expect(result).toEqual(
