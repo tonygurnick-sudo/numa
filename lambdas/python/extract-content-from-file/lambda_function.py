@@ -87,7 +87,6 @@ PageT = TypeVar("PageT", bound="DocumentPage")
 class ExcelDocumentPage(DocumentPage):
     sheet_name: str = ""
     structure: dict = dataclasses.field(default_factory=dict)
-    rows: List[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -193,7 +192,8 @@ def handler(event: dict, context) -> dict:
     )
 
     try:
-        document = _extract_content(input_bucket, input_key, file_name)
+        # Pass payload to extraction for Excel processing options
+        document = _extract_content(input_bucket, input_key, file_name, payload)
 
         content = json.dumps(dataclasses.asdict(document), indent=4).encode("utf-8")
         s3_client.put_object(Body=content, Bucket=output_bucket, Key=output_key)
@@ -251,7 +251,7 @@ def handler(event: dict, context) -> dict:
 
 @tracer.start_as_current_span("_extract_content")
 def _extract_content(
-    input_bucket: str, input_key: str, file_name: str | None
+    input_bucket: str, input_key: str, file_name: str | None, payload: dict
 ) -> Document:
     suffix = pathlib.PurePosixPath(input_key.lower()).suffix
 
@@ -275,7 +275,15 @@ def _extract_content(
     elif suffix in [".xlsx"]:
         s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
         file_content = s3_file_object["Body"].read()
-        excel_structure = extract_excel_structure(file_content)
+
+        # Check if simple processing is requested (default to True)
+        simple_processing = payload.get("simple_excel_processing", True)
+
+        if simple_processing:
+            excel_structure = extract_excel_structure_simple(file_content)
+        else:
+            excel_structure = extract_excel_structure(file_content)
+
         return _excel_structure_to_document(excel_structure, input_key, file_name)
 
     # Vision extraction supported formats - direct processing
@@ -366,6 +374,57 @@ def _get_excel_column_name(col_index: int) -> str:
         col_name = chr(ord("A") + remainder) + col_name
         col_index = (col_index - 1) // 26
     return col_name
+
+
+def extract_excel_structure_simple(file_content: bytes) -> dict:
+    """
+    Extracts simplified text from an XLSX file.
+    Each sheet is processed as a separate page.
+    Rows are converted to tab-separated values without cell coordinates or formulas.
+    Returns a dictionary where each key (sheet number) maps to simplified text content.
+    """
+    file_io = io.BytesIO(file_content)
+    wb = load_workbook(file_io, data_only=True)
+
+    result = {}
+    sheet_index = 1
+
+    for sheet_name in wb.sheetnames:
+        sheet: Worksheet = wb[sheet_name]  # type: ignore
+
+        rows = []
+        for row in sheet.iter_rows(values_only=True):
+            # Skip completely empty rows
+            if all(cell is None or str(cell).strip() == "" for cell in row):
+                continue
+
+            # Convert each cell to string, handling None values
+            row_values = [str(cell) if cell is not None else "" for cell in row]
+
+            # Remove trailing empty cells
+            while row_values and row_values[-1] == "":
+                row_values.pop()
+
+            if row_values:  # Only add non-empty rows
+                rows.append("\t".join(row_values))
+
+        # Create clean text representation
+        sheet_text = (
+            f"Sheet: {sheet_name}\n" + "\n".join(rows)
+            if rows
+            else f"Sheet: {sheet_name}\n"
+        )
+
+        result[sheet_index] = {
+            "sheet_name": sheet_name,
+            "structure": {
+                "rows_count": len(rows),
+            },
+            "rows": [sheet_text],  # Single clean text block
+        }
+        sheet_index += 1
+
+    return result
 
 
 def extract_excel_structure(file_content: bytes) -> dict:
@@ -463,7 +522,6 @@ def _excel_structure_to_document(
             ExcelDocumentPage(
                 sheet_name=sheet_data["sheet_name"],
                 structure=sheet_data["structure"],
-                rows=sheet_data["rows"],
                 num_words=num_words,
                 page_number=sheet_num,
                 text=sheet_text,

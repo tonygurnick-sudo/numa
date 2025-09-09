@@ -170,8 +170,8 @@ class TestLambdaFunction(unittest.TestCase):
             "Body": MagicMock(read=lambda: mock_excel_content)
         }
 
-        # Mock the extract_excel_structure function
-        with patch("lambda_function.extract_excel_structure") as mock_extract:
+        # Mock the extract_excel_structure_simple function (default behavior)
+        with patch("lambda_function.extract_excel_structure_simple") as mock_extract:
             mock_extract.return_value = {
                 1: {
                     "sheet_name": "Sheet1",
