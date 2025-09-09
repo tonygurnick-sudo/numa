@@ -46,7 +46,7 @@
     "file-saver": "^2.0.5",
     "file-type": "^20.0.0",
     "html-to-docx-lite": "^2.0.1",
-    "html2pdf.js": "^0.10.2",
+    "jspdf": "^3.0.1",
     "jwt-decode": "^4.0.0",
     "micromark": "^4.0.1",
     "react": "^19.0.0",

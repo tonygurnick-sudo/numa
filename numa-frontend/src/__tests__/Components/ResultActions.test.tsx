@@ -14,18 +14,36 @@ import '@testing-library/jest-dom';
 // 3) Import the component to test
 import { ResultActions } from '../../Components/ResultActions';
 
-// 4) Mock out file-saver (saveAs), html2pdf, docx, and any other external libraries as needed
+// 4) Mock out file-saver (saveAs), jsPDF, docx, and any other external libraries as needed
 vi.mock('file-saver', () => ({
   saveAs: vi.fn(),
 }));
 
-// html2pdf is used internally. We'll mock it so it doesn’t actually try to render a PDF
-vi.mock('html2pdf.js', () => ({
-  default: () => ({
-    set: vi.fn().mockReturnThis(),
-    from: vi.fn().mockReturnThis(),
-    outputPdf: vi.fn().mockResolvedValue(new Blob(['PDF content'], { type: 'application/pdf' })),
-  }),
+// Mock jsPDF which is used for PDF generation
+vi.mock('jspdf', () => ({
+  jsPDF: vi.fn().mockImplementation(() => ({
+    internal: {
+      pageSize: {
+        getWidth: vi.fn().mockReturnValue(210), // A4 width in mm
+        getHeight: vi.fn().mockReturnValue(297), // A4 height in mm
+      },
+    },
+    setFont: vi.fn(),
+    setFontSize: vi.fn(),
+    setTextColor: vi.fn(),
+    setDrawColor: vi.fn(),
+    setLineWidth: vi.fn(),
+    setFillColor: vi.fn(),
+    text: vi.fn(),
+    splitTextToSize: vi.fn().mockReturnValue(['mocked text line']),
+    getTextWidth: vi.fn().mockReturnValue(50),
+    line: vi.fn(),
+    rect: vi.fn(),
+    addPage: vi.fn(),
+    setPage: vi.fn(),
+    getNumberOfPages: vi.fn().mockReturnValue(1),
+    output: vi.fn().mockReturnValue(new Blob(['PDF content'], { type: 'application/pdf' })),
+  })),
 }));
 
 // Mock docx to avoid actual file creation in tests

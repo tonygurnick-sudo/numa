@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Dropdown, Button, Modal, Form, Spinner } from 'react-bootstrap';
 import { saveAs } from 'file-saver';
-import html2pdf from 'html2pdf.js';
+import { jsPDF } from 'jspdf';
 import ReactDOMServer from 'react-dom/server';
 import { MarkdownContent } from './MarkdownContent';
 import { useAuth } from '../Providers/AuthProvider';
@@ -11,7 +11,7 @@ import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import { getExportOptionsForApp } from '../config/exportConfig';
 
 // Helper function to convert markdown to formatted plain text
-const convertMarkdownToPlainText = (markdown) => {
+const convertMarkdownToPlainText = (markdown: string): string => {
   // New Line for <br> tags
   let plainText = markdown.replace(/<br\s*\/?>/gi, '\n');
 
@@ -48,7 +48,13 @@ const convertMarkdownToPlainText = (markdown) => {
   return plainText.trim();
 };
 
-const ResultActions = ({ content, title = 'Result', appType = null }) => {
+interface ResultActionsProps {
+  content: string;
+  title?: string;
+  appType?: string | null;
+}
+
+const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result', appType = null }) => {
   const { getCredentials } = useAuth();
 
   const exportOptions = getExportOptionsForApp(appType);
@@ -60,187 +66,396 @@ const ResultActions = ({ content, title = 'Result', appType = null }) => {
   const [successMessage, setSuccessMessage] = useState('');
 
   // ─────────────────────────────────────────────────────────────
-  // PDF Creation
-  const createStyledPdfBlob = async (markdownString, title) => {
-    const markdownHtml = ReactDOMServer.renderToString(<MarkdownContent content={markdownString} />);
+  // PDF Creation Constants
+  const PDF_CONSTANTS = {
+    FONT_FAMILY: 'helvetica' as const,
+    LINE_HEIGHT: 4.5,
+    PARAGRAPH_SPACING: 8,
+    HEADER_FONT_SIZES: [16, 14, 13, 12, 11, 10] as const,
+    COLORS: {
+      BLACK: [0, 0, 0] as const,
+      DARK_GRAY: [20, 20, 20] as const,
+      MEDIUM_GRAY: [51, 51, 51] as const,
+      LIGHT_GRAY: [100, 100, 100] as const,
+      BORDER_GRAY: [128, 128, 128] as const,
+      TABLE_HEADER_BG: [240, 240, 240] as const,
+      TABLE_BORDER: [180, 180, 180] as const,
+    },
+  } as const;
 
-    const element = document.createElement('div');
+  const createStyledPdfBlob = async (markdownString: string, title: string): Promise<Blob> => {
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+      compress: true,
+    });
 
-    element.innerHTML = `
-      <html>
-        <head>
-          <style>
-            @page {
-              margin: 25mm;
-              size: A4;
-            }
-            body {
-              font-family: 'Helvetica', 'Arial', sans-serif;
-              line-height: 1.6;
-              color: #333;
-              font-size: 10.5pt;
-              margin: 0;
-              padding: 0;
-              background-color: white;
-            }
-            .container {
-              max-width: 100%;
-              width: 100%;
-              padding: 12px;
-              box-sizing: border-box;
-              background-color: white;
-            }
-            .header {
-              border-bottom: 2px solid #8e50a7;
-              margin-bottom: 20px;
-              padding-bottom: 10px;
-              width: 95%;
-              margin-left: auto;
-              margin-right: auto;
-            }
-            h1 {
-              color: #8e50a7;
-              margin: 0 0 10px 0;
-              padding: 0;
-              font-size: 24pt;
-              page-break-after: avoid;
-            }
-            h2, h3, h4, h5, h6 {
-              margin-top: 20px;
-              margin-bottom: 10px;
-              page-break-after: avoid;
-            }
-            p {
-              margin: 0 0 12px 0;
-              max-width: 95%;
-              width: 95%;
-              margin-left: auto;
-              margin-right: auto;
-              word-wrap: break-word;
-            }
-            table {
-              width: 95%;
-              max-width: 95%;
-              table-layout: fixed;
-              border-collapse: collapse;
-              margin: 16px auto;
-              page-break-inside: avoid;
-              font-size: 9.5pt;
-            }
-            th, td {
-              border: 1px solid #ddd;
-              padding: 5px;
-              text-align: left;
-              word-wrap: break-word;
-              overflow-wrap: break-word;
-              vertical-align: top;
-              overflow: hidden;
-            }
-            th {
-              background-color: #f5f5f5;
-              font-weight: bold;
-            }
-            pre, code {
-              background-color: #f8f8f8;
-              border-radius: 3px;
-              border: 1px solid #eaeaea;
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 9pt;
-              padding: 10px;
-              white-space: pre-wrap;
-              word-wrap: break-word;
-              overflow-x: hidden;
-              max-width: 95%;
-              width: 95%;
-              margin: 16px auto;
-              display: block;
-              page-break-inside: avoid;
-            }
-            ul, ol {
-              margin-bottom: 12px;
-              padding-left: 20px;
-            }
-            li {
-              margin-bottom: 6px;
-            }
-            .footer {
-              margin-top: 30px;
-              padding-top: 10px;
-              border-top: 1px solid #eee;
-              font-size: 9pt;
-              color: #666;
-              text-align: center;
-              width: 95%;
-              margin-left: auto;
-              margin-right: auto;
-            }
-            img {
-              max-width: 100%;
-              height: auto;
-            }
-            a {
-              color: #0366d6;
-              text-decoration: none;
-            }
-            blockquote {
-              margin: 16px 0;
-              padding: 0 16px;
-              color: #6a737d;
-              border-left: 4px solid #dfe2e5;
-            }
-            .content {
-              min-height: 500px;
-              width: 95%;
-              margin: 0 auto;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>${title}</h1>
-            </div>
-            <div class="content">
-              ${markdownHtml}
-            </div>
-            <div class="footer">
-              Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    // PDF generation settings
-    const opt = {
-      margin: [0, 0],
-      filename: `${title}.pdf`,
-      image: {
-        type: 'jpeg',
-        quality: 0.98,
-      },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        letterRendering: true,
-      },
-      jsPDF: {
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'portrait',
-        compress: true,
-        hotfixes: ['px_scaling'],
-      },
-      pagebreak: {
-        mode: 'css',
-        avoid: ['table', 'img', 'pre', 'h1, h2, h3, h4, h5, h6'],
-      },
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 20;
+    const maxWidth = pageWidth - 2 * margin;
+    let currentY = margin;
+    const checkPageBreak = (nextHeight: number): boolean => {
+      if (currentY + nextHeight > pageHeight - margin) {
+        pdf.addPage();
+        currentY = margin;
+        return true;
+      }
+      return false;
     };
 
-    const worker = html2pdf().set(opt).from(element);
-    const pdfBlob = await worker.outputPdf('blob');
-    return pdfBlob;
+    const { FONT_FAMILY, LINE_HEIGHT, PARAGRAPH_SPACING, HEADER_FONT_SIZES, COLORS } = PDF_CONSTANTS;
+
+    // Helper function to split text into words while preserving whitespace
+    const splitTextIntoWords = (text: string): Array<{ text: string; bold: boolean; isSpace: boolean }> => {
+      const words = text.split(/(\s+)/);
+      return words
+        .filter((word) => word.length > 0)
+        .map((word) => ({
+          text: word,
+          bold: false,
+          isSpace: /^\s+$/.test(word),
+        }));
+    };
+
+    // Helper function to parse markdown sections
+    const parseMarkdownSections = (text: string): Array<{ type: string; content: string; level: number }> => {
+      let content = text.replace(/<[^>]*>/g, '');
+      const sections: Array<{ type: string; content: string; level: number }> = [];
+      const lines = content.split('\n').filter((line) => line.trim());
+
+      let currentSection = { type: 'text', content: '', level: 0 };
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        const headerMatch = trimmed.match(/^(#{1,6})\s+(.+)/);
+        if (headerMatch) {
+          if (currentSection.content) {
+            sections.push(currentSection);
+          }
+          currentSection = {
+            type: 'header',
+            content: headerMatch[2],
+            level: headerMatch[1].length,
+          };
+          sections.push(currentSection);
+          currentSection = { type: 'text', content: '', level: 0 };
+          continue;
+        }
+
+        if (trimmed.includes('|') && trimmed.split('|').length > 2) {
+          if (currentSection.type !== 'table') {
+            if (currentSection.content) {
+              sections.push(currentSection);
+            }
+            currentSection = { type: 'table', content: '', level: 0 };
+          }
+          currentSection.content += trimmed + '\n';
+          continue;
+        }
+
+        if (trimmed.match(/^[-*+]\s+/) || trimmed.match(/^\d+\.\s+/)) {
+          if (currentSection.type !== 'list') {
+            if (currentSection.content) {
+              sections.push(currentSection);
+            }
+            currentSection = { type: 'list', content: '', level: 0 };
+          }
+          currentSection.content += trimmed + '\n';
+          continue;
+        }
+
+        if (currentSection.type === 'list' || currentSection.type === 'table') {
+          sections.push(currentSection);
+          currentSection = { type: 'text', content: '', level: 0 };
+        }
+        currentSection.content += trimmed + ' ';
+      }
+
+      if (currentSection.content) {
+        sections.push(currentSection);
+      }
+
+      return sections;
+    };
+
+    // Helper function to render text with bold formatting
+    const renderTextWithBold = (text: string, x: number, y: number, maxWidth: number): number => {
+      // Check if text contains bold formatting
+      const hasBoldFormatting = /\*\*(.*?)\*\*/g.test(text);
+
+      if (!hasBoldFormatting) {
+        // No bold formatting, use regular text rendering
+        pdf.setFont(FONT_FAMILY, 'normal');
+        const lines = pdf.splitTextToSize(text, maxWidth);
+        lines.forEach((line: string, index: number) => {
+          pdf.text(line, x, y + index * LINE_HEIGHT);
+        });
+        return lines.length;
+      }
+
+      // Parse bold patterns and create word-level parts
+      const parts: Array<{ text: string; bold: boolean; isSpace: boolean }> = [];
+      const boldPattern = /\*\*(.*?)\*\*/g;
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+
+      while ((match = boldPattern.exec(text)) !== null) {
+        // Add normal text before bold
+        if (match.index > lastIndex) {
+          const normalText = text.substring(lastIndex, match.index);
+          parts.push(...splitTextIntoWords(normalText));
+        }
+
+        // Add bold text
+        const boldText = match[1];
+        const boldWords = splitTextIntoWords(boldText);
+        parts.push(...boldWords.map((word) => ({ ...word, bold: true })));
+
+        lastIndex = match.index + match[0].length;
+      }
+
+      // Add remaining normal text
+      if (lastIndex < text.length) {
+        const remainingText = text.substring(lastIndex);
+        parts.push(...splitTextIntoWords(remainingText));
+      }
+
+      // Render with proper word wrapping
+      let currentX = x;
+      let currentY = y;
+      let lineCount = 1;
+
+      for (const part of parts) {
+        if (!part.text) continue;
+
+        pdf.setFont(FONT_FAMILY, part.bold ? 'bold' : 'normal');
+        const partWidth = pdf.getTextWidth(part.text);
+
+        // Check if we need to wrap to next line
+        if (!part.isSpace && currentX + partWidth > x + maxWidth && currentX > x) {
+          // Move to next line, maintaining the same X position as the first line
+          currentY += LINE_HEIGHT;
+          currentX = x;
+          lineCount++;
+        }
+
+        // Don't render leading spaces at start of new line
+        if (!(part.isSpace && currentX === x)) {
+          pdf.text(part.text, currentX, currentY);
+          currentX += partWidth;
+        }
+      }
+
+      return lineCount;
+    };
+
+    pdf.setFont(FONT_FAMILY);
+    pdf.setFontSize(18);
+    pdf.setTextColor(...COLORS.BLACK);
+    pdf.setFont(FONT_FAMILY, 'bold');
+
+    const titleLines = pdf.splitTextToSize(title, maxWidth);
+    titleLines.forEach((line: string, index: number) => {
+      pdf.text(line, margin, currentY + index * 7);
+    });
+
+    currentY += titleLines.length * 7 + 8;
+
+    pdf.setDrawColor(...COLORS.BORDER_GRAY);
+    pdf.setLineWidth(0.3);
+    pdf.line(margin, currentY, pageWidth - margin, currentY);
+    currentY += 12;
+
+    // Process content sections
+    const sections = parseMarkdownSections(markdownString);
+
+    sections.forEach((section: { type: string; content: string; level: number }) => {
+      pdf.setTextColor(...COLORS.MEDIUM_GRAY); // Dark gray text
+
+      if (section.type === 'header') {
+        // Add minimal spacing before headers (except first one)
+        if (currentY > margin + 20) {
+          currentY += 3;
+        }
+
+        checkPageBreak(20);
+
+        // Professional header hierarchy with Helvetica
+        const fontSize = HEADER_FONT_SIZES[Math.min(section.level - 1, 5)];
+        const lineHeight = fontSize * 0.5;
+
+        pdf.setFontSize(fontSize);
+        pdf.setFont(FONT_FAMILY, section.level <= 2 ? 'bold' : 'normal');
+        pdf.setTextColor(...COLORS.BLACK);
+
+        const headerLines = pdf.splitTextToSize(section.content, maxWidth);
+        headerLines.forEach((line: string, index: number) => {
+          pdf.text(line, margin, currentY + index * lineHeight);
+        });
+
+        currentY += headerLines.length * lineHeight + (section.level <= 2 ? 4 : 3);
+      } else if (section.type === 'list') {
+        checkPageBreak(20);
+
+        pdf.setFontSize(11);
+        pdf.setFont(FONT_FAMILY, 'normal');
+        pdf.setTextColor(...COLORS.DARK_GRAY); // Very dark gray for body text
+
+        const listItems = section.content.split('\n').filter((item) => item.trim());
+
+        listItems.forEach((item: string) => {
+          const cleanItem = item.replace(/^[-*+]\s+/, '').replace(/^\d+\.\s+/, '');
+
+          checkPageBreak(20); // Conservative estimate for page break
+
+          // Render bullet point with proper alignment
+          pdf.setFont(FONT_FAMILY, 'normal');
+          pdf.text('•', margin, currentY);
+
+          // Calculate indent for text after bullet
+          const bulletWidth = pdf.getTextWidth('• ');
+          const textIndent = margin + bulletWidth;
+
+          // Use the bold formatting function for list item text with proper indentation
+          const linesRendered = renderTextWithBold(cleanItem.trim(), textIndent, currentY, maxWidth - bulletWidth);
+          currentY += linesRendered * LINE_HEIGHT + 1.5;
+        });
+
+        currentY += 4;
+      } else if (section.type === 'table') {
+        checkPageBreak(30);
+
+        // Parse table content
+        const tableRows = section.content
+          .split('\n')
+          .filter((row) => row.trim() && !row.match(/^[\s\-|]+$/)) // Remove separator rows
+          .map((row) =>
+            row
+              .split('|')
+              .map((cell) => cell.trim())
+              .filter((cell) => cell),
+          );
+
+        if (tableRows.length > 0) {
+          const colCount = Math.max(...tableRows.map((row) => row.length));
+          const colWidth = (maxWidth - 10) / colCount;
+
+          pdf.setFontSize(10);
+          pdf.setFont(FONT_FAMILY, 'normal');
+          pdf.setTextColor(...COLORS.DARK_GRAY);
+
+          tableRows.forEach((row: string[], rowIndex: number) => {
+            const isHeader = rowIndex === 0;
+
+            // Calculate the actual row height needed based on cell content
+            let maxLines = 1;
+            const cellTextArrays = row.map((cell) => pdf.splitTextToSize(cell, colWidth - 4));
+            cellTextArrays.forEach((cellLines: string[]) => {
+              maxLines = Math.max(maxLines, cellLines.length);
+            });
+
+            const lineHeight = 4.5;
+            const rowHeight = maxLines * lineHeight + 2; // Padding for multi-line content
+
+            checkPageBreak(rowHeight + 2);
+
+            if (isHeader) {
+              pdf.setFont(FONT_FAMILY, 'bold');
+              // Header background
+              pdf.setFillColor(...COLORS.TABLE_HEADER_BG);
+              pdf.rect(margin, currentY - 1, maxWidth - 10, rowHeight, 'F');
+            } else {
+              pdf.setFont(FONT_FAMILY, 'normal');
+            }
+
+            // Draw borders
+            pdf.setDrawColor(...COLORS.TABLE_BORDER);
+            pdf.setLineWidth(0.2);
+            pdf.rect(margin, currentY - 1, maxWidth - 10, rowHeight);
+
+            // Render all cell content with proper multi-line support
+            cellTextArrays.forEach((cellLines: string[], colIndex: number) => {
+              const x = margin + colIndex * colWidth + 2;
+
+              // Render each line of the cell
+              cellLines.forEach((line: string, lineIndex: number) => {
+                const y = currentY + 3 + lineIndex * lineHeight;
+                pdf.text(line, x, y);
+              });
+
+              // Vertical borders
+              if (colIndex < row.length - 1) {
+                pdf.line(
+                  margin + (colIndex + 1) * colWidth,
+                  currentY - 1,
+                  margin + (colIndex + 1) * colWidth,
+                  currentY + rowHeight - 1,
+                );
+              }
+            });
+
+            currentY += rowHeight;
+          });
+
+          currentY += 6;
+        }
+      } else if (section.content.trim()) {
+        // Regular paragraph text with professional formatting
+        checkPageBreak(20);
+
+        pdf.setFontSize(11);
+        pdf.setFont(FONT_FAMILY, 'normal');
+        pdf.setTextColor(...COLORS.DARK_GRAY); // Very dark gray for readability
+
+        // Enhanced text processing for better paragraph formatting
+        const cleanText = section.content
+          .trim()
+          .replace(/\s+/g, ' ') // Normalize whitespace
+          .replace(/([.!?])\s+/g, '$1  '); // Double space after sentences
+
+        checkPageBreak(20); // Conservative estimate for page break
+
+        // Use the bold formatting function for paragraphs
+        const linesRendered = renderTextWithBold(cleanText, margin, currentY, maxWidth);
+        currentY += linesRendered * 5.5 + PARAGRAPH_SPACING; // Line height + paragraph spacing
+      }
+    });
+
+    // Add footer with page numbers on all pages
+    const totalPages = pdf.getNumberOfPages();
+    const footerY = pageHeight - 12;
+
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
+
+      // Footer styling
+      pdf.setFontSize(9);
+      pdf.setTextColor(...COLORS.LIGHT_GRAY);
+      pdf.setFont(FONT_FAMILY, 'normal');
+
+      // Left side: Generation date
+      const dateText = `Generated ${new Date().toLocaleDateString()}`;
+      pdf.text(dateText, margin, footerY);
+
+      // Right side: Page numbers
+      if (totalPages > 1) {
+        const pageText = `Page ${i} of ${totalPages}`;
+        const pageTextWidth = pdf.getTextWidth(pageText);
+        pdf.text(pageText, pageWidth - margin - pageTextWidth, footerY);
+      }
+
+      // Center: Document title (truncated if too long)
+      const centerText = title.length > 40 ? title.substring(0, 37) + '...' : title;
+      const centerWidth = pdf.getTextWidth(centerText);
+      const centerX = (pageWidth - centerWidth) / 2;
+      pdf.text(centerText, centerX, footerY);
+    }
+
+    return pdf.output('blob');
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -255,19 +470,15 @@ const ResultActions = ({ content, title = 'Result', appType = null }) => {
   };
 
   const handleDownloadCSV = () => {
-    const plainText = content.replace(/<[^>]+>/g, '');
-    const csv = plainText
-      .split('\n')
-      .map((line) => line.trim())
-      .join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const plainText = convertMarkdownToPlainText(content);
+    const blob = new Blob([plainText], { type: 'text/csv;charset=utf-8' });
     saveAs(blob, `${title}.csv`);
   };
 
   const handleDownloadJSON = () => {
     const data = {
       title,
-      content: content.replace(/<[^>]+>/g, ''),
+      content: convertMarkdownToPlainText(content),
       timestamp: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -294,15 +505,16 @@ const ResultActions = ({ content, title = 'Result', appType = null }) => {
   const doUploadToS3 = async () => {
     try {
       setModalStep('uploading');
-      const plainText = content.replace(/<[^>]+>/g, '');
+      const plainText = convertMarkdownToPlainText(content);
       const blob = new Blob([plainText], { type: 'text/plain' });
       const contentType = 'text/plain';
       const extension = 'txt';
 
       const bucketName = window.sessionStorage.getItem('DATA_BUCKET');
-      const fileName = `${docName}-${new Date()
-        .toLocaleDateString()
-        .replace(/\//g, '-')}-${new Date().toLocaleTimeString()}.${extension}`;
+      const currentDate = new Date();
+      const dateStr = currentDate.toLocaleDateString().replace(/\//g, '-');
+      const timeStr = currentDate.toLocaleTimeString();
+      const fileName = `${docName}-${dateStr}-${timeStr}.${extension}`;
       const region = window.sessionStorage.getItem('REGION');
 
       const arrayBuffer = await blob.arrayBuffer();
@@ -313,9 +525,9 @@ const ResultActions = ({ content, title = 'Result', appType = null }) => {
         `Text file "${fileName}" has been added and will be searchable in your Company Knowledge after the next scheduled sync.`,
       );
       setModalStep('success');
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to upload file:', err);
-      setSuccessMessage(`Failed to upload: ${err.message}`);
+      setSuccessMessage(`Failed to upload: ${err instanceof Error ? err.message : String(err)}`);
       setModalStep('success');
     }
   };
