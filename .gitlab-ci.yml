@@ -337,6 +337,7 @@ build-deployment-container:
     BUILD_DIR: .
     ECR_REPO: ${ECR_BASE}/numa-deploy
   before_script:
+    - !reference [.yarn, setup-private-auth]
     - !reference [.node_job, before_script]
     - (cd infra && yarn exec cdktf get)
   script:
