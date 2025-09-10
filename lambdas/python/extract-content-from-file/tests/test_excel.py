@@ -146,12 +146,11 @@ class TestExcelExtraction(unittest.TestCase):
             ["A1: Header", "B1: Value", "C1: = (computed: None)"],
         )
         self.assertEqual(page1.structure["rows_count"], 2)
-        self.assertEqual(
-            page1.rows[0], "A1: Header | B1: Value | C1: = (computed: None)"
-        )
-        self.assertEqual(page1.rows[1], "A2: Data1 | B2: Data2 | C2: None")
-        # Verify word count is computed (it should equal the number of words in the joined rows)
-        expected_page1_words = len(" ".join(page1.rows).split())
+        # Verify the text field contains the joined rows
+        expected_page1_text = "A1: Header | B1: Value | C1: = (computed: None) A2: Data1 | B2: Data2 | C2: None"
+        self.assertEqual(page1.text, expected_page1_text)
+        # Verify word count is computed (it should equal the number of words in the text)
+        expected_page1_words = len(page1.text.split())
         self.assertEqual(page1.num_words, expected_page1_words)
 
         # Verify Sheet2 details.
@@ -160,8 +159,10 @@ class TestExcelExtraction(unittest.TestCase):
         self.assertEqual(page2.structure["columns"], ["A"])
         self.assertEqual(page2.structure["headers"], ["A1: Sheet2Data"])
         self.assertEqual(page2.structure["rows_count"], 1)
-        self.assertEqual(page2.rows[0], "A1: Sheet2Data")
-        expected_page2_words = len(" ".join(page2.rows).split())
+        # Verify the text field for Sheet2
+        expected_page2_text = "A1: Sheet2Data"
+        self.assertEqual(page2.text, expected_page2_text)
+        expected_page2_words = len(page2.text.split())
         self.assertEqual(page2.num_words, expected_page2_words)
 
         # Total words should be the sum of page1 and page2 word counts.
