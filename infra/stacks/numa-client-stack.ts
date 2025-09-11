@@ -293,6 +293,7 @@ export class NumaClientStack extends TerraformStack {
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
         CHAT_AGENT_URL: chatAgentWs.websocketUrl,
         NUMA_CHAT_AGENTS: clientConfig.numaChatAgents ?? true,
+        PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
       }),
       contentType: 'application/json',
     });
@@ -501,6 +502,12 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         allowBedrockQuotaSharing: z.boolean().optional().default(false),
+        /**
+         * Whether to enable Pipedream integrations functionality
+         *
+         * @default false
+         */
+        pipedreamIntegrations: z.boolean().optional().default(false),
       })
       .strict(),
   );

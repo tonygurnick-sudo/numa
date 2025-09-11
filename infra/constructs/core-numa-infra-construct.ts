@@ -61,6 +61,7 @@ export class CoreNumaInfra extends Construct {
   readonly chatHistoryTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
+  readonly pipedreamRelayLambdaArn?: string;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -709,6 +710,45 @@ export class CoreNumaInfra extends Construct {
     new TerraformOutput(this, 'data-bucket', { value: this.dataBucket.bucket.bucket });
     new TerraformOutput(this, 'company-bucket', { value: companyBucket.bucket.bucket });
 
+    this.logGroup = new NumaLogGroup(this, 'core-log-group', {
+      logGroupName: `${props.clientName}-core`,
+    }).logGroup;
+
+    this.logGroup.addMoveTarget(`${props.clientName}-core-log-group`);
+
+    // Create Pipedream relay lambda if Pipedream integrations are enabled
+    let pipedreamRelayLambda: NumaLambda | undefined;
+    if (props.pipedreamIntegrations) {
+      const pipedreamRelayPolicyStatements = [
+        {
+          actions: ['lambda:InvokeFunction'],
+          effect: 'Allow',
+          resources: [
+            // Allow invoking cross-account Pipedream proxy lambda
+            // Note: pipedream-proxy is deployed to us-east-1 regardless of client region
+            'arn:aws:lambda:us-east-1:965745962688:function:pipedream-proxy',
+          ],
+        },
+        {
+          actions: ['sts:GetCallerIdentity'],
+          effect: 'Allow',
+          resources: ['*'],
+        },
+      ];
+
+      pipedreamRelayLambda = new NumaLambda(this, 'pipedream-relay', {
+        additionalPolicyStatements: pipedreamRelayPolicyStatements,
+        clientName: props.clientName,
+        lambdaDirectory: 'python/pipedream-relay/',
+        logGroup: this.logGroup,
+        resourceNameSuffix: '_pipedream-relay',
+        environment: {
+          PIPEDREAM_PROXY_LAMBDA_ARN: 'arn:aws:lambda:us-east-1:965745962688:function:pipedream-proxy',
+          ENVIRONMENT: props.environmentName,
+        },
+      });
+    }
+
     // Create the Cognito IDP construct to manage identity pools and groups
     // Pass Q Business application ID only if Q Business resources were created
     this.cognitoGroups = new CognitoGroupsConstruct(this, 'cognito-groups', {
@@ -724,6 +764,8 @@ export class CoreNumaInfra extends Construct {
       companyBucket: companyBucket,
       chatHistoryTable: this.chatHistoryTable,
       groups: props.groups,
+      pipedreamIntegrations: props.pipedreamIntegrations,
+      pipedreamRelayLambdaArn: pipedreamRelayLambda?.lambda.arn,
       qBusinessApplicationId: qBusinessApplicationIdForIdp,
       knowledgeBase: props.knowledgeBase,
     });
@@ -732,6 +774,14 @@ export class CoreNumaInfra extends Construct {
     this.defaultWebIdentityRoleArn = this.cognitoGroups.defaultWebIdentityRoleArn;
     this.groups = this.cognitoGroups.groups;
 
+    // Expose pipedream relay lambda ARN if created
+    this.pipedreamRelayLambdaArn = pipedreamRelayLambda?.lambda.arn;
+
+    // Output Pipedream relay lambda ARN if enabled
+    if (pipedreamRelayLambda) {
+      new TerraformOutput(this, 'pipedream-relay-lambda-arn', { value: pipedreamRelayLambda.lambda.arn });
+    }
+
     // Add system user to admin group
     new CognitoUserInGroup(this, 'system-user-admin-group', {
       groupName: 'admin',
@@ -739,12 +789,6 @@ export class CoreNumaInfra extends Construct {
       userPoolId: userPool.id,
       dependsOn: [this.cognitoGroups.cognitoGroups['admin']],
     });
-
-    this.logGroup = new NumaLogGroup(this, 'core-log-group', {
-      logGroupName: `${props.clientName}-core`,
-    }).logGroup;
-
-    this.logGroup.addMoveTarget(`${props.clientName}-core-log-group`);
 
     const bedrockModelManagerPolicyStatements = [
       {
@@ -853,6 +897,12 @@ const _coreNumaInfraPropsSchema = z
      * Default is `false` (resources are NOT created unless explicitly enabled).
      */
     provisionQResources: z.boolean().optional(),
+    /**
+     * Whether to enable Pipedream integrations functionality
+     *
+     * @default false
+     */
+    pipedreamIntegrations: z.boolean().optional().default(false),
   })
   .strict();
 
