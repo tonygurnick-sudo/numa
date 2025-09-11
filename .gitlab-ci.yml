@@ -83,6 +83,7 @@ variables:
         - lambdas/python/numa-recent-jobs
         - lambdas/python/pipedream-account-sync
         - lambdas/python/pipedream-proxy
+        - lambdas/python/pipedream-relay
         - lambdas/python/policy-builder-completion
         - lambdas/python/policy-builder-expert-review
         - lambdas/python/policy-builder-explainability

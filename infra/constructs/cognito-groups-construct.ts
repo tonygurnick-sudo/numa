@@ -47,6 +47,7 @@ const createFeatureSets = (props: {
   dataBucket: BucketType;
   qBusinessApplicationId?: string;
   knowledgeBase: KnowledgeBase;
+  pipedreamRelayLambdaArn?: string;
 }): Record<string, PolicyStatement[]> => ({
   // Chat Feature Set
   chat: [
@@ -264,6 +265,20 @@ const createFeatureSets = (props: {
         ]
       : []),
   ],
+
+  // Pipedream Integration Feature Set
+  pipedreamIntegration: props.pipedreamRelayLambdaArn
+    ? [
+        {
+          effect: 'Allow',
+          actions: ['lambda:InvokeFunction'],
+          resources: [
+            // Allow invoking local Pipedream relay lambda
+            props.pipedreamRelayLambdaArn,
+          ],
+        },
+      ]
+    : [],
 });
 
 // Derive feature set names from the factory function return type
@@ -307,6 +322,8 @@ export const cognitoGroupsConstructPropsSchema = z.object({
   chatHistoryTable: tableSchema,
   qBusinessApplicationId: z.string().optional(), // Add optional Q Business application ID
   groups: z.record(z.string(), z.array(z.enum(FEATURE_SET_NAMES as [FeatureSetName, ...FeatureSetName[]]))).optional(),
+  pipedreamIntegrations: z.boolean().optional().default(false),
+  pipedreamRelayLambdaArn: z.string().optional(),
   knowledgeBase: z.instanceof(KnowledgeBase),
 });
 
@@ -322,7 +339,7 @@ export class CognitoGroupsConstruct extends Construct {
     // Define the groups and their feature sets
     const defaultGroups: Record<string, FeatureSetName[]> = {
       // The standard group should always be the least privileged group of all groups
-      standard: ['chat', 'useCompanyData', 'useApps', 'addToCompanyData', 'selfService'],
+      standard: ['chat', 'useCompanyData', 'useApps', 'addToCompanyData', 'selfService', 'pipedreamIntegration'],
       admin: FEATURE_SET_NAMES as FeatureSetName[],
     };
 
@@ -342,6 +359,7 @@ export class CognitoGroupsConstruct extends Construct {
       dataBucket: props.dataBucket,
       qBusinessApplicationId: props.qBusinessApplicationId,
       knowledgeBase: props.knowledgeBase,
+      pipedreamRelayLambdaArn: props.pipedreamRelayLambdaArn,
     });
 
     // Create a managed policy, store it in the featureSetPolicies object to attach it to the role
