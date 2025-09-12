@@ -364,6 +364,11 @@ export class CognitoGroupsConstruct extends Construct {
 
     // Create a managed policy, store it in the featureSetPolicies object to attach it to the role
     for (const [featureSetName, policyStatements] of Object.entries(featureSets)) {
+      // Skip creating policy if no statements (avoids AWS MalformedPolicyDocument error)
+      if (policyStatements.length === 0) {
+        continue;
+      }
+
       const policyDocument = new DataAwsIamPolicyDocument(this, `${featureSetName}-policy`, {
         statement: policyStatements,
       });
