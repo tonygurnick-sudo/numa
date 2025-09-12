@@ -41,6 +41,19 @@ export class GdsrAssessment extends BaseNumaApp {
           },
         },
         {
+          id: 'upload-supporting-data',
+          title: 'Upload Supporting Data',
+          description: 'Upload the GDSR Financial Details Template (optional)',
+          type: S3_UPLOAD_TASK,
+          required: false,
+          order: 2,
+          parameters: {
+            minFiles: 0,
+            maxFiles: 1,
+            userMessage: 'Optionally upload the GDSR Financial Details for enhanced assessment.',
+          },
+        },
+        {
           id: 'call-step-function',
           title: 'Process Application',
           type: HTTP_REQUEST_TASK,
@@ -48,12 +61,13 @@ export class GdsrAssessment extends BaseNumaApp {
           params: {
             payload: {
               uploaded_files: '@upload-files-to-s3',
+              supporting_data: '@upload-supporting-data',
             },
           },
-          order: 2,
+          order: 3,
         },
       ],
-      typicalDurationMinutes: 1,
+      typicalDurationMinutes: 3,
     };
 
     const extractContentLambda = this.addExtractContentLambda();
@@ -92,8 +106,42 @@ export class GdsrAssessment extends BaseNumaApp {
           },
           Next: 'ExtractContent',
         },
-        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.application_key', 'GdsrAssessment'),
-        GdsrAssessment: this.addLambdaTask(
+        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.application_key', 'CheckSupportingData'),
+        CheckSupportingData: {
+          Type: 'Choice',
+          Choices: [
+            {
+              Variable: '$$.Execution.Input.supporting_data[0]',
+              IsPresent: true,
+              Next: 'ExtractSupportingData',
+            },
+          ],
+          Default: 'GdsrAssessmentWithoutSupportingData',
+        },
+        ExtractSupportingData: this.addExtractContentTask(
+          extractContentLambda,
+          '$$.Execution.Input.supporting_data[0].s3_key',
+          'GdsrAssessmentWithSupportingData',
+          {
+            ResultPath: '$.extracted_supporting_data',
+          },
+        ),
+        GdsrAssessmentWithSupportingData: this.addLambdaTask(
+          assessGdsrLambda.arn,
+          {
+            app_id: this.appId,
+            'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
+            'input_key.$': '$.extracted.output_key',
+            'supporting_data_key.$': '$.extracted_supporting_data.output_key',
+            'output_key.$': `States.Format('${this.appId}/{}/{}/assessment.md', $.user_id, $.job_id)`,
+          },
+          'WriteSuccessStatus',
+          {
+            OutputPath: '$.Payload',
+          },
+        ),
+        GdsrAssessmentWithoutSupportingData: this.addLambdaTask(
           assessGdsrLambda.arn,
           {
             app_id: this.appId,

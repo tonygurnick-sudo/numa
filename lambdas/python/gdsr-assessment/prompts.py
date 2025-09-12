@@ -1,11 +1,16 @@
 # Core prompt for the GDSR assessment
 GDSR_ASSESSMENT_PROMPT = """# Game Development Sector Rebate (GDSR) Assessment Task
 
-Please act as a funding assessor for NZ On Air on GDSR. You are assessing the document contained in Application applying all applicable assessment criteria from the project knowledge in GDSR Reference File. Strictly use the template in Assessment Template as the output format.
+Please act as a funding assessor for NZ On Air on GDSR. You are assessing the document contained in Application applying all applicable assessment criteria from the project knowledge in GDSR Reference File. When supporting financial data is provided, use it to perform detailed cross-validation and verification. Strictly use the template in Assessment Template as the output format.
 
 ## Application
 ```
 {document_content}
+```
+
+## Supporting Financial Data (GDSR Financial Details Template)
+```
+{supporting_data_content}
 ```
 
 ## GDSR Reference File
@@ -17,6 +22,25 @@ Please act as a funding assessor for NZ On Air on GDSR. You are assessing the do
 ```
 {assessment_template}
 ```
+
+## Assessment Instructions
+
+### When Supporting Financial Data is Provided:
+1. **Cross-validate all financial figures** between the application and supporting data
+2. **Verify expense categorization** matches GDSR eligibility criteria from the reference file
+3. **Check project cost allocation** between eligible and non-eligible games
+4. **Validate personnel costs** and NZ residency status from employee summaries
+5. **Review software expenses** against the approved master sheet in the reference file
+6. **Confirm no double-funding** from other government sources listed in supporting data
+7. **Flag any discrepancies** between claimed amounts and supporting data calculations
+8. **Perform the 12 verification tests** outlined in the reference file using the supporting data
+9. **Calculate adjusted recommendations** based on supporting data validation
+10. **Include a Financial Data Validation section** in your assessment with specific findings
+
+### When Supporting Financial Data is Missing:
+- Note this limitation in your assessment
+- Recommend that supporting financial data be provided for complete evaluation
+- Base assessment solely on application document content
 
 ## Markdown Formatting Guidelines:
 - Start directly with the template structure provided in Assessment Template
@@ -33,10 +57,11 @@ Please act as a funding assessor for NZ On Air on GDSR. You are assessing the do
 As you assess the application:
 1. Be thorough and detailed in your evaluation
 2. Reference specific criteria from the GDSR Reference File
-3. Provide evidence from the Application document to support your assessment
+3. Provide evidence from both the Application document and Supporting Financial Data
 4. Be objective and balanced in your evaluation
 5. Make specific, actionable recommendations
 6. Follow the Assessment Template format exactly
+7. Highlight any inconsistencies between application claims and supporting data
 
 Do not add any introduction or summary outside the template structure - start directly with the Assessment Checklist Cover Sheet format.
 """
@@ -400,6 +425,42 @@ I [insert assessor name] declare I have no interest in [name of applicant] or th
 - **Total software costs claimed**: $[amount]
 - **Eligible software costs**: $[amount]
 - **Excluded software costs**: $[amount] - [reasons for exclusion]
+
+## Financial Data Validation
+
+**Supporting financial data provided**: Yes/No
+
+**Cross-validation status**: ✅ Passed / ⚠️ Minor discrepancies / ❌ Major discrepancies
+
+**Key validation findings**:
+- **Application total claimed**: $[amount from application]
+- **Supporting data total**: $[amount from financial template]
+- **Variance**: $[difference] - [explanation if any]
+
+**Project cost allocation validation**:
+| Project | Application Status | Supporting Data Amount | Validation Status | Notes |
+|---------|-------------------|----------------------|-------------------|-------|
+| [Project Name] | [Eligible/Ineligible] | $[amount] | [✅/⚠️/❌] | [Comments] |
+
+**Personnel cost validation**:
+- **Total staff costs claimed**: $[amount]
+- **NZ residents verified**: [X]/[Y] staff
+- **Non-eligible exclusions**: $[amount] - [reason]
+
+**Software expense validation**:
+- **Total software costs**: $[amount from supporting data]
+- **Confirmed eligible**: $[amount]
+- **Requires assessment**: $[amount]
+- **Not eligible**: $[amount]
+
+**Other government funding cross-check**:
+- **Funding sources identified**: [list from supporting data]
+- **Potential double-funding risk**: Yes/No - [explanation]
+
+**12 verification tests summary**:
+| Test # | Purpose | Status | Findings |
+|--------|---------|--------|----------|
+| 1-12 | [Brief test descriptions] | [✅/⚠️/❌] | [Key findings] |
 
 ## Recommended for Approval
 
