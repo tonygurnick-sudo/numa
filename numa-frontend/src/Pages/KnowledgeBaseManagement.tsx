@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Container,
   Row,
@@ -18,21 +18,129 @@ import { getUrlTagFromS3Object, listObjectsInFolder, deleteMultipleObjectsFromS3
 import { WebCrawler } from '../Components/WebCrawler';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { useAuth } from '../Providers/AuthProvider';
-import { isFileTypeValidForBedrockKB, getBedrockKBSupportedExtensions } from '../utils/fileUtils';
+import {
+  isFileTypeValidForBedrockKB,
+  getBedrockKBSupportedExtensions,
+  shouldShowLargeDataFileWarning,
+  formatFileSize,
+} from '../utils/fileUtils';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav as TopNav } from '../Components/Nav';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { FileUploader } from '../Components/FileUploader';
 import { FeatureWrapper } from '../Components/RequiredFeaturesWrapper';
+import { NotificationModal } from '../Components/NotificationModal';
 import { getKnowledgeBaseState } from '../utils/knowledgeBaseUtils';
 // Knowledge Base Management specific styles
 import '../assets/styles/components/_knowledge_base_management.scss';
 
+// Type definitions
+interface S3Object {
+  Key: string;
+  LastModified: Date;
+  Size: number;
+  urlTag?: string;
+  kbDoc?: KBDocument;
+}
+
+interface KBDocument {
+  documentId: string;
+  status: string;
+  updatedAt: string;
+  error?: {
+    errorMessage?: string;
+  };
+  fileName?: string;
+  isInferred?: boolean;
+  statusReason?: string;
+}
+
+interface DataSource {
+  dataSourceId: string;
+  name: string;
+  displayName?: string;
+  type: string;
+  status: string;
+  source: string;
+  isWebCrawler?: boolean;
+  url?: string;
+  pageCount?: number;
+  lastCrawled?: string;
+  lastSynced?: string;
+  lastUpdated?: string;
+  description?: string;
+}
+
+interface TreeNode {
+  name: string;
+  children: Record<string, TreeNode>;
+  files: S3Object[];
+}
+
+interface TableRow {
+  id: string;
+  type: 'folder' | 'file';
+  name: string;
+  displayName?: string;
+  originalKey?: string;
+  depth: number;
+  uploadDate: string;
+  size: string;
+  kbStatus?: string | null;
+  errorMessage?: string | null;
+  urlTag?: string | null;
+  children?: TableRow[];
+}
+
+interface SyncMetrics {
+  documentsAdded?: number;
+  numberOfNewDocumentsIndexed?: number;
+  documentsDeleted?: number;
+  numberOfDocumentsDeleted?: number;
+  documentsFailed?: number;
+  numberOfDocumentsFailed?: number;
+  documentsModified?: number;
+  numberOfModifiedDocumentsIndexed?: number;
+  documentsScanned?: number;
+  numberOfDocumentsScanned?: number;
+}
+
+interface BulkDeleteProgress {
+  processed: number;
+  total: number;
+  successful: number;
+  failed: number;
+}
+
+interface DataSourcesByType {
+  web: DataSource[];
+  document: DataSource[];
+  database: DataSource[];
+  other: DataSource[];
+}
+
+type SortColumn = 'name' | 'date' | 'size';
+type SortDirection = 'asc' | 'desc';
+type ItemType = 'pending' | 'indexed';
+
+interface RenderTreeTableSectionProps {
+  title: string;
+  rows?: TableRow[];
+  isLoading: boolean;
+  searchValue?: string;
+  setSearchValue?: (_value: string) => void;
+  expandedSet?: Set<string>;
+  toggleFolderFn?: (_folderId: string) => void;
+  isPending?: boolean;
+  showErrorColumn?: boolean;
+  customContent?: React.ReactNode;
+}
+
 /**
  * Build a nested folder tree from S3 object keys.
  */
-function buildFileTree(s3Objects) {
-  const root = {
+function buildFileTree(s3Objects: S3Object[]): TreeNode {
+  const root: TreeNode = {
     name: '(root)',
     children: {},
     files: [],
@@ -60,18 +168,22 @@ function buildFileTree(s3Objects) {
 /**
  * Filter the tree by a search term, removing folders/files that don't match.
  */
-function filterTree(node, searchTerm) {
+function filterTree(node: TreeNode, searchTerm: string): TreeNode {
   if (!searchTerm) return node;
 
   const lower = searchTerm.toLowerCase();
-  const filtered = {
+  const filtered: TreeNode = {
     name: node.name,
     children: {},
     files: [],
   };
 
   // Filter files
-  filtered.files = node.files.filter((f) => decodeURIComponent(f.Key.split('/').pop()).toLowerCase().includes(lower));
+  filtered.files = node.files.filter((f) =>
+    decodeURIComponent(f.Key.split('/').pop() || '')
+      .toLowerCase()
+      .includes(lower),
+  );
 
   // Recurse into subfolders
   for (const [folderName, folderNode] of Object.entries(node.children)) {
@@ -89,7 +201,11 @@ function filterTree(node, searchTerm) {
  * Collect all folder paths that should be expanded to show search results.
  * This recursively traverses the filtered tree and returns folder paths that contain matching content.
  */
-function collectFoldersToExpand(node, currentPath = '', foldersToExpand = new Set()) {
+function collectFoldersToExpand(
+  node: TreeNode,
+  currentPath: string = '',
+  foldersToExpand: Set<string> = new Set(),
+): Set<string> {
   // Check each child folder
   for (const [folderName, folderNode] of Object.entries(node.children)) {
     const folderPath = currentPath ? `${currentPath}/${folderName}` : folderName;
@@ -110,11 +226,8 @@ function collectFoldersToExpand(node, currentPath = '', foldersToExpand = new Se
 
 /**
  * Sort folders and files by specified column and direction.
- * @param {Object} node - The tree node to sort
- * @param {string} sortColumn - Column to sort by ('name', 'date', 'size')
- * @param {string} sortDirection - Direction to sort ('asc', 'desc')
  */
-function sortTree(node, sortColumn = 'name', sortDirection = 'asc') {
+function sortTree(node: TreeNode, sortColumn: SortColumn = 'name', sortDirection: SortDirection = 'asc'): void {
   // Sort files based on the specified column and direction
   node.files.sort((a, b) => {
     let comparison = 0;
@@ -122,7 +235,7 @@ function sortTree(node, sortColumn = 'name', sortDirection = 'asc') {
     switch (sortColumn) {
       case 'date':
         // Sort by LastModified date
-        comparison = new Date(a.LastModified) - new Date(b.LastModified);
+        comparison = new Date(a.LastModified).getTime() - new Date(b.LastModified).getTime();
         break;
       case 'size':
         // Sort by Size
@@ -131,8 +244,8 @@ function sortTree(node, sortColumn = 'name', sortDirection = 'asc') {
       case 'name':
       default: {
         // Sort by filename (default)
-        const A = decodeURIComponent(a.Key.split('/').pop()).toLowerCase();
-        const B = decodeURIComponent(b.Key.split('/').pop()).toLowerCase();
+        const A = decodeURIComponent(a.Key.split('/').pop() || '').toLowerCase();
+        const B = decodeURIComponent(b.Key.split('/').pop() || '').toLowerCase();
         comparison = A.localeCompare(B);
         break;
       }
@@ -141,7 +254,7 @@ function sortTree(node, sortColumn = 'name', sortDirection = 'asc') {
   });
 
   // Always sort folders alphabetically
-  const sortedChildren = {};
+  const sortedChildren: Record<string, TreeNode> = {};
   Object.keys(node.children)
     .sort((a, b) => a.localeCompare(b))
     .forEach((folderName) => {
@@ -158,13 +271,13 @@ function sortTree(node, sortColumn = 'name', sortDirection = 'asc') {
 /**
  * Recursively build an array of rows (folder or file) for display in a tree-table.
  */
-function buildRowsForTree(node, depth, parentPath) {
-  const rows = [];
+function buildRowsForTree(node: TreeNode, depth: number, parentPath: string): TableRow[] {
+  const rows: TableRow[] = [];
 
   // Subfolders
   for (const folderName of Object.keys(node.children)) {
     const folderId = parentPath ? `${parentPath}/${folderName}` : folderName;
-    const folderRow = {
+    const folderRow: TableRow = {
       id: folderId,
       type: 'folder',
       name: folderName,
@@ -180,7 +293,7 @@ function buildRowsForTree(node, depth, parentPath) {
 
   // Process files and attach KB status if available
   node.files.forEach((f) => {
-    const fileName = decodeURIComponent(f.Key.split('/').pop());
+    const fileName = decodeURIComponent(f.Key.split('/').pop() || '');
     const rowId = parentPath ? `${parentPath}/${fileName}` : fileName;
     const kbStatus = f.kbDoc ? (f.kbDoc.error && Object.keys(f.kbDoc.error).length > 0 ? 'FAILED' : 'SUCCESS') : null;
     const errorMessage = f.kbDoc ? f.kbDoc.error?.errorMessage : null;
@@ -209,12 +322,12 @@ function buildRowsForTree(node, depth, parentPath) {
 /**
  * Flatten the nested rows, expanding only folders in 'expandedSet'.
  */
-function flattenRows(rows, expandedSet) {
-  const flat = [];
+function flattenRows(rows: TableRow[], expandedSet: Set<string>): TableRow[] {
+  const flat: TableRow[] = [];
 
-  function visit(row) {
+  function visit(row: TableRow): void {
     flat.push(row);
-    if (row.type === 'folder' && expandedSet.has(row.id)) {
+    if (row.type === 'folder' && expandedSet.has(row.id) && row.children) {
       row.children.forEach(visit);
     }
   }
@@ -225,14 +338,14 @@ function flattenRows(rows, expandedSet) {
 /**
  * Convert bytes -> "x.xx KB"
  */
-function formatKB(bytes) {
+function formatKB(bytes: number): string {
   return `${(bytes / 1024).toFixed(2)} KB`;
 }
 
 /**
  * Returns a Date set to the next half-hour boundary
  */
-function getNextSyncTime() {
+function getNextSyncTime(): Date {
   const now = new Date();
   const min = now.getMinutes();
   const next = min < 30 ? 30 : 60;
@@ -245,7 +358,7 @@ function getNextSyncTime() {
  * Helper: Convert a documentId (from KB API) to an S3 file key.
  * E.g., "s3://numa-arcanum-demo-data/CustomerAccount.txt" => "CustomerAccount.txt"
  */
-function documentIdToKey(documentId) {
+function documentIdToKey(documentId: string): string {
   const parts = documentId.split('/');
   return parts.slice(3).join('/');
 }
@@ -253,7 +366,7 @@ function documentIdToKey(documentId) {
 /**
  * Get badge variant for data source status
  */
-function getDataSourceStatusVariant(status) {
+function getDataSourceStatusVariant(status: string | undefined): string {
   switch (status?.toUpperCase()) {
     case 'ACTIVE':
     case 'AVAILABLE':
@@ -273,7 +386,7 @@ function getDataSourceStatusVariant(status) {
 /**
  * Format data source type for display
  */
-function formatDataSourceType(type, source) {
+function formatDataSourceType(type: string | undefined, source: string): string {
   if (source === 'bedrock') {
     // Bedrock doesn't provide type in the same way, infer from name or default to S3
     return type === 'S3' || !type ? 'Numa Bedrock Knowledge Base' : type;
@@ -285,7 +398,7 @@ function formatDataSourceType(type, source) {
  * Format data source name to be user-friendly
  * Uses consistent client name format
  */
-function formatDataSourceName(name, clientName) {
+function formatDataSourceName(name: string | undefined, clientName: string | undefined): string {
   if (!name && !clientName) return 'Unnamed Data Source';
 
   // For consistent naming, use the client name format
@@ -301,7 +414,7 @@ function formatDataSourceName(name, clientName) {
   }
 
   // Fallback to original formatting if no client name
-  return name
+  return (name || '')
     .replace(/[-_]/g, ' ') // Replace hyphens and underscores with spaces
     .split(' ')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
@@ -311,56 +424,72 @@ function formatDataSourceName(name, clientName) {
 /**
  * Main Knowledge Base Management component
  */
-export function KnowledgeBaseManagement() {
-  const [files, setFiles] = useState([]);
-  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
-  const [deleteError, setDeleteError] = useState(null);
+export function KnowledgeBaseManagement(): React.JSX.Element {
+  const [files, setFiles] = useState<S3Object[]>([]);
+  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Bulk selection state
-  const [selectedItemsPending, setSelectedItemsPending] = useState(new Set());
-  const [selectedItemsIndexed, setSelectedItemsIndexed] = useState(new Set());
-  const [showBulkDeleteConfirmation, setShowBulkDeleteConfirmation] = useState(false);
-  const [bulkDeleteProgress, setBulkDeleteProgress] = useState(null);
-  const [bulkDeleteItemCount, setBulkDeleteItemCount] = useState(0);
-  const [bulkDeleteType, setBulkDeleteType] = useState('pending'); // 'pending' or 'indexed'
-  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
-  const [, setDataSourceId] = useState(null);
+  const [selectedItemsPending, setSelectedItemsPending] = useState<Set<string>>(new Set());
+  const [selectedItemsIndexed, setSelectedItemsIndexed] = useState<Set<string>>(new Set());
+  const [showBulkDeleteConfirmation, setShowBulkDeleteConfirmation] = useState<boolean>(false);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState<BulkDeleteProgress | null>(null);
+  const [bulkDeleteItemCount, setBulkDeleteItemCount] = useState<number>(0);
+  const [bulkDeleteType, setBulkDeleteType] = useState<ItemType>('pending');
+  const [isDeletingBulk, setIsDeletingBulk] = useState<boolean>(false);
+  const [, setDataSourceId] = useState<string | null>(null);
 
-  const [syncStatus, setSyncStatus] = useState(null);
-  const [syncJobStatus, setSyncJobStatus] = useState(null);
-  const [lastSuccessfulSync, setLastSuccessfulSync] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [lastSyncStartTime, setLastSyncStartTime] = useState(null);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [syncJobStatus, setSyncJobStatus] = useState<string | null>(null);
+  const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string | null>(null);
+  const [, setLastUpdated] = useState<string | null>(null);
+  const [lastSyncStartTime, setLastSyncStartTime] = useState<string | null>(null);
 
-  const [syncMetrics, setSyncMetrics] = useState(null);
+  const [syncMetrics, setSyncMetrics] = useState<SyncMetrics | null>(null);
 
-  const [pendingSearch] = useState('');
-  const [indexedSearch, setIndexedSearch] = useState('');
+  const [pendingSearch] = useState<string>('');
+  const [indexedSearch, setIndexedSearch] = useState<string>('');
 
-  const [expandedFoldersPending, setExpandedFoldersPending] = useState(new Set());
-  const [expandedFoldersIndexed, setExpandedFoldersIndexed] = useState(new Set());
+  const [expandedFoldersPending, setExpandedFoldersPending] = useState<Set<string>>(new Set());
+  const [expandedFoldersIndexed, setExpandedFoldersIndexed] = useState<Set<string>>(new Set());
 
   // Sorting state
-  const [pendingSortColumn, setPendingSortColumn] = useState('name');
-  const [pendingSortDirection, setPendingSortDirection] = useState('asc');
-  const [indexedSortColumn, setIndexedSortColumn] = useState('name');
-  const [indexedSortDirection, setIndexedSortDirection] = useState('asc');
+  const [pendingSortColumn, setPendingSortColumn] = useState<SortColumn>('name');
+  const [pendingSortDirection, setPendingSortDirection] = useState<SortDirection>('asc');
+  const [indexedSortColumn, setIndexedSortColumn] = useState<SortColumn>('name');
+  const [indexedSortDirection, setIndexedSortDirection] = useState<SortDirection>('asc');
 
-  const [kbDocuments, setKbDocuments] = useState([]);
-  const [kbStateError, setKbStateError] = useState(null);
-  const [kbStateLoading, setKbStateLoading] = useState(false);
-  const [dataSources, setDataSources] = useState([]);
+  const [kbDocuments, setKbDocuments] = useState<KBDocument[]>([]);
+  const [kbStateError, setKbStateError] = useState<string | null>(null);
+  const [kbStateLoading, setKbStateLoading] = useState<boolean>(false);
+  const [dataSources, setDataSources] = useState<DataSource[]>([]);
   // Category filtering
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [expandedItems, setExpandedItems] = useState([]);
-  const [fileValidationError, setFileValidationError] = useState(null);
+  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const [fileValidationError, setFileValidationError] = useState<string | null>(null);
+
+  // Notification modal state
+  const [showNotificationModal, setShowNotificationModal] = useState<boolean>(false);
+  const [pendingLargeFiles, setPendingLargeFiles] = useState<File[]>([]);
+  const [clearFileUploader, setClearFileUploader] = useState<boolean>(false);
 
   const { getCredentials, qBusinessClient, bedrockAgentClient, region: authRegion } = useAuth();
   // Fallback to session storage if region is not available from auth context
   const region = authRegion || window.sessionStorage.getItem('REGION') || 'ap-southeast-2';
 
+  // Reset clearFileUploader after it's been used
+  useEffect(() => {
+    if (clearFileUploader) {
+      // Reset the flag after a brief delay to ensure FileUploader has processed it
+      const timer = setTimeout(() => {
+        setClearFileUploader(false);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [clearFileUploader]);
+
   // Helper function to toggle expanded state of a data source
-  const toggleExpand = (dataSourceId) => {
+  const toggleExpand = (dataSourceId: string): void => {
     setExpandedItems((prevItems) => {
       if (prevItems.includes(dataSourceId)) {
         return prevItems.filter((id) => id !== dataSourceId);
@@ -371,7 +500,7 @@ export function KnowledgeBaseManagement() {
   };
 
   // Helper function to get icon based on data source type
-  const getSourceIcon = (dataSource) => {
+  const getSourceIcon = (dataSource: DataSource): string => {
     if (dataSource.isWebCrawler) {
       return 'bi bi-globe2';
     } else if (dataSource.type?.toLowerCase().includes('s3')) {
@@ -382,8 +511,8 @@ export function KnowledgeBaseManagement() {
   };
 
   // Group data sources by type
-  const dataSourcesByType = useMemo(() => {
-    const groups = {
+  const dataSourcesByType = useMemo((): DataSourcesByType => {
+    const groups: DataSourcesByType = {
       web: [],
       document: [],
       database: [],
@@ -406,7 +535,7 @@ export function KnowledgeBaseManagement() {
   }, [dataSources]);
 
   // Filter data sources based on active category
-  const filteredDataSources = useMemo(() => {
+  const filteredDataSources = useMemo((): DataSource[] => {
     let filtered = [...dataSources];
 
     // Filter by category
@@ -442,7 +571,7 @@ export function KnowledgeBaseManagement() {
   /**
    * Fetch files from S3
    */
-  async function fetchFiles() {
+  async function fetchFiles(): Promise<void> {
     if (!CLIENT_NAME) {
       console.error('CLIENT_NAME is not set');
       return;
@@ -464,24 +593,24 @@ export function KnowledgeBaseManagement() {
       const files = resp.Contents || [];
 
       // Only process files in batches and only those in scraped-content folder
-      const scrapedFiles = files.filter((file) => file.Key.includes('scraped-content/'));
-      const otherFiles = files.filter((file) => !file.Key.includes('scraped-content/'));
+      const scrapedFiles = files.filter((file) => file.Key && file.Key.includes('scraped-content/'));
+      const otherFiles = files.filter((file) => file.Key && !file.Key.includes('scraped-content/'));
 
       // Process scraped files in smaller batches to avoid rate limits
       const batchSize = 5;
-      const scrapedFilesWithTags = [];
+      const scrapedFilesWithTags: S3Object[] = [];
 
       for (let i = 0; i < scrapedFiles.length; i += batchSize) {
         const batch = scrapedFiles.slice(i, i + batchSize);
         const batchResults = await Promise.all(
-          batch.map(async (file) => {
+          batch.map(async (file): Promise<S3Object> => {
             try {
               const bucket = `numa-${CLIENT_NAME}-data`;
-              const urlTag = await getUrlTagFromS3Object(file.Key, bucket, region, getCredentials);
-              return { ...file, urlTag };
+              const urlTag = await getUrlTagFromS3Object(file.Key!, bucket, region, getCredentials);
+              return { ...file, urlTag } as S3Object;
             } catch (error) {
               console.error('Error getting URL tag:', error);
-              return file;
+              return file as S3Object;
             }
           }),
         );
@@ -494,7 +623,7 @@ export function KnowledgeBaseManagement() {
       }
 
       // Combine the results
-      const filesWithTags = [...scrapedFilesWithTags, ...otherFiles];
+      const filesWithTags: S3Object[] = [...scrapedFilesWithTags, ...(otherFiles as S3Object[])];
 
       setFiles(filesWithTags);
     } catch (err) {
@@ -507,7 +636,7 @@ export function KnowledgeBaseManagement() {
   /**
    * Check data source, sync status, and fetch KB documents (via utility).
    */
-  async function checkDataSourceSync() {
+  async function checkDataSourceSync(): Promise<void> {
     if (kbStateLoading) return; // Prevent concurrent calls
 
     setKbStateLoading(true);
@@ -546,9 +675,9 @@ export function KnowledgeBaseManagement() {
         console.error('Failed to fetch KB state:', state?.error);
         setKbStateError(state?.error || 'Unknown error');
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('checkDataSourceSync error:', err);
-      setKbStateError(err.message || 'Failed to check knowledge base state');
+      setKbStateError((err as Error).message || 'Failed to check knowledge base state');
     } finally {
       setKbStateLoading(false);
     }
@@ -573,7 +702,7 @@ export function KnowledgeBaseManagement() {
   /**
    * Refresh status & file list
    */
-  async function handleRefreshStatus() {
+  async function handleRefreshStatus(): Promise<void> {
     setKbStateError(null); // Clear any previous errors
     await checkDataSourceSync();
     await fetchFiles();
@@ -584,10 +713,8 @@ export function KnowledgeBaseManagement() {
    */
   /**
    * Validates files before upload
-   * @param {File[]} files - Files to validate
-   * @returns {boolean} - Whether all files are valid
    */
-  function validateFiles(files) {
+  function validateFiles(files: File[]): boolean {
     const invalidFiles = files.filter((file) => !isFileTypeValidForBedrockKB(file));
 
     if (invalidFiles.length > 0) {
@@ -608,31 +735,75 @@ export function KnowledgeBaseManagement() {
 
   /**
    * Handles file selection before upload
-   * @param {File[]} selectedFiles - Files selected by the user
    */
-  function handleFileSelect(selectedFiles) {
-    validateFiles(selectedFiles);
+  function handleFileSelect(selectedFiles: File[]): void {
+    console.log(
+      'handleFileSelect called with files:',
+      selectedFiles.map((f) => ({ name: f.name, size: f.size })),
+    );
+
+    // Check for validation errors first
+    if (!validateFiles(selectedFiles)) {
+      console.log('Files failed validation, stopping');
+      return;
+    }
+
+    // Check for large raw data files that should trigger a warning
+    const largeDataFiles = selectedFiles.filter((file) => shouldShowLargeDataFileWarning(file));
+    console.log('Large data files found:', largeDataFiles.length);
+
+    if (largeDataFiles.length > 0) {
+      console.log(
+        'Showing notification modal for large files:',
+        largeDataFiles.map((f) => f.name),
+      );
+      setPendingLargeFiles(largeDataFiles);
+      setShowNotificationModal(true);
+    }
+  }
+
+  /**
+   * Handle proceeding with upload despite large file warning
+   */
+  function handleProceedWithUpload(): void {
+    setShowNotificationModal(false);
+    // Reset the pending files state
+    setPendingLargeFiles([]);
+    // Note: The FileUploader component will handle the actual upload
+    // This is just to dismiss the warning and allow the user to proceed
+  }
+
+  /**
+   * Handle canceling the upload
+   */
+  function handleCancelUpload(): void {
+    setShowNotificationModal(false);
+    setPendingLargeFiles([]);
+    // Trigger FileUploader to clear its files
+    setClearFileUploader(true);
   }
 
   /**
    * On successful file upload
    */
-  function handleUploadSuccess() {
+  function handleUploadSuccess(): void {
     setFileValidationError(null);
+    setShowNotificationModal(false);
+    setPendingLargeFiles([]);
     fetchFiles();
   }
 
   /**
    * Get all child item IDs for a folder (recursively) from nested structure
    */
-  function getAllChildrenIds(folderId, nestedRows) {
-    const childIds = [];
+  function getAllChildrenIds(folderId: string, nestedRows: TableRow[]): string[] {
+    const childIds: string[] = [];
 
-    function findAndCollectChildren(rows) {
+    function findAndCollectChildren(rows: TableRow[]): boolean {
       for (const row of rows) {
         if (row.id === folderId && row.type === 'folder' && row.children) {
           // Found the target folder, collect all its children
-          function collectIds(children) {
+          function collectIds(children: TableRow[]): void {
             children.forEach((child) => {
               childIds.push(child.id);
               if (child.type === 'folder' && child.children) {
@@ -661,13 +832,13 @@ export function KnowledgeBaseManagement() {
   /**
    * Handle checkbox selection for items
    */
-  function handleItemSelection(itemId, itemType, isChecked) {
+  function handleItemSelection(itemId: string, itemType: ItemType, isChecked: boolean): void {
     const flatRows = itemType === 'pending' ? pendingRows : indexedRows;
     const nestedRows = itemType === 'pending' ? pendingRowsNested : indexedRowsNested;
     const targetRow = flatRows.find((row) => row.id === itemId);
     const isFolder = targetRow?.type === 'folder';
 
-    const updateSelection = (prev) => {
+    const updateSelection = (prev: Set<string>): Set<string> => {
       const newSet = new Set(prev);
 
       // Handle the clicked item
@@ -702,7 +873,7 @@ export function KnowledgeBaseManagement() {
   /**
    * Select all items in a table
    */
-  function handleSelectAll(itemType, rows) {
+  function handleSelectAll(itemType: ItemType, rows: TableRow[]): void {
     const itemIds = rows.map((row) => row.id);
     if (itemType === 'pending') {
       setSelectedItemsPending(new Set(itemIds));
@@ -714,7 +885,7 @@ export function KnowledgeBaseManagement() {
   /**
    * Clear all selections in a table
    */
-  function handleClearSelection(itemType) {
+  function handleClearSelection(itemType: ItemType): void {
     if (itemType === 'pending') {
       setSelectedItemsPending(new Set());
     } else {
@@ -726,8 +897,8 @@ export function KnowledgeBaseManagement() {
    * Get all S3 object keys that need to be deleted from selected items
    * Handles both individual files and folders (expands folders to contained files)
    */
-  async function getItemsToDelete(selectedItems, rows) {
-    const itemsToDelete = new Set();
+  async function getItemsToDelete(selectedItems: Set<string>, rows: TableRow[]): Promise<string[]> {
+    const itemsToDelete = new Set<string>();
     const region = window.sessionStorage.getItem('REGION');
     const bucketName = `numa-${CLIENT_NAME}-data`;
 
@@ -756,7 +927,7 @@ export function KnowledgeBaseManagement() {
   /**
    * Handle bulk delete confirmation
    */
-  async function confirmBulkDelete(itemType) {
+  async function confirmBulkDelete(itemType: ItemType): Promise<void> {
     const selectedItems = itemType === 'pending' ? selectedItemsPending : selectedItemsIndexed;
     const rows = itemType === 'pending' ? pendingRows : indexedRows;
 
@@ -768,7 +939,7 @@ export function KnowledgeBaseManagement() {
       setBulkDeleteItemCount(itemsToDelete.length);
       setBulkDeleteType(itemType);
       setShowBulkDeleteConfirmation(true);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error preparing bulk delete:', error);
       setDeleteError('Failed to prepare deletion. Please try again.');
     }
@@ -777,7 +948,7 @@ export function KnowledgeBaseManagement() {
   /**
    * Close bulk delete confirmation modal
    */
-  function handleCloseBulkDeleteModal() {
+  function handleCloseBulkDeleteModal(): void {
     setShowBulkDeleteConfirmation(false);
     setBulkDeleteProgress(null);
     setBulkDeleteItemCount(0);
@@ -786,7 +957,7 @@ export function KnowledgeBaseManagement() {
   /**
    * Execute bulk delete
    */
-  async function handleBulkDelete() {
+  async function handleBulkDelete(): Promise<void> {
     const selectedItems = bulkDeleteType === 'pending' ? selectedItemsPending : selectedItemsIndexed;
     const rows = bulkDeleteType === 'pending' ? pendingRows : indexedRows;
 
@@ -820,9 +991,9 @@ export function KnowledgeBaseManagement() {
       if (result.failed.length === 0) {
         setShowBulkDeleteConfirmation(false);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error in bulk delete:', error);
-      setDeleteError(error.message || 'Failed to delete items. Please try again.');
+      setDeleteError((error as Error).message || 'Failed to delete items. Please try again.');
     } finally {
       setIsDeletingBulk(false);
     }
@@ -831,7 +1002,7 @@ export function KnowledgeBaseManagement() {
   /**
    * Determine likely failed files based on upload time vs last sync start time (with buffer)
    */
-  const likelyFailedFiles = useMemo(() => {
+  const likelyFailedFiles = useMemo((): KBDocument[] => {
     if (!lastSyncStartTime) return [];
 
     const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
@@ -851,13 +1022,13 @@ export function KnowledgeBaseManagement() {
         const uploadTime = new Date(file.LastModified);
         return uploadTime < cutoffTime;
       })
-      .map((file) => {
+      .map((file): KBDocument => {
         // Create a failed document object
-        const fileName = decodeURIComponent(file.Key.split('/').pop());
+        const fileName = decodeURIComponent(file.Key.split('/').pop() || '');
         return {
           documentId: `s3://numa-${CLIENT_NAME}-data/${file.Key}`,
           status: 'FAILED',
-          updatedAt: lastSuccessfulSync,
+          updatedAt: lastSuccessfulSync || '',
           error: {
             errorMessage: 'Processing failed during indexing',
           },
@@ -867,12 +1038,12 @@ export function KnowledgeBaseManagement() {
       });
 
     return likelyFailed;
-  }, [files, kbDocuments, lastSyncStartTime, CLIENT_NAME]);
+  }, [files, kbDocuments, lastSyncStartTime, CLIENT_NAME, lastSuccessfulSync]);
 
   /**
    * Determine pending vs. indexed files by comparing S3 files with KB documents.
    */
-  const pendingFiles = useMemo(() => {
+  const pendingFiles = useMemo((): S3Object[] => {
     const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
     const likelyFailedKeys = new Set(likelyFailedFiles.map((doc) => documentIdToKey(doc.documentId)));
 
@@ -887,7 +1058,7 @@ export function KnowledgeBaseManagement() {
     return pending;
   }, [files, kbDocuments, likelyFailedFiles]);
 
-  const indexedFiles = useMemo(() => {
+  const indexedFiles = useMemo((): S3Object[] => {
     const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
     const indexed = files
       .filter((file) => kbFileKeys.has(file.Key))
@@ -902,14 +1073,14 @@ export function KnowledgeBaseManagement() {
   /**
    * Build & filter & sort trees
    */
-  const pendingTree = useMemo(() => {
+  const pendingTree = useMemo((): TreeNode => {
     const tree = buildFileTree(pendingFiles);
     const filtered = filterTree(tree, pendingSearch);
     sortTree(filtered, pendingSortColumn, pendingSortDirection);
     return filtered;
   }, [pendingFiles, pendingSearch, pendingSortColumn, pendingSortDirection]);
 
-  const indexedTree = useMemo(() => {
+  const indexedTree = useMemo((): TreeNode => {
     const tree = buildFileTree(indexedFiles);
     const filtered = filterTree(tree, indexedSearch);
     sortTree(filtered, indexedSortColumn, indexedSortDirection);
@@ -930,27 +1101,27 @@ export function KnowledgeBaseManagement() {
   /**
    * Convert each tree to nested row objects, then flatten them
    */
-  const pendingRowsNested = useMemo(() => buildRowsForTree(pendingTree, 0, ''), [pendingTree]);
-  const indexedRowsNested = useMemo(() => buildRowsForTree(indexedTree, 0, ''), [indexedTree]);
+  const pendingRowsNested = useMemo((): TableRow[] => buildRowsForTree(pendingTree, 0, ''), [pendingTree]);
+  const indexedRowsNested = useMemo((): TableRow[] => buildRowsForTree(indexedTree, 0, ''), [indexedTree]);
 
   const pendingRows = useMemo(
-    () => flattenRows(pendingRowsNested, expandedFoldersPending),
+    (): TableRow[] => flattenRows(pendingRowsNested, expandedFoldersPending),
     [pendingRowsNested, expandedFoldersPending],
   );
   const indexedRows = useMemo(
-    () => flattenRows(indexedRowsNested, expandedFoldersIndexed),
+    (): TableRow[] => flattenRows(indexedRowsNested, expandedFoldersIndexed),
     [indexedRowsNested, expandedFoldersIndexed],
   );
 
   /**
    * Expand/collapse folder
    */
-  function toggleFolderPending(folderId) {
+  function toggleFolderPending(folderId: string): void {
     const newSet = new Set(expandedFoldersPending);
     newSet.has(folderId) ? newSet.delete(folderId) : newSet.add(folderId);
     setExpandedFoldersPending(newSet);
   }
-  function toggleFolderIndexed(folderId) {
+  function toggleFolderIndexed(folderId: string): void {
     const newSet = new Set(expandedFoldersIndexed);
     newSet.has(folderId) ? newSet.delete(folderId) : newSet.add(folderId);
     setExpandedFoldersIndexed(newSet);
@@ -958,10 +1129,8 @@ export function KnowledgeBaseManagement() {
 
   /**
    * Handle column sort toggle
-   * @param {string} column - Column to sort by ('name', 'date', 'size')
-   * @param {string} tableType - Table type ('pending' or 'indexed')
    */
-  function handleSortToggle(column, tableType) {
+  function handleSortToggle(column: SortColumn, tableType: ItemType): void {
     if (tableType === 'pending') {
       // If clicking the same column, toggle direction; otherwise, set new column with 'asc' direction
       if (column === pendingSortColumn) {
@@ -986,18 +1155,19 @@ export function KnowledgeBaseManagement() {
    * with a header that includes file count, plus a table of files/folders.
    * The search bar is included only for "Your Knowledge Base Files" (indexed).
    */
-  function renderTreeTableSection({
-    title,
-    rows = [],
-    isLoading,
-    searchValue = '',
-    setSearchValue = () => {},
-    expandedSet = new Set(),
-    toggleFolderFn = () => {},
-    isPending = false,
-    showErrorColumn = false,
-    customContent = null,
-  }) {
+  function renderTreeTableSection(props: RenderTreeTableSectionProps): React.JSX.Element {
+    const {
+      title,
+      rows = [],
+      isLoading,
+      searchValue = '',
+      setSearchValue = () => {},
+      expandedSet = new Set(),
+      toggleFolderFn = () => {},
+      isPending = false,
+      showErrorColumn = false,
+      customContent = null,
+    } = props;
     const showSearch = !isPending && !customContent;
     const noItemsMsg = isPending ? 'No files waiting to be indexed—everything is up to date!' : 'No files found';
 
@@ -1253,7 +1423,7 @@ export function KnowledgeBaseManagement() {
   /**
    * Compute failed documents from KB (documents with an error) + likely failed files.
    */
-  const failedDocuments = useMemo(() => {
+  const failedDocuments = useMemo((): KBDocument[] => {
     // Get actual failed documents from KB API
     const actualFailed = kbDocuments.filter(
       (doc) => (doc.error && Object.keys(doc.error).length > 0 && doc.error?.errorMessage) || doc.status === 'FAILED',
@@ -1478,13 +1648,13 @@ export function KnowledgeBaseManagement() {
                             <tbody>
                               {filteredDataSources.length === 0 ? (
                                 <tr>
-                                  <td colSpan="4" className="text-center py-3">
+                                  <td colSpan={4} className="text-center py-3">
                                     No matching data sources found
                                   </td>
                                 </tr>
                               ) : (
                                 filteredDataSources.flatMap((dataSource, index) => {
-                                  const id = dataSource.dataSourceId || index;
+                                  const id = dataSource.dataSourceId || index.toString();
                                   const isExpanded = expandedItems.includes(id);
                                   const lastUpdated = dataSource.lastSynced || dataSource.lastUpdated;
 
@@ -1526,7 +1696,7 @@ export function KnowledgeBaseManagement() {
                                   if (isExpanded) {
                                     rows.push(
                                       <tr key={`details-${id}`} className="table-light">
-                                        <td colSpan="4" className="p-3">
+                                        <td colSpan={4} className="p-3">
                                           <div className="row">
                                             <div className="col-md-6 mb-2">
                                               <strong>ID:</strong> {dataSource.dataSourceId || 'N/A'}
@@ -1580,47 +1750,52 @@ export function KnowledgeBaseManagement() {
                       {/* Accordion for Mobile View */}
                       <div className="d-md-none mt-3">
                         <Accordion>
-                          {filteredDataSources.map((dataSource, index) => (
-                            <Accordion.Item key={dataSource.dataSourceId || index} eventKey={index.toString()}>
-                              <Accordion.Header>
-                                <div className="d-flex align-items-center">
-                                  <i className={`${getSourceIcon(dataSource)} me-2 text-primary`}></i>
-                                  <span className="me-2">
-                                    {formatDataSourceName(dataSource.displayName || dataSource.name, CLIENT_NAME)}
-                                  </span>
-                                  <span className={`badge bg-${getDataSourceStatusVariant(dataSource.status)} ms-auto`}>
-                                    {dataSource.status || 'Unknown'}
-                                  </span>
-                                </div>
-                              </Accordion.Header>
-                              <Accordion.Body>
-                                <div className="mb-2">
-                                  <strong>Type:</strong> {dataSource.type || 'Unknown'}
-                                </div>
-                                {dataSource.dataSourceId && (
+                          {filteredDataSources.map((dataSource, index) => {
+                            const lastUpdated = dataSource.lastSynced || dataSource.lastUpdated;
+                            return (
+                              <Accordion.Item key={dataSource.dataSourceId || index} eventKey={index.toString()}>
+                                <Accordion.Header>
+                                  <div className="d-flex align-items-center">
+                                    <i className={`${getSourceIcon(dataSource)} me-2 text-primary`}></i>
+                                    <span className="me-2">
+                                      {formatDataSourceName(dataSource.displayName || dataSource.name, CLIENT_NAME)}
+                                    </span>
+                                    <span
+                                      className={`badge bg-${getDataSourceStatusVariant(dataSource.status)} ms-auto`}
+                                    >
+                                      {dataSource.status || 'Unknown'}
+                                    </span>
+                                  </div>
+                                </Accordion.Header>
+                                <Accordion.Body>
                                   <div className="mb-2">
-                                    <strong>ID:</strong> {dataSource.dataSourceId}
+                                    <strong>Type:</strong> {dataSource.type || 'Unknown'}
                                   </div>
-                                )}
-                                {dataSource.pageCount && (
-                                  <div className="mb-2">
-                                    <strong>Pages:</strong> {dataSource.pageCount}
-                                  </div>
-                                )}
-                                {dataSource.isWebCrawler && dataSource.lastCrawled && (
-                                  <div className="mb-2">
-                                    <strong>Crawl Date:</strong>{' '}
-                                    {new Date(dataSource.lastCrawled).toLocaleString('en-NZ')}
-                                  </div>
-                                )}
-                                {!dataSource.isWebCrawler && lastUpdated && (
-                                  <div className="mb-0">
-                                    <strong>Last Synced:</strong> {new Date(lastUpdated).toLocaleString('en-NZ')}
-                                  </div>
-                                )}
-                              </Accordion.Body>
-                            </Accordion.Item>
-                          ))}
+                                  {dataSource.dataSourceId && (
+                                    <div className="mb-2">
+                                      <strong>ID:</strong> {dataSource.dataSourceId}
+                                    </div>
+                                  )}
+                                  {dataSource.pageCount && (
+                                    <div className="mb-2">
+                                      <strong>Pages:</strong> {dataSource.pageCount}
+                                    </div>
+                                  )}
+                                  {dataSource.isWebCrawler && dataSource.lastCrawled && (
+                                    <div className="mb-2">
+                                      <strong>Crawl Date:</strong>{' '}
+                                      {new Date(dataSource.lastCrawled).toLocaleString('en-NZ')}
+                                    </div>
+                                  )}
+                                  {!dataSource.isWebCrawler && lastUpdated && (
+                                    <div className="mb-0">
+                                      <strong>Last Synced:</strong> {new Date(lastUpdated).toLocaleString('en-NZ')}
+                                    </div>
+                                  )}
+                                </Accordion.Body>
+                              </Accordion.Item>
+                            );
+                          })}
                         </Accordion>
                       </div>
                     </>
@@ -1653,6 +1828,7 @@ export function KnowledgeBaseManagement() {
                       onUploadSuccess={handleUploadSuccess}
                       onFileSelect={handleFileSelect}
                       validateFile={isFileTypeValidForBedrockKB}
+                      clearFiles={clearFileUploader}
                     />
                   </Card.Body>
                 </Card>
@@ -1809,6 +1985,42 @@ export function KnowledgeBaseManagement() {
             </Button>
           </Modal.Footer>
         </Modal>
+
+        {/* Large Data File Warning Modal */}
+        <NotificationModal
+          type="warning"
+          title="Large Raw Data File Detected"
+          message={
+            <div>
+              <p>You are about to upload large raw data files that may not be optimal for knowledge base indexing:</p>
+              <ul className="mb-3">
+                {pendingLargeFiles.map((file, index) => (
+                  <li key={index}>
+                    <strong>{file.name}</strong> ({formatFileSize(file.size)})
+                  </li>
+                ))}
+              </ul>
+              <p className="mb-0">
+                This can incur higher than expected cost, or may fail to index successfully into the knowledge base.
+              </p>
+              <div className="alert alert-info mb-3">
+                <i className="bi bi-info-circle me-2"></i>
+                <strong>Recommendation:</strong> For better knowledge base performance, consider:
+                <ul className="mb-0 mt-2">
+                  <li>Breaking large raw data files into smaller bite sized chunks</li>
+                </ul>
+              </div>
+              <p className="mb-0">Do you want to proceed with uploading these files anyway?</p>
+            </div>
+          }
+          show={showNotificationModal}
+          onHide={handleCancelUpload}
+          onConfirm={handleProceedWithUpload}
+          confirmText="Proceed Anyway"
+          cancelText="Cancel Upload"
+          showCancelButton={true}
+          size="lg"
+        />
       </div>
     </>
   );

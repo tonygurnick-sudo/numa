@@ -96,9 +96,88 @@ export const getBedrockKBSupportedExtensions = () => {
   return supportedExtensions.join(', ');
 };
 
+/**
+ * Raw data file extensions that should trigger warnings
+ * These are file types that are supported by Bedrock KB but may not be optimal for knowledge base indexing when large
+ */
+const RAW_DATA_EXTENSIONS = [
+  'csv', // Comma-separated values
+  'json', // JSON data files (can be large data dumps)
+  'jsonl', // JSON Lines format
+  'xml', // XML data exports
+  'txt', // Plain text files (could be data dumps, logs, etc.)
+];
+
+/**
+ * Size threshold for large files (in bytes) - 12MB
+ */
+const LARGE_FILE_THRESHOLD = 12 * 1024 * 1024; // 12MB
+
+/**
+ * Checks if a file is a raw data file (CSV, Parquet, etc.)
+ * @param {File} file - The file to check
+ * @returns {boolean} - Whether the file is a raw data file
+ */
+export const isRawDataFile = (file) => {
+  if (!file) return false;
+
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  return extension ? RAW_DATA_EXTENSIONS.includes(extension) : false;
+};
+
+/**
+ * Checks if a file is large (above threshold)
+ * @param {File} file - The file to check
+ * @returns {boolean} - Whether the file is large
+ */
+export const isLargeFile = (file) => {
+  if (!file) return false;
+  return file.size > LARGE_FILE_THRESHOLD;
+};
+
+/**
+ * Checks if a file is a large raw data file that should trigger a warning
+ * @param {File} file - The file to check
+ * @returns {boolean} - Whether the file should trigger a warning
+ */
+export const shouldShowLargeDataFileWarning = (file) => {
+  const isRaw = isRawDataFile(file);
+  const isLarge = isLargeFile(file);
+  const shouldWarn = isRaw && isLarge;
+
+  // Debug logging for troubleshooting
+  if (file && file.size > 1024 * 1024) {
+    // Log for files > 1MB
+    console.log(
+      `File: ${file.name}, Size: ${formatFileSize(file.size)}, IsRaw: ${isRaw}, IsLarge: ${isLarge}, ShouldWarn: ${shouldWarn}`,
+    );
+  }
+
+  return shouldWarn;
+};
+
+/**
+ * Gets the formatted file size for display
+ * @param {number} bytes - File size in bytes
+ * @returns {string} - Formatted file size
+ */
+export const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 Bytes';
+
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
 // For backward compatibility
 export default {
   getContentType,
   isFileTypeValidForBedrockKB,
   getBedrockKBSupportedExtensions,
+  isRawDataFile,
+  isLargeFile,
+  shouldShowLargeDataFileWarning,
+  formatFileSize,
 };

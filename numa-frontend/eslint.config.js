@@ -89,6 +89,15 @@ export default [
       '@typescript-eslint/no-explicit-any': 'error',
       'no-undef': 'off', // TypeScript handles this better
       'react/display-name': 'off', // Not needed for TypeScript
+      'no-unused-vars': 'off', // Turn off base rule
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
     },
   },
   ...eslintBase,

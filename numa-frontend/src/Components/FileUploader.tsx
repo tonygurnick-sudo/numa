@@ -5,24 +5,45 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useAuth } from '../Providers/AuthProvider';
 
-const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
-  const [files, setFiles] = useState([]);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [, setShowSuccess] = useState(false);
-  const [, setShowProgress] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploadingFileIndex, setUploadingFileIndex] = useState(0);
-  const [totalFiles, setTotalFiles] = useState(0);
-  const [currentFileName, setCurrentFileName] = useState('');
-  const [detailedError, setDetailedError] = useState(null);
-  const [fileStructure, setFileStructure] = useState({
+// Type definitions
+interface Config {
+  CLIENT_NAME: string;
+}
+
+interface ExtendedFile extends File {
+  customRelativePath?: string;
+}
+
+interface FileStructure {
+  files: ExtendedFile[];
+  folders: Set<string>;
+}
+
+interface FileUploaderProps {
+  onUploadSuccess: () => void;
+  onFileSelect?: (files: File[]) => void;
+  validateFile?: (file: File) => boolean;
+  clearFiles?: boolean;
+}
+
+const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSelect, validateFile, clearFiles }) => {
+  const [files, setFiles] = useState<ExtendedFile[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<boolean>(false);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [, setShowSuccess] = useState<boolean>(false);
+  const [, setShowProgress] = useState<boolean>(false);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [uploadingFileIndex, setUploadingFileIndex] = useState<number>(0);
+  const [totalFiles, setTotalFiles] = useState<number>(0);
+  const [currentFileName, setCurrentFileName] = useState<string>('');
+  const [detailedError, setDetailedError] = useState<string | null>(null);
+  const [fileStructure, setFileStructure] = useState<FileStructure>({
     files: [],
     folders: new Set(),
   });
-  const [config, setConfig] = useState(null);
+  const [config, setConfig] = useState<Config | null>(null);
   const { getCredentials } = useAuth();
 
   useEffect(() => {
@@ -32,8 +53,33 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
       .catch((error) => console.error('Error loading config:', error));
   }, []);
 
-  const handleFileSelect = (event) => {
-    const fileList = Array.from(event.target.files);
+  // Clear files when clearFiles prop changes
+  useEffect(() => {
+    if (clearFiles) {
+      console.log('Clearing files due to clearFiles prop');
+      setFiles([]);
+      setFileStructure({
+        files: [],
+        folders: new Set(),
+      });
+      setError(null);
+      setSuccess(false);
+      setUploadProgress(0);
+      setUploadingFileIndex(0);
+      setTotalFiles(0);
+      setCurrentFileName('');
+      setDetailedError(null);
+
+      // Clear file input value
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) {
+        fileInput.value = '';
+      }
+    }
+  }, [clearFiles]);
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const fileList = Array.from(event.target.files || []) as ExtendedFile[];
     console.log(
       'Files to be uploaded:',
       fileList.map((file) => ({
@@ -44,14 +90,16 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
       })),
     );
 
+    // Always call onFileSelect first to allow parent to handle validation and warnings
+    if (onFileSelect) {
+      onFileSelect(fileList);
+    }
+
     // Validate files if validateFile function is provided
     if (validateFile) {
       const invalidFiles = fileList.filter((file) => !validateFile(file));
       if (invalidFiles.length > 0) {
         // Don't add invalid files to the list
-        if (onFileSelect) {
-          onFileSelect(fileList); // Pass files to parent for validation display
-        }
         return; // Stop processing if there are invalid files
       }
     }
@@ -85,7 +133,7 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
     }
   };
 
-  const handleUpload = async () => {
+  const handleUpload = async (): Promise<void> => {
     if (!files.length) {
       setError('Please select files first');
       return;
@@ -185,7 +233,7 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
       setTotalFiles(0);
 
       // Reset file input to allow re-adding the same files
-      const fileInput = document.getElementById('file-upload');
+      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
       if (fileInput) {
         fileInput.value = '';
       }
@@ -205,26 +253,26 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
     }
   };
 
-  const handleDragEnter = (e) => {
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>): void => {
     e.preventDefault();
     e.stopPropagation();
     if (!isDragging) setIsDragging(true);
   };
 
-  const handleDragLeave = (e) => {
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>): void => {
     e.preventDefault();
     e.stopPropagation();
-    if (!e.currentTarget.contains(e.relatedTarget)) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setIsDragging(false);
     }
   };
 
-  const handleDragOver = (e) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>): void => {
     e.preventDefault();
     e.stopPropagation();
   };
 
-  const logItemStructure = (entry, depth = 0) => {
+  const logItemStructure = (entry: FileSystemEntry, depth: number = 0): void => {
     const indent = '  '.repeat(depth);
     if (entry.isDirectory) {
       console.log(`${indent}📁 ${entry.fullPath}`);
@@ -233,31 +281,48 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
     }
   };
 
-  const handleDrop = async (e) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>): Promise<void> => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
 
     const items = Array.from(e.dataTransfer.items);
-    const files = [];
+    const files: ExtendedFile[] = [];
 
     console.log('Analyzing dropped items:');
 
     for (const item of items) {
       if (item.kind === 'file') {
         const entry = item.webkitGetAsEntry();
-        if (entry.isDirectory) {
+        if (entry?.isDirectory) {
           console.log(`\n📁 Found directory: ${entry.fullPath}`);
           console.log('Scanning contents...');
-          await readDirectory(entry, files);
-        } else {
+          await readDirectory(entry as FileSystemDirectoryEntry, files);
+        } else if (entry?.isFile) {
           console.log(`📄 Found file: ${entry.fullPath}`);
-          files.push(item.getAsFile());
+          const file = item.getAsFile();
+          if (file) {
+            files.push(file as ExtendedFile);
+          }
         }
       }
     }
 
     if (files.length) {
+      // Always call onFileSelect first to allow parent to handle validation and warnings
+      if (onFileSelect) {
+        onFileSelect(files);
+      }
+
+      // Validate files if validateFile function is provided
+      if (validateFile) {
+        const invalidFiles = files.filter((file) => !validateFile(file));
+        if (invalidFiles.length > 0) {
+          // Don't add invalid files to the list
+          return; // Stop processing if there are invalid files
+        }
+      }
+
       // Create a set of unique folder paths
       // Get existing files from state and combine with newly dropped files
       const stateFiles = [...fileStructure.files]; // Get existing files from state
@@ -285,10 +350,10 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
     }
   };
 
-  const readDirectory = async (dirEntry, files) => {
+  const readDirectory = async (dirEntry: FileSystemDirectoryEntry, files: ExtendedFile[]): Promise<void> => {
     const reader = dirEntry.createReader();
 
-    const entries = await new Promise((resolve) => {
+    const entries = await new Promise<FileSystemEntry[]>((resolve) => {
       reader.readEntries((entries) => resolve(entries));
     });
 
@@ -296,19 +361,19 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
       logItemStructure(entry, 1);
 
       if (entry.isFile) {
-        const file = await new Promise((resolve) => {
-          entry.file((file) => resolve(file));
+        const file = await new Promise<File>((resolve) => {
+          (entry as FileSystemFileEntry).file((file) => resolve(file));
         });
-        file.customRelativePath = entry.fullPath.substring(1); // Remove leading slash
-        files.push(file);
+        (file as ExtendedFile).customRelativePath = entry.fullPath.substring(1); // Remove leading slash
+        files.push(file as ExtendedFile);
       } else if (entry.isDirectory) {
-        await readDirectory(entry, files);
+        await readDirectory(entry as FileSystemDirectoryEntry, files);
       }
     }
   };
 
   useEffect(() => {
-    let timeoutId;
+    let timeoutId: NodeJS.Timeout;
     if (success || uploadProgress === 100) {
       setShowSuccess(true);
       setShowProgress(true);
@@ -320,7 +385,7 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
     return () => clearTimeout(timeoutId);
   }, [success, uploadProgress]);
 
-  const removeFile = (fileToRemove) => {
+  const removeFile = (fileToRemove: ExtendedFile): void => {
     // Update files array
     setFiles((prev) => prev.filter((file) => file !== fileToRemove));
 
@@ -334,13 +399,13 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
     setError(null);
 
     // Reset file input to allow re-adding the same file
-    const fileInput = document.getElementById('file-upload');
+    const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) {
       fileInput.value = '';
     }
   };
 
-  const clearAllFiles = () => {
+  const clearAllFiles = (): void => {
     setFiles([]);
     setFileStructure({
       files: [],
@@ -351,48 +416,51 @@ const FileUploader = ({ onUploadSuccess, onFileSelect, validateFile }) => {
     setSuccess(false);
 
     // Reset file input to allow re-adding the same files
-    const fileInput = document.getElementById('file-upload');
+    const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) {
       fileInput.value = '';
     }
   };
 
   // State to track which folders are expanded/collapsed
-  const [expandedFolders, setExpandedFolders] = useState({});
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
 
   // Toggle folder expanded/collapsed state
-  const toggleFolder = (folderPath) => {
+  const toggleFolder = (folderPath: string): void => {
     setExpandedFolders((prev) => ({
       ...prev,
       [folderPath]: !prev[folderPath],
     }));
   };
 
-  const renderFileTree = () => {
+  const renderFileTree = (): React.ReactElement | null => {
     if (!fileStructure.files.length) return null;
 
     // Group files by their folder path
-    const groupedFiles = fileStructure.files.reduce((acc, file) => {
-      const path = file.customRelativePath || file.webkitRelativePath || file.name;
-      const parts = path.split('/');
+    const groupedFiles: Record<string, ExtendedFile[]> = fileStructure.files.reduce(
+      (acc: Record<string, ExtendedFile[]>, file) => {
+        const path = file.customRelativePath || file.webkitRelativePath || file.name;
+        const parts = path.split('/');
 
-      // Create entries for each folder level
-      for (let i = 0; i < parts.length - 1; i++) {
-        const folderPath = parts.slice(0, i + 1).join('/');
-        if (!acc[folderPath]) {
-          acc[folderPath] = [];
+        // Create entries for each folder level
+        for (let i = 0; i < parts.length - 1; i++) {
+          const folderPath = parts.slice(0, i + 1).join('/');
+          if (!acc[folderPath]) {
+            acc[folderPath] = [];
+          }
         }
-      }
 
-      // Add the file to its immediate parent folder
-      const parentPath = parts.slice(0, -1).join('/');
-      if (!acc[parentPath]) {
-        acc[parentPath] = [];
-      }
-      acc[parentPath].push(file);
+        // Add the file to its immediate parent folder
+        const parentPath = parts.slice(0, -1).join('/');
+        if (!acc[parentPath]) {
+          acc[parentPath] = [];
+        }
+        acc[parentPath].push(file);
 
-      return acc;
-    }, {});
+        return acc;
+      },
+      {},
+    );
 
     return (
       <div className="files-list">
