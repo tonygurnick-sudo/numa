@@ -1,31 +1,47 @@
 /**
  * @vitest-environment jsdom
  */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mock the FeatureWrapper to always render its children
+vi.mock('../../Components/RequiredFeaturesWrapper', () => ({
+  FeatureWrapper: ({ children }) => children,
+}));
+
+// Mock the FileUploader component so we can control the upload success event and file selection
+vi.mock('../../Components/FileUploader', () => ({
+  FileUploader: ({ onUploadSuccess, onFileSelect }) => (
+    <div data-testid="file-uploader">
+      <button onClick={onUploadSuccess}>Mock Upload</button>
+      <button
+        onClick={() => {
+          // Create a mock large CSV file (13MB) to trigger the warning
+          const largeCSVFile = new File(['test content'], 'large-data.csv', {
+            type: 'text/csv',
+          });
+          // Override the size property to simulate a 13MB file without creating 13MB of actual data
+          Object.defineProperty(largeCSVFile, 'size', {
+            value: 13 * 1024 * 1024,
+            writable: false,
+          });
+          onFileSelect && onFileSelect([largeCSVFile]);
+        }}
+        data-testid="select-large-csv"
+      >
+        Select Large CSV
+      </button>
+    </div>
+  ),
+}));
+
 import { renderWithProviders, clearAllMocks } from '../Mocks/ProviderWrapper';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { KnowledgeBaseManagement } from '../../Pages/KnowledgeBaseManagement';
 import { setupAwsMocks } from '../Mocks/AwsMock';
 import * as AuthProvider from '../../Providers/AuthProvider';
 
-// Mock the FileUploader component so we can control the upload success event
-vi.mock('../../Components/FileUploader', () => ({
-  FileUploader: ({ onUploadSuccess }) => (
-    <div data-testid="file-uploader">
-      <button onClick={onUploadSuccess}>Mock Upload</button>
-    </div>
-  ),
-}));
-
 describe('KnowledgeBaseManagement', () => {
-  // Example mock S3 files (all considered "pending" if there's no lastSuccessfulSync)
-  const mockFiles = [
-    { Key: 'file1.txt', LastModified: '2025-01-01T12:00:00Z', Size: 1024 },
-    { Key: 'folder1/file2.txt', LastModified: '2025-01-02T13:00:00Z', Size: 2048 },
-    { Key: 'folder1/subfolder/file3.txt', LastModified: '2025-01-03T14:00:00Z', Size: 3072 },
-  ];
-
   beforeEach(() => {
     // Set the required session storage values
     window.sessionStorage.setItem('CLIENT_NAME', 'test');
@@ -33,8 +49,8 @@ describe('KnowledgeBaseManagement', () => {
     window.sessionStorage.setItem('Q_INDEX_ID', 'test-index');
 
     clearAllMocks();
-    // Set up AWS mocks so that S3Client sends ListObjectsV2Command return our mockFiles
-    setupAwsMocks(mockFiles);
+    // Set up AWS mocks
+    setupAwsMocks();
   });
 
   function renderComponent(props = {}) {
@@ -76,8 +92,8 @@ describe('KnowledgeBaseManagement', () => {
     renderComponent();
 
     // Wait for the cards to appear first
-    const pendingCardTitle = await screen.findByText(/Pending Files \(\d+\)/, { timeout: 5000 });
-    const kbCardTitle = await screen.findByText(/Your Knowledge Base Files \(\d+\)/, { timeout: 5000 });
+    const pendingCardTitle = await screen.findByText(/Pending Files \(\d+\)/, {}, { timeout: 5000 });
+    const kbCardTitle = await screen.findByText(/Your Knowledge Base Files \(\d+\)/, {}, { timeout: 5000 });
 
     // Get the card elements
     const pendingCard = pendingCardTitle.closest('.card');
@@ -135,8 +151,7 @@ describe('KnowledgeBaseManagement', () => {
     expect(refreshButton).toBeInTheDocument();
 
     fireEvent.click(refreshButton);
-    // Just ensuring no errors are thrown on refresh.
-    expect(true).toBeTruthy();
+    // Just ensuring no errors are thrown on refresh by not throwing here.
   });
 
   it('renders the Failed Documents section when there are failed documents', async () => {
@@ -230,17 +245,90 @@ describe('KnowledgeBaseManagement', () => {
     renderComponent();
 
     // Wait for the KB card to appear
-    const kbCardTitle = await screen.findByText(/Your Knowledge Base Files \(\d+\)/, { timeout: 5000 });
+    const kbCardTitle = await screen.findByText(/Your Knowledge Base Files \(\d+\)/, {}, { timeout: 5000 });
     const kbCard = kbCardTitle.closest('.card');
 
-    // Verify that the search functionality components are present
-    expect(kbCard.querySelector('input[type="text"]')).toBeNull(); // Initially no search since no indexed files
+    // Wait for loading to complete first
+    await waitFor(
+      () => {
+        expect(kbCard.querySelector('.spinner-border')).not.toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
 
-    // But the structure should be set up for search when there are files
-    expect(kbCard.querySelector('.file-table-container')).toBeInTheDocument();
-    expect(kbCard.querySelector('.table-body-container')).toBeInTheDocument();
+    // Then wait for the search input to be rendered (it should always be present for KB files)
+    const searchInput = await waitFor(() => {
+      const input = kbCard.querySelector('input[type="text"]');
+      expect(input).toBeInTheDocument();
+      return input;
+    });
 
-    // Should show "No files match your search" when search is active but no results
-    expect(kbCard.textContent).toContain('No files match your search');
+    // Perform a search that should return no results
+    fireEvent.change(searchInput, { target: { value: 'nonexistentfile.xyz' } });
+
+    // Wait for search to be processed
+    await waitFor(() => {
+      expect(kbCard.textContent).toContain('No files match your search');
+    });
+
+    // Verify search bar is still visible after search returns no results
+    expect(searchInput).toBeInTheDocument();
+    expect((searchInput as HTMLInputElement).value).toBe('nonexistentfile.xyz');
+  });
+
+  it('shows large CSV file warning modal and handles cancel/continue correctly', async () => {
+    renderComponent();
+
+    // Find the FileUploader component
+    const fileUploader = await screen.findByTestId('file-uploader');
+    expect(fileUploader).toBeInTheDocument();
+
+    // Click the button to select a large CSV file
+    const selectLargeCSVButton = screen.getByTestId('select-large-csv');
+    fireEvent.click(selectLargeCSVButton);
+
+    // Wait for the large file warning modal to appear
+    await waitFor(() => {
+      expect(screen.getByText('Large Raw Data File Detected')).toBeInTheDocument();
+    });
+
+    // Check that the modal shows the correct file name and size
+    expect(screen.getByText('large-data.csv')).toBeInTheDocument();
+    expect(screen.getByText('(13 MB)')).toBeInTheDocument();
+
+    // Check that both cancel and continue buttons are present
+    const cancelButton = screen.getByText('Cancel Upload');
+    const continueButton = screen.getByText('Proceed Anyway');
+    expect(cancelButton).toBeInTheDocument();
+    expect(continueButton).toBeInTheDocument();
+
+    // Test canceling the upload
+    fireEvent.click(cancelButton);
+
+    // Wait for the modal to close
+    await waitFor(() => {
+      expect(screen.queryByText('Large Raw Data File Detected')).not.toBeInTheDocument();
+    });
+
+    // Test the continue flow by selecting another large CSV file
+    fireEvent.click(selectLargeCSVButton);
+
+    // Wait for the modal to appear again
+    await waitFor(() => {
+      expect(screen.getByText('Large Raw Data File Detected')).toBeInTheDocument();
+    });
+
+    // Click continue this time
+    const newContinueButton = screen.getByText('Proceed Anyway');
+    fireEvent.click(newContinueButton);
+
+    // Wait for the modal to close
+    await waitFor(() => {
+      expect(screen.queryByText('Large Raw Data File Detected')).not.toBeInTheDocument();
+    });
+
+    // The file should remain available for upload (modal just closes without clearing)
+    // We can verify this by checking that no error messages appear
+    expect(screen.queryByText(/File Validation Error/)).not.toBeInTheDocument();
   });
 });
