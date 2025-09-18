@@ -4,13 +4,14 @@ Web search module for Numa Chat Agent.
 Provides Google search and web scraping functionality.
 """
 
+import re
 import time
 from typing import Any, Dict, List
+from urllib.parse import quote_plus, unquote
 
 import httpx
 import structlog
-from bs4 import BeautifulSoup
-from googlesearch import search  # type: ignore[import-untyped]
+from bs4 import BeautifulSoup, Tag
 
 from .summarization import summarize_combined_content
 
@@ -57,9 +58,172 @@ def _is_processable_url(url: str) -> bool:
     )
 
 
+def _clean_yahoo_url(url: str) -> str:
+    """
+    Clean Yahoo redirect URL to extract the actual destination URL.
+
+    Args:
+        url: Raw URL from Yahoo search results
+
+    Returns:
+        Cleaned URL pointing directly to the destination
+    """
+    try:
+        if "r.search.yahoo.com" in url and "/RU=" in url:
+            # Extract actual URL from Yahoo redirect format
+            ru_part = url.split("/RU=")[1].split("/")[0]
+            actual_url = unquote(ru_part)
+
+            # Handle double encoding
+            if actual_url.startswith("https%3a"):
+                actual_url = unquote(actual_url)
+
+            return actual_url
+        return url
+    except Exception:
+        # Return original URL if cleaning fails
+        return url
+
+
+def _startpage_search(query: str, max_results: int) -> List[str]:
+    """
+    Search using Startpage (privacy-focused search engine using Google results).
+
+    Args:
+        query: Search query string
+        max_results: Maximum number of results to return
+
+    Returns:
+        List of URLs from search results
+    """
+    session = None
+    try:
+        session = httpx.Client(
+            headers={
+                "User-Agent": FALLBACK_USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate",
+            },
+            timeout=15.0,
+        )
+
+        search_url = f"https://www.startpage.com/sp/search?query={quote_plus(query)}"
+        response = session.get(search_url)
+
+        if response.status_code != 200:
+            logger.warning("Startpage search failed", status_code=response.status_code)
+            return []
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        urls = []
+
+        # Find result containers
+        containers = soup.select("div.result")
+
+        for container in containers[:max_results]:
+            # Find title link
+            title_link = container.find("a", class_=re.compile(r"result-link"))
+            if not title_link:
+                h3_elem = container.find("h3")
+                if h3_elem and isinstance(h3_elem, Tag):
+                    title_link = h3_elem.find("a", href=True)
+                else:
+                    title_link = container.find("a", href=True)
+
+            if title_link and isinstance(title_link, Tag):
+                url = title_link.get("href", "")
+                if isinstance(url, str) and url and url.startswith("http"):
+                    urls.append(url)
+
+        return urls
+
+    except Exception as e:
+        logger.warning("Startpage search error", error=str(e))
+        return []
+    finally:
+        if session is not None:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+
+def _yahoo_search(query: str, max_results: int) -> List[str]:
+    """
+    Search using Yahoo Search.
+
+    Args:
+        query: Search query string
+        max_results: Maximum number of results to return
+
+    Returns:
+        List of cleaned URLs from search results
+    """
+    session = None
+    try:
+        session = httpx.Client(
+            headers={
+                "User-Agent": FALLBACK_USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate",
+                "Connection": "keep-alive",
+            },
+            timeout=15.0,
+        )
+
+        search_url = f"https://search.yahoo.com/search?p={quote_plus(query)}"
+        response = session.get(search_url)
+
+        if response.status_code != 200:
+            logger.warning("Yahoo search failed", status_code=response.status_code)
+            return []
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        urls = []
+
+        # Find result containers
+        containers = soup.select("div.algo")
+
+        for container in containers[:max_results]:
+            # Find title link
+            h3_elem = container.find("h3")
+            if not h3_elem or not isinstance(h3_elem, Tag):
+                continue
+
+            title_link = h3_elem.find("a", href=True)
+            if not title_link or not isinstance(title_link, Tag):
+                continue
+
+            raw_url = title_link.get("href", "")
+            if not raw_url or not isinstance(raw_url, str):
+                continue
+
+            # Clean Yahoo redirect URL
+            clean_url = _clean_yahoo_url(raw_url)
+            if clean_url.startswith("http"):
+                urls.append(clean_url)
+
+        return urls
+
+    except Exception as e:
+        logger.warning("Yahoo search error", error=str(e))
+        return []
+    finally:
+        if session is not None:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+
 def google_search(query: str, max_results: int = 3, max_retries: int = 3) -> List[str]:
     """
-    Perform a Google search with retry logic for rate limiting.
+    Perform web search using reliable search engines with fallback strategy.
+
+    This replaces the previous Google search implementation which was being blocked.
+    Uses Startpage (privacy-focused) as primary and Yahoo as fallback.
 
     Args:
         query: The search query string
@@ -69,58 +233,77 @@ def google_search(query: str, max_results: int = 3, max_retries: int = 3) -> Lis
     Returns:
         List of URLs from search results
     """
-    for attempt in range(max_retries + 1):
-        try:
-            # Add 2-second delay before retry attempts (not on first attempt)
-            if attempt > 0:
+    if not query or not query.strip():
+        logger.warning("Empty search query provided")
+        return []
+
+    logger.info(
+        "Starting web search with fallback engines",
+        query=query,
+        max_results=max_results,
+        max_retries=max_retries,
+    )
+
+    # Search engines to try in order of preference
+    search_engines = [
+        ("Startpage", _startpage_search),
+        ("Yahoo", _yahoo_search),
+    ]
+
+    for attempt in range(max_retries):
+        for engine_name, search_func in search_engines:
+            try:
                 logger.info(
-                    "Retrying Google search after delay",
+                    "Attempting search",
+                    engine=engine_name,
                     query=query,
                     attempt=attempt + 1,
-                    delay_seconds=2,
                 )
-                time.sleep(2)
 
-            # Perform the search
-            results = list(search(query, num_results=max_results, lang="en"))
-            urls = [
-                r if isinstance(r, str) else getattr(r, "url", str(r)) for r in results
-            ]
+                urls = search_func(query, max_results)
 
-            logger.info(
-                "Google search completed successfully",
-                query=query,
-                results_count=len(urls),
-                attempt=attempt + 1,
-            )
-            return urls
+                if urls:
+                    logger.info(
+                        "Search completed successfully",
+                        engine=engine_name,
+                        query=query,
+                        results_count=len(urls),
+                        attempt=attempt + 1,
+                    )
+                    return urls
+                else:
+                    logger.warning(
+                        "No results from search engine",
+                        engine=engine_name,
+                        query=query,
+                        attempt=attempt + 1,
+                    )
 
-        except Exception as e:
-            error_str = str(e).lower()
-            is_rate_limit = (
-                "429" in error_str
-                or "too many requests" in error_str
-                or "rate limit" in error_str
-            )
-
-            if is_rate_limit and attempt < max_retries:
-                logger.warning(
-                    "Google search rate limited, will retry",
+            except Exception as e:
+                logger.error(
+                    "Search engine error",
+                    engine=engine_name,
                     query=query,
                     attempt=attempt + 1,
-                    max_retries=max_retries,
                     error=str(e),
                 )
-            logger.error(
-                "Google search failed",
+
+        # Delay between retry attempts (not after last attempt)
+        if attempt < max_retries - 1:
+            delay = 2.0
+            logger.info(
+                "Retrying search after delay",
                 query=query,
                 attempt=attempt + 1,
-                max_retries=max_retries,
-                error=str(e),
-                is_rate_limit=is_rate_limit,
+                delay_seconds=delay,
             )
-            return []
+            time.sleep(delay)
 
+    logger.error(
+        "All search attempts failed",
+        query=query,
+        total_attempts=max_retries * len(search_engines),
+    )
     return []
 
 

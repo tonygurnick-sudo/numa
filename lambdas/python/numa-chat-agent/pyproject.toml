@@ -30,7 +30,6 @@ opentelemetry-api = "^1.34.0"
 opentelemetry-sdk = "^1.34.0"
 requests = "^2.31.0"
 httpx = "^0.28.1"
-googlesearch-python = "^1.1.0"
 beautifulsoup4 = "^4.12.2"
 s3_helpers = {path = "../../../lib/s3_helpers", develop = true}
 
