@@ -4,9 +4,11 @@ Web search module for Numa Chat Agent.
 Provides Google search and web scraping functionality.
 """
 
+import random
 import re
 import time
-from typing import Any, Dict, List
+import uuid
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus, unquote
 
 import httpx
@@ -17,18 +19,167 @@ from .summarization import summarize_combined_content
 
 logger = structlog.get_logger()
 
-# User agents for retry logic
-PRIMARY_USER_AGENT = "curl/8.7.1"
-FALLBACK_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/128.0.0.0 Safari/537.36"
-)
+# Static user agent pool (September 2025) with current browser versions
+USER_AGENTS_2025_SEP = [
+    # Desktop — Chrome (Windows)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.128 Safari/537.36",
+    # Desktop — Chrome (macOS)
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.128 Safari/537.36",
+    # Desktop — Chrome (Linux)
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.128 Safari/537.36",
+    # Desktop — Firefox (Windows)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0",
+    # Desktop — Firefox (macOS)
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6; rv:143.0) Gecko/20100101 Firefox/143.0",
+    # Desktop — Microsoft Edge (Windows, Chromium-based)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.128 Safari/537.36 Edg/140.0.7339.128",
+    # Desktop — Safari (macOS)
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
+    # Mobile — iPhone (Safari on iOS 17.x)
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+    # Mobile — iPad (Safari)
+    "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/605.1.15",
+    # Mobile — Android (Chrome on Pixel / Android 14+)
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.128 Mobile Safari/537.36",
+    # Mobile — Android (Samsung)
+    "Mozilla/5.0 (Linux; Android 14; SM-S931B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.128 Mobile Safari/537.36",
+]
+
+
+def _random_chrome_version() -> str:
+    """Generate a randomized Chrome version within plausible range."""
+    major = 140  # Current stable (Sept 2025)
+    minor = 0
+    build = random.randint(7330, 7360)  # Slightly narrower, still plausible
+    patch = random.randint(60, 180)
+    return f"{major}.{minor}.{build}.{patch}"
+
+
+def _random_edge_version() -> str:
+    """Generate a randomized Edge version (typically close to Chrome but not identical)."""
+    major = 140
+    minor = 0
+    build = random.randint(7330, 7360)
+    patch = random.randint(50, 170)
+    return f"{major}.{minor}.{build}.{patch}"
+
+
+def _random_firefox_version() -> str:
+    """Generate a randomized Firefox version."""
+    major = 143  # Current stable
+    return f"{major}.0"
+
+
+def _random_windows() -> str:
+    """Generate randomized Windows platform string (Win 11 still reports NT 10.0)."""
+    return random.choice(
+        [
+            "Windows NT 10.0; Win64; x64",
+            "Windows NT 10.0; WOW64",
+        ]
+    )
+
+
+def _random_mac() -> str:
+    """Generate randomized macOS platform string."""
+    version = random.choice(["13_6", "13_7", "14_0"])
+    return f"Macintosh; Intel Mac OS X {version}"
+
+
+def _random_android() -> str:
+    """Generate randomized Android platform string."""
+    devices = [
+        "Pixel 8",
+        "Pixel 8 Pro",
+        "Pixel 7 Pro",
+        "SM-S931B",
+        "SM-G991B",
+        "SM-A546B",
+    ]
+    return f"Linux; Android 14; {random.choice(devices)}"
+
+
+def _random_ios() -> str:
+    """Generate randomized iOS Safari platform string."""
+    ios_ver = random.choice(["17_4", "17_5", "17_6"])
+    mobile_build = random.choice(["15E148", "16F203", "17G80"])
+    device = random.choice(
+        [
+            "iPhone; CPU iPhone OS",  # iPhone
+            "iPad; CPU OS",  # iPad
+        ]
+    )
+    # Safari on iOS typically: WebKit 605.1.15, Safari/604.1 (legacy token)
+    return (
+        f"{device} {ios_ver} like Mac OS X) AppleWebKit/605.1.15 "
+        f"(KHTML, like Gecko) Version/{ios_ver.replace('_','.')}"
+        f" Mobile/{mobile_build} Safari/604.1"
+    )
+
+
+def _generate_random_user_agent() -> str:
+    """Generate a randomized user agent with plausible variations."""
+    templates = [
+        # Desktop Chromium
+        "Mozilla/5.0 ({win}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome} Safari/537.36",
+        "Mozilla/5.0 ({mac}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome} Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome} Safari/537.36",
+        # Firefox
+        "Mozilla/5.0 ({win}; rv:{ff}) Gecko/20100101 Firefox/{ff}",
+        "Mozilla/5.0 ({mac}; rv:{ff}) Gecko/20100101 Firefox/{ff}",
+        # Edge (Chromium)
+        "Mozilla/5.0 ({win}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome} Safari/537.36 Edg/{edge}",
+        # Android Chrome
+        "Mozilla/5.0 ({android}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome} Mobile Safari/537.36",
+        # iOS Safari
+        "Mozilla/5.0 ({ios}",
+    ]
+
+    t = random.choice(templates)
+    if "{ios}" in t:
+        # Already complete iOS UA (no additional format fields)
+        return t.format(ios=_random_ios())
+
+    return t.format(
+        win=_random_windows(),
+        mac=_random_mac(),
+        android=_random_android(),
+        chrome=_random_chrome_version(),
+        edge=_random_edge_version(),
+        ff=_random_firefox_version(),
+    )
+
+
+def _get_random_user_agent() -> str:
+    """
+    Get a random user agent - mix of static pool and generated variants.
+
+    70% chance of using static pool (reliable), 30% chance of generating
+    randomized version (unpredictable). This provides both stability and variety.
+    """
+    if random.random() < 0.7:
+        return random.choice(USER_AGENTS_2025_SEP)
+    else:
+        return _generate_random_user_agent()
+
+
+def _dedupe(urls: List[str]) -> List[str]:
+    """Remove duplicate URLs while preserving order."""
+    seen = set()
+    result = []
+    for url in urls:
+        if url not in seen:
+            seen.add(url)
+            result.append(url)
+    return result
 
 
 def _is_processable_url(url: str) -> bool:
-    """Check if URL should be processed based on file extension."""
-    return not url.lower().endswith(
+    """Check if URL is processable (http/https and not a binary file)."""
+    u = url.lower()
+    if not u.startswith(("http://", "https://")):
+        return False
+    return not u.endswith(
         (
             ".pdf",
             ".docx",
@@ -69,23 +220,39 @@ def _clean_yahoo_url(url: str) -> str:
         Cleaned URL pointing directly to the destination
     """
     try:
-        if "r.search.yahoo.com" in url and "/RU=" in url:
-            # Extract actual URL from Yahoo redirect format
-            ru_part = url.split("/RU=")[1].split("/")[0]
-            actual_url = unquote(ru_part)
+        # Handle multiple Yahoo redirect formats
+        if "r.search.yahoo.com" in url or "search.yahoo.com/_ylt" in url:
+            if "/RU=" in url:
+                # Standard format: /RU=https%3a%2f%2fexample.com/
+                ru_part = url.split("/RU=")[1].split("/")[0]
+                actual_url = unquote(ru_part)
 
-            # Handle double encoding
-            if actual_url.startswith("https%3a"):
-                actual_url = unquote(actual_url)
+                # Handle double encoding
+                if actual_url.startswith("https%3a"):
+                    actual_url = unquote(actual_url)
 
-            return actual_url
+                return actual_url
+
+            elif "RU=" in url:
+                # Alternative format in URL parameters
+                ru_part = url.split("RU=")[1].split("&")[0].split("/")[0]
+                actual_url = unquote(ru_part)
+
+                # Handle double encoding
+                if actual_url.startswith("https%3a"):
+                    actual_url = unquote(actual_url)
+
+                return actual_url
+
         return url
     except Exception:
         # Return original URL if cleaning fails
         return url
 
 
-def _startpage_search(query: str, max_results: int) -> List[str]:
+def _startpage_search(
+    query: str, max_results: int, user_agent: Optional[str] = None
+) -> List[str]:
     """
     Search using Startpage (privacy-focused search engine using Google results).
 
@@ -98,28 +265,57 @@ def _startpage_search(query: str, max_results: int) -> List[str]:
     """
     session = None
     try:
+        # Use provided user agent or get a random one
+        selected_user_agent = user_agent or _get_random_user_agent()
+
+        # Randomize Accept-Language for each search
+        accept_lang = random.choice(
+            ["en-US,en;q=0.9", "en-GB,en;q=0.9", "en-AU,en;q=0.9"]
+        )
+
         session = httpx.Client(
             headers={
-                "User-Agent": FALLBACK_USER_AGENT,
+                "User-Agent": selected_user_agent,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate",
+                "Accept-Language": accept_lang,
+                "Connection": "keep-alive",
+                "DNT": "1",  # Do Not Track - common in privacy-focused browsers
+                "Sec-GPC": "1",  # Global Privacy Control
             },
             timeout=15.0,
+            follow_redirects=True,  # Follow redirects for geographic handling
         )
 
         search_url = f"https://www.startpage.com/sp/search?query={quote_plus(query)}"
         response = session.get(search_url)
 
-        if response.status_code != 200:
+        # Handle various response codes
+        if response.status_code in (429, 403):
+            # Rate limited or forbidden - back off
+            backoff_delay = 2 + random.random() * 3
+            logger.warning(
+                "Startpage rate limited/blocked, backing off",
+                status_code=response.status_code,
+                delay=round(backoff_delay, 2),
+            )
+            time.sleep(backoff_delay)
+            return []
+        elif response.status_code != 200:
             logger.warning("Startpage search failed", status_code=response.status_code)
+            return []
+
+        # Check if we got redirected to captcha block
+        if "captcha-block" in str(response.url):
+            logger.warning("Startpage captcha block detected")
             return []
 
         soup = BeautifulSoup(response.text, "html.parser")
         urls = []
 
-        # Find result containers
+        # Find result containers - try multiple selectors for robustness
         containers = soup.select("div.result")
+        if not containers:
+            containers = soup.select('[data-testid="result"]')
 
         for container in containers[:max_results]:
             # Find title link
@@ -149,7 +345,9 @@ def _startpage_search(query: str, max_results: int) -> List[str]:
                 pass
 
 
-def _yahoo_search(query: str, max_results: int) -> List[str]:
+def _yahoo_search(
+    query: str, max_results: int, user_agent: Optional[str] = None
+) -> List[str]:
     """
     Search using Yahoo Search.
 
@@ -162,29 +360,65 @@ def _yahoo_search(query: str, max_results: int) -> List[str]:
     """
     session = None
     try:
+        # Use provided user agent or get a random one
+        selected_user_agent = user_agent or _get_random_user_agent()
+
+        # Randomize Accept-Language for each search
+        accept_lang = random.choice(
+            ["en-US,en;q=0.9", "en-GB,en;q=0.9", "en-AU,en;q=0.9"]
+        )
+
         session = httpx.Client(
             headers={
-                "User-Agent": FALLBACK_USER_AGENT,
+                "User-Agent": selected_user_agent,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate",
+                "Accept-Language": accept_lang,
                 "Connection": "keep-alive",
+                "DNT": "1",  # Do Not Track - common in privacy-focused browsers
+                "Sec-GPC": "1",  # Global Privacy Control
             },
             timeout=15.0,
+            follow_redirects=True,
         )
 
         search_url = f"https://search.yahoo.com/search?p={quote_plus(query)}"
         response = session.get(search_url)
 
-        if response.status_code != 200:
+        # Handle various response codes
+        if response.status_code in (429, 403):
+            # Rate limited or forbidden - back off
+            backoff_delay = 2 + random.random() * 3
+            logger.warning(
+                "Yahoo rate limited/blocked, backing off",
+                status_code=response.status_code,
+                delay=round(backoff_delay, 2),
+            )
+            time.sleep(backoff_delay)
+            return []
+        elif response.status_code != 200:
             logger.warning("Yahoo search failed", status_code=response.status_code)
             return []
 
         soup = BeautifulSoup(response.text, "html.parser")
         urls = []
 
-        # Find result containers
-        containers = soup.select("div.algo")
+        # Find result containers - try multiple selectors for robustness
+        containers: List[Tag] = soup.select("div.algo, div.algo-sr, li div.algo") or []
+
+        # Log container discovery for debugging intermittent issues
+        logger.debug(
+            "Yahoo search container analysis",
+            containers_found=len(containers),
+            content_length=len(response.text),
+            query=query,
+        )
+
+        # If no primary containers, try alternative selectors
+        if not containers:
+            containers = soup.select("div.Sr") or []
+            logger.debug(
+                "Yahoo search fallback selectors", fallback_containers=len(containers)
+            )
 
         for container in containers[:max_results]:
             # Find title link
@@ -205,6 +439,14 @@ def _yahoo_search(query: str, max_results: int) -> List[str]:
             if clean_url.startswith("http"):
                 urls.append(clean_url)
 
+        # Log final results for reliability tracking
+        logger.debug(
+            "Yahoo search results",
+            query=query,
+            urls_found=len(urls),
+            containers_processed=min(len(containers), max_results),
+        )
+
         return urls
 
     except Exception as e:
@@ -218,17 +460,31 @@ def _yahoo_search(query: str, max_results: int) -> List[str]:
                 pass
 
 
-def google_search(query: str, max_results: int = 3, max_retries: int = 3) -> List[str]:
+# Global state for search spacing (prevents rapid consecutive searches)
+_last_search_time: float = 0.0
+_search_count_in_session: int = 0
+_failed_searches_in_row: int = 0
+
+
+def google_search(
+    query: str, max_results: int = 3, max_retries: int = 3, force_delay: bool = True
+) -> List[str]:
     """
     Perform web search using reliable search engines with fallback strategy.
 
     This replaces the previous Google search implementation which was being blocked.
     Uses Startpage (privacy-focused) as primary and Yahoo as fallback.
 
+    Implements anti-detection measures for high-volume searches:
+    - Automatic spacing between searches to avoid rate limiting
+    - Progressive backoff after failed searches
+    - Session-aware request spacing
+
     Args:
         query: The search query string
         max_results: Maximum number of results to return (default: 3)
         max_retries: Maximum number of retry attempts (default: 3)
+        force_delay: Whether to enforce delays between searches (default: True)
 
     Returns:
         List of URLs from search results
@@ -236,6 +492,58 @@ def google_search(query: str, max_results: int = 3, max_retries: int = 3) -> Lis
     if not query or not query.strip():
         logger.warning("Empty search query provided")
         return []
+
+    # Anti-detection: implement search spacing for high-volume usage
+    # pylint: disable=global-statement
+    global _last_search_time, _search_count_in_session, _failed_searches_in_row
+    current_time = time.time()
+
+    if force_delay and _last_search_time > 0:
+        time_since_last = current_time - _last_search_time
+
+        # Calculate required delay based on session state
+        base_delay = 2.0  # Base 2 second delay
+
+        # Increase delay after failed searches (progressive backoff)
+        if _failed_searches_in_row > 0:
+            backoff_multiplier = min(2**_failed_searches_in_row, 8)  # Cap at 8x
+            base_delay *= backoff_multiplier
+            logger.info(
+                "Progressive backoff active",
+                failed_in_row=_failed_searches_in_row,
+                backoff_multiplier=backoff_multiplier,
+                base_delay=base_delay,
+            )
+
+        # Increase delay for rapid searches in same session
+        if _search_count_in_session > 1:
+            session_multiplier = min(
+                1 + (_search_count_in_session - 1) * 0.3, 3.0
+            )  # Max 3x
+            base_delay *= session_multiplier
+            logger.debug(
+                "Session-based delay scaling",
+                search_count=_search_count_in_session,
+                session_multiplier=session_multiplier,
+            )
+
+        # Add jitter to avoid predictable patterns
+        jittered_delay = base_delay + (random.random() - 0.5) * base_delay * 0.3
+        required_delay = max(jittered_delay, 1.0)  # Minimum 1 second
+
+        if time_since_last < required_delay:
+            sleep_time = required_delay - time_since_last
+            logger.info(
+                "Anti-detection delay",
+                query=query,
+                sleep_time=round(sleep_time, 2),
+                session_search_count=_search_count_in_session,
+                failed_in_row=_failed_searches_in_row,
+            )
+            time.sleep(sleep_time)
+
+    _search_count_in_session += 1
+    _last_search_time = time.time()
 
     logger.info(
         "Starting web search with fallback engines",
@@ -253,22 +561,35 @@ def google_search(query: str, max_results: int = 3, max_retries: int = 3) -> Lis
     for attempt in range(max_retries):
         for engine_name, search_func in search_engines:
             try:
+                # Get a fresh random user agent for each attempt
+                fresh_user_agent = _get_random_user_agent()
+                request_id = str(uuid.uuid4())[:8]  # Short request ID for tracking
+
                 logger.info(
                     "Attempting search",
                     engine=engine_name,
                     query=query,
                     attempt=attempt + 1,
+                    request_id=request_id,
+                    user_agent=(
+                        fresh_user_agent[:50] + "..."
+                        if len(fresh_user_agent) > 50
+                        else fresh_user_agent
+                    ),
                 )
 
-                urls = search_func(query, max_results)
+                urls = search_func(query, max_results, user_agent=fresh_user_agent)
 
                 if urls:
+                    # Reset failure counter on success
+                    _failed_searches_in_row = 0
                     logger.info(
                         "Search completed successfully",
                         engine=engine_name,
                         query=query,
                         results_count=len(urls),
                         attempt=attempt + 1,
+                        session_search_count=_search_count_in_session,
                     )
                     return urls
                 else:
@@ -290,19 +611,25 @@ def google_search(query: str, max_results: int = 3, max_retries: int = 3) -> Lis
 
         # Delay between retry attempts (not after last attempt)
         if attempt < max_retries - 1:
-            delay = 2.0
+            # Randomized delay with jitter (1.5-3.5 seconds)
+            delay = 1.5 + random.random() * 2.0
             logger.info(
                 "Retrying search after delay",
                 query=query,
                 attempt=attempt + 1,
-                delay_seconds=delay,
+                delay_seconds=round(delay, 2),
             )
             time.sleep(delay)
+
+    # Increment failure counter for progressive backoff
+    _failed_searches_in_row += 1
 
     logger.error(
         "All search attempts failed",
         query=query,
         total_attempts=max_retries * len(search_engines),
+        failed_searches_in_row=_failed_searches_in_row,
+        session_search_count=_search_count_in_session,
     )
     return []
 
@@ -327,27 +654,51 @@ def scrape_page(url: str) -> Dict[str, Any]:
             "error_type": "non_processable_url",
         }
     # Browser-like headers to improve scraping success
+    referer_options = [
+        "https://www.google.com/",
+        "https://www.bing.com/",
+        "https://duckduckgo.com/",
+        "https://www.startpage.com/",
+        "https://search.yahoo.com/",
+    ]
+
+    # Simulate realistic viewport dimensions
+    viewport_width = random.choice([1920, 1366, 1536, 1440, 1280, 2560])
+
     base_headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate",
+        "Accept-Language": random.choice(
+            ["en-US,en;q=0.9", "en-GB,en;q=0.9", "en-AU,en;q=0.9"]
+        ),
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Cache-Control": "max-age=0",
+        "Referer": random.choice(referer_options),
+        "DNT": "1",  # Do Not Track - privacy-conscious behavior
+        "Sec-GPC": "1",  # Global Privacy Control
+        "Cache-Control": random.choice(
+            ["no-cache", "max-age=0"]
+        ),  # Vary caching behavior
+        "Viewport-Width": str(viewport_width),  # Simulate browser viewport
+        # Removed: Accept-Encoding (let httpx negotiate), Sec-Fetch-* (browser-generated)
     }
 
-    user_agents = [PRIMARY_USER_AGENT, FALLBACK_USER_AGENT]
+    # Use random user agents for web scraping too
+    user_agents = [_get_random_user_agent(), _get_random_user_agent()]
+    # Reuse client per user agent for cookie persistence
+    clients = {}
 
     def attempt_scrape(url: str, user_agent: str, timeout: int = 12) -> Dict[str, Any]:
         """Single scraping attempt with detailed error tracking"""
         headers = {**base_headers, "User-Agent": user_agent}
         try:
-            response = httpx.get(
-                url, headers=headers, timeout=timeout, follow_redirects=True
-            )
+            # Get or create client for this user agent
+            if user_agent not in clients:
+                clients[user_agent] = httpx.Client(
+                    headers=headers, timeout=timeout, follow_redirects=True
+                )
+
+            client = clients[user_agent]
+            response = client.get(url)
 
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, "html.parser")
@@ -451,72 +802,82 @@ def scrape_page(url: str) -> Dict[str, Any]:
                 "error_type": type(e).__name__,
             }
 
-    for attempt, user_agent in enumerate(user_agents, 1):
-        try:
-            result = attempt_scrape(url, user_agent)
+    try:
+        for attempt, user_agent in enumerate(user_agents, 1):
+            try:
+                result = attempt_scrape(url, user_agent)
 
-            if result.get("success"):
-                if attempt > 1:
+                if result.get("success"):
+                    if attempt > 1:
+                        logger.info(
+                            "Web scrape retry successful",
+                            url=url,
+                            attempt=attempt,
+                            user_agent=user_agent,
+                        )
+                    return result
+
+                if result.get("status_code", 0) >= 500:
                     logger.info(
-                        "Web scrape retry successful",
+                        "Retrying server error with longer timeout",
                         url=url,
                         attempt=attempt,
                         user_agent=user_agent,
                     )
-                return result
+                    # Jittered delay before retry (0.8-1.2s)
+                    time.sleep(0.8 + random.random() * 0.4)
+                    retry_result = attempt_scrape(url, user_agent, timeout=15)
+                    if retry_result.get("success"):
+                        return retry_result
 
-            if result.get("status_code", 0) >= 500:
-                logger.info(
-                    "Retrying server error with longer timeout",
+                if result.get("status_code") == 403 and attempt < len(user_agents):
+                    logger.info(
+                        "403 error with user agent, trying fallback",
+                        url=url,
+                        attempt=attempt,
+                        current_user_agent=user_agent,
+                        next_user_agent=(
+                            user_agents[attempt] if attempt < len(user_agents) else None
+                        ),
+                    )
+                    continue
+
+                if attempt == len(user_agents):
+                    return result
+
+            except Exception as e:
+                logger.error(
+                    "Error in scrape attempt",
                     url=url,
                     attempt=attempt,
                     user_agent=user_agent,
+                    error=str(e),
                 )
-                time.sleep(1)
-                retry_result = attempt_scrape(url, user_agent, timeout=15)
-                if retry_result.get("success"):
-                    return retry_result
-
-            if result.get("status_code") == 403 and attempt < len(user_agents):
-                logger.info(
-                    "403 error with user agent, trying fallback",
-                    url=url,
-                    attempt=attempt,
-                    current_user_agent=user_agent,
-                    next_user_agent=(
-                        user_agents[attempt] if attempt < len(user_agents) else None
-                    ),
-                )
+                if attempt == len(user_agents):
+                    return {
+                        "title": "",
+                        "url": url,
+                        "snippet": "",
+                        "success": False,
+                        "error_type": "complete_failure",
+                    }
                 continue
 
-            if attempt == len(user_agents):
-                return result
+        return {
+            "title": "",
+            "url": url,
+            "snippet": "",
+            "success": False,
+            "error_type": "complete_failure",
+        }
 
-        except Exception as e:
-            logger.error(
-                "Error in scrape attempt",
-                url=url,
-                attempt=attempt,
-                user_agent=user_agent,
-                error=str(e),
-            )
-            if attempt == len(user_agents):
-                return {
-                    "title": "",
-                    "url": url,
-                    "snippet": "",
-                    "success": False,
-                    "error_type": "complete_failure",
-                }
-            continue
-
-    return {
-        "title": "",
-        "url": url,
-        "snippet": "",
-        "success": False,
-        "error_type": "complete_failure",
-    }
+    finally:
+        # Clean up clients after all attempts
+        for client in clients.values():
+            try:
+                client.close()
+            except Exception:
+                pass
 
 
 def web_search_impl(query: str, user_intent: str, max_results: int = 3):
@@ -538,7 +899,8 @@ def web_search_impl(query: str, user_intent: str, max_results: int = 3):
         max_results = min(max(1, max_results), 10)
 
         # Step 1: Get URLs from Google search with retry logic
-        urls = google_search(query, max_results, max_retries=3)
+        raw_urls = google_search(query, max_results, max_retries=3)
+        urls = _dedupe(raw_urls)
 
         if not urls:
             logger.warning(
@@ -582,8 +944,8 @@ def web_search_impl(query: str, user_intent: str, max_results: int = 3):
                     status_code=status_code,
                 )
 
-            # Small delay between requests to be respectful
-            time.sleep(0.5)
+            # Small randomized delay between requests (0.4-1.2s)
+            time.sleep(0.4 + random.random() * 0.8)
 
         logger.info(
             "Web scraping summary",
