@@ -24,6 +24,29 @@ import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
 import { NumaLambda } from './numa-lambda';
 import type { StateMachine } from 'asl-types';
 
+// This should match the configuration in pipedream-proxy-stack.ts
+// TODO: decide on integrations and think of better way to centralise them
+const SUPPORTED_INTEGRATIONS = [
+  'gmail',
+  // 'microsoft_outlook',
+  // 'slack',
+  // 'google_calendar',
+  // 'xero_accounting_api',
+  // 'hubspot',
+  // 'notion',
+  // 'apollo_io',
+  // 'pipedrive',
+  // 'jira',
+  // 'smartsheet',
+  // 'airtable_oauth',
+  // 'ringcentral',
+  // 'linkedin',
+  // 'google_drive',
+  // 'google_analytics',
+  // 'webflow',
+  // 'sharepoint',
+];
+
 interface ChatAgentConfiguration {
   preferredKnowledgeBase: 'bedrock' | 'q';
   // Both can be present, but only preferred one needs to be valid
@@ -49,6 +72,16 @@ export interface ChatAgentWsProps {
   // S3 Buckets for file access
   outputsBucketArn: string;
   dataBucketArn: string;
+  /**
+   * ARN of the secure Pipedream proxy lambda in the dedicated proxy account
+   * Only provided when pipedreamIntegrationsEnabled is true
+   */
+  pipedreamProxyLambdaArn?: string;
+  /**
+   * Whether PipeDream integrations are enabled for this client
+   * @default false
+   */
+  pipedreamIntegrationsEnabled?: boolean;
 }
 
 export class NumaChatAgentWebSocket extends Construct {
@@ -193,6 +226,13 @@ export class NumaChatAgentWebSocket extends Construct {
         BEDROCK_KNOWLEDGE_BASE_ID: config.bedrockKnowledgeBaseId ?? '',
         PREFERRED_KNOWLEDGE_BASE: config.preferredKnowledgeBase,
         BUCKET: props.outputsBucketArn.split(':').pop() ?? '', // Extract bucket name from ARN for s3_helpers
+        // Pipedream MCP integration - only add proxy ARN if enabled
+        ...(props.pipedreamIntegrationsEnabled &&
+          props.pipedreamProxyLambdaArn && {
+            PIPEDREAM_PROXY_LAMBDA_ARN: props.pipedreamProxyLambdaArn,
+          }),
+        CLIENT_NAME: props.clientName,
+        SUPPORTED_INTEGRATIONS: JSON.stringify(SUPPORTED_INTEGRATIONS),
       },
       logGroup: agentLogGroup,
       resourceNameSuffix: '_ws_agent',
@@ -232,6 +272,21 @@ export class NumaChatAgentWebSocket extends Construct {
           actions: ['s3:GetObject'],
           resources: [`${props.outputsBucketArn}/*`, `${props.dataBucketArn}/*`],
         },
+        // Add cross-account lambda invocation permissions for Pipedream proxy (conditional)
+        ...(props.pipedreamIntegrationsEnabled && props.pipedreamProxyLambdaArn
+          ? [
+              {
+                effect: 'Allow',
+                actions: ['lambda:InvokeFunction'],
+                resources: [props.pipedreamProxyLambdaArn],
+              },
+              {
+                effect: 'Allow',
+                actions: ['sts:GetCallerIdentity'],
+                resources: ['*'],
+              },
+            ]
+          : []),
       ]
         .concat(
           config.bedrockKnowledgeBaseId

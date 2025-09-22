@@ -317,6 +317,7 @@ def handler(event, _):
             "enabledTools": body.get(
                 "enabledTools", ["query_knowledge_base", "web_search"]
             ),
+            "enabledConnections": body.get("enabledConnections", []),
             "systemPrompt": body.get("systemPrompt", ""),
             "modelId": body.get("modelId"),  # Pass through model ID from frontend
             "userAuth": {

@@ -72,9 +72,20 @@ def handler(event, _ctx):
     prompt = event["prompt"]
     messages = event.get("messages", [])
     enabled_tools = event.get("enabledTools", ["query_knowledge_base", "web_search"])
+    enabled_connections = event.get("enabledConnections", [])
     system_prompt = event.get("systemPrompt", "")
     model_id = event.get("modelId")  # Extract model ID from event, may be None
     user_auth = event.get("userAuth")
+
+    logger.info(
+        "Extracted enabled_connections from event",
+        connection_id=connection_id,
+        enabled_connections=enabled_connections,
+        enabled_connections_type=type(enabled_connections),
+        enabled_connections_length=(
+            len(enabled_connections) if enabled_connections else 0
+        ),
+    )
 
     # Convert tool blocks to text when no tools are enabled
     # This prevents ValidationException when conversation history contains tool blocks
@@ -111,7 +122,13 @@ def handler(event, _ctx):
 
         try:
             # Create fresh agent with dynamic tool selection and primary model ID
-            agent = create_fresh_agent(enabled_tools, system_prompt, current_model_id)
+            agent, mcp_clients = create_fresh_agent(
+                enabled_tools,
+                system_prompt,
+                current_model_id,
+                messages,
+                enabled_connections,
+            )
 
             # Run the streaming process with no time constraints
             asyncio.run(
@@ -121,6 +138,7 @@ def handler(event, _ctx):
                     messages=messages,
                     connection_id=connection_id,
                     endpoint_url=endpoint_url,
+                    mcp_clients=mcp_clients,
                 )
             )
 
@@ -140,8 +158,12 @@ def handler(event, _ctx):
                 used_fallback = True
 
                 # Create fresh agent with fallback model
-                agent = create_fresh_agent(
-                    enabled_tools, system_prompt, current_model_id
+                agent, mcp_clients = create_fresh_agent(
+                    enabled_tools,
+                    system_prompt,
+                    current_model_id,
+                    messages,
+                    enabled_connections,
                 )
 
                 # Run the streaming process with fallback model
@@ -152,6 +174,7 @@ def handler(event, _ctx):
                         messages=messages,
                         connection_id=connection_id,
                         endpoint_url=endpoint_url,
+                        mcp_clients=mcp_clients,
                     )
                 )
 

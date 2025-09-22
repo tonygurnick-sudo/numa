@@ -10,14 +10,15 @@ import uuid
 from typing import List, Optional
 
 import structlog
-from strands import Agent  # type: ignore
+from strands import Agent
 
 from .auth import clear_current_user_auth, set_current_user_auth
 
 # Import main components
 from .config import MODEL_ID, get_bedrock_model, validate_config
+from .mcp_tools import SUPPORTED_MCP_APPS, get_mcp_tools_and_clients_for_agent
 from .tools import AVAILABLE_TOOLS, get_available_tool_names, get_tools_for_agent
-from .websocket import build_websocket_endpoint, run_agent_stream
+from .websocket import build_websocket_endpoint, cleanup_mcp_clients, run_agent_stream
 
 # ── OpenTelemetry Configuration ──────────────────────────────────────────────
 os.environ.setdefault("OTEL_SERVICE_NAME", "numa-chat-agent")
@@ -28,7 +29,13 @@ os.environ.setdefault(
 logger = structlog.get_logger()
 
 
-def create_fresh_agent(enabled_tools=None, system_prompt=None, model_id=None):
+def create_fresh_agent(
+    enabled_tools=None,
+    system_prompt=None,
+    model_id=None,
+    messages=None,
+    enabled_connections=None,
+):
     """
     Create a fresh Agent instance for each request to avoid shared state.
 
@@ -39,13 +46,33 @@ def create_fresh_agent(enabled_tools=None, system_prompt=None, model_id=None):
             Uses default if not provided.
         model_id (str, optional): Model ID to use for this request.
             Uses default from config if not provided.
+        messages (list, optional): Conversation history to initialize the agent with.
+            Defaults to an empty list.
+        enabled_connections (list, optional): List of connection IDs to enable for MCP tools.
+            Defaults to an empty list.
 
     Returns:
-        Agent: Fresh Agent instance with specified tools and configuration
+        tuple: (Agent, mcp_clients_list) - Agent instance and list of MCP clients to keep alive
+               If no MCP clients, returns (Agent, [])
     """
     agent_id = str(uuid.uuid4())[:8]  # Short ID for logging
     effective_model_id = model_id or MODEL_ID
     logger.debug(f"Creating fresh agent {agent_id} with MODEL_ID: {effective_model_id}")
+
+    # Initialize default values
+    if messages is None:
+        messages = []
+    if enabled_connections is None:
+        enabled_connections = []
+
+    # Debug logging for enabled_connections parameter
+    logger.info(
+        "create_fresh_agent called with enabled_connections",
+        agent_id=agent_id,
+        enabled_connections=enabled_connections,
+        enabled_connections_type=type(enabled_connections),
+        enabled_connections_length=len(enabled_connections),
+    )
 
     # Default to all tools if none specified
     if enabled_tools is None:
@@ -59,11 +86,41 @@ def create_fresh_agent(enabled_tools=None, system_prompt=None, model_id=None):
             "When tools are available, use them strategically: query_knowledge_base for organisational information, "
             "web_search for current external information. "
             "Use web_search when the user explicitly asks you to look online or check a website, or when the information is time-sensitive, likely to change, or you are uncertain. "
-            "Prefer query_knowledge_base for organisational content. When web_search is enabled, do not apologise about browsing limitations; when it is disabled but would help, explain briefly and offer to proceed without it."
+            "Prefer query_knowledge_base for organisational content. When web_search is enabled, do not apologise about browsing limitations; when it is disabled but would help, explain briefly and offer to proceed without it. "
+            "Additionally, use connected service tools (e.g., Slack, Notion, Google Calendar) when appropriate to interact with the user's integrated applications."
         )
 
-    # Get tool instances based on enabled tools
+    # Get standard tool instances based on enabled tools
     tools = get_tools_for_agent(enabled_tools)
+    mcp_clients = []
+
+    # Add MCP tools for Pipedream integrations based on enabled connections
+    try:
+        logger.debug("Attempting to add MCP tools for Pipedream integrations")
+
+        # Only add MCP tools for enabled connections
+        if enabled_connections:
+            # Get both tools and clients (clients must stay alive)
+            mcp_tools, mcp_clients = get_mcp_tools_and_clients_for_agent(
+                enabled_connections
+            )
+
+            if mcp_tools:
+                tools.extend(mcp_tools)
+                logger.info(
+                    f"Successfully added {len(mcp_tools)} MCP tools from Pipedream",
+                    enabled_connections=enabled_connections,
+                    active_clients=len(mcp_clients),
+                )
+            else:
+                logger.warning("No MCP tools were loaded for enabled connections")
+        else:
+            logger.debug("No connections enabled, skipping MCP tool setup")
+
+    except Exception as e:
+        logger.warning(
+            "Failed to add MCP tools, continuing with standard tools only", error=str(e)
+        )
 
     logger.info(
         f"Creating agent {agent_id} with enabled tools: {enabled_tools}, model: {effective_model_id}"
@@ -73,10 +130,13 @@ def create_fresh_agent(enabled_tools=None, system_prompt=None, model_id=None):
         model=get_bedrock_model(effective_model_id),
         tools=tools,
         system_prompt=system_prompt,
+        messages=messages,
     )
 
     logger.info(f"Fresh agent {agent_id} created successfully with {len(tools)} tools")
-    return agent
+
+    # Return both agent and MCP clients that need to stay alive
+    return agent, mcp_clients
 
 
 # Validate configuration on import
@@ -85,10 +145,12 @@ validate_config()
 # Export main components
 __all__ = [
     "create_fresh_agent",
+    "cleanup_mcp_clients",
     "set_current_user_auth",
     "clear_current_user_auth",
     "run_agent_stream",
     "build_websocket_endpoint",
     "get_available_tool_names",
     "AVAILABLE_TOOLS",
+    "SUPPORTED_MCP_APPS",
 ]

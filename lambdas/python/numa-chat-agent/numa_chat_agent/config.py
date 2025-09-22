@@ -83,6 +83,9 @@ QB_RETRIEVER_ID = os.getenv("Q_RETRIEVER_ID")
 BEDROCK_KNOWLEDGE_BASE_ID = os.getenv("BEDROCK_KNOWLEDGE_BASE_ID")
 PREFERRED_KNOWLEDGE_BASE = os.getenv("PREFERRED_KNOWLEDGE_BASE", "q").lower()
 
+# Pipedream Integration Configuration
+PIPEDREAM_PROXY_LAMBDA_ARN = os.getenv("PIPEDREAM_PROXY_LAMBDA_ARN")
+
 logger = structlog.get_logger()
 
 
@@ -115,6 +118,11 @@ def get_sts_client():
 def get_apigateway_management_client(endpoint_url: str):
     """Get API Gateway Management client for WebSocket connections."""
     return boto3.client("apigatewaymanagementapi", endpoint_url=endpoint_url)
+
+
+def get_lambda_client():
+    """Get Lambda client instance for proxy calls."""
+    return boto3.client("lambda", region_name="us-east-1")
 
 
 # ── Model Configuration ───────────────────────────────────────────────────

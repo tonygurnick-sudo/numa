@@ -6,7 +6,7 @@ integration for real-time communication with clients.
 """
 
 import json
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 import structlog
 
@@ -19,6 +19,27 @@ from .config import (
 from .utils import safe_json_convert
 
 logger = structlog.get_logger()
+
+
+def cleanup_mcp_clients(mcp_clients: List) -> None:
+    """
+    Clean up MCP clients when agent processing is complete.
+
+    Args:
+        mcp_clients: List of MCP clients to clean up
+    """
+    if not mcp_clients:
+        return
+
+    logger.debug(f"Cleaning up {len(mcp_clients)} MCP clients")
+
+    for client in reversed(mcp_clients):  # Clean up in reverse order
+        try:
+            client.__exit__(None, None, None)  # type: ignore[arg-type]
+        except Exception as e:
+            logger.warning(f"Error cleaning up MCP client: {e}")
+
+    logger.debug("MCP client cleanup completed")
 
 
 def build_websocket_endpoint(request_context: dict) -> str:
@@ -99,7 +120,12 @@ def post_to_connection(
 
 
 async def run_agent_stream(
-    agent, prompt: str, messages, connection_id: str, endpoint_url: str
+    agent,
+    prompt: str,
+    messages: List[Dict[str, Any]],
+    connection_id: str,
+    endpoint_url: str,
+    mcp_clients: Optional[List] = None,
 ) -> None:
     """
     Run agent streaming with WebSocket message forwarding.
@@ -110,12 +136,16 @@ async def run_agent_stream(
         messages (list): Conversation history
         connection_id (str): WebSocket connection ID
         endpoint_url (str): WebSocket management API endpoint
+        mcp_clients (List, optional): List of MCP clients to keep alive during streaming
     """
     # Send start message
     if not post_to_connection(connection_id, {"type": "start"}, endpoint_url):
         logger.error(
             "Failed to send start message, aborting stream", connection_id=connection_id
         )
+        # Clean up MCP clients before returning
+        if mcp_clients:
+            cleanup_mcp_clients(mcp_clients)
         return
 
     try:
@@ -124,6 +154,7 @@ async def run_agent_stream(
             connection_id=connection_id,
             messages_count=len(messages),
             prompt_preview=prompt[:100],
+            mcp_clients_count=len(mcp_clients) if mcp_clients else 0,
         )
 
         async for event in agent.stream_async(prompt, messages=messages):
@@ -165,6 +196,12 @@ async def run_agent_stream(
             logger.error(
                 "Failed to send error message to client", connection_id=connection_id
             )
+
+    finally:
+        # Always clean up MCP clients when streaming is done
+        if mcp_clients:
+            logger.debug("Cleaning up MCP clients after stream completion")
+            cleanup_mcp_clients(mcp_clients)
 
 
 def send_completion_message(

@@ -111,7 +111,7 @@ async def test_agent(
         print("Successfully imported numa-chat-agent")
 
         print(f"Creating agent with tools: {enabled_tools or 'none'}")
-        agent = create_fresh_agent(
+        agent, _ = create_fresh_agent(
             enabled_tools=enabled_tools, system_prompt=system_prompt
         )
         print("Agent created successfully")

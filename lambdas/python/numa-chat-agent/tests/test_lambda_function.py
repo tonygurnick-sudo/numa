@@ -48,7 +48,8 @@ class TestLambdaFunction(unittest.TestCase):
             "https://test.execute-api.us-east-1.amazonaws.com"
         )
         mock_agent = MagicMock()
-        mock_create_agent.return_value = mock_agent
+        mock_mcp_clients = []
+        mock_create_agent.return_value = (mock_agent, mock_mcp_clients)
         mock_run_stream.return_value = None
 
         # Execute handler
@@ -58,7 +59,11 @@ class TestLambdaFunction(unittest.TestCase):
         mock_set_auth.assert_called_once_with(self.mock_event["userAuth"])
         mock_build_endpoint.assert_called_once_with(self.mock_event["requestContext"])
         mock_create_agent.assert_called_once_with(
-            self.mock_event["enabledTools"], self.mock_event["systemPrompt"], None
+            self.mock_event["enabledTools"],
+            self.mock_event["systemPrompt"],
+            None,
+            self.mock_event["messages"],
+            [],
         )
         mock_clear_auth.assert_called_once()
 
@@ -106,7 +111,8 @@ class TestLambdaFunction(unittest.TestCase):
             "https://test.execute-api.us-east-1.amazonaws.com"
         )
         mock_agent = MagicMock()
-        mock_create_agent.return_value = mock_agent
+        mock_mcp_clients = []
+        mock_create_agent.return_value = (mock_agent, mock_mcp_clients)
 
         result = handler(minimal_event, self.mock_context)
 
@@ -115,6 +121,8 @@ class TestLambdaFunction(unittest.TestCase):
             ["query_knowledge_base", "web_search"],  # Default tools
             "",  # Default empty system prompt
             None,  # Default model_id
+            [],  # Default empty messages
+            [],  # Default empty enabled_connections
         )
         mock_set_auth.assert_called_once_with(None)  # No user auth
 
@@ -165,7 +173,8 @@ class TestLambdaFunction(unittest.TestCase):
             "https://test.execute-api.us-east-1.amazonaws.com"
         )
         mock_agent = MagicMock()
-        mock_create_agent.return_value = mock_agent
+        mock_mcp_clients = []
+        mock_create_agent.return_value = (mock_agent, mock_mcp_clients)
         mock_run_stream.side_effect = RuntimeError("Streaming failed")
 
         with patch("lambda_function.send_error_message") as mock_send_error:
@@ -199,7 +208,8 @@ class TestLambdaFunction(unittest.TestCase):
             "https://test.execute-api.us-east-1.amazonaws.com"
         )
         mock_agent = MagicMock()
-        mock_create_agent.return_value = mock_agent
+        mock_mcp_clients = []
+        mock_create_agent.return_value = (mock_agent, mock_mcp_clients)
 
         handler(self.mock_event, self.mock_context)
 
@@ -227,7 +237,8 @@ class TestLambdaFunction(unittest.TestCase):
             "https://test.execute-api.us-east-1.amazonaws.com"
         )
         mock_agent = MagicMock()
-        mock_create_agent.return_value = mock_agent
+        mock_mcp_clients = []
+        mock_create_agent.return_value = (mock_agent, mock_mcp_clients)
         mock_run_stream.side_effect = RuntimeError("Streaming failed")
 
         with patch("lambda_function.send_error_message") as mock_send_error:
