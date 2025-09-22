@@ -48,6 +48,9 @@ import { DataAwsSsmParameter } from '@cdktf/provider-aws/lib/data-aws-ssm-parame
 const arcanumOrgId = 'o-g8veu85jva';
 const nextGenOrgId = 'o-apdsu3c1a7';
 
+// Dedicated account for secure Pipedream proxy operations
+const PIPEDREAM_PROXY_ACCOUNT_ID = '965745962688';
+
 export class NumaClientStack extends TerraformStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
     const defaults = {
@@ -180,6 +183,11 @@ export class NumaClientStack extends TerraformStack {
       userPoolClientId: core.userPoolClient.id,
       outputsBucketArn: core.outputsBucket.bucket.arn,
       dataBucketArn: core.dataBucket.bucket.arn,
+      pipedreamIntegrationsEnabled: clientConfig.pipedreamIntegrations, // Pass through the config flag
+      // Hardcoded proxy lambda ARN in dedicated proxy account - only provided when feature enabled
+      pipedreamProxyLambdaArn: clientConfig.pipedreamIntegrations
+        ? `arn:aws:lambda:us-east-1:${PIPEDREAM_PROXY_ACCOUNT_ID}:function:pipedream-proxy`
+        : undefined,
     });
 
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
@@ -502,6 +510,7 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         allowBedrockQuotaSharing: z.boolean().optional().default(false),
+
         /**
          * Whether to enable Pipedream integrations functionality
          *
