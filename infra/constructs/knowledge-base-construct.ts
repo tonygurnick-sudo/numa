@@ -415,6 +415,10 @@ export class KnowledgeBase extends Construct {
           resources: [knowledgeBase.arn],
           actions: ['bedrock:StartIngestionJob'],
         },
+        {
+          resources: [knowledgeBase.arn],
+          actions: ['bedrock:StopIngestionJob'],
+        },
       ],
     });
     const stateMachineRolePolicy = new IamPolicy(this, 'state-machine-role-policy', {
@@ -437,7 +441,7 @@ export class KnowledgeBase extends Construct {
             KnowledgeBaseId: knowledgeBase.id,
           },
           Resource: 'arn:aws:states:::aws-sdk:bedrockagent:startIngestionJob',
-          Next: 'Wait X Seconds',
+          Next: 'Set Deadline',
           Retry: [
             {
               ErrorEquals: ['States.TaskFailed'],
@@ -446,6 +450,14 @@ export class KnowledgeBase extends Construct {
               MaxAttempts: 5,
             },
           ],
+        },
+        'Set Deadline': {
+          Type: 'Pass',
+          Parameters: {
+            'Deadline.$': "States.TimestampAdd($$.Execution.StartTime, 10800, 'Seconds')",
+          },
+          ResultPath: '$.Ctl',
+          Next: 'Wait X Seconds',
         },
         'Wait X Seconds': {
           Type: 'Wait',
@@ -460,7 +472,18 @@ export class KnowledgeBase extends Construct {
             'IngestionJobId.$': '$.IngestionJob.IngestionJobId',
           },
           Resource: 'arn:aws:states:::aws-sdk:bedrockagent:getIngestionJob',
-          Next: 'Job Complete?',
+          Next: 'Timed Out?',
+        },
+        'Timed Out?': {
+          Type: 'Choice',
+          Choices: [
+            {
+              Variable: '$$.State.EnteredTime',
+              TimestampGreaterThanPath: '$.Ctl.Deadline',
+              Next: 'StopIngestionJob',
+            },
+          ],
+          Default: 'Job Complete?',
         },
         'Job Complete?': {
           Type: 'Choice',
@@ -477,6 +500,20 @@ export class KnowledgeBase extends Construct {
             },
           ],
           Default: 'Wait X Seconds',
+        },
+        StopIngestionJob: {
+          Type: 'Task',
+          Parameters: {
+            DataSourceId: dataSource.dataSourceId,
+            KnowledgeBaseId: knowledgeBase.id,
+            'IngestionJobId.$': '$.IngestionJob.IngestionJobId',
+          },
+          Resource: 'arn:aws:states:::aws-sdk:bedrockagent:stopIngestionJob',
+          Next: 'FailTimeout',
+        },
+        FailTimeout: {
+          Type: 'Fail',
+          Cause: 'Ingestion job exceeded time limit',
         },
         Success: {
           Type: 'Succeed',
