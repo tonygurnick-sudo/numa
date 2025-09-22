@@ -1,7 +1,13 @@
-import { useRef, useEffect } from 'react';
-import { Button, Form, Spinner } from 'react-bootstrap';
-import { Database, Search, Gear } from 'react-bootstrap-icons';
+import { useRef, useEffect, useState } from 'react';
+import { Button, Form, Spinner, Modal } from 'react-bootstrap';
+import { Database, Search, Gear, Link } from 'react-bootstrap-icons';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
+import {
+  getConnectionIcon,
+  getConnectionFallbackIcon,
+  getConnectionFallbackColor,
+  getConnectionDisplayName,
+} from '../config/connectionsConfig';
 
 const ChatInput = ({
   inputMessage,
@@ -15,10 +21,16 @@ const ChatInput = ({
   setWebSearchEnabled,
   autoToolsEnabled,
   setAutoToolsEnabled,
+  availableConnections = [],
+  enabledConnections = [],
+  setEnabledConnections,
+  connectionsLoading = false,
+  hasPipedreamFeature = false,
   disabled = false,
   noToolsActive = false,
 }) => {
   const inputRef = useRef(null);
+  const [showConnectionsModal, setShowConnectionsModal] = useState(false);
 
   // Check if agent mode is enabled
   const useAgentMode = sessionStorage.getItem('NUMA_CHAT_AGENTS') === 'true';
@@ -59,6 +71,18 @@ const ChatInput = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
+    }
+  };
+
+  const handleToggleConnection = (connectionId) => {
+    if (enabledConnections.includes(connectionId)) {
+      // Remove connection
+      setEnabledConnections(enabledConnections.filter((id) => id !== connectionId));
+    } else {
+      // Add connection (max 2)
+      if (enabledConnections.length < 2) {
+        setEnabledConnections([...enabledConnections, connectionId]);
+      }
     }
   };
 
@@ -133,6 +157,68 @@ const ChatInput = ({
               <Search size={25} />
               {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}
             </Button>
+
+            {/* Connections Toggle */}
+            {hasPipedreamFeature && (
+              <Button
+                variant="link"
+                className={`connections-toggle ${enabledConnections.length > 0 ? 'active' : ''}`}
+                onClick={() => setShowConnectionsModal(true)}
+                aria-label="Toggle Connections"
+                disabled={isTextInputDisabled || connectionsLoading}
+              >
+                {connectionsLoading && (
+                  <>
+                    <Link size={25} />
+                    <Spinner
+                      as="span"
+                      animation="border"
+                      size="sm"
+                      className="connections-loading-spinner"
+                      role="status"
+                      aria-hidden="true"
+                    />
+                  </>
+                )}
+                {!connectionsLoading && (
+                  <>
+                    {/* Show "Enable Connections" when no connections enabled */}
+                    {enabledConnections.length === 0 && (
+                      <span className="enable-connection-text">
+                        <Link size={20} style={{ marginRight: '0.5rem', marginTop: '-2px' }} />
+                        Enable Connections
+                      </span>
+                    )}
+                    {/* Show enabled connection icons */}
+                    {enabledConnections.length > 0 && (
+                      <>
+                        <Link size={25} />
+                        {enabledConnections.map((connectionId) => {
+                          const connection = availableConnections.find((conn) => conn.id === connectionId);
+                          return connection ? (
+                            <div key={connectionId} className="connection-icon">
+                              <img
+                                src={getConnectionIcon(connection.id)}
+                                alt={connection.name}
+                                style={{ width: '20px', height: '20px' }}
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'inline-block';
+                                }}
+                              />
+                              <i
+                                className={`${getConnectionFallbackIcon(connection.id)} text-${getConnectionFallbackColor(connection.id)}`}
+                                style={{ fontSize: '20px', display: 'none' }}
+                              />
+                            </div>
+                          ) : null;
+                        })}
+                      </>
+                    )}
+                  </>
+                )}
+              </Button>
+            )}
           </div>
           <div className="right-controls">
             {buttonStatus === 'loading' || buttonStatus === 'streaming' ? (
@@ -168,6 +254,65 @@ const ChatInput = ({
           </div>
         </div>
       </Form>
+
+      {/* Connections Selection Modal */}
+      <Modal show={showConnectionsModal} onHide={() => setShowConnectionsModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Select Connections</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-3">Select up to 2 connections to enable for this chat session.</p>
+          {connectionsLoading ? (
+            <p className="text-muted text-center">Loading available connections...</p>
+          ) : availableConnections.length === 0 ? (
+            <p className="text-muted text-center">
+              No connections available. Set up integrations in the Pipedream page first.
+            </p>
+          ) : (
+            <div className="d-flex flex-column gap-3">
+              {availableConnections.map((connection) => {
+                const isEnabled = enabledConnections.includes(connection.id);
+                const canToggle = !isEnabled || enabledConnections.length > 1;
+
+                return (
+                  <div
+                    key={connection.id}
+                    className="d-flex align-items-center justify-content-between p-3 border rounded"
+                  >
+                    <div className="d-flex align-items-center gap-3">
+                      <img
+                        src={getConnectionIcon(connection.id)}
+                        alt={connection.name}
+                        style={{ width: '24px', height: '24px' }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'inline-block';
+                        }}
+                      />
+                      <i
+                        className={`${getConnectionFallbackIcon(connection.id)} text-${getConnectionFallbackColor(connection.id)}`}
+                        style={{ fontSize: '24px', display: 'none' }}
+                      />
+                      <div>
+                        <div className="fw-bold">{getConnectionDisplayName(connection.id)}</div>
+                        <div className="text-muted small">Connected</div>
+                      </div>
+                    </div>
+                    <Button
+                      variant={isEnabled ? 'success' : 'outline-primary'}
+                      size="sm"
+                      disabled={!canToggle && !isEnabled}
+                      onClick={() => handleToggleConnection(connection.id)}
+                    >
+                      {isEnabled ? 'Enabled' : 'Enable'}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Modal.Body>
+      </Modal>
     </div>
   );
 };

@@ -1,8 +1,19 @@
 /**
  * Service for interacting with the Numa Chat Agent via WebSocket API Gateway
  */
+import type { AgentEventFrame, ChatMessage, OnChunk, OnComplete, OnError, OnEvent } from '../types/chat';
+import { getStopReason, isMessageStopFrame, isToolEventFrame, tryGetDeltaText } from '../types/chat';
 
 class ChatAgentWebSocket {
+  private websocket: WebSocket | null;
+  private connectionPromise: Promise<void> | null;
+  private responseCallbacks;
+  private currentRequestId: number;
+  private reconnectAttempts: number;
+  private maxReconnectAttempts: number;
+  private reconnectDelay: number;
+  private currentOnEvent: OnEvent | null | undefined;
+
   constructor() {
     this.websocket = null;
     this.connectionPromise = null;
@@ -11,12 +22,13 @@ class ChatAgentWebSocket {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 3;
     this.reconnectDelay = 1000; // Start with 1 second
+    this.currentOnEvent = null;
   }
 
   /**
    * Get the WebSocket URL from session storage
    */
-  getWebSocketUrl() {
+  getWebSocketUrl(): string {
     const wsUrl = window.sessionStorage.getItem('CHAT_AGENT_URL');
     if (!wsUrl) {
       throw new Error('Chat Agent WebSocket URL not configured. Make sure the app is properly initialized.');
@@ -27,7 +39,7 @@ class ChatAgentWebSocket {
   /**
    * Connect to the WebSocket
    */
-  async connect() {
+  async connect(): Promise<void> {
     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
       return Promise.resolve();
     }
@@ -36,7 +48,7 @@ class ChatAgentWebSocket {
       return this.connectionPromise;
     }
 
-    this.connectionPromise = new Promise((resolve, reject) => {
+    this.connectionPromise = new Promise<void>((resolve, reject) => {
       try {
         const wsUrl = this.getWebSocketUrl();
 
@@ -59,11 +71,11 @@ class ChatAgentWebSocket {
           resolve();
         };
 
-        this.websocket.onmessage = (event) => {
+        this.websocket.onmessage = (event: MessageEvent) => {
           this.handleMessage(event);
         };
 
-        this.websocket.onclose = (event) => {
+        this.websocket.onclose = (event: CloseEvent) => {
           console.log('WebSocket connection closed:', event.code, event.reason);
           this.connectionPromise = null;
 
@@ -73,7 +85,7 @@ class ChatAgentWebSocket {
           }
         };
 
-        this.websocket.onerror = (error) => {
+        this.websocket.onerror = (error: Event) => {
           console.error('WebSocket error:', error);
           this.connectionPromise = null;
           reject(new Error('Failed to connect to Chat Agent WebSocket'));
@@ -98,7 +110,7 @@ class ChatAgentWebSocket {
   /**
    * Attempt to reconnect with exponential backoff
    */
-  async attemptReconnect() {
+  async attemptReconnect(): Promise<void> {
     this.reconnectAttempts++;
     console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
 
@@ -115,11 +127,13 @@ class ChatAgentWebSocket {
   /**
    * Handle incoming WebSocket messages
    */
-  handleMessage(event) {
+  handleMessage(event: MessageEvent): void {
     try {
-      const msg = JSON.parse(event.data);
+      const msg = JSON.parse(event.data as string) as AgentEventFrame;
       if ('data' in msg) {
-        return; // Ignore raw data messages - These are from bedrock, not strands.
+        // Ignore top-level text frames from Strands ModelStreamEvent to avoid duplicate rendering;
+        // we extract text from contentBlockDelta deltas instead.
+        return;
       }
 
       // Handle streaming for the current request
@@ -133,7 +147,7 @@ class ChatAgentWebSocket {
         case 'event': {
           // Forward raw event frame to optional handler (e.g., UI wants to render tool events)
           // But only forward tool-specific events, not content deltas
-          if (this.currentOnEvent && this.isToolEvent(msg)) {
+          if (this.currentOnEvent && isToolEventFrame(msg)) {
             try {
               this.currentOnEvent(msg);
             } catch (handlerErr) {
@@ -142,22 +156,13 @@ class ChatAgentWebSocket {
           }
 
           // Handle content block deltas (don't duplicate in onEvent)
-          if (msg.event?.contentBlockDelta?.delta?.text) {
-            const textData = msg.event.contentBlockDelta.delta.text;
-            cb({ type: 'chunk', data: textData });
-          }
+          const textData = tryGetDeltaText(msg);
+          if (typeof textData === 'string') cb({ type: 'chunk', data: textData });
 
           // Handle message completion
-          if (msg.event && (msg.event.messageStop || msg.event.complete)) {
+          if (isMessageStopFrame(msg)) {
             // Extract stop reason from the correct location
-            let stopReason = 'complete';
-            if (msg.event.messageStop && msg.event.messageStop.stopReason) {
-              stopReason = msg.event.messageStop.stopReason;
-            } else if (msg.event.stop_reason) {
-              stopReason = msg.event.stop_reason;
-            } else if (msg.event.stopReason) {
-              stopReason = msg.event.stopReason;
-            }
+            const stopReason = getStopReason(msg) || 'complete';
 
             // If the agent indicates it is pausing to perform a tool call, keep
             // the stream open so that follow-up content (after the tool call has
@@ -193,25 +198,14 @@ class ChatAgentWebSocket {
    * Helper method to determine if a message is a tool-specific event
    * This prevents duplicate processing of content deltas
    */
-  isToolEvent(msg) {
-    // Determine if this frame relates to a tool (call or result)
-    const hasToolUseStart = msg.event?.contentBlockStart?.start?.toolUse;
-    const hasCurrentTool = msg.current_tool_use || msg.event?.current_tool_use;
-
-    // Check for toolResult directly on various paths
-    const directToolResult = msg.message?.toolResult || msg.event?.toolResult || msg.delta?.toolResult;
-
-    // Check arrays that may contain toolUse/toolResult objects
-    const arrayContent = msg.message?.content;
-    const arrayToolResult = Array.isArray(arrayContent) && arrayContent.some((item) => item.toolUse || item.toolResult);
-
-    return hasToolUseStart || hasCurrentTool || directToolResult || arrayToolResult || msg.type === 'tool_use_complete';
+  isToolEvent(msg: AgentEventFrame): boolean {
+    return isToolEventFrame(msg);
   }
 
   /**
    * Send a message through the WebSocket
    */
-  async sendMessage(message) {
+  async sendMessage(message: Record<string, unknown>): Promise<void> {
     await this.connect();
 
     if (this.websocket.readyState !== WebSocket.OPEN) {
@@ -236,17 +230,18 @@ class ChatAgentWebSocket {
    * @returns {function} abort() – remove listeners
    */
   async streamPrompt(
-    prompt,
-    messages,
-    enabledTools,
-    systemPrompt,
-    modelId,
-    onChunk,
-    onComplete,
-    onError,
-    onEvent,
-    userAuth = null,
-  ) {
+    prompt: string,
+    messages: ChatMessage[],
+    enabledTools: string[],
+    systemPrompt: string,
+    modelId: string | null,
+    onChunk: OnChunk,
+    onComplete: OnComplete,
+    onError: OnError,
+    onEvent: OnEvent | null,
+    userAuth: Record<string, unknown> | null = null,
+    enabledConnections: string[] = [],
+  ): Promise<() => void> {
     await this.connect();
     this.currentOnEvent = onEvent;
 
@@ -270,10 +265,11 @@ class ChatAgentWebSocket {
     });
 
     // Send the prompt with enabled tools configuration, system prompt, model ID, and user auth
-    const messagePayload = {
+    const messagePayload: Record<string, unknown> = {
       prompt,
       messages,
       enabledTools,
+      enabledConnections,
       systemPrompt,
       modelId,
     };
@@ -293,7 +289,7 @@ class ChatAgentWebSocket {
     return () => this.cleanup();
   }
 
-  cleanup() {
+  cleanup(): void {
     this.responseCallbacks.delete('current');
     this.currentOnEvent = null;
   }
@@ -301,7 +297,7 @@ class ChatAgentWebSocket {
   /**
    * Disconnect the WebSocket
    */
-  disconnect() {
+  disconnect(): void {
     if (this.websocket) {
       this.websocket.close(1000, 'Client disconnect');
       this.websocket = null;
@@ -313,8 +309,8 @@ class ChatAgentWebSocket {
   /**
    * Check if WebSocket is connected
    */
-  isConnected() {
-    return this.websocket && this.websocket.readyState === WebSocket.OPEN;
+  isConnected(): boolean {
+    return !!this.websocket && this.websocket.readyState === WebSocket.OPEN;
   }
 }
 
@@ -336,16 +332,17 @@ const chatAgentWS = new ChatAgentWebSocket();
  * @returns {function} Abort function to cancel the stream
  */
 export const callChatAgentStreaming = (
-  prompt,
-  messages = [{ role: 'user', content: [{ text: prompt }] }],
-  enabledTools = ['query_knowledge_base', 'web_search'],
-  systemPrompt = '',
-  modelId = null,
-  onChunk,
-  onComplete,
-  onError,
-  onEvent = null,
-  userAuth = null,
+  prompt: string,
+  messages: ChatMessage[] = [{ role: 'user', content: [{ text: prompt }] }],
+  enabledTools: string[] = ['query_knowledge_base', 'web_search'],
+  systemPrompt: string = '',
+  modelId: string | null = null,
+  onChunk: OnChunk,
+  onComplete: OnComplete,
+  onError: OnError,
+  onEvent: OnEvent | null = null,
+  userAuth: Record<string, unknown> | null = null,
+  enabledConnections: string[] = [],
 ) =>
   chatAgentWS.streamPrompt(
     prompt,
@@ -358,13 +355,14 @@ export const callChatAgentStreaming = (
     onError,
     onEvent,
     userAuth,
+    enabledConnections,
   );
 
 /**
  * Check if the Chat Agent is available
  * @returns {boolean} True if the agent WebSocket URL is configured
  */
-export const isChatAgentAvailable = () => {
+export const isChatAgentAvailable = (): boolean => {
   try {
     chatAgentWS.getWebSocketUrl();
     return true;
@@ -377,7 +375,7 @@ export const isChatAgentAvailable = () => {
  * Get the Chat Agent WebSocket URL
  * @returns {string|null} The WebSocket URL or null if not configured
  */
-export const getChatAgentUrl = () => {
+export const getChatAgentUrl = (): string | null => {
   try {
     return chatAgentWS.getWebSocketUrl();
   } catch {
@@ -389,14 +387,12 @@ export const getChatAgentUrl = () => {
  * Manually connect to the WebSocket (optional - connections are automatic)
  * @returns {Promise} Promise that resolves when connected
  */
-export const connectChatAgent = () => {
-  return chatAgentWS.connect();
-};
+export const connectChatAgent = (): Promise<void> => chatAgentWS.connect();
 
 /**
  * Disconnect from the WebSocket
  */
-export const disconnectChatAgent = () => {
+export const disconnectChatAgent = (): void => {
   chatAgentWS.disconnect();
 };
 
@@ -404,9 +400,7 @@ export const disconnectChatAgent = () => {
  * Check if the WebSocket is currently connected
  * @returns {boolean} True if connected
  */
-export const isChatAgentConnected = () => {
-  return chatAgentWS.isConnected();
-};
+export const isChatAgentConnected = (): boolean => chatAgentWS.isConnected();
 
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {

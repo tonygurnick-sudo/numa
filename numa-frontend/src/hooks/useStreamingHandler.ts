@@ -8,7 +8,7 @@ import { parseChunkWithoutDocComments, createDocStripState } from '../utils/stre
 export const useStreamingHandler = () => {
   // Streaming state refs
   const textBufferRef = useRef('');
-  const processedEventIdsRef = useRef(new Set());
+  const processedEventIdsRef = useRef(new Set<string>());
   const toolUseMapRef = useRef(new Map());
   const finalFlushPerformedRef = useRef(false);
 

@@ -302,6 +302,7 @@ export class NumaClientStack extends TerraformStack {
         CHAT_AGENT_URL: chatAgentWs.websocketUrl,
         NUMA_CHAT_AGENTS: clientConfig.numaChatAgents ?? true,
         PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
+        PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
       }),
       contentType: 'application/json',
     });

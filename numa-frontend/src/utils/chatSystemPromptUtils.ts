@@ -85,26 +85,90 @@ export const getEnabledTools = (autoToolsEnabled, queryDataSources, webSearchEna
   return enabledTools;
 };
 
+// Core delegation framework for when connections are available
+const DELEGATION_FRAMEWORK = `
+**Working with Connections/Integrations:**
+You need to think of it like you manage a team of specialist assistants through connection tools. The tools for connections do not work like normal function calling. They expect a single "instruction" parameter. Each tool connects you to a sub-agent expert who completes tasks and reports back to you. This is for connecting to external services like Slack, Notion, Google Calendar, etc.
+
+**How to Use Connections:**
+
+**Delegation Approach:**
+- Structure instructions as: "[ACTION] because [INTENT] with [TECHNICAL_DETAILS]"
+- Think: "I need X outcome, so I'll ask the [specialist] to do Y"
+- Be specific about what outcome you need, not just what data to retrieve
+- Include context for why you need it and how detailed the response should be
+- Give instructions relevant to each tool. E.g. don't ask google_drive-find-file with instructions to download the tool, instead ask for the file id and then call the download tool separately.
+
+**Expected Response Patterns:**
+- Small-medium/structured data (events, contacts) → Ask specialist to return actual data for your analysis
+- Large/complex data (documents, transcripts) → Specialist returns processed results due to context limits as it would not fit in the tool response.
+
+**Planning Multi-step Tasks:**
+If you anticipate follow-up actions, request supporting details upfront:
+✓ "List events today with event IDs because I may need to update one"
+✓ "Find the contract document and extract key terms because I need to reference specific clauses"
+
+**Examples:**
+✓ "List my events today because I need to analyze my schedule for conflicts, include full details like duration and attendees"
+✗ "List calendar events today"
+✓ "Find the Q3 sales report because I need to prepare for the board meeting, provide actual revenue numbers and regional breakdown"
+✗ "Get sales report"
+✓ "Download me example.txt file from google drive and summarize its contents because I need to understand the key points for my meeting, include any action items"
+✗ "Download example.txt file from google drive" (the sub-agent will not know what to do with the file - it needs clear instructions for analysis, summarization, or full content extraction within context limits)`;
+
+// Connection-specific prompt instructions
+const CONNECTION_PROMPTS: Record<string, string> = {
+  slack:
+    '- When using Slack tools: Always use as_user: true and include_sent_via_pipedream_flag: false parameters. Only list channels the user is in and that are not archived unless they specifically ask.',
+  notion:
+    "- When using Notion tools: Focus on the user's accessible pages and databases. Provide structured responses when creating or updating content.",
+  google_calendar:
+    "- When using Google Calendar tools: Always consider the user's timezone and provide clear time references. When creating events, ask for confirmation of key details.",
+  gmail:
+    "- When using Gmail tools: Always consider the user's timezone when referencing emails from their inbox, even if they are received in UTC.",
+};
+
 /**
  * Generate system prompt based on tool availability and user context
  * @param {Array} enabledTools - List of enabled tool names
  * @param {string} email - User's email address
  * @param {string} companyProfile - Company profile information
+ * @param {Array} enabledConnections - List of enabled connection names (optional)
  * @returns {string} Complete system prompt
  */
-export const generateSystemPrompt = (enabledTools, email, companyProfile) => {
+export const generateSystemPrompt = (enabledTools, email, companyProfile, enabledConnections: string[] = []) => {
   const NOW = new Date();
   const TODAY = {
+    date: NOW.toLocaleDateString(),
     time: NOW.toLocaleTimeString(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    iso: NOW.toISOString(),
     toString: function () {
-      return `Local time: ${this.time} (${this.timezone}), ISO time: ${this.iso}`;
+      return `Local date: ${this.date}, Local time: ${this.time} (${this.timezone})`;
     },
   };
 
+  // Helper function to generate connection-specific prompts
+  const generateConnectionPrompts = (connections: string[]) => {
+    const connectionSpecificPrompts = connections
+      .map((connection) => CONNECTION_PROMPTS[connection])
+      .filter((prompt) => prompt)
+      .join('\n');
+
+    if (connections.length > 0) {
+      let result = DELEGATION_FRAMEWORK;
+      if (connectionSpecificPrompts) {
+        result += '\n**IMPORTANT Connection-Specific Guidelines:**\n' + connectionSpecificPrompts;
+      }
+      return result;
+    }
+    return '';
+  };
+
+  // Generate connection prompts for enabled connections
+  const connectionPrompts = generateConnectionPrompts(enabledConnections);
+
   let baseSystemPrompt = '';
-  if (enabledTools.length === 0) {
+  if (enabledTools.length === 0 && enabledConnections.length === 0) {
     baseSystemPrompt = `You are Numa, an AI assistant created by Arcanum AI who specialises in helping small to medium businesses get their work done and save time on everyday tasks.
 
 **Available Tools:**
@@ -124,12 +188,30 @@ For any document, report, email, analysis or anything that may be considered exp
 User Email: ${email}
 Today's Date: ${TODAY}`;
   } else {
+    // Build tools section with both tools and connections
+    const toolLines: string[] = [];
+
+    if (enabledTools.includes('query_knowledge_base')) {
+      toolLines.push(
+        "- Use query_knowledge_base to search your organization's documents and knowledge base with semantic search",
+      );
+    }
+
+    if (enabledTools.includes('web_search')) {
+      toolLines.push('- Use web_search to find current information from the internet using natural language queries');
+    }
+
+    if (connectionPrompts) {
+      toolLines.push(connectionPrompts);
+    }
+
+    const toolsSection = toolLines.length > 0 ? toolLines.join('\n') : '- No tools are currently enabled.';
+
     baseSystemPrompt = `You are Numa, an AI assistant created by Arcanum AI who specialises in helping small to medium businesses get their work done and save time on everyday tasks.
 
 **Available Tools:**
 Note: Users can select or deselect tools, which is why you may see different tools available in different sessions.
-${enabledTools.includes('query_knowledge_base') ? "- Use query_knowledge_base to search your organization's documents and knowledge base with semantic search" : ''}
-${enabledTools.includes('web_search') ? '- Use web_search to find current information from the internet using natural language queries' : ''}
+${toolsSection}
 
 **Document Generation:**
 For any document, report, email, analysis or anything that may be considered exportable content, wrap it with:
@@ -139,9 +221,8 @@ For any document, report, email, analysis or anything that may be considered exp
 - Use Markdown formatting appropriately
 - Ask follow-up questions if requests are ambiguous. If you are unsure of an answer, say so.
 - Maintain a professional yet conversational tone
-  - Personalise your responses using general user or company context information if available.
-  ${enabledTools.includes('web_search') ? '- Decision rubric: Use web_search when the user explicitly asks you to look online or check a website, or when the information is time-sensitive, likely to change, or you are uncertain. Prefer query_knowledge_base for organisational content. When web_search is enabled, do not apologise about browsing limitations; when it is disabled but would help, explain briefly and offer to proceed without it.' : ''}
-
+- Personalise your responses using general user or company context information if available.
+${enabledTools.includes('web_search') ? '- Decision rubric: Use web_search when the user explicitly asks you to look online or check a website, or when the information is time-sensitive, likely to change, or you are uncertain. Prefer query_knowledge_base for organisational content. When web_search is enabled, do not apologise about browsing limitations; when it is disabled but would help, explain briefly and offer to proceed without it.' : ''}
 User Email: ${email}
 Today's Date: ${TODAY}`;
   }

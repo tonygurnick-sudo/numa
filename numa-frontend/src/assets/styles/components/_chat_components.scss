@@ -292,6 +292,42 @@ $border-radius-pill: 1rem;
           @include bubble-text;
         }
       }
+
+      // Connections toggle button
+      .connections-toggle {
+        @include toggle-button-base;
+
+        &:focus {
+          outline: none;
+          box-shadow: none;
+        }
+
+        .connection-icon {
+          display: inline-flex;
+          align-items: center;
+
+          img, i {
+            border-radius: 4px;
+          }
+        }
+
+        .enable-connection-text {
+          font-size: 14px;
+          font-weight: 500;
+          color: $numa-secondary;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+        }
+
+        .connections-loading-spinner {
+          color: $numa-primary;
+          border-color: $numa-primary transparent $numa-primary transparent;
+          width: 18px;
+          height: 18px;
+          border-width: 2px;
+        }
+      }
       // Send Button (Arrow in Circle)
       .send-button {
         background: none !important; /* Ensures full transparency */
