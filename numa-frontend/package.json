@@ -28,6 +28,7 @@
     "@honeycombio/opentelemetry-web": "^0.21.0",
     "@mdxeditor/editor": "^3.19.3",
     "@opentelemetry/auto-instrumentations-web": "^0.47.0",
+    "@pipedream/sdk": "2.0.4",
     "@popperjs/core": "^2.11.8",
     "@smithy/core": "^3.5.3",
     "@testing-library/jest-dom": "^6.6.3",

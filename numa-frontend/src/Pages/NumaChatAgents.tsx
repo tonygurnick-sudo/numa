@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Button, Container, Row, Col } from 'react-bootstrap';
+import { LambdaClient } from '@aws-sdk/client-lambda';
+import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
 import { preWarmAuroraDatabase } from '../utils/knowledgeBaseUtils';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
@@ -14,6 +16,7 @@ import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/ChatMessages';
 import ResizableSplitView from '../Components/ResizableSplitView';
 import { generateSystemPrompt, getEnabledTools } from '../utils/chatSystemPromptUtils';
+import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import {
   getModelId,
   MODEL_TYPES,
@@ -37,10 +40,15 @@ const NumaChatAgents = () => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [queryDataSources, setQueryDataSources] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [availableConnections, setAvailableConnections] = useState<
+    Array<{ id: string; name: string; isConnected: boolean; mcpServerUrl?: string }>
+  >([]);
+  const [enabledConnections, setEnabledConnections] = useState<string[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false);
   const [autoToolsEnabled, setAutoToolsEnabled] = useState(true); // Default to auto mode
   const [buttonStatus, setButtonStatus] = useState('idle');
   const [isFileProcessing, setIsFileProcessing] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [isManuallyLoading, setIsManuallyLoading] = useState(false);
 
   // Refs
@@ -83,6 +91,92 @@ const NumaChatAgents = () => {
   // Memoize constants to prevent unnecessary rerenders
   const REGION = useMemo(() => window.sessionStorage.getItem('REGION'), []);
 
+  // Pipedream integration feature flags - check config instead of Cognito groups
+  const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+  const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
+
+  useEffect(() => {
+    if (!user) return;
+    if (hasPipedreamFeature && !relayLambdaArn) {
+      console.error('Pipedream feature enabled but Lambda ARN not configured');
+    }
+  }, [user, hasPipedreamFeature, relayLambdaArn]);
+
+  // Initialize AWS Lambda client (cross-account) if feature enabled
+  useEffect(() => {
+    const init = async () => {
+      if (!user) return;
+      if (!hasPipedreamFeature) {
+        setConnectionsLoading(false);
+        setAvailableConnections([]);
+        return;
+      }
+      if (!relayLambdaArn) {
+        console.error('Pipedream feature enabled but Lambda ARN not configured');
+        setConnectionsLoading(false);
+        setAvailableConnections([]);
+        return;
+      }
+      try {
+        const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
+        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
+        const roleArn = GROUPS[userGroup]?.roleArn;
+        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
+        if (!roleArn) {
+          console.error('No role ARN found for user group:', userGroup);
+          setConnectionsLoading(false);
+          setAvailableConnections([]);
+          return;
+        }
+        const credentials = fromWebToken({
+          webIdentityToken: user.tokens.idToken,
+          roleArn,
+          roleSessionName: cognitoUserId,
+        });
+        const client = new LambdaClient({ region: REGION, credentials });
+        setLambdaClient(client);
+        console.log('Lambda client initialized successfully for Pipedream relay');
+      } catch (e) {
+        console.error('Error initializing Lambda client:', e);
+        setConnectionsLoading(false);
+        setAvailableConnections([]);
+      }
+    };
+    init();
+  }, [user, REGION, hasPipedreamFeature, relayLambdaArn]);
+
+  // Load connections via proxy
+  const loadConnectionStatus = async () => {
+    if (!lambdaClient || !user) return;
+    try {
+      setConnectionsLoading(true);
+      const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+      const response = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId);
+
+      // Transform the connection objects to the format expected by the UI
+      const allConnections = (response.connections || []).map((conn) => ({
+        id: conn.app_name,
+        name: conn.app_name,
+        isConnected: conn.status === 'connected',
+        mcpServerUrl: undefined,
+      }));
+
+      // Only show connected integrations as available for selection
+      const connected = allConnections.filter((conn) => conn.isConnected);
+
+      setAvailableConnections(connected);
+    } catch (e) {
+      console.error('Failed to load connection status via proxy:', e);
+      setAvailableConnections([]);
+    } finally {
+      setConnectionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (lambdaClient) loadConnectionStatus();
+  }, [lambdaClient]);
+
   // Constants
   const PREFERRED_KNOWLEDGE_BASE = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'q';
   const BEDROCK_KNOWLEDGE_BASE_ID = window.sessionStorage.getItem('BEDROCK_KNOWLEDGE_BASE_ID');
@@ -95,13 +189,6 @@ const NumaChatAgents = () => {
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  // Track window width
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // Pre-warm Aurora database when component mounts (only for Bedrock knowledge base)
   useEffect(() => {
@@ -253,7 +340,7 @@ const NumaChatAgents = () => {
 
     // Create the system prompt based on tool availability
     const email = idToken.email || 'Unknown';
-    const systemPrompt = generateSystemPrompt(enabledTools, email, companyProfile);
+    const systemPrompt = generateSystemPrompt(enabledTools, email, companyProfile, enabledConnections);
 
     // Prepare user authentication context for the Lambda
     const userAuth = {
@@ -607,6 +694,7 @@ const NumaChatAgents = () => {
             );
           },
           userAuth, // Pass user authentication context
+          enabledConnections, // Pass enabled connections
         );
 
         // Store the abort function for the stop button
@@ -763,7 +851,7 @@ const NumaChatAgents = () => {
       </header>
 
       {/* Main content */}
-      <LayoutDashboard className="flex-grow-1">
+      <LayoutDashboard>
         {/* Chat layout */}
         <div className="chat-layout d-flex">
           {/* Chat history sidebar */}
@@ -771,6 +859,7 @@ const NumaChatAgents = () => {
             ref={chatHistoryRef}
             onSelectConversation={handleLoadConversation}
             currentConversationId={conversationId}
+            setError={(error) => console.error('Chat history error:', error)}
           />
 
           {/* Main chat content */}
@@ -817,7 +906,9 @@ const NumaChatAgents = () => {
                           <ChatMessages
                             messages={messages}
                             messageEndRef={messageEndRef}
+                            loadingIndicatorStyle={{}}
                             onOpenDocument={openDocument}
+                            isConversationLoading={false}
                           />
                         )}
                       </div>
@@ -830,13 +921,17 @@ const NumaChatAgents = () => {
                           handleSubmit={handleSubmit}
                           setShowUploadModal={setShowUploadModal}
                           buttonStatus={buttonStatus}
-                          isMobile={isMobile}
                           queryDataSources={queryDataSources}
                           setQueryDataSources={setQueryDataSources}
                           webSearchEnabled={webSearchEnabled}
                           setWebSearchEnabled={setWebSearchEnabled}
                           autoToolsEnabled={autoToolsEnabled}
                           setAutoToolsEnabled={setAutoToolsEnabled}
+                          availableConnections={availableConnections}
+                          enabledConnections={enabledConnections}
+                          setEnabledConnections={setEnabledConnections}
+                          connectionsLoading={connectionsLoading}
+                          hasPipedreamFeature={hasPipedreamFeature}
                           disabled={isFileProcessing}
                           noToolsActive={noToolsActive}
                         />
@@ -874,7 +969,6 @@ const NumaChatAgents = () => {
       <ChatFileUpload
         show={showUploadModal}
         onHide={() => setShowUploadModal(false)}
-        getAccessToken={getAccessToken}
         setMessages={setMessages}
         conversationId={conversationId}
         sub={sub}

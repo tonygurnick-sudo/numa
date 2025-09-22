@@ -2,7 +2,13 @@ import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 're
 import { Button } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
 
-export const ChatHistorySidebar = forwardRef(function ChatHistorySidebar(
+interface ChatHistorySidebarProps {
+  onSelectConversation;
+  setError?;
+  currentConversationId: string | null;
+}
+
+export const ChatHistorySidebar = forwardRef<unknown, ChatHistorySidebarProps>(function ChatHistorySidebar(
   { onSelectConversation, setError, currentConversationId },
   ref,
 ) {

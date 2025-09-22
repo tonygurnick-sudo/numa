@@ -6,6 +6,7 @@ import { NumaChat } from '../Pages/NumaChat';
 import { NumaChatAgents } from '../Pages/NumaChatAgents';
 import { KnowledgeBaseManagement } from '../Pages/KnowledgeBaseManagement';
 import { CompanyInfo } from '../Pages/CompanyInfo';
+import { PipedreamIntegrations } from '../Pages/PipedreamIntegrations';
 import JobHistoryManager from '../Pages/JobHistoryManager';
 
 export const ROUTE_CONFIG = [
@@ -51,6 +52,17 @@ export const ROUTE_CONFIG = [
     requiredFeature: 'manageUsers',
     nav: { label: 'User Management', icon: 'bi bi-people-fill', footerOnly: true },
   },
+  // Show Pipedream integrations only if enabled in config
+  // TODO: Consider showing for all users with context admin message when disabled
+  ...(sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true'
+    ? [
+        {
+          path: '/pipedream-integrations',
+          element: () => <PipedreamIntegrations />,
+          nav: { label: 'Integrations', icon: 'bi bi-link-45deg' },
+        },
+      ]
+    : []),
   {
     path: '/app/:appId',
     element: () => <AppDetail />, // no nav entry

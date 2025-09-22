@@ -28,7 +28,7 @@ def _log_body_snippet(body: bytes, max_length: int = 200) -> str:
 # Matches:
 #   - e.g. arcanum-demo-sydney_pipedream-relay (for the relay lambda)
 #   - e.g arcanum-demo-sydney_ws-agent (for the numa-chat-agent lambda)
-ALLOWED_ROLE_REGEX = re.compile(r"^[a-zA-Z0-9-]+_(?:pipedream-relay|ws[-]agent)$")
+ALLOWED_ROLE_REGEX = re.compile(r"^[a-zA-Z0-9-]+_(?:pipedream-relay|ws[_-]agent)$")
 
 
 class SecurityValidationError(Exception):
