@@ -1,7 +1,24 @@
 """
 Web search module for Numa Chat Agent.
 
-Provides Google search and web scraping functionality.
+This module provides comprehensive web search capabilities using multiple search engines
+with intelligent fallback strategies for maximum reliability and uptime.
+
+Features:
+- Multi-engine search with automatic failover (DuckDuckGo API → Startpage → Yahoo)
+- DuckDuckGo API integration for primary search (most reliable, API-based)
+- Startpage search with privacy-focused Google results (HTML scraping)
+- Yahoo search with enhanced CSS selectors and URL cleaning (HTML scraping)
+- Anti-detection measures including user agent rotation and request spacing
+- Progressive backoff and session-aware rate limiting
+- Comprehensive content scraping with browser-like headers
+- Automatic content summarization using Claude Haiku
+- Production-ready error handling and logging
+
+Architecture:
+1. Search Phase: Try search engines in priority order until results found
+2. Scraping Phase: Extract content from discovered URLs with retry logic
+3. Summarization Phase: Process content using AI for user consumption
 """
 
 import random
@@ -14,6 +31,7 @@ from urllib.parse import quote_plus, unquote
 import httpx
 import structlog
 from bs4 import BeautifulSoup, Tag
+from ddgs import DDGS
 
 from .summarization import summarize_combined_content
 
@@ -402,31 +420,59 @@ def _yahoo_search(
         soup = BeautifulSoup(response.text, "html.parser")
         urls = []
 
-        # Find result containers - try multiple selectors for robustness
-        containers: List[Tag] = soup.select("div.algo, div.algo-sr, li div.algo") or []
+        # Find result containers - prioritize current working selectors
+        # Note: div.compTitle is the current working selector for Yahoo AU/main results
+        containers: List[Tag] = soup.select("div.compTitle") or []
 
-        # Log container discovery for debugging intermittent issues
+        # If no results from primary selector, try legacy selectors
+        if not containers:
+            containers = soup.select("div.algo, div.algo-sr, li div.algo") or []
+
+        # Final fallback to older selectors
+        if not containers:
+            containers = soup.select("div.Sr") or []
+
+        # Log container discovery for debugging
         logger.debug(
             "Yahoo search container analysis",
             containers_found=len(containers),
             content_length=len(response.text),
             query=query,
+            selector_used=(
+                "div.compTitle"
+                if containers and soup.select("div.compTitle")
+                else "legacy"
+            ),
         )
 
-        # If no primary containers, try alternative selectors
-        if not containers:
-            containers = soup.select("div.Sr") or []
-            logger.debug(
-                "Yahoo search fallback selectors", fallback_containers=len(containers)
-            )
-
         for container in containers[:max_results]:
-            # Find title link
-            h3_elem = container.find("h3")
-            if not h3_elem or not isinstance(h3_elem, Tag):
-                continue
+            # For div.compTitle containers, links are directly in the container
+            # For legacy containers, look for h3 > a structure
+            title_link = None
 
-            title_link = h3_elem.find("a", href=True)
+            # First, try direct link extraction (works for div.compTitle)
+            direct_links = container.find_all("a", href=True)
+            for link in direct_links:
+                if isinstance(link, Tag):
+                    href = link.get("href", "")
+                    if href and "RU=" in href:  # Yahoo redirect link
+                        title_link = link
+                        break
+
+            # Fallback to h3 > a structure (legacy selectors)
+            if not title_link:
+                h3_elem = container.find("h3")
+                if h3_elem and isinstance(h3_elem, Tag):
+                    link_elem = h3_elem.find("a", href=True)
+                    if isinstance(link_elem, Tag):
+                        title_link = link_elem
+
+            # Final fallback to any link
+            if not title_link and direct_links:
+                first_link = direct_links[0]
+                if isinstance(first_link, Tag):
+                    title_link = first_link
+
             if not title_link or not isinstance(title_link, Tag):
                 continue
 
@@ -460,6 +506,58 @@ def _yahoo_search(
                 pass
 
 
+def _duckduckgo_search(
+    query: str,
+    max_results: int,
+    user_agent: Optional[str] = None,  # pylint: disable=unused-argument
+) -> List[str]:
+    """
+    Search using DuckDuckGo API (reliable third fallback).
+
+    Args:
+        query: Search query string
+        max_results: Maximum number of results to return
+        user_agent: Optional user agent string (ignored - DDGS handles this internally)
+
+    Returns:
+        List of URLs from search results
+    """
+    try:
+        # Use the official DuckDuckGo search API
+        # This is much more reliable than HTML scraping
+        with DDGS() as ddgs:
+            # Use text search - updated for ddgs v9.6.0 API
+            results = list(
+                ddgs.text(
+                    query,  # First positional argument
+                    region="wt-wt",  # Worldwide results
+                    safesearch="moderate",
+                    max_results=max_results,
+                    backend="auto",  # Try all backends for maximum reliability
+                )
+            )
+
+            urls = []
+            for result in results:
+                if isinstance(result, dict) and "href" in result:
+                    url = result["href"]
+                    if isinstance(url, str) and url.startswith("http"):
+                        urls.append(url)
+
+            logger.debug(
+                "DuckDuckGo search results",
+                query=query,
+                urls_found=len(urls),
+                total_results=len(results),
+            )
+
+            return urls
+
+    except Exception as e:
+        logger.warning("DuckDuckGo search error", error=str(e), query=query)
+        return []
+
+
 # Global state for search spacing (prevents rapid consecutive searches)
 _last_search_time: float = 0.0
 _search_count_in_session: int = 0
@@ -473,7 +571,7 @@ def google_search(
     Perform web search using reliable search engines with fallback strategy.
 
     This replaces the previous Google search implementation which was being blocked.
-    Uses Startpage (privacy-focused) as primary and Yahoo as fallback.
+    Uses DuckDuckGo API as primary, Startpage (privacy-focused) as secondary, and Yahoo as final fallback.
 
     Implements anti-detection measures for high-volume searches:
     - Automatic spacing between searches to avoid rate limiting
@@ -554,6 +652,7 @@ def google_search(
 
     # Search engines to try in order of preference
     search_engines = [
+        ("DuckDuckGo", _duckduckgo_search),
         ("Startpage", _startpage_search),
         ("Yahoo", _yahoo_search),
     ]
