@@ -20,6 +20,7 @@ import {
   setFallbackMode,
   isQuotaLimitError,
 } from '../utils/bedrockModelConfig';
+import { autoNameConversation } from '../utils/autoChatTitle';
 
 const NumaChat = () => {
   const [messages, setMessages] = useState([]);
@@ -732,6 +733,25 @@ Today's Date: ${TODAY}`;
             latestMessage: inputMessage,
           })
           .catch((err) => console.error('Error updating meta item:', err));
+      }
+
+      // Attempt auto-naming after first assistant response/meta update
+      try {
+        if (bedrockRuntimeClient && numaChatDynamoUtils && sub && cid) {
+          const renamed = await autoNameConversation({
+            conversationId: cid,
+            userId: sub,
+            bedrockRuntimeClient,
+            numaChatDynamoUtils,
+            region: REGION,
+          });
+          if (renamed) {
+            // Refresh sidebar to reflect new title
+            refreshSidebar();
+          }
+        }
+      } catch (e) {
+        console.error('Auto-naming failed:', e);
       }
 
       // After streaming, attach references to local state for immediate display

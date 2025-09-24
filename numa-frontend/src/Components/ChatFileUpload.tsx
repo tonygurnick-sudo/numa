@@ -9,15 +9,16 @@ import { processFile } from '../utils/fileProcessing';
 const ChatFileUpload = ({
   show,
   onHide,
+  getAccessToken: _getAccessToken,
   setMessages,
   conversationId,
   sub,
   refreshSidebar,
   setIsFileProcessing,
   createNewConversationIfNeeded,
-  resetUserNewChatFlag,
+  resetUserNewChatFlag = () => {},
 }) => {
-  const { numaChatDynamoUtils, user, getCredentials } = useAuth();
+  const { numaChatDynamoUtils, user, getCredentials, bedrockRuntimeClient: _bedrockRuntimeClient } = useAuth();
   const { numaPost } = useNumaRequest();
 
   const handleUploadComplete = async (fileArray) => {
@@ -110,6 +111,29 @@ const ChatFileUpload = ({
       // Remove initial processing message
       setMessages((prev) => prev.filter((msg) => msg.ephemeralId !== processingMessageId));
 
+      // Update the conversation meta so the chat appears immediately in sidebar
+      try {
+        const uploadedNames = fileArray
+          .map((f) => f?.fileName)
+          .filter(Boolean)
+          .slice(0, 2)
+          .join(', ');
+        const moreCount = Math.max(0, fileArray.length - 2);
+        let latestMessage: string;
+        if (moreCount > 0) {
+          latestMessage = `Uploaded ${uploadedNames} and ${moreCount} more`;
+        } else {
+          latestMessage = `Uploaded ${uploadedNames}`;
+        }
+        await numaChatDynamoUtils.updateMetaItem(cid, sub, {
+          latestTimestamp: Date.now(),
+          latestMessage,
+        });
+      } catch (e) {
+        console.error('Failed to update meta after file upload:', e);
+      }
+
+      // Refresh sidebar to show new/updated conversation
       refreshSidebar();
     } catch (error) {
       console.error('Error processing uploaded files:', error);
@@ -174,6 +198,7 @@ const ChatFileUpload = ({
               ],
             },
           }}
+          // @ts-ignore S3UploadModule passes selected files to onComplete
           onComplete={handleUploadComplete}
           onNotComplete={() => {}}
           onChange={() => {}}

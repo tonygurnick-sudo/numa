@@ -47,18 +47,19 @@ describe('File Processing Utils', () => {
       writable: true,
     });
 
-    // Mock global fetch
-    vi.spyOn(global, 'fetch').mockImplementation(() => {
-      return Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            output_key: 'processed/output.json',
-            output_bucket: 'output-bucket',
-          }),
-        text: () => Promise.resolve('{"error": "Error text"}'),
-      });
-    });
+    // Mock global fetch with a real Response to satisfy TS
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          output_key: 'processed/output.json',
+          output_bucket: 'output-bucket',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
 
     // Mock fetchFileFromS3 to simulate successful file fetch from S3
     fetchFileFromS3.mockImplementation(() =>
@@ -82,11 +83,19 @@ describe('File Processing Utils', () => {
       return Promise.resolve(callCount > 3);
     });
 
-    // Mock setTimeout to avoid actual waiting in tests
-    vi.spyOn(global, 'setTimeout').mockImplementation((callback) => {
-      callback();
-      return 123; // dummy timeout id
-    });
+    // Mock setTimeout to avoid actual waiting in tests and satisfy TS return type
+    vi.spyOn(global, 'setTimeout').mockImplementation(((
+      handler: (...args: unknown[]) => void,
+      _timeout?: number,
+      ...args: unknown[]
+    ) => {
+      // Run the callback immediately
+      if (typeof handler === 'function') {
+        handler(...args);
+      }
+      // Return a dummy token typed as ReturnType<typeof setTimeout>
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as unknown as typeof setTimeout);
   });
 
   afterEach(() => {

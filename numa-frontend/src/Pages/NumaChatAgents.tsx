@@ -31,6 +31,7 @@ import { useConversationManager } from '../hooks/useConversationManager';
 import { useStreamingHandler } from '../hooks/useStreamingHandler';
 import { useDocumentProcessor } from '../hooks/useDocumentProcessor';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
+import { autoNameConversation } from '../utils/autoChatTitle';
 
 const NumaChatAgents = () => {
   // Basic UI state
@@ -82,7 +83,8 @@ const NumaChatAgents = () => {
   } = documentProcessor;
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
-  const { user, bedrockAgentRuntimeClient, numaChatDynamoUtils, getCredentials, getAccessToken } = useAuth();
+  const { user, bedrockAgentRuntimeClient, bedrockRuntimeClient, numaChatDynamoUtils, getCredentials, getAccessToken } =
+    useAuth();
 
   // Extract user info from token
   const idToken = user?.decoded_tokens?.idToken ?? {};
@@ -433,7 +435,7 @@ const NumaChatAgents = () => {
     setInputMessage,
     inputRef,
   ) => {
-    return (cid, userMsg, sub, chunkHandler) => {
+    return async (cid, userMsg, sub, chunkHandler) => {
       console.log('[NumaChat] Chat agent completion callback triggered');
       const { hasStreamingStarted, hasReceivedTextChunk, accumulatedResponse } = chunkHandler.getStreamingState();
       console.log(
@@ -499,6 +501,25 @@ const NumaChatAgents = () => {
             latestMessage: userMsg,
           })
           .catch((err) => console.error('Error updating meta item:', err));
+      }
+
+      // Attempt auto-naming after first assistant response/meta update
+      try {
+        if (bedrockRuntimeClient && numaChatDynamoUtils && sub && cid) {
+          const renamed = await autoNameConversation({
+            conversationId: cid,
+            userId: sub,
+            bedrockRuntimeClient,
+            numaChatDynamoUtils,
+            region: REGION,
+          });
+          if (renamed) {
+            // Refresh sidebar to reflect new title
+            refreshSidebar();
+          }
+        }
+      } catch (e) {
+        console.error('Auto-naming failed:', e);
       }
 
       // Refresh the sidebar
