@@ -62,6 +62,7 @@ export class CoreNumaInfra extends Construct {
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
+  readonly mcpPolicyTable?: DynamodbTable;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -719,6 +720,23 @@ export class CoreNumaInfra extends Construct {
     // Create Pipedream relay lambda if Pipedream integrations are enabled
     let pipedreamRelayLambda: NumaLambda | undefined;
     if (props.pipedreamIntegrations) {
+      // Create per-user MCP tool policy table in client account
+      this.mcpPolicyTable = new DynamodbTable(this, 'mcp-tool-policies', {
+        name: `${props.clientName}-mcp-tool-policies`,
+        billingMode: 'PAY_PER_REQUEST',
+        hashKey: 'pk',
+        rangeKey: 'sk',
+        attribute: [
+          { name: 'pk', type: 'S' },
+          { name: 'sk', type: 'S' },
+        ],
+        tags: {
+          Name: `${props.clientName}-mcp-tool-policies`,
+          Environment: props.environmentName,
+          Purpose: 'per-user-mcp-tool-policy',
+        },
+      });
+
       const pipedreamRelayPolicyStatements = [
         {
           actions: ['lambda:InvokeFunction'],
@@ -734,6 +752,16 @@ export class CoreNumaInfra extends Construct {
           effect: 'Allow',
           resources: ['*'],
         },
+        // Allow reading/writing MCP policy table
+        ...(this.mcpPolicyTable
+          ? [
+              {
+                actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
+                effect: 'Allow',
+                resources: [this.mcpPolicyTable.arn],
+              },
+            ]
+          : []),
       ];
 
       pipedreamRelayLambda = new NumaLambda(this, 'pipedream-relay', {
@@ -745,6 +773,7 @@ export class CoreNumaInfra extends Construct {
         environment: {
           PIPEDREAM_PROXY_LAMBDA_ARN: 'arn:aws:lambda:us-east-1:965745962688:function:pipedream-proxy',
           ENVIRONMENT: props.environmentName,
+          ...(this.mcpPolicyTable && { MCP_POLICY_TABLE_NAME: this.mcpPolicyTable.name }),
         },
       });
     }

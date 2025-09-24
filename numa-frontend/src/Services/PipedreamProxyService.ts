@@ -79,6 +79,64 @@ export class PipedreamProxyService {
     }
   }
 
+  static async listMcpTools(
+    lambdaClient: AwsLambdaClient,
+    externalUserId: string,
+    appName: string,
+  ): Promise<{ tools: { name: string; description?: string }[] }> {
+    const payload: PipedreamProxyRequest = {
+      operation: 'list_mcp_tools',
+      external_user_id: externalUserId,
+      parameters: { app_name: appName },
+    };
+    const response = await this.invokePipedreamProxy<{ tools: { name: string; description?: string }[] }>(
+      lambdaClient,
+      payload,
+    );
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to list MCP tools');
+    }
+    return response.data;
+  }
+
+  static async getMcpPolicy(
+    lambdaClient: AwsLambdaClient,
+    externalUserId: string,
+    appName: string,
+  ): Promise<{ mode: 'deny' | 'allow'; denyTools: string[] }> {
+    const payload: PipedreamProxyRequest = {
+      operation: 'get_mcp_policy',
+      external_user_id: externalUserId,
+      parameters: { app_name: appName },
+    };
+    const response = await this.invokePipedreamProxy<{ mode: 'deny' | 'allow'; denyTools: string[] }>(
+      lambdaClient,
+      payload,
+    );
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get MCP policy');
+    }
+    return response.data;
+  }
+
+  static async setMcpPolicy(
+    lambdaClient: AwsLambdaClient,
+    externalUserId: string,
+    appName: string,
+    policy: { mode: 'deny' | 'allow'; denyTools: string[] },
+  ): Promise<void> {
+    const payload: PipedreamProxyRequest = {
+      operation: 'set_mcp_policy',
+      external_user_id: externalUserId,
+      parameters: { app_name: appName, ...policy },
+    };
+    const response = await this.invokePipedreamProxy<Record<string, unknown>>(lambdaClient, payload);
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set MCP policy');
+    }
+    return;
+  }
+
   /**
    * Internal method to invoke the Pipedream relay lambda (which forwards to the cross-account proxy)
    * @param {LambdaClient} lambdaClient - Configured AWS Lambda client

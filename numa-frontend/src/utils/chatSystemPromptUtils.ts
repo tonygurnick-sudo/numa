@@ -125,7 +125,7 @@ const CONNECTION_PROMPTS: Record<string, string> = {
   google_calendar:
     "- When using Google Calendar tools: Always consider the user's timezone and provide clear time references. When creating events, ask for confirmation of key details.",
   gmail:
-    "- When using Gmail tools: Always consider the user's timezone when referencing emails from their inbox, even if they are received in UTC.",
+    "- When using Gmail tools: All timestamps are returned in UTC format regardless of timezone indicators shown. Always convert to user's local timezone before presenting. When in doubt, ask user to verify times against their Gmail interface.",
 };
 
 /**

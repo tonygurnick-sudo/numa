@@ -19,6 +19,8 @@ import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from botocore.session import Session
 
+from policy_store import PolicyStore
+
 # Set up structured logging
 logger = structlog.get_logger()
 
@@ -67,7 +69,7 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
 
     Expected request format (same as proxy):
     {
-        "operation": "generate_connect_token|get_integration_status|create_mcp_client",
+        "operation": "generate_connect_token|get_integration_status|create_mcp_client|list_mcp_tools|get_mcp_policy|set_mcp_policy",
         "external_user_id": "client_name_user123",
         "parameters": {
             // Operation-specific parameters (optional)
@@ -77,89 +79,128 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
     try:
         logger.info("Pipedream relay request received", request_event=event)
 
-        # Get the cross-account proxy lambda ARN from environment
         proxy_lambda_arn = os.environ.get("PIPEDREAM_PROXY_LAMBDA_ARN")
-        if not proxy_lambda_arn:
-            logger.error("PIPEDREAM_PROXY_LAMBDA_ARN environment variable not set")
-            return _error_response(500, "Relay configuration error")
+        policy_table = os.environ.get("MCP_POLICY_TABLE_NAME")
 
-        # Generate STS proof URL for caller identity verification
-        try:
-            sts_proof_url = generate_sts_proof_url()
-            logger.debug("Generated STS proof URL for proxy request")
-        except Exception as e:
-            logger.error("Failed to generate STS proof URL", error=str(e))
-            return _error_response(500, "Identity verification setup failed")
+        operation = event.get("operation")
+        external_user_id = event.get("external_user_id")
+        parameters = event.get("parameters", {})
 
-        # Create Lambda client for cross-account invocation (target region us-east-1)
-        lambda_client = boto3.client("lambda", region_name="us-east-1")
+        # Validate required fields
+        if not external_user_id:
+            return _error_response(400, "external_user_id is required")
 
-        # Add STS proof URL to the request payload
-        proxy_payload = event.copy()
-        proxy_payload["sts_proof_url"] = sts_proof_url
+        # Handle local policy ops without proxy
+        if operation in ("get_mcp_policy", "set_mcp_policy"):
+            if not policy_table:
+                return _error_response(500, "Policy table not configured")
 
-        # Forward the request to the cross-account proxy lambda
-        logger.info(
-            "Forwarding request to cross-account proxy",
-            proxy_lambda_arn=proxy_lambda_arn,
-            operation=event.get("operation"),
-            external_user_id=event.get("external_user_id"),
-            has_sts_proof=True,
-        )
+            store = PolicyStore()
+            if operation == "get_mcp_policy":
+                app_name = parameters.get("app_name")
+                if not app_name:
+                    return _error_response(400, "get_mcp_policy requires app_name")
+                result = store.get_policy(external_user_id, app_name)
+                return {"statusCode": 200, "body": {"success": True, "data": result}}
+            else:
+                app_name = parameters.get("app_name")
+                if not app_name:
+                    return _error_response(400, "set_mcp_policy requires app_name")
+                mode = parameters.get("mode", "deny")
+                deny_tools = parameters.get("denyTools", [])
+                result = store.set_policy(external_user_id, app_name, mode, deny_tools)
+                return {"statusCode": 200, "body": {"success": True, "data": result}}
 
-        response = lambda_client.invoke(
-            FunctionName=proxy_lambda_arn,
-            Payload=json.dumps(proxy_payload),
-            InvocationType="RequestResponse",
-        )
+        if operation in (
+            "generate_connect_token",
+            "get_integration_status",
+            "create_mcp_client",
+            "list_mcp_tools",
+        ):
+            if not proxy_lambda_arn:
+                logger.error("PIPEDREAM_PROXY_LAMBDA_ARN environment variable not set")
+                return _error_response(500, "Relay configuration error")
 
-        # Parse the proxy lambda response
-        response_payload = json.loads(response["Payload"].read())
+            # Generate STS proof URL for caller identity verification
+            try:
+                sts_proof_url = generate_sts_proof_url()
+                logger.debug("Generated STS proof URL for proxy request")
+            except Exception as e:
+                logger.error("Failed to generate STS proof URL", error=str(e))
+                return _error_response(500, "Identity verification setup failed")
 
-        # Handle lambda execution errors
-        if response.get("FunctionError"):
-            logger.error(
-                "Cross-account proxy lambda execution failed",
-                function_error=response["FunctionError"],
-                response_payload=response_payload,
-            )
-            return _error_response(500, "Proxy lambda execution failed")
+            # Create Lambda client for cross-account invocation (target region us-east-1)
+            lambda_client = boto3.client("lambda", region_name="us-east-1")
 
-        # Check if proxy returned an error status
-        status_code = response_payload.get("statusCode")
+            # Add STS proof URL to the request payload
+            proxy_payload = event.copy()
+            proxy_payload["sts_proof_url"] = sts_proof_url
 
-        # Parse the response body (it's JSON stringified)
-        try:
-            body = json.loads(response_payload.get("body", "{}"))
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.error(
-                "Failed to parse proxy response body",
-                error=str(e),
-                body=response_payload.get("body"),
-            )
-            return _error_response(500, "Invalid proxy response format")
-
-        if status_code != 200:
-            error_details = body.get("error", "Unknown error")
-            logger.error(
-                "Cross-account proxy returned error response",
-                status_code=status_code,
-                operation=event.get("operation"),
-                error_details=error_details,
-                full_response=response_payload,
-            )
-        else:
+            # Forward the request to the cross-account proxy lambda
             logger.info(
-                "Successfully relayed request to cross-account proxy",
-                status_code=status_code,
-                operation=event.get("operation"),
+                "Forwarding request to cross-account proxy",
+                proxy_lambda_arn=proxy_lambda_arn,
+                operation=operation,
+                external_user_id=external_user_id,
+                has_sts_proof=True,
             )
 
-        # Return the response with parsed body (maintain original structure for frontend compatibility)
-        return {
-            "statusCode": status_code,
-            "body": body,
-        }
+            response = lambda_client.invoke(
+                FunctionName=proxy_lambda_arn,
+                Payload=json.dumps(proxy_payload),
+                InvocationType="RequestResponse",
+            )
+
+            # Parse the proxy lambda response
+            response_payload = json.loads(response["Payload"].read())
+
+            # Handle lambda execution errors
+            if response.get("FunctionError"):
+                logger.error(
+                    "Cross-account proxy lambda execution failed",
+                    function_error=response["FunctionError"],
+                    response_payload=response_payload,
+                )
+                return _error_response(500, "Proxy lambda execution failed")
+
+            # Check if proxy returned an error status
+            status_code = response_payload.get("statusCode")
+
+            # Parse the response body (it's JSON stringified)
+            try:
+                body = json.loads(response_payload.get("body", "{}"))
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.error(
+                    "Failed to parse proxy response body",
+                    error=str(e),
+                    body=response_payload.get("body"),
+                )
+                return _error_response(500, "Invalid proxy response format")
+
+            if status_code != 200:
+                error_details = body.get("error", "Unknown error")
+                logger.error(
+                    "Cross-account proxy returned error response",
+                    status_code=status_code,
+                    operation=operation,
+                    error_details=error_details,
+                    full_response=response_payload,
+                )
+            else:
+                logger.info(
+                    "Successfully relayed request to cross-account proxy",
+                    status_code=status_code,
+                    operation=operation,
+                )
+
+            # Return the response with parsed body (maintain original structure for frontend compatibility)
+            return {
+                "statusCode": status_code,
+                "body": body,
+            }
+
+        # Unknown operation
+        return _error_response(400, "Unsupported operation")
 
     except Exception as e:
         logger.exception(
