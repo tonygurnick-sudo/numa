@@ -1,4 +1,5 @@
 import { QueryCommand, PutItemCommand, UpdateItemCommand, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
+import type { AttributeValue, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 const client = window.sessionStorage.getItem('CLIENT_NAME'); // e.g. "arcanum-demo"
 const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod'; // default to "prod" if not set
@@ -6,7 +7,10 @@ const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod';
 const NUMA_CHAT_HISTORY_TABLE_NAME = `numa-${client}${environment !== 'prod' ? `-${environment}` : ''}-chat-history`;
 
 class NumaChatDynamoUtils {
-  constructor(dynamoDBClient) {
+  private dynamoDBClient: DynamoDBClient;
+  private tableName: string;
+
+  constructor(dynamoDBClient: DynamoDBClient) {
     this.dynamoDBClient = dynamoDBClient;
     this.tableName = NUMA_CHAT_HISTORY_TABLE_NAME;
   }
@@ -80,10 +84,7 @@ class NumaChatDynamoUtils {
       const response = await this.dynamoDBClient.send(command);
 
       // Unmarshal and parse out the real timestamp
-      const items = response.Items.map((item) => {
-        const out = unmarshall(item);
-        return out;
-      });
+      const items = (response.Items || []).map((item) => unmarshall(item as Record<string, AttributeValue>));
 
       return items;
     } catch (error) {
@@ -132,7 +133,12 @@ class NumaChatDynamoUtils {
   /**
    * Update conversation name by finding the earliest "meta" item for that conversation.
    */
-  async updateConversationName(conversationId, userId, newName) {
+  async updateConversationName(
+    conversationId: string,
+    userId: string,
+    newName: string,
+    nameSource?: 'manual' | 'auto',
+  ) {
     try {
       // 1. Query all items for this user with begins_with(sk, conversationId#)
       const queryCommand = new QueryCommand({
@@ -145,7 +151,7 @@ class NumaChatDynamoUtils {
         ScanIndexForward: true,
       });
       const queryResponse = await this.dynamoDBClient.send(queryCommand);
-      const items = queryResponse.Items.map(unmarshall);
+      const items = (queryResponse.Items || []).map((it) => unmarshall(it as Record<string, AttributeValue>));
 
       // 2. Find the first meta item
       const metaItem = items.find((item) => item.message_type === 'meta');
@@ -153,17 +159,26 @@ class NumaChatDynamoUtils {
         throw new Error('No meta item found to update conversationName.');
       }
 
-      // 3. Update the conversationName field
+      // 3. Update the conversationName field (and optional nameSource)
       const updateCommand = new UpdateItemCommand({
         TableName: this.tableName,
         Key: marshall({
           user_id: userId,
           sk: metaItem.sk, // i.e. conversationId#timestampOfMeta
         }),
-        UpdateExpression: 'SET conversationName = :newName',
-        ExpressionAttributeValues: marshall({
-          ':newName': newName,
-        }),
+        UpdateExpression: nameSource
+          ? 'SET conversationName = :newName, nameSource = :nameSource'
+          : 'SET conversationName = :newName',
+        ExpressionAttributeValues: marshall(
+          nameSource
+            ? {
+                ':newName': newName,
+                ':nameSource': nameSource,
+              }
+            : {
+                ':newName': newName,
+              },
+        ),
         ReturnValues: 'UPDATED_NEW',
       });
 
@@ -178,7 +193,7 @@ class NumaChatDynamoUtils {
   /**
    * Update the "meta" item with the provided attributes.
    */
-  async updateMetaItem(conversationId, userId, updates) {
+  async updateMetaItem(conversationId: string, userId: string, updates: Record<string, unknown>) {
     try {
       // 1. Query items for user + conversation
       const queryResp = await this.dynamoDBClient.send(
@@ -194,7 +209,7 @@ class NumaChatDynamoUtils {
         }),
       );
 
-      const items = queryResp.Items.map(unmarshall);
+      const items = (queryResp.Items || []).map((it) => unmarshall(it as Record<string, AttributeValue>));
       if (items.length === 0) {
         throw new Error(`No meta item found for conversation ${conversationId} and user ${userId}`);
       }
@@ -257,7 +272,7 @@ class NumaChatDynamoUtils {
         });
 
         const response = await this.dynamoDBClient.send(command);
-        const items = response.Items.map(unmarshall);
+        const items = (response.Items || []).map((it) => unmarshall(it as Record<string, AttributeValue>));
 
         // Add meta items to our collection
         allMetaItems.push(...items);
@@ -313,7 +328,7 @@ class NumaChatDynamoUtils {
       });
 
       const response = await this.dynamoDBClient.send(queryCommand);
-      const items = response.Items.map(unmarshall);
+      const items = (response.Items || []).map((it) => unmarshall(it as Record<string, AttributeValue>));
 
       // 2. Delete each item
       for (const item of items) {
