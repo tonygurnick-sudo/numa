@@ -23,29 +23,7 @@ import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-i
 import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
 import { NumaLambda } from './numa-lambda';
 import type { StateMachine } from 'asl-types';
-
-// This should match the configuration in pipedream-proxy-stack.ts
-// TODO: decide on integrations and think of better way to centralise them
-const SUPPORTED_INTEGRATIONS = [
-  'gmail',
-  // 'microsoft_outlook',
-  // 'slack',
-  // 'google_calendar',
-  // 'xero_accounting_api',
-  // 'hubspot',
-  // 'notion',
-  // 'apollo_io',
-  // 'pipedrive',
-  // 'jira',
-  // 'smartsheet',
-  // 'airtable_oauth',
-  // 'ringcentral',
-  // 'linkedin',
-  // 'google_drive',
-  // 'google_analytics',
-  // 'webflow',
-  // 'sharepoint',
-];
+import { SUPPORTED_INTEGRATIONS } from '../config/integrations';
 
 interface ChatAgentConfiguration {
   preferredKnowledgeBase: 'bedrock' | 'q';

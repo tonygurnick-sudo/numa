@@ -1,0 +1,21 @@
+/**
+ * Shared configuration for supported Pipedream integrations across infrastructure
+ */
+export const SUPPORTED_INTEGRATIONS = [
+  'gmail',
+  'microsoft_outlook',
+  'slack',
+  'google_calendar',
+  'xero_accounting_api',
+  'hubspot',
+  'notion',
+  'apollo_io',
+  'pipedrive',
+  'jira',
+  'linkedin',
+  'google_drive',
+  'google_analytics',
+  'sharepoint',
+] as const;
+
+export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];
