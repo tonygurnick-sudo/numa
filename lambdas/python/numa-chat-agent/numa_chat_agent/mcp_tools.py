@@ -21,7 +21,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from strands.tools.mcp import MCPClient
 
 from .auth import get_current_user_auth
-from .config import PIPEDREAM_PROXY_LAMBDA_ARN, get_lambda_client
+from .config import PIPEDREAM_PROXY_LAMBDA_ARN, get_dynamodb_resource, get_lambda_client
 
 logger = structlog.get_logger()
 
@@ -271,6 +271,37 @@ def get_mcp_connection_details_from_proxy(external_user_id: str, app_name: str) 
         raise
 
 
+def get_mcp_policy_from_dynamo(external_user_id: str, app_name: str) -> dict:
+    """
+    Fetch per-user MCP policy from DynamoDB in client account.
+
+    Returns default allow-all (deny list empty) on error or if not found.
+    """
+    table_name = os.environ.get("MCP_POLICY_TABLE_NAME")
+    default = {"mode": "deny", "denyTools": []}
+    if not table_name:
+        return default
+
+    try:
+        if "_" not in external_user_id:
+            return default
+        client_name, cognito_sub = external_user_id.split("_", 1)
+        pk = f"CLIENT#{client_name}#USER#{cognito_sub}"
+        sk = f"INTEGRATION#{app_name}"
+        table = get_dynamodb_resource().Table(table_name)
+        resp = table.get_item(Key={"pk": pk, "sk": sk}, ConsistentRead=True)
+        item = resp.get("Item")
+        if not item:
+            return default
+        return {
+            "mode": item.get("mode", "deny"),
+            "denyTools": item.get("denyTools", []),
+        }
+    except Exception as e:
+        logger.warning("Failed to read MCP policy from DynamoDB", error=str(e))
+        return default
+
+
 def create_mcp_client(app_name: str, external_user_id: str) -> Optional[MCPClient]:
     """
     Create an MCP client for a specific Pipedream app using secure proxy.
@@ -466,40 +497,95 @@ def get_mcp_tools_and_clients_for_agent(
     Returns:
         Tuple[List, List[MCPClient]]: (tools, clients) - Tools and their corresponding active clients
     """
-    clients = create_all_mcp_clients(enabled_apps)
+    # Resolve enabled apps list
+    if enabled_apps is not None and len(enabled_apps) == 0:
+        logger.debug("No enabled apps specified, skipping MCP client creation")
+        return [], []
+    if enabled_apps is None:
+        enabled_apps = SUPPORTED_MCP_APPS.copy()
 
-    if not clients:
-        logger.warning("No MCP clients created")
+    # Check if proxy is configured
+    if not PIPEDREAM_PROXY_LAMBDA_ARN:
+        logger.debug("Pipedream proxy not configured, skipping MCP client creation")
         return [], []
 
-    # Initialize all clients and collect tools
-    initialized_clients = []
-    all_tools: List[Any] = []
+    # Get external user ID
+    external_user_id = get_external_user_id()
+    if not external_user_id:
+        logger.warning("Cannot create MCP clients without user context")
+        return [], []
 
-    for client in clients:
+    all_tools: List[Any] = []
+    active_clients: List[MCPClient] = []
+
+    # At this point enabled_apps is guaranteed to be a list, not None
+    assert enabled_apps is not None
+    for app_name in enabled_apps:
+        client: Optional[MCPClient] = None
         try:
-            # Initialize the client
-            initialized_client = (
+            if app_name not in SUPPORTED_MCP_APPS:
+                logger.warning("Skipping unsupported MCP app", app_name=app_name)
+                continue
+
+            client = create_mcp_client(app_name, external_user_id)
+            if not client:
+                logger.warning("Failed to create MCP client", app_name=app_name)
+                continue
+
+            entered_client = (
                 client.__enter__()
             )  # pylint: disable=unnecessary-dunder-call
-            initialized_clients.append(client)  # Keep reference to original for cleanup
 
-            # Get tools from initialized client
-            tools = initialized_client.list_tools_sync()
-            all_tools.extend(tools)
-            logger.debug("Retrieved MCP tools", client_tools_count=len(tools))
+            # Get tool list
+            tools = entered_client.list_tools_sync()
+
+            # Fetch policy and filter (deny list by name)
+            policy = get_mcp_policy_from_dynamo(external_user_id, app_name)
+            deny = set(policy.get("denyTools", []) or [])
+            filtered = []
+            for t in tools:
+                # Prefer Strands wrapper property, then raw MCP tool name
+                tname = (
+                    getattr(t, "tool_name", None)
+                    or getattr(getattr(t, "mcp_tool", None), "name", None)
+                    or getattr(t, "name", None)
+                )
+                if tname not in deny:
+                    filtered.append(t)
+
+            logger.info(
+                "MCP tools filtered",
+                app_name=app_name,
+                total=len(tools),
+                allowed=len(filtered),
+                denied_count=len(deny),
+            )
+
+            if filtered:
+                all_tools.extend(filtered)
+                active_clients.append(client)
+            else:
+                # No allowed tools; close client immediately
+                try:
+                    client.__exit__(None, None, None)  # type: ignore[arg-type]
+                except Exception:
+                    pass
 
         except Exception as e:
-            logger.error("Failed to initialize MCP client", error=str(e))
-            # Clean up this client if initialization failed
+            logger.error(
+                "Failed to initialize or filter MCP client",
+                app_name=app_name,
+                error=str(e),
+            )
             try:
-                client.__exit__(None, None, None)  # type: ignore[arg-type]
+                if client is not None:
+                    client.__exit__(None, None, None)  # type: ignore[arg-type]
             except Exception:
                 pass
 
     logger.info(
         "Retrieved total MCP tools",
         total_tools_count=len(all_tools),
-        active_clients=len(initialized_clients),
+        active_clients=len(active_clients),
     )
-    return all_tools, initialized_clients
+    return all_tools, active_clients

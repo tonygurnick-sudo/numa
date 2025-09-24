@@ -6,13 +6,90 @@ Contains all the Pipedream-specific logic ported from existing lambdas.
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 import requests
 import structlog
+from mcp.client.streamable_http import streamablehttp_client
+from strands.tools.mcp import MCPClient
 
 logger = structlog.get_logger()
+
+# Simple in-memory TTL cache for tool lists: key = (external_user_id, app_name)
+# value = (tools, expires_epoch)
+_TOOL_LIST_CACHE: Dict[Tuple[str, str], Tuple[List[Dict[str, Any]], float]] = {}
+_TOOL_LIST_TTL_SECONDS = 600.0  # 10 minutes
+
+
+def _extract_tool_info(tool: Any) -> Dict[str, Any]:
+    """Best-effort extraction of human-friendly tool name and description.
+
+    Handles Strands MCPAgentTool wrappers and plain MCP definitions.
+    """
+
+    def _get_attr(obj: Any, attr: str) -> Optional[str]:
+        try:
+            val = getattr(obj, attr, None)
+            return val if isinstance(val, str) else None
+        except Exception:
+            return None
+
+    def _get_nested(obj: Any, path: Tuple[str, str]) -> Optional[str]:
+        try:
+            parent = getattr(obj, path[0], None)
+            if parent is None and isinstance(getattr(obj, "__dict__", None), dict):
+                parent = obj.__dict__.get(path[0])
+            if parent is None:
+                return None
+            # attribute or dict
+            if isinstance(parent, dict):
+                val = parent.get(path[1])
+                return val if isinstance(val, str) else None
+            return _get_attr(parent, path[1])
+        except Exception:
+            return None
+
+    # Prefer Strands wrapper -> underlying MCP Tool object
+    mcp_tool = getattr(tool, "mcp_tool", None)
+
+    # Name extraction (prefer raw MCP tool name)
+    if mcp_tool is not None:
+        name_candidates: List[Optional[str]] = [_get_attr(mcp_tool, "name")]
+    else:
+        name_candidates = [
+            _get_attr(tool, "name"),
+            _get_attr(tool, "display_name"),
+            _get_nested(tool, ("tool", "name")),
+            _get_nested(tool, ("definition", "name")),
+            _get_nested(tool, ("_tool", "name")),
+            _get_nested(tool, ("tool_definition", "name")),
+        ]
+    name = next((n for n in name_candidates if n), None)
+    if not name:
+        # Last resort: try common dict access on __dict__
+        d = getattr(tool, "__dict__", None)
+        if isinstance(d, dict):
+            name = d.get("name") or d.get("display_name")
+            if not isinstance(name, str):
+                name = None
+
+    # Description extraction (prefer raw MCP tool description)
+    if mcp_tool is not None:
+        desc_candidates: List[Optional[str]] = [_get_attr(mcp_tool, "description")]
+    else:
+        desc_candidates = [
+            _get_attr(tool, "description"),
+            _get_nested(tool, ("tool", "description")),
+            _get_nested(tool, ("definition", "description")),
+            _get_nested(tool, ("_tool", "description")),
+            _get_nested(tool, ("tool_definition", "description")),
+            _get_attr(tool, "summary"),
+            _get_attr(tool, "long_description"),
+        ]
+    description = next((d for d in desc_candidates if d), None)
+    return {"name": name or str(tool), "description": description}
 
 
 class PipedreamOperations:
@@ -234,6 +311,70 @@ class PipedreamOperations:
                 exc_info=True,
             )
             raise Exception(f"MCP client creation error: {str(e)}") from e
+
+    def list_mcp_tools(
+        self, external_user_id: str, app_name: str
+    ) -> List[Dict[str, Any]]:
+        """List tools exposed by the MCP server for this user + integration.
+
+        Uses Streamable HTTP transport with Pipedream auth headers.
+        Results cached briefly to reduce API load.
+        """
+        cache_key = (external_user_id, app_name)
+
+        cached = _TOOL_LIST_CACHE.get(cache_key)
+        now = time.time()
+        if cached and cached[1] > now:
+            logger.debug(
+                "Returning cached MCP tool list",
+                external_user_id=external_user_id,
+                app_name=app_name,
+                count=len(cached[0]),
+            )
+            return cached[0]
+
+        # Build connection details
+        conn = self.create_mcp_client(external_user_id, app_name)
+        base_url = conn.get("base_url")
+        headers = conn.get("headers", {})
+        if not base_url:
+            raise ValueError("Missing base_url for MCP server")
+
+        # Create MCP client via Strands wrapper
+        def create_transport():
+            return streamablehttp_client(base_url, headers=headers)
+
+        client = MCPClient(create_transport)
+        tools: List[Dict[str, Any]] = []
+        try:
+            entered = client.__enter__()  # pylint: disable=unnecessary-dunder-call
+            for t in entered.list_tools_sync():
+                tools.append(_extract_tool_info(t))
+        except Exception as e:
+            logger.error(
+                "Failed to list MCP tools",
+                error=str(e),
+                external_user_id=external_user_id,
+                app_name=app_name,
+                base_url=base_url,
+                exc_info=True,
+            )
+            raise
+        finally:
+            try:
+                client.__exit__(None, None, None)  # type: ignore[arg-type]
+            except Exception:
+                pass
+
+        # Cache
+        _TOOL_LIST_CACHE[cache_key] = (tools, now + _TOOL_LIST_TTL_SECONDS)
+        logger.info(
+            "Listed MCP tools",
+            app_name=app_name,
+            external_user_id=external_user_id,
+            count=len(tools),
+        )
+        return tools
 
     def _get_user_connections(self, external_user_id: str) -> List[Dict[str, Any]]:
         """Get user's connected accounts from Pipedream API."""

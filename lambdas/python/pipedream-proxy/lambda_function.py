@@ -26,6 +26,7 @@ SUPPORTED_OPERATIONS = [
     "generate_connect_token",
     "get_integration_status",
     "create_mcp_client",
+    "list_mcp_tools",
 ]
 
 
@@ -142,6 +143,14 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                     400, "create_mcp_client operation requires app_name parameter"
                 )
             result = pipedream_ops.create_mcp_client(external_user_id, app_name)
+
+        elif operation == "list_mcp_tools":
+            app_name = parameters.get("app_name")
+            if not app_name:
+                return _error_response(
+                    400, "list_mcp_tools operation requires app_name parameter"
+                )
+            result = {"tools": pipedream_ops.list_mcp_tools(external_user_id, app_name)}
 
         else:
             return _error_response(

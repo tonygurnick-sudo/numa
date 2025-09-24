@@ -1,5 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Container, Row, Col, Card, Button, Alert, Spinner, Collapse } from 'react-bootstrap';
+import {
+  Container,
+  Row,
+  Col,
+  Card,
+  Button,
+  Alert,
+  Spinner,
+  Collapse,
+  Modal,
+  OverlayTrigger,
+  Tooltip,
+} from 'react-bootstrap';
 
 import { createFrontendClient } from '@pipedream/sdk/browser';
 import { LambdaClient } from '@aws-sdk/client-lambda';
@@ -29,6 +41,13 @@ export const PipedreamIntegrations = () => {
   const [error, setError] = useState<string | null>(null);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [expandedTestUI, setExpandedTestUI] = useState<Record<string, boolean>>({});
+  const [settingsApp, setSettingsApp] = useState<string | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState<boolean>(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [availableTools, setAvailableTools] = useState<{ name: string; description?: string }[]>([]);
+  const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
+  // Version removed: last-write-wins policy
+  const [recentlyConnectedApp, setRecentlyConnectedApp] = useState<string | null>(null);
 
   // Initialize Lambda client only if Pipedream proxy is configured
   useEffect(() => {
@@ -149,6 +168,9 @@ export const PipedreamIntegrations = () => {
                 : conn,
             ),
           );
+          // Show post-connection guidance
+          setRecentlyConnectedApp(appName);
+          setTimeout(() => setRecentlyConnectedApp(null), 8000); // Auto-dismiss after 8 seconds
           console.log(`${appName} connected successfully`);
         },
         onError: (error: Error | { message?: string }) => {
@@ -179,6 +201,51 @@ export const PipedreamIntegrations = () => {
     setError(
       'Disconnect functionality is coming soon. Please contact support if you need to disconnect an integration.',
     );
+  };
+
+  const openSettings = async (appName: string) => {
+    if (!lambdaClient || !user) return;
+    try {
+      setSettingsError(null);
+      setSettingsLoading(true);
+      setSettingsApp(appName);
+      const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+      const [toolsResp, policy] = await Promise.all([
+        PipedreamProxyService.listMcpTools(lambdaClient, externalUserId, appName),
+        PipedreamProxyService.getMcpPolicy(lambdaClient, externalUserId, appName),
+      ]);
+      setAvailableTools(toolsResp.tools || []);
+      // Build toggles from deny list (all ON by default)
+      const deny = new Set(policy.denyTools || []);
+      const toggles: Record<string, boolean> = {};
+      (toolsResp.tools || []).forEach((t) => (toggles[t.name] = !deny.has(t.name)));
+      setToolToggles(toggles);
+    } catch (e: unknown) {
+      const err = e as Error;
+      setSettingsError(err.message || 'Failed to load settings');
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const saveSettings = async () => {
+    if (!lambdaClient || !user || !settingsApp) return;
+    try {
+      setSettingsError(null);
+      const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+      const denyTools = Object.entries(toolToggles)
+        .filter(([_, allowed]) => !allowed)
+        .map(([name]) => name);
+      await PipedreamProxyService.setMcpPolicy(lambdaClient, externalUserId, settingsApp, {
+        mode: 'deny',
+        denyTools,
+      });
+      // refresh policy version by reloading policy if needed (optional)
+      setSettingsApp(null);
+    } catch (e: unknown) {
+      const err = e as Error;
+      setSettingsError(err.message || 'Failed to save settings');
+    }
   };
 
   const getConnectionStatus = (appName: string) => {
@@ -261,6 +328,26 @@ export const PipedreamIntegrations = () => {
                       <i className="bi bi-lightning-fill me-2"></i>
                       Test Connection
                     </Button>
+                    <OverlayTrigger
+                      placement="top"
+                      overlay={
+                        <Tooltip>
+                          For better security and performance, review each integration&apos;s Settings to enable only
+                          the tools you need. Fewer enabled tools means more focused AI responses and enhanced data
+                          protection.
+                        </Tooltip>
+                      }
+                    >
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => openSettings(integration.name_slug)}
+                        disabled={isConnecting}
+                      >
+                        <i className="bi bi-sliders me-2"></i>
+                        Settings
+                      </Button>
+                    </OverlayTrigger>
                     <Button variant="outline-secondary" size="sm" onClick={() => disconnectApp()} disabled>
                       <i className="bi bi-x-circle me-2"></i>
                       Disconnect
@@ -325,10 +412,40 @@ export const PipedreamIntegrations = () => {
               {error}
             </Alert>
           )}
+
+          {/* Post-connection guidance alert */}
+          {recentlyConnectedApp && (
+            <Alert variant="success" className="mb-3" dismissible onClose={() => setRecentlyConnectedApp(null)}>
+              <div className="d-flex align-items-start">
+                <i className="bi bi-check-circle-fill text-success me-3 mt-1"></i>
+                <div className="flex-grow-1">
+                  <h6 className="mb-1 fw-semibold">Integration Connected Successfully!</h6>
+                  <p className="mb-2 small">
+                    Your{' '}
+                    {availableApps.find((app) => app.name_slug === recentlyConnectedApp)?.name || recentlyConnectedApp}{' '}
+                    integration is now ready to use.
+                  </p>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    onClick={() => {
+                      openSettings(recentlyConnectedApp);
+                      setRecentlyConnectedApp(null);
+                    }}
+                    className="d-flex align-items-center"
+                  >
+                    <i className="bi bi-sliders me-2"></i>
+                    Customize Tool Access
+                  </Button>
+                </div>
+              </div>
+            </Alert>
+          )}
+
           <Card className="mb-4 border-0 shadow-sm">
             <Card.Body className="p-4">
               <Row className="g-4">
-                <Col md={4}>
+                <Col md={3}>
                   <div className="text-center p-2">
                     <div className="d-flex align-items-center justify-content-center mb-2">
                       <div
@@ -344,7 +461,7 @@ export const PipedreamIntegrations = () => {
                     <p className="small text-muted mb-0">Click the connect button on any app below to get started</p>
                   </div>
                 </Col>
-                <Col md={4}>
+                <Col md={3}>
                   <div className="text-center p-2">
                     <div className="d-flex align-items-center justify-content-center mb-2">
                       <div
@@ -358,11 +475,11 @@ export const PipedreamIntegrations = () => {
                       <h6 className="text-primary fw-semibold mb-0">Sign In Securely</h6>
                     </div>
                     <p className="small text-muted mb-0">
-                      Follow the secure authentication steps and testing your connection was successful
+                      Follow the secure authentication steps and test your connection was successful
                     </p>
                   </div>
                 </Col>
-                <Col md={4}>
+                <Col md={3}>
                   <div className="text-center p-2">
                     <div className="d-flex align-items-center justify-content-center mb-2">
                       <div
@@ -371,6 +488,24 @@ export const PipedreamIntegrations = () => {
                       >
                         <span className="fw-bold" style={{ fontSize: '1rem' }}>
                           3
+                        </span>
+                      </div>
+                      <h6 className="text-primary fw-semibold mb-0">Optimize Security</h6>
+                    </div>
+                    <p className="small text-muted mb-0">
+                      Use Settings to enable only the tools you need for better security and performance
+                    </p>
+                  </div>
+                </Col>
+                <Col md={3}>
+                  <div className="text-center p-2">
+                    <div className="d-flex align-items-center justify-content-center mb-2">
+                      <div
+                        className="rounded-circle text-white d-inline-flex align-items-center justify-content-center me-2"
+                        style={{ width: '32px', height: '32px', background: 'var(--color-primary)' }}
+                      >
+                        <span className="fw-bold" style={{ fontSize: '1rem' }}>
+                          4
                         </span>
                       </div>
                       <h6 className="text-primary fw-semibold mb-0">Get Work Done</h6>
@@ -419,8 +554,184 @@ export const PipedreamIntegrations = () => {
           </div>
         </Container>
       </main>
+      {/* Settings modal */}
+      <SettingsModal
+        show={!!settingsApp}
+        onHide={() => setSettingsApp(null)}
+        loading={settingsLoading}
+        error={settingsError}
+        tools={availableTools}
+        toggles={toolToggles}
+        setToggles={setToolToggles}
+        onSave={saveSettings}
+        appSlug={settingsApp}
+      />
     </div>
   );
 };
 
 export default PipedreamIntegrations;
+
+// Helper function to make URLs clickable
+const formatDescriptionWithLinks = (description: string) => {
+  const urlRegex = /(https?:\/\/[^\s)]+)/g;
+  const parts = description.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (part.match(urlRegex)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary text-decoration-none"
+          style={{ fontSize: 'inherit' }}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+};
+
+// Settings Modal (inline for simplicity)
+export const SettingsModal = ({
+  show,
+  onHide,
+  loading,
+  error,
+  tools,
+  toggles,
+  setToggles,
+  onSave,
+  appSlug,
+}: {
+  show: boolean;
+  onHide: () => void;
+  loading: boolean;
+  error: string | null;
+  tools: { name: string; description?: string }[];
+  toggles: Record<string, boolean>;
+  setToggles: (t: Record<string, boolean>) => void;
+  onSave: () => void;
+  appSlug?: string | null;
+}) => (
+  <Modal show={show} onHide={onHide} centered size="lg">
+    <Modal.Header closeButton className="border-0 pb-2">
+      <div>
+        <Modal.Title className="mb-1">Integration Settings</Modal.Title>
+        <p className="text-muted mb-0 small">
+          Toggle on and off the tools that Numa will have access to when using this integration
+        </p>
+      </div>
+    </Modal.Header>
+    <Modal.Body className="pt-2">
+      {loading ? (
+        <div className="text-center py-4">
+          <Spinner animation="border" className="text-primary" />
+          <p className="mt-3 text-muted mb-0">Loading available tools...</p>
+        </div>
+      ) : error ? (
+        <Alert variant="danger" className="mb-0">
+          <i className="bi bi-exclamation-triangle-fill me-2"></i>
+          {error}
+        </Alert>
+      ) : tools.length === 0 ? (
+        <div className="text-center py-4">
+          <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
+          <p className="text-muted mt-2 mb-0">No tools available for this integration.</p>
+        </div>
+      ) : (
+        <div className="d-flex flex-column gap-1">
+          {tools.map((t, index) => {
+            // Derive a human label from the canonical name: strip app prefix and convert kebab to Title Case
+            const stripPrefix = (name: string, prefix?: string | null) => {
+              if (!prefix) return name;
+              return name.startsWith(prefix + '-') ? name.slice(prefix.length + 1) : name;
+            };
+            const toTitle = (s: string) =>
+              s
+                .split('-')
+                .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+                .join(' ');
+            const display = toTitle(stripPrefix(t.name, appSlug || undefined));
+            const isEnabled = toggles[t.name] ?? true;
+
+            return (
+              <div
+                key={t.name}
+                className={`rounded-3 p-3 border ${
+                  index < tools.length - 1 ? 'mb-2' : ''
+                } ${isEnabled ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
+                style={{
+                  transition: 'all 0.2s ease',
+                  borderColor: isEnabled ? 'var(--bs-border-color)' : 'var(--bs-border-color-translucent)',
+                }}
+              >
+                <div className="d-flex align-items-start justify-content-between">
+                  <div className="flex-grow-1 me-3">
+                    <div className="d-flex align-items-center mb-1">
+                      <div
+                        className={`rounded-circle me-2 ${isEnabled ? 'bg-success' : 'bg-secondary'}`}
+                        style={{ width: '8px', height: '8px', transition: 'all 0.2s ease' }}
+                      ></div>
+                      <span className={`fw-semibold ${isEnabled ? 'text-dark' : 'text-muted'}`}>{display}</span>
+                    </div>
+                    {t.description && (
+                      <div
+                        className={`small text-break ${isEnabled ? 'text-muted' : 'text-secondary'}`}
+                        style={{
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                          lineHeight: '1.4',
+                          fontSize: '0.85rem',
+                        }}
+                      >
+                        {formatDescriptionWithLinks(t.description)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="form-check form-switch ms-2">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={(e) => setToggles({ ...toggles, [t.name]: e.target.checked })}
+                      style={{
+                        accentColor: 'var(--color-primary)',
+                        transform: 'scale(1.1)',
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Modal.Body>
+    <Modal.Footer className="border-0 pt-2">
+      <div className="d-flex justify-content-between align-items-center w-100">
+        <small className="text-muted">
+          {tools.length > 0 && (
+            <span>
+              <i className="bi bi-info-circle me-1"></i>
+              {Object.values(toggles).filter(Boolean).length} of {tools.length} tools enabled
+            </span>
+          )}
+        </small>
+        <div>
+          <Button variant="outline-secondary" onClick={onHide} className="me-2">
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={onSave} disabled={loading || !!error}>
+            <i className="bi bi-check-lg me-2"></i>
+            Save Changes
+          </Button>
+        </div>
+      </div>
+    </Modal.Footer>
+  </Modal>
+);

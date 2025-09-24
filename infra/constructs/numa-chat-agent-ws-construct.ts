@@ -82,6 +82,10 @@ export interface ChatAgentWsProps {
    * @default false
    */
   pipedreamIntegrationsEnabled?: boolean;
+  /**
+   * Optional DynamoDB table name for per-user MCP tool policies (client account)
+   */
+  mcpPolicyTableName?: string;
 }
 
 export class NumaChatAgentWebSocket extends Construct {
@@ -233,6 +237,7 @@ export class NumaChatAgentWebSocket extends Construct {
           }),
         CLIENT_NAME: props.clientName,
         SUPPORTED_INTEGRATIONS: JSON.stringify(SUPPORTED_INTEGRATIONS),
+        ...(props.mcpPolicyTableName && { MCP_POLICY_TABLE_NAME: props.mcpPolicyTableName }),
       },
       logGroup: agentLogGroup,
       resourceNameSuffix: '_ws_agent',
@@ -284,6 +289,18 @@ export class NumaChatAgentWebSocket extends Construct {
                 effect: 'Allow',
                 actions: ['sts:GetCallerIdentity'],
                 resources: ['*'],
+              },
+            ]
+          : []),
+        // Allow agent to read MCP policy table if provided
+        ...(props.mcpPolicyTableName
+          ? [
+              {
+                effect: 'Allow',
+                actions: ['dynamodb:GetItem'],
+                resources: [
+                  `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.mcpPolicyTableName}`,
+                ],
               },
             ]
           : []),
