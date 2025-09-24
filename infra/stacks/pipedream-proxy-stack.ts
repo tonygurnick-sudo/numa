@@ -11,29 +11,7 @@ import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-sec
 import { S3Backend, TerraformStack, Fn } from 'cdktf';
 import { Construct } from 'constructs';
 import path from 'node:path';
-
-// Supported Pipedream integrations
-// TODO: think of a better way to manage this list
-const SUPPORTED_INTEGRATIONS = [
-  'gmail',
-  'microsoft_outlook',
-  'slack',
-  'google_calendar',
-  'xero_accounting_api',
-  'hubspot',
-  'notion',
-  'apollo_io',
-  'pipedrive',
-  'jira',
-  'smartsheet',
-  'airtable_oauth',
-  'ringcentral',
-  'linkedin',
-  'google_drive',
-  'google_analytics',
-  'webflow',
-  'sharepoint',
-];
+import { SUPPORTED_INTEGRATIONS } from '../config/integrations';
 
 export interface PipedreamProxyStackProps {
   /**
