@@ -168,7 +168,7 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
               segments.push({
                 kind: 'tool',
                 label: `Calling ${toolLabel} tool`,
-                toolUseId: item.toolUseId,
+                toolUseId: item.tool_use_id,
                 isLoading: false, // Never loading when reconstructing from history
               });
             } else if (item.message_type === 'tool_result') {
