@@ -8,6 +8,7 @@
 
 import gmailIcon from '../assets/icons/gmail.svg';
 import outlookIcon from '../assets/icons/outlook.svg';
+import outlookCalendarIcon from '../assets/icons/outlook_calendar.png';
 import slackIcon from '../assets/icons/slack.svg';
 import googleCalendarIcon from '../assets/icons/google_calendar.svg';
 import xeroIcon from '../assets/icons/xero.png';
@@ -63,6 +64,17 @@ export const CONNECTIONS_CONFIG: Record<string, ConnectionConfigEntry> = {
     fallback_icon: 'bi bi-envelope-at',
     fallback_color: 'primary',
     example_query: 'Show me my unread emails from the last week',
+  },
+  microsoft_outlook_calendar: {
+    id: 'microsoft_outlook_calendar',
+    name: 'Microsoft Outlook Calendar',
+    description:
+      'Manage calendar events and scheduling in Outlook. Create, update, and delete events, check availability, and sync across devices',
+    auth_type: 'oauth',
+    img_src: outlookCalendarIcon,
+    fallback_icon: 'bi bi-calendar-event',
+    fallback_color: 'info',
+    example_query: 'Schedule a meeting for tomorrow at 2 PM and check my availability for this week',
   },
   slack: {
     id: 'slack',

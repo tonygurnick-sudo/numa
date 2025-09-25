@@ -4,6 +4,7 @@
 export const SUPPORTED_INTEGRATIONS = [
   'gmail',
   'microsoft_outlook',
+  'microsoft_outlook_calendar',
   'slack',
   'google_calendar',
   'xero_accounting_api',
