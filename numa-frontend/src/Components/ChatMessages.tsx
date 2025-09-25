@@ -27,8 +27,7 @@ function DocOpenBubble({ docTitle, docContent, onClick }) {
 const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDocument, isConversationLoading }) => {
   const { getCredentials } = useAuth();
 
-  // Check if agent mode is enabled
-  const useAgentMode = sessionStorage.getItem('NUMA_CHAT_AGENTS') === 'true';
+  // Agent mode is the default and only mode; remove legacy flag checks
 
   // Show conversation loading state
   if (isConversationLoading) {
@@ -59,11 +58,8 @@ const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDo
             statusText = 'Processing Upload...';
           } else if (message.status === 'thinking') {
             statusText = 'Thinking...';
-          } else if (!useAgentMode && message.status === 'querying') {
-            statusText = 'Querying data sources...';
-          } else if (!useAgentMode && message.status === 'searching') {
-            statusText = 'Searching the web...';
           }
+          if (!statusText) return null; // Skip legacy statuses in agent-only mode
           return (
             <div key={index} className="message assistant ephemeral">
               <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -116,53 +112,47 @@ const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDo
               )}
             </strong>
             <div className="message-content markdown-content">
-              {useAgentMode ? (
-                // Agent mode: segment-based rendering
-                message.segments ? (
-                  message.segments.map((seg, idx) => {
-                    if (seg.kind === 'text') {
-                      return <MarkdownContent key={idx} content={seg.text} />;
-                    } else if (seg.kind === 'tool') {
-                      return (
-                        <div key={idx} className="tool-event-bubble">
-                          <i className="bi bi-tools me-1" />
-                          {seg.label}
-                          {seg.isLoading && (
-                            <Spinner
-                              animation="border"
-                              size="sm"
-                              className="ms-2 tool-loading-spinner"
-                              style={{ width: '16px', height: '16px' }}
-                            />
-                          )}
-                        </div>
-                      );
-                    } else if (seg.kind === 'result') {
-                      const toolName = seg.toolName || 'unknown';
-                      const descriptor = TOOL_CONFIG[toolName] || TOOL_CONFIG._default;
-                      const Renderer = descriptor.renderer;
-                      return <Renderer key={idx} result={seg.payload} />;
-                    }
-                    return null;
-                  })
-                ) : (
-                  // Fallback for legacy messages without segments in agent mode
-                  <>
-                    {message.content && <MarkdownContent content={message.content} />}
-                    {message.toolEvents?.length > 0 && (
-                      <div className="tool-events-container">
-                        {message.toolEvents.map((evt, idx) => (
-                          <div key={idx} className="tool-event-bubble">
-                            {evt}
-                          </div>
-                        ))}
+              {message.segments ? (
+                message.segments.map((seg, idx) => {
+                  if (seg.kind === 'text') {
+                    return <MarkdownContent key={idx} content={seg.text} />;
+                  } else if (seg.kind === 'tool') {
+                    return (
+                      <div key={idx} className="tool-event-bubble">
+                        <i className="bi bi-tools me-1" />
+                        {seg.label}
+                        {seg.isLoading && (
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="ms-2 tool-loading-spinner"
+                            style={{ width: '16px', height: '16px' }}
+                          />
+                        )}
                       </div>
-                    )}
-                  </>
-                )
+                    );
+                  } else if (seg.kind === 'result') {
+                    const toolName = seg.toolName || 'unknown';
+                    const descriptor = TOOL_CONFIG[toolName] || TOOL_CONFIG._default;
+                    const Renderer = descriptor.renderer;
+                    return <Renderer key={idx} result={seg.payload} />;
+                  }
+                  return null;
+                })
               ) : (
-                // Legacy mode: simple message content rendering
-                <MarkdownContent content={message.content} />
+                // Fallback for messages without segments in agent mode
+                <>
+                  {message.content && <MarkdownContent content={message.content} />}
+                  {message.toolEvents?.length > 0 && (
+                    <div className="tool-events-container">
+                      {message.toolEvents.map((evt, idx) => (
+                        <div key={idx} className="tool-event-bubble">
+                          {evt}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
 
               {/* If there are references, show the dropdown */}

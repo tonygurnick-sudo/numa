@@ -385,9 +385,8 @@ const prepareConversationHistoryForChat = async (conversationHistory, getCredent
   const sortedHistory = conversationHistory.sort((a, b) => a.timestamp - b.timestamp);
   const truncatedHistory = truncateConversationHistory(sortedHistory);
 
-  // Check if numaChatAgents is enabled - if so, don't load files to avoid WebSocket size limits
-  const numaChatAgentsEnabled = window.sessionStorage.getItem('NUMA_CHAT_AGENTS') === 'true';
-  const loadFiles = !numaChatAgentsEnabled;
+  // In agent mode, don't load files to avoid WebSocket size limits
+  const loadFiles = false;
 
   const formattedMessages = await formatMessagesForChat(truncatedHistory, getCredentials, loadFiles);
 
