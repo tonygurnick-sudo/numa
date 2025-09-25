@@ -32,8 +32,7 @@ const ChatInput = ({
   const inputRef = useRef(null);
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
 
-  // Check if agent mode is enabled
-  const useAgentMode = sessionStorage.getItem('NUMA_CHAT_AGENTS') === 'true';
+  // Agent mode is the default and only mode; remove legacy flag checks
 
   // Text input should only be disabled during loading (not streaming) and file processing
   const isTextInputDisabled = buttonStatus === 'loading' || disabled;
@@ -44,7 +43,7 @@ const ChatInput = ({
   // Dynamic placeholder text based on tool availability (only in agent mode)
   const placeholderText = isTextInputDisabled
     ? 'Processing...'
-    : useAgentMode && noToolsActive
+    : noToolsActive
       ? 'Chat with Numa (no tools active)...'
       : 'Chat with Numa...';
 
@@ -120,8 +119,8 @@ const ChatInput = ({
               </Button>
             </FeatureWrapper>
 
-            {/* Auto Tools Toggle (Agent mode only) */}
-            {useAgentMode && autoToolsEnabled !== undefined && setAutoToolsEnabled && (
+            {/* Auto Tools Toggle */}
+            {autoToolsEnabled !== undefined && setAutoToolsEnabled && (
               <Button
                 variant="link"
                 className={`auto-tools-toggle ${autoToolsEnabled ? 'active' : ''}`}
@@ -140,7 +139,7 @@ const ChatInput = ({
               className={`data-mode-toggle ${queryDataSources ? 'active' : ''}`}
               onClick={() => setQueryDataSources(!queryDataSources)}
               aria-label="Toggle Data Mode"
-              disabled={isTextInputDisabled || (useAgentMode && autoToolsEnabled)}
+              disabled={isTextInputDisabled || autoToolsEnabled}
             >
               <Database size={25} />
               {queryDataSources && <span className="bubble-text">Data Sources Enabled</span>}
@@ -152,7 +151,7 @@ const ChatInput = ({
               className={`web-search-toggle ${webSearchEnabled ? 'active' : ''}`}
               onClick={() => setWebSearchEnabled(!webSearchEnabled)}
               aria-label="Toggle Web Search"
-              disabled={isTextInputDisabled || (useAgentMode && autoToolsEnabled)}
+              disabled={isTextInputDisabled || autoToolsEnabled}
             >
               <Search size={25} />
               {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}

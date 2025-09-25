@@ -2,7 +2,6 @@ import { reloadFavourites } from './navigation';
 import { Dash } from '../Pages/Dash';
 import AppDetail from '../Pages/AppDetail';
 import UserManagement from '../Pages/UserManagement';
-import { NumaChat } from '../Pages/NumaChat';
 import { NumaChatAgents } from '../Pages/NumaChatAgents';
 import { KnowledgeBaseManagement } from '../Pages/KnowledgeBaseManagement';
 import { CompanyInfo } from '../Pages/CompanyInfo';
@@ -28,8 +27,7 @@ export const ROUTE_CONFIG = [
   {
     path: '/chat',
     element: () => {
-      const useAgents = sessionStorage.getItem('NUMA_CHAT_AGENTS') === 'true';
-      return useAgents ? <NumaChatAgents /> : <NumaChat />;
+      return <NumaChatAgents />;
     },
     requiredFeature: 'chat',
     nav: { label: 'Chat', icon: 'bi bi-chat-dots-fill' },

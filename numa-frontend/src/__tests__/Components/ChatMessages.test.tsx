@@ -143,9 +143,7 @@ describe('ChatMessages Component - Additional Tests', () => {
     expect(messageElement).toBeTruthy();
   });
 
-  it('renders legacy status messages only in legacy mode', () => {
-    // Test legacy mode
-    sessionStorage.setItem('NUMA_CHAT_AGENTS', 'false');
+  it("doesn't render legacy 'querying' status (agent mode only)", () => {
     const messages = [
       {
         role: 'assistant',
@@ -153,19 +151,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         status: 'querying',
       },
     ];
-    const { rerender } = render(
-      <ChatMessages
-        messages={messages}
-        messageEndRef={dummyRef}
-        loadingIndicatorStyle={loadingIndicatorStyle}
-        onOpenDocument={noop}
-      />,
-    );
-    expect(screen.getByText('Querying data sources...')).toBeInTheDocument();
-
-    // Test agent mode (should not show legacy status)
-    sessionStorage.setItem('NUMA_CHAT_AGENTS', 'true');
-    rerender(
+    render(
       <ChatMessages
         messages={messages}
         messageEndRef={dummyRef}
@@ -177,7 +163,6 @@ describe('ChatMessages Component - Additional Tests', () => {
   });
 
   it('renders segment-based content in agent mode', () => {
-    sessionStorage.setItem('NUMA_CHAT_AGENTS', 'true');
     const messages = [
       {
         role: 'assistant',
