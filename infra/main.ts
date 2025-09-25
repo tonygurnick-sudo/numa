@@ -54,6 +54,7 @@ if (override === undefined || override === 'none') {
     serviceName: 'q-apps-deployer',
     templateBucketName: 'arcanum-numa-templates' + bucketSuffix,
     appsBucketName: 'numa-qapps' + bucketSuffix,
+    enableCustomerSuccessPortal: true, // Enable POC Customer Success Portal
     ...environmentConfig,
   });
 

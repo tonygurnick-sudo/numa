@@ -9,6 +9,7 @@ import { Route53Zone } from '@cdktf/provider-aws/lib/route53-zone';
 import { TerraformOutput } from 'cdktf';
 import { Honeycomb } from '../constructs/honeycomb-construct';
 import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
+import { CustomerSuccessPortalConstruct } from '../constructs/customer-success-portal-construct';
 
 export class QAppsDeployerStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: QAppsDeployerStackProps) {
@@ -95,6 +96,15 @@ export class QAppsDeployerStack extends ArcanumStack {
     new TerraformOutput(this, 'zone-id', {
       value: zone.id,
     });
+
+    // Customer Success Portal
+    if (props.enableCustomerSuccessPortal) {
+      new CustomerSuccessPortalConstruct(this, 'customer-success-portal', {
+        clientConfigTable,
+        domainName: `customer-success-portal.${props.domainSuffix}`,
+        hostedZoneId: zone.id,
+      });
+    }
   }
 }
 
@@ -103,4 +113,9 @@ export interface QAppsDeployerStackProps extends ArcanumStackProps {
   appsBucketName: string;
   arcanumNumaAccount: string;
   domainSuffix: string;
+  /**
+   * Enable Customer Success Portal (POC)
+   * @default false
+   */
+  enableCustomerSuccessPortal?: boolean;
 }
