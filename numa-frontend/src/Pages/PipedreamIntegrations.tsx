@@ -40,6 +40,7 @@ export const PipedreamIntegrations = () => {
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
+  const [disconnectingApp, setDisconnectingApp] = useState<string | null>(null);
   const [expandedTestUI, setExpandedTestUI] = useState<Record<string, boolean>>({});
   const [settingsApp, setSettingsApp] = useState<string | null>(null);
   const [settingsLoading, setSettingsLoading] = useState<boolean>(false);
@@ -197,10 +198,43 @@ export const PipedreamIntegrations = () => {
     setExpandedTestUI((prev) => ({ ...prev, [appName]: true }));
   };
 
-  const disconnectApp = async () => {
-    setError(
-      'Disconnect functionality is coming soon. Please contact support if you need to disconnect an integration.',
-    );
+  const disconnectApp = async (appName: string) => {
+    if (!lambdaClient || !user) return;
+    try {
+      setError(null);
+      const confirmed = window.confirm(
+        `Are you sure you want to disconnect ${appName}? This will revoke access until you reconnect.`,
+      );
+      if (!confirmed) return;
+      setDisconnectingApp(appName);
+      const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+      const result = await PipedreamProxyService.disconnectIntegration(lambdaClient, externalUserId, {
+        appName,
+      });
+
+      if (!result.disconnected && result.reason === 'not_connected') {
+        // Already disconnected - just refresh state to be safe
+        setConnections((prev) =>
+          prev.map((c) => (c.app_name === appName ? { ...c, status: 'not_connected', pipedream_account_id: null } : c)),
+        );
+        return;
+      }
+
+      // Mark as not connected locally and collapse test UI
+      setConnections((prev) =>
+        prev.map((c) => (c.app_name === appName ? { ...c, status: 'not_connected', pipedream_account_id: null } : c)),
+      );
+      setExpandedTestUI((prev) => ({ ...prev, [appName]: false }));
+
+      // Optionally re-fetch status to confirm
+      await loadConnectionStatus();
+    } catch (err) {
+      const e = err as Error;
+      console.error('Disconnect failed', e);
+      setError(e.message || 'Failed to disconnect integration');
+    } finally {
+      setDisconnectingApp(null);
+    }
   };
 
   const openSettings = async (appName: string) => {
@@ -348,9 +382,22 @@ export const PipedreamIntegrations = () => {
                         Settings
                       </Button>
                     </OverlayTrigger>
-                    <Button variant="outline-secondary" size="sm" onClick={() => disconnectApp()} disabled>
-                      <i className="bi bi-x-circle me-2"></i>
-                      Disconnect
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={() => disconnectApp(integration.name_slug)}
+                      disabled={!!disconnectingApp}
+                      className="d-flex align-items-center"
+                    >
+                      {disconnectingApp === integration.name_slug ? (
+                        <>
+                          <Spinner size="sm" className="me-2" /> Disconnecting...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-x-circle me-2"></i> Disconnect
+                        </>
+                      )}
                     </Button>
                   </>
                 ) : (
