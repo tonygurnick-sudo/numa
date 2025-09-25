@@ -1,5 +1,11 @@
 import { TOOL_CONFIG } from './ToolConfig';
-import type { AgentEventFrame, ToolResult, ContentBlockStartEvent } from '@/types/chat';
+import type {
+  AgentEventFrame,
+  ToolResult,
+  ContentBlockStartEvent,
+  ContentBlockDeltaEvent,
+  ContentBlockDeltaToolUse,
+} from '@/types/chat';
 
 /**
  * Utility functions for handling tool events during streaming
@@ -60,7 +66,13 @@ export function markEventProcessed(eventKey: string | null, processedEventIds: S
  */
 // Minimal UI segment/message shapes used for local state updates in this module
 type UiTextSegment = { kind: 'text'; text: string; finalized?: boolean };
-type UiToolSegment = { kind: 'tool'; label: string; isLoading: boolean; toolUseId: string | null };
+type UiToolSegment = {
+  kind: 'tool';
+  label: string;
+  isLoading: boolean;
+  toolUseId: string | null;
+  // inputPayload intentionally omitted from UI; we do not display tool input
+};
 type UiResultSegment = { kind: 'result'; toolName: string | null; payload: ToolResult | unknown };
 type UiSegment = UiTextSegment | UiToolSegment | UiResultSegment;
 type UiMessage = {
@@ -71,7 +83,7 @@ type UiMessage = {
   [key: string]: unknown;
 };
 
-export function createMessageHelpers(setMessages) {
+export function createMessageHelpers(setMessages: (updater: (prev: UiMessage[]) => UiMessage[]) => void) {
   const appendToolEvent = (label: string, toolUseId: string | null = null, isLoading = false) => {
     setMessages((prev) => {
       if (prev.length === 0) return prev;
@@ -109,7 +121,7 @@ export function createMessageHelpers(setMessages) {
         segs[toolSegIndex] = { ...seg, isLoading };
         lastMsg.segments = segs;
         updated[lastIdx] = lastMsg;
-        console.log('[ToolEventHandlers] Updated tool loading state for', toolUseId, 'to', isLoading);
+        // minimal logging: omit per-segment updates
       }
 
       return updated;
@@ -144,9 +156,8 @@ export function handleToolUseStart(
   eventMsg: AgentEventFrame,
   toolUseMap: Map<string, string>,
   messageHelpers: ReturnType<typeof createMessageHelpers>,
-  flushPendingText,
+  flushPendingText: (conversationId?: string | null, preserveContent?: boolean) => void,
   conversationId: string | null,
-  saveToolCall?,
 ) {
   const nestedStart =
     eventMsg.event && 'contentBlockStart' in eventMsg.event
@@ -159,7 +170,7 @@ export function handleToolUseStart(
   const useIdVal = toolInfo.toolUseId ?? (toolInfo as unknown as Record<string, unknown>)['id'];
   const useId = typeof useIdVal === 'string' ? useIdVal : null;
 
-  console.log('[ToolEventHandlers] Tool use started:', toolName, toolLabel, 'useId:', useId);
+  // minimal logging: omit tool start
 
   flushPendingText(conversationId); // Don't preserve content for mid-stream flushes
   messageHelpers.appendToolEvent(`Calling ${toolLabel} tool`, useId, true); // Set loading=true
@@ -169,15 +180,7 @@ export function handleToolUseStart(
     toolUseMap.set(useId, toolName);
   }
 
-  // Save tool call to DynamoDB (non-blocking)
-  if (saveToolCall) {
-    saveToolCall({
-      toolName,
-      toolUseId: useId,
-      toolPayload: toolInfo,
-      content: `Tool call: ${toolName}`,
-    });
-  }
+  // Do not persist tool call yet; we will save when final input is available
 }
 
 // Payload shape used when persisting tool calls/results via callbacks
@@ -228,17 +231,24 @@ export function handleToolResults(
   messageHelpers: ReturnType<typeof createMessageHelpers>,
   flushPendingText,
   conversationId: string | null,
-  saveToolResult?,
+  saveToolResult?: (payload: ToolPersistencePayload) => void,
+  processedEventIds?: Set<string>,
 ) {
-  console.log('[ToolEventHandlers] Tool results received:', toolResults.length, 'results');
+  // minimal logging: omit result batch counts
   flushPendingText(conversationId); // Don't preserve content for mid-stream flushes
 
   toolResults.forEach((toolResult) => {
+    const tId = toolResult.toolUseId || 'unknown';
+    const resultKey = `result:${tId}`;
+    if (processedEventIds && processedEventIds.has(resultKey)) {
+      return; // already handled
+    }
+    if (processedEventIds) processedEventIds.add(resultKey);
     let tName = toolResult.name || null;
     if (!tName && toolResult.toolUseId) {
       tName = toolUseMap.get(toolResult.toolUseId) || 'unknown';
     }
-    console.log('[ToolEventHandlers] Processing tool result for:', tName, 'toolUseId:', toolResult.toolUseId);
+    // minimal logging: omit per-result processing logs
 
     // Stop loading indicator for this tool
     if (toolResult.toolUseId) {
@@ -278,11 +288,11 @@ export interface ProcessToolEventContext {
 }
 
 export interface ProcessToolEventCallbacks {
-  setMessages;
-  setButtonStatus;
-  flushPendingText;
-  saveToolCall?;
-  saveToolResult?;
+  setMessages: (updater: (prev: UiMessage[]) => UiMessage[]) => void;
+  setButtonStatus: (status: string) => void;
+  flushPendingText: (conversationId?: string | null, preserveContent?: boolean) => void;
+  saveToolCall?: (payload: ToolPersistencePayload) => void;
+  saveToolResult?: (payload: ToolPersistencePayload) => void;
   conversationId: string | null;
 }
 
@@ -295,18 +305,11 @@ export function processToolEvent(
 
   const { setMessages, setButtonStatus, flushPendingText, saveToolCall, saveToolResult, conversationId } = callbacks;
 
-  // ----- Deduplicate tool events (StrictMode-safe) -----
-  const eventKey = extractEventKey(eventMsg);
-  if (isEventProcessed(eventKey, processedEventIds)) {
-    return; // already handled
-  }
-  markEventProcessed(eventKey, processedEventIds);
-
-  console.log('[ToolEventHandlers] onEvent called:', eventMsg.type || 'unknown', eventMsg);
+  // minimal logging: omit raw event frame logs
 
   // Initialize streaming mode on first event (handles tool-first scenarios)
   if (!hasStreamingStarted) {
-    console.log('[ToolEventHandlers] First event received, initializing streaming mode');
+    // minimal logging: omit init logs
     setMessages((prev) => {
       const updated = [...prev];
       const idx = updated.findIndex((m) => m.status === 'thinking');
@@ -328,18 +331,98 @@ export function processToolEvent(
         (eventMsg.event.contentBlockStart as ContentBlockStartEvent | undefined)?.start?.toolUse,
     );
   if (hasToolUseStart) {
-    handleToolUseStart(eventMsg, toolUseMap, messageHelpers, flushPendingText, conversationId, saveToolCall);
+    const startKey = `start:${extractEventKey(eventMsg) || 'unknown'}`;
+    if (!processedEventIds.has(startKey)) {
+      processedEventIds.add(startKey);
+      handleToolUseStart(eventMsg, toolUseMap, messageHelpers, flushPendingText, conversationId);
+    }
     return;
+  }
+
+  // Handle streamed tool input (arguments) deltas - ignore for UI, only log
+  const flatDeltaToolUse: ContentBlockDeltaToolUse | undefined = eventMsg.contentBlockDelta?.delta?.toolUse as
+    | ContentBlockDeltaToolUse
+    | undefined;
+  const getNestedDelta = (f: AgentEventFrame): ContentBlockDeltaEvent | undefined => {
+    const e = f.event as { contentBlockDelta?: ContentBlockDeltaEvent } | undefined;
+    return e?.contentBlockDelta;
+  };
+  const nestedDeltaToolUse: ContentBlockDeltaToolUse | undefined = getNestedDelta(eventMsg)?.delta?.toolUse;
+  const toolUseDelta = flatDeltaToolUse || nestedDeltaToolUse;
+  if (toolUseDelta && typeof toolUseDelta === 'object') {
+    // minimal logging: ignore incremental deltas
+    return;
+  }
+
+  // Handle Strands-style tool_stream_event frames carrying tool args
+  const toolStreamEvt = eventMsg.tool_stream_event;
+  if (toolStreamEvt && typeof toolStreamEvt === 'object') {
+    // minimal logging: ignore tool_stream events
+    return;
+  }
+
+  // Handle final tool input from message.content[].toolUse
+  const getNestedMessageContent = (f: AgentEventFrame): unknown[] | undefined => {
+    const e = f.event as { message?: { content?: unknown[] } } | undefined;
+    return e?.message?.content as unknown[] | undefined;
+  };
+  const msgContent = eventMsg?.message?.content || getNestedMessageContent(eventMsg);
+  if (Array.isArray(msgContent)) {
+    const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+    for (const c of msgContent) {
+      if (!isRecord(c)) continue;
+      const toolUseRaw = (c as Record<string, unknown>)['toolUse'];
+      if (isRecord(toolUseRaw) && 'input' in toolUseRaw) {
+        const tu = toolUseRaw as Record<string, unknown>;
+        let payload = tu['input'];
+        if (typeof payload === 'string') {
+          try {
+            payload = JSON.parse(payload);
+          } catch {
+            // leave as string
+          }
+        }
+        const tId = typeof tu['toolUseId'] === 'string' ? (tu['toolUseId'] as string) : 'unknown';
+        const inputKey = `input:${tId}`;
+        if (!processedEventIds.has(inputKey)) {
+          processedEventIds.add(inputKey);
+          // Debug log of final tool input
+          const tName = typeof tu['name'] === 'string' ? (tu['name'] as string) : toolUseMap.get(tId) || 'unknown';
+          console.log('[ToolEventHandlers] Final tool call input:', { toolUseId: tId, name: tName, input: payload });
+          // Persist tool call now that input is finalized
+          if (saveToolCall) {
+            // Compose a normalized payload including parsed input
+            const fullPayload: Record<string, unknown> = { toolUseId: tId, name: tName, input: payload };
+            saveToolCall({
+              toolName: tName,
+              toolUseId: tId,
+              toolPayload: fullPayload,
+              content: `Tool call: ${tName}`,
+            });
+          }
+        }
+        // Only add one input per frame
+        return;
+      }
+    }
   }
 
   // Handle tool results
   const toolResults = extractToolResults(eventMsg);
   if (toolResults.length > 0) {
-    handleToolResults(toolResults, toolUseMap, messageHelpers, flushPendingText, conversationId, saveToolResult);
+    handleToolResults(
+      toolResults,
+      toolUseMap,
+      messageHelpers,
+      flushPendingText,
+      conversationId,
+      saveToolResult,
+      processedEventIds,
+    );
     return;
   }
 
   if (eventMsg?.type === 'tool_use_complete') {
-    console.log('[ToolEventHandlers] Tool use complete, ready for follow-up content...');
+    // minimal logging: omit completion chatter
   }
 }
