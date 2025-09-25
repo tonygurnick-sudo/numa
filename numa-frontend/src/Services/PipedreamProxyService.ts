@@ -9,6 +9,7 @@ import type {
   PipedreamLambdaHttpResponse,
   PipedreamProxyRequest,
   AuthUserMinimal,
+  DisconnectIntegrationData,
 } from '../types/pipedream';
 
 export class PipedreamProxyService {
@@ -135,6 +136,33 @@ export class PipedreamProxyService {
       throw new Error(response.error || 'Failed to set MCP policy');
     }
     return;
+  }
+
+  /**
+   * Disconnect integration(s) for a user
+   * - If accountId provided: deletes that specific account
+   * - Else if appName provided: deletes all accounts for that app for the user
+   */
+  static async disconnectIntegration(
+    lambdaClient: AwsLambdaClient,
+    externalUserId: string,
+    params: { appName?: string; accountId?: string },
+  ): Promise<DisconnectIntegrationData> {
+    const payload: PipedreamProxyRequest = {
+      operation: 'disconnect_integration',
+      external_user_id: externalUserId,
+      parameters: {
+        ...(params.accountId ? { account_id: params.accountId } : {}),
+        ...(params.appName ? { app_name: params.appName } : {}),
+      },
+    };
+
+    const response = await this.invokePipedreamProxy<DisconnectIntegrationData>(lambdaClient, payload);
+
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to disconnect integration');
+    }
+    return response.data;
   }
 
   /**

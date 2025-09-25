@@ -26,10 +26,11 @@ Same as the proxy lambda:
 
 ```json
 {
-  "operation": "generate_connect_token|get_integration_status|create_mcp_client",
+  "operation": "generate_connect_token|get_integration_status|create_mcp_client|disconnect_integration",
   "external_user_id": "client_name_user123",
   "parameters": {
     // Operation-specific parameters (optional)
+    // For disconnect_integration: app_name or account_id
   }
 }
 ```

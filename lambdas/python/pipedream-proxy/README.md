@@ -32,16 +32,18 @@ The proxy validates that calling accounts are explicitly authorized:
 - `generate_connect_token` - Creates OAuth connect tokens for frontend
 - `get_integration_status` - Lists connected integrations for user
 - `create_mcp_client` - Creates MCP client connection details for chat agent
+- `disconnect_integration` - Disconnects a user's integration accounts
 
 ## Request Format
 
 ```json
 {
-  "operation": "generate_connect_token|get_integration_status|create_mcp_client",
+  "operation": "generate_connect_token|get_integration_status|create_mcp_client|disconnect_integration",
   "external_user_id": "arcanum_tenant_user123",
   "sts_proof_url": "https://sts.us-east-1.amazonaws.com/?Action=GetCallerIdentity&...",
   "parameters": {
-    "app_name": "slack"  // Required for create_mcp_client only
+    "app_name": "slack",       // Required for create_mcp_client; optional for disconnect_integration
+    "account_id": "pa_abc123"  // Optional for disconnect_integration (delete a specific account)
   }
 }
 ```
@@ -157,6 +159,69 @@ The proxy validates that calling accounts are explicitly authorized:
   "sts_proof_url": "https://sts.us-east-1.amazonaws.com/?Action=GetCallerIdentity&...",
   "parameters": {
     "app_name": "slack"
+  }
+}
+```
+
+### 4. Disconnect Integration
+
+Disconnect either a single account by `account_id` or all of the user's accounts for an app by `app_name`.
+
+By account_id:
+
+```json
+{
+  "operation": "disconnect_integration",
+  "external_user_id": "arcanum_demo_user123",
+  "sts_proof_url": "https://sts.us-east-1.amazonaws.com/?Action=GetCallerIdentity&...",
+  "parameters": { "account_id": "pa_abc123" }
+}
+```
+
+Response (idempotent):
+
+```json
+{
+  "statusCode": 200,
+  "body": {
+    "success": true,
+    "operation": "disconnect_integration",
+    "data": {
+      "external_user_id": "arcanum_demo_user123",
+      "account_id": "pa_abc123",
+      "disconnected": true
+    }
+  }
+}
+```
+
+By app_name (deletes all the user's accounts for that app):
+
+```json
+{
+  "operation": "disconnect_integration",
+  "external_user_id": "arcanum_demo_user123",
+  "sts_proof_url": "https://sts.us-east-1.amazonaws.com/?Action=GetCallerIdentity&...",
+  "parameters": { "app_name": "slack" }
+}
+```
+
+Response (idempotent if none found):
+
+```json
+{
+  "statusCode": 200,
+  "body": {
+    "success": true,
+    "operation": "disconnect_integration",
+    "data": {
+      "external_user_id": "arcanum_demo_user123",
+      "app_name": "slack",
+      "found_accounts": ["pa_1", "pa_2"],
+      "deleted_account_ids": ["pa_1", "pa_2"],
+      "failed_account_ids": [],
+      "disconnected": true
+    }
   }
 }
 ```

@@ -312,6 +312,143 @@ class PipedreamOperations:
             )
             raise Exception(f"MCP client creation error: {str(e)}") from e
 
+    def disconnect_integration(
+        self,
+        external_user_id: str,
+        app_name: Optional[str] = None,
+        account_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Disconnect integration accounts.
+
+        Behavior:
+        - If account_id is provided: delete that specific account id
+        - Else if app_name is provided: delete ALL accounts for that app for the user
+
+        Returns a result describing what was deleted or why nothing changed.
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "x-pd-environment": credentials["environment"],
+        }
+
+        base_url = f"https://api.pipedream.com/v1/connect/{credentials['project_id']}"
+
+        def _delete_single_account(acc_id: str) -> int:
+            """Attempt to delete a single account. Returns HTTP status code."""
+            try:
+                resp = requests.delete(
+                    f"{base_url}/accounts/{acc_id}", headers=headers, timeout=15
+                )
+                # Do not raise for status - we interpret 204/404 specially
+                return resp.status_code
+            except Exception as e:  # network or other errors
+                logger.error(
+                    "Delete account request failed",
+                    error=str(e),
+                    account_id=acc_id,
+                    external_user_id=external_user_id,
+                )
+                raise Exception(f"Pipedream delete account error: {str(e)}") from e
+
+        # Case 1: Direct by account_id
+        if account_id:
+            status = _delete_single_account(account_id)
+            if status in (204, 404):
+                # 204: deleted now; 404: already gone (idempotent)
+                logger.info(
+                    "Account disconnect completed",
+                    external_user_id=external_user_id,
+                    account_id=account_id,
+                    status=status,
+                )
+                return {
+                    "external_user_id": external_user_id,
+                    "account_id": account_id,
+                    "disconnected": status == 204,
+                    "reason": None if status == 204 else "not_connected",
+                }
+            # Any other status is considered an error
+            logger.error(
+                "Account disconnect failed",
+                external_user_id=external_user_id,
+                account_id=account_id,
+                status=status,
+            )
+            raise Exception(f"Failed to delete account: HTTP {status}")
+
+        # Case 2: By app_name (delete all this user's accounts for the app)
+        if app_name:
+            # List user accounts and filter by app
+            user_connections = self._get_user_connections(external_user_id)
+            matching: List[str] = []
+            for conn in user_connections:
+                if self._get_app_name_from_pipedream(conn) == app_name:
+                    conn_id = conn.get("id")
+                    if conn_id is not None:
+                        matching.append(conn_id)
+
+            if not matching:
+                logger.info(
+                    "No accounts found for app; already disconnected",
+                    external_user_id=external_user_id,
+                    app_name=app_name,
+                )
+                return {
+                    "external_user_id": external_user_id,
+                    "app_name": app_name,
+                    "found_accounts": [],
+                    "deleted_account_ids": [],
+                    "failed_account_ids": [],
+                    "disconnected": False,
+                    "reason": "not_connected",
+                }
+
+            deleted: List[str] = []
+            failed: List[str] = []
+
+            for acc_id in matching:
+                status = _delete_single_account(acc_id)
+                if status in (204, 404):
+                    # Treat 404 as idempotent success for the purposes of removal
+                    deleted.append(acc_id)
+                else:
+                    logger.warning(
+                        "Failed to delete account for app",
+                        external_user_id=external_user_id,
+                        app_name=app_name,
+                        account_id=acc_id,
+                        status=status,
+                    )
+                    failed.append(acc_id)
+
+            # If any failed (non-204/404), surface an error to caller
+            if failed:
+                raise Exception(
+                    "One or more accounts failed to delete: " + ",".join(failed)
+                )
+
+            logger.info(
+                "App disconnect completed",
+                external_user_id=external_user_id,
+                app_name=app_name,
+                deleted_count=len(deleted),
+            )
+            return {
+                "external_user_id": external_user_id,
+                "app_name": app_name,
+                "found_accounts": matching,
+                "deleted_account_ids": deleted,
+                "failed_account_ids": [],
+                "disconnected": True,
+            }
+
+        # Neither account_id nor app_name provided
+        raise ValueError("disconnect_integration requires account_id or app_name")
+
     def list_mcp_tools(
         self, external_user_id: str, app_name: str
     ) -> List[Dict[str, Any]]:

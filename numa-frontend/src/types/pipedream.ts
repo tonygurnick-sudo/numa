@@ -6,7 +6,8 @@ export type PipedreamOperation =
   | 'generate_connect_token'
   | 'list_mcp_tools'
   | 'get_mcp_policy'
-  | 'set_mcp_policy';
+  | 'set_mcp_policy'
+  | 'disconnect_integration';
 
 export interface PipedreamProxyRequest {
   operation: PipedreamOperation;
@@ -43,6 +44,19 @@ export interface ConnectTokenData {
   externalUserId: string;
   expiresAt: string;
   connectLinkUrl: string;
+}
+
+export interface DisconnectIntegrationData {
+  external_user_id: string;
+  // account-based disconnect
+  account_id?: string;
+  // app-based disconnect
+  app_name?: string;
+  found_accounts?: string[];
+  deleted_account_ids?: string[];
+  failed_account_ids?: string[];
+  disconnected: boolean;
+  reason?: 'not_connected' | 'partial_failure' | string;
 }
 
 export interface IntegrationStatusResult {

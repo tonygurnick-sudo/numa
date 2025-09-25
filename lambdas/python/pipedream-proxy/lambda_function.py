@@ -26,6 +26,7 @@ SUPPORTED_OPERATIONS = [
     "generate_connect_token",
     "get_integration_status",
     "create_mcp_client",
+    "disconnect_integration",
     "list_mcp_tools",
 ]
 
@@ -143,6 +144,23 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                     400, "create_mcp_client operation requires app_name parameter"
                 )
             result = pipedream_ops.create_mcp_client(external_user_id, app_name)
+
+        elif operation == "disconnect_integration":
+            # Accept either account_id or app_name (preferred for UI)
+            app_name = (
+                parameters.get("app_name") if isinstance(parameters, dict) else None
+            )
+            account_id = (
+                parameters.get("account_id") if isinstance(parameters, dict) else None
+            )
+            if not app_name and not account_id:
+                return _error_response(
+                    400,
+                    "disconnect_integration requires account_id or app_name",
+                )
+            result = pipedream_ops.disconnect_integration(
+                external_user_id, app_name=app_name, account_id=account_id
+            )
 
         elif operation == "list_mcp_tools":
             app_name = parameters.get("app_name")
