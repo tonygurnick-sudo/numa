@@ -40,6 +40,13 @@ const ChatFileUpload = ({
         resetUserNewChatFlag();
       }
 
+      // Reset inactivity timer so we don't bounce back to the new-chat suggestion view
+      try {
+        localStorage.setItem('numa_chat_lastInteraction', Date.now().toString());
+      } catch (e) {
+        console.warn('Failed to set inactivity timer after file upload:', e);
+      }
+
       // Create auth context to pass to process function
       const authContext = { user };
 
