@@ -32,6 +32,7 @@ import { useStreamingHandler } from '../hooks/useStreamingHandler';
 import { useDocumentProcessor } from '../hooks/useDocumentProcessor';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { autoNameConversation } from '../utils/autoChatTitle';
+import { useChatInactivity } from '../hooks/useChatInactivity';
 
 const NumaChatAgents = () => {
   // Basic UI state
@@ -224,6 +225,39 @@ const NumaChatAgents = () => {
     initializeServices();
   }, [PREFERRED_KNOWLEDGE_BASE, bedrockAgentRuntimeClient, BEDROCK_KNOWLEDGE_BASE_ID]);
 
+  // Inactivity: when expired, start a new chat and show suggestions (hook will fetch suggestions)
+  async function handleNewChatOnExpired() {
+    // Stop any ongoing streaming response
+    setButtonStatus('idle');
+    resetStreamingState();
+
+    // Clear all UI states
+    setMessages([]);
+    setUploadedFiles([]);
+    setInputMessage('');
+    closeDocument();
+
+    // Reset split view state - hide document panel
+    setShowSplitView(false);
+    setLeftFraction(0.99);
+
+    // Clear manual loading state to prevent conflicts
+    setIsManuallyLoading(false);
+
+    // Use the hook's new chat handler
+    await handleNewChat();
+  }
+
+  // Inactivity: centralized in hook
+  const { showContinueSuggestions, recentConversations, resetInactivityTimer, hideSuggestions } = useChatInactivity({
+    numaChatDynamoUtils,
+    sub,
+    buttonStatus,
+    isProcessingRef,
+    onExpired: handleNewChatOnExpired,
+    // Do NOT pass inputMessage: keep suggestions visible while typing; hide on submit instead
+  });
+
   // Auto-load conversation when conversationId is set by useConversationManager
   // But skip auto-load if this conversation was just created in this session, messages already exist, or manual loading is in progress
   useEffect(() => {
@@ -246,6 +280,8 @@ const NumaChatAgents = () => {
     }
   }, [conversationId, numaChatDynamoUtils, sub, hasUserStartedNewChat, messages.length, isManuallyLoading]);
 
+  // (Typing hide handled in hook)
+
   // Helper to refresh sidebar
   const refreshSidebar = () => {
     chatHistoryRef.current?.refreshConversations();
@@ -255,6 +291,8 @@ const NumaChatAgents = () => {
   const toggleChatHistory = () => {
     chatHistoryRef.current?.toggleSidebar();
   };
+
+  // (Helper functions moved into hook)
 
   // New chat handler that clears UI state
   const handleNewChatClick = async () => {
@@ -281,6 +319,11 @@ const NumaChatAgents = () => {
     // Add an initial greeting from the assistant
     const greeting = { role: 'assistant', content: 'How can I help you today?' };
     setMessages([greeting]);
+
+    // This is a user interaction
+    resetInactivityTimer();
+    // Hide suggestions when explicitly starting a new chat
+    hideSuggestions();
   };
 
   // Prepare conversation context and add user message
@@ -553,6 +596,11 @@ const NumaChatAgents = () => {
       return;
     }
 
+    // This is a user interaction
+    resetInactivityTimer();
+    // Hide suggestions on first interaction
+    hideSuggestions();
+
     // Prepare UI
     setInputMessage('');
     if (inputRef.current) {
@@ -763,6 +811,11 @@ const NumaChatAgents = () => {
     setMessages([]); // Clear current messages immediately
     resetUserNewChatFlag(); // Reset the flag since user is explicitly loading a conversation
 
+    // This is a user interaction
+    resetInactivityTimer();
+    // Hide suggestions when loading a conversation
+    hideSuggestions();
+
     try {
       const chatMessages = await loadConversation(selectedConversationId, numaChatDynamoUtils, sub, getAccessToken);
       setMessages(chatMessages);
@@ -923,6 +976,68 @@ const NumaChatAgents = () => {
                               <p className="mt-2 text-muted">Loading conversation...</p>
                             </div>
                           </div>
+                        ) : showContinueSuggestions && recentConversations.length > 0 && messages.length === 0 ? (
+                          <div className="d-flex flex-column align-items-center justify-content-center h-100">
+                            <div style={{ maxWidth: 640, width: '100%' }}>
+                              {/* No initial assistant bubble; keep area clean */}
+                              {/* During initial new chat flow, show the input directly under the first message */}
+                              <div className="d-flex justify-content-center">
+                                <div
+                                  className="chat-input-wrapper"
+                                  style={{ maxWidth: 640, width: '100%', marginBottom: '24px' }}
+                                >
+                                  <ChatInput
+                                    inputMessage={inputMessage}
+                                    setInputMessage={setInputMessage}
+                                    handleSubmit={handleSubmit}
+                                    setShowUploadModal={setShowUploadModal}
+                                    buttonStatus={buttonStatus}
+                                    queryDataSources={queryDataSources}
+                                    setQueryDataSources={setQueryDataSources}
+                                    webSearchEnabled={webSearchEnabled}
+                                    setWebSearchEnabled={setWebSearchEnabled}
+                                    autoToolsEnabled={autoToolsEnabled}
+                                    setAutoToolsEnabled={setAutoToolsEnabled}
+                                    availableConnections={availableConnections}
+                                    enabledConnections={enabledConnections}
+                                    setEnabledConnections={setEnabledConnections}
+                                    connectionsLoading={connectionsLoading}
+                                    hasPipedreamFeature={hasPipedreamFeature}
+                                    disabled={isFileProcessing}
+                                    noToolsActive={noToolsActive}
+                                    externalInputRef={inputRef}
+                                    autoFocus={true}
+                                    placeholderOverride={'How can I help you today?'}
+                                  />
+                                </div>
+                              </div>
+                              <div className="d-flex justify-content-center">
+                                <div
+                                  className="continue-suggestions p-3 mt-2 mb-2"
+                                  style={{ maxWidth: 640, width: '100%' }}
+                                >
+                                  <div className="text-muted small mb-2">Continue where you left off</div>
+                                  <div className="d-flex flex-column gap-2">
+                                    {recentConversations.map((convo) => (
+                                      <Button
+                                        key={convo.conversation_id}
+                                        variant="outline-secondary"
+                                        size="lg"
+                                        className="text-start"
+                                        style={{ paddingTop: '0.75rem', paddingBottom: '0.75rem' }}
+                                        onClick={() => {
+                                          hideSuggestions();
+                                          handleLoadConversation(convo.conversation_id);
+                                        }}
+                                      >
+                                        {convo.conversationName || 'Untitled Chat'}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         ) : (
                           <ChatMessages
                             messages={messages}
@@ -934,29 +1049,33 @@ const NumaChatAgents = () => {
                         )}
                       </div>
 
-                      {/* pinned input at bottom */}
-                      <div className="chat-input-wrapper">
-                        <ChatInput
-                          inputMessage={inputMessage}
-                          setInputMessage={setInputMessage}
-                          handleSubmit={handleSubmit}
-                          setShowUploadModal={setShowUploadModal}
-                          buttonStatus={buttonStatus}
-                          queryDataSources={queryDataSources}
-                          setQueryDataSources={setQueryDataSources}
-                          webSearchEnabled={webSearchEnabled}
-                          setWebSearchEnabled={setWebSearchEnabled}
-                          autoToolsEnabled={autoToolsEnabled}
-                          setAutoToolsEnabled={setAutoToolsEnabled}
-                          availableConnections={availableConnections}
-                          enabledConnections={enabledConnections}
-                          setEnabledConnections={setEnabledConnections}
-                          connectionsLoading={connectionsLoading}
-                          hasPipedreamFeature={hasPipedreamFeature}
-                          disabled={isFileProcessing}
-                          noToolsActive={noToolsActive}
-                        />
-                      </div>
+                      {/* pinned input at bottom (hide during initial new chat flow) */}
+                      {!(showContinueSuggestions && recentConversations.length > 0 && messages.length === 0) && (
+                        <div className="chat-input-wrapper">
+                          <ChatInput
+                            inputMessage={inputMessage}
+                            setInputMessage={setInputMessage}
+                            handleSubmit={handleSubmit}
+                            setShowUploadModal={setShowUploadModal}
+                            buttonStatus={buttonStatus}
+                            queryDataSources={queryDataSources}
+                            setQueryDataSources={setQueryDataSources}
+                            webSearchEnabled={webSearchEnabled}
+                            setWebSearchEnabled={setWebSearchEnabled}
+                            autoToolsEnabled={autoToolsEnabled}
+                            setAutoToolsEnabled={setAutoToolsEnabled}
+                            availableConnections={availableConnections}
+                            enabledConnections={enabledConnections}
+                            setEnabledConnections={setEnabledConnections}
+                            connectionsLoading={connectionsLoading}
+                            hasPipedreamFeature={hasPipedreamFeature}
+                            disabled={isFileProcessing}
+                            noToolsActive={noToolsActive}
+                            externalInputRef={inputRef}
+                            autoFocus={true}
+                          />
+                        </div>
+                      )}
                     </div>
                   }
                   right={
@@ -990,6 +1109,7 @@ const NumaChatAgents = () => {
       <ChatFileUpload
         show={showUploadModal}
         onHide={() => setShowUploadModal(false)}
+        getAccessToken={getAccessToken}
         setMessages={setMessages}
         conversationId={conversationId}
         sub={sub}

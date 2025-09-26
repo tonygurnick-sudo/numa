@@ -27,9 +27,12 @@ const ChatInput = ({
   connectionsLoading = false,
   hasPipedreamFeature = false,
   disabled = false,
-  noToolsActive = false,
+  externalInputRef = null,
+  autoFocus = false,
+  placeholderOverride = undefined,
 }) => {
-  const inputRef = useRef(null);
+  const internalRef = useRef(null);
+  const inputRef = externalInputRef || internalRef;
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
 
   // Agent mode is the default and only mode; remove legacy flag checks
@@ -40,12 +43,8 @@ const ChatInput = ({
   // Send button should be disabled during loading, streaming, and file processing
   const isSendDisabled = buttonStatus === 'loading' || buttonStatus === 'streaming' || disabled;
 
-  // Dynamic placeholder text based on tool availability (only in agent mode)
-  const placeholderText = isTextInputDisabled
-    ? 'Processing...'
-    : noToolsActive
-      ? 'Chat with Numa (no tools active)...'
-      : 'Chat with Numa...';
+  // Placeholder: prefer explicit override, otherwise show processing or a friendly default
+  const placeholderText = placeholderOverride ?? (isTextInputDisabled ? 'Processing...' : 'How can I help you today?');
 
   const handleInputChange = (e) => {
     setInputMessage(e.target.value);
@@ -59,6 +58,13 @@ const ChatInput = ({
       inputRef.current.style.height = '40px';
     }
   }, [inputMessage]);
+
+  // Auto focus when requested and input is enabled
+  useEffect(() => {
+    if (autoFocus && inputRef.current && !isTextInputDisabled) {
+      inputRef.current.focus();
+    }
+  }, [autoFocus, isTextInputDisabled]);
 
   const handleKeyDown = (e) => {
     // If send is disabled, don't process Enter as a submit
@@ -201,8 +207,10 @@ const ChatInput = ({
                                 alt={connection.name}
                                 style={{ width: '20px', height: '20px' }}
                                 onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'inline-block';
+                                  const img = e.currentTarget as HTMLImageElement;
+                                  img.style.display = 'none';
+                                  const fallback = img.nextElementSibling as HTMLElement | null;
+                                  if (fallback) fallback.style.display = 'inline-block';
                                 }}
                               />
                               <i
@@ -284,8 +292,10 @@ const ChatInput = ({
                         alt={connection.name}
                         style={{ width: '24px', height: '24px' }}
                         onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'inline-block';
+                          const img = e.currentTarget as HTMLImageElement;
+                          img.style.display = 'none';
+                          const fallback = img.nextElementSibling as HTMLElement | null;
+                          if (fallback) fallback.style.display = 'inline-block';
                         }}
                       />
                       <i
