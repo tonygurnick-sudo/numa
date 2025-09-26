@@ -21,6 +21,7 @@ import linkedinIcon from '../assets/icons/linkedin.png';
 import googleDriveIcon from '../assets/icons/google_drive.svg';
 import googleAnalyticsIcon from '../assets/icons/google_analytics.svg';
 import sharepointIcon from '../assets/icons/sharepoint.svg';
+import salesforceIcon from '../assets/icons/salesforce.png';
 
 export type BootstrapColor =
   | 'primary'
@@ -196,6 +197,17 @@ export const CONNECTIONS_CONFIG: Record<string, ConnectionConfigEntry> = {
     fallback_icon: 'bi bi-files',
     fallback_color: 'primary',
     example_query: 'Show me recent updates to my SharePoint lists and documents',
+  },
+  salesforce_rest_api: {
+    id: 'salesforce_rest_api',
+    name: 'Salesforce',
+    description:
+      'Manage your Salesforce CRM data including leads, accounts, contacts, opportunities, and cases. Create, update, query, and sync customer relationship data',
+    auth_type: 'oauth',
+    img_src: salesforceIcon,
+    fallback_icon: 'bi bi-cloud-check',
+    fallback_color: 'info',
+    example_query: 'Show me all open opportunities over $10,000 and create a new lead from this contact information',
   },
 };
 
