@@ -17,6 +17,7 @@ export const SUPPORTED_INTEGRATIONS = [
   'google_drive',
   'google_analytics',
   'sharepoint',
+  'salesforce_rest_api',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];
