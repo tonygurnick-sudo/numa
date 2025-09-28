@@ -32,8 +32,21 @@ PIP="${VENV_DIR}"/bin/pip
 
 # some packages don't provide wheels, so have to build them manually to be compatible to --only-binary=:all:
 mkdir "${WHEEL_DIR}"
+# Build a wheel for the exact svglib version locked by Poetry (to satisfy --only-binary)
 pushd "${WHEEL_DIR}"
-    ${PIP} wheel --no-cache-dir --no-deps svglib
+    # Determine locked svglib version from Poetry, if present
+    SVGLIB_VERSION=""
+    if command -v poetry >/dev/null 2>&1; then
+        pushd "${LAMBDA_DIRECTORY}" >/dev/null
+            # shellcheck disable=SC2016
+            SVGLIB_VERSION=$(poetry show --only main 2>/dev/null | awk '$1=="svglib" {print $2}') || true
+        popd >/dev/null
+    fi
+    if test -n "${SVGLIB_VERSION}"; then
+        ${PIP} wheel --no-cache-dir --no-deps "svglib==${SVGLIB_VERSION}"
+    else
+        ${PIP} wheel --no-cache-dir --no-deps svglib
+    fi
 popd
 
 pushd "${LAMBDA_DIRECTORY}"
