@@ -528,7 +528,6 @@ const NumaChatAgents = () => {
       // Refresh the sidebar
       refreshSidebar();
       setUploadedFiles([]);
-      setInputMessage('');
 
       // Reset the hasUserStartedNewChat flag after first successful submit
       if (hasUserStartedNewChat) {
@@ -683,7 +682,6 @@ const NumaChatAgents = () => {
 
             setButtonStatus('idle');
             setUploadedFiles([]);
-            setInputMessage('');
             setTimeout(() => {
               inputRef.current?.focus();
             }, 0);
@@ -755,7 +753,6 @@ const NumaChatAgents = () => {
 
         setButtonStatus('idle');
         setUploadedFiles([]);
-        setInputMessage('');
         setTimeout(() => {
           inputRef.current?.focus();
         }, 0);
@@ -975,7 +972,7 @@ const NumaChatAgents = () => {
                                     setEnabledConnections={setEnabledConnections}
                                     connectionsLoading={connectionsLoading}
                                     hasPipedreamFeature={hasPipedreamFeature}
-                                    disabled={isFileProcessing}
+                                    uploadsInProgress={isFileProcessing}
                                     noToolsActive={noToolsActive}
                                     externalInputRef={inputRef}
                                     autoFocus={true}
@@ -1041,7 +1038,7 @@ const NumaChatAgents = () => {
                             setEnabledConnections={setEnabledConnections}
                             connectionsLoading={connectionsLoading}
                             hasPipedreamFeature={hasPipedreamFeature}
-                            disabled={isFileProcessing}
+                            uploadsInProgress={isFileProcessing}
                             noToolsActive={noToolsActive}
                             externalInputRef={inputRef}
                             autoFocus={true}

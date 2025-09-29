@@ -33,6 +33,8 @@ const ChatInput = ({
   externalInputRef = null,
   autoFocus = false,
   placeholderOverride = undefined,
+  uploadsInProgress = false,
+  noToolsActive: _noToolsActive = false,
 }) => {
   const internalRef = useRef(null);
   const inputRef = externalInputRef || internalRef;
@@ -40,15 +42,22 @@ const ChatInput = ({
 
   // Agent mode is the default and only mode; remove legacy flag checks
 
-  // Text input should only be disabled during loading (not streaming) and file processing
-  const isTextInputDisabled = buttonStatus === 'loading' || disabled;
+  // Keep text input enabled during chat processing and uploads; only honor a hard disable
+  const isTextInputDisabled = !!disabled;
 
-  // Send button should be disabled during loading, streaming, file processing, or oversized messages
+  // Send button should be disabled during loading/streaming, uploads, hard-disable, or oversized messages
   const isSendDisabled =
-    buttonStatus === 'loading' || buttonStatus === 'streaming' || disabled || inputMessage.length > MAX_MESSAGE_LENGTH;
+    buttonStatus === 'loading' ||
+    buttonStatus === 'streaming' ||
+    uploadsInProgress ||
+    !!disabled ||
+    inputMessage.length > MAX_MESSAGE_LENGTH;
 
-  // Placeholder: prefer explicit override, otherwise show processing or a friendly default
-  const placeholderText = placeholderOverride ?? (isTextInputDisabled ? 'Processing...' : 'How can I help you today?');
+  // Keep other controls disabled during streaming/uploads to avoid mid-turn config changes
+  const isControlsDisabled = buttonStatus === 'streaming' || uploadsInProgress || !!disabled;
+
+  // Placeholder: prefer explicit override, otherwise show a friendly default
+  const placeholderText = placeholderOverride ?? 'How can I help you today?';
 
   const handleInputChange = (e) => {
     const newValue = e.target.value;
@@ -158,7 +167,7 @@ const ChatInput = ({
                   setShowUploadModal(true);
                 }}
                 aria-label="Upload Files"
-                disabled={isTextInputDisabled}
+                disabled={isControlsDisabled}
               >
                 <i className="bi bi-paperclip"></i>
               </Button>
@@ -171,7 +180,7 @@ const ChatInput = ({
                 className={`auto-tools-toggle ${autoToolsEnabled ? 'active' : ''}`}
                 onClick={() => setAutoToolsEnabled(!autoToolsEnabled)}
                 aria-label="Toggle Auto Tools"
-                disabled={isTextInputDisabled}
+                disabled={isControlsDisabled}
               >
                 <Gear size={25} />
                 {autoToolsEnabled && <span className="bubble-text">Auto Mode</span>}
@@ -184,7 +193,7 @@ const ChatInput = ({
               className={`data-mode-toggle ${queryDataSources ? 'active' : ''}`}
               onClick={() => setQueryDataSources(!queryDataSources)}
               aria-label="Toggle Data Mode"
-              disabled={isTextInputDisabled || autoToolsEnabled}
+              disabled={isControlsDisabled || autoToolsEnabled}
             >
               <Database size={25} />
               {queryDataSources && <span className="bubble-text">Data Sources Enabled</span>}
@@ -196,7 +205,7 @@ const ChatInput = ({
               className={`web-search-toggle ${webSearchEnabled ? 'active' : ''}`}
               onClick={() => setWebSearchEnabled(!webSearchEnabled)}
               aria-label="Toggle Web Search"
-              disabled={isTextInputDisabled || autoToolsEnabled}
+              disabled={isControlsDisabled || autoToolsEnabled}
             >
               <Search size={25} />
               {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}
@@ -209,7 +218,7 @@ const ChatInput = ({
                 className={`connections-toggle ${enabledConnections.length > 0 ? 'active' : ''}`}
                 onClick={() => setShowConnectionsModal(true)}
                 aria-label="Toggle Connections"
-                disabled={isTextInputDisabled || connectionsLoading}
+                disabled={isControlsDisabled || connectionsLoading}
               >
                 {connectionsLoading && (
                   <>
@@ -267,7 +276,7 @@ const ChatInput = ({
             )}
           </div>
           <div className="right-controls">
-            {buttonStatus === 'loading' || buttonStatus === 'streaming' ? (
+            {buttonStatus === 'loading' || buttonStatus === 'streaming' || uploadsInProgress ? (
               <Button
                 variant="primary"
                 type="submit"
