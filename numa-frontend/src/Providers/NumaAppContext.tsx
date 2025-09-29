@@ -1,21 +1,17 @@
 import { createContext, useContext } from 'react';
-
-type Ctx = {
-  updateTaskInputValue: (taskId: string, value: unknown) => void;
-  updateTaskCompletionStatus: (taskId: string, success?: boolean) => void;
-};
+import type { NumaApp, NumaAppContextValue } from '../types/apps';
 
 // Create the context
-export const NumaAppContext = createContext<Ctx>({
+export const NumaAppContext = createContext<NumaAppContextValue>({
   // Status states
   loading: false,
-  setLoading: () => {},
+  setLoading: (_v: boolean) => {},
   error: null,
-  setError: () => {},
+  setError: (_e: string | null) => {},
 
   // App data states
   numaApps: [],
-  setNumaApps: () => {},
+  setNumaApps: (_apps: NumaApp[]) => {},
   numaAppData: null,
   setNumaAppData: () => {},
   qAppData: [],
@@ -77,7 +73,7 @@ export const NumaAppContext = createContext<Ctx>({
 });
 
 // Custom hook for using context
-export const useNumaApp = () => {
+export const useNumaApp = (): NumaAppContextValue => {
   const context = useContext(NumaAppContext);
   if (!context) {
     throw new Error('useNumaApp must be used within a NumaAppProvider');
