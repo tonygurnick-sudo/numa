@@ -15,7 +15,6 @@ class TestLambdaFunction(unittest.TestCase):
                 "domainName": "test.execute-api.us-east-1.amazonaws.com"
             },
             "prompt": "What is the company policy on remote work?",
-            "messages": [{"role": "user", "content": "Previous message"}],
             "enabledTools": ["query_knowledge_base", "web_search"],
             "systemPrompt": "You are a helpful assistant",
             "userAuth": {
@@ -62,7 +61,12 @@ class TestLambdaFunction(unittest.TestCase):
             self.mock_event["enabledTools"],
             self.mock_event["systemPrompt"],
             None,
-            self.mock_event["messages"],
+            [
+                {
+                    "role": "user",
+                    "content": [{"text": "What is the company policy on remote work?"}],
+                }
+            ],
             [],
         )
         mock_clear_auth.assert_called_once()
@@ -121,7 +125,7 @@ class TestLambdaFunction(unittest.TestCase):
             ["query_knowledge_base", "web_search"],  # Default tools
             "",  # Default empty system prompt
             None,  # Default model_id
-            [],  # Default empty messages
+            [{"role": "user", "content": [{"text": "Test prompt"}]}],
             [],  # Default empty enabled_connections
         )
         mock_set_auth.assert_called_once_with(None)  # No user auth

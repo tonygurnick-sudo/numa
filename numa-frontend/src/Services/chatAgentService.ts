@@ -1,7 +1,7 @@
 /**
  * Service for interacting with the Numa Chat Agent via WebSocket API Gateway
  */
-import type { AgentEventFrame, ChatMessage, OnChunk, OnComplete, OnError, OnEvent } from '../types/chat';
+import type { AgentEventFrame, OnChunk, OnComplete, OnError, OnEvent } from '../types/chat';
 import { getStopReason, isMessageStopFrame, isToolEventFrame, tryGetDeltaText } from '../types/chat';
 
 class ChatAgentWebSocket {
@@ -218,7 +218,7 @@ class ChatAgentWebSocket {
   /**
    * Stream a prompt to Chat Agent.
    * @param {string} prompt
-   * @param {Array} messages - Conversation history
+   * @param {string} conversationId - Conversation ID for backend to load history
    * @param {Array} enabledTools - Array of tool names to enable
    * @param {string} systemPrompt - System prompt for the agent
    * @param {string} modelId - Model ID to use for this request
@@ -231,7 +231,7 @@ class ChatAgentWebSocket {
    */
   async streamPrompt(
     prompt: string,
-    messages: ChatMessage[],
+    conversationId: string,
     enabledTools: string[],
     systemPrompt: string,
     modelId: string | null,
@@ -264,10 +264,10 @@ class ChatAgentWebSocket {
       }
     });
 
-    // Send the prompt with enabled tools configuration, system prompt, model ID, and user auth
+    // Send the prompt with conversationId for backend to load history and enabled connections
     const messagePayload: Record<string, unknown> = {
       prompt,
-      messages,
+      conversationId,
       enabledTools,
       enabledConnections,
       systemPrompt,
@@ -320,7 +320,7 @@ const chatAgentWS = new ChatAgentWebSocket();
 /**
  * Call the Chat Agent with streaming response via WebSocket
  * @param {string} prompt - The user's prompt/question
- * @param {Array} messages - Optional array of message objects for context
+ * @param {string} conversationId - Conversation ID for backend to load history
  * @param {Array} enabledTools - Array of tool names to enable
  * @param {string} systemPrompt - Optional system prompt for the agent
  * @param {string} modelId - Model ID to use for this request
@@ -333,7 +333,7 @@ const chatAgentWS = new ChatAgentWebSocket();
  */
 export const callChatAgentStreaming = (
   prompt: string,
-  messages: ChatMessage[] = [{ role: 'user', content: [{ text: prompt }] }],
+  conversationId: string,
   enabledTools: string[] = ['query_knowledge_base', 'web_search'],
   systemPrompt: string = '',
   modelId: string | null = null,
@@ -346,7 +346,7 @@ export const callChatAgentStreaming = (
 ) =>
   chatAgentWS.streamPrompt(
     prompt,
-    messages,
+    conversationId,
     enabledTools,
     systemPrompt,
     modelId,

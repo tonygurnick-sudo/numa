@@ -313,7 +313,9 @@ def handler(event, _):
                 "apiId": event["requestContext"]["apiId"],
             },
             "prompt": prompt,
-            "messages": body.get("messages", []),
+            "conversationId": body.get(
+                "conversationId"
+            ),  # Backend will load conversation history
             "enabledTools": body.get(
                 "enabledTools", ["query_knowledge_base", "web_search"]
             ),

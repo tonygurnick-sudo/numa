@@ -9,6 +9,9 @@ import {
   getConnectionDisplayName,
 } from '../config/connectionsConfig';
 
+// WebSocket message size limit (AWS API Gateway limit is 32KB)
+const MAX_MESSAGE_LENGTH = 20000; // Conservative limit accounting for JSON overhead
+
 const ChatInput = ({
   inputMessage,
   setInputMessage,
@@ -40,14 +43,22 @@ const ChatInput = ({
   // Text input should only be disabled during loading (not streaming) and file processing
   const isTextInputDisabled = buttonStatus === 'loading' || disabled;
 
-  // Send button should be disabled during loading, streaming, and file processing
-  const isSendDisabled = buttonStatus === 'loading' || buttonStatus === 'streaming' || disabled;
+  // Send button should be disabled during loading, streaming, file processing, or oversized messages
+  const isSendDisabled =
+    buttonStatus === 'loading' || buttonStatus === 'streaming' || disabled || inputMessage.length > MAX_MESSAGE_LENGTH;
 
   // Placeholder: prefer explicit override, otherwise show processing or a friendly default
   const placeholderText = placeholderOverride ?? (isTextInputDisabled ? 'Processing...' : 'How can I help you today?');
 
   const handleInputChange = (e) => {
-    setInputMessage(e.target.value);
+    const newValue = e.target.value;
+
+    // Don't update the input if it exceeds the limit
+    if (newValue.length > MAX_MESSAGE_LENGTH) {
+      return;
+    }
+
+    setInputMessage(newValue);
     e.target.style.height = 'auto';
     e.target.style.height = `${e.target.scrollHeight}px`;
   };
@@ -67,8 +78,8 @@ const ChatInput = ({
   }, [autoFocus, isTextInputDisabled]);
 
   const handleKeyDown = (e) => {
-    // If send is disabled, don't process Enter as a submit
-    if (isSendDisabled) {
+    // If send is disabled or message is too large, don't process Enter as a submit
+    if (isSendDisabled || inputMessage.length > MAX_MESSAGE_LENGTH) {
       return;
     }
 
@@ -77,6 +88,15 @@ const ChatInput = ({
       e.preventDefault();
       handleSubmit(e);
     }
+  };
+
+  // Custom submit handler to prevent submission of oversized messages
+  const handleFormSubmit = (e) => {
+    if (inputMessage.length > MAX_MESSAGE_LENGTH) {
+      e.preventDefault();
+      return;
+    }
+    handleSubmit(e);
   };
 
   const handleToggleConnection = (connectionId) => {
@@ -93,18 +113,37 @@ const ChatInput = ({
 
   return (
     <div className="chat-input-container" style={{ marginTop: '1px' }}>
-      <Form onSubmit={handleSubmit} className="d-flex flex-column">
+      <Form onSubmit={handleFormSubmit} className="d-flex flex-column">
         {/* Row 1: Input Box */}
-        <Form.Control
-          as="textarea"
-          ref={inputRef}
-          value={inputMessage}
-          onInput={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholderText}
-          disabled={isTextInputDisabled}
-          className="chat-textarea"
-        />
+        <div style={{ position: 'relative' }}>
+          <Form.Control
+            as="textarea"
+            ref={inputRef}
+            value={inputMessage}
+            onInput={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholderText}
+            disabled={isTextInputDisabled}
+            className="chat-textarea"
+            style={{ paddingRight: '80px' }}
+          />
+          {/* Character count positioned absolutely in bottom right of textarea */}
+          <small
+            className="text-muted"
+            style={{
+              position: 'absolute',
+              bottom: '8px',
+              right: '8px',
+              fontSize: '0.75rem',
+              pointerEvents: 'none',
+              backgroundColor: 'var(--bs-body-bg)',
+              padding: '2px 4px',
+              borderRadius: '2px',
+            }}
+          >
+            {inputMessage.length.toLocaleString()} / {MAX_MESSAGE_LENGTH.toLocaleString()}
+          </small>
+        </div>
 
         {/* Row 2: Buttons & Toggles */}
         <div className="input-controls">

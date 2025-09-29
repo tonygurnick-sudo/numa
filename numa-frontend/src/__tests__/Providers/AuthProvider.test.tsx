@@ -133,22 +133,17 @@ describe('AuthProvider', () => {
 
   it('should authenticate user successfully', async () => {
     const mockUser = { username: 'testuser', password: 'testpass' };
-    const mockResponse = {
+
+    // Mock the SRP hasher endpoint response
+    const mockHashResponse = {
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue({
-        ChallengeParameters: {
-          SALT: 'mock-salt',
-          SECRET_BLOCK: 'mock-secret-block',
-          SRP_B: 'mock-srp-b',
-          USERNAME: mockUser.username,
-          USER_ID_FOR_SRP: mockUser.username,
-        },
-        ChallengeName: 'PASSWORD_VERIFIER',
-        Session: 'mock-session',
+        hash: 'mock-secret-hash',
       }),
     };
-    vi.mocked(global.fetch).mockResolvedValue(mockResponse as Response);
+
+    vi.mocked(global.fetch).mockResolvedValue(mockHashResponse as unknown as Response);
 
     const onAuth = vi.fn();
     render(
@@ -177,15 +172,16 @@ describe('AuthProvider', () => {
 
   it('should handle failed authentication', async () => {
     const mockUser = { username: 'testuser', password: 'wrong' };
-    const mockResponse = {
-      ok: false,
-      status: 401,
+
+    // Mock the SRP hasher endpoint to return a hash (authentication will fail later in the flow)
+    const mockHashResponse = {
+      ok: true,
+      status: 200,
       json: vi.fn().mockResolvedValue({
-        message: 'Invalid credentials',
-        __type: 'NotAuthorizedException',
+        hash: 'mock-secret-hash',
       }),
     };
-    vi.mocked(global.fetch).mockResolvedValue(mockResponse as Response);
+    vi.mocked(global.fetch).mockResolvedValue(mockHashResponse as unknown as Response);
 
     const onAuth = vi.fn();
     render(
@@ -887,22 +883,16 @@ describe('AuthProvider', () => {
 
   it('should convert email to lowercase during login', async () => {
     const mockUser = { username: 'TestUser@Example.com', password: 'testpass' };
-    const mockResponse = {
+
+    // Mock the SRP hasher endpoint response
+    const mockHashResponse = {
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue({
-        ChallengeParameters: {
-          SALT: 'mock-salt',
-          SECRET_BLOCK: 'mock-secret-block',
-          SRP_B: 'mock-srp-b',
-          USERNAME: mockUser.username.toLowerCase(),
-          USER_ID_FOR_SRP: mockUser.username.toLowerCase(),
-        },
-        ChallengeName: 'PASSWORD_VERIFIER',
-        Session: 'mock-session',
+        hash: 'mock-secret-hash',
       }),
     };
-    vi.mocked(global.fetch).mockResolvedValue(mockResponse as Response);
+    vi.mocked(global.fetch).mockResolvedValue(mockHashResponse as unknown as Response);
 
     const onAuth = vi.fn();
     render(
@@ -977,22 +967,16 @@ describe('AuthProvider', () => {
 
   it('should convert email to lowercase during set new password', async () => {
     const mockUser = { username: 'TestUser@Example.com', oldPassword: 'oldpass', newPassword: 'newpass' };
-    const mockResponse = {
+
+    // Mock the SRP hasher endpoint response
+    const mockHashResponse = {
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue({
-        ChallengeParameters: {
-          SALT: 'mock-salt',
-          SECRET_BLOCK: 'mock-secret-block',
-          SRP_B: 'mock-srp-b',
-          USERNAME: mockUser.username.toLowerCase(),
-          USER_ID_FOR_SRP: mockUser.username.toLowerCase(),
-        },
-        ChallengeName: 'PASSWORD_VERIFIER',
-        Session: 'mock-session',
+        hash: 'mock-secret-hash',
       }),
     };
-    vi.mocked(global.fetch).mockResolvedValue(mockResponse as Response);
+    vi.mocked(global.fetch).mockResolvedValue(mockHashResponse as unknown as Response);
 
     const onAuth = vi.fn();
     render(

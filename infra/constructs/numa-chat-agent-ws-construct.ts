@@ -255,6 +255,14 @@ export class NumaChatAgentWebSocket extends Construct {
           actions: ['s3:GetObject'],
           resources: [`${props.outputsBucketArn}/*`, `${props.dataBucketArn}/*`],
         },
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query', 'dynamodb:GetItem'],
+          resources: [
+            `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-chat-history`,
+            `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-*-chat-history`,
+          ],
+        },
         // Add cross-account lambda invocation permissions for Pipedream proxy (conditional)
         ...(props.pipedreamIntegrationsEnabled && props.pipedreamProxyLambdaArn
           ? [
