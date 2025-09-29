@@ -572,6 +572,10 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
    * Fetch files from S3
    */
   async function fetchFiles(): Promise<void> {
+    if (typeof window === 'undefined') {
+      console.warn('fetchFiles called without browser window context');
+      return;
+    }
     if (!CLIENT_NAME) {
       console.error('CLIENT_NAME is not set');
       return;
@@ -1987,40 +1991,42 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
         </Modal>
 
         {/* Large Data File Warning Modal */}
-        <NotificationModal
-          type="warning"
-          title="Large Raw Data File Detected"
-          message={
-            <div>
-              <p>You are about to upload large raw data files that may not be optimal for knowledge base indexing:</p>
-              <ul className="mb-3">
-                {pendingLargeFiles.map((file, index) => (
-                  <li key={index}>
-                    <strong>{file.name}</strong> ({formatFileSize(file.size)})
-                  </li>
-                ))}
-              </ul>
-              <p className="mb-0">
-                This can incur higher than expected cost, or may fail to index successfully into the knowledge base.
-              </p>
-              <div className="alert alert-info mb-3">
-                <i className="bi bi-info-circle me-2"></i>
-                <strong>Recommendation:</strong> For better knowledge base performance, consider:
-                <ul className="mb-0 mt-2">
-                  <li>Breaking large raw data files into smaller bite sized chunks</li>
+        {showNotificationModal && (
+          <NotificationModal
+            type="warning"
+            title="Large Raw Data File Detected"
+            message={
+              <div>
+                <p>You are about to upload large raw data files that may not be optimal for knowledge base indexing:</p>
+                <ul className="mb-3">
+                  {pendingLargeFiles.map((file, index) => (
+                    <li key={index}>
+                      <strong>{file.name}</strong> ({formatFileSize(file.size)})
+                    </li>
+                  ))}
                 </ul>
+                <p className="mb-0">
+                  This can incur higher than expected cost, or may fail to index successfully into the knowledge base.
+                </p>
+                <div className="alert alert-info mb-3">
+                  <i className="bi bi-info-circle me-2"></i>
+                  <strong>Recommendation:</strong> For better knowledge base performance, consider:
+                  <ul className="mb-0 mt-2">
+                    <li>Breaking large raw data files into smaller bite sized chunks</li>
+                  </ul>
+                </div>
+                <p className="mb-0">Do you want to proceed with uploading these files anyway?</p>
               </div>
-              <p className="mb-0">Do you want to proceed with uploading these files anyway?</p>
-            </div>
-          }
-          show={showNotificationModal}
-          onHide={handleCancelUpload}
-          onConfirm={handleProceedWithUpload}
-          confirmText="Proceed Anyway"
-          cancelText="Cancel Upload"
-          showCancelButton={true}
-          size="lg"
-        />
+            }
+            show={showNotificationModal}
+            onHide={handleCancelUpload}
+            onConfirm={handleProceedWithUpload}
+            confirmText="Proceed Anyway"
+            cancelText="Cancel Upload"
+            showCancelButton={true}
+            size="lg"
+          />
+        )}
       </div>
     </>
   );
