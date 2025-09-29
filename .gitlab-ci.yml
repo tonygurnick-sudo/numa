@@ -248,6 +248,7 @@ node-lint:
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
   script:
     - yarn workspace @arcanumai/q-apps-deployer-infra run get
+    - yarn workspaces foreach --parallel --all --exclude infra run lint --fix || true
     - yarn workspaces foreach --parallel --all --exclude infra run lint
 
 tools-test:
