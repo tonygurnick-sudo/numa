@@ -121,15 +121,45 @@ export const mockJwtDecode = vi.fn().mockImplementation((token) => {
 // Mock Cognito Identity Provider Client
 export const mockCognitoIdentityProviderClient = {
   CognitoIdentityProviderClient: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({
-      ChallengeName: 'NEW_PASSWORD_REQUIRED',
-      Session: 'mock-session',
+    send: vi.fn().mockImplementation((command) => {
+      // Handle InitiateAuthCommand (SRP authentication)
+      if (command.constructor.name === 'InitiateAuthCommand') {
+        return Promise.resolve({
+          ChallengeName: 'PASSWORD_VERIFIER',
+          ChallengeParameters: {
+            SALT: 'mock-salt',
+            SECRET_BLOCK: 'mock-secret-block',
+            SRP_B: 'mock-srp-b',
+            USERNAME: 'testuser',
+            USER_ID_FOR_SRP: 'testuser',
+          },
+          Session: 'mock-session',
+        });
+      }
+
+      // Handle RespondToAuthChallengeCommand
+      if (command.constructor.name === 'RespondToAuthChallengeCommand') {
+        return Promise.resolve({
+          AuthenticationResult: {
+            AccessToken: 'mock-access-token',
+            IdToken: 'mock-id-token',
+            RefreshToken: 'mock-refresh-token',
+          },
+        });
+      }
+
+      // Default response for other commands
+      return Promise.resolve({
+        ChallengeName: 'NEW_PASSWORD_REQUIRED',
+        Session: 'mock-session',
+      });
     }),
   })),
   RespondToAuthChallengeCommand: vi.fn(),
   InitiateAuthCommand: vi.fn(),
   ForgotPasswordCommand: vi.fn(),
   ConfirmForgotPasswordCommand: vi.fn(),
+  GetUserCommand: vi.fn(),
 };
 
 // Setup all mocks

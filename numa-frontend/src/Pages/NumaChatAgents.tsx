@@ -9,7 +9,6 @@ import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
-import { MAX_DYNAMO_MESSAGES, prepareConversationHistoryForChat } from '../utils/bedrockMessageHistoryUtils';
 import { callChatAgentStreaming, connectChatAgent, isChatAgentAvailable } from '../Services/chatAgentService';
 import { ChatInput } from '../Components/ChatInput';
 import { DocumentPanel } from '../Components/DocumentPanel';
@@ -84,8 +83,7 @@ const NumaChatAgents = () => {
   } = documentProcessor;
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
-  const { user, bedrockAgentRuntimeClient, bedrockRuntimeClient, numaChatDynamoUtils, getCredentials, getAccessToken } =
-    useAuth();
+  const { user, bedrockAgentRuntimeClient, numaChatDynamoUtils, getAccessToken } = useAuth();
 
   // Extract user info from token
   const idToken = user?.decoded_tokens?.idToken ?? {};
@@ -324,44 +322,6 @@ const NumaChatAgents = () => {
     resetInactivityTimer();
     // Hide suggestions when explicitly starting a new chat
     hideSuggestions();
-  };
-
-  // Prepare conversation context and add user message
-  const prepareConversationContext = async (
-    inputMessage,
-    createNewConversationIfNeeded,
-    setMessages,
-    numaChatDynamoUtils,
-    sub,
-  ) => {
-    const cid = await createNewConversationIfNeeded(inputMessage);
-
-    // Original user message to store
-    const userMsg = inputMessage;
-
-    // Add user message to local state
-    const userMsgObject = { role: 'user', content: userMsg };
-    setMessages((prev) => [...prev, userMsgObject]);
-
-    if (numaChatDynamoUtils) {
-      await numaChatDynamoUtils
-        .addMessage({
-          conversationId: cid,
-          userId: sub,
-          messageType: 'text',
-          role: 'user',
-          content: userMsg,
-        })
-        .catch((err) => console.error('Error storing user message:', err));
-    }
-
-    // Retrieve conversation history for the agent
-    const conversationHistory = await numaChatDynamoUtils.queryConversations(cid, MAX_DYNAMO_MESSAGES, sub);
-
-    // Prepare conversation history using the proper formatting (handles tools correctly)
-    const agentMessages = await prepareConversationHistoryForChat(conversationHistory, getCredentials);
-
-    return { cid, userMsg, agentMessages };
   };
 
   // Configure model, tools, and system prompt for agent call
@@ -610,20 +570,32 @@ const NumaChatAgents = () => {
 
     try {
       /* ────────────────────────────────
-         Chat Agent Primary Interface
-         Using chat agent as the main and only chat interface
+         Chat Agent Primary Interface - Stateful Backend Design
+         Backend loads conversation history from DynamoDB
       ──────────────────────────────── */
 
-      const { cid, userMsg, agentMessages } = await prepareConversationContext(
-        inputMessage,
-        createNewConversationIfNeeded,
-        setMessages,
-        numaChatDynamoUtils,
-        sub,
-      );
+      // Create conversation and store new message locally
+      const cid = await createNewConversationIfNeeded(inputMessage);
+      const userMsg = inputMessage;
 
-      // Log the history being sent to the agent
-      console.log('[NumaChat] Calling Chat agent with messages:', JSON.stringify(agentMessages, null, 2));
+      // Add user message to local UI state
+      const userMsgObject = { role: 'user', content: userMsg };
+      setMessages((prev) => [...prev, userMsgObject]);
+
+      // Store user message in DynamoDB
+      if (numaChatDynamoUtils) {
+        await numaChatDynamoUtils
+          .addMessage({
+            conversationId: cid,
+            userId: sub,
+            messageType: 'text',
+            role: 'user',
+            content: userMsg,
+          })
+          .catch((err) => console.error('Error storing user message:', err));
+      }
+
+      console.log('[NumaChat] Sending minimal payload - backend will load conversation history');
 
       const { modelId, enabledTools, systemPrompt, userAuth, clientName } = configureAgentCall(
         autoToolsEnabled,
@@ -661,7 +633,7 @@ const NumaChatAgents = () => {
       try {
         const abortStream = await callChatAgentStreaming(
           userMsg,
-          agentMessages, // Pass conversation history to the agent
+          cid, // Pass conversationId - backend will load history from DynamoDB
           enabledTools, // Pass enabled tools configuration
           systemPrompt, // Pass the enhanced system prompt
           modelId, // Pass the selected model ID

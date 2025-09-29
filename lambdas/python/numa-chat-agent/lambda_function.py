@@ -35,6 +35,11 @@ from numa_chat_agent import (
     set_current_user_auth,
 )
 from numa_chat_agent.config import FALLBACK_MODEL_ID, is_quota_limit_error
+from numa_chat_agent.dynamodb_utils import (
+    MAX_DYNAMO_MESSAGES,
+    NumaChatDynamoUtils,
+    format_conversation_for_bedrock,
+)
 from numa_chat_agent.utils import (
     convert_tool_blocks_to_text,
     extract_preview,
@@ -70,7 +75,7 @@ def handler(event, _ctx):
     connection_id = event["connectionId"]
     request_context = event["requestContext"]
     prompt = event["prompt"]
-    messages = event.get("messages", [])
+    conversation_id = event.get("conversationId")  # Backend loads conversation history
     enabled_tools = event.get("enabledTools", ["query_knowledge_base", "web_search"])
     enabled_connections = event.get("enabledConnections", [])
     system_prompt = event.get("systemPrompt", "")
@@ -86,6 +91,55 @@ def handler(event, _ctx):
             len(enabled_connections) if enabled_connections else 0
         ),
     )
+
+    # Load conversation history from DynamoDB if conversationId provided
+    messages = []
+    logger.info(
+        "Conversation loading check",
+        conversation_id=conversation_id,
+        has_user_auth=bool(user_auth),
+        user_sub=user_auth.get("sub") if user_auth else None,
+    )
+
+    if conversation_id and user_auth and user_auth.get("sub"):
+        logger.info(
+            "Loading conversation history from DynamoDB",
+            conversation_id=conversation_id,
+        )
+
+        try:
+            dynamo_utils = NumaChatDynamoUtils()
+            conversation_items = dynamo_utils.query_conversations(
+                conversation_id=conversation_id,
+                user_id=user_auth["sub"],
+                limit=MAX_DYNAMO_MESSAGES,  # Use same limit as frontend
+            )
+
+            # Convert DynamoDB items to Bedrock message format
+            messages = format_conversation_for_bedrock(conversation_items)
+
+            # Add the current user prompt to continue the conversation
+            messages.append({"role": "user", "content": [{"text": prompt}]})
+
+            logger.info(
+                "Successfully loaded conversation history and added current prompt",
+                conversation_id=conversation_id,
+                history_message_count=len(messages) - 1,  # Subtract the current prompt
+                total_message_count=len(messages),
+            )
+
+        except Exception as load_error:
+            logger.error(
+                "Failed to load conversation history, proceeding with new message only",
+                conversation_id=conversation_id,
+                error=str(load_error),
+            )
+            # Fallback: just use the new message
+            messages = [{"role": "user", "content": [{"text": prompt}]}]
+    else:
+        # No conversation ID provided, treat as new conversation
+        messages = [{"role": "user", "content": [{"text": prompt}]}]
+        logger.info("No conversationId provided, starting new conversation")
 
     # Convert tool blocks to text when no tools are enabled
     # This prevents ValidationException when conversation history contains tool blocks
