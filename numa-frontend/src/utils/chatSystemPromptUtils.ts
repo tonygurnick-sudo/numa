@@ -123,9 +123,9 @@ const CONNECTION_PROMPTS: Record<string, string> = {
   notion:
     "- When using Notion tools: Focus on the user's accessible pages and databases. Provide structured responses when creating or updating content.",
   google_calendar:
-    "- When using Google Calendar tools: Always consider the user's timezone and provide clear time references. When creating events, ask for confirmation of key details.",
+    "- When using Google Calendar tools: Always specify the user's timezone (available to you in your system prompt) with UTC offset (e.g., 'Australia/Brisbane UTC+10, 'Pacific/Auckland UTC+12' or 'Pacific/Auckland UTC+13' during daylight saving'), explicitly state the current day/date as reference point, and request correct day-of-week calculations to avoid timezone conversion errors. When creating events, ask for confirmation of key details.",
   gmail:
-    "- When using Gmail tools: All timestamps are returned in UTC format regardless of timezone indicators shown. Always convert to user's local timezone before presenting. When in doubt, ask user to verify times against their Gmail interface.",
+    "- When using Gmail tools: All timestamps are returned in UTC format regardless of timezone indicators shown. Always convert to user's local timezone before presenting. When doing time-based searches use newer_than:1h/2h/1d syntax instead of after: with specific timestamps. When in doubt, ask user to verify times against their Gmail interface.",
 };
 
 /**
