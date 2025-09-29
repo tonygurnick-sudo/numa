@@ -1,7 +1,12 @@
 import { createContext, useContext } from 'react';
 
+type Ctx = {
+  updateTaskInputValue: (taskId: string, value: unknown) => void;
+  updateTaskCompletionStatus: (taskId: string, success?: boolean) => void;
+};
+
 // Create the context
-export const NumaAppContext = createContext({
+export const NumaAppContext = createContext<Ctx>({
   // Status states
   loading: false,
   setLoading: () => {},

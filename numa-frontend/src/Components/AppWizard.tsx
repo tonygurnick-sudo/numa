@@ -35,7 +35,6 @@ const AppWizard = ({ manifest }) => {
     job,
     loadingJobId,
   } = useNumaApp();
-
   const [activeTab, setActiveTab] = useState(() => {
     // If there are results, start on results tab
     if (job?.results) {
@@ -270,7 +269,7 @@ const AppWizard = ({ manifest }) => {
 
     // For traditional tasks
     const handleComplete = (results) => handleTaskCompletion(task.id, true, results);
-    const handleNotComplete = () => handleTaskCompletion(task.id, false);
+    const handleNotComplete = (results) => handleTaskCompletion(task.id, false, results);
 
     const commonProps = {
       task: task,
