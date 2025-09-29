@@ -83,7 +83,7 @@ const NumaChatAgents = () => {
   } = documentProcessor;
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
-  const { user, bedrockAgentRuntimeClient, numaChatDynamoUtils, getAccessToken } = useAuth();
+  const { user, bedrockAgentRuntimeClient, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken } = useAuth();
 
   // Extract user info from token
   const idToken = user?.decoded_tokens?.idToken ?? {};
