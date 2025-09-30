@@ -14,10 +14,11 @@ import { StarFill } from 'react-bootstrap-icons';
 
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { useFavorites } from '../hooks/useFavorites';
-import { manifestService } from '../Services/manifestService';
 import { NicetyContext } from '../Providers/NicetyContext';
+import { manifestService } from '../Services/manifestService';
+import type { DashProps } from '../types/dash';
 
-export const Dash = ({ showFavorites }) => {
+export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   const niceties = useContext(NicetyContext);
   const { error, setError, loading, setLoading, setNumaApps, numaApps } = useNumaApp();
   const [searchTerm, setSearchTerm] = useState('');
@@ -145,7 +146,7 @@ export const Dash = ({ showFavorites }) => {
   return (
     <>
       <Nav />
-      <div className="dashboard" data-testid="dashboard">
+      <div className="dashboard" data-testid="dashboard" {...rest}>
         <header>
           <Container fluid>
             <Row>

@@ -5,8 +5,8 @@ import { useAuth } from './Providers/AuthProvider';
 import { NumaLogin } from './Pages/Login';
 import AppProviders from './Providers/AppProviders';
 import { ProtectedRoute } from './Components/RequiredFeaturesWrapper';
-import { ROUTE_CONFIG } from './utils/routeConfig.jsx';
-import { Ian } from './Pages/Ian.jsx';
+import { ROUTE_CONFIG } from './utils/routeConfig';
+import { Ian } from './Pages/Ian';
 
 const NumaRoutes = () => {
   return (
