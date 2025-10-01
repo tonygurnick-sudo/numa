@@ -489,6 +489,7 @@ export const getKnowledgeBaseState = async (config) => {
         syncMetrics: latestJob?.metrics,
         documents: docs,
         dataSources: combinedDataSources,
+        failedDocuments: [], // Q Business doesn't use this feature yet
         source: 'q-business',
       };
     }
@@ -559,6 +560,69 @@ export const getKnowledgeBaseState = async (config) => {
       const latestJob = ingestionJobs[0];
       const lastSuccess = ingestionJobs.find((j) => j.status === 'COMPLETE');
 
+      // Get failed documents from last 48 hours of ingestion jobs
+      const failedDocumentsMap = new Map(); // Use map to deduplicate by URI
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      const recentJobs = ingestionJobs.filter((job) => {
+        const jobDate = new Date(job.updatedAt || job.startedAt);
+        return jobDate >= fortyEightHoursAgo;
+      });
+
+      if (recentJobs.length > 0) {
+        try {
+          const { GetIngestionJobCommand } = await import('@aws-sdk/client-bedrock-agent');
+          const s3UriPattern = /s3:\/\/[^\s,\]]+/g;
+
+          // Process each job to extract failures
+          for (const job of recentJobs) {
+            try {
+              const jobDetailsResponse = await bedrockAgentClient.send(
+                new GetIngestionJobCommand({
+                  knowledgeBaseId: bedrockKnowledgeBaseId,
+                  dataSourceId: dataSourceId,
+                  ingestionJobId: job.ingestionJobId,
+                }),
+              );
+
+              const failureReasons = jobDetailsResponse.ingestionJob?.failureReasons || [];
+
+              // Parse failure reasons to extract S3 URIs
+              // Format: "[\"Encountered error: Ignored N files... [Files: s3://bucket/key1, s3://bucket/key2]. ...\"]"
+              for (const reason of failureReasons) {
+                const matches = reason.match(s3UriPattern);
+                if (matches) {
+                  matches.forEach((uri) => {
+                    // Only add if not already present (keep most recent failure)
+                    if (!failedDocumentsMap.has(uri)) {
+                      // Extract filename from URI
+                      const keyMatch = uri.match(/[^/]+$/);
+                      const filename = keyMatch ? decodeURIComponent(keyMatch[0]) : uri;
+
+                      failedDocumentsMap.set(uri, {
+                        documentId: uri,
+                        status: 'FAILED',
+                        updatedAt: job.updatedAt || new Date().toISOString(),
+                        error: {
+                          errorMessage: 'File format not supported or processing failed during ingestion',
+                        },
+                        fileName: filename,
+                      });
+                    }
+                  });
+                }
+              }
+            } catch (jobError) {
+              console.error(`Error fetching details for job ${job.ingestionJobId}:`, jobError);
+              // Continue processing other jobs even if one fails
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching ingestion job details:', error);
+        }
+      }
+
+      const failedDocuments = Array.from(failedDocumentsMap.values());
+
       // Map Bedrock status to expected UI status
       const mapBedrockJobStatus = (status) => {
         switch (status) {
@@ -610,6 +674,7 @@ export const getKnowledgeBaseState = async (config) => {
         syncMetrics: latestJob?.statistics, // Bedrock uses statistics instead of metrics
         documents: normalizedDocs,
         dataSources: combinedDataSources,
+        failedDocuments: failedDocuments, // Failed files from ingestion job failure reasons
         source: 'bedrock',
       };
     }

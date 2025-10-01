@@ -247,6 +247,59 @@ export class KnowledgeBase extends Construct {
       assumeRolePolicy: initFunctionAssumptionPolicyDoc.json,
     });
 
+    // Cleanup Lambda IAM configuration
+    const cleanupFunctionAssumptionPolicyDoc = new DataAwsIamPolicyDocument(
+      this,
+      'cleanup-function-assumption-policy-document',
+      {
+        statement: [
+          {
+            actions: ['sts:AssumeRole'],
+            principals: [
+              {
+                type: 'Service',
+                identifiers: ['lambda.amazonaws.com'],
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    const cleanupFunctionPolicyDoc = new DataAwsIamPolicyDocument(this, 'cleanup-function-policy-document', {
+      statement: [
+        {
+          actions: ['bedrock:ListIngestionJobs', 'bedrock:GetIngestionJob'],
+          resources: ['*'],
+        },
+        {
+          actions: ['s3:DeleteObject', 's3:DeleteObjects'],
+          resources: [`${dataBucketArn}/*`],
+        },
+      ],
+    });
+
+    const cleanupFunctionPolicy = new IamPolicy(this, 'cleanup-function-policy', {
+      name: props.clientName + '-knowledge-base-cleanup',
+      policy: cleanupFunctionPolicyDoc.json,
+    });
+
+    const cleanupFunctionRole = new IamRole(this, 'cleanup-function-role', {
+      name: props.clientName + '-knowledge-base-cleanup',
+      assumeRolePolicy: cleanupFunctionAssumptionPolicyDoc.json,
+    });
+
+    const cleanupFunctionPolicyAttachments = [
+      new IamRolePolicyAttachment(this, 'cleanup-function-role-policy-attachment', {
+        role: cleanupFunctionRole.name,
+        policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+      }),
+      new IamRolePolicyAttachment(this, 'cleanup-function-role-policy-attachment-custom', {
+        role: cleanupFunctionRole.name,
+        policyArn: cleanupFunctionPolicy.arn,
+      }),
+    ];
+
     const policyAttachments = [
       new IamRolePolicyAttachment(this, 'knowledge-base-role-policy-attachment', {
         role: knowledgeBaseRole.name,
@@ -264,6 +317,7 @@ export class KnowledgeBase extends Construct {
         role: initFunctionRole.name,
         policyArn: initFunctionPolicy.arn,
       }),
+      ...cleanupFunctionPolicyAttachments,
     ];
 
     const initFunctionPath = path.resolve(import.meta.dirname, '..', '..', 'lambdas', 'node', 'vector-db-init');
@@ -276,6 +330,26 @@ export class KnowledgeBase extends Construct {
       filename: initFunctionFilename,
       timeout: 60,
       sourceCodeHash: Fn.filebase64sha256(initFunctionFilename),
+    });
+
+    // Cleanup Lambda for removing unsuccessful files from S3 datasource
+    const cleanupFunctionPath = path.resolve(
+      import.meta.dirname,
+      '..',
+      '..',
+      'lambdas',
+      'node',
+      'bedrock-cleanup-failed-files',
+    );
+    const cleanupFunctionFilename = path.resolve(cleanupFunctionPath, 'lambda_function.zip');
+    const cleanupFunc = new LambdaFunction(this, 'cleanup-function', {
+      functionName: props.clientName + '-knowledge-base-cleanup',
+      role: cleanupFunctionRole.arn,
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      filename: cleanupFunctionFilename,
+      timeout: 300, // 5 minutes for potentially large cleanup operations
+      sourceCodeHash: Fn.filebase64sha256(cleanupFunctionFilename),
     });
 
     const invocation = new LambdaInvocation(this, 'init-function-invocation', {
@@ -415,6 +489,10 @@ export class KnowledgeBase extends Construct {
           resources: [knowledgeBase.arn],
           actions: ['bedrock:StartIngestionJob'],
         },
+        {
+          resources: [cleanupFunc.arn],
+          actions: ['lambda:InvokeFunction'],
+        },
       ],
     });
     const stateMachineRolePolicy = new IamPolicy(this, 'state-machine-role-policy', {
@@ -468,6 +546,52 @@ export class KnowledgeBase extends Construct {
             {
               Variable: '$.IngestionJob.Status',
               StringEquals: 'FAILED',
+              Next: 'CleanupFailedFiles',
+            },
+            {
+              Variable: '$.IngestionJob.Status',
+              StringEquals: 'COMPLETE',
+              Next: 'CleanupFailedFiles',
+            },
+          ],
+          Default: 'Wait X Seconds',
+        },
+        CleanupFailedFiles: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::lambda:invoke',
+          Parameters: {
+            FunctionName: cleanupFunc.arn,
+            Payload: {
+              knowledgeBaseId: knowledgeBase.id,
+              dataSourceId: dataSource.dataSourceId,
+              bucketName: `numa-${props.clientName}-data`,
+            },
+          },
+          ResultPath: '$.CleanupResult',
+          Next: 'CheckJobStatus',
+          Retry: [
+            {
+              ErrorEquals: ['States.TaskFailed'],
+              BackoffRate: 2,
+              IntervalSeconds: 1,
+              MaxAttempts: 3,
+            },
+          ],
+          Catch: [
+            {
+              ErrorEquals: ['States.ALL'],
+              ResultPath: '$.CleanupError',
+              Next: 'CheckJobStatus',
+              Comment: 'Continue to check job status even if cleanup fails',
+            },
+          ],
+        } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+        CheckJobStatus: {
+          Type: 'Choice',
+          Choices: [
+            {
+              Variable: '$.IngestionJob.Status',
+              StringEquals: 'FAILED',
               Next: 'Fail',
             },
             {
@@ -476,7 +600,7 @@ export class KnowledgeBase extends Construct {
               Next: 'Success',
             },
           ],
-          Default: 'Wait X Seconds',
+          Default: 'Success',
         },
         Success: {
           Type: 'Succeed',
@@ -491,6 +615,7 @@ export class KnowledgeBase extends Construct {
       name: props.clientName + '-start-sync-job',
       roleArn: stateMachineRole.arn,
       definition: JSON.stringify(stateMachineDefinition),
+      dependsOn: [cleanupFunc, ...cleanupFunctionPolicyAttachments],
     });
 
     const scheduledEventRoleAssumptionPolicyDocument = new DataAwsIamPolicyDocument(

@@ -184,6 +184,7 @@ const createFeatureSets = (props: {
         'bedrock:ListKnowledgeBases',
         'bedrock:ListDataSources',
         'bedrock:ListIngestionJobs',
+        'bedrock:GetIngestionJob',
         'bedrock:ListKnowledgeBaseDocuments',
       ],
       resources: [props.knowledgeBase.knowledgeBaseArn],
