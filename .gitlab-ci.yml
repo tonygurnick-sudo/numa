@@ -403,8 +403,16 @@ deploy-to-client:
   environment:
     deployment_tier: production
   rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $DEPLOY_ALL_CUSTOMERS == "1"'
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: manual
+  release:
+    name: "Customer deploy [$CLIENT_NAME] ${CI_COMMIT_SHORT_SHA}"
+    tag_name: "customer-deploy/${CLIENT_NAME}/${CI_COMMIT_SHORT_SHA}"
+    ref: $CI_COMMIT_SHA
+    description: |
+      Full customer deploy for ${CLIENT_NAME}
+      Pipeline: ${CI_PIPELINE_URL}
 
 deploy-to-client-custom:
   extends: .deploy-infra
@@ -418,3 +426,10 @@ deploy-to-client-custom:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: manual
+  release:
+    name: "Customer deploy [custom:${CLIENT_NAME}] ${CI_COMMIT_SHORT_SHA}"
+    tag_name: "customer-deploy/${CLIENT_NAME}/${CI_COMMIT_SHORT_SHA}"
+    ref: $CI_COMMIT_SHA
+    description: |
+      Custom customer deploy for ${CLIENT_NAME}
+      Pipeline: ${CI_PIPELINE_URL}
