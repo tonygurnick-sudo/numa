@@ -443,7 +443,6 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
   const [syncJobStatus, setSyncJobStatus] = useState<string | null>(null);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string | null>(null);
   const [, setLastUpdated] = useState<string | null>(null);
-  const [lastSyncStartTime, setLastSyncStartTime] = useState<string | null>(null);
 
   const [syncMetrics, setSyncMetrics] = useState<SyncMetrics | null>(null);
 
@@ -460,6 +459,7 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
   const [indexedSortDirection, setIndexedSortDirection] = useState<SortDirection>('asc');
 
   const [kbDocuments, setKbDocuments] = useState<KBDocument[]>([]);
+  const [apiFailedDocuments, setApiFailedDocuments] = useState<KBDocument[]>([]);
   const [kbStateError, setKbStateError] = useState<string | null>(null);
   const [kbStateLoading, setKbStateLoading] = useState<boolean>(false);
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
@@ -671,10 +671,10 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
         setSyncJobStatus(state.syncJobStatus);
         setLastSuccessfulSync(state.lastSuccessfulSync);
         setLastUpdated(state.lastUpdated);
-        setLastSyncStartTime(state.lastSyncStartTime);
         setSyncMetrics(state.syncMetrics);
         setKbDocuments(state.documents);
         setDataSources(state.dataSources || []);
+        setApiFailedDocuments(state.failedDocuments || []);
       } else {
         console.error('Failed to fetch KB state:', state?.error);
         setKbStateError(state?.error || 'Unknown error');
@@ -1004,63 +1004,20 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
   }
 
   /**
-   * Determine likely failed files based on upload time vs last sync start time (with buffer)
-   */
-  const likelyFailedFiles = useMemo((): KBDocument[] => {
-    if (!lastSyncStartTime) return [];
-
-    const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
-
-    // Use sync start time with a 1-minute safety buffer
-    // This prevents marking files as failed if they were uploaded during the sync
-    const syncStartTime = new Date(lastSyncStartTime);
-    const bufferMinutes = 1;
-    const cutoffTime = new Date(syncStartTime.getTime() - bufferMinutes * 60 * 1000);
-
-    const likelyFailed = files
-      .filter((file) => {
-        // Must not be in KB documents (pending)
-        if (kbFileKeys.has(file.Key)) return false;
-
-        // Must have been uploaded well before the sync started (with buffer)
-        const uploadTime = new Date(file.LastModified);
-        return uploadTime < cutoffTime;
-      })
-      .map((file): KBDocument => {
-        // Create a failed document object
-        const fileName = decodeURIComponent(file.Key.split('/').pop() || '');
-        return {
-          documentId: `s3://numa-${CLIENT_NAME}-data/${file.Key}`,
-          status: 'FAILED',
-          updatedAt: lastSuccessfulSync || '',
-          error: {
-            errorMessage: 'Processing failed during indexing',
-          },
-          fileName,
-          isInferred: true,
-        };
-      });
-
-    return likelyFailed;
-  }, [files, kbDocuments, lastSyncStartTime, CLIENT_NAME, lastSuccessfulSync]);
-
-  /**
    * Determine pending vs. indexed files by comparing S3 files with KB documents.
+   * Failed files are deleted from S3 and shown via ingestion job history.
    */
   const pendingFiles = useMemo((): S3Object[] => {
     const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
-    const likelyFailedKeys = new Set(likelyFailedFiles.map((doc) => documentIdToKey(doc.documentId)));
 
     const pending = files.filter((file) => {
       // Exclude if in KB documents (indexed)
       if (kbFileKeys.has(file.Key)) return false;
-      // Exclude if likely failed (will show in failed documents section)
-      if (likelyFailedKeys.has(file.Key)) return false;
       return true;
     });
 
     return pending;
-  }, [files, kbDocuments, likelyFailedFiles]);
+  }, [files, kbDocuments]);
 
   const indexedFiles = useMemo((): S3Object[] => {
     const kbFileKeys = new Set(kbDocuments.map((doc) => documentIdToKey(doc.documentId)));
@@ -1425,19 +1382,11 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
   }
 
   /**
-   * Compute failed documents from KB (documents with an error) + likely failed files.
+   * Use failed documents from the latest ingestion job (parsed from failure reasons).
    */
   const failedDocuments = useMemo((): KBDocument[] => {
-    // Get actual failed documents from KB API
-    const actualFailed = kbDocuments.filter(
-      (doc) => (doc.error && Object.keys(doc.error).length > 0 && doc.error?.errorMessage) || doc.status === 'FAILED',
-    );
-
-    // Combine with likely failed files (inferred)
-    const allFailed = [...actualFailed, ...likelyFailedFiles];
-
-    return allFailed;
-  }, [kbDocuments, likelyFailedFiles]);
+    return apiFailedDocuments;
+  }, [apiFailedDocuments]);
 
   /**
    * Render the entire S3 Uploader page.

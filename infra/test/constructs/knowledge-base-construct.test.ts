@@ -239,7 +239,7 @@ Object.entries(testCases).forEach(([name, props]) =>
       );
 
       const lambdaFunction = stackObject.resource.aws_lambda_function;
-      assert.equal(Object.keys(lambdaFunction).length, 1);
+      assert.equal(Object.keys(lambdaFunction).length, 2);
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_lambda_function', {
           functionName: props.clientName + '-knowledge-base-init',
@@ -247,6 +247,15 @@ Object.entries(testCases).forEach(([name, props]) =>
           runtime: 'nodejs22.x',
           timeout: 60,
           role: '${aws_iam_role.' + roleId + '.arn}',
+        }),
+      );
+
+      assert(
+        Testing.toHaveResourceWithProperties(synthesized, 'aws_lambda_function', {
+          functionName: props.clientName + '-knowledge-base-cleanup',
+          handler: 'index.handler',
+          runtime: 'nodejs22.x',
+          timeout: 300,
         }),
       );
 
