@@ -23,6 +23,7 @@ import { GenericTestConnection } from '../Components/GenericTestConnection';
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/connectionsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import type { ConnectionStatus } from '../types/pipedream';
+import { getDefaultDenyTools } from '../config/pipedreamToolsDefault';
 
 const AVAILABLE_INTEGRATIONS: IntegrationListItem[] = getIntegrationsListFormat();
 
@@ -169,6 +170,38 @@ export const PipedreamIntegrations = () => {
                 : conn,
             ),
           );
+          // Apply default tool policy (deny list) immediately after connection
+          try {
+            const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+            const defaults = getDefaultDenyTools(appName);
+            if (defaults.length > 0) {
+              const [{ tools }, currentPolicy] = await Promise.all([
+                PipedreamProxyService.listMcpTools(lambdaClient, externalUserId, appName),
+                PipedreamProxyService.getMcpPolicy(lambdaClient, externalUserId, appName),
+              ]);
+              const available = new Set((tools || []).map((t) => t.name));
+              const filteredDefaults = defaults.filter((d) => available.has(d));
+              const existingDeny = new Set(currentPolicy.denyTools || []);
+              let changed = false;
+              for (const name of filteredDefaults) {
+                if (!existingDeny.has(name)) {
+                  existingDeny.add(name);
+                  changed = true;
+                }
+              }
+              if (changed) {
+                await PipedreamProxyService.setMcpPolicy(lambdaClient, externalUserId, appName, {
+                  mode: 'deny',
+                  denyTools: Array.from(existingDeny),
+                });
+                console.log(`Applied default deny tools for ${appName}`, { denyTools: Array.from(existingDeny) });
+              } else {
+                console.log(`No default deny tools to apply for ${appName}`);
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to apply default tool policy after connection', e);
+          }
           // Show post-connection guidance
           setRecentlyConnectedApp(appName);
           setTimeout(() => setRecentlyConnectedApp(null), 8000); // Auto-dismiss after 8 seconds
@@ -237,6 +270,8 @@ export const PipedreamIntegrations = () => {
     }
   };
 
+  const [initialToggles, setInitialToggles] = useState<Record<string, boolean>>({});
+
   const openSettings = async (appName: string) => {
     if (!lambdaClient || !user) return;
     try {
@@ -254,6 +289,7 @@ export const PipedreamIntegrations = () => {
       const toggles: Record<string, boolean> = {};
       (toolsResp.tools || []).forEach((t) => (toggles[t.name] = !deny.has(t.name)));
       setToolToggles(toggles);
+      setInitialToggles(toggles); // Store initial state for comparison
     } catch (e: unknown) {
       const err = e as Error;
       setSettingsError(err.message || 'Failed to load settings');
@@ -609,6 +645,7 @@ export const PipedreamIntegrations = () => {
         error={settingsError}
         tools={availableTools}
         toggles={toolToggles}
+        initialToggles={initialToggles}
         setToggles={setToolToggles}
         onSave={saveSettings}
         appSlug={settingsApp}
@@ -651,6 +688,7 @@ export const SettingsModal = ({
   error,
   tools,
   toggles,
+  initialToggles,
   setToggles,
   onSave,
   appSlug,
@@ -661,124 +699,169 @@ export const SettingsModal = ({
   error: string | null;
   tools: { name: string; description?: string }[];
   toggles: Record<string, boolean>;
+  initialToggles: Record<string, boolean>;
   setToggles: (t: Record<string, boolean>) => void;
   onSave: () => void;
   appSlug?: string | null;
-}) => (
-  <Modal show={show} onHide={onHide} centered size="lg">
-    <Modal.Header closeButton className="border-0 pb-2">
-      <div>
-        <Modal.Title className="mb-1">Integration Settings</Modal.Title>
-        <p className="text-muted mb-0 small">
-          Toggle on and off the tools that Numa will have access to when using this integration
-        </p>
-      </div>
-    </Modal.Header>
-    <Modal.Body className="pt-2">
-      {loading ? (
-        <div className="text-center py-4">
-          <Spinner animation="border" className="text-primary" />
-          <p className="mt-3 text-muted mb-0">Loading available tools...</p>
-        </div>
-      ) : error ? (
-        <Alert variant="danger" className="mb-0">
-          <i className="bi bi-exclamation-triangle-fill me-2"></i>
-          {error}
-        </Alert>
-      ) : tools.length === 0 ? (
-        <div className="text-center py-4">
-          <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
-          <p className="text-muted mt-2 mb-0">No tools available for this integration.</p>
-        </div>
-      ) : (
-        <div className="d-flex flex-column gap-1">
-          {tools.map((t, index) => {
-            // Derive a human label from the canonical name: strip app prefix and convert kebab to Title Case
-            const stripPrefix = (name: string, prefix?: string | null) => {
-              if (!prefix) return name;
-              return name.startsWith(prefix + '-') ? name.slice(prefix.length + 1) : name;
-            };
-            const toTitle = (s: string) =>
-              s
-                .split('-')
-                .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-                .join(' ');
-            const display = toTitle(stripPrefix(t.name, appSlug || undefined));
-            const isEnabled = toggles[t.name] ?? true;
+}) => {
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = JSON.stringify(toggles) !== JSON.stringify(initialToggles);
 
-            return (
-              <div
-                key={t.name}
-                className={`rounded-3 p-3 border ${
-                  index < tools.length - 1 ? 'mb-2' : ''
-                } ${isEnabled ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
-                style={{
-                  transition: 'all 0.2s ease',
-                  borderColor: isEnabled ? 'var(--bs-border-color)' : 'var(--bs-border-color-translucent)',
-                }}
-              >
-                <div className="d-flex align-items-start justify-content-between">
-                  <div className="flex-grow-1 me-3">
-                    <div className="d-flex align-items-center mb-1">
-                      <div
-                        className={`rounded-circle me-2 ${isEnabled ? 'bg-success' : 'bg-secondary'}`}
-                        style={{ width: '8px', height: '8px', transition: 'all 0.2s ease' }}
-                      ></div>
-                      <span className={`fw-semibold ${isEnabled ? 'text-dark' : 'text-muted'}`}>{display}</span>
-                    </div>
-                    {t.description && (
-                      <div
-                        className={`small text-break ${isEnabled ? 'text-muted' : 'text-secondary'}`}
-                        style={{
-                          whiteSpace: 'normal',
-                          wordBreak: 'break-word',
-                          lineHeight: '1.4',
-                          fontSize: '0.85rem',
-                        }}
-                      >
-                        {formatDescriptionWithLinks(t.description)}
+  // Custom close handler with confirmation
+  const handleClose = () => {
+    if (hasUnsavedChanges) {
+      const confirmClose = window.confirm(
+        'Exit will lose the changes made. Cancel and use "Save Changes" if you wish to update the available tools.\n\nExit anyway?',
+      );
+      if (!confirmClose) return;
+    }
+    onHide();
+  };
+
+  return (
+    <Modal show={show} onHide={handleClose} centered size="lg">
+      <Modal.Header closeButton className="border-0 pb-2">
+        <div className="d-flex align-items-center justify-content-between w-100 pe-3">
+          <div>
+            <Modal.Title className="mb-1">
+              Integration Settings
+              {hasUnsavedChanges && (
+                <span className="ms-2 badge bg-warning text-dark" style={{ fontSize: '0.65rem', fontWeight: 'normal' }}>
+                  Unsaved Changes
+                </span>
+              )}
+            </Modal.Title>
+            <p className="text-muted mb-0 small">
+              Toggle on and off the tools that Numa will have access to when using this integration
+            </p>
+          </div>
+        </div>
+      </Modal.Header>
+      <Modal.Body className="pt-2" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+        {loading ? (
+          <div className="text-center py-4">
+            <Spinner animation="border" className="text-primary" />
+            <p className="mt-3 text-muted mb-0">Loading available tools...</p>
+          </div>
+        ) : error ? (
+          <Alert variant="danger" className="mb-0">
+            <i className="bi bi-exclamation-triangle-fill me-2"></i>
+            {error}
+          </Alert>
+        ) : tools.length === 0 ? (
+          <div className="text-center py-4">
+            <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
+            <p className="text-muted mt-2 mb-0">No tools available for this integration.</p>
+          </div>
+        ) : (
+          <div className="d-flex flex-column gap-1">
+            {(() => {
+              // Helpers
+              const stripPrefix = (name: string, prefix?: string | null) =>
+                prefix && name.startsWith(prefix + '-') ? name.slice(prefix.length + 1) : name;
+              const toTitle = (s: string) =>
+                s
+                  .split('-')
+                  .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+                  .join(' ');
+
+              // Sort by on/off (enabled first), then by display name
+              const sorted = [...tools].sort((a, b) => {
+                const aEnabled = toggles[a.name] ?? true;
+                const bEnabled = toggles[b.name] ?? true;
+                if (aEnabled !== bEnabled) return aEnabled ? -1 : 1;
+                const aLabel = toTitle(stripPrefix(a.name, appSlug || undefined));
+                const bLabel = toTitle(stripPrefix(b.name, appSlug || undefined));
+                return aLabel.localeCompare(bLabel);
+              });
+
+              return sorted.map((t, index) => {
+                const display = toTitle(stripPrefix(t.name, appSlug || undefined));
+                const isEnabled = toggles[t.name] ?? true;
+                return (
+                  <div
+                    key={t.name}
+                    className={`rounded-3 p-3 border ${
+                      index < sorted.length - 1 ? 'mb-2' : ''
+                    } ${isEnabled ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
+                    style={{
+                      transition: 'all 0.2s ease',
+                      borderColor: isEnabled ? 'var(--bs-border-color)' : 'var(--bs-border-color-translucent)',
+                    }}
+                  >
+                    <div className="d-flex align-items-start justify-content-between">
+                      <div className="flex-grow-1 me-3">
+                        <div className="d-flex align-items-center mb-1">
+                          <div
+                            className={`rounded-circle me-2 ${isEnabled ? 'bg-success' : 'bg-secondary'}`}
+                            style={{ width: '8px', height: '8px', transition: 'all 0.2s ease' }}
+                          ></div>
+                          <span className={`fw-semibold ${isEnabled ? 'text-dark' : 'text-muted'}`}>{display}</span>
+                        </div>
+                        {t.description && (
+                          <div
+                            className={`small text-break ${isEnabled ? 'text-muted' : 'text-secondary'}`}
+                            style={{
+                              whiteSpace: 'normal',
+                              wordBreak: 'break-word',
+                              lineHeight: '1.4',
+                              fontSize: '0.85rem',
+                            }}
+                          >
+                            {formatDescriptionWithLinks(t.description)}
+                          </div>
+                        )}
                       </div>
-                    )}
+                      <div className="form-check form-switch ms-2">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          checked={isEnabled}
+                          onChange={(e) => setToggles({ ...toggles, [t.name]: e.target.checked })}
+                          style={{
+                            accentColor: 'var(--color-primary)',
+                            transform: 'scale(1.1)',
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="form-check form-switch ms-2">
-                    <input
-                      className="form-check-input"
-                      type="checkbox"
-                      checked={isEnabled}
-                      onChange={(e) => setToggles({ ...toggles, [t.name]: e.target.checked })}
-                      style={{
-                        accentColor: 'var(--color-primary)',
-                        transform: 'scale(1.1)',
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              });
+            })()}
+          </div>
+        )}
+      </Modal.Body>
+      <Modal.Footer
+        className="border-top pt-3"
+        style={{
+          position: 'sticky',
+          bottom: 0,
+          backgroundColor: 'white',
+          zIndex: 1050,
+          boxShadow: '0 -2px 8px rgba(0,0,0,0.05)',
+        }}
+      >
+        <div className="d-flex justify-content-between align-items-center w-100">
+          <small className="text-muted">
+            {tools.length > 0 && (
+              <span>
+                <i className="bi bi-info-circle me-1"></i>
+                {Object.values(toggles).filter(Boolean).length} of {tools.length} tools enabled
+              </span>
+            )}
+          </small>
+          <div>
+            <Button variant="outline-secondary" onClick={handleClose} className="me-2">
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={onSave} disabled={loading || !!error}>
+              <i className="bi bi-check-lg me-2"></i>
+              Save Changes
+            </Button>
+          </div>
         </div>
-      )}
-    </Modal.Body>
-    <Modal.Footer className="border-0 pt-2">
-      <div className="d-flex justify-content-between align-items-center w-100">
-        <small className="text-muted">
-          {tools.length > 0 && (
-            <span>
-              <i className="bi bi-info-circle me-1"></i>
-              {Object.values(toggles).filter(Boolean).length} of {tools.length} tools enabled
-            </span>
-          )}
-        </small>
-        <div>
-          <Button variant="outline-secondary" onClick={onHide} className="me-2">
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={onSave} disabled={loading || !!error}>
-            <i className="bi bi-check-lg me-2"></i>
-            Save Changes
-          </Button>
-        </div>
-      </div>
-    </Modal.Footer>
-  </Modal>
-);
+      </Modal.Footer>
+    </Modal>
+  );
+};
