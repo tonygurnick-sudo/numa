@@ -386,6 +386,7 @@ deploy-to-arcanum-demo:
     deployment_tier: testing
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
 
 deploy-to-median:
   extends: .deploy-infra
@@ -393,8 +394,14 @@ deploy-to-median:
     CLIENT_NAME: median
   environment:
     deployment_tier: testing
+  needs: ["deploy-to-arcanum-demo"]   # wait for demo to finish
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual                   # only runs when a user clicks Play
+    - when: never                    # prevent running in other cases
+  allow_failure: false               # manual, but still fails pipeline if it errors
+
+
 
 deploy-to-client:
   extends: .deploy-infra
