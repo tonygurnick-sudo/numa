@@ -32,3 +32,4 @@ public/config.json
 **/blob-report/
 **/playwright/.cache/
 **/test-reports/
+**/.tsbuildinfo

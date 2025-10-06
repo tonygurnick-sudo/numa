@@ -1,5 +1,5 @@
-import { useMemo, useCallback, useState, useEffect } from 'react';
-import { Container, Row, Col, Button, Tabs, Tab } from 'react-bootstrap';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button, Col, Container, Row, Tab, Tabs } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
@@ -10,8 +10,23 @@ import { WizardNavigation } from './WizardNavigation';
 import { Preloader } from '../Components/Preloader';
 import { ResultsRenderer } from './ResultsRenderer';
 import { MarkdownContent } from './MarkdownContent';
+import { RunActiveState } from '@/types/apps.ts';
 
-const AppWizard = ({ manifest }) => {
+type ManifestTask = {
+  id: string;
+  type: string;
+  title?: string;
+  hidden?: boolean;
+  required?: boolean;
+  defaultContent?: string;
+};
+
+type Manifest = {
+  tasks: ManifestTask[];
+  typicalDurationMinutes?: number;
+};
+
+const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
   const {
     taskCompletionStatus,
     handleRunButtonClick,
@@ -35,16 +50,12 @@ const AppWizard = ({ manifest }) => {
     job,
     loadingJobId,
   } = useNumaApp();
+
   const [activeTab, setActiveTab] = useState(() => {
-    // If there are results, start on results tab
-    if (job?.results) {
-      return 'results';
-    }
-    // Otherwise start on inputs tab
+    if (job?.results) return 'results';
     return 'inputs';
   });
 
-  // Update activeTab when job changes
   useEffect(() => {
     if (job && job.results) {
       setActiveTab('results');
@@ -53,19 +64,15 @@ const AppWizard = ({ manifest }) => {
     }
   }, [job]);
 
-  // Filter out hidden tasks and system tasks (q-app and http-request)
   const visibleTasks = useMemo(
     () =>
       manifest?.tasks?.filter((task) => !task.hidden && task.type !== 'q-app' && task.type !== 'http-request') || [],
     [manifest?.tasks],
   );
 
-  // Split tasks into pre-run and post-run groups
   const preRunTasks = useMemo(() => visibleTasks.filter((task) => !task.type.includes('output')), [visibleTasks]);
-
   const postRunTasks = useMemo(() => visibleTasks.filter((task) => task.type.includes('output')), [visibleTasks]);
 
-  // Mark tasks with default content as complete when navigating
   const markDefaultContentComplete = useCallback(
     (taskIndex) => {
       const currentTask = visibleTasks[taskIndex];
@@ -76,7 +83,6 @@ const AppWizard = ({ manifest }) => {
     [visibleTasks, taskCompletionStatus, updateTaskCompletionStatus],
   );
 
-  // Define isStepComplete and isStepDisabled first, before they're used in handleStepClick
   const isStepComplete = useCallback(
     (index) => {
       const task = visibleTasks[index];
@@ -88,68 +94,46 @@ const AppWizard = ({ manifest }) => {
   const isStepDisabled = useCallback(
     (index) => {
       const task = visibleTasks[index];
-      // For output tasks, only disable if we haven't run yet
-      if (task?.type.includes('output')) {
-        return !hasRun;
-      }
+      if (task?.type.includes('output')) return !hasRun;
 
-      // For input tasks, check if any previous required task is incomplete
-      if (!task?.type.includes('output')) {
-        // Only check steps before the current one
-        for (let i = 0; i < index; i++) {
-          const prevTask = visibleTasks[i];
-          // If a previous task is required and incomplete, disable this step
-          if (prevTask?.required && !taskCompletionStatus[prevTask.id]) {
-            return true;
-          }
+      // For input tasks, disable if any earlier required task is incomplete
+      for (let i = 0; i < index; i++) {
+        const prevTask = visibleTasks[i];
+        if (prevTask?.required && !taskCompletionStatus[prevTask.id]) {
+          return true;
         }
       }
-
-      // Otherwise, allow the step
       return false;
     },
     [visibleTasks, hasRun, taskCompletionStatus],
   );
 
-  // Now we can use isStepDisabled in handleStepClick
   const handleStepClick = useCallback(
     (index) => {
-      // Check if this is a result step (index >= preRunTasks.length)
+      // If this is a results step (>= preRunTasks.length), only allow if we've run
       if (index >= preRunTasks.length) {
+        if (hasRun) setActiveStep(index);
+        return;
+      }
+
+      // Traditional task navigation
+      const task = visibleTasks[index];
+      if (!task) return;
+
+      if (task.type.includes('output')) {
         if (hasRun) {
-          console.log(`Setting active step to result index: ${index}`);
           setActiveStep(index);
-          // No need to set selectedTaskId for results
+          setSelectedTaskId(task.id);
         }
         return;
       }
 
-      // For traditional tasks
-      const task = visibleTasks[index];
-      if (task) {
-        // For output tasks, only allow clicking if we have results
-        if (task.type.includes('output')) {
-          if (hasRun) {
-            setActiveStep(index);
-            setSelectedTaskId(task.id);
-          }
-          return;
-        }
+      const disabled = isStepDisabled(index);
+      if (disabled) return;
 
-        // For input tasks, check if any previous required task is incomplete
-        if (!task.type.includes('output')) {
-          // Check if this step should be disabled
-          const isDisabled = isStepDisabled(index);
-          if (isDisabled) {
-            // Don't allow clicking on disabled steps
-            return;
-          }
-
-          markDefaultContentComplete(activeStep); // Mark current task if it has default content
-          setActiveStep(index);
-          setSelectedTaskId(task.id);
-        }
-      }
+      markDefaultContentComplete(activeStep);
+      setActiveStep(index);
+      setSelectedTaskId(task.id);
     },
     [
       visibleTasks,
@@ -179,7 +163,7 @@ const AppWizard = ({ manifest }) => {
 
       setHasRun(true);
       setAppRunning(true);
-      setActiveTab('results'); // Switch to results tab when running
+      setActiveTab('results');
       await handleRunButtonClick(numaAppData);
     } catch (error) {
       console.error('Error running app:', error);
@@ -200,7 +184,6 @@ const AppWizard = ({ manifest }) => {
 
   const handleTaskInputChange = useCallback(
     (taskId, value) => {
-      // Only allow changes if app hasn't run
       if (hasRun) return;
       setTaskInputValues((prev) => ({
         ...prev,
@@ -227,20 +210,42 @@ const AppWizard = ({ manifest }) => {
     }
   };
 
-  // Navigation control flags
-  const isLastInputStep = activeStep + 1 === preRunTasks.length;
-  const nextDisabled = isLastInputStep && !appRunning;
-  const isLastVisibleStep = activeStep === visibleTasks.length - 1;
-  const isCurrentStepIncomplete = !taskCompletionStatus[visibleTasks[activeStep]?.id];
+  // ---- Consolidated "Next" disabled logic (single source of truth) ----
+  // includeIncompleteCheck:
+  //   - true  -> enforce current-step completeness (Inputs view)
+  //   - false -> ignore completeness (Results tab)
+  const isNextInputDisabled = useCallback(
+    (includeIncompleteCheck = true) => {
+      const totalSteps = visibleTasks.length;
+      const current = activeStep;
+
+      // 1) At last visible step: no next step exists
+      const atLastVisibleStep = totalSteps === 0 || current >= totalSteps - 1;
+      if (atLastVisibleStep) return true;
+
+      // 2) At the boundary: next index would be first result step
+      const inputStepCount = visibleTasks.filter((t) => !t?.type?.includes('output')).length;
+      const atLastInputStep = current + 1 === inputStepCount;
+      if (atLastInputStep && !appRunning) return true;
+
+      // 3) Optionally require current step completed (inputs view only)
+      if (includeIncompleteCheck) {
+        const currentTaskId = visibleTasks[current]?.id;
+        const stepIsComplete = !!(currentTaskId && taskCompletionStatus[currentTaskId]);
+        if (!stepIsComplete) return true;
+      }
+
+      return false;
+    },
+    [activeStep, visibleTasks, appRunning, taskCompletionStatus],
+  );
 
   const renderTask = (task, index) => {
-    // Check if this is a result step (index >= preRunTasks.length)
+    // Results step
     if (index >= preRunTasks.length && job?.results && job?.results.length > 0) {
-      // Find the corresponding result output
       let outputIndex = index - preRunTasks.length;
       let currentOutput = null;
 
-      // Find the output at the given index across all results
       for (const result of job.results) {
         if (outputIndex < result.outputs.length) {
           currentOutput = result.outputs[outputIndex];
@@ -267,17 +272,17 @@ const AppWizard = ({ manifest }) => {
       return <p>No output found at index {index}</p>;
     }
 
-    // For traditional tasks
+    // Traditional task
     const handleComplete = (results) => handleTaskCompletion(task.id, true, results);
     const handleNotComplete = (results) => handleTaskCompletion(task.id, false, results);
 
     const commonProps = {
-      task: task,
+      task,
       onComplete: handleComplete,
       onNotComplete: handleNotComplete,
       value: taskInputValues[task.id],
       onChange: (value) => handleTaskInputChange(task.id, value),
-      disabled: hasRun, // Add disabled prop to all input modules
+      disabled: hasRun,
     };
 
     switch (task.type) {
@@ -304,7 +309,6 @@ const AppWizard = ({ manifest }) => {
     );
   }
 
-  // Show loading state when fetching a job
   if (loadingJobId) {
     return (
       <div>
@@ -332,7 +336,7 @@ const AppWizard = ({ manifest }) => {
             isStepComplete={isStepComplete}
             isStepDisabled={isStepDisabled}
             runButtonProps={{
-              disabled: runActive === 'disabled',
+              disabled: runActive === RunActiveState.Disabled,
               isRunning: appRunning,
               onClick: handleRunApp,
             }}
@@ -347,7 +351,6 @@ const AppWizard = ({ manifest }) => {
 
       <Row>
         <Col xs={12} className="px-2 px-md-4 position-relative">
-          {/* Only show tabs if there are results */}
           {job?.results && job?.results.length > 0 ? (
             <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="mb-4">
               <Tab eventKey="inputs" title="Inputs">
@@ -364,11 +367,8 @@ const AppWizard = ({ manifest }) => {
                             <i className="bi bi-arrow-left me-2"></i>
                             Previous Input
                           </Button>
-                          <Button
-                            variant="primary"
-                            onClick={handleNextStep}
-                            disabled={isLastVisibleStep || nextDisabled}
-                          >
+                          {/* Results tab ignores incomplete-step rule (original behavior) */}
+                          <Button variant="primary" onClick={handleNextStep} disabled={isNextInputDisabled(false)}>
                             Next Input
                             <i className="bi bi-arrow-right ms-2"></i>
                           </Button>
@@ -383,7 +383,6 @@ const AppWizard = ({ manifest }) => {
               </Tab>
             </Tabs>
           ) : (
-            // If no results, just show the inputs section
             <div className="mb-4 position-relative">
               {activeStep < visibleTasks.length && (
                 <>
@@ -398,11 +397,8 @@ const AppWizard = ({ manifest }) => {
                           <i className="bi bi-arrow-left me-2"></i>
                           Previous Input
                         </Button>
-                        <Button
-                          variant="primary"
-                          onClick={handleNextStep}
-                          disabled={isLastVisibleStep || isCurrentStepIncomplete || nextDisabled}
-                        >
+                        {/* Inputs view enforces completeness (original logic) */}
+                        <Button variant="primary" onClick={handleNextStep} disabled={isNextInputDisabled()}>
                           Next Input
                           <i className="bi bi-arrow-right ms-2"></i>
                         </Button>

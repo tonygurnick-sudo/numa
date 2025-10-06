@@ -91,10 +91,18 @@ const CodeBlock = ({ textContent, language, copied, handleCopy }) => {
   );
 };
 
-class MarkdownErrorBoundary extends React.Component {
-  constructor(props) {
+type MarkdownErrorBoundaryProps = React.PropsWithChildren<{}>;
+type MarkdownErrorBoundaryState = { hasError: boolean };
+
+class MarkdownErrorBoundary extends React.Component<MarkdownErrorBoundaryProps, MarkdownErrorBoundaryState> {
+  constructor(props: MarkdownErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
+  }
+
+  // (optional but correct for an error boundary)
+  static getDerivedStateFromError() {
+    return { hasError: true };
   }
 
   render() {
@@ -106,14 +114,18 @@ class MarkdownErrorBoundary extends React.Component {
       );
     }
 
-    return this.props.children;
+    return <>{this.props.children}</>;
   }
 }
 
-const MarkdownContent = React.memo(({ content }) => {
+interface MarkdownContentProps {
+  content: string;
+}
+
+const MarkdownContent = React.memo(({ content }: MarkdownContentProps) => {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = (text) => {
+  const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+
+
+
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
@@ -14,7 +17,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Migration-friendly settings - warnings instead of errors */
+    /* Migration-friendly settings (lenient so builds never block) */
     "strict": false,
     "noImplicitAny": false,
     "strictNullChecks": false,
@@ -27,11 +30,11 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": false,
 
-    /* Additional lenient settings for gradual migration */
+    /* Additional lenient settings */
     "noErrorTruncation": true,
     "skipDefaultLibCheck": true,
 
-    /* Path mapping */
+    /* Paths / aliases */
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
@@ -42,10 +45,11 @@
       "@/providers/*": ["./src/Providers/*"],
       "@/hooks/*": ["./src/hooks/*"],
       "@/modules/*": ["./src/Modules/*"],
-      "@/layouts/*": ["./src/Layouts/*"]
+      "@/layouts/*": ["./src/Layouts/*"],
+
     },
 
-    /* Additional options for React development */
+    /* React / tooling */
     "allowJs": true,
     "checkJs": false,
     "esModuleInterop": true,
@@ -53,12 +57,27 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
 
-    /* Type checking enhancements - relaxed for migration */
+    /* Useful in Vite/Vitest projects */
+    "types": ["vite/client", "vitest/globals"],
+
+    /* Perf / caching */
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo",
+
+    /* Type checking enhancements (kept relaxed) */
     "exactOptionalPropertyTypes": false,
     "noPropertyAccessFromIndexSignature": false,
     "noUncheckedIndexedAccess": false
   },
   "include": ["src/**/*", "src/**/*.json", "src/**/__tests__/**/*"],
-  "exclude": ["node_modules", "dist", "coverage", "playwright-report", "test-results", "**/*.js", "**/*.jsx"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage",
+    "playwright-report",
+    "test-results",
+    "**/*.js",
+    "**/*.jsx"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

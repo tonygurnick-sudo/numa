@@ -1,7 +1,8 @@
+// Providers/NumaAppContext.tsx
 import { createContext, useContext } from 'react';
-import type { NumaApp, NumaAppContextValue } from '../types/apps';
+import { FileRef, LegacyFileRef, NumaApp, NumaAppContextValue, RunActiveState } from '../types/apps';
 
-// Create the context
+// Create the context with a fully typed default (no-ops are fine)
 export const NumaAppContext = createContext<NumaAppContextValue>({
   // Status states
   loading: false,
@@ -9,70 +10,73 @@ export const NumaAppContext = createContext<NumaAppContextValue>({
   error: null,
   setError: (_e: string | null) => {},
 
+  // Job state
+  job: null,
+
   // App data states
   numaApps: [],
   setNumaApps: (_apps: NumaApp[]) => {},
   numaAppData: null,
-  setNumaAppData: () => {},
+  setNumaAppData: (_a: NumaApp | null) => {}, // ✅ explicitly typed as NumaApp | null
   qAppData: [],
-  setqAppData: () => {},
+  setqAppData: (_d: unknown[]) => {},
   numaAppId: null,
-  setNumaAppId: () => {},
+  setNumaAppId: (_id: string | null) => {},
 
   // Task states
   taskInputValues: {},
-  setTaskInputValues: () => {},
-  updateTaskInputValue: () => {},
+  setTaskInputValues: (_vals: Record<string, unknown>) => {},
+  updateTaskInputValue: (_taskId: string, _value: unknown) => {},
   taskCompletionStatus: {},
-  setTaskCompletionStatus: () => {},
-  updateTaskCompletionStatus: () => {},
+  setTaskCompletionStatus: (_s: Record<string, boolean>) => {},
+  updateTaskCompletionStatus: (_taskId: string, _success?: boolean) => {},
 
   // Q-App specific states
   qCardInputValues: {},
-  setQCardInputValues: () => {},
+  setQCardInputValues: (_vals: Record<string, unknown>) => {},
   qSsessionId: null,
-  setQSessionId: () => {},
+  setQSessionId: (_id: string | null) => {},
 
   // Run states
-  runActive: 'disabled',
-  setRunActive: () => {},
+  runActive: RunActiveState.Disabled,
+  setRunActive: (_state: 'enabled' | 'disabled') => {},
   progress: 0,
-  setProgress: () => {},
+  setProgress: (_v: number) => {},
   isPolling: false,
-  setIsPolling: () => {},
+  setIsPolling: (_v: boolean) => {},
   processingStatus: '',
-  setProcessingStatus: () => {},
+  setProcessingStatus: (_s: string) => {},
   processingProgress: 0,
-  setProcessingProgress: () => {},
+  setProcessingProgress: (_v: number) => {},
 
   // Job and task management
-  handleRunButtonClick: async () => {},
+  handleRunButtonClick: async (_app: NumaApp | null) => {},
   getAppJobs: () => [],
   loadAppJobs: async () => {},
   appRunning: false,
-  setAppRunning: () => {},
+  setAppRunning: (_v: boolean) => {},
   loadJobResults: async () => {},
   currentJobId: null,
-  setCurrentJobId: () => {},
+  setCurrentJobId: (_id: string | null) => {},
   loadingJobId: null,
-  setLoadingJobId: () => {},
+  setLoadingJobId: (_id: string | null) => {},
 
   // UI states
   numaTaskResponses: [],
   selectedTaskId: null,
-  setSelectedTaskId: () => {},
+  setSelectedTaskId: (_id: string | null) => {},
   jobHistorySidebarOpen: false,
-  setJobHistorySidebarOpen: () => {},
+  setJobHistorySidebarOpen: (_v: boolean) => {},
   activeStep: 0,
-  setActiveStep: () => {},
+  setActiveStep: (_n: number) => {},
   hasRun: false,
-  setHasRun: () => {},
+  setHasRun: (_v: boolean) => {},
 
-  // Utility functions
+  // Utility
   resetAppState: () => {},
 });
 
-// Custom hook for using context
+// Hook for consuming the context
 export const useNumaApp = (): NumaAppContextValue => {
   const context = useContext(NumaAppContext);
   if (!context) {
@@ -81,46 +85,33 @@ export const useNumaApp = (): NumaAppContextValue => {
   return context;
 };
 
-// Utility function to find a value in an object using both hyphen and underscore formats of the key
-export const findValueWithFormatFlexibility = (obj, key) => {
-  // Try the original key first
-  let value = obj[key];
-  if (value !== undefined) {
-    return value;
-  }
+// ---- Utility functions ----
 
-  // Try hyphen version if the key contains underscores
+// Look up a value in an object by key, allowing "_" vs "-" flexibility
+export const findValueWithFormatFlexibility = (obj: Record<string, unknown>, key: string): unknown => {
+  let value = obj[key];
+  if (value !== undefined) return value;
+
   if (key.includes('_')) {
     const hyphenKey = key.replace(/_/g, '-');
     value = obj[hyphenKey];
-    if (value !== undefined) {
-      return value;
-    }
+    if (value !== undefined) return value;
   }
 
-  // Try underscore version if the key contains hyphens
   if (key.includes('-')) {
     const underscoreKey = key.replace(/-/g, '_');
     value = obj[underscoreKey];
-    if (value !== undefined) {
-      return value;
-    }
+    if (value !== undefined) return value;
   }
 
-  // Return undefined if not found with any format
   return undefined;
 };
 
-// Global helper function to resolve references like @taskId or @taskId/subPath
-export const resolveReference = (key, taskResults) => {
-  if (!key?.startsWith('@')) {
-    return key; // If it's not a reference, just return the key (unchanged)
-  }
+// Resolve a reference like "@taskId" or "@taskId/subPath"
+export const resolveReference = (key: string, taskResults: Record<string, unknown>): unknown => {
+  if (!key?.startsWith('@')) return key;
 
-  // Split the reference into taskId and subPath
   const [fullTaskId, ...subPaths] = key.slice(1).split('/');
-
-  // Get the base result using format flexibility
   const baseResult = findValueWithFormatFlexibility(taskResults, fullTaskId);
 
   if (baseResult === undefined) {
@@ -128,76 +119,68 @@ export const resolveReference = (key, taskResults) => {
     return '';
   }
 
-  // Process file arrays - if the result is an array of file objects, preserve the standardized format
   if (
     Array.isArray(baseResult) &&
     baseResult.length > 0 &&
     typeof baseResult[0] === 'object' &&
-    (baseResult[0].filePath || baseResult[0].s3_key)
+    ('filePath' in baseResult[0] || 's3_key' in baseResult[0])
   ) {
-    // If there's no subPath, return the array as-is
     if (subPaths.length === 0) {
-      // Convert legacy format (filePath) to standardized format (s3_key)
-      return baseResult.map((fileObj) => ({
-        id: fileObj.randomId || fileObj.id,
-        name: fileObj.fileName || fileObj.name,
-        s3_key: fileObj.filePath || fileObj.s3_key,
-      }));
+      return (baseResult as LegacyFileRef[]).map(
+        (fileObj): FileRef => ({
+          id: fileObj.randomId ?? fileObj.id ?? '',
+          name: fileObj.fileName ?? fileObj.name ?? '',
+          s3_key: fileObj.filePath ?? fileObj.s3_key ?? '',
+        }),
+      );
     }
-
-    // If there is a subPath, we can't navigate further since we've transformed the structure
     console.warn(`Cannot navigate to subpath ${subPaths.join('/')} after file array transformation`);
     return baseResult;
   }
 
-  // If there's no subPath or the result isn't an object, return the base result
-  if (subPaths.length === 0 || typeof baseResult !== 'object') {
-    return baseResult;
-  }
+  if (subPaths.length === 0 || typeof baseResult !== 'object') return baseResult;
 
-  // Navigate through the subPath
   try {
-    const result = subPaths.reduce((obj, path) => obj[path], baseResult);
-    return result !== undefined ? result : '';
+    return (
+      subPaths.reduce<unknown>((obj, path) => {
+        if (obj && typeof obj === 'object' && path in obj) {
+          return (obj as Record<string, unknown>)[path];
+        }
+        return undefined;
+      }, baseResult) ?? ''
+    );
   } catch (error) {
     console.warn(`Failed to resolve sub-reference ${key}:`, error);
     return '';
   }
 };
 
-// Function to create a payload dynamically from a template
-export function createPayloadFromTemplate(template, inputValues, taskResults) {
-  // Main function to recursively handle template (string, array, or object)
+// Create a payload dynamically from a template + task results
+export function createPayloadFromTemplate(
+  template: unknown,
+  inputValues: Record<string, unknown>,
+  taskResults: Record<string, unknown>,
+): unknown {
   if (typeof template === 'string') {
-    // If the string is a direct reference (e.g. "@upload-files-to-s3"), return the resolved value directly
     if (template.match(/^@[\w-]+$/)) {
       return resolveReference(template, taskResults);
     }
-    // Otherwise, it's a string with potential embedded references, so replace them
-    return template.replace(/@[\w-]+/g, (match) => resolveReference(match, taskResults));
+    return template.replace(/@[\w-]+/g, (match) => String(resolveReference(match, taskResults)));
   } else if (Array.isArray(template)) {
-    // Handle case for arrays (recursively apply transformation)
     return template.map((item) => createPayloadFromTemplate(item, inputValues, taskResults));
   } else if (typeof template === 'object' && template !== null) {
-    // Handle case for objects (recursively apply transformation)
-    return Object.entries(template).reduce((acc, [key, value]) => {
-      const processedValue = createPayloadFromTemplate(value, inputValues, taskResults);
-
-      // Handle null values and empty arrays to prevent backend errors
-      if (processedValue === null) {
-        // Use empty string instead of null
+    return Object.entries(template).reduce<Record<string, unknown>>((acc, [key, value]) => {
+      const processed = createPayloadFromTemplate(value, inputValues, taskResults);
+      if (processed === null) {
         acc[key] = '';
-      } else if (Array.isArray(processedValue) && processedValue.length === 0) {
-        // Use empty array as is
+      } else if (Array.isArray(processed) && processed.length === 0) {
         acc[key] = [];
       } else {
-        // Use the processed value directly without wrapping in an array
-        acc[key] = processedValue;
+        acc[key] = processed;
       }
-
       return acc;
     }, {});
   }
 
-  return template; // Return as is for other data types (numbers, booleans, etc.)
+  return template;
 }
