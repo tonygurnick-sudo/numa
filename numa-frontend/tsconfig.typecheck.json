@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+
+    /* keep error.message etc. working without casting */
+    "useUnknownInCatchVariables": false,
+
+    /* don't load any ambient @types by default */
+    "types": [],
+    "typeRoots": ["./src/@types"],
+
+    /* modern libs, no checking of lib .d.ts */
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": [
+    "src/**/__tests__/**",
+    "src/**/Mocks/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "e2e-tests/**",
+    "../node_modules/**",
+    "../../node_modules/**"
+  ]
+}

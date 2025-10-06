@@ -1,9 +1,50 @@
+import type React from 'react';
 import { Button, ProgressBar } from 'react-bootstrap';
 import { CheckCircleFill } from 'react-bootstrap-icons';
 import { useEffect, useState } from 'react';
 import { useNumaApp } from '../Providers/NumaAppContext';
 
-const WizardNavigation = ({
+/* ---------- Local types ---------- */
+
+type Step = {
+  id: string;
+  title?: string;
+  required?: boolean;
+};
+
+type RunButtonProps = {
+  /** Whether the run is currently happening */
+  isRunning: boolean;
+  /** Whether the button should be disabled */
+  disabled: boolean;
+  /** Click handler used on the Button (allowing async handlers too) */
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>;
+} & Omit<React.ComponentProps<typeof Button>, 'disabled' | 'onClick'>;
+
+type WizardNavigationProps = {
+  preRunSteps: Step[];
+  postRunSteps: Step[];
+  activeStep: number;
+  onStepClick: (index: number) => void;
+  isStepComplete?: (index: number) => boolean;
+  isStepDisabled?: (index: number) => boolean;
+  runButtonProps: RunButtonProps;
+  processingProgress: number; // 0..100
+  processingStatus: string;
+  hasRun: boolean;
+  typicalDurationMinutes?: number;
+
+  /* ---- Optional extras passed by AppWizard (not used here, but allowed) ---- */
+  handlePrevStep?: () => void;
+  handleNextStep?: () => void;
+  visibleTasks?: Step[];
+  taskCompletionStatus?: Record<string, boolean>;
+  results?: readonly unknown[];
+};
+
+/* ---------- Component ---------- */
+
+const WizardNavigation: React.FC<WizardNavigationProps> = ({
   preRunSteps,
   postRunSteps,
   activeStep,
@@ -18,11 +59,12 @@ const WizardNavigation = ({
 }) => {
   const { resetAppState } = useNumaApp();
   const { isRunning, disabled, onClick, ...otherRunButtonProps } = runButtonProps;
-  const [wasDisabled, setWasDisabled] = useState(true);
-  const [showHighlight, setShowHighlight] = useState(false);
+
+  const [wasDisabled, setWasDisabled] = useState<boolean>(true);
+  const [showHighlight, setShowHighlight] = useState<boolean>(false);
 
   // Show post-run steps if app is running or has been run (has results)
-  const hasBeenRun = isRunning || hasRun;
+  const hasBeenRun: boolean = isRunning || hasRun;
 
   useEffect(() => {
     if (wasDisabled && !disabled) {
@@ -105,9 +147,10 @@ const WizardNavigation = ({
                       <br />
                     </>
                   )}
-                  {typicalDurationMinutes && (
+                  {typeof typicalDurationMinutes === 'number' && (
                     <>
-                      This app typically takes {typicalDurationMinutes} minute{typicalDurationMinutes > 1 ? 's' : ''}.
+                      This app typically takes {typicalDurationMinutes} minute
+                      {typicalDurationMinutes > 1 ? 's' : ''}.
                     </>
                   )}
                 </>
@@ -125,17 +168,15 @@ const WizardNavigation = ({
               label={`${Math.round(processingProgress)}%`}
               animated
               variant="primary"
-              style={{
-                width: '50%',
-                margin: '0 auto 10px auto',
-              }}
+              style={{ width: '50%', margin: '0 auto 10px auto' }}
             />
             <div className="processing-status">
               {processingStatus}
-              {typicalDurationMinutes && (
+              {typeof typicalDurationMinutes === 'number' && (
                 <>
                   <br />
-                  This app typically takes {typicalDurationMinutes} minute{typicalDurationMinutes > 1 ? 's' : ''}.
+                  This app typically takes {typicalDurationMinutes} minute
+                  {typicalDurationMinutes > 1 ? 's' : ''}.
                 </>
               )}
             </div>

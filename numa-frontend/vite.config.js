@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import fsExtra from 'fs-extra';
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
+import { fileURLToPath, URL } from 'node:url';           // ⬅️ add this
 import config from './public/config.json';
 
 // Custom plugin to copy build output to @numa-frontend
@@ -13,21 +14,15 @@ const copyBuildPlugin = () => ({
     const targetDir = '../infra/build/numa-frontend';
     const excludeFiles = ['config.json', 'manifest.json'];
 
-    // Cleanup old builds
     fsExtra.removeSync(targetDir);
-
     mkdirSync(targetDir, { recursive: true });
 
-    // Function to copy directory recursively
     const copyDir = (src, dest) => {
       if (!existsSync(src)) return;
-
       const entries = readdirSync(src, { withFileTypes: true });
-
       for (const entry of entries) {
         const srcPath = resolve(src, entry.name);
         const destPath = resolve(dest, entry.name);
-
         if (entry.isDirectory()) {
           mkdirSync(destPath, { recursive: true });
           copyDir(srcPath, destPath);
@@ -38,7 +33,6 @@ const copyBuildPlugin = () => ({
     };
 
     try {
-      // Copy the build output
       copyDir(sourceDir, targetDir);
       console.log('Successfully copied build files to /infra/build/numa-frontend');
     } catch (error) {
@@ -50,42 +44,33 @@ const copyBuildPlugin = () => ({
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), copyBuildPlugin()],
-  build: {
-    sourcemap: false,
-  },
+  build: { sourcemap: false },
   server: {
     proxy: {
       '/api': {
         target: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
         changeOrigin: true,
         secure: false,
-        headers: {
-          Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
-        },
+        headers: { Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/` },
         rewrite: (path) => path.replace(/^\/api/, '/api'),
       },
       '/manifest.json': {
         target: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
         changeOrigin: true,
         secure: false,
-        headers: {
-          Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
-        },
+        headers: { Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/` },
       },
     },
   },
   resolve: {
     alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),  // ⬅️ add this
       'node_modules/@popperjs/core': '@popperjs/core/dist/umd/popper.min.js',
     },
     extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
   },
   assetsInclude: ['**/*.md'],
-  // HTML to DOCX needs a browser environment, so we need to define process.env
-  // This is a workaround for MdToDocx.jsx
-  define: {
-    'process.env': {},
-  },
+  define: { 'process.env': {} },
   test: {
     environment: 'jsdom',
     globals: true,

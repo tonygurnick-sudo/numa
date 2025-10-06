@@ -5,25 +5,33 @@
     "module": "ESNext",
     "skipLibCheck": true,
 
-    /* Bundler mode */
+    /* Bundler / ESM-friendly */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
-    "emitDeclarationOnly": true,
     "isolatedModules": true,
     "moduleDetection": "force",
-    "composite": true,
 
-    /* Linting */
+    /* No output; keep builds unblocked */
+    "noEmit": true,
+
+    /* Enable incremental cache (harmless for noEmit, speeds IDE) */
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo.node",
+
+    /* Type safety for config files */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* Node.js compatibility */
+    /* Node/CLI compat */
     "allowJs": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+
+    /* Ambient types for tools you’re using here */
+    "types": ["node", "vitest", "vite/client", "playwright", "eslint"]
   },
   "include": [
     "vite.config.ts",

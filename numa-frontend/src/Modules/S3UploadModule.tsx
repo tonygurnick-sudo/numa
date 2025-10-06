@@ -10,8 +10,53 @@ import { UploadStatusRow } from '../Components/UploadStatusRow';
 import PropTypes from 'prop-types';
 import { useJobsApi } from '../Services/jobsApi';
 
+// ---------- Types added ----------
+type NumaAppWithTasks = { tasks?: Array<{ id: string }> };
+type TaskInputMap = Record<string, unknown>;
+
+export interface StandardizedFile {
+  id: string;
+  name: string;
+  s3_key: string;
+  filePath?: string;
+  fileName?: string;
+  fileType?: string;
+  s3Bucket?: string;
+  file?: File;
+}
+
+export interface TaskParameters {
+  allowedFileTypes?: string[];
+  maximumFileSize?: number;
+  minFiles?: number;
+  maxFiles?: number;
+  userMessage?: string;
+}
+
+export interface ManifestTask {
+  id: string;
+  title?: string;
+  required?: boolean;
+  parameters?: TaskParameters;
+}
+
+export interface S3UploadModuleProps {
+  task: ManifestTask;
+  onComplete?: (results?: StandardizedFile[] | []) => void;
+  onNotComplete?: (results?: StandardizedFile[] | []) => void;
+  onChange?: (value: StandardizedFile[] | null | string) => void;
+  value?: unknown;
+  disabled?: boolean;
+}
+
+// put this near the top of the file (after imports is fine)
+type TaskResponse = {
+  taskId: string;
+  result?: unknown;
+};
+
 // Default no-op functions
-const noop = () => {};
+const noop: (..._args: unknown[]) => void = () => {};
 
 // Utility function to standardize file format
 const standardizeFileFormat = (file) => {
@@ -57,14 +102,18 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [bucketName, setBucketName] = useState();
+  const [bucketName, setBucketName] = useState('');
   const [region, setRegion] = useState();
   const [isCreatingJob, setIsCreatingJob] = useState(false);
 
   const fileInputRef = useRef(null);
   // Single promise to ensure atomic job creation across concurrent uploads
   const jobCreationPromiseRef = useRef(null);
-  const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
+
+  const taskResponse = Array.isArray(numaTaskResponses)
+    ? (numaTaskResponses as TaskResponse[]).find((r) => r?.taskId === task.id)
+    : undefined;
+
   const userUuid = user?.decoded_tokens?.idToken?.sub;
 
   // Handle value prop changes
@@ -399,10 +448,13 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
 
           // Filter out internal fields from taskInputValues before merging
           // Only include fields that correspond to actual task IDs
-          const filteredTaskInputValues = {};
-          if (numaAppData?.tasks) {
-            const taskIds = new Set(numaAppData.tasks.map((t) => t.id));
-            Object.entries(taskInputValues).forEach(([key, value]) => {
+          const filteredTaskInputValues: TaskInputMap = {};
+
+          const appWithTasks = numaAppData as NumaAppWithTasks | null;
+          if (appWithTasks?.tasks && Array.isArray(appWithTasks.tasks)) {
+            const taskIds = new Set(appWithTasks.tasks.map((t) => t.id));
+
+            Object.entries(taskInputValues as TaskInputMap).forEach(([key, value]) => {
               if (taskIds.has(key)) {
                 filteredTaskInputValues[key] = value;
               }
@@ -542,8 +594,8 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
                     role="progressbar"
                     style={{ width: `${uploadProgress}%` }}
                     aria-valuenow={uploadProgress}
-                    aria-valuemin="0"
-                    aria-valuemax="100"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
                   >
                     {uploadProgress}%
                   </div>
@@ -553,7 +605,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           )}
         </div>
 
-        {appRunning && !taskResponse?.result && <Preloader overlayParent={true} />}
+        {appRunning && !taskResponse?.result && <Preloader smallscreen={true} overlayParent={true} />}
         {selectedFiles.length > 0 && (
           <div className="s3-files-section">
             <div className="files-header">

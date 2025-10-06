@@ -1,3 +1,4 @@
+// eslint.config.js
 import js from '@eslint/js';
 import globals from 'globals';
 import reactPlugin from 'eslint-plugin-react';
@@ -7,6 +8,22 @@ import importPlugin from 'eslint-plugin-import';
 import tsParser from '@typescript-eslint/parser'; // eslint-disable-line import/no-unresolved
 import tsPlugin from '@typescript-eslint/eslint-plugin'; // eslint-disable-line import/no-unresolved
 import { eslintBase } from '@arcanumai/style';
+
+// ✅ Keep ESLint out of third-party & generated files
+const IGNORES = {
+  ignores: [
+    '**/node_modules/**',
+    '**/*.d.ts',
+    '**/dist/**',
+    '**/build/**',
+    '**/coverage/**',
+    '**/playwright-report/**',
+    '**/test-results/**',
+    'e2e-tests/**',
+    'infra/**',
+    'public/**',
+  ],
+};
 
 // Shared configuration
 const sharedConfig = {
@@ -56,10 +73,13 @@ const sharedConfig = {
 };
 
 export default [
+  IGNORES, // ✅ must come first
+
   js.configs.recommended,
-  // JavaScript/JSX files
+
+  // JavaScript/JSX files — only lint app code
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['src/**/*.{js,jsx}'],
     ...sharedConfig,
     rules: {
       ...sharedConfig.rules,
@@ -72,9 +92,10 @@ export default [
       'import/namespace': 'error',
     },
   },
-  // TypeScript/TSX files
+
+  // TypeScript/TSX files — only lint app code
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}'],
     ...sharedConfig,
     languageOptions: {
       ...sharedConfig.languageOptions,
@@ -87,18 +108,15 @@ export default [
     rules: {
       ...sharedConfig.rules,
       '@typescript-eslint/no-explicit-any': 'error',
-      'no-undef': 'off', // TypeScript handles this better
-      'react/display-name': 'off', // Not needed for TypeScript
-      'no-unused-vars': 'off', // Turn off base rule
+      'no-undef': 'off', // TS does this
+      'react/display-name': 'off',
+      'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
         'error',
-        {
-          argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
-          ignoreRestSiblings: true,
-        },
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
       ],
     },
   },
+
   ...eslintBase,
 ];
