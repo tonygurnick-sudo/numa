@@ -591,6 +591,7 @@ export const PolicyBuilderDetail = () => {
         s3Client,
         '.md',
         userId,
+        policy.jobDetails,
       );
 
       // Create the command to get the markdown content
