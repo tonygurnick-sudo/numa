@@ -81,6 +81,7 @@ export class KnowledgeBase extends Construct {
       manageMasterUserPassword: true,
       enableHttpEndpoint: true,
       databaseName,
+      skipFinalSnapshot: true,
       serverlessv2ScalingConfiguration: {
         minCapacity: 0,
         maxCapacity: 1,
