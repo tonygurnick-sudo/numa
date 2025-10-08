@@ -23,6 +23,7 @@
     "region": "us-east-1",
     "provisionQResources": true,
     "preferredKnowledgeBase": "bedrock",
+    "vectorStorageType": "s3vectors",
     "budget": {
       "name": "monthly-budget",
       "limitAmount": 1500,

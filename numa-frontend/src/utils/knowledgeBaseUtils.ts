@@ -290,34 +290,36 @@ export const fetchWebCrawlerDataSources = async (getCredentials, clientName, reg
       credentials,
     });
 
+    // List all objects - we'll filter for web-crawler/ in the keys
     const cmd = new ListObjectsV2Command({
       Bucket: `numa-${clientName}-data`,
-      Prefix: 'web-crawler/',
-      Delimiter: '/',
     });
 
     const resp = await s3Client.send(cmd);
+    const allObjects = resp.Contents || [];
 
-    // Get all the domain folders (CommonPrefixes represents folders)
-    const domainFolders = resp.CommonPrefixes || [];
+    // Find all unique web-crawler domains from object keys
+    // Keys can be: web-crawler/{domain}/{file} or documents/company/web-crawler/{domain}/{file}
+    const domainMap = new Map();
+
+    for (const obj of allObjects) {
+      const key = obj.Key;
+      // Match pattern: .../web-crawler/{domain}/{file}
+      const match = key.match(/web-crawler\/([^/]+)\//);
+      if (match) {
+        const domain = match[1];
+        if (!domainMap.has(domain)) {
+          domainMap.set(domain, []);
+        }
+        domainMap.get(domain).push(obj);
+      }
+    }
+
     const webCrawlerDataSources = [];
 
-    // Process each domain folder
-    for (const prefix of domainFolders) {
-      const domain = prefix.Prefix.replace('web-crawler/', '').replace('/', '');
-
-      if (!domain) continue;
-
-      // List files in this domain folder to get page count and latest crawl date
-      const domainCmd = new ListObjectsV2Command({
-        Bucket: `numa-${clientName}-data`,
-        Prefix: prefix.Prefix,
-      });
-
-      const domainResp = await s3Client.send(domainCmd);
-      const files = domainResp.Contents || [];
-
-      if (files.length === 0) continue;
+    // Process each domain
+    for (const [domain, files] of domainMap.entries()) {
+      if (!domain || files.length === 0) continue;
 
       // Get the most recent file to determine the latest crawl date
       const latestFile = files.reduce((latest, file) => {
