@@ -134,7 +134,6 @@ Object.entries(testCases).forEach(([name, props]) =>
 
           lifecycle: {
             ignoreChanges: ['engine_version'],
-            preventDestroy: true,
           },
         }),
       );
@@ -152,7 +151,6 @@ Object.entries(testCases).forEach(([name, props]) =>
           engineVersion: '${aws_rds_cluster.' + rdsClusterId + '.engine_version}',
           lifecycle: {
             ignoreChanges: ['engine_version'],
-            preventDestroy: true,
           },
         }),
       );

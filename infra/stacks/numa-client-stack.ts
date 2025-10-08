@@ -39,6 +39,7 @@ import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { z } from 'zod';
 import { KnowledgeBase } from '../constructs/knowledge-base-construct';
+import { S3VectorsKnowledgeBase } from '../constructs/s3-vectors-knowledge-base-construct';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
@@ -150,12 +151,22 @@ export class NumaClientStack extends TerraformStack {
       defaultTags: defaultProvider.defaultTags,
     });
 
-    const knowledgeBase = new KnowledgeBase(this, 'knowledge-base', {
-      clientName: clientConfig.clientName,
-      region: clientConfig.region,
-      embeddingModel: clientConfig.embeddingModel,
-      bedrockParserModel: clientConfig.bedrockParserModel,
-    });
+    // Conditionally create either RDS-based or S3 Vectors-based knowledge base
+    const vectorStorageType = clientConfig.vectorStorageType ?? 'rds';
+    const knowledgeBase =
+      vectorStorageType === 's3vectors'
+        ? new S3VectorsKnowledgeBase(this, 'knowledge-base', {
+            clientName: clientConfig.clientName,
+            region: clientConfig.region,
+            embeddingModel: clientConfig.embeddingModel,
+            bedrockParserModel: clientConfig.bedrockParserModel,
+          })
+        : new KnowledgeBase(this, 'knowledge-base', {
+            clientName: clientConfig.clientName,
+            region: clientConfig.region,
+            embeddingModel: clientConfig.embeddingModel,
+            bedrockParserModel: clientConfig.bedrockParserModel,
+          });
 
     const core = new CoreNumaInfra(this, 'numa', {
       ...clientConfig,
@@ -471,6 +482,19 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default 'q' if provisionQResources is true, else 'bedrock'
          */
         preferredKnowledgeBase: z.enum(['q', 'bedrock']).optional(),
+
+        /**
+         * Vector storage type for Bedrock knowledge base
+         *
+         * - 'rds': Aurora PostgreSQL with pgvector (default, production-ready)
+         * - 's3vectors': Amazon S3 Vectors (preview, 90% cost reduction)
+         *
+         * Note: S3 Vectors is in preview and only available in us-east-1, us-east-2,
+         * us-west-2, eu-central-1, ap-southeast-2
+         *
+         * @default 'rds'
+         */
+        vectorStorageType: z.enum(['rds', 's3vectors']).optional().default('rds'),
 
         /**
          * Model to use for document embedding in knowledge base

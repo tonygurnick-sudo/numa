@@ -388,8 +388,11 @@ function getDataSourceStatusVariant(status: string | undefined): string {
  */
 function formatDataSourceType(type: string | undefined, source: string): string {
   if (source === 'bedrock') {
-    // Bedrock doesn't provide type in the same way, infer from name or default to S3
-    return type === 'S3' || !type ? 'Numa Bedrock Knowledge Base' : type;
+    // Handle S3 Vectors and regular S3 data sources
+    if (type === 'S3_VECTORS' || type === 'S3' || !type) {
+      return 'Numa Bedrock Knowledge Base';
+    }
+    return type;
   }
   return type === 'S3' ? 'Numa Q Business Knowledge Base' : type || 'Unknown';
 }

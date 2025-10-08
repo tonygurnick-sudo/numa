@@ -89,7 +89,6 @@ export class KnowledgeBase extends Construct {
 
       lifecycle: {
         ignoreChanges: ['engine_version'], // Avoid recreating the cluster when the engine version changes
-        preventDestroy: true, // Prevent accidental deletion
       },
     });
 
@@ -102,7 +101,6 @@ export class KnowledgeBase extends Construct {
 
       lifecycle: {
         ignoreChanges: ['engine_version'], // Avoid recreating the instance when the engine version changes
-        preventDestroy: true, // Prevent accidental deletion
       },
     });
 
