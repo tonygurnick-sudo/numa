@@ -69,29 +69,23 @@ function sanitizeTitle(raw: string): string {
 /** Create the Anthropic-style body for InvokeModel */
 function buildInvokeModelBody(transcript: string) {
   const instruction =
-    `You are a chat title generator.\n\n` +
-    `TASK: Read the chat transcript and output ONLY a concise topic-style title.\n` +
+    // Role
+    `You are an expert at deriving concise, topic-style chat titles that capture the overall intent of a conversation.\n\n` +
+    // Task
+    `Your task is to read the messages between the user and the AI assistant and produce a single, concise noun-phrase title for the chat.\n\n` +
+    // Rules
     `RULES:\n` +
-    `- Output a noun-phrase title (NOT a sentence or an answer).\n` +
-    `- Identify up to the three most prevalent distinct topics in the conversation.\n` +
-    `- Join topics using " / " in order of prevalence (e.g., Topic A / Topic B / Topic C).\n` +
-    `- Keep each topic concise: ~2–6 words.\n` +
+    `- Output a title (NOT a sentence or an answer).\n` +
+    `- Include multiple topics in the title if applicable` +
+    `- Keep the title's concise.\n` +
     `- Avoid first-person words (I, I'm, we, our).\n` +
-    `- Avoid filler/stop words unless essential (the, a, an, is, are, have, be, to, of, in, on, at).\n` +
-    `- No preambles (no: Based on..., Final title:, Recommended title:).\n` +
-    `- No punctuation other than the slashes; no trailing period.\n` +
+    `- No preambles or explanations (do not write: Based on..., Final title:, Recommended title:).\n` +
     `- Do NOT include quotes.\n\n` +
-    `FEW-SHOT EXAMPLES:\n` +
-    `User: do you sell shoes that are long?\n` +
-    `Assistant: [answer]\n` +
-    `Title: Shoe enquiry\n\n` +
-    `User: why is the sky blue and the grass green?\n` +
-    `Assistant: [answer]\n` +
-    `Title: Sky and grass colours\n\n` +
-    `User: We discussed Sales KPIs, Sprint planning and also touched OKRs\n` +
-    `Assistant: [answer]\n` +
-    `Title: Sales KPIs / Sprint planning / OKRs\n\n` +
-    `Now generate the title for this chat. Output only the title:`;
+    // Example
+    `EXAMPLE:\n` +
+    `If the user said: "Can you analyse this Excel file and let me know how the Q4 performance is going?"\n` +
+    `and the AI Assistant responded: "Analysing Excel file... Based on the file, Tech Solutions is performing well in Q4 and profits are high."\n` +
+    `then an appropriate title would be: "Tech Solutions Q4 Profit Analysis".`;
 
   return {
     anthropic_version: 'bedrock-2023-05-31',
@@ -102,7 +96,12 @@ function buildInvokeModelBody(transcript: string) {
         role: 'user',
         content: [
           { type: 'text', text: instruction },
-          { type: 'text', text: `\n\nChat Transcript:\n${transcript}` },
+          {
+            type: 'text',
+            text:
+              `\n\nHere is the chat transcript between the user and the AI Assistant:\n${transcript}\n\n` +
+              `Please generate the title for this chat. Output only the final title and nothing else.`,
+          },
         ],
       },
     ],
