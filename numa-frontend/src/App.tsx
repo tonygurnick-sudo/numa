@@ -5,9 +5,14 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import './assets/styles/Main.scss';
 
 import { NumaRoutes } from './Routes';
+import { BrandingProvider } from './Providers/BrandingProvider.tsx';
 
 function App() {
-  return <NumaRoutes />;
+  return (
+    <BrandingProvider>
+      <NumaRoutes />
+    </BrandingProvider>
+  );
 }
 
 export default App;
