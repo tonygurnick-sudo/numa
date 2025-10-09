@@ -12,21 +12,119 @@ import { ResultsRenderer } from './ResultsRenderer';
 import { MarkdownContent } from './MarkdownContent';
 import { RunActiveState } from '@/types/apps.ts';
 
-type ManifestTask = {
-  id: string;
-  type: string;
+import type { ReactElement } from 'react';
+
+export type TaskId = string;
+
+export type FileResult = {
+  s3_key: string;
+  [key: string]: unknown;
+};
+
+export type TaskCompletionHandler = (taskId: TaskId, results?: FileResult[] | null) => void;
+
+type InputTaskType = 'text-input' | 's3-upload' | 'dropdown' | 'dropdown-table';
+type OutputTaskType = 'text-output';
+// other task types that we explicitly hide from the wizard flow:
+type HiddenTaskType = 'q-app' | 'http-request';
+
+export type TaskType = InputTaskType | OutputTaskType | HiddenTaskType | (string & {}); // permit forward-compat
+
+export type ManifestTask = {
+  id: TaskId;
+  type: TaskType;
   title?: string;
   hidden?: boolean;
   required?: boolean;
   defaultContent?: string;
 };
 
-type Manifest = {
+export type Manifest = {
   tasks: ManifestTask[];
   typicalDurationMinutes?: number;
 };
 
-const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
+export type VisibleTask = ManifestTask & { hidden?: false };
+
+export type TaskCompletionStatus<T extends ManifestTask[]> = {
+  [K in T[number]['id']]?: boolean;
+};
+
+export type TaskInputValue = unknown;
+export type HandleTaskInputChange = (taskId: TaskId, value: TaskInputValue) => void;
+export type HandleStepNavigation = () => void;
+
+type ActiveTab = 'inputs' | 'results';
+
+type NextDisableInputs<T extends VisibleTask[]> = {
+  tasks: T;
+  completion: TaskCompletionStatus<T>;
+  activeIndex: number;
+  preRunCount: number;
+  appRunning: boolean;
+  includeIncompleteCheck: boolean;
+};
+
+type AppWizardProps = { manifest?: Manifest };
+
+/* ========= Results model (strict, discriminated) ========= */
+/* keep local to avoid react-refresh lint; move to its own file if you need reuse */
+
+const OUTPUT_CONTENT_TYPE = {
+  Markdown: 'text/markdown',
+  PlainText: 'text/plain',
+  Html: 'text/html',
+  Csv: 'text/csv',
+  Json: 'application/json',
+} as const;
+
+type OutputContentMime = (typeof OUTPUT_CONTENT_TYPE)[keyof typeof OUTPUT_CONTENT_TYPE];
+
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | { [k: string]: JsonValue } | JsonValue[];
+
+type MarkdownOutput = { title?: string; content_type: typeof OUTPUT_CONTENT_TYPE.Markdown; data: string };
+type PlainTextOutput = { title?: string; content_type: typeof OUTPUT_CONTENT_TYPE.PlainText; data: string };
+type HtmlOutput = { title?: string; content_type: typeof OUTPUT_CONTENT_TYPE.Html; data: string };
+type CsvOutput = { title?: string; content_type: typeof OUTPUT_CONTENT_TYPE.Csv; data: string };
+type JsonOutput = { title?: string; content_type: typeof OUTPUT_CONTENT_TYPE.Json; data: JsonValue };
+
+type UnknownOutput<TCT extends string = string> = {
+  title?: string;
+  content_type: Exclude<TCT, OutputContentMime>;
+  data: unknown;
+};
+
+type Output = MarkdownOutput | PlainTextOutput | HtmlOutput | CsvOutput | JsonOutput | UnknownOutput;
+
+type JobResult<T extends Output = Output> = { outputs: T[] };
+type JobLike<T extends Output = Output> = { results?: JobResult<T>[] } | null | undefined;
+
+/* Type guards (file-local to dodge react-refresh rule) */
+
+const isMarkdownOutput = (o: Output): o is MarkdownOutput => o.content_type === OUTPUT_CONTENT_TYPE.Markdown;
+const isJsonOutput = (o: Output): o is JsonOutput => o.content_type === OUTPUT_CONTENT_TYPE.Json;
+const isPlainTextOutput = (o: Output): o is PlainTextOutput => o.content_type === OUTPUT_CONTENT_TYPE.PlainText;
+
+const isHtmlOutput = (o: Output): o is HtmlOutput => o.content_type === OUTPUT_CONTENT_TYPE.Html;
+const isCsvOutput = (o: Output): o is CsvOutput => o.content_type === OUTPUT_CONTENT_TYPE.Csv;
+
+/* ========= Type guards / helpers ========= */
+
+const isVisibleTask = (task: ManifestTask): task is VisibleTask =>
+  !task.hidden && task.type !== 'q-app' && task.type !== 'http-request';
+
+const isOutputTask = (task: ManifestTask | VisibleTask): boolean =>
+  typeof task.type === 'string' && task.type.includes('output');
+
+const isFileResultArray = (x: unknown): x is FileResult[] =>
+  Array.isArray(x) && x.every((f) => f && typeof (f as FileResult).s3_key === 'string');
+
+/* ========= Component ========= */
+
+const DEFAULT_MANIFEST: Manifest = { tasks: [], typicalDurationMinutes: 0 };
+
+const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) => {
   const {
     taskCompletionStatus,
     handleRunButtonClick,
@@ -51,30 +149,20 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
     loadingJobId,
   } = useNumaApp();
 
-  const [activeTab, setActiveTab] = useState(() => {
-    if (job?.results) return 'results';
-    return 'inputs';
-  });
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => (job?.results ? 'results' : 'inputs'));
 
   useEffect(() => {
-    if (job && job.results) {
-      setActiveTab('results');
-    } else {
-      setActiveTab('inputs');
-    }
+    setActiveTab(job && (job as JobLike)?.results ? 'results' : 'inputs');
   }, [job]);
 
-  const visibleTasks = useMemo(
-    () =>
-      manifest?.tasks?.filter((task) => !task.hidden && task.type !== 'q-app' && task.type !== 'http-request') || [],
-    [manifest?.tasks],
-  );
+  const visibleTasks = useMemo<VisibleTask[]>(() => manifest?.tasks?.filter(isVisibleTask) ?? [], [manifest?.tasks]);
 
-  const preRunTasks = useMemo(() => visibleTasks.filter((task) => !task.type.includes('output')), [visibleTasks]);
-  const postRunTasks = useMemo(() => visibleTasks.filter((task) => task.type.includes('output')), [visibleTasks]);
+  const preRunTasks = useMemo<VisibleTask[]>(() => visibleTasks.filter((task) => !isOutputTask(task)), [visibleTasks]);
+
+  const postRunTasks = useMemo<VisibleTask[]>(() => visibleTasks.filter((task) => isOutputTask(task)), [visibleTasks]);
 
   const markDefaultContentComplete = useCallback(
-    (taskIndex) => {
+    (taskIndex: number) => {
       const currentTask = visibleTasks[taskIndex];
       if (currentTask?.defaultContent && !taskCompletionStatus[currentTask.id]) {
         updateTaskCompletionStatus(currentTask.id, true);
@@ -83,18 +171,30 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
     [visibleTasks, taskCompletionStatus, updateTaskCompletionStatus],
   );
 
+  function isStepCompleteOriginal<T extends VisibleTask[]>(
+    tasks: T,
+    comp: TaskCompletionStatus<T>,
+    index: number,
+  ): boolean {
+    const task = tasks[index];
+    if (!task) return false;
+    return comp[task.id] ?? false;
+  }
+
   const isStepComplete = useCallback(
-    (index) => {
-      const task = visibleTasks[index];
-      return task ? taskCompletionStatus[task.id] || false : false;
-    },
+    (index: number) =>
+      isStepCompleteOriginal(
+        visibleTasks as VisibleTask[],
+        taskCompletionStatus as TaskCompletionStatus<VisibleTask[]>,
+        index,
+      ),
     [visibleTasks, taskCompletionStatus],
   );
 
   const isStepDisabled = useCallback(
-    (index) => {
+    (index: number) => {
       const task = visibleTasks[index];
-      if (task?.type.includes('output')) return !hasRun;
+      if (isOutputTask(task)) return !hasRun;
 
       // For input tasks, disable if any earlier required task is incomplete
       for (let i = 0; i < index; i++) {
@@ -109,18 +209,16 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
   );
 
   const handleStepClick = useCallback(
-    (index) => {
-      // If this is a results step (>= preRunTasks.length), only allow if we've run
+    (index: number) => {
       if (index >= preRunTasks.length) {
         if (hasRun) setActiveStep(index);
         return;
       }
 
-      // Traditional task navigation
       const task = visibleTasks[index];
       if (!task) return;
 
-      if (task.type.includes('output')) {
+      if (isOutputTask(task)) {
         if (hasRun) {
           setActiveStep(index);
           setSelectedTaskId(task.id);
@@ -143,18 +241,19 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
       hasRun,
       isStepDisabled,
       preRunTasks.length,
+      setActiveStep,
     ],
   );
 
-  const handleRunApp = async () => {
+  const handleRunApp = async (): Promise<void> => {
     try {
-      const updatedStatus = {};
+      const updatedStatus: Record<TaskId, boolean> = {};
       visibleTasks.forEach((task) => {
         updatedStatus[task.id] = false;
       });
       setTaskCompletionStatus(updatedStatus);
 
-      const firstOutputTask = visibleTasks.find((task) => task.type.includes('output'));
+      const firstOutputTask = visibleTasks.find(isOutputTask);
       if (firstOutputTask) {
         const outputIndex = visibleTasks.indexOf(firstOutputTask);
         setActiveStep(outputIndex);
@@ -167,34 +266,36 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
       await handleRunButtonClick(numaAppData);
     } catch (error) {
       console.error('Error running app:', error);
-      setError(error);
+      setError(error instanceof Error ? error.message : String(error));
     } finally {
       setAppRunning(false);
     }
   };
 
-  const handleTaskCompletion = (taskId, success = true, results = null) => {
-    if (results) {
-      const validFiles = results.filter((file) => file && file.s3_key);
-      updateTaskInputValue(taskId, validFiles);
-      success = validFiles.length > 0;
-    }
-    updateTaskCompletionStatus(taskId, success);
+  const handleTaskCompletion: TaskCompletionHandler = (taskId, results = null) => {
+    const validFiles: FileResult[] = isFileResultArray(results) ? results.filter((f) => f.s3_key.length > 0) : [];
+
+    updateTaskInputValue(taskId, validFiles);
+
+    // success only if at least one valid file
+    updateTaskCompletionStatus(taskId, validFiles.length > 0);
   };
 
-  const handleTaskInputChange = useCallback(
+  const handleTaskInputChange: HandleTaskInputChange = useCallback(
     (taskId, value) => {
       if (hasRun) return;
-      setTaskInputValues((prev) => ({
+
+      setTaskInputValues((prev: Record<TaskId, TaskInputValue>) => ({
         ...prev,
         [taskId]: value,
       }));
+
       updateTaskInputValue(taskId, value);
     },
     [setTaskInputValues, updateTaskInputValue, hasRun],
   );
 
-  const handlePrevStep = () => {
+  const handlePrevStep: HandleStepNavigation = () => {
     if (activeStep > 0) {
       const newStep = activeStep - 1;
       setActiveStep(newStep);
@@ -202,53 +303,57 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
     }
   };
 
-  const handleNextStep = () => {
-    if (activeStep < visibleTasks.length - 1) {
+  const handleNextStep: HandleStepNavigation = () => {
+    const totalSteps = visibleTasks.length;
+    if (activeStep < totalSteps - 1) {
       const newStep = activeStep + 1;
       setActiveStep(newStep);
       markDefaultContentComplete(newStep);
     }
   };
 
-  // ---- Consolidated "Next" disabled logic (single source of truth) ----
-  // includeIncompleteCheck:
-  //   - true  -> enforce current-step completeness (Inputs view)
-  //   - false -> ignore completeness (Results tab)
+  function isNextInputDisabledTyped<T extends VisibleTask[]>(i: NextDisableInputs<T>): boolean {
+    const total = i.tasks.length;
+    const current = i.activeIndex;
+
+    if (total === 0 || current >= total - 1) return true;
+
+    // crossing from last input to first output
+    const atLastInputStep = current + 1 === i.preRunCount;
+    if (atLastInputStep && !i.appRunning) return true;
+
+    if (i.includeIncompleteCheck) {
+      const task = i.tasks[current];
+      if (!task) return true;
+      const done = !!i.completion[task.id];
+      if (!done) return true;
+    }
+
+    return false;
+  }
+
   const isNextInputDisabled = useCallback(
-    (includeIncompleteCheck = true) => {
-      const totalSteps = visibleTasks.length;
-      const current = activeStep;
-
-      // 1) At last visible step: no next step exists
-      const atLastVisibleStep = totalSteps === 0 || current >= totalSteps - 1;
-      if (atLastVisibleStep) return true;
-
-      // 2) At the boundary: next index would be first result step
-      const inputStepCount = visibleTasks.filter((t) => !t?.type?.includes('output')).length;
-      const atLastInputStep = current + 1 === inputStepCount;
-      if (atLastInputStep && !appRunning) return true;
-
-      // 3) Optionally require current step completed (inputs view only)
-      if (includeIncompleteCheck) {
-        const currentTaskId = visibleTasks[current]?.id;
-        const stepIsComplete = !!(currentTaskId && taskCompletionStatus[currentTaskId]);
-        if (!stepIsComplete) return true;
-      }
-
-      return false;
-    },
-    [activeStep, visibleTasks, appRunning, taskCompletionStatus],
+    (includeIncompleteCheck = true) =>
+      isNextInputDisabledTyped({
+        tasks: visibleTasks as VisibleTask[],
+        completion: taskCompletionStatus as TaskCompletionStatus<VisibleTask[]>,
+        activeIndex: activeStep,
+        preRunCount: preRunTasks.length,
+        appRunning,
+        includeIncompleteCheck,
+      }),
+    [activeStep, visibleTasks, preRunTasks.length, appRunning, taskCompletionStatus],
   );
 
-  const renderTask = (task, index) => {
-    // Results step
-    if (index >= preRunTasks.length && job?.results && job?.results.length > 0) {
+  const renderTask = (task: VisibleTask, index: number): ReactElement | null => {
+    const jobLike = job as JobLike;
+    if (index >= preRunTasks.length && jobLike?.results?.length) {
       let outputIndex = index - preRunTasks.length;
-      let currentOutput = null;
+      let currentOutput: Output | null = null; // ← was JobOutput
 
-      for (const result of job.results) {
+      for (const result of jobLike.results) {
         if (outputIndex < result.outputs.length) {
-          currentOutput = result.outputs[outputIndex];
+          currentOutput = result.outputs[outputIndex] ?? null;
           break;
         }
         outputIndex -= result.outputs.length;
@@ -256,11 +361,17 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
 
       if (currentOutput) {
         return (
-          <div className="result-output">
-            <h3>{currentOutput.title || `Output ${outputIndex + 1}`}</h3>
+          <div className="result-output" key={`result-${index}`}>
+            <h3>{currentOutput.title ?? `Output ${outputIndex + 1}`}</h3>
             <div>
-              {currentOutput.content_type === 'text/markdown' ? (
+              {isMarkdownOutput(currentOutput) ? (
                 <MarkdownContent content={currentOutput.data} />
+              ) : isJsonOutput(currentOutput) ? (
+                <pre>{JSON.stringify(currentOutput.data, null, 2)}</pre>
+              ) : isPlainTextOutput(currentOutput) || isCsvOutput(currentOutput) ? (
+                <pre>{currentOutput.data}</pre>
+              ) : isHtmlOutput(currentOutput) ? (
+                <div>{currentOutput.data}</div>
               ) : (
                 <pre>{JSON.stringify(currentOutput.data, null, 2)}</pre>
               )}
@@ -269,19 +380,19 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
         );
       }
 
-      return <p>No output found at index {index}</p>;
+      return <p key={`no-output-${index}`}>No output found at index {index}</p>;
     }
 
     // Traditional task
-    const handleComplete = (results) => handleTaskCompletion(task.id, true, results);
-    const handleNotComplete = (results) => handleTaskCompletion(task.id, false, results);
+    const handleComplete = (results?: FileResult[] | null) => handleTaskCompletion(task.id, results ?? null);
+    const handleNotComplete = (results?: FileResult[] | null) => handleTaskCompletion(task.id, results ?? null);
 
     const commonProps = {
       task,
       onComplete: handleComplete,
       onNotComplete: handleNotComplete,
-      value: taskInputValues[task.id],
-      onChange: (value) => handleTaskInputChange(task.id, value),
+      value: (taskInputValues as Record<TaskId, TaskInputValue>)[task.id],
+      onChange: (value: TaskInputValue) => handleTaskInputChange(task.id, value),
       disabled: hasRun,
     };
 
@@ -343,7 +454,7 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
             processingProgress={processingProgress}
             processingStatus={processingStatus}
             hasRun={hasRun}
-            results={job?.results}
+            results={(job as JobLike)?.results}
             typicalDurationMinutes={manifest.typicalDurationMinutes}
           />
         </Col>
@@ -351,8 +462,14 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
 
       <Row>
         <Col xs={12} className="px-2 px-md-4 position-relative">
-          {job?.results && job?.results.length > 0 ? (
-            <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="mb-4">
+          {(job as JobLike)?.results && (job as JobLike)?.results!.length > 0 ? (
+            <Tabs
+              activeKey={activeTab}
+              onSelect={(k: string | null) => {
+                if (k === 'inputs' || k === 'results') setActiveTab(k);
+              }}
+              className="mb-4"
+            >
               <Tab eventKey="inputs" title="Inputs">
                 {activeStep < visibleTasks.length ? (
                   <div className="mb-4 position-relative">
@@ -367,7 +484,7 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
                             <i className="bi bi-arrow-left me-2"></i>
                             Previous Input
                           </Button>
-                          {/* Results tab ignores incomplete-step rule (original behavior) */}
+                          {/* Results tab ignores incomplete-step rule (original behaviour) */}
                           <Button variant="primary" onClick={handleNextStep} disabled={isNextInputDisabled(false)}>
                             Next Input
                             <i className="bi bi-arrow-right ms-2"></i>
@@ -379,7 +496,7 @@ const AppWizard: React.FC<{ manifest: Manifest }> = ({ manifest }) => {
                 ) : null}
               </Tab>
               <Tab eventKey="results" title="Results">
-                <ResultsRenderer results={job?.results} />
+                <ResultsRenderer results={(job as JobLike)?.results} />
               </Tab>
             </Tabs>
           ) : (
