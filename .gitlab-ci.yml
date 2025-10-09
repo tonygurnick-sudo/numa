@@ -30,6 +30,7 @@ variables:
 .node-lambdas-matrix:
   matrix:
     - BUILD_DIR:
+        - lambdas/node/admin-integration-settings
         - lambdas/node/api-gateway-authorizer
         - lambdas/node/bedrock-cleanup-failed-files
         - lambdas/node/budget-forwarder
