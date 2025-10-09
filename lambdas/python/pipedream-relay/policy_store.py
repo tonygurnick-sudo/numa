@@ -22,9 +22,13 @@ DEFAULT_POLICY = {
 
 class PolicyStore:
     def __init__(self) -> None:
-        table_name = os.environ.get("MCP_POLICY_TABLE_NAME")
+        table_name = os.environ.get(
+            "USER_INTEGRATION_SETTINGS_TABLE_NAME"
+        ) or os.environ.get("MCP_POLICY_TABLE_NAME")
         if not table_name:
-            raise ValueError("MCP_POLICY_TABLE_NAME environment variable not set")
+            raise ValueError(
+                "USER_INTEGRATION_SETTINGS_TABLE_NAME (or MCP_POLICY_TABLE_NAME) environment variable not set"
+            )
         self._table = boto3.resource("dynamodb").Table(table_name)
 
     @staticmethod

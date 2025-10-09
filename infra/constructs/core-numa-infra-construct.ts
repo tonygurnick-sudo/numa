@@ -737,6 +737,19 @@ export class CoreNumaInfra extends Construct {
         },
       });
 
+      // Create global integration settings table in client account
+      const globalIntegrationSettingsTable = new DynamodbTable(this, 'global-integration-settings', {
+        name: `${props.clientName}-global-integration-settings`,
+        billingMode: 'PAY_PER_REQUEST',
+        hashKey: 'integration',
+        attribute: [{ name: 'integration', type: 'S' }],
+        tags: {
+          Name: `${props.clientName}-global-integration-settings`,
+          Environment: props.environmentName,
+          Purpose: 'global-integration-settings',
+        },
+      });
+
       const pipedreamRelayPolicyStatements = [
         {
           actions: ['lambda:InvokeFunction'],
@@ -762,6 +775,12 @@ export class CoreNumaInfra extends Construct {
               },
             ]
           : []),
+        // Allow reading global integration settings table
+        {
+          actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
+          effect: 'Allow',
+          resources: [globalIntegrationSettingsTable.arn],
+        },
       ];
 
       pipedreamRelayLambda = new NumaLambda(this, 'pipedream-relay', {
@@ -773,7 +792,8 @@ export class CoreNumaInfra extends Construct {
         environment: {
           PIPEDREAM_PROXY_LAMBDA_ARN: 'arn:aws:lambda:us-east-1:965745962688:function:pipedream-proxy',
           ENVIRONMENT: props.environmentName,
-          ...(this.mcpPolicyTable && { MCP_POLICY_TABLE_NAME: this.mcpPolicyTable.name }),
+          ...(this.mcpPolicyTable && { USER_INTEGRATION_SETTINGS_TABLE_NAME: this.mcpPolicyTable.name }),
+          GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME: globalIntegrationSettingsTable.name,
         },
       });
     }

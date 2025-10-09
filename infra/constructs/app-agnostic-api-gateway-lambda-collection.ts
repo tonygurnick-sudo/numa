@@ -158,6 +158,40 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         },
       ],
     });
+
+    // Admin Integration Settings API (GET list, PUT single)
+    const adminIntegrationEnv = {
+      CLIENT_NAME: props.clientName,
+      GLOBAL_TABLE_NAME: `${props.clientName}-global-integration-settings`,
+    } as Record<string, string>;
+
+    const adminIntegrationPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:Scan', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.clientName}-global-integration-settings`],
+      },
+    ];
+
+    // Register routes pointing to same lambda code
+    this.addLambdaFunction(this, 'admin-integration-settings-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-integration-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminIntegrationEnv,
+      additionalPolicyStatements: adminIntegrationPolicy,
+      route: { verb: 'GET', path: 'settings/integrations' },
+    });
+    this.addLambdaFunction(this, 'admin-integration-settings-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-integration-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminIntegrationEnv,
+      additionalPolicyStatements: adminIntegrationPolicy,
+      route: { verb: 'PUT', path: 'settings/integrations/{integration}' },
+    });
   }
 }
 

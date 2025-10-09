@@ -200,6 +200,7 @@ export class NumaClientStack extends TerraformStack {
         ? `arn:aws:lambda:us-east-1:${PIPEDREAM_PROXY_ACCOUNT_ID}:function:pipedream-proxy`
         : undefined,
       mcpPolicyTableName: core.mcpPolicyTable?.name,
+      globalIntegrationSettingsTableName: `${props.clientName}-global-integration-settings`,
     });
 
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {

@@ -19,10 +19,58 @@ export class PipedreamProxyService {
    * @param {string} externalUserId - External user ID for Pipedream
    * @returns {Promise<Object>} Integration status data
    */
+  static _statusCache: Map<string, { data: IntegrationStatusResult; expiresAt: number }> = new Map();
+
+  /**
+   * Invalidate cached integration status for an external user id
+   */
+  static async invalidateIntegrationStatus(externalUserId: string): Promise<void> {
+    try {
+      this._statusCache.delete(externalUserId);
+      const key = `NUMA_INTEGRATIONS_STATUS:${externalUserId}`;
+      sessionStorage.removeItem(key);
+    } catch {
+      // no-op
+    }
+  }
+
+  /**
+   * Get integration status for a user via proxy lambda with simple caching.
+   * Uses in-memory cache first, then falls back to sessionStorage. Both respect TTL.
+   */
   static async getIntegrationStatus(
     lambdaClient: AwsLambdaClient,
     externalUserId: string,
+    options?: { forceRefresh?: boolean; ttlMs?: number },
   ): Promise<IntegrationStatusResult> {
+    const { forceRefresh = false, ttlMs = 60_000 } = options || {};
+    const now = Date.now();
+    const storageKey = `NUMA_INTEGRATIONS_STATUS:${externalUserId}`;
+
+    // In-memory cache check
+    if (!forceRefresh) {
+      const cached = this._statusCache.get(externalUserId);
+      if (cached && cached.expiresAt > now) {
+        return cached.data;
+      }
+    }
+
+    // sessionStorage cache check
+    if (!forceRefresh) {
+      try {
+        const raw = sessionStorage.getItem(storageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { data: IntegrationStatusResult; expiresAt: number };
+          if (parsed?.expiresAt && parsed.expiresAt > now && parsed.data) {
+            // hydrate in-memory cache for fast subsequent reads
+            this._statusCache.set(externalUserId, { data: parsed.data, expiresAt: parsed.expiresAt });
+            return parsed.data;
+          }
+        }
+      } catch {
+        // ignore parse or storage errors
+      }
+    }
     const payload: PipedreamProxyRequest = {
       operation: 'get_integration_status',
       external_user_id: externalUserId,
@@ -35,11 +83,20 @@ export class PipedreamProxyService {
       }
 
       // Transform response to match frontend expectations
-      return {
+      const data: IntegrationStatusResult = {
         connections: response.data.connections || [],
         external_user_id: response.data.external_user_id,
         connected_apps: response.data.connected_apps || [],
       };
+      // write-through caches
+      const expiresAt = Date.now() + ttlMs;
+      this._statusCache.set(externalUserId, { data, expiresAt });
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify({ data, expiresAt }));
+      } catch {
+        // ignore storage quota issues
+      }
+      return data;
     } catch (error) {
       console.error('PipedreamService.getIntegrationStatus failed:', error);
       throw error;
@@ -180,7 +237,7 @@ export class PipedreamProxyService {
     const relayLambdaArn = sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
 
     if (!relayLambdaArn) {
-      throw new Error('Pipedream integrations are not available for this account.');
+      throw new Error('Numa Integrations are not available for this account.');
     }
 
     const command = new InvokeCommand({

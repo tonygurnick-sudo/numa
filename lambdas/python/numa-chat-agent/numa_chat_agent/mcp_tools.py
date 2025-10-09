@@ -13,7 +13,7 @@ Slack, Notion, and Google Calendar through Pipedream's MCP servers.
 import json
 import os
 from contextlib import contextmanager
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Set, Tuple
 
 import structlog
 from botocore.session import Session
@@ -21,7 +21,12 @@ from mcp.client.streamable_http import streamablehttp_client
 from strands.tools.mcp import MCPClient
 
 from .auth import get_current_user_auth
-from .config import PIPEDREAM_PROXY_LAMBDA_ARN, get_dynamodb_resource, get_lambda_client
+from .config import (
+    GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME,
+    PIPEDREAM_PROXY_LAMBDA_ARN,
+    get_dynamodb_resource,
+    get_lambda_client,
+)
 
 logger = structlog.get_logger()
 
@@ -277,10 +282,24 @@ def get_mcp_policy_from_dynamo(external_user_id: str, app_name: str) -> dict:
 
     Returns default allow-all (deny list empty) on error or if not found.
     """
-    table_name = os.environ.get("MCP_POLICY_TABLE_NAME")
+    table_name = os.environ.get(
+        "USER_INTEGRATION_SETTINGS_TABLE_NAME"
+    ) or os.environ.get("MCP_POLICY_TABLE_NAME")
     default = {"mode": "deny", "denyTools": []}
     if not table_name:
         return default
+
+    def _as_str_set(value: Any) -> Set[str]:
+        """Normalize unknown value into a set of strings.
+
+        Only string-like entries are retained; other types are ignored.
+        """
+        if not value:
+            return set()
+        if isinstance(value, (list, tuple, set)):
+            return {v for v in value if isinstance(v, str)}
+        # Unexpected type (e.g., mapping, Decimal, bool) -> empty set
+        return set()
 
     try:
         if "_" not in external_user_id:
@@ -288,18 +307,51 @@ def get_mcp_policy_from_dynamo(external_user_id: str, app_name: str) -> dict:
         client_name, cognito_sub = external_user_id.split("_", 1)
         pk = f"CLIENT#{client_name}#USER#{cognito_sub}"
         sk = f"INTEGRATION#{app_name}"
-        table = get_dynamodb_resource().Table(table_name)
+        ddb = get_dynamodb_resource()
+        table = ddb.Table(table_name)
         resp = table.get_item(Key={"pk": pk, "sk": sk}, ConsistentRead=True)
         item = resp.get("Item")
         if not item:
             return default
-        return {
+        policy = {
             "mode": item.get("mode", "deny"),
             "denyTools": item.get("denyTools", []),
         }
+        # Overlay global denies without persisting them into user policy
+        try:
+            if GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME:
+                gtable = ddb.Table(GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME)
+                gres = gtable.get_item(Key={"integration": app_name})
+                gitem = gres.get("Item") or {}
+                gdeny = _as_str_set(gitem.get("denyTools"))
+                if gdeny:
+                    deny = _as_str_set(policy.get("denyTools"))
+                    policy["denyTools"] = list(deny.union(gdeny))
+        except Exception:
+            pass
+        return policy
     except Exception as e:
         logger.warning("Failed to read MCP policy from DynamoDB", error=str(e))
         return default
+
+
+def is_integration_globally_disabled(app_name: str) -> bool:
+    """Check if an integration is disabled globally via the global settings table.
+
+    If the global table isn't configured or item not found, treat as enabled (return False).
+    """
+    table_name = GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME
+    if not table_name:
+        return False
+    try:
+        ddb = get_dynamodb_resource()
+        table = ddb.Table(table_name)
+        res = table.get_item(Key={"integration": app_name})
+        item = res.get("Item") or {}
+        return (item.get("status") or "enabled") == "disabled"
+    except Exception:
+        # Fail open (enabled) if table read fails
+        return False
 
 
 def create_mcp_client(app_name: str, external_user_id: str) -> Optional[MCPClient]:
@@ -521,6 +573,14 @@ def get_mcp_tools_and_clients_for_agent(
     # At this point enabled_apps is guaranteed to be a list, not None
     assert enabled_apps is not None
     for app_name in enabled_apps:
+        # Skip if globally disabled for the tenant
+        try:
+            if is_integration_globally_disabled(app_name):
+                logger.info("Skipping globally disabled integration", app_name=app_name)
+                continue
+        except Exception:
+            # If check fails, proceed (fail-open) to avoid blocking user flows unnecessarily
+            pass
         client: Optional[MCPClient] = None
         try:
             if app_name not in SUPPORTED_MCP_APPS:

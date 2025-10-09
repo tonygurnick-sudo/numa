@@ -1,7 +1,7 @@
 import { Button } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-bootstrap-icons';
-import { getConnectionExampleQuery } from '../config/connectionsConfig';
+import { getConnectionExampleQuery } from '../config/integrationsConfig';
 
 export const GenericTestConnection = ({
   appName,
@@ -31,7 +31,7 @@ export const GenericTestConnection = ({
             <i className="bi bi-lightning-fill text-white fs-5"></i>
           </div>
           <div>
-            <h5 className="mb-1 fw-semibold">Test {integrationName} Connection</h5>
+            <h5 className="mb-1 fw-semibold">Test {integrationName} Integration</h5>
             <p className="mb-0 small text-muted">Test your integration by using it in NumaChat</p>
           </div>
         </div>
@@ -68,9 +68,9 @@ export const GenericTestConnection = ({
               2
             </div>
             <div>
-              <div className="fw-semibold mb-1">Enable the Connection</div>
+              <div className="fw-semibold mb-1">Enable the Integration</div>
               <div className="small text-muted">
-                Click the connections button (<Link size={14} className="mx-1" />) in the chat input and enable{' '}
+                Click the integrations button (<Link size={14} className="mx-1" />) in the chat input and enable{' '}
                 {integrationName}
               </div>
             </div>
@@ -115,7 +115,7 @@ export const GenericTestConnection = ({
 
         <div className="text-center mt-3">
           <div className="small text-muted">
-            Remember to enable the connection using the <Link size={12} className="mx-1" /> button before sending your
+            Remember to enable the integration using the <Link size={12} className="mx-1" /> button before sending your
             query
           </div>
         </div>

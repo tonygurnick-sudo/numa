@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Container,
   Row,
@@ -20,10 +20,12 @@ import { useAuth } from '../Providers/AuthProvider';
 import { Nav } from '../Components/Nav';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { GenericTestConnection } from '../Components/GenericTestConnection';
-import { getIntegrationsListFormat, type IntegrationListItem } from '../config/connectionsConfig';
+import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
+import { AdminIntegrationsService, type GlobalIntegrationSettingsMap } from '../Services/AdminIntegrationsService';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
 import type { ConnectionStatus } from '../types/pipedream';
-import { getDefaultDenyTools } from '../config/pipedreamToolsDefault';
+import { getDefaultDenyTools } from '../config/integrationToolsDefault';
 
 const AVAILABLE_INTEGRATIONS: IntegrationListItem[] = getIntegrationsListFormat();
 
@@ -32,14 +34,16 @@ type PipedreamConnection = ConnectionStatus & {
   status: 'connected' | 'not_connected' | string; // Allow string for compatibility
 };
 
-export const PipedreamIntegrations = () => {
+export const NumaIntegrations = () => {
   const { user } = useAuth();
+  const { numaGet } = useNumaRequest();
   const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [connections, setConnections] = useState<PipedreamConnection[]>([]);
   const [availableApps] = useState(AVAILABLE_INTEGRATIONS);
   const [loading, setLoading] = useState(true);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<boolean>(false);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [disconnectingApp, setDisconnectingApp] = useState<string | null>(null);
   const [expandedTestUI, setExpandedTestUI] = useState<Record<string, boolean>>({});
@@ -50,15 +54,22 @@ export const PipedreamIntegrations = () => {
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
   // Version removed: last-write-wins policy
   const [recentlyConnectedApp, setRecentlyConnectedApp] = useState<string | null>(null);
+  // Global admin integration settings
+  const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
+  const lambdaInitializedRef = useRef(false);
 
-  // Initialize Lambda client only if Pipedream proxy is configured
+  // Initialize Lambda client only if integrations proxy is configured
   useEffect(() => {
     const initializeLambdaClient = async () => {
       if (!user) return;
+      if (lambdaClient || lambdaInitializedRef.current) return;
       const relayLambdaArn = sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
-      if (!relayLambdaArn) {
-        console.log('Pipedream relay not configured - feature may be disabled');
-        setError('Pipedream integrations are not enabled for this account. Please contact your administrator.');
+      const enabledFlag = sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+      if (!relayLambdaArn || !enabledFlag) {
+        console.log('Integrations proxy not configured or disabled - entering preview mode');
+        setPreviewMode(true);
+        setLambdaClient(null);
+        setLoading(false);
         return;
       }
       try {
@@ -80,14 +91,17 @@ export const PipedreamIntegrations = () => {
         });
         const newClient = new LambdaClient({ region: REGION, credentials });
         setLambdaClient(newClient);
-        console.log('Lambda client initialized successfully for Pipedream proxy');
+        if (!lambdaInitializedRef.current) {
+          console.log('Lambda client initialized successfully for integrations proxy');
+          lambdaInitializedRef.current = true;
+        }
       } catch (err) {
         console.error('Error initializing Lambda client:', err);
         setError('Failed to initialize AWS Lambda client. Please try refreshing the page.');
       }
     };
     initializeLambdaClient();
-  }, [user]);
+  }, [user, lambdaClient]);
 
   // Load connection status when lambda client is ready
   useEffect(() => {
@@ -96,40 +110,63 @@ export const PipedreamIntegrations = () => {
     }
   }, [lambdaClient]);
 
-  const loadConnectionStatus = useCallback(async () => {
-    if (!lambdaClient || !user || loadingStatus) {
-      console.log('Lambda client or user not ready yet, or already loading');
-      return;
-    }
+  // Load global admin settings
+  const loadGlobalSettings = useCallback(async () => {
     try {
-      setLoadingStatus(true);
-      setLoading(true);
-      setError(null);
-      const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
-      const response = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId);
-      // Transform connection objects from response
-      // Use connected_apps array as source of truth for connection status
-      const connectedAppNames = response.connected_apps || [];
-      const connectionObjects = (response.connections || []).map((conn) => ({
-        app_name: conn.app_name,
-        status: connectedAppNames.includes(conn.app_name) ? 'connected' : 'not_connected',
-        pipedream_account_id: conn.pipedream_account_id,
-        last_auth_check: conn.last_auth_check || new Date().toISOString(),
-      }));
-      setConnections(connectionObjects);
-      console.log('Integration status loaded successfully:', {
-        connectionsCount: response.connections?.length || 0,
-        connectedApps: response.connected_apps?.length || 0,
-      });
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error('Failed to load integration status:', error);
-      setError(`Failed to load integration status: ${error.message}`);
-    } finally {
-      setLoading(false);
-      setLoadingStatus(false);
+      if (!user) return;
+      const data = await AdminIntegrationsService.listWithNuma(numaGet);
+      setGlobalSettings(data);
+    } catch {
+      // leave defaults (all disabled) if API not available
+      setGlobalSettings({});
     }
-  }, [lambdaClient, user, loadingStatus]);
+  }, [user, numaGet]);
+
+  // Initial fetch for global settings
+  useEffect(() => {
+    loadGlobalSettings();
+  }, [loadGlobalSettings]);
+
+  const loadConnectionStatus = useCallback(
+    async (forceRefresh = false) => {
+      if (!lambdaClient || !user || loadingStatus) {
+        console.log('Lambda client or user not ready yet, or already loading');
+        return;
+      }
+      try {
+        setLoadingStatus(true);
+        setLoading(true);
+        setError(null);
+        const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+        const response = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
+          forceRefresh,
+          ttlMs: 5 * 60 * 1000, // 5 minutes default cache TTL for page loads
+        });
+        // Transform connection objects from response
+        // Use connected_apps array as source of truth for connection status
+        const connectedAppNames = response.connected_apps || [];
+        const connectionObjects = (response.connections || []).map((conn) => ({
+          app_name: conn.app_name,
+          status: connectedAppNames.includes(conn.app_name) ? 'connected' : 'not_connected',
+          pipedream_account_id: conn.pipedream_account_id,
+          last_auth_check: conn.last_auth_check || new Date().toISOString(),
+        }));
+        setConnections(connectionObjects);
+        console.log('Integration status loaded successfully:', {
+          connectionsCount: response.connections?.length || 0,
+          connectedApps: response.connected_apps?.length || 0,
+        });
+      } catch (err: unknown) {
+        const error = err as Error;
+        console.error('Failed to load integration status:', error);
+        setError(`Failed to load integration status: ${error.message}`);
+      } finally {
+        setLoading(false);
+        setLoadingStatus(false);
+      }
+    },
+    [lambdaClient, user, loadingStatus],
+  );
 
   const connectApp = async (appName: string) => {
     if (!lambdaClient || !user) {
@@ -170,6 +207,11 @@ export const PipedreamIntegrations = () => {
                 : conn,
             ),
           );
+          try {
+            await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
+          } catch {
+            /* ignore invalidate errors */
+          }
           // Apply default tool policy (deny list) immediately after connection
           try {
             const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
@@ -259,8 +301,13 @@ export const PipedreamIntegrations = () => {
       );
       setExpandedTestUI((prev) => ({ ...prev, [appName]: false }));
 
-      // Optionally re-fetch status to confirm
-      await loadConnectionStatus();
+      // Invalidate cache and re-fetch status to confirm
+      try {
+        await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
+      } catch {
+        /* ignore invalidate errors */
+      }
+      await loadConnectionStatus(true);
     } catch (err) {
       const e = err as Error;
       console.error('Disconnect failed', e);
@@ -286,8 +333,9 @@ export const PipedreamIntegrations = () => {
       setAvailableTools(toolsResp.tools || []);
       // Build toggles from deny list (all ON by default)
       const deny = new Set(policy.denyTools || []);
+      const globalDeny = new Set(globalSettings[appName]?.denyTools || []);
       const toggles: Record<string, boolean> = {};
-      (toolsResp.tools || []).forEach((t) => (toggles[t.name] = !deny.has(t.name)));
+      (toolsResp.tools || []).forEach((t) => (toggles[t.name] = !deny.has(t.name) && !globalDeny.has(t.name)));
       setToolToggles(toggles);
       setInitialToggles(toggles); // Store initial state for comparison
     } catch (e: unknown) {
@@ -342,10 +390,27 @@ export const PipedreamIntegrations = () => {
     const isConnected = status === 'connected';
     const isConnecting = connectingApp === integration.name_slug;
     const isExpanded = expandedTestUI[integration.name_slug] || false;
+    const adminDisabled = globalSettings[integration.name_slug]?.status === 'disabled';
 
     return (
       <div key={integration.name_slug} className="mb-2">
-        <div className="rounded-3 p-3 border" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)', minHeight: '120px' }}>
+        <div
+          className="rounded-3 p-3 border"
+          style={{
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+            minHeight: '120px',
+            transition: 'all 0.2s ease',
+            cursor: 'default',
+            opacity: adminDisabled ? 0.55 : 1,
+            filter: adminDisabled ? 'grayscale(20%)' : 'none',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)';
+          }}
+        >
           <div className="row align-items-center h-100">
             {/* Icon & Name */}
             <div className="col-md-6">
@@ -396,7 +461,7 @@ export const PipedreamIntegrations = () => {
                       className="d-flex align-items-center"
                     >
                       <i className="bi bi-lightning-fill me-2"></i>
-                      Test Connection
+                      Test
                     </Button>
                     <OverlayTrigger
                       placement="top"
@@ -436,6 +501,21 @@ export const PipedreamIntegrations = () => {
                       )}
                     </Button>
                   </>
+                ) : adminDisabled ? (
+                  <OverlayTrigger placement="top" overlay={<Tooltip>Disabled by your administrator</Tooltip>}>
+                    <div>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => connectApp(integration.name_slug)}
+                        disabled
+                        className="px-4"
+                      >
+                        <i className="bi bi-plus-circle me-2"></i>
+                        Connect
+                      </Button>
+                    </div>
+                  </OverlayTrigger>
                 ) : (
                   <Button
                     variant="primary"
@@ -487,9 +567,15 @@ export const PipedreamIntegrations = () => {
           <Row className="mb-3">
             <Col>
               <Breadcrumbs label={'Integrations'} clearStack={true} />
-              <h1 className="mb-0 fs-3">Pipedream Integrations</h1>
+              <h1 className="mb-0 fs-3">Numa Integrations</h1>
             </Col>
           </Row>
+          {previewMode && (
+            <Alert variant="info" className="mb-3">
+              Numa Integrations are not enabled in your Numa environment. Contact your account administrator to request
+              access.
+            </Alert>
+          )}
           {error && (
             <Alert variant="danger" className="mb-3">
               {error}
@@ -594,7 +680,7 @@ export const PipedreamIntegrations = () => {
                       <h6 className="text-primary fw-semibold mb-0">Get Work Done</h6>
                     </div>
                     <p className="small text-muted mb-0">
-                      Utilise your connections while getting work done in{' '}
+                      Utilise your integrations while getting work done in{' '}
                       <Button
                         variant="link"
                         size="sm"
@@ -609,30 +695,77 @@ export const PipedreamIntegrations = () => {
               </Row>
             </Card.Body>
           </Card>
-          <div className="mb-4">
-            <h4 className="text-primary mb-3">
+          <div className="mb-4 d-flex align-items-center justify-content-between">
+            <h4 className="text-primary mb-0 d-flex align-items-center">
               <i className="bi bi-grid-3x3-gap me-2"></i>
-              Available Connections {!loading && `(${availableApps.length})`}
+              <span>Available Integrations {!loading && `(${availableApps.length})`}</span>
             </h4>
+            <div className="d-flex align-items-center gap-2">
+              <Button
+                variant="outline-primary"
+                size="sm"
+                disabled={loading || loadingStatus || previewMode}
+                onClick={async () => {
+                  await loadGlobalSettings();
+                  await loadConnectionStatus(true);
+                }}
+                className="d-flex align-items-center"
+              >
+                {loading || loadingStatus ? (
+                  <>
+                    <Spinner size="sm" className="me-2" /> Refreshing
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-arrow-repeat me-2" /> Refresh
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
-          <div>
+          <div style={previewMode ? { position: 'relative' } : undefined}>
             {loading ? (
               <div className="text-center py-5">
                 <Spinner animation="border" variant="primary" />
-                <p className="mt-3 text-muted">Loading connection status...</p>
+                <p className="mt-3 text-muted">Loading integrations...</p>
               </div>
             ) : (
-              availableApps
-                .sort((a: IntegrationListItem, b: IntegrationListItem) => {
-                  const statusA = getConnectionStatus(a.name_slug);
-                  const statusB = getConnectionStatus(b.name_slug);
-                  const connectedA = statusA === 'connected';
-                  const connectedB = statusB === 'connected';
-                  if (connectedA && !connectedB) return -1;
-                  if (!connectedA && connectedB) return 1;
-                  return a.name.localeCompare(b.name);
-                })
-                .map(renderIntegrationRow)
+              <>
+                {/* Preview overlay */}
+                {previewMode && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'rgba(255,255,255,0.6)',
+                      backdropFilter: 'blur(2px)',
+                      WebkitBackdropFilter: 'blur(2px)',
+                      zIndex: 2,
+                    }}
+                  />
+                )}
+                <div style={previewMode ? { pointerEvents: 'none', opacity: 0.8 } : undefined}>
+                  {availableApps
+                    .sort((a: IntegrationListItem, b: IntegrationListItem) => {
+                      // Admin allowed (enabled) first
+                      const adminDisabledA = globalSettings[a.name_slug]?.status === 'disabled';
+                      const adminDisabledB = globalSettings[b.name_slug]?.status === 'disabled';
+                      if (adminDisabledA !== adminDisabledB) return adminDisabledA ? 1 : -1;
+
+                      // Then connected first
+                      const statusA = getConnectionStatus(a.name_slug);
+                      const statusB = getConnectionStatus(b.name_slug);
+                      const connectedA = statusA === 'connected';
+                      const connectedB = statusB === 'connected';
+                      if (connectedA && !connectedB) return -1;
+                      if (!connectedA && connectedB) return 1;
+
+                      // Finally alphabetical
+                      return a.name.localeCompare(b.name);
+                    })
+                    .map(renderIntegrationRow)}
+                </div>
+              </>
             )}
           </div>
         </Container>
@@ -649,35 +782,54 @@ export const PipedreamIntegrations = () => {
         setToggles={setToolToggles}
         onSave={saveSettings}
         appSlug={settingsApp}
+        globalDenyTools={settingsApp ? globalSettings[settingsApp]?.denyTools || [] : []}
       />
     </div>
   );
 };
 
-export default PipedreamIntegrations;
+export default NumaIntegrations;
 
-// Helper function to make URLs clickable
+// Helper function to parse markdown links and make them clickable
 const formatDescriptionWithLinks = (description: string) => {
-  const urlRegex = /(https?:\/\/[^\s)]+)/g;
-  const parts = description.split(urlRegex);
+  // Match markdown links: [text](url)
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const parts: (string | React.ReactElement)[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
 
-  return parts.map((part, index) => {
-    if (part.match(urlRegex)) {
-      return (
-        <a
-          key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary text-decoration-none"
-          style={{ fontSize: 'inherit' }}
-        >
-          {part}
-        </a>
-      );
+  while ((match = linkRegex.exec(description)) !== null) {
+    // Add text before the link
+    if (match.index > lastIndex) {
+      parts.push(description.substring(lastIndex, match.index));
     }
-    return part;
-  });
+
+    // Replace "See the docs" with "see documentation"
+    const linkText = match[1].toLowerCase().includes('see') ? 'see documentation' : match[1];
+
+    // Add the link as JSX
+    parts.push(
+      <a
+        key={match.index}
+        href={match[2]}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary text-decoration-none"
+        style={{ fontSize: 'inherit' }}
+      >
+        [{linkText}]
+      </a>,
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add any remaining text
+  if (lastIndex < description.length) {
+    parts.push(description.substring(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : description;
 };
 
 // Settings Modal (inline for simplicity)
@@ -692,6 +844,7 @@ export const SettingsModal = ({
   setToggles,
   onSave,
   appSlug,
+  globalDenyTools = [],
 }: {
   show: boolean;
   onHide: () => void;
@@ -703,6 +856,7 @@ export const SettingsModal = ({
   setToggles: (t: Record<string, boolean>) => void;
   onSave: () => void;
   appSlug?: string | null;
+  globalDenyTools?: string[];
 }) => {
   // Check if there are unsaved changes
   const hasUnsavedChanges = JSON.stringify(toggles) !== JSON.stringify(initialToggles);
@@ -724,14 +878,20 @@ export const SettingsModal = ({
         <div className="d-flex align-items-center justify-content-between w-100 pe-3">
           <div>
             <Modal.Title className="mb-1">
-              Integration Settings
-              {hasUnsavedChanges && (
-                <span className="ms-2 badge bg-warning text-dark" style={{ fontSize: '0.65rem', fontWeight: 'normal' }}>
-                  Unsaved Changes
-                </span>
-              )}
+              <div className="d-flex align-items-center">
+                <i className="bi bi-sliders me-2 text-primary"></i>
+                Integration Settings
+                {hasUnsavedChanges && (
+                  <span
+                    className="ms-2 badge bg-warning text-dark"
+                    style={{ fontSize: '0.65rem', fontWeight: 'normal' }}
+                  >
+                    Unsaved Changes
+                  </span>
+                )}
+              </div>
             </Modal.Title>
-            <p className="text-muted mb-0 small">
+            <p className="text-muted mb-0 small" style={{ fontSize: '0.85rem' }}>
               Toggle on and off the tools that Numa will have access to when using this integration
             </p>
           </div>
@@ -739,8 +899,8 @@ export const SettingsModal = ({
       </Modal.Header>
       <Modal.Body className="pt-2" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
         {loading ? (
-          <div className="text-center py-4">
-            <Spinner animation="border" className="text-primary" />
+          <div className="text-center py-5">
+            <Spinner animation="border" variant="primary" />
             <p className="mt-3 text-muted mb-0">Loading available tools...</p>
           </div>
         ) : error ? (
@@ -749,12 +909,12 @@ export const SettingsModal = ({
             {error}
           </Alert>
         ) : tools.length === 0 ? (
-          <div className="text-center py-4">
+          <div className="text-center py-5">
             <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
             <p className="text-muted mt-2 mb-0">No tools available for this integration.</p>
           </div>
         ) : (
-          <div className="d-flex flex-column gap-1">
+          <div className="d-flex flex-column gap-2">
             {(() => {
               // Helpers
               const stripPrefix = (name: string, prefix?: string | null) =>
@@ -778,6 +938,7 @@ export const SettingsModal = ({
               return sorted.map((t, index) => {
                 const display = toTitle(stripPrefix(t.name, appSlug || undefined));
                 const isEnabled = toggles[t.name] ?? true;
+                const isGloballyDenied = (globalDenyTools || []).includes(t.name);
                 return (
                   <div
                     key={t.name}
@@ -811,12 +972,18 @@ export const SettingsModal = ({
                             {formatDescriptionWithLinks(t.description)}
                           </div>
                         )}
+                        {isGloballyDenied && (
+                          <div className="small text-danger mt-1">
+                            <i className="bi bi-slash-circle me-1"></i>Disabled globally by your administrator
+                          </div>
+                        )}
                       </div>
                       <div className="form-check form-switch ms-2">
                         <input
                           className="form-check-input"
                           type="checkbox"
-                          checked={isEnabled}
+                          checked={isEnabled && !isGloballyDenied}
+                          disabled={isGloballyDenied}
                           onChange={(e) => setToggles({ ...toggles, [t.name]: e.target.checked })}
                           style={{
                             accentColor: 'var(--color-primary)',

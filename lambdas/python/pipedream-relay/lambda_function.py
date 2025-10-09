@@ -12,6 +12,7 @@ Architecture:
 
 import json
 import os
+from functools import lru_cache
 from typing import Any, Dict
 
 import boto3
@@ -20,6 +21,39 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from botocore.session import Session
 
 from policy_store import PolicyStore
+
+
+@lru_cache(maxsize=1)
+def _get_global_table():
+    """Return the global integration settings DynamoDB table (or None if not configured).
+
+    Cached to avoid repeated client construction during a warm lambda runtime.
+    """
+    table_name = os.environ.get("GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME")
+    if not table_name:
+        return None
+    dynamodb = boto3.resource("dynamodb")
+    return dynamodb.Table(table_name)
+
+
+def _get_global_settings(app_name: str) -> dict:
+    table = _get_global_table()
+    if not table:
+        return {"status": "disabled", "denyTools": []}
+    try:
+        resp = table.get_item(Key={"integration": app_name})
+        item = resp.get("Item") or {}
+        status = item.get("status", "disabled")
+        deny = item.get("denyTools", []) or []
+        if not isinstance(deny, list):
+            deny = []
+        return {"status": status, "denyTools": deny}
+    except Exception as e:
+        logger.warning(
+            "Failed to read global settings", app_name=app_name, error=str(e)
+        )
+        return {"status": "disabled", "denyTools": []}
+
 
 # Set up structured logging
 logger = structlog.get_logger()
@@ -80,7 +114,9 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
         logger.info("Pipedream relay request received", request_event=event)
 
         proxy_lambda_arn = os.environ.get("PIPEDREAM_PROXY_LAMBDA_ARN")
-        policy_table = os.environ.get("MCP_POLICY_TABLE_NAME")
+        policy_table = os.environ.get(
+            "USER_INTEGRATION_SETTINGS_TABLE_NAME"
+        ) or os.environ.get("MCP_POLICY_TABLE_NAME")
 
         operation = event.get("operation")
         external_user_id = event.get("external_user_id")
@@ -108,6 +144,18 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
                     return _error_response(400, "set_mcp_policy requires app_name")
                 mode = parameters.get("mode", "deny")
                 deny_tools = parameters.get("denyTools", [])
+                # Enforce global denies: reject attempts to enable globally-disabled tools
+                global_settings = _get_global_settings(app_name)
+                global_deny = set(global_settings.get("denyTools", []) or [])
+                # If user attempts to enable a tool in global deny (i.e., not present in deny_tools), reject
+                attempted_enables = [
+                    t for t in global_deny if t not in (deny_tools or [])
+                ]
+                if attempted_enables:
+                    return _error_response(
+                        400,
+                        f"One or more tools are disabled by admin: {', '.join(sorted(attempted_enables))}",
+                    )
                 result = store.set_policy(external_user_id, app_name, mode, deny_tools)
                 return {"statusCode": 200, "body": {"success": True, "data": result}}
 
@@ -145,6 +193,12 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
                 external_user_id=external_user_id,
                 has_sts_proof=True,
             )
+
+            # If list_mcp_tools: optionally filter tools server-side based on global denies for additional safety
+            if operation == "list_mcp_tools":
+                app_name = parameters.get("app_name")
+                gs = _get_global_settings(app_name) if app_name else {"denyTools": []}
+                proxy_payload["global_deny_tools"] = gs.get("denyTools", [])
 
             response = lambda_client.invoke(
                 FunctionName=proxy_lambda_arn,

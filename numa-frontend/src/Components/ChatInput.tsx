@@ -7,7 +7,7 @@ import {
   getConnectionFallbackIcon,
   getConnectionFallbackColor,
   getConnectionDisplayName,
-} from '../config/connectionsConfig';
+} from '../config/integrationsConfig';
 
 // WebSocket message size limit (AWS API Gateway limit is 32KB)
 const MAX_MESSAGE_LENGTH = 20000; // Conservative limit accounting for JSON overhead
@@ -211,13 +211,13 @@ const ChatInput = ({
               {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}
             </Button>
 
-            {/* Connections Toggle */}
+            {/* Integrations Toggle */}
             {hasPipedreamFeature && (
               <Button
                 variant="link"
                 className={`connections-toggle ${enabledConnections.length > 0 ? 'active' : ''}`}
                 onClick={() => setShowConnectionsModal(true)}
-                aria-label="Toggle Connections"
+                aria-label="Toggle Integrations"
                 disabled={isControlsDisabled || connectionsLoading}
               >
                 {connectionsLoading && (
@@ -235,11 +235,11 @@ const ChatInput = ({
                 )}
                 {!connectionsLoading && (
                   <>
-                    {/* Show "Enable Connections" when no connections enabled */}
+                    {/* Show "Enable Integrations" when none enabled */}
                     {enabledConnections.length === 0 && (
                       <span className="enable-connection-text">
                         <Link size={20} style={{ marginRight: '0.5rem', marginTop: '-2px' }} />
-                        Enable Connections
+                        Enable Integrations
                       </span>
                     )}
                     {/* Show enabled connection icons */}
@@ -310,19 +310,17 @@ const ChatInput = ({
         </div>
       </Form>
 
-      {/* Connections Selection Modal */}
+      {/* Integrations Selection Modal */}
       <Modal show={showConnectionsModal} onHide={() => setShowConnectionsModal(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Select Connections</Modal.Title>
+          <Modal.Title>Select Integrations</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <p className="text-muted mb-3">Select up to 2 connections to enable for this chat session.</p>
+          <p className="text-muted mb-3">Select up to 2 integrations to enable for this chat session.</p>
           {connectionsLoading ? (
-            <p className="text-muted text-center">Loading available connections...</p>
+            <p className="text-muted text-center">Loading available integrations...</p>
           ) : availableConnections.length === 0 ? (
-            <p className="text-muted text-center">
-              No connections available. Set up integrations in the Pipedream page first.
-            </p>
+            <p className="text-muted text-center">No integrations available. Set them up on the Integrations page.</p>
           ) : (
             <div className="d-flex flex-column gap-3">
               {availableConnections.map((connection) => {
