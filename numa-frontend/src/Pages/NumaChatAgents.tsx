@@ -32,6 +32,7 @@ import { useDocumentProcessor } from '../hooks/useDocumentProcessor';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { autoNameConversation } from '../utils/autoChatTitle';
 import { useChatInactivity } from '../hooks/useChatInactivity';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
 
 const NumaChatAgents = () => {
   // Basic UI state
@@ -84,6 +85,7 @@ const NumaChatAgents = () => {
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
   const { user, bedrockAgentRuntimeClient, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken } = useAuth();
+  const { numaGet } = useNumaRequest();
 
   // Extract user info from token
   const idToken = user?.decoded_tokens?.idToken ?? {};
@@ -95,6 +97,9 @@ const NumaChatAgents = () => {
   // Pipedream integration feature flags - check config instead of Cognito groups
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
+  const [globalIntegrationSettings, setGlobalIntegrationSettings] = useState<
+    Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }>
+  >({});
 
   useEffect(() => {
     if (!user) return;
@@ -146,6 +151,27 @@ const NumaChatAgents = () => {
     init();
   }, [user, REGION, hasPipedreamFeature, relayLambdaArn]);
 
+  // Load global admin integration settings once
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!user) return;
+        const items = (await numaGet('/api/settings/integrations')) as Array<{
+          integration: string;
+          status: 'enabled' | 'disabled';
+          denyTools: string[];
+        }>;
+        const map: Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }> = {};
+        for (const item of items || []) {
+          map[item.integration] = { status: item.status, denyTools: item.denyTools || [] };
+        }
+        setGlobalIntegrationSettings(map);
+      } catch {
+        /* ignore: default is empty */
+      }
+    })();
+  }, [user, numaGet]);
+
   // Load connections via proxy
   const loadConnectionStatus = async () => {
     if (!lambdaClient || !user) return;
@@ -162,8 +188,10 @@ const NumaChatAgents = () => {
         mcpServerUrl: undefined,
       }));
 
-      // Only show connected integrations as available for selection
-      const connected = allConnections.filter((conn) => conn.isConnected);
+      // Only show connected integrations as available for selection, and enabled by admin
+      const connected = allConnections
+        .filter((conn) => conn.isConnected)
+        .filter((conn) => globalIntegrationSettings[conn.id]?.status !== 'disabled');
 
       setAvailableConnections(connected);
     } catch (e) {

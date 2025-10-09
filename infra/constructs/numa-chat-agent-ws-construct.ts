@@ -64,6 +64,10 @@ export interface ChatAgentWsProps {
    * Optional DynamoDB table name for per-user MCP tool policies (client account)
    */
   mcpPolicyTableName?: string;
+  /**
+   * Optional DynamoDB table name for global integration settings (client account)
+   */
+  globalIntegrationSettingsTableName?: string;
 }
 
 export class NumaChatAgentWebSocket extends Construct {
@@ -215,7 +219,10 @@ export class NumaChatAgentWebSocket extends Construct {
           }),
         CLIENT_NAME: props.clientName,
         SUPPORTED_INTEGRATIONS: JSON.stringify(SUPPORTED_INTEGRATIONS),
-        ...(props.mcpPolicyTableName && { MCP_POLICY_TABLE_NAME: props.mcpPolicyTableName }),
+        ...(props.mcpPolicyTableName && { USER_INTEGRATION_SETTINGS_TABLE_NAME: props.mcpPolicyTableName }),
+        ...(props.globalIntegrationSettingsTableName && {
+          GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME: props.globalIntegrationSettingsTableName,
+        }),
       },
       logGroup: agentLogGroup,
       resourceNameSuffix: '_ws_agent',
@@ -286,6 +293,18 @@ export class NumaChatAgentWebSocket extends Construct {
                 actions: ['dynamodb:GetItem'],
                 resources: [
                   `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.mcpPolicyTableName}`,
+                ],
+              },
+            ]
+          : []),
+        // Allow reading global integration settings table if provided
+        ...(props.globalIntegrationSettingsTableName
+          ? [
+              {
+                effect: 'Allow',
+                actions: ['dynamodb:GetItem'],
+                resources: [
+                  `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.globalIntegrationSettingsTableName}`,
                 ],
               },
             ]

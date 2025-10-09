@@ -1,7 +1,7 @@
 /**
- * Centralized configuration for all Pipedream integrations
+ * Centralized configuration for all Numa integrations
  * This file contains all metadata needed across components:
- * - PipedreamIntegrations page
+ * - Numa Integrations page
  * - ChatInput component
  * - GenericTestConnection component
  */

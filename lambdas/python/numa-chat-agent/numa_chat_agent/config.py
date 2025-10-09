@@ -85,6 +85,9 @@ PREFERRED_KNOWLEDGE_BASE = os.getenv("PREFERRED_KNOWLEDGE_BASE", "q").lower()
 
 # Pipedream Integration Configuration
 PIPEDREAM_PROXY_LAMBDA_ARN = os.getenv("PIPEDREAM_PROXY_LAMBDA_ARN")
+GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME = os.getenv(
+    "GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME"
+)
 
 logger = structlog.get_logger()
 
