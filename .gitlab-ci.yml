@@ -415,16 +415,25 @@ deploy-to-arcanum-demo:
 
 deploy-to-median:
   extends: .deploy-infra
+  artifacts:
+    paths:
+      - infra/**/archive.zip
+    when: on_failure
   variables:
     CLIENT_NAME: median
   environment:
     deployment_tier: testing
-  needs: ["deploy-to-arcanum-demo"]   # wait for demo to finish
+  needs: ["deploy-to-arcanum-demo"]  # optional dependency on demo
+  before_script:
+    - !reference [.yarn, setup-private-auth]
+    - corepack enable
+    - (cd infra && yarn install --immutable)
+    - (cd infra && yarn exec cdktf get)
+    - cd infra
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual                   # only runs when a user clicks Play
-    - when: never                    # prevent running in other cases
-  allow_failure: false               # manual, but still fails pipeline if it errors
+      when: manual
+
 
 
 
