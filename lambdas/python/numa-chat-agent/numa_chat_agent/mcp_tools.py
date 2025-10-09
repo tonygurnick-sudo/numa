@@ -278,46 +278,65 @@ def get_mcp_connection_details_from_proxy(external_user_id: str, app_name: str) 
 
 def get_mcp_policy_from_dynamo(external_user_id: str, app_name: str) -> dict:
     """
-    Fetch per-user MCP policy from DynamoDB in client account.
+    Fetch effective MCP policy for a user/app, merged with global denies.
 
-    Returns default allow-all (deny list empty) on error or if not found.
+    Behavior:
+    - Start with default policy {mode: 'deny', denyTools: []}
+    - If a user policy exists, overlay it
+    - Always merge in global denyTools (if configured), even if user policy is missing
     """
-    table_name = os.environ.get(
+    user_table = os.environ.get(
         "USER_INTEGRATION_SETTINGS_TABLE_NAME"
     ) or os.environ.get("MCP_POLICY_TABLE_NAME")
-    default = {"mode": "deny", "denyTools": []}
-    if not table_name:
-        return default
+    default_policy = {"mode": "deny", "denyTools": []}
 
     def _as_str_set(value: Any) -> Set[str]:
-        """Normalize unknown value into a set of strings.
-
-        Only string-like entries are retained; other types are ignored.
-        """
+        """Normalize unknown value into a set of strings. Non-strings are dropped."""
         if not value:
             return set()
         if isinstance(value, (list, tuple, set)):
             return {v for v in value if isinstance(v, str)}
-        # Unexpected type (e.g., mapping, Decimal, bool) -> empty set
         return set()
 
+    # If external_user_id format is unexpected, return default + global denies best-effort
+    if "_" not in (external_user_id or ""):
+        try:
+            # Best-effort merge of global denies
+            if GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME:
+                ddb = get_dynamodb_resource()
+                gtable = ddb.Table(GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME)
+                gres = gtable.get_item(Key={"integration": app_name})
+                gitem = gres.get("Item") or {}
+                gdeny = _as_str_set(gitem.get("denyTools"))
+                if gdeny:
+                    return {"mode": "deny", "denyTools": list(gdeny)}
+        except Exception:
+            pass
+        return default_policy
+
+    client_name, cognito_sub = external_user_id.split("_", 1)
+    pk = f"CLIENT#{client_name}#USER#{cognito_sub}"
+    sk = f"INTEGRATION#{app_name}"
+
+    # Start with default policy
+    policy = dict(default_policy)
+
     try:
-        if "_" not in external_user_id:
-            return default
-        client_name, cognito_sub = external_user_id.split("_", 1)
-        pk = f"CLIENT#{client_name}#USER#{cognito_sub}"
-        sk = f"INTEGRATION#{app_name}"
         ddb = get_dynamodb_resource()
-        table = ddb.Table(table_name)
-        resp = table.get_item(Key={"pk": pk, "sk": sk}, ConsistentRead=True)
-        item = resp.get("Item")
-        if not item:
-            return default
-        policy = {
-            "mode": item.get("mode", "deny"),
-            "denyTools": item.get("denyTools", []),
-        }
-        # Overlay global denies without persisting them into user policy
+
+        # Read user-level policy if table configured
+        if user_table:
+            try:
+                utbl = ddb.Table(user_table)
+                resp = utbl.get_item(Key={"pk": pk, "sk": sk}, ConsistentRead=True)
+                item = resp.get("Item")
+                if item:
+                    policy["mode"] = item.get("mode", "deny")
+                    policy["denyTools"] = list(_as_str_set(item.get("denyTools", [])))
+            except Exception as e:
+                logger.warning("User policy read failed", error=str(e))
+
+        # Always attempt to merge global denies (even when user policy missing)
         try:
             if GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME:
                 gtable = ddb.Table(GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME)
@@ -325,14 +344,23 @@ def get_mcp_policy_from_dynamo(external_user_id: str, app_name: str) -> dict:
                 gitem = gres.get("Item") or {}
                 gdeny = _as_str_set(gitem.get("denyTools"))
                 if gdeny:
-                    deny = _as_str_set(policy.get("denyTools"))
-                    policy["denyTools"] = list(deny.union(gdeny))
-        except Exception:
-            pass
+                    current_deny = _as_str_set(policy.get("denyTools"))
+                    merged = list(current_deny.union(gdeny))
+                    policy["denyTools"] = merged
+                    logger.info(
+                        "Merged global deny tools into MCP policy",
+                        app_name=app_name,
+                        user_deny_count=len(current_deny),
+                        global_deny_count=len(gdeny),
+                        merged_count=len(merged),
+                    )
+        except Exception as e:
+            logger.warning("Global deny merge failed", error=str(e))
+
         return policy
     except Exception as e:
-        logger.warning("Failed to read MCP policy from DynamoDB", error=str(e))
-        return default
+        logger.warning("Failed to build effective MCP policy", error=str(e))
+        return policy
 
 
 def is_integration_globally_disabled(app_name: str) -> bool:
