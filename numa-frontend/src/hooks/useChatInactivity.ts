@@ -69,9 +69,21 @@ export function useChatInactivity({
 
   // Check inactivity on mount/focus and periodic polling
   useEffect(() => {
+    // Wait until we have the user's identity and Dynamo helpers before running inactivity logic.
+    // Otherwise we can mark the timer as "fresh" too early and skip the real new-chat flow
+    // once the auth context finishes loading.
+    if (!sub || !numaChatDynamoUtils) {
+      return;
+    }
+
     const checkAndMaybeReset = async () => {
       if (hasInactivityExpired() && buttonStatus === 'idle' && !isProcessingRef.current) {
-        await onExpired();
+        try {
+          await onExpired();
+        } finally {
+          // Seed a fresh interaction timestamp so we don't immediately expire again
+          resetInactivityTimer();
+        }
         await showSuggestionsIfAvailable();
       }
     };
