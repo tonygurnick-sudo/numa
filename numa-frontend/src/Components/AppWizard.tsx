@@ -21,7 +21,7 @@ export type FileResult = {
   [key: string]: unknown;
 };
 
-export type TaskCompletionHandler = (taskId: TaskId, results?: FileResult[] | null) => void;
+export type TaskCompletionHandler = (taskId: TaskId, isComplete: boolean, results?: FileResult[] | null) => void;
 
 type InputTaskType = 'text-input' | 's3-upload' | 'dropdown' | 'dropdown-table';
 type OutputTaskType = 'text-output';
@@ -272,13 +272,23 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
     }
   };
 
-  const handleTaskCompletion: TaskCompletionHandler = (taskId, results = null) => {
-    const validFiles: FileResult[] = isFileResultArray(results) ? results.filter((f) => f.s3_key.length > 0) : [];
+  const handleTaskCompletion: TaskCompletionHandler = (taskId, isComplete, results = null) => {
+    if (isFileResultArray(results)) {
+      const validFiles: FileResult[] = results.filter((f) => f.s3_key.length > 0);
+      updateTaskInputValue(taskId, validFiles);
+      updateTaskCompletionStatus(taskId, isComplete && validFiles.length > 0);
+      return;
+    }
 
-    updateTaskInputValue(taskId, validFiles);
+    if (!isComplete) {
+      updateTaskCompletionStatus(taskId, false);
+      if (results == null) {
+        updateTaskInputValue(taskId, []);
+      }
+      return;
+    }
 
-    // success only if at least one valid file
-    updateTaskCompletionStatus(taskId, validFiles.length > 0);
+    updateTaskCompletionStatus(taskId, true);
   };
 
   const handleTaskInputChange: HandleTaskInputChange = useCallback(
@@ -384,8 +394,8 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
     }
 
     // Traditional task
-    const handleComplete = (results?: FileResult[] | null) => handleTaskCompletion(task.id, results ?? null);
-    const handleNotComplete = (results?: FileResult[] | null) => handleTaskCompletion(task.id, results ?? null);
+    const handleComplete = (results?: FileResult[] | null) => handleTaskCompletion(task.id, true, results ?? null);
+    const handleNotComplete = (results?: FileResult[] | null) => handleTaskCompletion(task.id, false, results ?? null);
 
     const commonProps = {
       task,
