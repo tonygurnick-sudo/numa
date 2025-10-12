@@ -87,7 +87,11 @@ function Breadcrumbs({ label, clearStack }) {
         <li key={index}>
           {breadcrumbs.length > 0 && index < breadcrumbs.length - 1 ? (
             <>
-              <a href={breadcrumb.path} onClick={(e) => handleBreadcrumbClick(e, breadcrumb.path)}>
+              <a
+                type="button"
+                className="btn btn-link p-0 text-decoration-none"
+                onClick={(e) => handleBreadcrumbClick(e, breadcrumb.path)}
+              >
                 {breadcrumb.label}
               </a>{' '}
               &#62; &nbsp;
