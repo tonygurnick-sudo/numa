@@ -1,13 +1,18 @@
+import { lazy } from 'react';
 import { reloadFavourites } from './navigation';
-import { Dash } from '../Pages/Dash';
-import AppDetail from '../Pages/AppDetail';
-import UserManagement from '../Pages/UserManagement';
-import SettingsPage from '../Pages/Settings';
-import { NumaChatAgents } from '../Pages/NumaChatAgents';
-import { KnowledgeBaseManagement } from '../Pages/KnowledgeBaseManagement';
-import { CompanyInfo } from '../Pages/CompanyInfo';
-import { NumaIntegrations } from '../Pages/NumaIntegrations';
-import JobHistoryManager from '../Pages/JobHistoryManager';
+
+// Lazy load page components for better code splitting
+const Dash = lazy(() => import('../Pages/Dash').then((m) => ({ default: m.Dash })));
+const AppDetail = lazy(() => import('../Pages/AppDetail'));
+const UserManagement = lazy(() => import('../Pages/UserManagement'));
+const SettingsPage = lazy(() => import('../Pages/Settings'));
+const NumaChatAgents = lazy(() => import('../Pages/NumaChatAgents').then((m) => ({ default: m.NumaChatAgents })));
+const KnowledgeBaseManagement = lazy(() =>
+  import('../Pages/KnowledgeBaseManagement').then((m) => ({ default: m.KnowledgeBaseManagement })),
+);
+const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
+const NumaIntegrations = lazy(() => import('../Pages/NumaIntegrations').then((m) => ({ default: m.NumaIntegrations })));
+const JobHistoryManager = lazy(() => import('../Pages/JobHistoryManager'));
 
 export const ROUTE_CONFIG = [
   {

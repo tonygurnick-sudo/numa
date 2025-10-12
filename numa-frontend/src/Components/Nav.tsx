@@ -25,7 +25,7 @@ const Nav = () => {
 
   useEffect(() => {
     let isMounted = true;
-    import('../utils/routeConfig.jsx').then((mod) => {
+    import('../utils/routeConfig.tsx').then((mod) => {
       if (!isMounted) return;
       const items = mod.ROUTE_CONFIG.filter((r) => r.nav).map((r) => ({
         to: r.path,
@@ -36,7 +36,9 @@ const Nav = () => {
       }));
       setNavItems(items);
     });
-    return () => (isMounted = false);
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const MobileNav = () => {
@@ -96,7 +98,15 @@ const Nav = () => {
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
-      <div className="btn-home-logo" onClick={() => navigate('/dash')} role="button">
+      <div
+        className="btn-home-logo"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          navigate('/dash');
+        }}
+        role="button"
+      >
         <img src={Logo} className="logo-bk" alt="Arcanum" />
         {isExpanded && <span className="logo-text">Numa</span>}
       </div>
@@ -108,7 +118,16 @@ const Nav = () => {
           .map((item) => (
             <FeatureWrapper key={item.to} requiredFeature={item.feature}>
               <li>
-                <div className="nav-link nav-item" onClick={() => navigate(item.to)} title={item.label} role="button">
+                <div
+                  className="nav-link nav-item"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate(item.to);
+                  }}
+                  title={item.label}
+                  role="button"
+                >
                   <div className="nav-icon-container">
                     <i className={`${item.icon} icon`} style={{ color: 'var(--color-icon)' }}></i>
                   </div>
@@ -128,7 +147,16 @@ const Nav = () => {
             .map((item) => (
               <FeatureWrapper key={item.to} requiredFeature={item.feature}>
                 <li>
-                  <div className="nav-link nav-item" onClick={() => navigate(item.to)} title={item.label} role="button">
+                  <div
+                    className="nav-link nav-item"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      navigate(item.to);
+                    }}
+                    title={item.label}
+                    role="button"
+                  >
                     <div className="nav-icon-container">
                       <i className={`${item.icon} icon`} style={{ color: 'var(--color-icon)' }}></i>
                     </div>

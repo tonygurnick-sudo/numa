@@ -3,8 +3,9 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import fsExtra from 'fs-extra';
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
-import { fileURLToPath, URL } from 'node:url';           // ⬅️ add this
-import config from './public/config.json';
+import { fileURLToPath, URL } from 'node:url';
+import config from './public/config.json' with { type: 'json' };
+const { CLIENT_NAME } = config as { CLIENT_NAME: string };
 
 // Custom plugin to copy build output to @numa-frontend
 const copyBuildPlugin = () => ({
@@ -44,27 +45,41 @@ const copyBuildPlugin = () => ({
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), copyBuildPlugin()],
-  build: { sourcemap: false },
+  build: {
+    sourcemap: false,
+    // Enable content-based hashing for cache busting
+    rollupOptions: {
+      output: {
+        // Hash filenames based on content
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+
+        // Let Vite handle chunking automatically with route-based lazy loading
+        manualChunks: undefined,
+      },
+    },
+  },
   server: {
     proxy: {
       '/api': {
-        target: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
+        target: `https://${CLIENT_NAME}.numa.arcanum.ai/`,
         changeOrigin: true,
         secure: false,
-        headers: { Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/` },
+        headers: { Origin: `https://${CLIENT_NAME}.numa.arcanum.ai/` },
         rewrite: (path) => path.replace(/^\/api/, '/api'),
       },
       '/manifest.json': {
-        target: `https://${config.CLIENT_NAME}.numa.arcanum.ai/`,
+        target: `https://${CLIENT_NAME}.numa.arcanum.ai/`,
         changeOrigin: true,
         secure: false,
-        headers: { Origin: `https://${config.CLIENT_NAME}.numa.arcanum.ai/` },
+        headers: { Origin: `https://${CLIENT_NAME}.numa.arcanum.ai/` },
       },
     },
   },
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),  // ⬅️ add this
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
       'node_modules/@popperjs/core': '@popperjs/core/dist/umd/popper.min.js',
     },
     extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
