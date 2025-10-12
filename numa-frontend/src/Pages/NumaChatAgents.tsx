@@ -9,7 +9,7 @@ import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
-import { callChatAgentStreaming, connectChatAgent, isChatAgentAvailable } from '../Services/chatAgentService';
+import { callChatAgentStreaming } from '../Services/chatAgentService';
 import { ChatInput } from '../Components/ChatInput';
 import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/ChatMessages';
@@ -229,23 +229,12 @@ const NumaChatAgents = () => {
         }
       };
 
-      // Start WebSocket pre-connection
-      const preConnectWebSocket = async () => {
-        if (isChatAgentAvailable()) {
-          try {
-            console.log('Pre-connecting to Chat Agent WebSocket...');
-            await connectChatAgent();
-            console.log('WebSocket pre-connection successful');
-          } catch (error) {
-            console.warn('WebSocket pre-connection failed:', error);
-          }
-        }
-      };
-
-      // Run both
-      Promise.all([warmUpDatabase(), preConnectWebSocket()]).catch((error) => {
-        console.warn('Service initialization error:', error);
-      });
+      // Run any initializations that are still applicable
+      Promise.resolve()
+        .then(() => warmUpDatabase())
+        .catch((error) => {
+          console.warn('Service initialization error:', error);
+        });
     };
 
     initializeServices();
@@ -658,6 +647,14 @@ const NumaChatAgents = () => {
       );
 
       try {
+        // Diagnostics: log prompt length and preview before calling the agent
+        try {
+          console.log('[Diag] ChatAgent prompt length:', userMsg?.length ?? 0);
+          console.log('[Diag] ChatAgent prompt preview:', (userMsg || '').slice(0, 200));
+        } catch {
+          // Ignore logging errors
+        }
+
         const abortStream = await callChatAgentStreaming(
           userMsg,
           cid, // Pass conversationId - backend will load history from DynamoDB

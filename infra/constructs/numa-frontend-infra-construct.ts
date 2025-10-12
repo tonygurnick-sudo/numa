@@ -7,6 +7,10 @@ import { Apigatewayv2Authorizer } from '@cdktf/provider-aws/lib/apigatewayv2-aut
 import { Apigatewayv2Stage } from '@cdktf/provider-aws/lib/apigatewayv2-stage';
 import { CloudfrontCachePolicy } from '@cdktf/provider-aws/lib/cloudfront-cache-policy';
 import { CloudfrontDistribution } from '@cdktf/provider-aws/lib/cloudfront-distribution';
+import type {
+  CloudfrontDistributionOrigin,
+  CloudfrontDistributionOrderedCacheBehavior,
+} from '@cdktf/provider-aws/lib/cloudfront-distribution';
 import { CloudfrontOriginAccessIdentity } from '@cdktf/provider-aws/lib/cloudfront-origin-access-identity';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { DataAwsRoute53Zone } from '@cdktf/provider-aws/lib/data-aws-route53-zone';
@@ -33,6 +37,7 @@ export class NumaFrontendInfra extends Construct {
   readonly authorizer: Apigatewayv2Authorizer;
   readonly frontendBucket: S3Bucket;
   readonly distribution: CloudfrontDistribution;
+  readonly cloudfrontSecretParameter: SsmParameter;
 
   constructor(scope: Construct, name: string, props: NumaFrontendInfraProps) {
     super(scope, name);
@@ -98,15 +103,18 @@ export class NumaFrontendInfra extends Construct {
       lifecycle: { createBeforeDestroy: true },
     });
 
-    const cloudfrontSecretParameter = new SsmParameter(this, 'cloudfront-secret', {
-      name: props.clientName + '_' + name + '_cloudfront-secret',
-      type: 'String',
-      value: uuidv4(),
-      lifecycle: {
-        createBeforeDestroy: true,
-        ignoreChanges: ['value'],
-      },
-    });
+    const cloudfrontSecretParameter =
+      props.cloudfrontSecretParam ??
+      new SsmParameter(this, 'cloudfront-secret', {
+        name: props.clientName + '_' + name + '_cloudfront-secret',
+        type: 'String',
+        value: uuidv4(),
+        lifecycle: {
+          createBeforeDestroy: true,
+          ignoreChanges: ['value'],
+        },
+      });
+    this.cloudfrontSecretParameter = cloudfrontSecretParameter;
 
     new IamRolePolicyAttachmentsExclusive(this, 'authorizer-role', {
       policyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'],
@@ -228,7 +236,84 @@ export class NumaFrontendInfra extends Construct {
       maxTtl: 3600,
     });
 
+    // // Dedicated cache policy for chat streaming: forward auth + CF secret
+    // const chatApiCachePolicy = new CloudfrontCachePolicy(this, 'chatApiCachePolicy', {
+    //   name: `${props.clientName.replaceAll('.', '-')}-chat-api-cache-policy`,
+    //   parametersInCacheKeyAndForwardedToOrigin: {
+    //     cookiesConfig: { cookieBehavior: 'all' },
+    //     headersConfig: {
+    //       headerBehavior: 'whitelist',
+    //       headers: { items: ['authorization', 'x-arcanum-cloudfront-secret'] },
+    //     },
+    //     queryStringsConfig: { queryStringBehavior: 'all' },
+    //   },
+    //   minTtl: 0,
+    //   defaultTtl: 0,
+    //   maxTtl: 1,
+    // });
+
     const accessIdentity = new CloudfrontOriginAccessIdentity(this, 'identity', {});
+
+    // Build origins array including the chat agent Function URL
+    const origins: CloudfrontDistributionOrigin[] = [
+      {
+        domainName: this.frontendBucket.bucketRegionalDomainName,
+        originId: 'default',
+        s3OriginConfig: {
+          originAccessIdentity: accessIdentity.cloudfrontAccessIdentityPath,
+        },
+      },
+      {
+        customHeader: [{ name: 'x-arcanum-cloudfront-secret', value: cloudfrontSecretParameter.value }],
+        customOriginConfig: {
+          httpPort: 80,
+          httpsPort: 443,
+          originProtocolPolicy: 'https-only',
+          originSslProtocols: ['TLSv1.2'],
+          originReadTimeout: 30,
+        },
+        domainName: Fn.replace(this.apiGateway.apiEndpoint, '/^(http|ws)s:///', ''),
+        originId: 'api-gateway',
+      },
+    ];
+
+    const chatOriginDomain = Fn.replace(Fn.replace(props.chatAgentFunctionUrl, '/^https?:\/{2}/', ''), '/\/$/', '');
+    origins.push({
+      customHeader: [{ name: 'x-arcanum-cloudfront-secret', value: cloudfrontSecretParameter.value }],
+      customOriginConfig: {
+        httpPort: 80,
+        httpsPort: 443,
+        originProtocolPolicy: 'https-only',
+        originSslProtocols: ['TLSv1.2'],
+        originReadTimeout: 60, // keep-alive via Lambda heartbeats
+      },
+      domainName: chatOriginDomain,
+      originId: 'chat-agent-fnurl',
+    });
+
+    // Build ordered cache behaviors (chat route before generic /api/*)
+    const orderedCacheBehavior: CloudfrontDistributionOrderedCacheBehavior[] = [
+      {
+        targetOriginId: 'chat-agent-fnurl',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/api/numa-chat-agent/*',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        // Use AWS managed policies to avoid custom policy deletion blockers
+        cachePolicyId: '4135ea2d-6df8-44a3-9df3-4b5a84be39ad',
+        originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac',
+      },
+      {
+        targetOriginId: 'api-gateway',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/api/*',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: apiCachePolicy.id,
+      },
+    ];
 
     this.distribution = new CloudfrontDistribution(this, 'cloudfront', {
       aliases: [props.domainName],
@@ -240,27 +325,7 @@ export class NumaFrontendInfra extends Construct {
         targetOriginId: 'default',
         cachePolicyId: defaultCachePolicy.id,
       },
-      origin: [
-        {
-          domainName: this.frontendBucket.bucketRegionalDomainName,
-          originId: 'default',
-          s3OriginConfig: {
-            originAccessIdentity: accessIdentity.cloudfrontAccessIdentityPath,
-          },
-        },
-        {
-          customHeader: [{ name: 'x-arcanum-cloudfront-secret', value: cloudfrontSecretParameter.value }],
-          customOriginConfig: {
-            httpPort: 80,
-            httpsPort: 443,
-            originProtocolPolicy: 'https-only',
-            originSslProtocols: ['TLSv1.2'],
-            originReadTimeout: 30,
-          },
-          domainName: Fn.replace(this.apiGateway.apiEndpoint, '/^(http|ws)s:///', ''),
-          originId: 'api-gateway',
-        },
-      ],
+      origin: origins,
       defaultRootObject: 'index.html',
       customErrorResponse: [
         {
@@ -279,17 +344,7 @@ export class NumaFrontendInfra extends Construct {
         sslSupportMethod: 'sni-only',
         minimumProtocolVersion: 'TLSv1.2_2021',
       },
-      orderedCacheBehavior: [
-        {
-          targetOriginId: 'api-gateway',
-          allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
-          cachedMethods: ['GET', 'HEAD'],
-          pathPattern: '/api/*',
-          viewerProtocolPolicy: 'redirect-to-https',
-          compress: true,
-          cachePolicyId: apiCachePolicy.id,
-        },
-      ],
+      orderedCacheBehavior,
       dependsOn: [validation],
     });
 
@@ -364,4 +419,6 @@ export interface NumaFrontendInfraProps {
   outputsBucket: NumaCorsEnabledBucket;
   accountId: string;
   knowledgeBase: KnowledgeBase;
+  chatAgentFunctionUrl: string;
+  cloudfrontSecretParam?: SsmParameter;
 }

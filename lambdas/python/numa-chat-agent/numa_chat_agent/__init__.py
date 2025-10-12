@@ -5,9 +5,10 @@ A modular WebSocket-powered Lambda function for real-time streaming chat with AI
 Provides clean interfaces for agent creation, tool management, and WebSocket streaming.
 """
 
+import logging
 import os
 import uuid
-from typing import List, Optional
+from typing import Any
 
 import structlog
 from strands import Agent
@@ -18,7 +19,39 @@ from .auth import clear_current_user_auth, set_current_user_auth
 from .config import MODEL_ID, get_bedrock_model, validate_config
 from .mcp_tools import SUPPORTED_MCP_APPS, get_mcp_tools_and_clients_for_agent
 from .tools import AVAILABLE_TOOLS, get_available_tool_names, get_tools_for_agent
-from .websocket import build_websocket_endpoint, cleanup_mcp_clients, run_agent_stream
+from .utils import cleanup_mcp_clients
+
+# ── Logging Configuration (JSON in Lambda by default) ───────────────────────
+
+
+def _setup_structlog() -> None:
+    # Ensure stdlib logs from dependencies don't pollute formatting
+    logging.basicConfig(format="%(message)s", level=logging.ERROR)
+
+    # Default to JSON in Lambda; allow console pretty logs locally via env
+    renderer: Any = structlog.processors.JSONRenderer(sort_keys=True)
+    if os.environ.get("LOG_TO_CONSOLE", "false").lower() == "true":
+        renderer = structlog.dev.ConsoleRenderer()
+
+    log_level = logging.getLevelName(os.environ.get("LOG_LEVEL", "INFO").upper())
+
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.StackInfoRenderer(),
+            structlog.dev.set_exc_info,
+            structlog.processors.format_exc_info,
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
+            renderer,
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
+        logger_factory=structlog.WriteLoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
+
+_setup_structlog()
 
 # ── OpenTelemetry Configuration ──────────────────────────────────────────────
 os.environ.setdefault("OTEL_SERVICE_NAME", "numa-chat-agent")
@@ -148,8 +181,6 @@ __all__ = [
     "cleanup_mcp_clients",
     "set_current_user_auth",
     "clear_current_user_auth",
-    "run_agent_stream",
-    "build_websocket_endpoint",
     "get_available_tool_names",
     "AVAILABLE_TOOLS",
     "SUPPORTED_MCP_APPS",

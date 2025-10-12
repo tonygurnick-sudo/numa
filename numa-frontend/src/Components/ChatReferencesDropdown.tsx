@@ -1,9 +1,26 @@
 import { useState, useEffect, useRef } from 'react';
+import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import { getContentType } from '../utils/fileUtils';
 import { getUrlTagFromS3Object } from '../utils/s3Utils';
 import { Button, Collapse } from 'react-bootstrap';
 
-const ChatReferencesDropdown = ({ references, getCredentials, showAsDropdown = true }) => {
+type ChatReferencesDropdownProps = {
+  references: string[];
+  getCredentials: () => Promise<AwsCredentialIdentity>;
+  showAsDropdown?: boolean;
+  label?: string;
+  showLabel?: boolean;
+  noIndent?: boolean; // when true, remove left margin to align with surrounding text
+};
+
+const ChatReferencesDropdown = ({
+  references,
+  getCredentials,
+  showAsDropdown = true,
+  label = 'References',
+  showLabel = true,
+  noIndent = false,
+}: ChatReferencesDropdownProps) => {
   const [open, setOpen] = useState(false);
   const [processedRefs, setProcessedRefs] = useState([]);
   const [downloadingIndex, setDownloadingIndex] = useState(null);
@@ -249,11 +266,11 @@ const ChatReferencesDropdown = ({ references, getCredentials, showAsDropdown = t
   // Simple list mode (for tool results)
   if (!showAsDropdown) {
     return (
-      <div className="references-list mt-2">
+      <div className={`references-list ${noIndent ? '' : 'mt-2'}`}>
         {/* Invisible link for downloads */}
         <a ref={downloadLinkRef} style={{ display: 'none' }} />
-        <strong>References:</strong>
-        <div className="ms-3">{renderReferenceItems()}</div>
+        {showLabel && <strong>{label}:</strong>}
+        <div className={noIndent ? '' : 'ms-3'}>{renderReferenceItems()}</div>
       </div>
     );
   }
@@ -271,7 +288,7 @@ const ChatReferencesDropdown = ({ references, getCredentials, showAsDropdown = t
         aria-expanded={open}
         style={{ color: '#4b007d' }}
       >
-        {open ? 'Hide References' : 'Show References'}
+        {open ? `Hide ${label}` : `Show ${label}`}
       </Button>
       <Collapse in={open}>
         <div id="references-collapse" className="ms-3">

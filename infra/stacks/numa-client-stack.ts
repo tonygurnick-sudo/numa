@@ -34,8 +34,10 @@ import { RfpResponseComparison } from '../constructs/apps/rfp-response-compariso
 import { CoreNumaInfra, coreNumaInfraPropsSchema } from '../constructs/core-numa-infra-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
-import { NumaChatAgentWebSocket } from '../constructs/numa-chat-agent-ws-construct';
+import { NumaChatAgent } from '../constructs/numa-chat-agent-construct';
+import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
+import { v4 as uuidv4 } from 'uuid';
 import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { z } from 'zod';
 import { KnowledgeBase } from '../constructs/knowledge-base-construct';
@@ -175,15 +177,20 @@ export class NumaClientStack extends TerraformStack {
       knowledgeBase: knowledgeBase,
     });
 
-    // Create Chat Agent WebSocket API
-    const chatAgentDomain = `chat-agent.${domainName}`;
-    const chatAgentWs = new NumaChatAgentWebSocket(this, 'chat-agent-ws', {
+    // Frontend + CloudFront
+    // Shared CloudFront secret SSM parameter (used by both FE and Chat Agent)
+    const cfSecretParam = new SsmParameter(this, 'shared-cloudfront-secret', {
+      name: clientConfig.clientName + '_' + 'numa-frontend' + '_cloudfront-secret',
+      type: 'String',
+      value: uuidv4(),
+      lifecycle: { createBeforeDestroy: true, ignoreChanges: ['value'] },
+      provider: hostedZoneProvider,
+    });
+
+    // Chat Agent – HTTP streaming via Lambda Function URL (created first to pass URL into FE)
+    const chatAgent = new NumaChatAgent(this, 'chat-agent', {
       clientName: props.clientName,
       region: clientConfig.region,
-      domainName: chatAgentDomain,
-      hostedZoneId: props.hostedZone,
-      hostedZoneProvider: hostedZoneProvider,
-      certificateProvider: certificateProvider,
       chatAgentConfiguration: {
         preferredKnowledgeBase: clientConfig.preferredKnowledgeBase as 'q' | 'bedrock',
         qApplicationId: core.qBusinessApplicationId,
@@ -192,15 +199,17 @@ export class NumaClientStack extends TerraformStack {
       },
       userPoolId: core.userPoolId,
       userPoolClientId: core.userPoolClient.id,
+      chatHistoryTableName: core.chatHistoryTable.name,
       outputsBucketArn: core.outputsBucket.bucket.arn,
       dataBucketArn: core.dataBucket.bucket.arn,
-      pipedreamIntegrationsEnabled: clientConfig.pipedreamIntegrations, // Pass through the config flag
-      // Hardcoded proxy lambda ARN in dedicated proxy account - only provided when feature enabled
+      pipedreamIntegrationsEnabled: clientConfig.pipedreamIntegrations,
       pipedreamProxyLambdaArn: clientConfig.pipedreamIntegrations
         ? `arn:aws:lambda:us-east-1:${PIPEDREAM_PROXY_ACCOUNT_ID}:function:pipedream-proxy`
         : undefined,
       mcpPolicyTableName: core.mcpPolicyTable?.name,
       globalIntegrationSettingsTableName: `${props.clientName}-global-integration-settings`,
+      // Enforce CloudFront secret
+      cloudfrontSharedSecret: cfSecretParam.value,
     });
 
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
@@ -215,6 +224,8 @@ export class NumaClientStack extends TerraformStack {
       outputsBucket: core.outputsBucket,
       accountId: clientConfig.clientAccountId,
       knowledgeBase: knowledgeBase,
+      chatAgentFunctionUrl: chatAgent.functionUrl,
+      cloudfrontSecretParam: cfSecretParam,
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
@@ -312,7 +323,6 @@ export class NumaClientStack extends TerraformStack {
         PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'q',
         BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase.knowledgeBaseId,
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
-        CHAT_AGENT_URL: chatAgentWs.websocketUrl,
         PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
         PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
       }),

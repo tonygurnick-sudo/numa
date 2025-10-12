@@ -155,6 +155,15 @@ const MarkdownContent = React.memo(({ content }: MarkdownContentProps) => {
           );
         }
 
+        // If the code block is single-line (no newline chars), render as inline
+        if (!inline && !textContent.includes('\n')) {
+          return (
+            <code className="markdown-code-inline" {...props}>
+              {textContent}
+            </code>
+          );
+        }
+
         if (match?.[1] === 'markdown') {
           return <MarkdownDocument textContent={textContent} copied={copied} handleCopy={handleCopy} />;
         }

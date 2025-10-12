@@ -1,4 +1,6 @@
 import { ToolResultCard } from '../Components/ToolResultCard';
+import { ChatReferencesDropdown } from '../Components/ChatReferencesDropdown';
+import { useAuth } from '../Providers/AuthProvider';
 
 /**
  * Renderer for query_knowledge_base tool results.
@@ -6,6 +8,7 @@ import { ToolResultCard } from '../Components/ToolResultCard';
  * Handles both new ToolResult JSON format and legacy string format.
  */
 export const KnowledgeBaseRenderer = ({ result }) => {
+  const { getCredentials } = useAuth();
   let payload = null;
 
   // Try new ToolResult format first: content[0].json
@@ -48,19 +51,15 @@ export const KnowledgeBaseRenderer = ({ result }) => {
       {references.length > 0 && (
         <div className="kb-sources mb-3">
           <strong>Sources:</strong>
-          <ul className="mt-1 mb-0">
-            {references.map((ref, idx) => (
-              <li key={idx}>
-                {ref.startsWith('http') ? (
-                  <a href={ref} target="_blank" rel="noopener noreferrer">
-                    {ref}
-                  </a>
-                ) : (
-                  <span>{ref}</span>
-                )}
-              </li>
-            ))}
-          </ul>
+          <div className="mt-1 mb-0">
+            <ChatReferencesDropdown
+              references={references}
+              getCredentials={getCredentials}
+              showAsDropdown={false}
+              showLabel={false}
+              noIndent
+            />
+          </div>
         </div>
       )}
 
