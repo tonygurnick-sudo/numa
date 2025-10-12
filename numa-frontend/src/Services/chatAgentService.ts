@@ -1,234 +1,115 @@
 /**
- * Service for interacting with the Numa Chat Agent via WebSocket API Gateway
+ * Service for interacting with the Numa Chat Agent via HTTP streaming (Function URL through CloudFront)
  */
-import type { AgentEventFrame, OnChunk, OnComplete, OnError, OnEvent } from '../types/chat';
+import type {
+  AgentEventFrame,
+  OnChunk,
+  OnComplete,
+  OnError,
+  OnEvent,
+  ChatAgentRequest,
+  ChatAgentNdjsonFrame,
+  StreamCallbackMessage,
+} from '../types/chat';
 import { getStopReason, isMessageStopFrame, isToolEventFrame, tryGetDeltaText } from '../types/chat';
 
-class ChatAgentWebSocket {
-  private websocket: WebSocket | null;
-  private connectionPromise: Promise<void> | null;
-  private responseCallbacks;
-  private currentRequestId: number;
-  private reconnectAttempts: number;
-  private maxReconnectAttempts: number;
-  private reconnectDelay: number;
+class ChatAgentHttpStream {
   private currentOnEvent: OnEvent | null | undefined;
+  private readerAbortController: AbortController | null;
+  private responseCallbacks: Map<string, (msg: StreamCallbackMessage) => void>;
 
   constructor() {
-    this.websocket = null;
-    this.connectionPromise = null;
+    this.currentOnEvent = null;
+    this.readerAbortController = null;
     this.responseCallbacks = new Map();
-    this.currentRequestId = 0;
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 3;
-    this.reconnectDelay = 1000; // Start with 1 second
+  }
+
+  getHttpUrl(): string {
+    return '/api/numa-chat-agent/stream';
+  }
+
+  async connect(): Promise<void> {
+    // No-op for HTTP streaming; kept for API parity
+    return Promise.resolve();
+  }
+
+  isConnected(): boolean {
+    // Always available (request-scoped)
+    return true;
+  }
+
+  cleanup(): void {
+    this.responseCallbacks.delete('current');
     this.currentOnEvent = null;
   }
 
-  /**
-   * Get the WebSocket URL from session storage
-   */
-  getWebSocketUrl(): string {
-    const wsUrl = window.sessionStorage.getItem('CHAT_AGENT_URL');
-    if (!wsUrl) {
-      throw new Error('Chat Agent WebSocket URL not configured. Make sure the app is properly initialized.');
-    }
-    return wsUrl;
-  }
-
-  /**
-   * Connect to the WebSocket
-   */
-  async connect(): Promise<void> {
-    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-      return Promise.resolve();
-    }
-
-    if (this.connectionPromise) {
-      return this.connectionPromise;
-    }
-
-    this.connectionPromise = new Promise<void>((resolve, reject) => {
-      try {
-        const wsUrl = this.getWebSocketUrl();
-
-        // Add ID token as query parameter for authentication
-        let authenticatedWsUrl = wsUrl;
-        const idToken = localStorage.getItem('idToken');
-        if (idToken) {
-          const separator = wsUrl.includes('?') ? '&' : '?';
-          authenticatedWsUrl = `${wsUrl}${separator}Authorization=${encodeURIComponent(idToken)}`;
-        }
-
-        console.log('Connecting to Chat Agent WebSocket:', wsUrl, '(with auth)');
-
-        this.websocket = new WebSocket(authenticatedWsUrl);
-
-        this.websocket.onopen = () => {
-          console.log('Connected to Chat Agent WebSocket');
-          this.reconnectAttempts = 0;
-          this.reconnectDelay = 1000;
-          resolve();
-        };
-
-        this.websocket.onmessage = (event: MessageEvent) => {
-          this.handleMessage(event);
-        };
-
-        this.websocket.onclose = (event: CloseEvent) => {
-          console.log('WebSocket connection closed:', event.code, event.reason);
-          this.connectionPromise = null;
-
-          // Handle unexpected disconnections
-          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.attemptReconnect();
-          }
-        };
-
-        this.websocket.onerror = (error: Event) => {
-          console.error('WebSocket error:', error);
-          this.connectionPromise = null;
-          reject(new Error('Failed to connect to Chat Agent WebSocket'));
-        };
-
-        // Timeout for connection
-        setTimeout(() => {
-          if (this.websocket.readyState !== WebSocket.OPEN) {
-            this.websocket.close();
-            reject(new Error('WebSocket connection timeout'));
-          }
-        }, 10000);
-      } catch (error) {
-        this.connectionPromise = null;
-        reject(error);
-      }
-    });
-
-    return this.connectionPromise;
-  }
-
-  /**
-   * Attempt to reconnect with exponential backoff
-   */
-  async attemptReconnect(): Promise<void> {
-    this.reconnectAttempts++;
-    console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-
-    await new Promise((resolve) => setTimeout(resolve, this.reconnectDelay));
-    this.reconnectDelay *= 2; // Exponential backoff
+  handleFrame(frame: ChatAgentNdjsonFrame, onChunk: OnChunk, onComplete: OnComplete, onError: OnError): void {
+    if (!this.responseCallbacks.has('current')) return;
+    const cb = this.responseCallbacks.get('current');
 
     try {
-      await this.connect();
-    } catch (error) {
-      console.error('Reconnection failed:', error);
-    }
-  }
-
-  /**
-   * Handle incoming WebSocket messages
-   */
-  handleMessage(event: MessageEvent): void {
-    try {
-      const msg = JSON.parse(event.data as string) as AgentEventFrame;
-      if ('data' in msg) {
-        // Ignore top-level text frames from Strands ModelStreamEvent to avoid duplicate rendering;
-        // we extract text from contentBlockDelta deltas instead.
-        return;
-      }
-
-      // Handle streaming for the current request
-      if (!this.responseCallbacks.has('current')) return;
-      const cb = this.responseCallbacks.get('current');
-
-      switch (msg.type) {
+      switch (frame.type) {
         case 'start':
           cb({ type: 'start' });
           break;
         case 'event': {
-          // Forward raw event frame to optional handler (e.g., UI wants to render tool events)
-          // But only forward tool-specific events, not content deltas
-          if (this.currentOnEvent && isToolEventFrame(msg)) {
+          const evt = frame as AgentEventFrame;
+          // Ignore top-level model text frames to avoid duplication.
+          // We rely on Bedrock-like nested contentBlockDelta events for tokens.
+          if (Object.prototype.hasOwnProperty.call(evt as Record<string, unknown>, 'data')) {
+            break;
+          }
+          if (this.currentOnEvent && isToolEventFrame(evt)) {
             try {
-              this.currentOnEvent(msg);
+              this.currentOnEvent(evt);
             } catch (handlerErr) {
-              console.error('Chat WS onEvent handler error:', handlerErr);
+              console.error('Chat HTTP onEvent handler error:', handlerErr);
             }
           }
-
-          // Handle content block deltas (don't duplicate in onEvent)
-          const textData = tryGetDeltaText(msg);
+          let textData = tryGetDeltaText(evt);
+          if (typeof textData !== 'string') {
+            const e = evt as Record<string, unknown>;
+            const altDelta = (e.delta as { text?: unknown } | undefined)?.text ?? e.data;
+            if (typeof altDelta === 'string') textData = altDelta;
+          }
           if (typeof textData === 'string') cb({ type: 'chunk', data: textData });
-
-          // Handle message completion
-          if (isMessageStopFrame(msg)) {
-            // Extract stop reason from the correct location
-            const stopReason = getStopReason(msg) || 'complete';
-
-            // If the agent indicates it is pausing to perform a tool call, keep
-            // the stream open so that follow-up content (after the tool call has
-            // finished) will still be delivered through the same callback chain.
+          if (isMessageStopFrame(evt)) {
+            const stopReason = getStopReason(evt) || 'complete';
+            // Do not mark complete on tool_use pauses;
+            // allow stream to continue for post-tool assistant content.
             if (stopReason === 'tool_use') {
-              if (this.currentOnEvent) {
-                this.currentOnEvent({ type: 'tool_use_complete', original: msg });
+              try {
+                if (this.currentOnEvent) {
+                  this.currentOnEvent({ type: 'tool_use_complete', original: evt } as unknown as AgentEventFrame);
+                }
+              } catch (e) {
+                console.warn('Error emitting tool_use_complete event', e);
               }
-              return;
+            } else {
+              cb({ type: 'complete', stop_reason: stopReason });
             }
-
-            console.log('[Chat WS] Stream complete');
-            console.log('[Chat WS] Calling completion callback with stop_reason:', stopReason);
-            cb({
-              type: 'complete',
-              stop_reason: stopReason,
-            });
           }
           break;
         }
         case 'error':
-          cb({ type: 'error', error: msg.error });
+          cb({ type: 'error', error: frame.error });
+          break;
+        case 'completion':
+          // Terminal marker from backend; mark complete if not already
+          cb({ type: 'complete', stop_reason: 'complete' });
+          break;
+        case 'ping':
+          // Heartbeat from server; ignore
           break;
         default:
-        // ignore other frame types for now
+        // ignore other types (e.g., ping)
       }
     } catch (err) {
-      console.error('WS parse error', err);
+      console.error('HTTP stream frame error', err);
+      onError(err as Error);
     }
   }
 
-  /**
-   * Helper method to determine if a message is a tool-specific event
-   * This prevents duplicate processing of content deltas
-   */
-  isToolEvent(msg: AgentEventFrame): boolean {
-    return isToolEventFrame(msg);
-  }
-
-  /**
-   * Send a message through the WebSocket
-   */
-  async sendMessage(message: Record<string, unknown>): Promise<void> {
-    await this.connect();
-
-    if (this.websocket.readyState !== WebSocket.OPEN) {
-      throw new Error('WebSocket is not connected');
-    }
-
-    this.websocket.send(JSON.stringify(message));
-  }
-
-  /**
-   * Stream a prompt to Chat Agent.
-   * @param {string} prompt
-   * @param {string} conversationId - Conversation ID for backend to load history
-   * @param {Array} enabledTools - Array of tool names to enable
-   * @param {string} systemPrompt - System prompt for the agent
-   * @param {string} modelId - Model ID to use for this request
-   * @param {function} onChunk
-   * @param {function} onComplete
-   * @param {function} onError
-   * @param {function=} onEvent
-   * @param {Object=} userAuth
-   * @returns {function} abort() – remove listeners
-   */
   async streamPrompt(
     prompt: string,
     conversationId: string,
@@ -242,9 +123,7 @@ class ChatAgentWebSocket {
     userAuth: Record<string, unknown> | null = null,
     enabledConnections: string[] = [],
   ): Promise<() => void> {
-    await this.connect();
     this.currentOnEvent = onEvent;
-
     this.responseCallbacks.set('current', (msg) => {
       switch (msg.type) {
         case 'start':
@@ -264,8 +143,7 @@ class ChatAgentWebSocket {
       }
     });
 
-    // Send the prompt with conversationId for backend to load history and enabled connections
-    const messagePayload: Record<string, unknown> = {
+    const payload: ChatAgentRequest = {
       prompt,
       conversationId,
       enabledTools,
@@ -274,51 +152,139 @@ class ChatAgentWebSocket {
       modelId,
     };
 
-    // Add JWT token for backend authentication (backend expects 'jwtToken')
     const idToken = localStorage.getItem('idToken');
-    if (idToken) {
-      messagePayload.jwtToken = idToken;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idToken) headers.Authorization = `Bearer ${idToken}`;
+    if (userAuth) payload.userAuth = userAuth;
+
+    const url = this.getHttpUrl();
+    this.readerAbortController = new AbortController();
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: this.readerAbortController.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`Chat agent HTTP error: ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      // Emit a synthetic start when first bytes arrive if backend start is delayed
+      let started = false;
+      const emitStart = () => {
+        if (!started) {
+          started = true;
+          this.handleFrame({ type: 'start' } as AgentEventFrame, onChunk, onComplete, onError);
+        }
+      };
+
+      // Read stream
+      const pump = async () => {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          emitStart();
+          buffer += decoder.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buffer.indexOf('\n')) >= 0) {
+            const line = buffer.slice(0, idx).trim();
+            buffer = buffer.slice(idx + 1);
+            if (!line) continue;
+            try {
+              const maybe: unknown = JSON.parse(line);
+              // Temporary compatibility: unwrap non-streaming Function URL responses
+              const isApiGwLikeResponse = (v: unknown): v is { statusCode: number | string; body: string } => {
+                if (typeof v !== 'object' || v === null) return false;
+                const obj = v as Record<string, unknown>;
+                return 'statusCode' in obj && typeof obj.body === 'string';
+              };
+
+              if (isApiGwLikeResponse(maybe)) {
+                const inner = maybe.body;
+                inner
+                  .split('\n')
+                  .map((l) => l.trim())
+                  .filter(Boolean)
+                  .forEach((l) => {
+                    try {
+                      const innerFrame = JSON.parse(l) as ChatAgentNdjsonFrame;
+                      this.handleFrame(innerFrame, onChunk, onComplete, onError);
+                    } catch {
+                      console.warn('Invalid inner NDJSON line:', l);
+                    }
+                  });
+                continue;
+              }
+
+              const frame = maybe as ChatAgentNdjsonFrame;
+              this.handleFrame(frame, onChunk, onComplete, onError);
+            } catch {
+              console.warn('Invalid NDJSON line from chat agent:', line);
+            }
+          }
+        }
+        // Flush any trailing line
+        const tail = buffer.trim();
+        if (tail) {
+          try {
+            const maybe: unknown = JSON.parse(tail);
+            const isApiGwLikeResponse = (v: unknown): v is { statusCode: number | string; body: string } => {
+              if (typeof v !== 'object' || v === null) return false;
+              const obj = v as Record<string, unknown>;
+              return 'statusCode' in obj && typeof obj.body === 'string';
+            };
+            if (isApiGwLikeResponse(maybe)) {
+              const inner = maybe.body;
+              inner
+                .split('\n')
+                .map((l) => l.trim())
+                .filter(Boolean)
+                .forEach((l) => {
+                  try {
+                    const innerFrame = JSON.parse(l) as ChatAgentNdjsonFrame;
+                    this.handleFrame(innerFrame, onChunk, onComplete, onError);
+                  } catch {
+                    console.warn('Invalid inner NDJSON line (tail):', l);
+                  }
+                });
+            } else {
+              const frame = maybe as ChatAgentNdjsonFrame;
+              this.handleFrame(frame, onChunk, onComplete, onError);
+            }
+          } catch {
+            // ignore
+          }
+        }
+      };
+
+      pump().catch((err) => {
+        console.error('HTTP streaming pump error', err);
+        onError(err as Error);
+        this.cleanup();
+      });
+    } catch (err) {
+      onError(err as Error);
+      this.cleanup();
     }
 
-    // Add user authentication context if provided
-    if (userAuth) {
-      messagePayload.userAuth = userAuth;
-    }
-
-    this.websocket.send(JSON.stringify(messagePayload));
-    return () => this.cleanup();
-  }
-
-  cleanup(): void {
-    this.responseCallbacks.delete('current');
-    this.currentOnEvent = null;
-  }
-
-  /**
-   * Disconnect the WebSocket
-   */
-  disconnect(): void {
-    if (this.websocket) {
-      this.websocket.close(1000, 'Client disconnect');
-      this.websocket = null;
-    }
-    this.connectionPromise = null;
-    this.responseCallbacks.clear();
-  }
-
-  /**
-   * Check if WebSocket is connected
-   */
-  isConnected(): boolean {
-    return !!this.websocket && this.websocket.readyState === WebSocket.OPEN;
+    return () => {
+      if (this.readerAbortController) this.readerAbortController.abort();
+      this.cleanup();
+    };
   }
 }
 
-// Create a singleton instance
-const chatAgentWS = new ChatAgentWebSocket();
+const chatAgentWS = new ChatAgentHttpStream();
 
 /**
- * Call the Chat Agent with streaming response via WebSocket
+ * Call the Chat Agent with streaming response via HTTP
  * @param {string} prompt - The user's prompt/question
  * @param {string} conversationId - Conversation ID for backend to load history
  * @param {Array} enabledTools - Array of tool names to enable
@@ -360,49 +326,36 @@ export const callChatAgentStreaming = (
 
 /**
  * Check if the Chat Agent is available
- * @returns {boolean} True if the agent WebSocket URL is configured
+ * @returns {boolean} True if the agent streaming endpoint is available
  */
-export const isChatAgentAvailable = (): boolean => {
-  try {
-    chatAgentWS.getWebSocketUrl();
-    return true;
-  } catch {
-    return false;
-  }
-};
+export const isChatAgentAvailable = (): boolean => true;
 
 /**
- * Get the Chat Agent WebSocket URL
- * @returns {string|null} The WebSocket URL or null if not configured
+ * Get the Chat Agent streaming URL
+ * @returns {string|null} The streaming URL or null if not configured
  */
-export const getChatAgentUrl = (): string | null => {
-  try {
-    return chatAgentWS.getWebSocketUrl();
-  } catch {
-    return null;
-  }
-};
+export const getChatAgentUrl = (): string | null => '/api/numa-chat-agent/stream';
 
 /**
- * Manually connect to the WebSocket (optional - connections are automatic)
+ * Manually connect (no-op for HTTP streaming)
  * @returns {Promise} Promise that resolves when connected
  */
 export const connectChatAgent = (): Promise<void> => chatAgentWS.connect();
 
 /**
- * Disconnect from the WebSocket
+ * Disconnect (no-op for HTTP streaming)
  */
 export const disconnectChatAgent = (): void => {
-  chatAgentWS.disconnect();
+  // No persistent connection to close
 };
 
 /**
- * Check if the WebSocket is currently connected
+ * Check if the streaming client is connected (always true for HTTP request-scoped)
  * @returns {boolean} True if connected
  */
 export const isChatAgentConnected = (): boolean => chatAgentWS.isConnected();
 
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {
-  chatAgentWS.disconnect();
+  // Nothing to clean up
 });

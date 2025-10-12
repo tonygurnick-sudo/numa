@@ -117,7 +117,7 @@ export class NumaLambda extends Construct {
       filename,
       functionName: resourceName,
       handler: props.handler ?? 'lambda_function.handler',
-      layers: [...honeycombConfig.layers],
+      layers: [...honeycombConfig.layers, ...(props.additionalLayers ?? [])],
       loggingConfig: {
         logFormat: 'JSON',
         logGroup: props.logGroup.name,
@@ -178,6 +178,7 @@ export interface OTelConfig {
 export interface NumaLambdaProps {
   appId?: string;
   additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
+  additionalLayers?: string[];
   clientName: string;
   environment?: Record<string, string>;
   handler?: string;

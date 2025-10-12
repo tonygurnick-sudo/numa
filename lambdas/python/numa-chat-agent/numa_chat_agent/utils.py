@@ -212,6 +212,26 @@ def convert_tool_blocks_to_text(messages):
     return converted_messages
 
 
+def cleanup_mcp_clients(mcp_clients: List) -> None:
+    """Clean up MCP clients when agent processing is complete.
+
+    Args:
+        mcp_clients: List of MCP clients (context managers) to clean up
+    """
+    if not mcp_clients:
+        return
+
+    logger.debug(f"Cleaning up {len(mcp_clients)} MCP clients")
+
+    for client in reversed(mcp_clients):  # Clean up in reverse order
+        try:
+            client.__exit__(None, None, None)  # type: ignore[arg-type]
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning(f"Error cleaning up MCP client: {e}")
+
+    logger.debug("MCP client cleanup completed")
+
+
 def load_file_content_from_ref(file_ref: Dict[str, Any]) -> str:
     """
     Load file content from S3 using file reference metadata.

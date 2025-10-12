@@ -15,3 +15,7 @@ disable=
 
 [REPORTS]
 msg-template={path}:{line}:{column} [{symbol}] {msg}
+
+[TYPECHECK]
+# Some third-party libs may not be importable in static analysis environments.
+ignored-modules=fastapi,fastapi.responses

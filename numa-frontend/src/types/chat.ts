@@ -313,3 +313,26 @@ export const isToolEventFrame = (f: AgentEventFrame): f is ToolUseRelatedFrame =
     hasStart || hasCurrent || hasDirectResult || arrayTool || hasToolStream || f.type === 'tool_use_complete',
   );
 };
+
+// ---------------------------------------------------------------------------
+// HTTP Streaming API (request/response) types
+// ---------------------------------------------------------------------------
+
+// Body sent to the HTTP streaming endpoint
+export interface ChatAgentRequest {
+  prompt: string;
+  conversationId?: string;
+  enabledTools?: string[];
+  enabledConnections?: string[];
+  systemPrompt?: string;
+  modelId?: string | null;
+  userAuth?: Record<string, unknown> | null;
+}
+
+// NDJSON frames coming back from the HTTP stream
+export type ChatAgentNdjsonFrame =
+  | { type: 'start' }
+  | ({ type: 'event' } & AgentEventFrame)
+  | { type: 'error'; error: string }
+  | { type: 'completion'; status: 'completed' | 'failed' }
+  | { type: 'ping'; ts?: number };

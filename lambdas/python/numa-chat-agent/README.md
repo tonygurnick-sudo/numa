@@ -1,69 +1,58 @@
-# Numa Chat Agent Lambda
+# Numa Chat Agent Lambda (HTTP streaming via LWA)
 
-A modular WebSocket-powered Lambda function for real-time streaming chat with AI capabilities.
+A Python Lambda that provides real-time chat streaming over HTTP using AWS Lambda Web Adapter (LWA) in ZIP mode and a FastAPI app.
 
 ## Overview
 
-This Lambda provides a Step Functions-based agent processing service.
+- Real-time HTTP streaming via Lambda Function URL (NDJSON)
+- LWA (Lambda Web Adapter) ZIP mode; no Docker/ECR required
+- FastAPI/ASGI app with two routes:
+  - `POST /api/numa-chat-agent/stream` – streaming NDJSON response
+  - `POST /api/numa-chat-agent/invoke` – non-streaming JSON response
+- Knowledge sources: Amazon Q Business and Bedrock KB
+- Cognito auth (JWT verification) and CloudFront shared secret enforced
 
-- **Real-time streaming**: WebSocket support for live chat responses
-- **AI-powered agent**: Uses bedrock with streaming capabilities
-- **Dual knowledge sources**: Query knowledge base (Q Business/Bedrock) and web search
-- **Extended execution time**: Runs via Step Functions to avoid 30-second API Gateway timeout
-- **User authentication**: Supports authenticated knowledge base queries
-- **Modular design**: Clean separation of concerns for easy maintenance and testing
+## Key Features
 
-## Architecture
+- Real-time streaming over HTTP (NDJSON) with heartbeat pings (<60s)
+- Non‑streaming invoke endpoint for single‑shot responses
+- Cognito authentication (ID/access token validation against your User Pool)
+- CloudFront shared‑secret enforcement for traffic from your FE domain
+- Conversation history reconstruction from DynamoDB chat history table
+- Knowledge sources: Amazon Q Business and Bedrock Knowledge Base
+- Tooling: query_knowledge_base and web_search; optional MCP/Pipedream integrations
 
-```
-WebSocket Client → ws-stream-initializer → Step Functions → numa-chat-agent
-                                              ↓
-                                         Real-time streaming
-                                              ↓
-                                         WebSocket Client
-```
+### Event Shape (WS‑era compatible)
+
+Streaming frames are passed through in the same style we used over WebSockets. Each frame is emitted as one NDJSON object with a top‑level `type: "event"` plus the original Strands/Bedrock fields. We do not flatten nested Bedrock structures and we do not synthesize `contentBlockDelta` from other fields — the frontend handles both nested and flat shapes.
+
+Key points:
+- Start: `{ "type": "start" }`
+- Events: `{ "type": "event", ...original event... }` (may include nested `event.contentBlockDelta`, top‑level `delta`, tool events, etc.)
+- Heartbeats: `{ "type": "ping", "ts": 1730000000 }` (periodic to keep CloudFront alive)
+- Completion: `{ "type": "completion", "status": "completed" }`
+
+Large/noisy keys such as `messages`, `agent`, or internal traces are dropped from each frame before emitting.
 
 ## Structure
 
 ```
 lambdas/python/numa-chat-agent/
-├── lambda_function.py              # Main Step Functions handler
-├── numa_chat_agent/             # Core package
-│   ├── __init__.py                 # Package exports & agent factory
-│   ├── config.py                   # Environment variables & clients
-│   ├── auth.py                     # User authentication & Q Business
+├── run.sh                          # LWA startup script (handler)
+├── numa_chat_agent/                # Core package
+│   ├── app.py                      # FastAPI app with streaming + invoke routes
+│   ├── __init__.py
+│   ├── auth.py                     # Cognito verification helpers
+│   ├── config.py                   # Env + model config
+│   ├── dynamodb_utils.py           # Conversation history helpers
 │   ├── knowledge_base.py           # Q Business + Bedrock querying
-│   ├── web_search.py               # Google search + scraping
-│   ├── summarization.py            # Claude Haiku content summarization
-│   ├── tools.py                    # Agent tools (@tool decorated functions)
-│   ├── utils.py                    # Retry logic & utilities
-│   └── websocket.py                # WebSocket connection management
+│   ├── web_search.py               # Web search helper
+│   ├── tools.py                    # Tools registry
+│   ├── utils.py                    # Utilities
+│   └── (websocket.py removed)      # Legacy WS support removed after HTTP cutover
 ├── pyproject.toml                  # Poetry dependencies
 └── README.md
 ```
-
-## Key Features
-
-### Tools Available
-1. **`query_knowledge_base`**: Search organizational knowledge base (Q Business or Bedrock)
-2. **`web_search`**: Search the internet for current information
-
-### Dynamic Tool Selection
-Tools can be enabled/disabled dynamically via Step Functions input:
-
-```python
-# Enable specific tools
-enabled_tools = ["query_knowledge_base", "web_search"]
-
-# Easy to add new tools
-from numa_chat_agent.tools import AVAILABLE_TOOLS
-AVAILABLE_TOOLS["new_tool"] = new_tool_function
-```
-
-### Streaming Support
-- Real-time response streaming via WebSocket
-- Supports tool usage with live updates
-- Content summarization using Claude Haiku for efficiency
 
 ## Environment Variables
 
@@ -74,160 +63,71 @@ AVAILABLE_TOOLS["new_tool"] = new_tool_function
 | `Q_RETRIEVER_ID` | Q Business retriever ID | - |
 | `BEDROCK_KNOWLEDGE_BASE_ID` | Bedrock knowledge base ID | - |
 | `PREFERRED_KNOWLEDGE_BASE` | `'q'` or `'bedrock'` | `'q'` |
-| `CONNECTION_TABLE` | DynamoDB table for WebSocket connections | - |
-| `WS_API_ENDPOINT_OVERRIDE` | Override WebSocket endpoint (optional) | - |
+| `CLOUDFRONT_SHARED_SECRET` | Shared secret from CloudFront custom header | required |
+| `AWS_LAMBDA_EXEC_WRAPPER` | Must be `/opt/bootstrap` (LWA ZIP) | set by infra |
+| `AWS_LWA_INVOKE_MODE` | Must be `response_stream` | set by infra |
 
-## Input Format (Step Functions)
+## Input Format
 
+Endpoints (behind CloudFront):
+- `POST /api/numa-chat-agent/stream` – streaming NDJSON response
+- `POST /api/numa-chat-agent/invoke` – non‑streaming JSON response
+
+Required headers:
+- `Authorization: Bearer <cognito-id-token>`
+- `x-arcanum-cloudfront-secret: <secret>` is injected by CloudFront. If calling the Function URL directly for testing, you must supply this header and value (matches `CLOUDFRONT_SHARED_SECRET`).
+
+Request body (JSON):
 ```json
 {
-  "connectionId": "abc123",
-  "requestContext": { "domainName": "xyz.execute-api.region.amazonaws.com" },
-  "prompt": "User's question",
-  "messages": [{"role": "user", "content": "Previous message"}],
+  "prompt": "User's question",                      // required
+  "conversationId": "abc123",                      // optional, loads history
   "enabledTools": ["query_knowledge_base", "web_search"],
-  "systemPrompt": "Custom system instructions",
-  "userAuth": {
-    "idToken": "cognito-id-token",
+  "enabledConnections": ["notion", "slack"],       // optional MCP connections
+  "systemPrompt": "Custom system instructions",    // optional
+  "modelId": "us.anthropic.claude-sonnet-4-20250514-v1:0", // optional override
+  "userAuth": {                                      // optional context override
     "email": "user@example.com",
-    "groups": ["admin"],
-    "groups_config": {...}
+    "groups": ["admin"]
   }
 }
 ```
 
-### Packaging
-
-```bash
-# From lambdas directory
-./package-python-lambda.sh python/numa-chat-agent
+Streaming response (NDJSON): one JSON object per line. Example first/last frames:
+```
+{"type":"start"}
+{"type":"event", "delta":{"text":"Hello"}}
+...
+{"type":"completion","status":"completed"}
 ```
 
-## Configuration
-
-### Knowledge Base Authentication
-
-When user authentication is provided, the lambda:
-1. Assumes a role using the user's Cognito ID token
-2. Creates authenticated Q Business client
-3. Queries knowledge base with user permissions
-
-## Development
-
-### Local Testing
-
-For local development and testing, use the `test_agent_locally.py` script to interact with the agent without deploying to AWS:
-
-```bash
-poetry run python test_agent_locally.py "hello"
-```
-
-#### Requirements
-- AWS profile configured (defaults to `q-demo`)
-- AWS credentials with Bedrock access
-
-#### Usage Examples
-
-**Basic usage:**
-```bash
-poetry run python test_agent_locally.py "What is machine learning?"
-```
-
-**With tools enabled:**
-```bash
-poetry run python test_agent_locally.py "What are some recent AI developments" --tools web_search
-poetry run python test_agent_locally.py "Company policy" --tools query_knowledge_base
-```
-
-**Custom AWS profile:**
-```bash
-poetry run python test_agent_locally.py "Test query" --profile my-profile
-```
-
-#### Example Output
-```
-numa-chat-agent Local Testing Utility
-==================================================
-Using AWS profile: q-demo
-Importing numa-chat-agent components...
-2025-07-02 09:24:15 [info     ] Configuration loaded           bedrock_configured=False model_id=us.anthropic.claude-sonnet-4-20250514-v1:0 preferred_kb=bedrock qb_configured=False region=us-east-1
-2025-07-02 09:24:15 [warning  ] Configuration issues detected  issues=['BEDROCK_KNOWLEDGE_BASE_ID not set but Bedrock is preferred']
-Successfully imported numa-chat-agent
-Creating agent with tools: none
-2025-07-02 09:24:15 [debug    ] Creating fresh agent 8b0c8a45 with MODEL_ID: us.anthropic.claude-sonnet-4-20250514-v1:0
-2025-07-02 09:24:15 [info     ] Creating agent 8b0c8a45 with enabled tools: [], model: us.anthropic.claude-sonnet-4-20250514-v1:0
-2025-07-02 09:24:15 [debug    ] Creating BedrockModel          model_id=us.anthropic.claude-sonnet-4-20250514-v1:0 streaming=True temperature=0.15
-2025-07-02 09:24:15 [info     ] Fresh agent 8b0c8a45 created successfully with 0 tools
-Agent created successfully
-Sending query: hello
-Response:
-------------------------------------------------------------
-Hello! How are you doing today? Is there anything I can help you with?
-------------------------------------------------------------
-Response complete (0 characters)
-
-Test completed successfully
-```
-
-#### Configuration
-The script automatically configures the environment for local testing. To test knowledge base functionality, set these environment variables:
-```bash
-export BEDROCK_KNOWLEDGE_BASE_ID="your-kb-id"
-export Q_APPLICATION_ID="your-q-app-id"
-export Q_RETRIEVER_ID="your-q-retriever-id"
-```
-
-### Adding New Tools
-
-1. **Create implementation function** in appropriate module:
-```python
-# In numa_chat_agent/new_module.py
-def new_tool_impl(param1: str, param2: str):
-    # Implementation here
-    return {"status": "success", "content": [...]}
-```
-
-2. **Add @tool decorator** in `tools.py`:
-```python
-@tool
-def new_tool(param1: str, param2: str):
-    """Tool description for the agent."""
-    return new_tool_impl(param1, param2)
-
-# Register in tool registry
-AVAILABLE_TOOLS["new_tool"] = new_tool
-```
-
-3. **Enable in requests**:
+Non‑streaming response (JSON):
 ```json
-{"enabledTools": ["query_knowledge_base", "web_search", "new_tool"]}
+{ "type": "result", "content": "Hello ...", "stop_reason": "complete" }
 ```
 
-## Error Handling
+## Packaging
 
-### Aurora Database Retry Logic
+```bash
+# From project root or lambdas/
+bash lambdas/package-python-lambda.sh lambdas/python/numa-chat-agent
+```
 
-Includes automatic retry logic for Aurora Serverless auto-pause scenarios:
-- Detects resuming database exceptions
-- Retries with exponential backoff
-- Maximum 20 attempts with 2-second delays
+## Local Testing
 
-## Performance
+Run the FastAPI app locally (bypasses LWA):
 
-### Token Usage Optimization
+```bash
+poetry run uvicorn numa_chat_agent.app:app --host 127.0.0.1 --port 8081
+```
 
-- **Main model**: Claude Sonnet for primary responses
-- **Summarization**: Claude Haiku for cost-effective content summarization
-- **Token tracking**: Logs usage statistics for monitoring
+Test with httpie:
 
-### Content Processing
+```bash
+http :8081/api/numa-chat-agent/invoke Authorization:"Bearer <id-token>" prompt="Hello"
+```
 
-- Web search: Scrapes up to 10,000 characters per page
-- Summarization: Intelligent content condensation
-- Fallback: Original content if summarization fails
+## Notes
 
-## Security
-
-- User authentication via Cognito ID tokens
-- Role-based access to knowledge bases
-- Secure WebSocket connections
+- CloudFront routes `/api/numa-chat-agent/stream` to the Function URL. To expose `/api/numa-chat-agent/invoke` via CloudFront, add that path to the same origin behavior in `infra/constructs/numa-frontend-infra-construct.ts` (e.g., widen to `/api/numa-chat-agent/*`).
+- The legacy WebSocket artifacts remain temporarily and will be removed after full cutover.

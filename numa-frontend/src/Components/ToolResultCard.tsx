@@ -17,10 +17,12 @@ export const ToolResultCard = ({ title = 'Tool result', summary = '', children }
         <strong>{title}</strong>
       </div>
       {!expanded && summary && <div className="card-summary small text-muted mb-1">{summary}</div>}
-      {expanded && <div className="card-body-content">{children}</div>}
-      <div className="show-toggle" onClick={toggle} role="button">
-        {expanded ? '▲ Hide details' : '▼ Show details'}
-      </div>
+      {expanded && children && <div className="card-body-content">{children}</div>}
+      {children && (
+        <div className="show-toggle" onClick={toggle} role="button">
+          {expanded ? '▲ Hide details' : '▼ Show details'}
+        </div>
+      )}
     </div>
   );
 };

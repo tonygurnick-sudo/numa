@@ -28,7 +28,6 @@ describe('ConfigSetup', () => {
     PROVISION_Q_RESOURCES: true,
     PREFERRED_KNOWLEDGE_BASE: 'kb-1',
     BEDROCK_KNOWLEDGE_BASE_ID: 'bedrock-kb-1',
-    CHAT_AGENT_URL: 'wss://chat-agent.test-client-1.example.com',
     GROUPS: {
       admin: { roleArn: 'arn:aws:iam::123:role/admin', features: ['chat'] },
       standard: { roleArn: 'arn:aws:iam::123:role/standard', features: ['chat'] },
@@ -48,7 +47,6 @@ describe('ConfigSetup', () => {
     PROVISION_Q_RESOURCES: false,
     PREFERRED_KNOWLEDGE_BASE: 'kb-2',
     BEDROCK_KNOWLEDGE_BASE_ID: 'bedrock-kb-2',
-    CHAT_AGENT_URL: 'wss://chat-agent.test-client-2.example.com',
   };
 
   const CACHE_DURATION_TIMER = 2 * 60 * 60 * 1000; // 2 hours
@@ -266,7 +264,7 @@ describe('ConfigSetup', () => {
       mockSessionStorage.PROVISION_Q_RESOURCES = 'true';
       mockSessionStorage.PREFERRED_KNOWLEDGE_BASE = 'kb-1';
       mockSessionStorage.BEDROCK_KNOWLEDGE_BASE_ID = 'bedrock-kb-1';
-      mockSessionStorage.CHAT_AGENT_URL = 'wss://chat-agent.example.com';
+      // No CHAT_AGENT_URL required anymore
       mockSessionStorage.GROUPS = JSON.stringify({
         admin: { roleArn: 'arn:aws:iam::123:role/admin', features: ['chat'] },
         standard: { roleArn: 'arn:aws:iam::123:role/standard', features: ['chat'] },

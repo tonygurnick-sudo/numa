@@ -54,6 +54,8 @@ export const NumaIntegrations = () => {
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
   // Version removed: last-write-wins policy
   const [recentlyConnectedApp, setRecentlyConnectedApp] = useState<string | null>(null);
+  // Track per-app default policy application in-flight to avoid race in Settings
+  const [defaultsApplying, setDefaultsApplying] = useState<Record<string, boolean>>({});
   // Global admin integration settings
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
   const lambdaInitializedRef = useRef(false);
@@ -214,6 +216,7 @@ export const NumaIntegrations = () => {
           }
           // Apply default tool policy (deny list) immediately after connection
           try {
+            setDefaultsApplying((prev) => ({ ...prev, [appName]: true }));
             const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
             const defaults = getDefaultDenyTools(appName);
             if (defaults.length > 0) {
@@ -243,6 +246,8 @@ export const NumaIntegrations = () => {
             }
           } catch (e) {
             console.warn('Failed to apply default tool policy after connection', e);
+          } finally {
+            setDefaultsApplying((prev) => ({ ...prev, [appName]: false }));
           }
           // Show post-connection guidance
           setRecentlyConnectedApp(appName);
@@ -467,21 +472,23 @@ export const NumaIntegrations = () => {
                       placement="top"
                       overlay={
                         <Tooltip>
-                          For better security and performance, review each integration&apos;s Settings to enable only
-                          the tools you need. Fewer enabled tools means more focused AI responses and enhanced data
-                          protection.
+                          {defaultsApplying[integration.name_slug]
+                            ? 'Applying default tool policy...'
+                            : "For better security and performance, review each integration's Settings to enable only the tools you need. Fewer enabled tools means more focused AI responses and enhanced data protection."}
                         </Tooltip>
                       }
                     >
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => openSettings(integration.name_slug)}
-                        disabled={isConnecting}
-                      >
-                        <i className="bi bi-sliders me-2"></i>
-                        Settings
-                      </Button>
+                      <span>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => openSettings(integration.name_slug)}
+                          disabled={isConnecting || !!defaultsApplying[integration.name_slug]}
+                        >
+                          <i className="bi bi-sliders me-2"></i>
+                          {defaultsApplying[integration.name_slug] ? 'Please wait…' : 'Settings'}
+                        </Button>
+                      </span>
                     </OverlayTrigger>
                     <Button
                       variant="outline-secondary"

@@ -76,6 +76,12 @@ popd
 rm -rf "${BUILD_DIR:?}/bin"
 find "${BUILD_DIR}" -type d -name "*.dist-info" -not -name '*opentelemetry*' -not -name '*mcp*' -not -name '*prompt_toolkit*' -exec rm -r "{}" +
 
+# If a startup script (for LWA ZIP mode) exists in the lambda directory, include it at the ZIP root
+if test -f "${LAMBDA_DIRECTORY}/run.sh"; then
+    cp "${LAMBDA_DIRECTORY}/run.sh" "${BUILD_DIR}/run.sh"
+    chmod +x "${BUILD_DIR}/run.sh"
+fi
+
 # make sure full history is available to make git log reliable
 if test -f "${GIT_DIR}/shallow"; then
     git fetch --unshallow

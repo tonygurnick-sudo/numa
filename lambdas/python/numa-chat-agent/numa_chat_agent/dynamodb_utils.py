@@ -24,17 +24,17 @@ class NumaChatDynamoUtils:
         self.region = region or os.environ.get("AWS_REGION", "us-east-1")
         self.dynamodb = boto3.client("dynamodb", region_name=self.region)
 
-        # Determine table name by extracting client name from CONNECTION_TABLE
-        # This follows the same naming pattern as the frontend
-        connection_table = os.environ.get("CONNECTION_TABLE", "")
-        if connection_table:
-            # Extract client name from connection table: "client-chat-agent-connections" -> "client"
-            client_name = connection_table.replace("-chat-agent-connections", "")
-            # Chat history table follows pattern: "numa-{client}-chat-history"
-            self.table_name = f"numa-{client_name}-chat-history"
+        # Determine table name explicitly via environment, then fall back to client name
+        explicit_table = os.environ.get("CHAT_HISTORY_TABLE")
+        if explicit_table:
+            self.table_name = explicit_table
         else:
-            # Default table name if CONNECTION_TABLE is not set
-            self.table_name = "numa-chat-history"
+            client_name = os.environ.get("CLIENT_NAME", "")
+            if client_name:
+                self.table_name = f"numa-{client_name}-chat-history"
+            else:
+                # Final fallback for safety (should not be used in managed stacks)
+                self.table_name = "numa-chat-history"
 
         logger.info(
             "Initialized DynamoDB utils", table_name=self.table_name, region=self.region
@@ -71,6 +71,7 @@ class NumaChatDynamoUtils:
                     ":u": {"S": user_id},
                     ":c": {"S": f"{conversation_id}#"},
                 },
+                ConsistentRead=True,
                 ScanIndexForward=False,  # Sort descending by SK (newest first)
                 Limit=limit,
             )
