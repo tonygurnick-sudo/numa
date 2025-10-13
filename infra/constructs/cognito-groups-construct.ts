@@ -1,5 +1,6 @@
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
 import { z } from 'zod';
@@ -398,7 +399,13 @@ export class CognitoGroupsConstruct extends Construct {
     });
 
     // Create a managed policy, store it in the featureSetPolicies object to attach it to the role
+    let manageBrandingStatements: PolicyStatement[] = [];
+
     for (const [featureSetName, policyStatements] of Object.entries(featureSets)) {
+      if (featureSetName === 'manageBranding') {
+        manageBrandingStatements = policyStatements;
+        continue;
+      }
       // Skip creating policy if no statements (avoids AWS MalformedPolicyDocument error)
       if (policyStatements.length === 0) {
         continue;
@@ -537,6 +544,18 @@ export class CognitoGroupsConstruct extends Construct {
             role: groupRole.name,
           });
         }
+      }
+
+      if (groups[groupName].includes('manageBranding') && manageBrandingStatements.length > 0) {
+        const manageBrandingDoc = new DataAwsIamPolicyDocument(this, `${groupName}-manage-branding-inline-doc`, {
+          statement: manageBrandingStatements,
+        });
+
+        new IamRolePolicy(this, `${groupName}-manage-branding-inline`, {
+          name: `${numaClient}-${groupName}-manage-branding-inline`,
+          role: groupRole.name,
+          policy: manageBrandingDoc.json,
+        });
       }
 
       // Store the role for this group
