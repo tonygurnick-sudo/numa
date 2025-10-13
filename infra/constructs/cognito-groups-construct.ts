@@ -46,6 +46,7 @@ const createFeatureSets = (props: {
   companyBucket: BucketType;
   dataBucket: BucketType;
   qBusinessApplicationId?: string;
+  brandingTable?: TableType;
   knowledgeBase: KnowledgeBase;
   pipedreamRelayLambdaArn?: string;
 }): Record<string, PolicyStatement[]> => ({
@@ -233,6 +234,28 @@ const createFeatureSets = (props: {
     },
   ],
 
+  // Branding read access
+  brandingRead: props.brandingTable?.arn
+    ? [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
+          resources: [props.brandingTable.arn],
+        },
+      ]
+    : [],
+
+  // Branding management (admin)
+  manageBranding: props.brandingTable?.arn
+    ? [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
+          resources: [props.brandingTable.arn],
+        },
+      ]
+    : [],
+
   // Manage Users Feature Set
   manageUsers: [
     {
@@ -297,6 +320,7 @@ const dummyProps: {
   companyBucket: BucketType;
   dataBucket: BucketType;
   knowledgeBase: KnowledgeBase;
+  brandingTable?: TableType;
 } = {
   callerAccountId: '123',
   region: 'fake-region-1',
@@ -321,6 +345,7 @@ export const cognitoGroupsConstructPropsSchema = z.object({
   outputsBucket: bucketSchema,
   companyBucket: bucketSchema,
   chatHistoryTable: tableSchema,
+  brandingTable: tableSchema.optional(),
   qBusinessApplicationId: z.string().optional(), // Add optional Q Business application ID
   groups: z.record(z.string(), z.array(z.enum(FEATURE_SET_NAMES as [FeatureSetName, ...FeatureSetName[]]))).optional(),
   pipedreamIntegrations: z.boolean().optional().default(false),
@@ -340,7 +365,15 @@ export class CognitoGroupsConstruct extends Construct {
     // Define the groups and their feature sets
     const defaultGroups: Record<string, FeatureSetName[]> = {
       // The standard group should always be the least privileged group of all groups
-      standard: ['chat', 'useCompanyData', 'useApps', 'addToCompanyData', 'selfService', 'pipedreamIntegration'],
+      standard: [
+        'chat',
+        'useCompanyData',
+        'useApps',
+        'addToCompanyData',
+        'selfService',
+        'pipedreamIntegration',
+        'brandingRead',
+      ],
       admin: FEATURE_SET_NAMES as FeatureSetName[],
     };
 
@@ -356,6 +389,7 @@ export class CognitoGroupsConstruct extends Construct {
       userPoolId: props.userPoolId,
       outputsBucket: props.outputsBucket,
       chatHistoryTable: props.chatHistoryTable,
+      brandingTable: props.brandingTable,
       companyBucket: props.companyBucket,
       dataBucket: props.dataBucket,
       qBusinessApplicationId: props.qBusinessApplicationId,

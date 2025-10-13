@@ -59,6 +59,7 @@ export class CoreNumaInfra extends Construct {
   readonly otelConfigPath: string;
   readonly dataBucket: NumaCorsEnabledBucket;
   readonly chatHistoryTable: DynamodbTable;
+  readonly brandingTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
@@ -263,6 +264,28 @@ export class CoreNumaInfra extends Construct {
           type: 'S',
         },
       ],
+    });
+
+    this.brandingTable = new DynamodbTable(this, 'numa-branding-config-table', {
+      name: `${numaClient}-branding-config`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'client_id',
+      rangeKey: 'config_id',
+      attribute: [
+        {
+          name: 'client_id',
+          type: 'S',
+        },
+        {
+          name: 'config_id',
+          type: 'S',
+        },
+      ],
+      tags: {
+        Name: `${numaClient}-branding-config`,
+        Environment: props.environmentName,
+        Purpose: 'branding-config',
+      },
     });
 
     // Create config bucket and otel config
@@ -816,6 +839,7 @@ export class CoreNumaInfra extends Construct {
       pipedreamIntegrations: props.pipedreamIntegrations,
       pipedreamRelayLambdaArn: pipedreamRelayLambda?.lambda.arn,
       qBusinessApplicationId: qBusinessApplicationIdForIdp,
+      brandingTable: this.brandingTable,
       knowledgeBase: props.knowledgeBase,
     });
 

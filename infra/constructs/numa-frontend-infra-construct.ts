@@ -37,6 +37,7 @@ export class NumaFrontendInfra extends Construct {
   readonly authorizer: Apigatewayv2Authorizer;
   readonly frontendBucket: S3Bucket;
   readonly distribution: CloudfrontDistribution;
+  readonly brandingAssetsPrefix = 'branding/';
   readonly cloudfrontSecretParameter: SsmParameter;
 
   constructor(scope: Construct, name: string, props: NumaFrontendInfraProps) {
@@ -83,6 +84,12 @@ export class NumaFrontendInfra extends Construct {
       key: 'q',
       content: `<html><body><iframe src="${props.webExUrl}" frameborder="0" style="overflow:hidden;height:100%;width:100%" height="100%" width="100%"></iframe></body></html>`,
       contentType: 'text/html; charset=utf-8',
+    });
+
+    new S3Object(this, 'branding-prefix-placeholder', {
+      bucket: this.frontendBucket.bucket,
+      key: `${this.brandingAssetsPrefix}.keep`,
+      content: 'placeholder',
     });
 
     this.apiGateway = new Apigatewayv2Api(this, 'api-gw', {
@@ -402,6 +409,10 @@ export class NumaFrontendInfra extends Construct {
 
     new TerraformOutput(this, 'domain', {
       value: certificate.domainName,
+    });
+
+    new TerraformOutput(this, 'branding-prefix', {
+      value: this.brandingAssetsPrefix,
     });
   }
 }
