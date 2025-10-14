@@ -298,11 +298,12 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   }
 
   /**
-   * Generate a unique state name prefix to avoid duplicate state names in Step Functions
-   * @returns A unique string to use as a prefix for state names
+   * Generate a stable state name prefix to avoid duplicate state names in Step Functions
+   * without causing diffs on every synth.
    */
-  protected getUniqueStateNamePrefix(): string {
-    return `${Math.random().toString(36).substring(2, 8)}_`;
+  protected getStableStateNamePrefix(seed: string): string {
+    const cleaned = (seed || 'STATE').toString().replace(/[^A-Za-z0-9_]/g, '_');
+    return `${cleaned}_`;
   }
 
   // Write status to either S3 or DynamoDB based on configuration
@@ -331,7 +332,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
           S: statusValue,
         },
         ':lastUpdated': {
-          S: new Date().toISOString(),
+          'S.$': '$$.State.EnteredTime',
         },
       };
 
@@ -355,8 +356,8 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         };
       }
 
-      // Get a unique state name prefix to avoid duplicate state names
-      const statePrefix = this.getUniqueStateNamePrefix();
+      // Use a stable state name prefix derived from the status value to avoid perpetual diffs
+      const statePrefix = this.getStableStateNamePrefix(statusValue);
 
       // Create a state machine that handles both job_id and original_job_id
       return {
