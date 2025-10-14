@@ -84,7 +84,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
       typicalDurationMinutes: 5,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const policyStatements = [
       {
@@ -123,14 +123,14 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
           },
           Next: 'ExtractApplicationContent',
         },
-        ExtractApplicationContent: this.addExtractContentTask(
-          extractContentLambda,
+        ExtractApplicationContent: this.addExtractContentTaskWithArn(
+          props.sharedExtractContentLambdaArn!,
           '$.input_key',
           'ExtractRfpReferenceContent',
         ),
         ExtractRfpReferenceContent: {
           Type: 'Task',
-          Resource: extractContentLambda.arn,
+          Resource: props.sharedExtractContentLambdaArn!,
           ResultPath: '$.rfp_reference_extracted',
           Parameters: {
             app_id: this.appId,
@@ -180,12 +180,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
         {
           actions: ['lambda:InvokeFunction'],
           effect: 'Allow',
-          resources: [extractContentLambda.arn, rfpAssessmentLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          effect: 'Allow',
-          resources: [extractContentLambda.role, rfpAssessmentLambda.role],
+          resources: [props.sharedExtractContentLambdaArn!, rfpAssessmentLambda.arn],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),

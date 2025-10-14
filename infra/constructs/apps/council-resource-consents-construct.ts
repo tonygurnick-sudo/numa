@@ -68,7 +68,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
       typicalDurationMinutes: 3,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const analyzeDocumentsLambdaPolicyStatements = [
       {
@@ -118,7 +118,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
             StartAt: 'ExtractCouncilReferenceContent',
             States: {
               ExtractCouncilReferenceContent: this.addLambdaTask(
-                extractContentLambda.arn,
+                props.sharedExtractContentLambdaArn!,
                 {
                   'input_key.$': '$.key',
                   'output_key.$': `States.Format('${this.appId}/{}/{}/{}${extractedSuffix}', $$.Execution.Input.user_id, $$.Execution.Input.job_id, $.key)`,
@@ -146,7 +146,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
           Next: 'ExtractApplicationContent',
         },
         ExtractApplicationContent: this.addLambdaTask(
-          extractContentLambda.arn,
+          props.sharedExtractContentLambdaArn!,
           {
             'input_key.$': '$.application[0].s3_key',
             'output_key.$': `States.Format('${this.appId}/{}/{}/{}${extractedSuffix}', $$.Execution.Input.user_id, $$.Execution.Input.job_id, $.application[0].s3_key)`,
@@ -191,11 +191,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
       additionalPolicyStatements: [
         {
           actions: ['lambda:InvokeFunction'],
-          resources: [extractContentLambda.arn, analyzeDocumentsLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          resources: [extractContentLambda.role, analyzeDocumentsLambda.role],
+          resources: [props.sharedExtractContentLambdaArn!, analyzeDocumentsLambda.arn],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),

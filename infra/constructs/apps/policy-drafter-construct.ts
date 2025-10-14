@@ -85,7 +85,7 @@ export class PolicyDrafter extends BaseNumaApp {
       typicalDurationMinutes: 3,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const policyDrafterLambdaPolicyStatements = [
       {
@@ -142,7 +142,11 @@ export class PolicyDrafter extends BaseNumaApp {
           ResultPath: '$.extracted',
           Next: 'PolicyDrafter',
         },
-        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.example_policy_key', 'PolicyDrafter'),
+        ExtractContent: this.addExtractContentTaskWithArn(
+          props.sharedExtractContentLambdaArn!,
+          '$.example_policy_key',
+          'PolicyDrafter',
+        ),
         PolicyDrafter: this.addLambdaTask(
           policyDrafterLambda.arn,
           {
@@ -175,11 +179,7 @@ export class PolicyDrafter extends BaseNumaApp {
       additionalPolicyStatements: [
         {
           actions: ['lambda:InvokeFunction'],
-          resources: [extractContentLambda.arn, policyDrafterLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          resources: [extractContentLambda.role, policyDrafterLambda.role],
+          resources: [props.sharedExtractContentLambdaArn!, policyDrafterLambda.arn],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),

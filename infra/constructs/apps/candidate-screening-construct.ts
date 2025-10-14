@@ -75,7 +75,7 @@ export class CandidateScreening extends BaseNumaApp {
       typicalDurationMinutes: 3,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const candidateScreeningLambdaPolicyStatements = [
       {
@@ -155,7 +155,7 @@ export class CandidateScreening extends BaseNumaApp {
             StartAt: 'ExtractResumeContent',
             States: {
               ExtractResumeContent: this.addLambdaTask(
-                extractContentLambda.arn,
+                props.sharedExtractContentLambdaArn!,
                 {
                   input_bucket: props.outputsBucket.bucket,
                   'input_key.$': '$.resume_key',
@@ -241,11 +241,7 @@ export class CandidateScreening extends BaseNumaApp {
       additionalPolicyStatements: [
         {
           actions: ['lambda:InvokeFunction'],
-          resources: [extractContentLambda.arn, candidateScreeningLambda.arn, aggregatorLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          resources: [extractContentLambda.role, candidateScreeningLambda.role, aggregatorLambda.role],
+          resources: [props.sharedExtractContentLambdaArn!, candidateScreeningLambda.arn, aggregatorLambda.arn],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),

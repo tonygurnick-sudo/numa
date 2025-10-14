@@ -66,7 +66,7 @@ export class RfpResponseComparison extends BaseNumaApp {
       typicalDurationMinutes: 3,
     };
 
-    const extract = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
     const compareLambda = this.addLambdaFunction(this, 'compare', {
       additionalPolicyStatements: [
         {
@@ -112,7 +112,7 @@ export class RfpResponseComparison extends BaseNumaApp {
             StartAt: 'Extract',
             States: {
               Extract: this.addLambdaTask(
-                extract.arn,
+                props.sharedExtractContentLambdaArn!,
                 {
                   input_bucket: props.outputsBucket.bucket,
                   'input_key.$': '$.s3_key',
@@ -169,11 +169,7 @@ export class RfpResponseComparison extends BaseNumaApp {
     this.addStepFunction(this, 'main', {
       outputsBucket: props.outputsBucket,
       additionalPolicyStatements: [
-        {
-          actions: ['lambda:InvokeFunction'],
-          resources: [extract.arn, compareLambda.arn],
-        },
-        { actions: ['iam:PassRole'], resources: [extract.role, compareLambda.role] },
+        { actions: ['lambda:InvokeFunction'], resources: [props.sharedExtractContentLambdaArn!, compareLambda.arn] },
       ],
       stepFunctionDefinition: JSON.stringify(stepDef),
       urlPath: 'main',

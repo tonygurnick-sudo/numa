@@ -46,6 +46,7 @@
     "allApps": true,
     "preferredKnowledgeBase": "bedrock",
     "allowBedrockQuotaSharing": false,
-    "pipedreamIntegrations": true
+    "pipedreamIntegrations": true,
+    "vectorStorageType": "s3vectors"
   }
 }

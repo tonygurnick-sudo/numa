@@ -70,7 +70,7 @@ export class GdsrAssessment extends BaseNumaApp {
       typicalDurationMinutes: 3,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const assessGdsrLambdaPolicyStatements = [
       {
@@ -106,7 +106,11 @@ export class GdsrAssessment extends BaseNumaApp {
           },
           Next: 'ExtractContent',
         },
-        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.application_key', 'CheckSupportingData'),
+        ExtractContent: this.addExtractContentTaskWithArn(
+          props.sharedExtractContentLambdaArn!,
+          '$.application_key',
+          'CheckSupportingData',
+        ),
         CheckSupportingData: {
           Type: 'Choice',
           Choices: [
@@ -118,8 +122,8 @@ export class GdsrAssessment extends BaseNumaApp {
           ],
           Default: 'GdsrAssessmentWithoutSupportingData',
         },
-        ExtractSupportingData: this.addExtractContentTask(
-          extractContentLambda,
+        ExtractSupportingData: this.addExtractContentTaskWithArn(
+          props.sharedExtractContentLambdaArn!,
           '$$.Execution.Input.supporting_data[0].s3_key',
           'GdsrAssessmentWithSupportingData',
           {
@@ -172,12 +176,7 @@ export class GdsrAssessment extends BaseNumaApp {
         {
           actions: ['lambda:InvokeFunction'],
           effect: 'Allow',
-          resources: [extractContentLambda.arn, assessGdsrLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          effect: 'Allow',
-          resources: [extractContentLambda.role, assessGdsrLambda.role],
+          resources: [props.sharedExtractContentLambdaArn!, assessGdsrLambda.arn],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),

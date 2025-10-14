@@ -51,7 +51,7 @@ export class FinancialAnalysis extends BaseNumaApp {
       typicalDurationMinutes: 3,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const extractFinancialDataLambdaPolicyStatements = [
       {
@@ -122,7 +122,7 @@ export class FinancialAnalysis extends BaseNumaApp {
             StartAt: 'ExtractContent',
             States: {
               ExtractContent: this.addLambdaTask(
-                extractContentLambda.arn,
+                props.sharedExtractContentLambdaArn!,
                 {
                   'input_key.$': '$.key',
                   'output_key.$': `States.Format('${this.appId}/{}/{}/extracted/{}.json', $.user_id, $.job_id, States.ArrayGetItem($.key_parts[-1:], 0))`,
@@ -197,11 +197,11 @@ export class FinancialAnalysis extends BaseNumaApp {
       additionalPolicyStatements: [
         {
           actions: ['lambda:InvokeFunction'],
-          resources: [extractContentLambda.arn, extractFinancialDataLambda.arn, financialAnalysisLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          resources: [extractContentLambda.role, extractFinancialDataLambda.role, financialAnalysisLambda.role],
+          resources: [
+            props.sharedExtractContentLambdaArn!,
+            extractFinancialDataLambda.arn,
+            financialAnalysisLambda.arn,
+          ],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),

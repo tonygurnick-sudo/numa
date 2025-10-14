@@ -56,7 +56,7 @@ export class TorAssessment extends BaseNumaApp {
       typicalDurationMinutes: 3,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const assessTorLambdaPolicyStatements = [
       {
@@ -92,7 +92,11 @@ export class TorAssessment extends BaseNumaApp {
           },
           Next: 'ExtractContent',
         },
-        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.tor_document_key', 'TorAssessment'),
+        ExtractContent: this.addExtractContentTaskWithArn(
+          props.sharedExtractContentLambdaArn!,
+          '$.tor_document_key',
+          'TorAssessment',
+        ),
         TorAssessment: this.addLambdaTask(
           assessTorLambda.arn,
           {
@@ -125,12 +129,7 @@ export class TorAssessment extends BaseNumaApp {
         {
           actions: ['lambda:InvokeFunction'],
           effect: 'Allow',
-          resources: [extractContentLambda.arn, assessTorLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          effect: 'Allow',
-          resources: [extractContentLambda.role, assessTorLambda.role],
+          resources: [props.sharedExtractContentLambdaArn!, assessTorLambda.arn],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
