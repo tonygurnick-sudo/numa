@@ -1,5 +1,6 @@
 # pylint: disable=protected-access
 import dataclasses
+import io
 import os
 import sys
 import unittest
@@ -45,7 +46,17 @@ haiku_mock.extract_content = unittest.mock.Mock()
 
 sys.modules["fm_vision_extraction"] = haiku_mock
 
-# Import must be after sys.modules setup
+# Import docx modules after mocks are set up - they're conditionally available in tests
+try:
+    import docx  # noqa: F401 # pylint: disable=unused-import
+    from docx import Document as DocxDoc
+    from docx.enum.text import WD_BREAK
+
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+    DocxDoc = object  # type: ignore[misc, assignment]
+    WD_BREAK = object()  # type: ignore[misc, assignment]
 
 
 class TestException(Exception):
@@ -198,6 +209,49 @@ class TestLambdaFunction(unittest.TestCase):
             )
             # Should be called 3 times: initial status, main output, final status
             self.assertEqual(mock_s3_client.put_object.call_count, 3)
+
+    def test_extract_docx_pages_includes_table_text(self):
+        """DOCX extraction should capture table content."""
+        if not DOCX_AVAILABLE:
+            self.skipTest("python-docx not available")
+
+        buffer = io.BytesIO()
+        doc = DocxDoc()  # type: ignore[misc]
+        doc.add_paragraph("Intro paragraph")  # type: ignore[attr-defined]
+        table = doc.add_table(rows=2, cols=2)  # type: ignore[attr-defined]
+        table.cell(0, 0).text = "Label"
+        table.cell(0, 1).text = "Value"
+        table.cell(1, 0).text = "Notes"
+        table.cell(1, 1).text = "More detail"
+        doc.add_paragraph("Closing paragraph")  # type: ignore[attr-defined]
+        doc.save(buffer)  # type: ignore[attr-defined]
+
+        pages = lambda_function.extract_docx_pages(buffer.getvalue())
+
+        self.assertIn("Intro paragraph", pages[1])
+        self.assertIn("Label | Value", pages[1])
+        self.assertIn("Notes | More detail", pages[1])
+        self.assertIn("Closing paragraph", pages[1])
+
+    def test_extract_docx_pages_splits_table_on_page_break(self):
+        """A page break inside a table cell should start a new page."""
+        if not DOCX_AVAILABLE:
+            self.skipTest("python-docx not available")
+
+        buffer = io.BytesIO()
+        doc = DocxDoc()  # type: ignore[misc]
+        table = doc.add_table(rows=1, cols=1)  # type: ignore[attr-defined]
+        paragraph = table.cell(0, 0).paragraphs[0]
+        paragraph.add_run("First page content")
+        paragraph.add_run().add_break(WD_BREAK.PAGE)  # type: ignore[attr-defined]
+        paragraph.add_run("Second page content")
+        doc.save(buffer)  # type: ignore[attr-defined]
+
+        pages = lambda_function.extract_docx_pages(buffer.getvalue())
+
+        self.assertIn("First page content", pages[1])
+        self.assertNotIn("Second page content", pages[1])
+        self.assertIn("Second page content", pages[2])
 
     @patch("lambda_function.aws_transcribe")
     @patch("lambda_function.s3_client")
