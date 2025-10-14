@@ -7,11 +7,15 @@ import json
 import os
 import pathlib
 import time
-from typing import List, Sequence, TypeVar
+from typing import Iterator, List, Sequence, TypeVar
 
 import boto3
 import docx
 import structlog
+from docx.document import Document as DocxDocument
+from docx.oxml.ns import qn
+from docx.table import Table, _Cell, _Row  # pylint: disable=protected-access
+from docx.text.paragraph import Paragraph
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from opentelemetry import trace
@@ -327,6 +331,105 @@ def _document_to_string(document: Document) -> str:
     return "\n".join(page.text for page in document.pages) + "\n"
 
 
+def _iter_block_items(parent: DocxDocument | _Cell) -> Iterator[Paragraph | Table]:
+    """
+    Yield paragraphs and tables from a document or table cell in the order
+    they appear. This lets us walk the document body while also capturing
+    table content.
+    """
+    if isinstance(parent, DocxDocument):
+        parent_element = parent.element.body
+    else:
+        parent_element = parent._tc  # pylint: disable=protected-access
+
+    for child in parent_element.iterchildren():
+        if child.tag == qn("w:p"):
+            yield Paragraph(child, parent)
+        elif child.tag == qn("w:tbl"):
+            yield Table(child, parent)
+
+
+def _append_to_segment(segments: list[str], text: str) -> None:
+    """Append text to the current segment, inserting a newline when needed."""
+    if not text:
+        return
+    if segments[-1]:
+        segments[-1] += "\n" + text
+    else:
+        segments[-1] = text
+
+
+def _paragraph_text_segments(paragraph: Paragraph) -> list[str]:
+    """
+    Split a paragraph into segments around page breaks so we can keep text
+    after the break with the following page.
+    """
+    segments = [""]
+    for element in paragraph._element.iter():  # pylint: disable=protected-access
+        if element.tag == qn("w:t"):
+            text = element.text or ""
+            if text:
+                segments[-1] += text
+        elif element.tag == qn("w:br") and element.get(qn("w:type")) == "page":
+            segments.append("")
+        elif element.tag == qn("w:lastRenderedPageBreak"):
+            segments.append("")
+    return segments
+
+
+def _collect_cell_segments(cell: _Cell) -> list[str]:
+    """Collect text segments from a table cell while respecting page breaks."""
+    segments = [""]
+    for block in _iter_block_items(cell):
+        if isinstance(block, Paragraph):
+            paragraph_segments = _paragraph_text_segments(block)
+            for index, segment in enumerate(paragraph_segments):
+                _append_to_segment(segments, segment)
+                if index < len(paragraph_segments) - 1:
+                    segments.append("")
+        elif isinstance(block, Table):
+            table_segments = _collect_table_segments(block)
+            for index, segment in enumerate(table_segments):
+                _append_to_segment(segments, segment)
+                if index < len(table_segments) - 1:
+                    segments.append("")
+    return segments
+
+
+def _collect_row_segments(row: _Row) -> list[str]:
+    """Combine the segments from each cell in a row."""
+    cell_segments = [_collect_cell_segments(cell) for cell in row.cells]
+    if not cell_segments:
+        return [""]
+
+    max_segments = max(len(segments) for segments in cell_segments)
+    row_segments: list[str] = []
+    for segment_index in range(max_segments):
+        row_cells: list[str] = []
+        for segments in cell_segments:
+            if segment_index < len(segments):
+                text = segments[segment_index]
+                if text:
+                    row_cells.append(text)
+            else:
+                row_cells.append("")
+        joined = " | ".join(cell_text for cell_text in row_cells if cell_text)
+        row_segments.append(joined)
+    return row_segments
+
+
+def _collect_table_segments(table: Table) -> list[str]:
+    """Collect segments for an entire table based on row/cell segments."""
+    segments = [""]
+    for row in table.rows:
+        row_segments = _collect_row_segments(row)
+        for index, segment in enumerate(row_segments):
+            _append_to_segment(segments, segment)
+            if index < len(row_segments) - 1:
+                segments.append("")
+    return segments
+
+
 @tracer.start_as_current_span("extract_docx_pages")
 def extract_docx_pages(file_content: bytes) -> dict[int, str]:
     """
@@ -335,32 +438,41 @@ def extract_docx_pages(file_content: bytes) -> dict[int, str]:
     If no page breaks are found, the document is treated as a single page.
     """
     doc = docx.Document(io.BytesIO(file_content))
-    pages = []
-    current_page = []
+    pages: list[str] = []
+    current_lines: list[str] = []
 
-    for para in doc.paragraphs:
-        # Look for a page break element: <w:br w:type="page"/>
-        # pylint: disable=protected-access
-        if (
-            para._element.find('.//w:br[@w:type="page"]', para._element.nsmap)
-            is not None
-        ):
-            current_page.append(para.text)
-            pages.append("\n".join(current_page))
-            current_page = []
-        else:
-            current_page.append(para.text)
+    def flush_page(force: bool = False) -> None:
+        if not current_lines:
+            if force:
+                pages.append("")
+            return
 
-    if current_page:
-        pages.append("\n".join(current_page))
+        if not force and not any(line.strip() for line in current_lines):
+            current_lines.clear()
+            return
 
-    # If no manual page breaks were found, treat the entire document as one page.
-    if not pages:
-        pages = ["\n".join([p.text for p in doc.paragraphs if p.text.strip()])]
+        pages.append("\n".join(current_lines))
+        current_lines.clear()
 
-    # Create a dictionary mapping page numbers to page text.
-    docx_pages = dict(enumerate(pages, start=1))
-    return docx_pages
+    for block in _iter_block_items(doc):
+        if isinstance(block, Paragraph):
+            segments = _paragraph_text_segments(block)
+            for index, segment in enumerate(segments):
+                current_lines.append(segment)
+                if index < len(segments) - 1:
+                    flush_page()
+        elif isinstance(block, Table):
+            segments = _collect_table_segments(block)
+            for index, segment in enumerate(segments):
+                if segment:
+                    current_lines.append(segment)
+                if index < len(segments) - 1:
+                    flush_page()
+
+    if current_lines or not pages:
+        flush_page(force=not pages)
+
+    return dict(enumerate(pages, start=1))
 
 
 def _get_excel_column_name(col_index: int) -> str:
