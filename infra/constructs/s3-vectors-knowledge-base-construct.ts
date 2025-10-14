@@ -10,7 +10,6 @@ import { DataAwsS3Bucket } from '@cdktf/provider-aws/lib/data-aws-s3-bucket';
 import { S3BucketPolicy } from '@cdktf/provider-aws/lib/s3-bucket-policy';
 import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
 import { SchedulerSchedule } from '@cdktf/provider-aws/lib/scheduler-schedule';
-import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
 import { StateMachine } from 'asl-types';
 import { Fn } from 'cdktf';
 import path from 'node:path';
@@ -393,9 +392,9 @@ export class S3VectorsKnowledgeBase extends Construct {
       }).json,
     });
 
-    new IamRolePolicyAttachmentsExclusive(this, 'state-machine-attachments', {
-      roleName: stateMachineRole.name,
-      policyArns: [stateMachineRolePolicy.arn],
+    new IamRolePolicyAttachment(this, 'state-machine-policy-attachment', {
+      role: stateMachineRole.name,
+      policyArn: stateMachineRolePolicy.arn,
     });
 
     const stateMachineDefinition: StateMachine = {
@@ -571,9 +570,9 @@ export class S3VectorsKnowledgeBase extends Construct {
       }).json,
     });
 
-    new IamRolePolicyAttachmentsExclusive(this, 'sync-job-scheduled-event-attachments', {
-      roleName: scheduledEventRole.name,
-      policyArns: [scheduledEventRolePolicy.arn],
+    new IamRolePolicyAttachment(this, 'scheduled-event-policy-attachment', {
+      role: scheduledEventRole.name,
+      policyArn: scheduledEventRolePolicy.arn,
     });
 
     new SchedulerSchedule(this, 'schedule', {
