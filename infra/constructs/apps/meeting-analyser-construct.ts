@@ -80,7 +80,7 @@ export class MeetingAnalyser extends BaseNumaApp {
       typicalDurationMinutes: 3,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const analyserLambdaPolicyStatements = [
       {
@@ -129,7 +129,7 @@ export class MeetingAnalyser extends BaseNumaApp {
             StartAt: 'ExtractContent',
             States: {
               ExtractContent: this.addLambdaTask(
-                extractContentLambda.arn,
+                props.sharedExtractContentLambdaArn!,
                 {
                   'input_key.$': '$.item.s3_key',
                   'user_id.$': '$.user_id',
@@ -202,14 +202,7 @@ export class MeetingAnalyser extends BaseNumaApp {
     this.addStepFunction(this, 'main', {
       outputsBucket: props.outputsBucket,
       additionalPolicyStatements: [
-        {
-          actions: ['lambda:InvokeFunction'],
-          resources: [extractContentLambda.arn, analyserLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          resources: [extractContentLambda.role, analyserLambda.role],
-        },
+        { actions: ['lambda:InvokeFunction'], resources: [props.sharedExtractContentLambdaArn!, analyserLambda.arn] },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
       urlPath: 'main',

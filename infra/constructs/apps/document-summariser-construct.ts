@@ -51,7 +51,7 @@ export class DocumentSummariser extends BaseNumaApp {
       typicalDurationMinutes: 3,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const summariseDocumentLambdaPolicyStatements = [
       {
@@ -119,7 +119,7 @@ export class DocumentSummariser extends BaseNumaApp {
             StartAt: 'ExtractContent',
             States: {
               ExtractContent: this.addLambdaTask(
-                extractContentLambda.arn,
+                props.sharedExtractContentLambdaArn!,
                 {
                   'input_key.$': '$.key',
                   'output_key.$': `States.Format('${this.appId}/{}/{}/{}${extractedSuffix}', $$.Execution.Input.user_id, $$.Execution.Input.job_id, $.key)`,
@@ -195,11 +195,7 @@ export class DocumentSummariser extends BaseNumaApp {
       additionalPolicyStatements: [
         {
           actions: ['lambda:InvokeFunction'],
-          resources: [extractContentLambda.arn, summariseDocumentLambda.arn, aggregatorLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          resources: [extractContentLambda.role, summariseDocumentLambda.role, aggregatorLambda.role],
+          resources: [props.sharedExtractContentLambdaArn!, summariseDocumentLambda.arn, aggregatorLambda.arn],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),

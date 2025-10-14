@@ -230,7 +230,7 @@ export class NumaClientStack extends TerraformStack {
 
     // Resources can't start with a number, so prefix with an underscore if required.
     const safeConstructId = props.clientName.replace(/^(?=[^a-zA-Z_])/, '_');
-    new AppAgnosticApiGatewayLambdaCollection(this, safeConstructId + '-core', {
+    const coreApis = new AppAgnosticApiGatewayLambdaCollection(this, safeConstructId + '-core', {
       apiGatewayAuthorizerId: fe.authorizer.id,
       apiGatewayId: fe.apiGateway.id,
       bedrockAccount: clientConfig.bedrockAccount,
@@ -243,6 +243,7 @@ export class NumaClientStack extends TerraformStack {
       userPoolClientSecret: core.userPoolClient.clientSecret,
       webCrawlerStateMachineArn: core.webCrawler.stateMachine.arn,
       visionModelType: clientConfig.visionModelType ?? defaults.visionModelType,
+      outputsBucketArn: core.outputsBucket.bucket.arn,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(
@@ -262,6 +263,7 @@ export class NumaClientStack extends TerraformStack {
         clientName: props.clientName,
         outputsBucket: core.outputsBucket.bucket,
         region: clientConfig.region,
+        sharedExtractContentLambdaArn: coreApis.extractContentLambda.arn,
         otelConfig: {
           otelConfigPath: core.otelConfigPath,
           honeycombIngestKey: honeycombBackendKey,

@@ -118,7 +118,7 @@ export class InfringementReview extends BaseNumaApp {
       typicalDurationMinutes: 3,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const infringementReviewLambdaPolicyStatements = [
       {
@@ -155,7 +155,11 @@ export class InfringementReview extends BaseNumaApp {
           },
           Next: 'ExtractContent',
         },
-        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.evidence_key', 'InfringementReview'),
+        ExtractContent: this.addExtractContentTaskWithArn(
+          props.sharedExtractContentLambdaArn!,
+          '$.evidence_key',
+          'InfringementReview',
+        ),
         InfringementReview: this.addLambdaTask(
           infringementReviewLambda.arn,
           {
@@ -186,11 +190,7 @@ export class InfringementReview extends BaseNumaApp {
       additionalPolicyStatements: [
         {
           actions: ['lambda:InvokeFunction'],
-          resources: [extractContentLambda.arn, infringementReviewLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          resources: [extractContentLambda.role, infringementReviewLambda.role],
+          resources: [props.sharedExtractContentLambdaArn!, infringementReviewLambda.arn],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),

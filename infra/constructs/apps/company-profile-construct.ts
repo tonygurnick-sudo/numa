@@ -68,7 +68,7 @@ export class CompanyProfile extends BaseNumaApp {
       typicalDurationMinutes: 1,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const companyProfileLambdaPolicyStatements = [
       {
@@ -121,7 +121,7 @@ export class CompanyProfile extends BaseNumaApp {
             StartAt: 'ExtractContent',
             States: {
               ExtractContent: this.addLambdaTask(
-                extractContentLambda.arn,
+                props.sharedExtractContentLambdaArn!,
                 {
                   'input_key.$': '$.key',
                   'user_id.$': '$.user_id',
@@ -182,11 +182,7 @@ export class CompanyProfile extends BaseNumaApp {
       additionalPolicyStatements: [
         {
           actions: ['lambda:InvokeFunction'],
-          resources: [extractContentLambda.arn, companyProfileLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          resources: [extractContentLambda.role, companyProfileLambda.role],
+          resources: [props.sharedExtractContentLambdaArn!, companyProfileLambda.arn],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),

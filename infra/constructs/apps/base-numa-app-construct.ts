@@ -298,6 +298,33 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   }
 
   /**
+   * Variant accepting only a Lambda ARN (shared extract-content Lambda).
+   */
+  addExtractContentTaskWithArn(
+    extractContentLambdaArn: string,
+    input_key: string,
+    next: string,
+    additionalParameters?: AdditionalLambdaParameters,
+  ): asl.State {
+    return this.addLambdaTask(
+      extractContentLambdaArn,
+      {
+        'input_key.$': input_key,
+        'output_key.$': `States.Format('${this.appId}/{}/{}/extracted.json', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
+        input_bucket: this.outputsBucket.bucket,
+      },
+      next,
+      {
+        ResultSelector: {
+          'output_key.$': '$.Payload.output_key',
+        },
+        ResultPath: '$.extracted',
+        ...additionalParameters,
+      },
+    );
+  }
+
+  /**
    * Generate a stable state name prefix to avoid duplicate state names in Step Functions
    * without causing diffs on every synth.
    */
@@ -356,7 +383,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         };
       }
 
-      // Use a stable state name prefix derived from the status value to avoid perpetual diffs
+      // Use a stable prefix derived from status to avoid synth churn
       const statePrefix = this.getStableStateNamePrefix(statusValue);
 
       // Create a state machine that handles both job_id and original_job_id
@@ -704,6 +731,8 @@ export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiG
   outputsBucket: S3Bucket;
   region: string;
   visionModelType?: string;
+  /** ARN of the shared extract-content Lambda (optional, for consolidation). */
+  sharedExtractContentLambdaArn?: string;
 }
 
 export interface AppSpecificBaseNumaAppProps extends BaseNumaAppProps {

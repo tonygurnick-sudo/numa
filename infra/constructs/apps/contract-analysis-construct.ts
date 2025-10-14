@@ -65,7 +65,7 @@ export class ContractAnalysis extends BaseNumaApp {
       typicalDurationMinutes: 5,
     };
 
-    const extractContentLambda = this.addExtractContentLambda();
+    // Use shared extract-content Lambda provided at core level
 
     const contractAnalysisLambdaPolicyStatements = [
       {
@@ -102,7 +102,11 @@ export class ContractAnalysis extends BaseNumaApp {
           },
           Next: 'ExtractContent',
         },
-        ExtractContent: this.addExtractContentTask(extractContentLambda, '$.contract_key', 'ContractAnalyzer'),
+        ExtractContent: this.addExtractContentTaskWithArn(
+          props.sharedExtractContentLambdaArn!,
+          '$.contract_key',
+          'ContractAnalyzer',
+        ),
         ContractAnalyzer: this.addLambdaTask(
           contractAnalysisLambda.arn,
           {
@@ -135,12 +139,7 @@ export class ContractAnalysis extends BaseNumaApp {
         {
           actions: ['lambda:InvokeFunction'],
           effect: 'Allow',
-          resources: [extractContentLambda.arn, contractAnalysisLambda.arn],
-        },
-        {
-          actions: ['iam:PassRole'],
-          effect: 'Allow',
-          resources: [extractContentLambda.role, contractAnalysisLambda.role],
+          resources: [props.sharedExtractContentLambdaArn!, contractAnalysisLambda.arn],
         },
       ],
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),

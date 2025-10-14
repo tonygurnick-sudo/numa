@@ -6,6 +6,8 @@ import { NumaLogGroup } from './numa-log-group';
 export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaCollection {
   protected logGroup: CloudwatchLogGroup;
   readonly clientName: string;
+  // Expose shared extract-content Lambda for reuse by Step Functions
+  public readonly extractContentLambda: import('@cdktf/provider-aws/lib/lambda-function').LambdaFunction;
 
   constructor(scope: Construct, name: string, props: AppAgnosticApiGatewayLambdaCollectionProps) {
     super(scope, name, props);
@@ -117,7 +119,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
     });
 
     // Extract Content from File API Endpoint
-    this.addLambdaFunction(this, 'extract-content', {
+    this.extractContentLambda = this.addLambdaFunction(this, 'extract-content', {
       addAuthorizer: true,
       lambdaDirectory: 'python/extract-content-from-file',
       handler: 'lambda_function.handler',
@@ -135,12 +137,12 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         {
           effect: 'Allow',
           actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-          resources: [`arn:aws:s3:::numa-${props.clientName}-outputs/*`],
+          resources: [`${props.outputsBucketArn}/*`],
         },
         {
           effect: 'Allow',
           actions: ['s3:ListBucket'],
-          resources: [`arn:aws:s3:::numa-${props.clientName}-outputs`],
+          resources: [`${props.outputsBucketArn}`],
         },
         {
           effect: 'Allow',
@@ -208,4 +210,6 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   apiGatewayAuthorizerId: string;
   webCrawlerStateMachineArn: string;
   visionModelType: string;
+  /** Exact outputs bucket ARN for this environment (handles -dev/-staging suffix). */
+  outputsBucketArn: string;
 }
