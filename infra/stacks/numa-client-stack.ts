@@ -243,6 +243,10 @@ export class NumaClientStack extends TerraformStack {
       userPoolClientSecret: core.userPoolClient.clientSecret,
       webCrawlerStateMachineArn: core.webCrawler.stateMachine.arn,
       visionModelType: clientConfig.visionModelType ?? defaults.visionModelType,
+      // Branding API (disabled until lambda and finalized table wiring are added)
+      brandingProviderEnabled: true,
+      brandingTableName: core.brandingTable.name,
+      brandingAssetsPrefix: 'branding/',
       outputsBucketArn: core.outputsBucket.bucket.arn,
     });
 
@@ -317,6 +321,7 @@ export class NumaClientStack extends TerraformStack {
         Q_INDEX_ID: core.qBusinessIndexId,
         Q_RETRIEVER_ID: core.qBusinessRetrieverId,
         API_ENDPOINT: '/api',
+        BRANDING_PROVIDER_ENABLED: clientConfig.brandingProviderEnabled ?? false,
         CLIENT_NAME: props.clientName,
         OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
         HONEYCOMB_KEY: honeycombFrontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
@@ -555,6 +560,14 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         pipedreamIntegrations: z.boolean().optional().default(false),
+
+        /**
+         * Whether to show branding UI and attempt runtime fetch on the FE
+         * (Backend still enforces runtime owner switch via numa-client-config)
+         *
+         * @default false
+         */
+        brandingProviderEnabled: z.boolean().optional(),
       })
       .strict(),
   );

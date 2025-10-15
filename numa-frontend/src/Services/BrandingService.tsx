@@ -96,11 +96,17 @@ class BrandingService {
     }
 
     try {
+      const brandingEnabled = this._isBrandingEnabled();
       this.clientName = this._detectClientName();
+
+      if (!brandingEnabled) {
+        this.initialized = true;
+        return;
+      }
 
       // Try to load a dev/local branding JSON if present (no backend yet)
       await this._loadRemoteBranding();
-      console.log(this.config);
+
       // Apply tokens/placeholders and CSS variables
       this._applyBrandingTokens();
       this._applyCssVariables();
@@ -115,6 +121,15 @@ class BrandingService {
     }
   }
 
+  private _isBrandingEnabled(): boolean {
+    try {
+      const value = typeof window !== 'undefined' ? window.sessionStorage?.getItem('BRANDING_PROVIDER_ENABLED') : null;
+      return (value ?? 'false') === 'true';
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Detect client name from hostname or environment variables
    * @returns {string} Client name
@@ -125,15 +140,10 @@ class BrandingService {
       if (fromSession && fromSession.trim().length > 0) {
         return fromSession.toLowerCase();
       }
-      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-      const parts = hostname.split('.');
-      if (parts.length > 2) {
-        return parts[0].toLowerCase();
-      }
-      return 'numa';
     } catch {
-      return 'numa';
+      // fall through to default
     }
+    return 'numa';
   }
 
   /**
