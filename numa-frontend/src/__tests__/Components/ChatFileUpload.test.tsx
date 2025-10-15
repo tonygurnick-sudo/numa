@@ -51,9 +51,10 @@ describe('ChatFileUpload Component', () => {
   const mockSetMessages = vi.fn();
   const mockRefreshSidebar = vi.fn();
   const mockSetIsFileProcessing = vi.fn();
-  const mockCreateNewConversationIfNeeded = vi.fn();
+  const mockEnsureConversationReady = vi.fn();
   const mockAddMessage = vi.fn();
   const mockAddFileMessage = vi.fn();
+  const mockResetInactivityTimer = vi.fn();
 
   const defaultProps = {
     show: true,
@@ -64,7 +65,8 @@ describe('ChatFileUpload Component', () => {
     sub: 'test-user',
     refreshSidebar: mockRefreshSidebar,
     setIsFileProcessing: mockSetIsFileProcessing,
-    createNewConversationIfNeeded: mockCreateNewConversationIfNeeded,
+    ensureConversationReady: mockEnsureConversationReady,
+    resetInactivityTimer: mockResetInactivityTimer,
   };
 
   beforeEach(() => {
@@ -92,6 +94,8 @@ describe('ChatFileUpload Component', () => {
         Upload Files
       </button>
     ));
+
+    mockEnsureConversationReady.mockResolvedValue('test-conversation');
 
     useAuth.mockReturnValue({
       getCredentials: vi.fn(),
@@ -155,7 +159,12 @@ describe('ChatFileUpload Component', () => {
       expect(mockOnHide).toHaveBeenCalled();
     });
 
-    // 4. Verify processFile was called with correct parameters
+    // 4. ensureConversationReady called with preview
+    await waitFor(() => {
+      expect(mockEnsureConversationReady).toHaveBeenCalledWith('test.pdf');
+    });
+
+    // 5. Verify processFile was called with correct parameters
     await waitFor(() => {
       expect(processFile).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -173,6 +182,7 @@ describe('ChatFileUpload Component', () => {
 
     // 5. Verify successful completion
     await waitFor(() => {
+      expect(mockResetInactivityTimer).toHaveBeenCalled();
       expect(mockAddFileMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           conversationId: 'test-conversation',

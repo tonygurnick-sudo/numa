@@ -13,6 +13,7 @@ import { callChatAgentStreaming } from '../Services/chatAgentService';
 import { ChatInput } from '../Components/ChatInput';
 import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/ChatMessages';
+import { NewChat } from '../Components/NewChat';
 import ResizableSplitView from '../Components/ResizableSplitView';
 import { generateSystemPrompt, getEnabledTools } from '../utils/chatSystemPromptUtils';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
@@ -68,7 +69,7 @@ const NumaChatAgents = () => {
     setConversationId,
     isConversationLoading,
     setIsConversationLoading,
-    createNewConversationIfNeeded,
+    ensureConversationReady,
     handleNewChat,
     resetUserNewChatFlag,
     hasUserStartedNewChat,
@@ -90,6 +91,8 @@ const NumaChatAgents = () => {
   // Extract user info from token
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const sub = idToken.sub;
+  const userEmail = idToken.email || '';
+  const userName = userEmail.split('@')[0] || undefined; // Extract first part of email as name
 
   // Memoize constants to prevent unnecessary rerenders
   const REGION = useMemo(() => window.sessionStorage.getItem('REGION'), []);
@@ -264,7 +267,14 @@ const NumaChatAgents = () => {
   }
 
   // Inactivity: centralized in hook
-  const { showContinueSuggestions, recentConversations, resetInactivityTimer, hideSuggestions } = useChatInactivity({
+  const {
+    showContinueSuggestions,
+    recentConversations,
+    resetInactivityTimer,
+    hideSuggestions,
+    forceShowNewChatView,
+    suggestionsLoading,
+  } = useChatInactivity({
     numaChatDynamoUtils,
     sub,
     buttonStatus,
@@ -272,6 +282,8 @@ const NumaChatAgents = () => {
     onExpired: handleNewChatOnExpired,
     // Do NOT pass inputMessage: keep suggestions visible while typing; hide on submit instead
   });
+
+  const shouldShowNewChatView = showContinueSuggestions && messages.length === 0;
 
   // Auto-load conversation when conversationId is set by useConversationManager
   // But skip auto-load if this conversation was just created in this session, messages already exist, or manual loading is in progress
@@ -307,6 +319,45 @@ const NumaChatAgents = () => {
     chatHistoryRef.current?.toggleSidebar();
   };
 
+  // Handle renaming a conversation from NewChat view
+  const handleRenameConversation = async (conversationId: string, currentName: string) => {
+    const newName = prompt('Enter new name for this conversation:', currentName);
+    if (newName === null) return; // user cancelled
+    if (!numaChatDynamoUtils) {
+      console.error('DynamoDB client not initialized');
+      return;
+    }
+    try {
+      await numaChatDynamoUtils.updateConversationName(conversationId, sub, newName, 'manual');
+      refreshSidebar();
+      // Refresh the suggestions by forcing a re-fetch
+      if (showContinueSuggestions) {
+        forceShowNewChatView();
+      }
+    } catch (error) {
+      console.error('Error renaming conversation:', error);
+    }
+  };
+
+  // Handle deleting a conversation from NewChat view
+  const handleDeleteConversation = async (conversationId: string) => {
+    if (!numaChatDynamoUtils) return;
+    // Confirm deletion with the user
+    if (!window.confirm('Are you sure you want to delete this conversation?')) {
+      return;
+    }
+    try {
+      await numaChatDynamoUtils.deleteConversation(conversationId, sub);
+      refreshSidebar();
+      // Refresh the suggestions by forcing a re-fetch
+      if (showContinueSuggestions) {
+        forceShowNewChatView();
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+    }
+  };
+
   // (Helper functions moved into hook)
 
   // New chat handler that clears UI state
@@ -328,17 +379,11 @@ const NumaChatAgents = () => {
     // Clear manual loading state to prevent conflicts
     setIsManuallyLoading(false);
 
+    // Surface the enhanced new chat view immediately (with or without history)
+    forceShowNewChatView();
+
     // Use the hook's new chat handler
     await handleNewChat();
-
-    // Add an initial greeting from the assistant
-    const greeting = { role: 'assistant', content: 'How can I help you today?' };
-    setMessages([greeting]);
-
-    // This is a user interaction
-    resetInactivityTimer();
-    // Hide suggestions when explicitly starting a new chat
-    hideSuggestions();
   };
 
   // Configure model, tools, and system prompt for agent call
@@ -590,8 +635,8 @@ const NumaChatAgents = () => {
          Backend loads conversation history from DynamoDB
       ──────────────────────────────── */
 
-      // Create conversation and store new message locally
-      const cid = await createNewConversationIfNeeded(inputMessage);
+      // Ensure conversation exists and store new message locally
+      const cid = await ensureConversationReady(inputMessage);
       const userMsg = inputMessage;
 
       // Add user message to local UI state
@@ -970,68 +1015,35 @@ const NumaChatAgents = () => {
                               <p className="mt-2 text-muted">Loading conversation...</p>
                             </div>
                           </div>
-                        ) : showContinueSuggestions && recentConversations.length > 0 && messages.length === 0 ? (
-                          <div className="d-flex flex-column align-items-center justify-content-center h-100">
-                            <div style={{ maxWidth: 640, width: '100%' }}>
-                              {/* No initial assistant bubble; keep area clean */}
-                              {/* During initial new chat flow, show the input directly under the first message */}
-                              <div className="d-flex justify-content-center">
-                                <div
-                                  className="chat-input-wrapper"
-                                  style={{ maxWidth: 640, width: '100%', marginBottom: '24px' }}
-                                >
-                                  <ChatInput
-                                    inputMessage={inputMessage}
-                                    setInputMessage={setInputMessage}
-                                    handleSubmit={handleSubmit}
-                                    setShowUploadModal={setShowUploadModal}
-                                    buttonStatus={buttonStatus}
-                                    queryDataSources={queryDataSources}
-                                    setQueryDataSources={setQueryDataSources}
-                                    webSearchEnabled={webSearchEnabled}
-                                    setWebSearchEnabled={setWebSearchEnabled}
-                                    autoToolsEnabled={autoToolsEnabled}
-                                    setAutoToolsEnabled={setAutoToolsEnabled}
-                                    availableConnections={availableConnections}
-                                    enabledConnections={enabledConnections}
-                                    setEnabledConnections={setEnabledConnections}
-                                    connectionsLoading={connectionsLoading}
-                                    hasPipedreamFeature={hasPipedreamFeature}
-                                    uploadsInProgress={isFileProcessing}
-                                    noToolsActive={noToolsActive}
-                                    externalInputRef={inputRef}
-                                    autoFocus={true}
-                                    placeholderOverride={'How can I help you today?'}
-                                  />
-                                </div>
-                              </div>
-                              <div className="d-flex justify-content-center">
-                                <div
-                                  className="continue-suggestions p-3 mt-2 mb-2"
-                                  style={{ maxWidth: 640, width: '100%' }}
-                                >
-                                  <div className="text-muted small mb-2">Continue where you left off</div>
-                                  <div className="d-flex flex-column gap-2">
-                                    {recentConversations.map((convo) => (
-                                      <Button
-                                        key={convo.conversation_id}
-                                        variant="outline-secondary"
-                                        size="lg"
-                                        className="text-start"
-                                        style={{ paddingTop: '0.75rem', paddingBottom: '0.75rem' }}
-                                        onClick={() => {
-                                          hideSuggestions();
-                                          handleLoadConversation(convo.conversation_id);
-                                        }}
-                                      >
-                                        {convo.conversationName || 'Untitled Chat'}
-                                      </Button>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                        ) : shouldShowNewChatView ? (
+                          <NewChat
+                            inputMessage={inputMessage}
+                            setInputMessage={setInputMessage}
+                            handleSubmit={handleSubmit}
+                            setShowUploadModal={setShowUploadModal}
+                            buttonStatus={buttonStatus}
+                            queryDataSources={queryDataSources}
+                            setQueryDataSources={setQueryDataSources}
+                            webSearchEnabled={webSearchEnabled}
+                            setWebSearchEnabled={setWebSearchEnabled}
+                            autoToolsEnabled={autoToolsEnabled}
+                            setAutoToolsEnabled={setAutoToolsEnabled}
+                            availableConnections={availableConnections}
+                            enabledConnections={enabledConnections}
+                            setEnabledConnections={setEnabledConnections}
+                            connectionsLoading={connectionsLoading}
+                            hasPipedreamFeature={hasPipedreamFeature}
+                            uploadsInProgress={isFileProcessing}
+                            noToolsActive={noToolsActive}
+                            inputRef={inputRef}
+                            recentConversations={recentConversations}
+                            hideSuggestions={hideSuggestions}
+                            onContinueConversation={handleLoadConversation}
+                            suggestionsLoading={suggestionsLoading}
+                            userName={userName}
+                            onRenameConversation={handleRenameConversation}
+                            onDeleteConversation={handleDeleteConversation}
+                          />
                         ) : (
                           <ChatMessages
                             messages={messages}
@@ -1044,7 +1056,7 @@ const NumaChatAgents = () => {
                       </div>
 
                       {/* pinned input at bottom (hide during initial new chat flow) */}
-                      {!(showContinueSuggestions && recentConversations.length > 0 && messages.length === 0) && (
+                      {!shouldShowNewChatView && (
                         <div className="chat-input-wrapper">
                           <ChatInput
                             inputMessage={inputMessage}
@@ -1085,15 +1097,17 @@ const NumaChatAgents = () => {
                   minRight={200}
                 />
               </div>
-              {/* Tips Messages */}
-              <div className="tips-container">
-                <p className="datasource-tip text-center small text-muted">
-                  Click the <i className="bi bi-database"></i> to chat against your data sources.
-                </p>
-                <p className="websearch-tip text-center small text-muted">
-                  Click the <i className="bi bi-search"></i> to search the web.
-                </p>
-              </div>
+              {/* Tips Messages - hide on new chat view */}
+              {!shouldShowNewChatView && (
+                <div className="tips-container">
+                  <p className="datasource-tip text-center small text-muted">
+                    Click the <i className="bi bi-database"></i> to chat against your data sources.
+                  </p>
+                  <p className="websearch-tip text-center small text-muted">
+                    Click the <i className="bi bi-search"></i> to search the web.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1109,8 +1123,9 @@ const NumaChatAgents = () => {
         sub={sub}
         refreshSidebar={refreshSidebar}
         setIsFileProcessing={setIsFileProcessing}
-        createNewConversationIfNeeded={createNewConversationIfNeeded}
+        ensureConversationReady={ensureConversationReady}
         resetUserNewChatFlag={resetUserNewChatFlag}
+        resetInactivityTimer={resetInactivityTimer}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../Providers/AuthProvider';
 
 /**
@@ -20,44 +20,89 @@ export const useConversationManager = () => {
    * Reset the user new chat flag when explicitly loading a conversation
    */
   const resetUserNewChatFlag = useCallback(() => {
+    hasUserStartedNewChatRef.current = false;
     setHasUserStartedNewChat(false);
   }, []);
 
   /**
    * Create a new conversation if needed
    */
-  const createNewConversationIfNeeded = useCallback(
+  const pendingConversationIdRef = useRef<string | null>(null);
+  const creationPromisesRef = useRef<Map<string, Promise<string>>>(new Map());
+  const createdConversationIdsRef = useRef<Set<string>>(new Set());
+  const hasUserStartedNewChatRef = useRef<boolean>(hasUserStartedNewChat);
+
+  useEffect(() => {
+    hasUserStartedNewChatRef.current = hasUserStartedNewChat;
+  }, [hasUserStartedNewChat]);
+
+  const ensureConversationReady = useCallback(
     async (initialText = '') => {
-      if (conversationId && !hasUserStartedNewChat) return conversationId; // Already have one, but only if not in new chat mode
-
-      const newId = `${sub || 'anonymous'}_${Date.now()}`;
-      setConversationId(newId);
-      localStorage.setItem('currentConversationId', newId);
-
-      // Create a meta item in Dynamo
-      if (numaChatDynamoUtils) {
-        const defaultName = initialText.length > 60 ? initialText.slice(0, 57) + '...' : initialText || 'Untitled Chat';
-        await numaChatDynamoUtils.addMessage({
-          conversationId: newId,
-          userId: sub,
-          messageType: 'meta',
-          role: 'user',
-          conversationName: defaultName,
-          content: 'New conversation started',
-        });
-
-        await numaChatDynamoUtils.addMessage({
-          conversationId: newId,
-          userId: sub,
-          messageType: 'text',
-          role: 'assistant',
-          content: 'How can I help you today?',
-        });
+      if (!numaChatDynamoUtils) {
+        throw new Error('Dynamo utilities unavailable');
       }
 
-      return newId;
+      // Existing conversation that has already been persisted
+      if (conversationId && !hasUserStartedNewChat) {
+        return conversationId;
+      }
+
+      // Use existing pending ID or create a fresh one
+      let targetId = conversationId || pendingConversationIdRef.current;
+      if (!targetId) {
+        targetId = `${sub || 'anonymous'}_${Date.now()}`;
+        pendingConversationIdRef.current = targetId;
+        setConversationId(targetId);
+        localStorage.setItem('currentConversationId', targetId);
+      }
+
+      if (createdConversationIdsRef.current.has(targetId)) {
+        return targetId;
+      }
+
+      const existingPromise = creationPromisesRef.current.get(targetId);
+      if (existingPromise) {
+        return existingPromise;
+      }
+
+      const defaultName =
+        initialText && initialText.trim().length > 0
+          ? initialText.trim().length > 60
+            ? `${initialText.trim().slice(0, 57)}...`
+            : initialText.trim()
+          : 'Untitled Chat';
+
+      const creationPromise = (async () => {
+        try {
+          await numaChatDynamoUtils.addMessage({
+            conversationId: targetId,
+            userId: sub,
+            messageType: 'meta',
+            role: 'user',
+            conversationName: defaultName,
+            content: 'New conversation started',
+          });
+
+          await numaChatDynamoUtils.addMessage({
+            conversationId: targetId,
+            userId: sub,
+            messageType: 'text',
+            role: 'assistant',
+            content: 'How can I help you today?',
+          });
+
+          createdConversationIdsRef.current.add(targetId);
+          pendingConversationIdRef.current = null;
+          return targetId;
+        } finally {
+          creationPromisesRef.current.delete(targetId);
+        }
+      })();
+
+      creationPromisesRef.current.set(targetId, creationPromise);
+      return creationPromise;
     },
-    [conversationId, sub, numaChatDynamoUtils, hasUserStartedNewChat],
+    [conversationId, hasUserStartedNewChat, numaChatDynamoUtils, setConversationId, sub],
   );
 
   /**
@@ -67,9 +112,12 @@ export const useConversationManager = () => {
     setIsConversationLoading(false);
     setConversationId(null);
     setHasUserStartedNewChat(true);
+    hasUserStartedNewChatRef.current = true;
     localStorage.removeItem('currentConversationId');
+    pendingConversationIdRef.current = null;
+    creationPromisesRef.current.clear();
 
-    // Reset conversation ID first, then create new one will be handled by createNewConversationIfNeeded
+    // Reset conversation ID first; ensureConversationReady will handle persistence when needed
     return null;
   }, []);
 
@@ -77,41 +125,53 @@ export const useConversationManager = () => {
    * Initialize conversation on component mount
    */
   useEffect(() => {
+    let cancelled = false;
+
     async function initializeConversation() {
-      if (numaChatDynamoUtils && sub && !hasUserStartedNewChat) {
-        try {
-          // Fetch the conversation meta items for this user
-          const metaItems = await numaChatDynamoUtils.getUserConversationsMeta(sub);
-          if (metaItems.length === 0) {
-            // No conversation exists, so simulate "New Chat"
-            console.log('No conversation history found; initializing new conversation...');
-            handleNewChat();
-          } else {
-            // If there is a saved conversation and it exists in the meta, load it.
-            const savedConvoId = localStorage.getItem('currentConversationId');
-            if (savedConvoId && metaItems.some((item) => item.conversation_id === savedConvoId)) {
-              console.log('Loading saved conversation:', savedConvoId);
-              setConversationId(savedConvoId);
-            } else {
-              // Otherwise, load the most recent conversation (or choose one as needed)
-              console.log('Loading the most recent conversation from history.');
-              setConversationId(metaItems[0].conversation_id);
-            }
-          }
-        } catch (err) {
+      if (!numaChatDynamoUtils || !sub || hasUserStartedNewChatRef.current) {
+        return;
+      }
+
+      try {
+        const metaItems = await numaChatDynamoUtils.getUserConversationsMeta(sub);
+        if (cancelled || hasUserStartedNewChatRef.current) {
+          return;
+        }
+
+        if (metaItems.length === 0) {
+          console.log('No conversation history found; initializing new conversation...');
+          handleNewChat();
+          return;
+        }
+
+        const savedConvoId = localStorage.getItem('currentConversationId');
+        if (savedConvoId && metaItems.some((item) => item.conversation_id === savedConvoId)) {
+          console.log('Loading saved conversation:', savedConvoId);
+          setConversationId(savedConvoId);
+        } else {
+          console.log('Loading the most recent conversation from history.');
+          setConversationId(metaItems[0].conversation_id);
+        }
+      } catch (err) {
+        if (!cancelled) {
           console.error('Error initializing conversation:', err);
         }
       }
     }
+
     initializeConversation();
-  }, [numaChatDynamoUtils, sub, handleNewChat, hasUserStartedNewChat]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [numaChatDynamoUtils, sub, handleNewChat]);
 
   return {
     conversationId,
     setConversationId,
     isConversationLoading,
     setIsConversationLoading,
-    createNewConversationIfNeeded,
+    ensureConversationReady,
     handleNewChat,
     resetUserNewChatFlag,
     hasUserStartedNewChat,
