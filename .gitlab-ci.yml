@@ -34,6 +34,7 @@ variables:
         - lambdas/node/api-gateway-authorizer
         - lambdas/node/bedrock-cleanup-failed-files
         - lambdas/node/budget-forwarder
+        - lambdas/node/branding-config
         - lambdas/node/callback-renamer
         - lambdas/node/cloudfront-invalidator
         - lambdas/node/q-business-chat-control-configurer
@@ -50,6 +51,7 @@ variables:
         - lambdas/node/api-gateway-authorizer
         - lambdas/node/bedrock-cleanup-failed-files
         - lambdas/node/budget-forwarder
+        - lambdas/node/branding-config
         - lambdas/node/callback-renamer
         - lambdas/node/cloudfront-invalidator
         - lambdas/node/q-business-chat-control-configurer

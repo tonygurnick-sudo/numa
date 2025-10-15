@@ -161,12 +161,58 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
+    // Branding configuration API (feature-flagged)
+    if (props.brandingProviderEnabled && props.brandingTableName) {
+      const brandingEnv = {
+        CLIENT_NAME: props.clientName,
+        BRANDING_TABLE_NAME: props.brandingTableName,
+        BRANDING_PROVIDER_ENABLED: String(props.brandingProviderEnabled ?? false),
+        ...(props.brandingAssetsPrefix ? { BRANDING_ASSETS_PREFIX: props.brandingAssetsPrefix } : {}),
+      } as Record<string, string>;
+
+      const brandingReadPolicy = [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.brandingTableName}`],
+        },
+      ];
+      const brandingWritePolicy = [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.brandingTableName}`],
+        },
+      ];
+
+      // GET branding config per client
+      this.addLambdaFunction(this, 'branding-config-get', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/branding-config',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        environment: brandingEnv,
+        additionalPolicyStatements: brandingReadPolicy,
+        route: { verb: 'GET', path: 'branding/{clientId}' },
+      });
+
+      // PUT branding config per client
+      this.addLambdaFunction(this, 'branding-config-put', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/branding-config',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        environment: brandingEnv,
+        additionalPolicyStatements: [...brandingReadPolicy, ...brandingWritePolicy],
+        route: { verb: 'PUT', path: 'branding/{clientId}' },
+      });
+    }
+
     // Admin Integration Settings API (GET list, PUT single)
     const adminIntegrationEnv = {
       CLIENT_NAME: props.clientName,
       GLOBAL_TABLE_NAME: `${props.clientName}-global-integration-settings`,
     } as Record<string, string>;
-
     const adminIntegrationPolicy = [
       {
         effect: 'Allow',
@@ -210,6 +256,10 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   apiGatewayAuthorizerId: string;
   webCrawlerStateMachineArn: string;
   visionModelType: string;
+  // Branding API settings
+  brandingProviderEnabled?: boolean;
+  brandingTableName?: string;
+  brandingAssetsPrefix?: string;
   /** Exact outputs bucket ARN for this environment (handles -dev/-staging suffix). */
   outputsBucketArn: string;
 }

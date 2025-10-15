@@ -21,6 +21,7 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'BEDROCK_ACCOUNT',
   'PIPEDREAM_RELAY_LAMBDA_ARN',
   'PIPEDREAM_INTEGRATIONS',
+  'BRANDING_PROVIDER_ENABLED',
 ];
 const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
 
@@ -52,7 +53,8 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
     }
 
     // Check if all required properties exist
-    const missingProperties = CONFIG_REQUIRED_PROPERTIES.filter((prop) => !Object.hasOwn(configData, prop));
+    const hasOwnProperty = Object.prototype.hasOwnProperty;
+    const missingProperties = CONFIG_REQUIRED_PROPERTIES.filter((prop) => !hasOwnProperty.call(configData, prop));
     if (missingProperties.length > 0) {
       console.error(`Missing required properties in config: ${missingProperties.join(', ')}`);
     }

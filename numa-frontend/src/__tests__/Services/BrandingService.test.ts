@@ -51,13 +51,26 @@ describe('BrandingService', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     originalSessionStorage = window.sessionStorage;
+    const storageData = new Map<string, string>([
+      ['CLIENT_NAME', 'testco'],
+      ['BRANDING_PROVIDER_ENABLED', 'true'],
+    ]);
+
     const sessionStorageMock = {
-      getItem: vi.fn(() => 'testco'),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-      key: vi.fn(),
-      length: 0,
+      getItem: vi.fn((key: string) => storageData.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        storageData.set(key, value);
+      }),
+      removeItem: vi.fn((key: string) => {
+        storageData.delete(key);
+      }),
+      clear: vi.fn(() => {
+        storageData.clear();
+      }),
+      key: vi.fn((index: number) => Array.from(storageData.keys())[index] ?? null),
+      get length() {
+        return storageData.size;
+      },
     } as unknown as Storage;
     Object.defineProperty(window, 'sessionStorage', {
       value: sessionStorageMock,
