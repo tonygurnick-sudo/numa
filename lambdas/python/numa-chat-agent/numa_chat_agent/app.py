@@ -15,10 +15,10 @@ from jwt import algorithms
 
 from . import clear_current_user_auth, create_fresh_agent, set_current_user_auth
 from .dynamodb_utils import (
-    MAX_DYNAMO_MESSAGES,
     NumaChatDynamoUtils,
     format_conversation_for_bedrock,
 )
+from .progressive_summarization import ProgressiveSummarization
 from .utils import (
     cleanup_mcp_clients,
     convert_tool_blocks_to_text,
@@ -128,7 +128,12 @@ def _safe_event_frame(event: Dict[str, Any]) -> Dict[str, Any]:
 def _build_messages_from_history(
     conversation_id: Optional[str], user_auth: Dict[str, Any], prompt: str
 ) -> list[dict]:
-    """Load and format conversation history for the agent (do not append prompt).
+    """Load and format conversation history with progressive summarization.
+
+    Uses progressive summarization to efficiently manage long conversation histories:
+    - Summarizes older messages when threshold is reached (30+ messages)
+    - Caches summaries in DynamoDB to avoid re-computation
+    - Returns: [summary] + [recent messages] for optimal token usage
 
     We pass the current prompt separately to the agent stream call to avoid
     duplicating the latest user message. If Dynamo already contains the latest
@@ -139,16 +144,34 @@ def _build_messages_from_history(
     if conversation_id and user_auth and user_auth.get("sub"):
         try:
             dynamo_utils = NumaChatDynamoUtils()
-            conversation_items = dynamo_utils.query_conversations(
+            summarizer = ProgressiveSummarization(dynamo_utils)
+
+            # LAYER 1: Load conversation with progressive summarization
+            cached_messages, was_summarized = (
+                summarizer.load_conversation_with_summaries(
+                    conversation_id=conversation_id, user_id=user_auth["sub"]
+                )
+            )
+
+            logger.info(
+                "Loaded conversation with progressive summarization",
                 conversation_id=conversation_id,
-                user_id=user_auth["sub"],
-                limit=MAX_DYNAMO_MESSAGES,
+                cached_items=len(cached_messages),
+                was_summarized=was_summarized,
             )
-            history = format_conversation_for_bedrock(conversation_items) or []
+
+            # Convert DynamoDB items to Bedrock message format
+            history = format_conversation_for_bedrock(cached_messages) or []
+
         except Exception as e:  # pylint: disable=broad-except
-            logger.warning(
-                "History load failed; proceeding without history", error=str(e)
+            logger.error(
+                "Failed to load conversation history with summarization",
+                conversation_id=conversation_id,
+                error=str(e),
+                exc_info=True,
             )
+            # Fallback: proceed without history rather than failing the request
+            history = []
 
     # If the last message in history is a user text that exactly matches the
     # current prompt (ignoring surrounding whitespace), drop it from history to
@@ -260,6 +283,8 @@ async def http_stream(request: Request) -> Response:
         messages = process_messages_with_file_refs(messages)
         set_current_user_auth(user_auth)
         try:
+            # Progressive summarization already handled in LAYER 1 (DynamoDB loading)
+            # Agent will use default context management during execution
             agent, mcp_clients = create_fresh_agent(
                 enabled_tools,
                 system_prompt,
@@ -347,6 +372,8 @@ async def http_invoke(request: Request) -> Response:
         set_current_user_auth(user_auth)
 
         try:
+            # Progressive summarization already handled in LAYER 1 (DynamoDB loading)
+            # Agent will use default context management during execution
             agent, mcp_clients = create_fresh_agent(
                 enabled_tools,
                 system_prompt,

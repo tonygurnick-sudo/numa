@@ -68,6 +68,7 @@ def create_fresh_agent(
     model_id=None,
     messages=None,
     enabled_connections=None,
+    conversation_manager=None,
 ):
     """
     Create a fresh Agent instance for each request to avoid shared state.
@@ -83,6 +84,8 @@ def create_fresh_agent(
             Defaults to an empty list.
         enabled_connections (list, optional): List of connection IDs to enable for MCP tools.
             Defaults to an empty list.
+        conversation_manager (ConversationManager, optional): Strands conversation manager
+            for runtime context management. If not provided, agent uses default behavior.
 
     Returns:
         tuple: (Agent, mcp_clients_list) - Agent instance and list of MCP clients to keep alive
@@ -156,17 +159,27 @@ def create_fresh_agent(
         )
 
     logger.info(
-        f"Creating agent {agent_id} with enabled tools: {enabled_tools}, model: {effective_model_id}"
+        f"Creating agent {agent_id} with enabled tools: {enabled_tools}, model: {effective_model_id}",
+        has_conversation_manager=conversation_manager is not None,
     )
 
-    agent = Agent(
-        model=get_bedrock_model(effective_model_id),
-        tools=tools,
-        system_prompt=system_prompt,
-        messages=messages,
-    )
+    # Create agent with optional conversation manager
+    agent_kwargs = {
+        "model": get_bedrock_model(effective_model_id),
+        "tools": tools,
+        "system_prompt": system_prompt,
+        "messages": messages,
+    }
 
-    logger.info(f"Fresh agent {agent_id} created successfully with {len(tools)} tools")
+    if conversation_manager is not None:
+        agent_kwargs["conversation_manager"] = conversation_manager
+
+    agent = Agent(**agent_kwargs)
+
+    logger.info(
+        f"Fresh agent {agent_id} created successfully with {len(tools)} tools",
+        has_conversation_manager=conversation_manager is not None,
+    )
 
     # Return both agent and MCP clients that need to stay alive
     return agent, mcp_clients

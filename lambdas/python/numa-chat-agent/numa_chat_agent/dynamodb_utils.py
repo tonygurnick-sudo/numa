@@ -160,130 +160,7 @@ class NumaChatDynamoUtils:
 
 
 # Constants for conversation memory
-MAX_WORDS = (
-    25000  # Maximum number of words to use in prompt (increased for better memory)
-)
-MAX_CONVERSATION_TURNS = (
-    30  # Maximum number of conversation turns (groups tool interactions)
-)
 MAX_DYNAMO_MESSAGES = 100  # Maximum number of messages to fetch from DynamoDB
-
-
-def word_count(text: Optional[str]) -> int:
-    """Count words in text string."""
-    if not text or not isinstance(text, str):
-        return 0  # Return 0 words for tool blocks or other non-string content
-    return len(text.split())
-
-
-def group_messages_by_conversation_turns(
-    messages: List[Dict[str, Any]],
-) -> List[List[Dict[str, Any]]]:
-    """
-    Group messages by conversation turns. A turn includes:
-    1. User message
-    2. Assistant response(s) + tool calls + tool results + final response
-
-    Args:
-        messages: Sorted conversation history from DynamoDB (oldest first)
-
-    Returns:
-        List of conversation turns, each turn is a list of related messages
-    """
-    turns: List[List[Dict[str, Any]]] = []
-    current_turn: List[Dict[str, Any]] = []
-
-    for message in messages:
-        message_type = message.get("message_type")
-        role = message.get("role")
-
-        # Start new turn on user message (unless it's a tool result)
-        if role == "user" and message_type == "text":
-            # Save previous turn if it exists
-            if current_turn:
-                turns.append(current_turn)
-                current_turn = []
-            # Start new turn with user message
-            current_turn.append(message)
-
-        # Continue current turn with assistant responses, tool calls, etc.
-        elif role == "assistant" or message_type in ["tool_call", "tool_result"]:
-            current_turn.append(message)
-
-        # Tool results from user continue the current turn
-        elif role == "user" and message_type in ["tool_result"]:
-            current_turn.append(message)
-
-        # Other user messages (like file uploads, meta messages) start new turn
-        else:
-            if current_turn:
-                turns.append(current_turn)
-                current_turn = []
-            current_turn.append(message)
-
-    # Add final turn if it exists
-    if current_turn:
-        turns.append(current_turn)
-
-    return turns
-
-
-def truncate_conversation_history(
-    messages: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    """
-    Truncate conversation history based on conversation turns and word count.
-
-    Groups messages by conversation turns (user query + full assistant response cycle),
-    then keeps last N turns up to word limit.
-
-    Args:
-        messages: Array of message objects (oldest first)
-
-    Returns:
-        Truncated array of message objects
-    """
-    # Group messages by conversation turns
-    conversation_turns = group_messages_by_conversation_turns(messages)
-
-    # Apply turn limit and word limit working backwards from most recent
-    total_words = 0
-    selected_turns: List[List[Dict[str, Any]]] = []
-
-    # Process turns from most recent to oldest
-    for turn in reversed(conversation_turns):
-        # Calculate words in this turn
-        turn_words = sum(word_count(msg.get("content", "")) for msg in turn)
-
-        # Check if we can fit this turn
-        if (
-            len(selected_turns) >= MAX_CONVERSATION_TURNS
-            or total_words + turn_words > MAX_WORDS
-        ):
-            break
-
-        total_words += turn_words
-        selected_turns.insert(
-            0, turn
-        )  # Insert at beginning to maintain chronological order
-
-    # Flatten turns back into message list
-    truncated_messages = []
-    for turn in selected_turns:
-        truncated_messages.extend(turn)
-
-    logger.info(
-        "Conversation truncation applied",
-        original_messages=len(messages),
-        original_turns=len(conversation_turns),
-        selected_turns=len(selected_turns),
-        selected_messages=len(truncated_messages),
-        total_words=total_words,
-        word_limit=MAX_WORDS,
-        turn_limit=MAX_CONVERSATION_TURNS,
-    )
-
-    return truncated_messages
 
 
 def format_messages_for_chat(
@@ -451,6 +328,17 @@ def format_messages_for_chat(
                 formatted_messages.append(
                     {
                         "role": item.get("role", "assistant"),
+                        "content": [{"text": content}],
+                    }
+                )
+
+        elif message_type == "summary":
+            # Summary messages from progressive summarization
+            content = item.get("content", "")
+            if content and content.strip():
+                formatted_messages.append(
+                    {
+                        "role": "assistant",
                         "content": [{"text": content}],
                     }
                 )
@@ -648,37 +536,28 @@ def validate_and_clean_tool_pairs(
     return final_messages
 
 
-def prepare_conversation_history_for_chat(
-    conversation_history: List[Dict[str, Any]],
+def format_conversation_for_bedrock(
+    conversation_items: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """
-    Prepare conversation history for Chat Agent - Backend equivalent of frontend function.
+    Convert DynamoDB conversation items to Bedrock message format.
+
+    With progressive summarization, messages are already limited, so we skip
+    the old truncation logic and directly format + validate.
 
     Args:
-        conversation_history: Full conversation history from DynamoDB
+        conversation_items: Raw DynamoDB items (already summarized if needed)
 
     Returns:
-        Formatted and truncated messages for Chat Agent
+        List of messages in Bedrock format
     """
     # Sort by timestamp (oldest first)
-    sorted_history = sorted(conversation_history, key=lambda x: x.get("timestamp", 0))
+    sorted_history = sorted(conversation_items, key=lambda x: x.get("timestamp", 0))
 
-    # Truncate conversation based on word/message limits
-    truncated_history = truncate_conversation_history(sorted_history)
+    # Format messages for Bedrock (chat agents mode - don't load files)
+    formatted_messages = format_messages_for_chat(sorted_history, load_files=False)
 
-    logger.info(
-        "Conversation truncation",
-        original_count=len(sorted_history),
-        truncated_count=len(truncated_history),
-    )
-
-    # Chat agents mode - don't load files to avoid WebSocket size limits
-    load_files = False
-
-    # Format messages for Bedrock
-    formatted_messages = format_messages_for_chat(truncated_history, load_files)
-
-    # Validate and clean tool call/result pairs to prevent Chat validation errors
+    # Validate and clean tool call/result pairs
     cleaned_messages = validate_and_clean_tool_pairs(formatted_messages)
 
     if len(cleaned_messages) != len(formatted_messages):
@@ -687,19 +566,3 @@ def prepare_conversation_history_for_chat(
         )
 
     return cleaned_messages
-
-
-def format_conversation_for_bedrock(
-    conversation_items: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    """
-    Convert DynamoDB conversation items to Bedrock message format.
-    This is the main function that replicates frontend prepareConversationHistoryForChat logic.
-
-    Args:
-        conversation_items: Raw DynamoDB items from query_conversations
-
-    Returns:
-        List of messages in Bedrock format with full frontend parity
-    """
-    return prepare_conversation_history_for_chat(conversation_items)

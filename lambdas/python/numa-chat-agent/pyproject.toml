@@ -45,6 +45,7 @@ pylint = "3.3.7"
 pyright = "1.1.402"
 boto3-stubs = "^1.38.45"
 types-requests = "^2.32.0.20241016"
+pytest = "^8.4.2"
 
 [[tool.mypy.overrides]]
 module = ["fastapi", "fastapi.*"]
