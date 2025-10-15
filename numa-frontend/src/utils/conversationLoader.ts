@@ -89,7 +89,42 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
         if (group.role === 'user' || group.items.length === 1) {
           // Single message (user messages or single assistant messages)
           const item = group.items[0];
-          const baseMsg = {
+
+          if (item.message_type === 'document_metadata') {
+            // Handle document-only assistant turns by reconstructing a text segment from metadata
+            try {
+              const docData = JSON.parse(item.content || '{}');
+              const docContent = docData.docContent || '';
+              const docTitle = docData.docTitle || null;
+              return {
+                role: 'assistant',
+                content: docContent,
+                segments: docContent
+                  ? [
+                      {
+                        kind: 'text',
+                        text: docContent,
+                        finalized: true,
+                      },
+                    ]
+                  : undefined,
+                docTitle,
+                docContent: docContent || null,
+                references: item.references || [],
+              };
+            } catch (err) {
+              console.error('Error parsing document metadata:', err);
+              // Fall through to generic assistant message with raw content if parsing fails
+            }
+          }
+
+          const baseMsg: {
+            role: string;
+            content: string;
+            references: unknown[];
+            docTitle?: string | null;
+            docContent?: string | null;
+          } = {
             role: item.role,
             content: item.content || '',
             references: item.references || [],
@@ -119,14 +154,11 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
           } else if (item.message_type === 'meta') {
             // system-level info
             baseMsg.role = 'system';
-          } else if (item.message_type === 'document_metadata') {
-            // Skip document metadata items - they'll be applied to the main text message
-            return null;
           }
           return baseMsg;
         } else {
           // Multiple assistant messages - reconstruct segments
-          const segments = [];
+          const segments: Array<{ kind: string; [key: string]: unknown }> = [];
           let content = '';
           const references = [];
           let docTitle = null;
@@ -200,6 +232,12 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
               }
             }
           });
+
+          if ((!content || !content.trim()) && docContent) {
+            // Reconstruct text content entirely from document metadata if no text segments exist
+            segments.push({ kind: 'text', text: docContent, finalized: true });
+            content = docContent;
+          }
 
           return {
             role: 'assistant',

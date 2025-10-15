@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export type ConversationMeta = {
   conversation_id: string;
@@ -25,9 +25,20 @@ export function useChatInactivity({
 }: UseChatInactivityArgs) {
   const [showContinueSuggestions, setShowContinueSuggestions] = useState(false);
   const [recentConversations, setRecentConversations] = useState<ConversationMeta[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const newChatActiveRef = useRef(false);
 
   const INACTIVITY_KEY = 'numa_chat_lastInteraction';
   const INACTIVITY_MS = 20 * 60 * 1000; // 20 minutes
+
+  const activateNewChatView = () => {
+    newChatActiveRef.current = true;
+    setShowContinueSuggestions(true);
+  };
+
+  const deactivateNewChatView = () => {
+    newChatActiveRef.current = false;
+  };
 
   const resetInactivityTimer = () => {
     try {
@@ -35,9 +46,13 @@ export function useChatInactivity({
     } catch (e) {
       console.warn('Failed to set inactivity timer:', e);
     }
+    deactivateNewChatView();
   };
 
-  const hideSuggestions = () => setShowContinueSuggestions(false);
+  const hideSuggestions = () => {
+    setShowContinueSuggestions(false);
+    deactivateNewChatView();
+  };
 
   const hasInactivityExpired = (): boolean => {
     try {
@@ -61,10 +76,23 @@ export function useChatInactivity({
     }
   };
 
-  const showSuggestionsIfAvailable = async () => {
-    const items = await fetchRecentConversations();
-    setRecentConversations(items.slice(0, 3));
-    setShowContinueSuggestions(items.length > 0);
+  const showSuggestionsIfAvailable = async (forceShow = false) => {
+    setSuggestionsLoading(true);
+    try {
+      const items = await fetchRecentConversations();
+      setRecentConversations(items.slice(0, 3));
+      if (!forceShow) {
+        const shouldShow = items.length > 0;
+        setShowContinueSuggestions(shouldShow);
+        if (shouldShow) {
+          newChatActiveRef.current = true;
+        } else {
+          deactivateNewChatView();
+        }
+      }
+    } finally {
+      setSuggestionsLoading(false);
+    }
   };
 
   // Check inactivity on mount/focus and periodic polling
@@ -77,14 +105,22 @@ export function useChatInactivity({
     }
 
     const checkAndMaybeReset = async () => {
+      if (newChatActiveRef.current) {
+        return;
+      }
+
       if (hasInactivityExpired() && buttonStatus === 'idle' && !isProcessingRef.current) {
+        activateNewChatView();
         try {
           await onExpired();
-        } finally {
-          // Seed a fresh interaction timestamp so we don't immediately expire again
-          resetInactivityTimer();
+        } catch (error) {
+          console.warn('Error running inactivity expiration handler:', error);
         }
-        await showSuggestionsIfAvailable();
+        try {
+          await showSuggestionsIfAvailable(true);
+        } catch (error) {
+          console.warn('Failed to refresh recent conversations after inactivity expiration:', error);
+        }
       }
     };
 
@@ -106,6 +142,13 @@ export function useChatInactivity({
     };
   }, [buttonStatus, numaChatDynamoUtils, sub]);
 
+  const forceShowNewChatView = () => {
+    activateNewChatView();
+    showSuggestionsIfAvailable(true).catch((error) => {
+      console.warn('Failed to refresh recent conversations for new chat view:', error);
+    });
+  };
+
   // Hide suggestions as soon as user starts typing
   useEffect(() => {
     if (inputMessage && inputMessage.trim().length > 0 && showContinueSuggestions) {
@@ -118,5 +161,7 @@ export function useChatInactivity({
     recentConversations,
     resetInactivityTimer,
     hideSuggestions,
+    forceShowNewChatView,
+    suggestionsLoading,
   } as const;
 }

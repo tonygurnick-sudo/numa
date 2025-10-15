@@ -15,8 +15,9 @@ const ChatFileUpload = ({
   sub,
   refreshSidebar,
   setIsFileProcessing,
-  createNewConversationIfNeeded,
+  ensureConversationReady,
   resetUserNewChatFlag = () => {},
+  resetInactivityTimer = () => {},
 }) => {
   const { numaChatDynamoUtils, user, getCredentials, bedrockRuntimeClient: _bedrockRuntimeClient } = useAuth();
   const { numaPost } = useNumaRequest();
@@ -32,20 +33,15 @@ const ChatFileUpload = ({
     onHide();
 
     try {
-      // Ensure we have a conversation ID
-      let cid = conversationId;
-      if (!cid) {
-        cid = await createNewConversationIfNeeded();
+      const previewName = fileArray[0]?.fileName || '';
+      const cid = await ensureConversationReady(previewName);
+      if (!conversationId) {
         // Reset the new chat flag when creating conversation from file upload
         resetUserNewChatFlag();
       }
 
       // Reset inactivity timer so we don't bounce back to the new-chat suggestion view
-      try {
-        localStorage.setItem('numa_chat_lastInteraction', Date.now().toString());
-      } catch (e) {
-        console.warn('Failed to set inactivity timer after file upload:', e);
-      }
+      resetInactivityTimer();
 
       // Create auth context to pass to process function
       const authContext = { user };
