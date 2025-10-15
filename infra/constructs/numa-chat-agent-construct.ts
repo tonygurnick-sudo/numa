@@ -114,7 +114,7 @@ export class NumaChatAgent extends Construct {
         },
         {
           effect: 'Allow',
-          actions: ['dynamodb:Query', 'dynamodb:GetItem'],
+          actions: ['dynamodb:Query', 'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
           resources: [
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-chat-history`,
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-*-chat-history`,
