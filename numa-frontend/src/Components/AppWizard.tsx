@@ -25,10 +25,17 @@ export type TaskCompletionHandler = (taskId: TaskId, isComplete: boolean, result
 
 type InputTaskType = 'text-input' | 's3-upload' | 'dropdown' | 'dropdown-table';
 type OutputTaskType = 'text-output';
-// other task types that we explicitly hide from the wizard flow:
+
 type HiddenTaskType = 'q-app' | 'http-request';
 
 export type TaskType = InputTaskType | OutputTaskType | HiddenTaskType | (string & {}); // permit forward-compat
+
+type TaskParameters = {
+  minFiles?: number;
+  maxFiles?: number;
+  userMessage?: string;
+  [k: string]: unknown;
+};
 
 export type ManifestTask = {
   id: TaskId;
@@ -37,6 +44,10 @@ export type ManifestTask = {
   hidden?: boolean;
   required?: boolean;
   defaultContent?: string;
+
+  /** Optional validation rule for file uploads; supports both task.minFiles and task.parameters.minFiles */
+  minFiles?: number;
+  parameters?: TaskParameters;
 };
 
 export type Manifest = {
@@ -68,7 +79,6 @@ type NextDisableInputs<T extends VisibleTask[]> = {
 type AppWizardProps = { manifest?: Manifest };
 
 /* ========= Results model (strict, discriminated) ========= */
-/* keep local to avoid react-refresh lint; move to its own file if you need reuse */
 
 const OUTPUT_CONTENT_TYPE = {
   Markdown: 'text/markdown',
@@ -120,7 +130,90 @@ const isOutputTask = (task: ManifestTask | VisibleTask): boolean =>
 const isFileResultArray = (x: unknown): x is FileResult[] =>
   Array.isArray(x) && x.every((f) => f && typeof (f as FileResult).s3_key === 'string');
 
-/* ========= Component ========= */
+/* ========= Helper: read minFiles from either shape ========= */
+
+function getMinFiles(task: ManifestTask | undefined): number {
+  // Default for uploads is 1 unless manifest raises it.
+  if (!task) return 1;
+  if (typeof task.minFiles === 'number') return task.minFiles;
+  const p = task.parameters as TaskParameters | undefined;
+  if (p && typeof p.minFiles === 'number') return p.minFiles;
+  // If you wanted a different default per type, do it here:
+  // if (task.type === 's3-upload') return 1;
+  return 1;
+}
+
+/* ========= DEBUG: Next-button state explainer ========= */
+
+type NextStateDiag = {
+  context: 'inputs' | 'results';
+  activeIndex: number;
+  total: number;
+  preRunCount: number;
+  appRunning: boolean;
+  includeIncompleteCheck: boolean;
+  atLastInputStep: boolean;
+  crossingToOutputs: boolean;
+  isLastStep: boolean;
+  currentTaskId?: string;
+  currentTaskRequired?: boolean;
+  currentTaskComplete?: boolean;
+  disabled: boolean;
+  reasons: string[];
+};
+
+function explainNextDisabled<T extends VisibleTask[]>(
+  i: NextDisableInputs<T>,
+  context: 'inputs' | 'results',
+): NextStateDiag {
+  const reasons: string[] = [];
+  const total = i.tasks.length;
+  const current = i.activeIndex;
+
+  const isLastStep = total === 0 || current >= total - 1;
+  if (total === 0) reasons.push('no tasks');
+  if (current >= total - 1) reasons.push('already at or beyond last step');
+
+  const atLastInputStep = current + 1 === i.preRunCount;
+  const crossingToOutputs = atLastInputStep;
+
+  if (atLastInputStep && !i.appRunning) {
+    reasons.push('crossing from last input → first output, but app not running');
+  }
+
+  let currentTaskId: string | undefined;
+  let currentTaskRequired: boolean | undefined;
+  let currentTaskComplete: boolean | undefined;
+
+  if (i.tasks[current]) {
+    currentTaskId = i.tasks[current].id;
+    currentTaskRequired = !!i.tasks[current].required;
+    if (i.includeIncompleteCheck) {
+      currentTaskComplete = !!i.completion[i.tasks[current].id];
+      if (!currentTaskComplete) reasons.push('current required check failed (task incomplete)');
+    }
+  }
+
+  const disabled =
+    isLastStep || (atLastInputStep && !i.appRunning) || (i.includeIncompleteCheck && !(currentTaskComplete ?? false));
+
+  return {
+    context,
+    activeIndex: current,
+    total,
+    preRunCount: i.preRunCount,
+    appRunning: i.appRunning,
+    includeIncompleteCheck: i.includeIncompleteCheck,
+    atLastInputStep,
+    crossingToOutputs,
+    isLastStep,
+    currentTaskId,
+    currentTaskRequired,
+    currentTaskComplete,
+    disabled,
+    reasons: reasons.length ? reasons : ['enabled'],
+  };
+}
 
 const DEFAULT_MANIFEST: Manifest = { tasks: [], typicalDurationMinutes: 0 };
 
@@ -160,6 +253,8 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
   const preRunTasks = useMemo<VisibleTask[]>(() => visibleTasks.filter((task) => !isOutputTask(task)), [visibleTasks]);
 
   const postRunTasks = useMemo<VisibleTask[]>(() => visibleTasks.filter((task) => isOutputTask(task)), [visibleTasks]);
+
+  const findTask = useCallback((taskId: TaskId) => visibleTasks.find((t) => t.id === taskId), [visibleTasks]);
 
   const markDefaultContentComplete = useCallback(
     (taskIndex: number) => {
@@ -272,25 +367,31 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
     }
   };
 
+  // --- completion reflects minFiles (reads parameters.minFiles too) ---
   const handleTaskCompletion: TaskCompletionHandler = (taskId, isComplete, results = null) => {
+    const taskDef = findTask(taskId);
+    const minFiles = getMinFiles(taskDef);
+
     if (isFileResultArray(results)) {
       const validFiles: FileResult[] = results.filter((f) => f.s3_key.length > 0);
       updateTaskInputValue(taskId, validFiles);
-      updateTaskCompletionStatus(taskId, isComplete && validFiles.length > 0);
+      const complete = isComplete && validFiles.length >= minFiles;
+      updateTaskCompletionStatus(taskId, complete);
+
       return;
     }
 
     if (!isComplete) {
       updateTaskCompletionStatus(taskId, false);
-      if (results == null) {
-        updateTaskInputValue(taskId, []);
-      }
+      if (results == null) updateTaskInputValue(taskId, []);
+
       return;
     }
 
     updateTaskCompletionStatus(taskId, true);
   };
 
+  // --- auto-toggle completion when value is a FileResult[] (keeps state in sync on add/remove) ---
   const handleTaskInputChange: HandleTaskInputChange = useCallback(
     (taskId, value) => {
       if (hasRun) return;
@@ -301,8 +402,16 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
       }));
 
       updateTaskInputValue(taskId, value);
+
+      if (isFileResultArray(value)) {
+        const taskDef = findTask(taskId);
+        const minFiles = getMinFiles(taskDef);
+        const validFiles = value.filter((f) => f.s3_key && f.s3_key.length > 0);
+        const complete = validFiles.length >= minFiles;
+        updateTaskCompletionStatus(taskId, complete);
+      }
     },
-    [setTaskInputValues, updateTaskInputValue, hasRun],
+    [setTaskInputValues, updateTaskInputValue, updateTaskCompletionStatus, hasRun, findTask],
   );
 
   const handlePrevStep: HandleStepNavigation = () => {
@@ -322,44 +431,34 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
     }
   };
 
-  function isNextInputDisabledTyped<T extends VisibleTask[]>(i: NextDisableInputs<T>): boolean {
-    const total = i.tasks.length;
-    const current = i.activeIndex;
-
-    if (total === 0 || current >= total - 1) return true;
-
-    // crossing from last input to first output
-    const atLastInputStep = current + 1 === i.preRunCount;
-    if (atLastInputStep && !i.appRunning) return true;
-
-    if (i.includeIncompleteCheck) {
-      const task = i.tasks[current];
-      if (!task) return true;
-      const done = !!i.completion[task.id];
-      if (!done) return true;
-    }
-
-    return false;
-  }
-
   const isNextInputDisabled = useCallback(
-    (includeIncompleteCheck = true) =>
-      isNextInputDisabledTyped({
+    (includeIncompleteCheck = true) => {
+      const base: NextDisableInputs<VisibleTask[]> = {
         tasks: visibleTasks as VisibleTask[],
         completion: taskCompletionStatus as TaskCompletionStatus<VisibleTask[]>,
         activeIndex: activeStep,
         preRunCount: preRunTasks.length,
         appRunning,
         includeIncompleteCheck,
-      }),
+      };
+
+      const diagInputs = explainNextDisabled(base, 'inputs');
+
+      const diagResults = explainNextDisabled({ ...base, includeIncompleteCheck: false }, 'results');
+
+      return includeIncompleteCheck ? diagInputs.disabled : diagResults.disabled;
+    },
     [activeStep, visibleTasks, preRunTasks.length, appRunning, taskCompletionStatus],
   );
+
+  const nextDisabledInputsView = isNextInputDisabled(true);
+  const nextDisabledResultsView = isNextInputDisabled(false);
 
   const renderTask = (task: VisibleTask, index: number): ReactElement | null => {
     const jobLike = job as JobLike;
     if (index >= preRunTasks.length && jobLike?.results?.length) {
       let outputIndex = index - preRunTasks.length;
-      let currentOutput: Output | null = null; // ← was JobOutput
+      let currentOutput: Output | null = null;
 
       for (const result of jobLike.results) {
         if (outputIndex < result.outputs.length) {
@@ -374,17 +473,17 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
           <div className="result-output" key={`result-${index}`}>
             <h3>{currentOutput.title ?? `Output ${outputIndex + 1}`}</h3>
             <div>
-              {isMarkdownOutput(currentOutput) ? (
-                <MarkdownContent content={currentOutput.data} />
-              ) : isJsonOutput(currentOutput) ? (
+              {isMarkdownOutput(currentOutput) ? <MarkdownContent content={currentOutput.data} /> : null}
+              {isJsonOutput(currentOutput) ? <pre>{JSON.stringify(currentOutput.data, null, 2)}</pre> : null}
+              {isPlainTextOutput(currentOutput) || isCsvOutput(currentOutput) ? <pre>{currentOutput.data}</pre> : null}
+              {isHtmlOutput(currentOutput) ? <div>{currentOutput.data}</div> : null}
+              {!isMarkdownOutput(currentOutput) &&
+              !isJsonOutput(currentOutput) &&
+              !isPlainTextOutput(currentOutput) &&
+              !isCsvOutput(currentOutput) &&
+              !isHtmlOutput(currentOutput) ? (
                 <pre>{JSON.stringify(currentOutput.data, null, 2)}</pre>
-              ) : isPlainTextOutput(currentOutput) || isCsvOutput(currentOutput) ? (
-                <pre>{currentOutput.data}</pre>
-              ) : isHtmlOutput(currentOutput) ? (
-                <div>{currentOutput.data}</div>
-              ) : (
-                <pre>{JSON.stringify(currentOutput.data, null, 2)}</pre>
-              )}
+              ) : null}
             </div>
           </div>
         );
@@ -495,7 +594,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
                             Previous Input
                           </Button>
                           {/* Results tab ignores incomplete-step rule (original behaviour) */}
-                          <Button variant="primary" onClick={handleNextStep} disabled={isNextInputDisabled(false)}>
+                          <Button variant="primary" onClick={handleNextStep} disabled={nextDisabledResultsView}>
                             Next Input
                             <i className="bi bi-arrow-right ms-2"></i>
                           </Button>
@@ -525,7 +624,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
                           Previous Input
                         </Button>
                         {/* Inputs view enforces completeness (original logic) */}
-                        <Button variant="primary" onClick={handleNextStep} disabled={isNextInputDisabled()}>
+                        <Button variant="primary" onClick={handleNextStep} disabled={nextDisabledInputsView}>
                           Next Input
                           <i className="bi bi-arrow-right ms-2"></i>
                         </Button>
