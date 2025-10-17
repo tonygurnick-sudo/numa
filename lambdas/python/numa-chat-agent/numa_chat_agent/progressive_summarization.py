@@ -25,7 +25,7 @@ logger = structlog.get_logger()
 SUMMARIZATION_THRESHOLD = (
     30  # Summarize when 30+ unsummarized turns (user input + agent response cycles)
 )
-KEEP_RECENT_TURNS = 10  # Keep last 10 turns in full after summarization
+KEEP_RECENT_TURNS = 20  # Keep last 20 turns in full after summarization
 
 
 def group_messages_into_turns(
