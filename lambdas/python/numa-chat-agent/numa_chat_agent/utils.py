@@ -328,8 +328,20 @@ def process_messages_with_file_refs(
                     file_ref = content_block["fileRef"]
                     file_content = load_file_content_from_ref(file_ref)
 
-                    # Create text block with file content
-                    processed_content.append({"text": file_content})
+                    # TODO: Add character count validation here to detect files that are too large
+                    # for the context window. We could truncate and/or instruct Numa to call a sub
+                    # agent tool specialising in large file handling.
+
+                    # Create text block with file content and metadata header
+                    file_name = file_ref.get("fileName", "unknown")
+                    file_type = file_ref.get("fileType", "unknown")
+                    s3_bucket = file_ref.get("s3Bucket", "")
+                    s3_key = file_ref.get("extractedContentS3Key", "")
+
+                    metadata_header = f"[File: {file_name} | Type: {file_type} | S3: s3://{s3_bucket}/{s3_key}]\n\n"
+                    content_with_metadata = metadata_header + file_content
+
+                    processed_content.append({"text": content_with_metadata})
 
                     file_refs_processed += 1
                     logger.info(
