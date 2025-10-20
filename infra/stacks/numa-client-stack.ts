@@ -248,6 +248,10 @@ export class NumaClientStack extends TerraformStack {
       brandingTableName: core.brandingTable.name,
       brandingAssetsPrefix: 'branding/',
       outputsBucketArn: core.outputsBucket.bucket.arn,
+      outputsBucketName: core.outputsBucket.bucket.bucket,
+      workspaceAgentsTableName: core.workspaceAgentsTable.name,
+      userAgentsTableName: core.userAgentsTable.name,
+      agentsSettingsTableName: core.agentsSettingsTable.name,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(

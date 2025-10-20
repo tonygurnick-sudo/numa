@@ -1,10 +1,14 @@
-// ChatMessages.jsx
+// ChatMessages.tsx
+import type { CSSProperties, RefObject } from 'react';
 import { Spinner, Button } from 'react-bootstrap';
 import { MarkdownContent } from './MarkdownContent';
 import numaIcon from '../../public/numa-logo.svg';
 import { ChatReferencesDropdown } from '../Components/ChatReferencesDropdown';
 import { useAuth } from '../Providers/AuthProvider';
 import { TOOL_CONFIG } from '../utils/ToolConfig';
+import AgentAvatar from './AgentAvatar';
+import type { AgentSummary } from '../types/agents';
+import { formatAgentDisplayName } from '../utils/agentUtils';
 
 /**
  * A small helper bubble for opening doc if docTitle/docContent exist
@@ -24,7 +28,37 @@ function DocOpenBubble({ docTitle, docContent, onClick }) {
   );
 }
 
-const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDocument, isConversationLoading }) => {
+type TextSegment = { kind: 'text'; text: string; finalized?: boolean };
+type ToolSegment = { kind: 'tool'; label: string; isLoading?: boolean };
+type ResultSegment = { kind: 'result'; toolName?: string; payload: unknown };
+type MessageSegment = TextSegment | ToolSegment | ResultSegment;
+
+type ChatMessage = {
+  role: 'assistant' | 'user' | 'system';
+  status?: 'initializing' | 'processingFile' | 'thinking' | string | null;
+  content?: string;
+  segments?: MessageSegment[];
+  docTitle?: string;
+  docContent?: string;
+  toolEvents?: Array<string>;
+  references?: Array<string>;
+};
+
+const ChatMessages = ({
+  messages,
+  messageEndRef,
+  loadingIndicatorStyle,
+  onOpenDocument,
+  isConversationLoading,
+  currentAgent,
+}: {
+  messages: ChatMessage[];
+  messageEndRef: RefObject<HTMLDivElement>;
+  loadingIndicatorStyle: CSSProperties;
+  onOpenDocument: (title: string, content: string) => void;
+  isConversationLoading: boolean;
+  currentAgent?: AgentSummary | null;
+}) => {
   const { getCredentials } = useAuth();
 
   // Agent mode is the default and only mode; remove legacy flag checks
@@ -63,18 +97,27 @@ const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDo
           return (
             <div key={index} className="message assistant ephemeral">
               <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                <img
-                  src={numaIcon}
-                  alt="Numa"
-                  style={{
-                    width: '20px',
-                    height: '20px',
-                    marginRight: '7px',
-                    marginBottom: '2px',
-                    verticalAlign: 'middle',
-                  }}
-                />
-                Numa:
+                {currentAgent ? (
+                  <>
+                    <AgentAvatar agent={currentAgent} size={20} className="me-2" />
+                    {formatAgentDisplayName(currentAgent.title)}:
+                  </>
+                ) : (
+                  <>
+                    <img
+                      src={numaIcon}
+                      alt="Numa"
+                      style={{
+                        width: '20px',
+                        height: '20px',
+                        marginRight: '7px',
+                        marginBottom: '2px',
+                        verticalAlign: 'middle',
+                      }}
+                    />
+                    Numa:
+                  </>
+                )}
               </strong>
               <div className="message-content d-flex align-items-center" style={loadingIndicatorStyle}>
                 <Spinner animation="border" size="sm" className="me-2" />
@@ -84,27 +127,37 @@ const ChatMessages = ({ messages, messageEndRef, loadingIndicatorStyle, onOpenDo
           );
         }
 
+        // Check if this is the first assistant message (agent welcome)
+        const isInitialAgentMessage = message.role === 'assistant' && index === 0 && currentAgent;
+
         return (
           <div
             key={index}
-            className={`message ${message.role} ${message.role === 'assistant' && message.docTitle && message.docContent ? 'message-with-doc' : ''}`}
+            className={`message ${message.role} ${message.role === 'assistant' && message.docTitle && message.docContent ? 'message-with-doc' : ''} ${isInitialAgentMessage ? 'agent-welcome-message' : ''}`}
           >
             <strong className="message-role" style={{ display: 'inline-flex', alignItems: 'center' }}>
               {message.role === 'assistant' ? (
-                <>
-                  <img
-                    src={numaIcon}
-                    alt="Numa"
-                    style={{
-                      width: '20px',
-                      height: '20px',
-                      marginRight: '7px',
-                      marginBottom: '2px',
-                      verticalAlign: 'middle',
-                    }}
-                  />
-                  Numa:
-                </>
+                currentAgent ? (
+                  <>
+                    <AgentAvatar agent={currentAgent} size={20} className="me-2" />
+                    {formatAgentDisplayName(currentAgent.title)}:
+                  </>
+                ) : (
+                  <>
+                    <img
+                      src={numaIcon}
+                      alt="Numa"
+                      style={{
+                        width: '20px',
+                        height: '20px',
+                        marginRight: '7px',
+                        marginBottom: '2px',
+                        verticalAlign: 'middle',
+                      }}
+                    />
+                    Numa:
+                  </>
+                )
               ) : message.role === 'user' ? (
                 'You:'
               ) : (

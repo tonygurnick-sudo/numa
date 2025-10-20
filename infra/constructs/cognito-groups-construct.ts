@@ -59,6 +59,12 @@ const createFeatureSets = (props: {
       actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
       resources: [`${props.outputsBucket.bucket.arn}/*/$\${aws:PrincipalTag/username}/**`],
     },
+    // Read public agent icons for all users
+    {
+      effect: 'Allow',
+      actions: ['s3:GetObject'],
+      resources: [`${props.outputsBucket.bucket.arn}/numa-chat/agent-icons/public/*`],
+    },
     // Chat history permissions with row-level security
     {
       effect: 'Allow',
@@ -126,6 +132,12 @@ const createFeatureSets = (props: {
       effect: 'Allow',
       actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
       resources: [`${props.outputsBucket.bucket.arn}/*/$\${aws:PrincipalTag/username}/**`],
+    },
+    // Read public agent icons for all users
+    {
+      effect: 'Allow',
+      actions: ['s3:GetObject'],
+      resources: [`${props.outputsBucket.bucket.arn}/numa-chat/agent-icons/public/*`],
     },
   ],
 

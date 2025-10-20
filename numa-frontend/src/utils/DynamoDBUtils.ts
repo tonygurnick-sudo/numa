@@ -6,6 +6,35 @@ const environment = window.sessionStorage.getItem('ENVIRONMENT_NAME') || 'prod';
 
 const NUMA_CHAT_HISTORY_TABLE_NAME = `numa-${client}${environment !== 'prod' ? `-${environment}` : ''}-chat-history`;
 
+type AddMessageOptions = {
+  conversationId: string;
+  userId: string;
+  messageType: string;
+  role: string;
+  content: string;
+  conversationName?: string;
+  fileInfo?: Record<string, unknown>;
+  references?: unknown[];
+  agentId?: string;
+  agentTitle?: string;
+  agentVersion?: number;
+  agentIcon?: string;
+  agentType?: string;
+  agentVisibility?: string;
+  isAgentConversation?: boolean;
+};
+
+type AddFileMessageOptions = {
+  conversationId: string;
+  userId: string;
+  fileName: string;
+  fileType?: string;
+  s3Key: string;
+  s3Bucket: string;
+  extractedContentS3Key?: string;
+  messageContext?: string;
+};
+
 class NumaChatDynamoUtils {
   private dynamoDBClient: DynamoDBClient;
   private tableName: string;
@@ -28,7 +57,23 @@ class NumaChatDynamoUtils {
    * @param {object} [opts.fileInfo] - optional file metadata if needed
    * @param {Array} [opts.references] - optional references
    */
-  async addMessage({ conversationId, userId, messageType, role, content, conversationName, fileInfo, references }) {
+  async addMessage({
+    conversationId,
+    userId,
+    messageType,
+    role,
+    content,
+    conversationName,
+    fileInfo,
+    references,
+    agentId,
+    agentTitle,
+    agentVersion,
+    agentIcon,
+    agentType,
+    agentVisibility,
+    isAgentConversation,
+  }: AddMessageOptions) {
     try {
       const timestamp = Date.now();
       const sk = `${conversationId}#${timestamp}`;
@@ -47,6 +92,13 @@ class NumaChatDynamoUtils {
         conversationName,
         references,
         fileInfo,
+        agentId,
+        agentTitle,
+        agentVersion,
+        agentIcon,
+        agentType,
+        agentVisibility,
+        isAgentConversation,
       };
 
       const command = new PutItemCommand({
@@ -96,7 +148,16 @@ class NumaChatDynamoUtils {
   /**
    * Add a "file" message with file metadata.
    */
-  async addFileMessage({ conversationId, userId, fileName, fileType, s3Key, s3Bucket, extractedContentS3Key }) {
+  async addFileMessage({
+    conversationId,
+    userId,
+    fileName,
+    fileType,
+    s3Key,
+    s3Bucket,
+    extractedContentS3Key,
+    messageContext,
+  }: AddFileMessageOptions) {
     try {
       const timestamp = Date.now();
       const sk = `${conversationId}#${timestamp}`;
@@ -109,6 +170,7 @@ class NumaChatDynamoUtils {
         message_type: 'file',
         role: 'user',
         content: `Successfully uploaded file: ${fileName}`,
+        messageContext,
         fileInfo: {
           fileName,
           fileType,
@@ -266,7 +328,8 @@ class NumaChatDynamoUtils {
             ':u': userId,
             ':mtype': 'meta',
           }),
-          ProjectionExpression: 'sk, conversation_id, user_id, conversationName, latestTimestamp, content',
+          ProjectionExpression:
+            'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation',
           ScanIndexForward: false, // Sort descending by sort key (newest first)
           ExclusiveStartKey: lastEvaluatedKey,
         });
@@ -294,6 +357,13 @@ class NumaChatDynamoUtils {
         latestTimestamp: it.latestTimestamp || it.timestamp || 0,
         timestamp: it.timestamp || 0,
         content: it.content || '',
+        agentId: it.agentId || null,
+        agentTitle: it.agentTitle || null,
+        agentIcon: it.agentIcon || null,
+        agentType: it.agentType || null,
+        agentVisibility: it.agentVisibility || null,
+        agentVersion: it.agentVersion || null,
+        isAgentConversation: Boolean(it.isAgentConversation),
       }));
 
       // Sort by latestTimestamp (most recent activity first) to provide better UX

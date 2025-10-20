@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
-import { Button, Form, Spinner, Modal } from 'react-bootstrap';
+import { Button, Form, Spinner, Modal, Dropdown } from 'react-bootstrap';
 import { Database, Search, Gear, Link } from 'react-bootstrap-icons';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import {
@@ -173,43 +173,86 @@ const ChatInput = ({
               </Button>
             </FeatureWrapper>
 
-            {/* Auto Tools Toggle */}
+            {/* Tools Settings Dropup */}
             {autoToolsEnabled !== undefined && setAutoToolsEnabled && (
-              <Button
-                variant="link"
-                className={`auto-tools-toggle ${autoToolsEnabled ? 'active' : ''}`}
-                onClick={() => setAutoToolsEnabled(!autoToolsEnabled)}
-                aria-label="Toggle Auto Tools"
-                disabled={isControlsDisabled}
-              >
-                <Gear size={25} />
-                {autoToolsEnabled && <span className="bubble-text">Auto Mode</span>}
-              </Button>
+              <Dropdown drop="up" className="tools-settings-dropdown">
+                <Dropdown.Toggle
+                  variant="link"
+                  className={`tools-settings-toggle ${autoToolsEnabled || queryDataSources || webSearchEnabled ? 'active' : ''}`}
+                  disabled={isControlsDisabled}
+                  aria-label="Tools Settings"
+                >
+                  <Gear size={25} />
+                  {autoToolsEnabled && <span className="bubble-text">All Tools</span>}
+                  {!autoToolsEnabled && (queryDataSources || webSearchEnabled) && (
+                    <span className="active-tools-indicators">
+                      {queryDataSources && <Database size={16} />}
+                      {webSearchEnabled && <Search size={16} />}
+                    </span>
+                  )}
+                </Dropdown.Toggle>
+
+                <Dropdown.Menu className="p-3" style={{ minWidth: '250px', zIndex: 9999 }}>
+                  <div className="mb-3">
+                    <Form.Check
+                      type="switch"
+                      id="auto-tools-switch"
+                      label="All Tools"
+                      checked={autoToolsEnabled}
+                      onChange={(e) => setAutoToolsEnabled(e.target.checked)}
+                      className="mb-2"
+                    />
+                    <small className="text-muted d-block mb-3">
+                      When enabled, all tools are automatically available
+                    </small>
+                  </div>
+
+                  <hr className="my-2" />
+                  <div className="mb-2">
+                    <Form.Check
+                      type="switch"
+                      id="data-sources-switch"
+                      label={
+                        <span>
+                          <Database size={16} className="me-1" />
+                          Data Sources
+                        </span>
+                      }
+                      checked={autoToolsEnabled || queryDataSources}
+                      onChange={(e) => !autoToolsEnabled && setQueryDataSources(e.target.checked)}
+                      disabled={autoToolsEnabled}
+                    />
+                    <small className="text-muted ms-4 d-block" style={{ marginTop: '-0.25rem' }}>
+                      Chat against your knowledge base
+                    </small>
+                  </div>
+                  <div className="mb-2">
+                    <Form.Check
+                      type="switch"
+                      id="web-search-switch"
+                      label={
+                        <span>
+                          <Search size={16} className="me-1" />
+                          Web Search
+                        </span>
+                      }
+                      checked={autoToolsEnabled || webSearchEnabled}
+                      onChange={(e) => !autoToolsEnabled && setWebSearchEnabled(e.target.checked)}
+                      disabled={autoToolsEnabled}
+                    />
+                    <small className="text-muted ms-4 d-block" style={{ marginTop: '-0.25rem' }}>
+                      Search the web for current information
+                    </small>
+                  </div>
+
+                  {!autoToolsEnabled && !queryDataSources && !webSearchEnabled && (
+                    <div className="mt-2 p-2 bg-light rounded">
+                      <small className="text-muted">Select specific tools to enable for this conversation</small>
+                    </div>
+                  )}
+                </Dropdown.Menu>
+              </Dropdown>
             )}
-
-            {/* Data Mode Toggle */}
-            <Button
-              variant="link"
-              className={`data-mode-toggle ${queryDataSources ? 'active' : ''}`}
-              onClick={() => setQueryDataSources(!queryDataSources)}
-              aria-label="Toggle Data Mode"
-              disabled={isControlsDisabled || autoToolsEnabled}
-            >
-              <Database size={25} />
-              {queryDataSources && <span className="bubble-text">Data Sources Enabled</span>}
-            </Button>
-
-            {/* Web Search Toggle */}
-            <Button
-              variant="link"
-              className={`web-search-toggle ${webSearchEnabled ? 'active' : ''}`}
-              onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-              aria-label="Toggle Web Search"
-              disabled={isControlsDisabled || autoToolsEnabled}
-            >
-              <Search size={25} />
-              {webSearchEnabled && <span className="bubble-text">Web Search Enabled</span>}
-            </Button>
 
             {/* Integrations Toggle */}
             {hasPipedreamFeature && (
@@ -235,11 +278,11 @@ const ChatInput = ({
                 )}
                 {!connectionsLoading && (
                   <>
-                    {/* Show "Enable Integrations" when none enabled */}
+                    {/* Show "Integrations" when none enabled */}
                     {enabledConnections.length === 0 && (
                       <span className="enable-connection-text">
                         <Link size={20} style={{ marginRight: '0.5rem', marginTop: '-2px' }} />
-                        Enable Integrations
+                        Integrations
                       </span>
                     )}
                     {/* Show enabled connection icons */}

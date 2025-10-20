@@ -30,7 +30,9 @@ variables:
 .node-lambdas-matrix:
   matrix:
     - BUILD_DIR:
+        - lambdas/node/admin-agents-settings
         - lambdas/node/admin-integration-settings
+        - lambdas/node/agents
         - lambdas/node/api-gateway-authorizer
         - lambdas/node/bedrock-cleanup-failed-files
         - lambdas/node/budget-forwarder
@@ -47,7 +49,9 @@ variables:
 .node-matrix:
   matrix:
     - BUILD_DIR:
+        - lambdas/node/admin-agents-settings
         - lambdas/node/admin-integration-settings
+        - lambdas/node/agents
         - lambdas/node/api-gateway-authorizer
         - lambdas/node/bedrock-cleanup-failed-files
         - lambdas/node/budget-forwarder

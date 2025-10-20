@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Button, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
+import AgentAvatar from './AgentAvatar';
+import { useAgentById } from '../hooks/useAgentById';
 
 type ChatHistorySidebarProps = {
   onSelectConversation: (conversationId: string) => void;
@@ -19,6 +21,26 @@ type ConversationMeta = {
   latestTimestamp: number;
   timestamp: number;
   content: string;
+  agentId?: string | null;
+  agentTitle?: string | null;
+  agentIcon?: string | null;
+  agentType?: string | null;
+  agentVisibility?: string | null;
+  isAgentConversation?: boolean;
+};
+
+const HistoryAvatar = ({ convo }: { convo: ConversationMeta }) => {
+  const { agent } = useAgentById(convo.agentId || undefined);
+  if (!convo.isAgentConversation) return null;
+  return (
+    <AgentAvatar
+      agent={agent}
+      icon={convo.agentIcon || undefined}
+      size={18}
+      rounded={true}
+      alt={convo.agentTitle || 'Agent'}
+    />
+  );
 };
 
 export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistorySidebarProps>(
@@ -197,9 +219,7 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                     onClick={() => onSelectConversation(convo.conversation_id)}
                     role="button"
                   >
-                    {/* Left: Title + Timestamp | Right: Actions */}
                     <div className="d-flex align-items-center justify-content-between">
-                      {/* Left: Conversation details with tooltip for date/time */}
                       <OverlayTrigger
                         placement="left"
                         overlay={
@@ -213,12 +233,17 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                           style={{ minWidth: 0 }}
                           role="presentation"
                         >
-                          <div className="conversation-title fw-bold text-wrap text-break">
-                            {convo.conversationName || 'Untitled Chat'}
+                          <div className="d-flex align-items-center gap-2">
+                            <HistoryAvatar convo={convo} />
+                            <div className="conversation-title fw-bold text-wrap text-break">
+                              {convo.conversationName || 'Untitled Chat'}
+                            </div>
                           </div>
+                          {convo.isAgentConversation && convo.agentTitle && (
+                            <div className="text-muted small mt-1">Agent: {convo.agentTitle}</div>
+                          )}
                         </div>
                       </OverlayTrigger>
-                      {/* Right: Edit & Delete stacked */}
                       <div className="conversation-actions d-flex flex-column align-items-center flex-shrink-0 ms-2">
                         <Button
                           variant="link"

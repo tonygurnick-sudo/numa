@@ -1142,3 +1142,11 @@ label {
     }
   }
 }
+
+/* Agent Form Accordion - Remove active state color change */
+.agent-form-accordion {
+  .accordion-button:not(.collapsed) {
+    background-color: #f8f9fa !important;
+    color: inherit !important;
+  }
+}

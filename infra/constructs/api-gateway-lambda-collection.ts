@@ -57,27 +57,31 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
     }).lambda;
 
     if (props.route) {
-      const integration = new Apigatewayv2Integration(this, name + '_integration', {
-        apiId: this.props.apiGatewayId,
-        integrationType: 'AWS_PROXY',
-        integrationUri: lambda.invokeArn,
-        payloadFormatVersion: '2.0',
-      });
+      const routes = Array.isArray(props.route) ? props.route : [props.route];
 
-      let additionalRouteParameters = {};
+      routes.forEach((route, index) => {
+        const integration = new Apigatewayv2Integration(this, `${name}_integration_${index}`, {
+          apiId: this.props.apiGatewayId,
+          integrationType: 'AWS_PROXY',
+          integrationUri: lambda.invokeArn,
+          payloadFormatVersion: '2.0',
+        });
 
-      if (props.addAuthorizer ?? true) {
-        additionalRouteParameters = {
-          authorizationType: 'CUSTOM',
-          authorizerId: this.props.apiGatewayAuthorizerId,
-        };
-      }
+        let additionalRouteParameters = {};
 
-      new Apigatewayv2Route(this, name + '_route', {
-        ...additionalRouteParameters,
-        apiId: this.props.apiGatewayId,
-        routeKey: `${props.route.verb} ${this.urlPathPrefix}${this.prepPathPart(props.route.path)}`,
-        target: `integrations/${integration.id}`,
+        if (props.addAuthorizer ?? true) {
+          additionalRouteParameters = {
+            authorizationType: 'CUSTOM',
+            authorizerId: this.props.apiGatewayAuthorizerId,
+          };
+        }
+
+        new Apigatewayv2Route(this, `${name}_route_${index}`, {
+          ...additionalRouteParameters,
+          apiId: this.props.apiGatewayId,
+          routeKey: `${route.verb} ${this.urlPathPrefix}${this.prepPathPart(route.path)}`,
+          target: `integrations/${integration.id}`,
+        });
       });
 
       new LambdaPermission(this, name + '_permission', {
@@ -91,7 +95,7 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
 }
 
 export interface RouteDefinition {
-  verb: 'GET' | 'POST' | 'HEAD' | 'PUT' | 'OPTIONS';
+  verb: 'GET' | 'POST' | 'HEAD' | 'PUT' | 'OPTIONS' | 'DELETE' | 'ANY';
   path: string;
 }
 
@@ -103,7 +107,7 @@ export interface AddLambdaFunctionProps {
   handler?: string;
   lambdaDirectory: string;
   memorySize?: number;
-  route?: RouteDefinition;
+  route?: RouteDefinition | RouteDefinition[];
   runtime?: string;
   timeout?: number;
 }

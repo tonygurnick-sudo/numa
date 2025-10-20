@@ -8,6 +8,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
   readonly clientName: string;
   // Expose shared extract-content Lambda for reuse by Step Functions
   public readonly extractContentLambda: import('@cdktf/provider-aws/lib/lambda-function').LambdaFunction;
+  public readonly agentsLambda: import('@cdktf/provider-aws/lib/lambda-function').LambdaFunction;
 
   constructor(scope: Construct, name: string, props: AppAgnosticApiGatewayLambdaCollectionProps) {
     super(scope, name, props);
@@ -240,6 +241,97 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       additionalPolicyStatements: adminIntegrationPolicy,
       route: { verb: 'PUT', path: 'settings/integrations/{integration}' },
     });
+
+    // Admin Agents Settings API (GET/PUT policy)
+    const adminAgentsEnv = {
+      CLIENT_NAME: props.clientName,
+      AGENTS_SETTINGS_TABLE_NAME: props.agentsSettingsTableName,
+    } as Record<string, string>;
+    const adminAgentsPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.agentsSettingsTableName}`],
+      },
+    ];
+    this.addLambdaFunction(this, 'admin-agents-settings-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-agents-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminAgentsEnv,
+      additionalPolicyStatements: adminAgentsPolicy,
+      route: { verb: 'GET', path: 'settings/agents' },
+    });
+    this.addLambdaFunction(this, 'admin-agents-settings-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-agents-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminAgentsEnv,
+      additionalPolicyStatements: adminAgentsPolicy,
+      route: { verb: 'PUT', path: 'settings/agents' },
+    });
+
+    // Agents API (list/create/update/delete/copy)
+    const agentsEnv = {
+      CLIENT_NAME: props.clientName,
+      REGION: props.region,
+      WORKSPACE_AGENTS_TABLE: props.workspaceAgentsTableName,
+      USER_AGENTS_TABLE: props.userAgentsTableName,
+      OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+      AGENTS_SETTINGS_TABLE_NAME: props.agentsSettingsTableName,
+    } as Record<string, string>;
+
+    const agentsPolicy = [
+      {
+        effect: 'Allow',
+        actions: [
+          'dynamodb:Query',
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
+          'dynamodb:Scan',
+        ],
+        resources: [
+          `arn:aws:dynamodb:*:*:table/${props.workspaceAgentsTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.workspaceAgentsTableName}/index/*`,
+          `arn:aws:dynamodb:*:*:table/${props.userAgentsTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.userAgentsTableName}/index/*`,
+        ],
+      },
+      // Read agents settings policy table
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.agentsSettingsTableName}`],
+      },
+      // S3 access for copying, writing, and deleting agent icon images
+      {
+        effect: 'Allow',
+        actions: ['s3:GetObject'],
+        resources: [`${props.outputsBucketArn}/numa-chat/agent-icons/*`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['s3:PutObject', 's3:DeleteObject'],
+        resources: [`${props.outputsBucketArn}/numa-chat/agent-icons/*`],
+      },
+    ];
+
+    this.agentsLambda = this.addLambdaFunction(this, 'agents', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/agents',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: agentsEnv,
+      additionalPolicyStatements: agentsPolicy,
+      route: [
+        { verb: 'ANY', path: 'agents' },
+        { verb: 'ANY', path: 'agents/{proxy+}' },
+      ],
+    });
   }
 }
 
@@ -262,4 +354,10 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   brandingAssetsPrefix?: string;
   /** Exact outputs bucket ARN for this environment (handles -dev/-staging suffix). */
   outputsBucketArn: string;
+  /** Outputs bucket name for constructing S3 keys. */
+  outputsBucketName: string;
+  workspaceAgentsTableName: string;
+  userAgentsTableName: string;
+  /** Exact agents settings table name, passed from Core to avoid name drift. */
+  agentsSettingsTableName: string;
 }

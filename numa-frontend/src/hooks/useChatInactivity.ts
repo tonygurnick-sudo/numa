@@ -4,6 +4,13 @@ export type ConversationMeta = {
   conversation_id: string;
   conversationName?: string | null;
   latestTimestamp: number;
+  agentId?: string | null;
+  agentTitle?: string | null;
+  agentIcon?: string | null;
+  agentType?: string | null;
+  agentVisibility?: string | null;
+  agentVersion?: number | null;
+  isAgentConversation?: boolean;
 };
 
 type UseChatInactivityArgs = {

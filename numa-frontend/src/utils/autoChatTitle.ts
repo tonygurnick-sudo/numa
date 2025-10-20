@@ -15,6 +15,7 @@ export interface AutoNameOptions {
 interface ChatItem {
   message_type?: string;
   fileInfo?: { fileName?: string } | null;
+  messageContext?: string | null;
   role?: 'user' | 'assistant' | 'system' | string;
   content?: string | null;
   timestamp?: number;
@@ -24,10 +25,14 @@ interface ChatItem {
 
 // (Default-name detection removed; we now allow auto-renaming unless nameSource === 'manual')
 
-/** Strip obvious doc/comment blocks to avoid polluting naming prompt */
+/** Strip obvious doc/comment blocks and agent reference file lists to avoid polluting naming prompt */
 function stripDocTags(text: string): string {
   if (!text) return '';
-  return text.replace(/<!--[\s\S]*?-->/g, ' ');
+  // Remove HTML comment blocks
+  let cleaned = text.replace(/<!--[\s\S]*?-->/g, ' ');
+  // Remove agent reference files section (e.g., "**📎 Reference Files:**\n- file1.xlsx\n- file2.pdf")
+  cleaned = cleaned.replace(/\*\*📎 Reference Files:\*\*[\s\S]*?(?=\n\n|\n[A-Z]|$)/g, '');
+  return cleaned;
 }
 
 /** Build a compact transcript for the LLM with token safety in mind */
@@ -35,6 +40,10 @@ function buildCompactTranscript(items: ChatItem[], maxChars = 4000): string {
   const lines: string[] = [];
   for (const it of items) {
     if (it.message_type === 'file' && it.fileInfo?.fileName) {
+      // Skip agent reference files - they are preloaded context, not user uploads
+      if (it.messageContext === 'agent_reference') {
+        continue;
+      }
       lines.push(`User uploaded file: ${it.fileInfo.fileName}`);
       continue;
     }

@@ -5,6 +5,7 @@ import { UploadStatusRow } from './UploadStatusRow';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { processFile } from '../utils/fileProcessing';
+import type { AgentSummary } from '../types/agents';
 
 const ChatFileUpload = ({
   show,
@@ -17,6 +18,9 @@ const ChatFileUpload = ({
   setIsFileProcessing,
   ensureConversationReady,
   resetUserNewChatFlag = () => {},
+  pendingAgent = null,
+  currentAgent = null,
+  setPendingAgent,
   resetInactivityTimer = () => {},
 }) => {
   const { numaChatDynamoUtils, user, getCredentials, bedrockRuntimeClient: _bedrockRuntimeClient } = useAuth();
@@ -33,11 +37,45 @@ const ChatFileUpload = ({
     onHide();
 
     try {
+      const activeAgent: AgentSummary | null = pendingAgent || currentAgent || null;
       const previewName = fileArray[0]?.fileName || '';
-      const cid = await ensureConversationReady(previewName);
-      if (!conversationId) {
+      const conversationWasNew = !conversationId;
+      let cid: string;
+      if (activeAgent) {
+        cid = await ensureConversationReady(previewName, {
+          agentId: activeAgent.agentId,
+          title: activeAgent.title,
+          version: activeAgent.version,
+          icon: activeAgent.icon,
+          agentType: activeAgent.agentType,
+          visibility: activeAgent.visibility,
+        });
+      } else {
+        cid = await ensureConversationReady(previewName);
+      }
+      if (conversationWasNew) {
         // Reset the new chat flag when creating conversation from file upload
         resetUserNewChatFlag();
+
+        if (pendingAgent?.referenceFiles?.length && numaChatDynamoUtils) {
+          for (const file of pendingAgent.referenceFiles) {
+            try {
+              await numaChatDynamoUtils.addFileMessage({
+                conversationId: cid,
+                userId: sub,
+                fileName: file.fileName,
+                fileType: file.fileType,
+                s3Key: file.s3Key,
+                s3Bucket: file.s3Bucket,
+                extractedContentS3Key: file.extractedContentS3Key,
+                messageContext: 'agent_reference',
+              });
+            } catch (err) {
+              console.error('Error attaching agent reference file during upload:', err);
+            }
+          }
+          setPendingAgent?.(null);
+        }
       }
 
       // Reset inactivity timer so we don't bounce back to the new-chat suggestion view

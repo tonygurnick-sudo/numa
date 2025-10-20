@@ -60,6 +60,9 @@ export class CoreNumaInfra extends Construct {
   readonly dataBucket: NumaCorsEnabledBucket;
   readonly chatHistoryTable: DynamodbTable;
   readonly brandingTable: DynamodbTable;
+  readonly workspaceAgentsTable: DynamodbTable;
+  readonly userAgentsTable: DynamodbTable;
+  readonly agentsSettingsTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
@@ -285,6 +288,62 @@ export class CoreNumaInfra extends Construct {
         Name: `${numaClient}-branding-config`,
         Environment: props.environmentName,
         Purpose: 'branding-config',
+      },
+    });
+
+    // Agents tables
+    this.workspaceAgentsTable = new DynamodbTable(this, 'numa-workspace-agents-table', {
+      name: `${numaClient}-agents`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'tenant_id',
+      rangeKey: 'agent_id',
+      attribute: [
+        { name: 'tenant_id', type: 'S' },
+        { name: 'agent_id', type: 'S' },
+        { name: 'created_by_user_id', type: 'S' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'agent-id-index',
+          hashKey: 'agent_id',
+          projectionType: 'ALL',
+        },
+        {
+          name: 'agent-creator-index',
+          hashKey: 'created_by_user_id',
+          projectionType: 'ALL',
+        },
+      ],
+    });
+
+    this.userAgentsTable = new DynamodbTable(this, 'numa-user-agents-table', {
+      name: `${numaClient}-user-agents`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'user_id',
+      rangeKey: 'agent_id',
+      attribute: [
+        { name: 'user_id', type: 'S' },
+        { name: 'agent_id', type: 'S' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'agent-id-index',
+          hashKey: 'agent_id',
+          projectionType: 'ALL',
+        },
+      ],
+    });
+
+    // Agents settings table (company-wide policy)
+    this.agentsSettingsTable = new DynamodbTable(this, 'numa-agents-settings-table', {
+      name: `${numaClient}-agents-settings`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'setting',
+      attribute: [{ name: 'setting', type: 'S' }],
+      tags: {
+        Name: `${numaClient}-agents-settings`,
+        Environment: props.environmentName,
+        Purpose: 'agents-settings',
       },
     });
 

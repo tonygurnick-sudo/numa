@@ -10,6 +10,7 @@ const NumaChatAgents = lazy(() => import('../Pages/NumaChatAgents').then((m) => 
 const KnowledgeBaseManagement = lazy(() =>
   import('../Pages/KnowledgeBaseManagement').then((m) => ({ default: m.KnowledgeBaseManagement })),
 );
+const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m) => ({ default: m.AgentsManagement })));
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
 const NumaIntegrations = lazy(() => import('../Pages/NumaIntegrations').then((m) => ({ default: m.NumaIntegrations })));
 const JobHistoryManager = lazy(() => import('../Pages/JobHistoryManager'));
@@ -37,6 +38,11 @@ export const ROUTE_CONFIG = [
     },
     requiredFeature: 'chat',
     nav: { label: 'Chat', icon: 'bi bi-chat-dots-fill' },
+  },
+  {
+    path: '/agents',
+    element: () => <AgentsManagement />,
+    nav: { label: 'Agents', icon: 'bi bi-robot' },
   },
   {
     path: '/company-info',

@@ -202,6 +202,9 @@ def format_messages_for_chat(
             )
 
         elif message_type == "file":
+            if item.get("messageContext") == "agent_reference":
+                i += 1
+                continue
             file_info = item.get("fileInfo", {})
             s3_bucket = file_info.get("s3Bucket")
             extracted_content_s3_key = file_info.get("extractedContentS3Key")
