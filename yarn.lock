@@ -11955,6 +11955,25 @@ __metadata:
   languageName: node
   linkType: hard
 
+"admin-agents-settings@workspace:lambdas/node/admin-agents-settings":
+  version: 0.0.0-use.local
+  resolution: "admin-agents-settings@workspace:lambdas/node/admin-agents-settings"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
 "admin-integration-settings@workspace:lambdas/node/admin-integration-settings":
   version: 0.0.0-use.local
   resolution: "admin-integration-settings@workspace:lambdas/node/admin-integration-settings"
@@ -11989,6 +12008,25 @@ __metadata:
   checksum: 10c0/c2c9ab7599692d594b6a161559ada307b7a624fa4c7b03e3afdb5a5e31cd0e53269115b620fcab024c5ac6a6f37fa5eb2e004f076ad30f5f7e6b8b671f7b35fe
   languageName: node
   linkType: hard
+
+"agents-api@workspace:lambdas/node/agents":
+  version: 0.0.0-use.local
+  resolution: "agents-api@workspace:lambdas/node/agents"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
 
 "ajv@npm:^6.12.2, ajv@npm:^6.12.4":
   version: 6.12.6

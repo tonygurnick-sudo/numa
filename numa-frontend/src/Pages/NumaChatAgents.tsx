@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Button, Container, Row, Col } from 'react-bootstrap';
+import { Button, Container, Row, Col, Alert } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
@@ -9,6 +9,8 @@ import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/ChatHistorySidebar';
 import { ChatFileUpload } from '../Components/ChatFileUpload';
+import { AgentsSidebar, AgentsSidebarHandle } from '../Components/AgentsSidebar';
+import AgentAvatar from '../Components/AgentAvatar';
 import { callChatAgentStreaming } from '../Services/chatAgentService';
 import { ChatInput } from '../Components/ChatInput';
 import { DocumentPanel } from '../Components/DocumentPanel';
@@ -34,6 +36,12 @@ import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { autoNameConversation } from '../utils/autoChatTitle';
 import { useChatInactivity } from '../hooks/useChatInactivity';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import type { AgentSummary } from '../types/agents';
+import { getAgent, listAgents } from '../Services/AgentsService';
+import { getConnectionConfig } from '../config/integrationsConfig';
+import { formatAgentDisplayName } from '../utils/agentUtils';
+import { sortAgentsByPriority } from '../utils/agentSortingUtils';
+import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 
 const NumaChatAgents = () => {
   // Basic UI state
@@ -53,10 +61,18 @@ const NumaChatAgents = () => {
   const [isFileProcessing, setIsFileProcessing] = useState(false);
   const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [isManuallyLoading, setIsManuallyLoading] = useState(false);
+  const [currentAgent, setCurrentAgent] = useState<AgentSummary | null>(null);
+  const [pendingAgent, setPendingAgent] = useState<AgentSummary | null>(null);
+  const [agentError, setAgentError] = useState<React.ReactNode | null>(null);
+  const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
+  const [personalAgentsLoading, setPersonalAgentsLoading] = useState(false);
+  const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
 
   // Refs
   const messageEndRef = useRef(null);
   const chatHistoryRef = useRef(null);
+  const agentsSidebarRef = useRef<AgentsSidebarHandle | null>(null);
+  const preselectHandledRef = useRef(false);
 
   // Custom hooks
   const conversationManager = useConversationManager();
@@ -94,8 +110,132 @@ const NumaChatAgents = () => {
   const userEmail = idToken.email || '';
   const userName = userEmail.split('@')[0] || undefined; // Extract first part of email as name
 
+  // Load global Agents policy once
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await AdminAgentsService.get(numaGet);
+        setAgentsMode(res.mode);
+      } catch {
+        setAgentsMode('full');
+      } finally {
+        /* no-op */
+      }
+    })();
+  }, [numaGet]);
+
+  // Load personal agents once on mount
+  useEffect(() => {
+    const loadPersonalAgents = async () => {
+      if (!user) return;
+      setPersonalAgentsLoading(true);
+      try {
+        const ownedAgents = await listAgents(numaGet, { scope: 'owned' });
+
+        // Deduplicate: prefer user-scoped agents over workspace-scoped when both exist with same agentId
+        // This happens when a personal agent is made public (creates both user and workspace copies)
+        const agentMap = new Map<string, (typeof ownedAgents)[0]>();
+
+        for (const agent of ownedAgents) {
+          const existing = agentMap.get(agent.agentId);
+          // Prefer user scope over workspace scope to avoid duplicates
+          if (!existing || (agent.scope === 'user' && existing.scope === 'workspace')) {
+            agentMap.set(agent.agentId, agent);
+          }
+        }
+
+        setPersonalAgents(Array.from(agentMap.values()));
+      } catch (err) {
+        console.error('Failed to load personal agents', err);
+      } finally {
+        setPersonalAgentsLoading(false);
+      }
+    };
+    loadPersonalAgents();
+  }, [user, numaGet]);
+
   // Memoize constants to prevent unnecessary rerenders
   const REGION = useMemo(() => window.sessionStorage.getItem('REGION'), []);
+
+  const applyAgentConfiguration = (agent: AgentSummary | null) => {
+    if (!agent) {
+      setAutoToolsEnabled(true);
+      setQueryDataSources(false);
+      setWebSearchEnabled(false);
+      setEnabledConnections([]);
+      return;
+    }
+
+    const config = agent.toolsConfig ?? {};
+    setAutoToolsEnabled(config.autoToolsEnabled ?? true);
+    setQueryDataSources(config.queryDataSources ?? false);
+    setWebSearchEnabled(config.webSearchEnabled ?? false);
+    setEnabledConnections(config.enabledConnections ?? []);
+  };
+
+  const resetAgentState = () => {
+    setCurrentAgent(null);
+    setPendingAgent(null);
+    applyAgentConfiguration(null);
+    setAgentError(null);
+  };
+
+  const getMissingIntegrations = (agent: AgentSummary): string[] => {
+    const required = agent.requiredIntegrations ?? [];
+    if (required.length === 0) return [];
+    const connectedIds = new Set(availableConnections.map((conn) => conn.id));
+    return required.filter((integration) => !connectedIds.has(integration));
+  };
+
+  const resolveUserWelcomeMessage = (agent: AgentSummary): string | undefined =>
+    agent.userWelcomeMessage?.trim() || undefined;
+
+  const createAgentWelcomeMessage = (agent: AgentSummary): string => {
+    const authorMessage = resolveUserWelcomeMessage(agent);
+    let message = authorMessage || `Hello! I'm **${agent.title}**.`;
+    if (agent.referenceFiles && agent.referenceFiles.length > 0) {
+      message += '\n\n**📎 Reference Files:**';
+      agent.referenceFiles.forEach((file) => {
+        message += `\n- ${file.fileName}`;
+      });
+    }
+    return message;
+  };
+
+  const startAgentSession = async (agent: AgentSummary) => {
+    const missing = getMissingIntegrations(agent);
+    if (missing.length > 0) {
+      const displayNames = missing.map((id) => getConnectionConfig(id)?.name || id);
+      setAgentError(
+        <>
+          Connect {displayNames.join(', ')} before using this agent.{' '}
+          <a href="/integrations" className="alert-link">
+            Go to Integrations
+          </a>
+        </>,
+      );
+      return;
+    }
+
+    setAgentError(null);
+    setIsManuallyLoading(true);
+    await handleNewChat();
+    applyAgentConfiguration(agent);
+    setCurrentAgent(agent);
+    setPendingAgent(agent);
+    setMessages([{ role: 'assistant', content: createAgentWelcomeMessage(agent) }]);
+    setUploadedFiles([]);
+    setIsManuallyLoading(false);
+  };
+
+  const handleAgentSelect = async (agent: AgentSummary) => {
+    try {
+      await startAgentSession(agent);
+    } catch (error) {
+      console.error('Failed to activate agent', error);
+      setAgentError((error as Error)?.message ?? 'Unable to activate agent');
+    }
+  };
 
   // Pipedream integration feature flags - check config instead of Cognito groups
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
@@ -175,6 +315,33 @@ const NumaChatAgents = () => {
     })();
   }, [user, numaGet]);
 
+  // Apply preselected agent from Agents page - start a fresh chat
+  useEffect(() => {
+    if (preselectHandledRef.current) return;
+    const stored = sessionStorage.getItem('numa_preselected_agent');
+    if (!stored) return;
+
+    // Mark as handled immediately to prevent re-entry
+    preselectHandledRef.current = true;
+    sessionStorage.removeItem('numa_preselected_agent');
+
+    try {
+      if (agentsMode === 'off') {
+        return; // ignore preselect when disabled
+      }
+      const parsed = JSON.parse(stored) as AgentSummary;
+
+      // Start fresh chat first, then activate agent
+      // This ensures we don't load any previous conversation
+      Promise.resolve(handleAgentSelect(parsed)).catch((err) => {
+        console.error('Failed to activate preselected agent', err);
+        setAgentError((err as Error)?.message ?? 'Unable to activate selected agent');
+      });
+    } catch (error) {
+      console.error('Failed to load preselected agent', error);
+    }
+  }, [agentsMode]);
+
   // Load connections via proxy
   const loadConnectionStatus = async () => {
     if (!lambdaClient || !user) return;
@@ -248,6 +415,7 @@ const NumaChatAgents = () => {
     // Stop any ongoing streaming response
     setButtonStatus('idle');
     resetStreamingState();
+    resetAgentState();
 
     // Clear all UI states
     setMessages([]);
@@ -280,8 +448,13 @@ const NumaChatAgents = () => {
     buttonStatus,
     isProcessingRef,
     onExpired: handleNewChatOnExpired,
-    // Do NOT pass inputMessage: keep suggestions visible while typing; hide on submit instead
+    // DO NOT pass inputMessage: keep suggestions visible while typing; hide on submit instead
   });
+
+  // Sort agents by favorites first, then most recently used, then updatedAt
+  const sortedPersonalAgents = useMemo(() => {
+    return sortAgentsByPriority(personalAgents, recentConversations);
+  }, [personalAgents, recentConversations]);
 
   const shouldShowNewChatView = showContinueSuggestions && messages.length === 0;
 
@@ -365,6 +538,7 @@ const NumaChatAgents = () => {
     // Stop any ongoing streaming response
     setButtonStatus('idle');
     resetStreamingState();
+    resetAgentState();
 
     // Clear all UI states
     setMessages([]);
@@ -407,7 +581,24 @@ const NumaChatAgents = () => {
 
     // Create the system prompt based on tool availability
     const email = idToken.email || 'Unknown';
-    const systemPrompt = generateSystemPrompt(enabledTools, email, companyProfile, enabledConnections);
+    let systemPrompt = generateSystemPrompt(enabledTools, email, companyProfile, enabledConnections);
+
+    if (currentAgent) {
+      const agentPrompt = currentAgent.systemPrompt?.trim();
+      if (agentPrompt) {
+        systemPrompt += `\n\n**Agent Instructions (${currentAgent.title}):**\n${agentPrompt}`;
+      }
+      const userGuidance = resolveUserWelcomeMessage(currentAgent);
+      if (userGuidance) {
+        systemPrompt += `\n\n**Agent Notes:**\n${userGuidance}`;
+      }
+      if (currentAgent.referenceFiles?.length) {
+        systemPrompt += '\n\n**Reference Materials (preloaded):**';
+        currentAgent.referenceFiles.forEach((file) => {
+          systemPrompt += `\n- ${file.fileName}`;
+        });
+      }
+    }
 
     // Prepare user authentication context for the Lambda
     const userAuth = {
@@ -418,6 +609,7 @@ const NumaChatAgents = () => {
       region: REGION,
       userPoolId: window.sessionStorage.getItem('USER_POOL_ID'),
       groups_config: JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}'),
+      agentId: currentAgent?.agentId,
     };
 
     return { modelId, enabledTools, systemPrompt, userAuth, clientName };
@@ -635,8 +827,21 @@ const NumaChatAgents = () => {
          Backend loads conversation history from DynamoDB
       ──────────────────────────────── */
 
-      // Ensure conversation exists and store new message locally
-      const cid = await ensureConversationReady(inputMessage);
+      const activeAgent = pendingAgent || currentAgent;
+
+      const cid = await ensureConversationReady(
+        inputMessage,
+        activeAgent
+          ? {
+              agentId: activeAgent.agentId,
+              title: activeAgent.title,
+              version: activeAgent.version,
+              icon: activeAgent.icon,
+              agentType: activeAgent.agentType,
+              visibility: activeAgent.visibility,
+            }
+          : undefined,
+      );
       const userMsg = inputMessage;
 
       // Add user message to local UI state
@@ -645,6 +850,21 @@ const NumaChatAgents = () => {
 
       // Store user message in DynamoDB
       if (numaChatDynamoUtils) {
+        // If this is the first message in an agent conversation, save the agent's welcome message first
+        if (pendingAgent && messages.length === 1 && messages[0].role === 'assistant') {
+          try {
+            await numaChatDynamoUtils.addMessage({
+              conversationId: cid,
+              userId: sub,
+              messageType: 'text',
+              role: 'assistant',
+              content: messages[0].content,
+            });
+          } catch (err) {
+            console.error('Error storing agent welcome message:', err);
+          }
+        }
+
         await numaChatDynamoUtils
           .addMessage({
             conversationId: cid,
@@ -654,6 +874,26 @@ const NumaChatAgents = () => {
             content: userMsg,
           })
           .catch((err) => console.error('Error storing user message:', err));
+
+        if (pendingAgent?.referenceFiles?.length) {
+          for (const file of pendingAgent.referenceFiles) {
+            try {
+              await numaChatDynamoUtils.addFileMessage({
+                conversationId: cid,
+                userId: sub,
+                fileName: file.fileName,
+                fileType: file.fileType,
+                s3Key: file.s3Key,
+                s3Bucket: file.s3Bucket,
+                extractedContentS3Key: file.extractedContentS3Key,
+                messageContext: 'agent_reference',
+              });
+            } catch (fileErr) {
+              console.error('Failed to attach agent reference file to conversation', fileErr);
+            }
+          }
+          setPendingAgent(null);
+        }
       }
 
       console.log('[NumaChat] Sending minimal payload - backend will load conversation history');
@@ -856,10 +1096,30 @@ const NumaChatAgents = () => {
     hideSuggestions();
 
     try {
-      const chatMessages = await loadConversation(selectedConversationId, numaChatDynamoUtils, sub, getAccessToken);
+      const { messages: chatMessages, agentMeta } = await loadConversation(
+        selectedConversationId,
+        numaChatDynamoUtils,
+        sub,
+        getAccessToken,
+      );
       setMessages(chatMessages);
       setConversationId(selectedConversationId);
       localStorage.setItem('currentConversationId', selectedConversationId);
+
+      if (agentMeta?.agentId) {
+        try {
+          const agent = await getAgent(numaGet, agentMeta.agentId);
+          setCurrentAgent(agent);
+          setPendingAgent(null);
+          applyAgentConfiguration(agent);
+        } catch (err) {
+          console.error('Failed to hydrate agent for conversation', err);
+          setAgentError('Unable to load agent configuration for this conversation.');
+          resetAgentState();
+        }
+      } else {
+        resetAgentState();
+      }
     } catch (error) {
       console.error('Error loading conversation:', error);
       // Show error message to user
@@ -869,6 +1129,7 @@ const NumaChatAgents = () => {
           content: 'Error loading conversation. Please try again or select a different conversation.',
         },
       ]);
+      resetAgentState();
     } finally {
       setIsConversationLoading(false);
       setIsManuallyLoading(false);
@@ -876,7 +1137,7 @@ const NumaChatAgents = () => {
   };
 
   // Derived flag to show warning when no tools active in manual mode
-  const noToolsActive = !autoToolsEnabled && !queryDataSources && !webSearchEnabled;
+  const noToolsActive = !currentAgent && !autoToolsEnabled && !queryDataSources && !webSearchEnabled;
 
   // Helper: push buffered text as its own segment then clear buffer, and save to DynamoDB
   const flushPendingText = (currentConversationId = null, preserveContent = false) => {
@@ -980,15 +1241,36 @@ const NumaChatAgents = () => {
             <div className="chat-content flex-grow-1 d-flex flex-column">
               {/* Header with chat instructions and buttons on the right */}
               <div className="chat-header d-flex justify-content-between align-items-center mb-3">
-                <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
+                {currentAgent ? (
+                  <div className="d-flex align-items-center gap-2">
+                    <AgentAvatar agent={currentAgent} size={32} />
+                    <div>
+                      <div className="fw-semibold" style={{ fontSize: '1.1rem', color: '#8e50a7' }}>
+                        {formatAgentDisplayName(currentAgent.title)}
+                      </div>
+                      <div className="small text-muted">AI Agent Assistant</div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
+                )}
                 <div className="chat-header-buttons d-flex align-items-center gap-2">
+                  {agentsMode !== 'off' && (
+                    <AgentsSidebar
+                      ref={agentsSidebarRef}
+                      onSelectAgent={handleAgentSelect}
+                      currentAgentId={currentAgent?.agentId ?? null}
+                      recentConversations={recentConversations}
+                    />
+                  )}
                   <Button
                     variant="outline-secondary"
                     className="chat-history-btn"
                     onClick={toggleChatHistory}
                     title="Chat History"
                   >
-                    <i className="bi bi-clock-history"></i>
+                    <i className="bi bi-clock-history me-1"></i>
+                    History
                   </Button>
                   <Button
                     className="btn btn-primary new-chat-btn"
@@ -999,6 +1281,12 @@ const NumaChatAgents = () => {
                   </Button>
                 </div>
               </div>
+
+              {agentError && (
+                <Alert variant="warning" className="py-2" onClose={() => setAgentError(null)} dismissible>
+                  {agentError}
+                </Alert>
+              )}
 
               <div className="chat-container position-relative" style={{ flex: '1 1 auto' }}>
                 <ResizableSplitView
@@ -1043,6 +1331,9 @@ const NumaChatAgents = () => {
                             userName={userName}
                             onRenameConversation={handleRenameConversation}
                             onDeleteConversation={handleDeleteConversation}
+                            personalAgents={sortedPersonalAgents}
+                            onSelectAgent={handleAgentSelect}
+                            agentsLoading={personalAgentsLoading}
                           />
                         ) : (
                           <ChatMessages
@@ -1051,13 +1342,14 @@ const NumaChatAgents = () => {
                             loadingIndicatorStyle={{}}
                             onOpenDocument={openDocument}
                             isConversationLoading={false}
+                            currentAgent={currentAgent}
                           />
                         )}
                       </div>
 
                       {/* pinned input at bottom (hide during initial new chat flow) */}
                       {!shouldShowNewChatView && (
-                        <div className="chat-input-wrapper">
+                        <div className="chat-input-wrapper" style={{ marginBottom: '1rem' }}>
                           <ChatInput
                             inputMessage={inputMessage}
                             setInputMessage={setInputMessage}
@@ -1097,17 +1389,6 @@ const NumaChatAgents = () => {
                   minRight={200}
                 />
               </div>
-              {/* Tips Messages - hide on new chat view */}
-              {!shouldShowNewChatView && (
-                <div className="tips-container">
-                  <p className="datasource-tip text-center small text-muted">
-                    Click the <i className="bi bi-database"></i> to chat against your data sources.
-                  </p>
-                  <p className="websearch-tip text-center small text-muted">
-                    Click the <i className="bi bi-search"></i> to search the web.
-                  </p>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -1125,6 +1406,9 @@ const NumaChatAgents = () => {
         setIsFileProcessing={setIsFileProcessing}
         ensureConversationReady={ensureConversationReady}
         resetUserNewChatFlag={resetUserNewChatFlag}
+        pendingAgent={pendingAgent}
+        currentAgent={currentAgent}
+        setPendingAgent={setPendingAgent}
         resetInactivityTimer={resetInactivityTimer}
       />
     </div>

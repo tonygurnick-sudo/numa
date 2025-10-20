@@ -83,6 +83,20 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
       messageGroups.push(currentGroup);
     }
 
+    // Identify agent metadata from meta entry (if present)
+    const metaItem = conversationHistory.find((item) => item.message_type === 'meta');
+
+    const agentMeta = metaItem?.isAgentConversation
+      ? {
+          agentId: metaItem.agentId,
+          agentTitle: metaItem.agentTitle,
+          agentVersion: metaItem.agentVersion,
+          agentIcon: metaItem.agentIcon,
+          agentType: metaItem.agentType,
+          agentVisibility: metaItem.agentVisibility,
+        }
+      : null;
+
     // Convert grouped items to chat messages
     const chatMessages = messageGroups
       .map((group) => {
@@ -143,6 +157,9 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
           }
 
           if (item.message_type === 'file') {
+            if (item.messageContext === 'agent_reference') {
+              return null;
+            }
             baseMsg.content = `File '${item.fileInfo.fileName}' uploaded and processed successfully.`;
             baseMsg.role = 'assistant';
           } else if (item.message_type === 'image_description') {
@@ -152,8 +169,8 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
             baseMsg.content = `Retrieving data source knowledge...`;
             baseMsg.role = 'assistant';
           } else if (item.message_type === 'meta') {
-            // system-level info
-            baseMsg.role = 'system';
+            // Meta items are for tracking only, don't display them in chat
+            return null;
           }
           return baseMsg;
         } else {
@@ -251,7 +268,10 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
       })
       .filter(Boolean); // Remove null values from document_metadata items
 
-    return chatMessages;
+    return {
+      messages: chatMessages,
+      agentMeta,
+    };
   } catch (error) {
     console.error('Error loading conversation:', error);
     throw error; // Re-throw to let caller handle UI updates

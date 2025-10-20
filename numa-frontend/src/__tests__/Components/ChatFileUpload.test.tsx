@@ -47,7 +47,6 @@ vi.mock('../../utils/fileProcessing', () => ({
 
 describe('ChatFileUpload Component', () => {
   const mockOnHide = vi.fn();
-  const mockOnUploadSuccess = vi.fn();
   const mockSetMessages = vi.fn();
   const mockRefreshSidebar = vi.fn();
   const mockSetIsFileProcessing = vi.fn();
@@ -55,11 +54,12 @@ describe('ChatFileUpload Component', () => {
   const mockAddMessage = vi.fn();
   const mockAddFileMessage = vi.fn();
   const mockResetInactivityTimer = vi.fn();
+  const mockResetNewChatFlag = vi.fn();
+  const mockSetPendingAgent = vi.fn();
 
   const defaultProps = {
     show: true,
     onHide: mockOnHide,
-    onUploadSuccess: mockOnUploadSuccess,
     setMessages: mockSetMessages,
     conversationId: 'test-conversation',
     sub: 'test-user',
@@ -67,6 +67,10 @@ describe('ChatFileUpload Component', () => {
     setIsFileProcessing: mockSetIsFileProcessing,
     ensureConversationReady: mockEnsureConversationReady,
     resetInactivityTimer: mockResetInactivityTimer,
+    resetUserNewChatFlag: mockResetNewChatFlag,
+    pendingAgent: null,
+    currentAgent: null,
+    setPendingAgent: mockSetPendingAgent,
   };
 
   beforeEach(() => {
@@ -103,6 +107,7 @@ describe('ChatFileUpload Component', () => {
       numaChatDynamoUtils: {
         addMessage: mockAddMessage,
         addFileMessage: mockAddFileMessage,
+        updateMetaItem: vi.fn(),
       },
       numaChatBedrockUtils: {},
       user: { tokens: { idToken: 'test-token' } },

@@ -4,12 +4,23 @@ import type { FormEvent, MouseEvent } from 'react';
 import { ChatInput } from './ChatInput';
 import type { ConversationMeta } from '../hooks/useChatInactivity';
 import numaIcon from '../../public/numa-logo.svg';
+import AgentAvatar from './AgentAvatar';
+import { useAgentById } from '../hooks/useAgentById';
 
 type ConnectionOption = {
   id: string;
   name: string;
   isConnected: boolean;
   mcpServerUrl?: string;
+};
+
+type AgentSummary = {
+  agentId: string;
+  title: string;
+  icon?: string;
+  iconImage?: { s3Bucket: string; s3Key: string };
+  agentType?: string;
+  visibility?: string;
 };
 
 type NewChatProps = {
@@ -39,6 +50,37 @@ type NewChatProps = {
   userName?: string;
   onRenameConversation?: (conversationId: string, currentName: string) => Promise<void>;
   onDeleteConversation?: (conversationId: string) => Promise<void>;
+  personalAgents?: AgentSummary[];
+  onSelectAgent?: (agent: AgentSummary) => void;
+  agentsLoading?: boolean;
+};
+
+// Renders an avatar for a recent conversation using latest agent data when available.
+const ConversationAvatar = ({
+  convo,
+}: {
+  convo: {
+    isAgentConversation?: boolean;
+    agentId?: string | null;
+    agentIcon?: string | null;
+    agentTitle?: string | null;
+  };
+}) => {
+  const { agent } = useAgentById(convo.agentId || undefined);
+
+  if (convo.isAgentConversation) {
+    return (
+      <AgentAvatar
+        agent={agent}
+        icon={convo.agentIcon || undefined}
+        size={32}
+        rounded={true}
+        alt={convo.agentTitle || 'Agent'}
+      />
+    );
+  }
+
+  return <i className="bi bi-clock-history" style={{ fontSize: '1rem', color: '#6c757d' }}></i>;
 };
 
 // Helper function to get time-based greeting
@@ -103,6 +145,9 @@ const NewChat = ({
   userName,
   onRenameConversation,
   onDeleteConversation,
+  personalAgents = [],
+  onSelectAgent,
+  agentsLoading: _agentsLoading = false,
 }: NewChatProps) => {
   const handleContinueClick = (conversationId: string) => {
     hideSuggestions();
@@ -128,10 +173,16 @@ const NewChat = ({
 
   return (
     <div
-      className="d-flex flex-column align-items-center h-100 overflow-auto"
-      style={{ paddingTop: 'max(12vh, 3rem)', paddingBottom: '2rem', paddingLeft: '1rem', paddingRight: '1rem' }}
+      className="d-flex flex-column align-items-center h-100"
+      style={{
+        paddingTop: 'max(8vh, 2rem)',
+        paddingBottom: '0rem',
+        paddingLeft: '1rem',
+        paddingRight: '1rem',
+        overflow: 'hidden',
+      }}
     >
-      <div style={{ maxWidth: 680, width: '100%' }}>
+      <div style={{ maxWidth: 680, width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Greeting with Numa Logo */}
         <div
           style={{
@@ -168,7 +219,7 @@ const NewChat = ({
           className="chat-input-wrapper"
           style={{
             width: '100%',
-            marginBottom: '2rem',
+            marginBottom: '0.75rem',
             animation: 'fadeIn 0.8s ease-in-out',
           }}
         >
@@ -197,12 +248,73 @@ const NewChat = ({
           />
         </div>
 
-        {/* Conversation suggestions area - fixed height to prevent jump */}
-        <div style={{ maxWidth: 680, width: '100%', minHeight: '200px' }}>
+        {/* Personal Agents List */}
+        {personalAgents.length > 0 && (
+          <div style={{ maxWidth: 680, width: '100%', marginBottom: '1rem', animation: 'fadeIn 0.6s ease-in-out' }}>
+            <div
+              className="d-flex align-items-center"
+              style={{ gap: '0.5rem', overflowX: 'auto', overflowY: 'hidden', paddingBottom: '0.5rem' }}
+            >
+              {/* Robot icon as visual indicator */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '40px',
+                  height: '40px',
+                  color: '#4b007d',
+                  flexShrink: 0,
+                }}
+              >
+                <i className="bi bi-robot" style={{ fontSize: '1.5rem' }}></i>
+              </div>
+              {/* Agent avatars */}
+              {personalAgents.map((agent) => (
+                <OverlayTrigger
+                  key={agent.agentId}
+                  placement="top"
+                  overlay={<Tooltip id={`agent-${agent.agentId}`}>{agent.title}</Tooltip>}
+                >
+                  <Button
+                    variant="outline-secondary"
+                    className="agent-quick-select-btn"
+                    style={{
+                      padding: '0.25rem',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(0, 0, 0, 0.1)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      transition: 'all 0.2s ease-in-out',
+                      flexShrink: 0,
+                    }}
+                    onClick={() => onSelectAgent?.(agent)}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(75, 0, 125, 0.05)';
+                      e.currentTarget.style.borderColor = 'rgba(75, 0, 125, 0.3)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+                      e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <AgentAvatar agent={agent} size={36} rounded={true} alt={agent.title} style={{ margin: 0 }} />
+                  </Button>
+                </OverlayTrigger>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Conversation suggestions area - scrollable */}
+        <div style={{ maxWidth: 680, width: '100%', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
           {suggestionsLoading ? (
             <div
               className="d-flex justify-content-center align-items-center"
-              style={{ minHeight: '200px', animation: 'fadeIn 0.3s ease-in-out' }}
+              style={{ minHeight: '100px', animation: 'fadeIn 0.3s ease-in-out' }}
             >
               <Spinner animation="border" role="status" size="sm" style={{ color: '#4b007d' }}>
                 <span className="visually-hidden">Loading recent conversations...</span>
@@ -222,12 +334,13 @@ const NewChat = ({
               >
                 Continue where you left off
               </div>
-              <div className="d-flex flex-column" style={{ gap: '0.75rem' }}>
+              <div className="d-flex flex-column" style={{ gap: '0.75rem', paddingBottom: '1rem' }}>
                 {recentConversations.map((convo) => (
-                  <Button
+                  <div
                     key={convo.conversation_id}
-                    variant="outline-secondary"
                     className="text-start conversation-suggestion-btn"
+                    role="button"
+                    tabIndex={0}
                     style={{
                       padding: '0.75rem 1rem',
                       borderRadius: '10px',
@@ -241,8 +354,15 @@ const NewChat = ({
                       alignItems: 'center',
                       gap: '0.65rem',
                       position: 'relative',
+                      cursor: 'pointer',
                     }}
                     onClick={() => handleContinueClick(convo.conversation_id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleContinueClick(convo.conversation_id);
+                      }
+                    }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.backgroundColor = 'rgba(75, 0, 125, 0.05)';
                       e.currentTarget.style.borderColor = 'rgba(75, 0, 125, 0.3)';
@@ -256,7 +376,7 @@ const NewChat = ({
                       e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
-                    <i className="bi bi-clock-history" style={{ fontSize: '1rem', color: '#6c757d' }}></i>
+                    <ConversationAvatar convo={convo} />
                     <div style={{ flex: 1, overflow: 'hidden' }}>
                       <div
                         style={{
@@ -274,7 +394,9 @@ const NewChat = ({
                           marginTop: '0.2rem',
                         }}
                       >
-                        {formatRelativeTime(convo.latestTimestamp)}
+                        {convo.isAgentConversation && convo.agentTitle
+                          ? `${convo.agentTitle} • ${formatRelativeTime(convo.latestTimestamp)}`
+                          : formatRelativeTime(convo.latestTimestamp)}
                       </div>
                     </div>
                     {(onRenameConversation || onDeleteConversation) && (
@@ -322,7 +444,7 @@ const NewChat = ({
                         )}
                       </div>
                     )}
-                  </Button>
+                  </div>
                 ))}
               </div>
             </div>

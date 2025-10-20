@@ -5,10 +5,31 @@ import { useAuth } from '../Providers/AuthProvider';
  * Hook for managing conversation state, loading, and creation
  * Extracted from NumaChat.jsx to improve maintainability
  */
+export type AgentMeta = {
+  agentId: string;
+  title: string;
+  version?: number;
+  icon?: string;
+  agentType?: string;
+  visibility?: string;
+};
+
+const getHasPreselectedAgent = () => {
+  try {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return window.sessionStorage.getItem('numa_preselected_agent') !== null;
+  } catch (error) {
+    console.warn('Unable to read preselected agent from sessionStorage:', error);
+    return false;
+  }
+};
+
 export const useConversationManager = () => {
   const [conversationId, setConversationId] = useState(null);
   const [isConversationLoading, setIsConversationLoading] = useState(true);
-  const [hasUserStartedNewChat, setHasUserStartedNewChat] = useState(false);
+  const [hasUserStartedNewChat, setHasUserStartedNewChat] = useState<boolean>(() => getHasPreselectedAgent());
 
   const { numaChatDynamoUtils, user } = useAuth();
 
@@ -24,9 +45,6 @@ export const useConversationManager = () => {
     setHasUserStartedNewChat(false);
   }, []);
 
-  /**
-   * Create a new conversation if needed
-   */
   const pendingConversationIdRef = useRef<string | null>(null);
   const creationPromisesRef = useRef<Map<string, Promise<string>>>(new Map());
   const createdConversationIdsRef = useRef<Set<string>>(new Set());
@@ -37,17 +55,15 @@ export const useConversationManager = () => {
   }, [hasUserStartedNewChat]);
 
   const ensureConversationReady = useCallback(
-    async (initialText = '') => {
+    async (initialText = '', agentInfo?: AgentMeta | null) => {
       if (!numaChatDynamoUtils) {
         throw new Error('Dynamo utilities unavailable');
       }
 
-      // Existing conversation that has already been persisted
-      if (conversationId && !hasUserStartedNewChat) {
+      if (conversationId && !hasUserStartedNewChatRef.current) {
         return conversationId;
       }
 
-      // Use existing pending ID or create a fresh one
       let targetId = conversationId || pendingConversationIdRef.current;
       if (!targetId) {
         targetId = `${sub || 'anonymous'}_${Date.now()}`;
@@ -66,30 +82,46 @@ export const useConversationManager = () => {
       }
 
       const defaultName =
-        initialText && initialText.trim().length > 0
-          ? initialText.trim().length > 60
-            ? `${initialText.trim().slice(0, 57)}...`
-            : initialText.trim()
-          : 'Untitled Chat';
+        agentInfo?.title && agentInfo.title.trim().length > 0
+          ? agentInfo.title.trim()
+          : initialText && initialText.trim().length > 0
+            ? initialText.trim().length > 60
+              ? `${initialText.trim().slice(0, 57)}...`
+              : initialText.trim()
+            : 'Untitled Chat';
 
       const creationPromise = (async () => {
         try {
-          await numaChatDynamoUtils.addMessage({
+          const metaPayload: Record<string, unknown> = {
             conversationId: targetId,
             userId: sub,
             messageType: 'meta',
             role: 'user',
             conversationName: defaultName,
             content: 'New conversation started',
-          });
+          };
 
-          await numaChatDynamoUtils.addMessage({
-            conversationId: targetId,
-            userId: sub,
-            messageType: 'text',
-            role: 'assistant',
-            content: 'How can I help you today?',
-          });
+          if (agentInfo) {
+            metaPayload.agentId = agentInfo.agentId;
+            metaPayload.agentTitle = agentInfo.title;
+            metaPayload.agentVersion = agentInfo.version ?? Date.now();
+            metaPayload.agentIcon = agentInfo.icon;
+            metaPayload.agentType = agentInfo.agentType;
+            metaPayload.agentVisibility = agentInfo.visibility;
+            metaPayload.isAgentConversation = true;
+          }
+
+          await numaChatDynamoUtils.addMessage(metaPayload as never);
+
+          if (!agentInfo) {
+            await numaChatDynamoUtils.addMessage({
+              conversationId: targetId,
+              userId: sub,
+              messageType: 'text',
+              role: 'assistant',
+              content: 'How can I help you today?',
+            });
+          }
 
           createdConversationIdsRef.current.add(targetId);
           pendingConversationIdRef.current = null;
@@ -129,6 +161,13 @@ export const useConversationManager = () => {
 
     async function initializeConversation() {
       if (!numaChatDynamoUtils || !sub || hasUserStartedNewChatRef.current) {
+        return;
+      }
+
+      // Check if there's a preselected agent - if so, don't load previous conversation
+      const preselectedAgent = sessionStorage.getItem('numa_preselected_agent');
+      if (preselectedAgent) {
+        console.log('Preselected agent found; skipping conversation initialization');
         return;
       }
 

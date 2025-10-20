@@ -104,18 +104,43 @@ $border-radius-pill: 1rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 40px;
         height: 38px;
+        padding: 0 0.75rem;
         border: 1px solid var(--color-primary);
         background-color: var(--color-bg-lightest);
         color: var(--color-primary);
         border-radius: 0.375rem;
         transition: all 0.2s ease-in-out;
+        white-space: nowrap;
 
         &:hover {
           background-color: var(--color-primary);
           color: white;
           border-color: var(--color-primary);
+        }
+
+        i {
+          font-size: 1.1rem;
+        }
+      }
+
+      .agents-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 38px;
+        padding: 0 0.75rem;
+        border: 1px solid $numa-primary;
+        background-color: white;
+        color: $numa-primary;
+        border-radius: 0.375rem;
+        transition: all 0.2s ease-in-out;
+        white-space: nowrap;
+
+        &:hover {
+          background-color: $numa-primary;
+          color: white;
+          border-color: $numa-primary;
         }
 
         i {
@@ -251,8 +276,9 @@ $border-radius-pill: 1rem;
         }
       }
 
-      // Auto Tools Toggle
-      .auto-tools-toggle {
+      // Auto Tools Toggle (and new tools-settings-toggle)
+      .auto-tools-toggle,
+      .tools-settings-toggle {
         @include toggle-button-base;
 
         &:focus {
@@ -262,6 +288,28 @@ $border-radius-pill: 1rem;
 
         .bubble-text {
           @include bubble-text;
+        }
+      }
+
+      // Tools settings dropdown
+      .tools-settings-dropdown {
+        position: static !important;
+
+        .dropdown-menu {
+          z-index: 9999 !important;
+          position: fixed !important;
+        }
+
+        .active-tools-indicators {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          margin-left: 0.5rem;
+          color: #4b007d;
+
+          svg {
+            opacity: 0.9;
+          }
         }
       }
 
@@ -421,6 +469,12 @@ $border-radius-pill: 1rem;
     margin-bottom: 0.5rem;
     margin-top: 0.5rem;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+    &.agent-welcome-message {
+      background: linear-gradient(135deg, rgba(142, 80, 167, 0.08) 0%, rgba(142, 80, 167, 0.02) 100%);
+      border: 2px solid rgba(142, 80, 167, 0.2);
+      box-shadow: 0 2px 8px rgba(142, 80, 167, 0.15);
+    }
 
 
     &.system {
@@ -799,6 +853,39 @@ $border-radius-pill: 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+// Agents Sidebar Styling
+.agent-list-item {
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+
+  &:hover {
+    border-color: $numa-primary !important;
+    background-color: $numa-hover-bg;
+    box-shadow: 0 2px 8px rgba(142, 80, 167, 0.15);
+  }
+
+  &.border-primary {
+    background-color: $numa-active-bg;
+    border-color: $numa-primary !important;
+  }
+
+  .btn-outline-success {
+    border-color: $numa-primary;
+    color: $numa-primary;
+
+    &:hover:not(:disabled) {
+      background-color: $numa-primary;
+      border-color: $numa-primary;
+      color: white;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
 }
 
 // Tool Result Card Styling (from POC)
