@@ -1,498 +1,426 @@
-# Core prompt for the GDSR assessment
-GDSR_ASSESSMENT_PROMPT = """# Game Development Sector Rebate (GDSR) Assessment Task
+"""Prompt components for the GDSR assessment workflow."""
 
-Please act as a funding assessor for NZ On Air on GDSR. You are assessing the document contained in Application applying all applicable assessment criteria from the project knowledge in GDSR Reference File. When supporting financial data is provided, use it to perform detailed cross-validation and verification. Strictly use the template in Assessment Template as the output format.
+from textwrap import dedent
 
-## Application
-```
-{document_content}
-```
+# Core prompt sections -----------------------------------------------------------------
 
-## Supporting Financial Data (GDSR Financial Details Template)
-```
-{supporting_data_content}
-```
+ROLE_AND_OBJECTIVES = dedent(
+    """\
+    ## Role & Objectives
+    - Act as the NZ On Air assessor for the Game Development Sector Rebate (GDSR).
+    - Evaluate the `Application` using the policy excerpts provided in the reference library.
+    - When `Supporting Financial Data` is available, reconcile figures and explain mismatches.
+    - When supporting data is missing, state the limitation and base findings solely on the application.
+    - Surface policy breaches, risks, and missing evidence with explicit references.
+    """
+)
 
-## GDSR Reference File
-```
-{gdsr_reference}
-```
+ASSESSMENT_WORKFLOW = dedent(
+    """\
+    ## Required Workflow
+    1. Confirm the applicant, project, and software eligibility.
+    2. Reconcile supporting financial data against the application; quantify any variance.
+    3. Run the 12 verification tests and record ✅ / ⚠️ / ❌ with concise evidence.
+    4. Calculate recommended adjustments to eligible expenditure and document rationale.
+    5. Flag follow-up questions, missing documentation, or policy risks for NZ On Air.
+    """
+)
 
-## Assessment Template
-```
-{assessment_template}
-```
-
-## Assessment Instructions
-
-### When Supporting Financial Data is Provided:
-1. **Cross-validate all financial figures** between the application and supporting data
-2. **Verify expense categorization** matches GDSR eligibility criteria from the reference file
-3. **Check project cost allocation** between eligible and non-eligible games
-4. **Validate personnel costs** and NZ residency status from employee summaries
-5. **Review software expenses** against the approved master sheet in the reference file
-6. **Confirm no double-funding** from other government sources listed in supporting data
-7. **Flag any discrepancies** between claimed amounts and supporting data calculations
-8. **Perform the 12 verification tests** outlined in the reference file using the supporting data
-9. **Calculate adjusted recommendations** based on supporting data validation
-10. **Include a Financial Data Validation section** in your assessment with specific findings
-
-### When Supporting Financial Data is Missing:
-- Note this limitation in your assessment
-- Recommend that supporting financial data be provided for complete evaluation
-- Base assessment solely on application document content
-
-## Markdown Formatting Guidelines:
-- Start directly with the template structure provided in Assessment Template
-- Maintain all headings, sections, and tables exactly as shown in the template
-- Use **bold** for emphasis on important findings, requirements, or decisions
-- Use `code formatting` for specific sections of GDSR policy being referenced
-- Use > blockquotes to highlight direct quotes from the application document
-- Use proper table formatting with | characters and header rows for all tables
-- Use bullet points with - for listing multiple items within a section
-- Create a visually structured document with clear section separation
-- Ensure tables are aligned properly with consistent column widths
-- When filling fields with [bracketed placeholders], replace them entirely with your assessment content
-
-As you assess the application:
-1. Be thorough and detailed in your evaluation
-2. Reference specific criteria from the GDSR Reference File
-3. Provide evidence from both the Application document and Supporting Financial Data
-4. Be objective and balanced in your evaluation
-5. Make specific, actionable recommendations
-6. Follow the Assessment Template format exactly
-7. Highlight any inconsistencies between application claims and supporting data
-
-Do not add any introduction or summary outside the template structure - start directly with the Assessment Checklist Cover Sheet format.
+OUTPUT_RULES = dedent(
+    """\
+## Output Rules
+- Populate the assessment template exactly as supplied; keep every heading, table, and section.
+- Replace bracketed placeholders with findings or the words `Not provided`—never invent data.
+- Use **bold** for decisions, > blockquotes for direct citations, and `code formatting` for policy clauses.
+- Quote amounts exactly as stated; show calculation logic when adjusting totals.
+- Do not add commentary before or after the template.
+- Do not introduce extra sections (for example, avoid creating "Software Eligibility Assessment" or "Financial Data Validation" headings).
+- If a required field cannot be found verbatim in the inputs, write `Not provided` and (if relevant) add a follow-up question in the final section.
 """
+)
 
-# GDSR reference guide document
-GDSR_REFERENCE = """Game Development Sector Rebate (GDSR) Comprehensive Reference Guide
+EVIDENCE_EXPECTATIONS = dedent(
+    """\
+    ## Evidence Expectations
+    - Cite the relevant policy clause or software decision list when approving or rejecting costs.
+    - Highlight discrepancies between application and supporting data with precise dollar amounts.
+    - When documentation is insufficient, clearly flag what is missing and how it affects the assessment.
+    """
+)
 
-Overview
-The Game Development Sector Rebate (GDSR) is a government initiative designed to support the growth of New Zealand's game development sector. It provides a 20% rebate on eligible expenditure for qualifying businesses, with a maximum rebate of $3,000,000 NZD per application period and a minimum threshold of $250,000 in eligible expenditure.
+ADJUSTMENT_EXPECTATIONS = dedent(
+    """\
+    ## Adjustment Expectations
+    - Treat projects flagged as ineligible (for example, lootboxes with real-world winnings) as non-claimable. Exclude their costs from recommended totals.
+    - Use the supporting spreadsheet to summarise totals by cost category; rely on the Eligible column, not the original claim, when computing recommendations.
+    - Where the spreadsheet shows multiple games or cost centres, itemise key exclusions in the `Reason for adjustment` column of the approval table.
+    - When data is ambiguous, call it out under follow-up questions rather than defaulting to the applicant’s claimed totals.
+    """
+)
 
-Key Program Details
-• Annual funding: $40 million per annum (less scheme administration costs)
-• Rebate rate: 20% of eligible expenditure
-• Maximum rebate: $3,000,000 NZD per applicant per year
-• Minimum eligible expenditure: $250,000 per year
-• Eligibility period: April 1 to March 31 each year
-• Administrator: NZ On Air
-• Policy responsibility: Ministry of Business, Innovation and Employment (MBIE)
+# STRICT entity extraction (tolerant of PDF layout) ------------------------------------
 
-Application Process Timeline
-1. Registration Phase (beginning of calendar year):
-   o Businesses must register through the NZ On Air portal
-   o Registration period typically lasts one month
-   o Assessment of eligibility based on registration information
-   o Notification via Letter of Acknowledgement or Letter of Decline
+ENTITY_EXTRACTION_PROTOCOL = dedent(
+    """\
+    ## Entity Extraction Protocol — STRICT
+    Extract names and other entities directly from the provided text. Do not guess.
 
-2. Application Phase (April):
-   o For businesses that received a Letter of Acknowledgement
-   o Applications cover eligible expenditures from previous financial year (April 1 - March 31)
-   o Six-week submission period after eligibility period ends
-   o Submission of financial and game project details using provided templates
+    1) Assessor Names
+       - there are no assessors as this is an AI assessment
 
-3. Assessment and Payment (post-April):
-   o Review of applications by NZ On Air
-   o Possible requests for additional information
-   o About 20% of successful applicants are audited each year
-   o Publication of recipients' names and aggregate funding disbursed
-   o Individual funding amounts published in dollar bands two years later
+    2) Conflict-of-Interest Backfill
+       - there are no conflict as this is an AI assessment
 
-Eligibility Criteria
+    3) Peer Reviewer
+       - there are no peer review as this is an AI assessment
 
-Eligible Businesses
-• New Zealand residents with a New Zealand Company Number, OR
-• Foreign residents with a permanent establishment in New Zealand and a NZ Company Number
-• Must undertake relevant game development activity
+    4) Applicant, Funding Round, Contact Details
+       - Read values immediately after each heading. If the value wraps, capture subsequent lines until the next heading.
+       - Include emails and phone numbers verbatim if present.
 
-Eligible Games
-Inclusions:
-• Digital games intended for general public release
-• Entertainment or educational purposes, including serious games
-• Formats including VR, AR, mobile, tablet, console, hybrid, installation, web browsers, PC, and multiplatform games
+    5) Ambiguity Handling
+       - If names appear once for multiple adjacent headings and no contrary evidence exists, copy them to each heading.
+       - If evidence conflicts, list both sets exactly as written and add a follow-up question.
 
-Exclusions:
-• Gambling services or games substantially comprised of gambling
-• Games with mechanics allowing real money winnings
-• Games containing material that would be refused classification by Te Mana Whakaatu Classification Office
-• Games containing pornography
-• Gamified software primarily designed for another purpose
-• Linear content with limited interactivity
-• Games intended for commercial advertising purposes
+    6) No Guessing
+       - If an entity cannot be located verbatim, write `Not provided`. Do not infer titles, roles, or affiliations.
 
-Note on Lootboxes: Games with lootboxes are eligible unless they involve mechanics allowing real money winnings. Applicants must disclose lootbox use in their applications.
+    7) Formatting
+       - Preserve capitalisation and punctuation exactly as written. Do not translate or normalise names.
+    """
+)
 
-Eligible Digital Assets
-Businesses that develop digital assets for the game development industry (without developing games themselves) may qualify. These assets include:
-• 3D Models (characters, vehicles, props)
-• Environment textures
-• Animations
-• User interface elements
+# STRICT numeric precision & reconciliation --------------------------------------------
 
-Assets must be intended for the game development sector, not for direct consumer use.
+NUMERIC_PRECISION_PROTOCOL = dedent(
+    """\
+    ## Numeric Precision & Reconciliation Protocol — STRICT (No Hallucinations)
+    Numerical accuracy is the highest priority. Never fabricate, round, or alter figures.
 
-Eligible Expenditure
-Inclusions:
-1. Personnel Costs:
-   o Market-level remuneration for NZ-domiciled employees and contractors performing eligible game development functions:
-     ▪ Project management
-     ▪ Development (game design, programming, engineering)
-     ▪ Writing and story designing
-     ▪ Production
-     ▪ Art and design
-     ▪ Marketing and community development
-     ▪ Live operations
-     ▪ Player research and game quality improvements
+    1) Verbatim Capture
+       - Copy amounts, totals, percentages, and caps exactly as shown (including commas and decimal places).
 
-2. Development Costs:
-   o Research for game development
-   o Prototyping
-   o User testing, debugging, data collection
-   o Game engines and infrastructure
-   o Game production software (SaaS) and hardware/software depreciation
-   o Online hosting and distribution
-   o Classification costs
-   o Trademark costs for IP created
-   o Licensing of NZ material
-   o Conference participation
-   o Auditing costs related to GDSR application
+    2) Dual-Source Reconciliation
+       - If both Application and Supporting Financial Data include totals:
+         - Display both totals.
+         - Compute and display: `Variance = Supporting total − Application total`.
+         - Show the arithmetic explicitly (e.g., `$925,448.30 − $925,448.30 = $0.00`).
+       - If the spreadsheet provides separate Eligible vs Not Eligible columns, recompute totals based on the Eligible column only.
 
-Exclusions:
-1. General Business Overheads:
-   o Insurance, HR, legal services, general auditing
-   o Travel, accommodation, catering, hospitality
-   o Visas or work permits
-   o Financing expenses
+    3) Zero Invention
+       - If a figure is missing, write `Not provided`. Do not estimate, prorate, extrapolate, or infer.
 
-2. Other Exclusions:
-   o Non-game development staff
-   o Staff not domiciled in NZ
-   o Land or premises use
-   o Other depreciation expenses
-   o Expenditures already claimed by another business
-   o Expenditures funded by other government grants or subsidies
+    4) Adjustments
+       - When excluding or adjusting costs, show:
+         - The original claimed amount.
+         - The revised amount.
+         - The precise reason for the difference, with references.
+       - If an activity or project is marked ineligible (`No`, `Maybe`, or flagged with policy risk), remove its costs from the recommended totals.
 
-Eligible Software
-Inclusions:
-1. Art, Animation, UX and UI Software (Adobe Suite, ZBrush, Maya, Figma)
-2. Coding and Version Control Software (JetBrains IDEs, GitHub)
-3. Game Development Software (Unity, Unreal Engine)
-4. Game Distribution Software (Apple Developer Program, Steamworks)
-5. Narrative Design Software (Articy Draft)
-6. User Testing, Debugging, and User Data Collection Software (UserTesting, Backtrace)
-7. Crash Reporting Software (Bugsplat, Sentry)
+    5) Percentages & Caps
+       - Compute `GDSR at 20%` from the final eligible expenditure after all adjustments and caps.
+       - Show intermediate steps and the final outcome.
 
-Exclusions:
-1. General Business Software (Slack, Microsoft Teams, Office, G-Suite)
-2. Financial Software (Xero, MYOB)
-3. Customer Support Software
-4. Marketing and E-Commerce Software
-5. Asset Purchase and Freelance Marketplace Software
+    6) Currency
+       - Use NZD consistently. Keep the `$` prefix and spacing exactly as in the source text.
 
-Edge Cases (requiring additional justification):
-• AI software (ChatGPT)
-• Analytics software (Appfigures)
-• Audio design software (Soundtrap)
-• Cloud software (Microsoft Azure, Cloudflare)
-• Communication software (Discord)
-• Customer support software (Zendesk)
-• IT security software (Hexnode)
-• Localization Software (Crowdin, Smartling)
-• Project Management Software (Jira)
+    7) Ambiguity
+       - If figures conflict or cannot be verified, present both and note: `Unable to reconcile — follow-up required`.
+    """
+)
 
-APPROVED SOFTWARE MASTER SHEET REFERENCE This master sheet provides specific guidance for commonly requested software and should be used alongside the general software eligibility criteria above.
 
-CONFIRMED ELIGIBLE SOFTWARE:
-Adobe (Art software), Affinity (Art/animation software), Animbot (3D modelling software), Apple Developer Program (Develop and distribute app on Apple software), Articy (Narrative design software), Atlassian - Jira (Project Management), Autodesk Maya (3D art software), BorisFX (VFX Software), Bugsplatt (Crash reporting software), CircleCI (Distributing code across game platforms software), Click-up (Project Management), Cloudflare (Infrastructure), Codecks (Project Management), Confluence (Project Management), Crowdin (Translation service software), Epic Games (Game engine software), GitHub (Version control for game development), Harvest Forecast (Project management), Jetbrains (Programming languages), Marmoset (Art - rendering, texturing tool), Milanote (Project management tool), Movella (Motion tracking and analysis software for VR games), Pager Duty (Crash reporting software), Parsec (connects teams to hardware to maintain workflows), Per Force Helix Core (Game version control), Plastic SCM/Unity (Game engine), Planyway (Project management), red Giant Maxon (Video effects software), Sentry (Crash reporting software), SideFX (3D animation software), Steam (Game platform), Syncsketch (communication and collaboration platform), Test guild (Automation testing software), Trello (Project management), Unity (Game engine), Whole Tomato (Programming software), Whimsical (Project management software), Xsolla (In-game payment software), Z-Brush (3D modelling software), FontLab (Font creation software)
+ASSESSMENT_EXAMPLE = dedent(
+    """\
+    # GDSR Assessment Checklist
 
-REQUIRES ADDITIONAL ASSESSMENT - AI Software (determine if used by dev team vs marketing/ops): ChatGPT, MidJourney, OpenAI, ArtAI, Anthropic, Claude.ai, Poe.com, Runway, Magnific, Blockade labs, Suno
-REQUIRES ADDITIONAL ASSESSMENT - Analytics Software (determine if used by dev team vs marketing/ops): Appfigures, Appsflyer
-REQUIRES ADDITIONAL ASSESSMENT - Training Software (determine if included within employee contracts): Training programs, Animator Guild, Audible
-REQUIRES ADDITIONAL ASSESSMENT - Cloud Software (determine if used to host/power games vs general business): Microsoft Azure, Vultr, Dreamhost, Backblaze, Wasabi Technologies, Zappie Host
-REQUIRES ADDITIONAL ASSESSMENT - Music/Audio Software (NZ-based team members only): Soundtrap, Ableton, Cargo Cult - Envy
-REQUIRES ADDITIONAL ASSESSMENT - Conditional Eligibility: Figma (only if used by game dev art team, not marketing), Sketchfab (only if used by dev team, not marketing), Librato (only if used by dev team, not ops), Solarwinds (only if used by dev team, not ops), Hexnode (only if protecting players), paddle.net (only if used for in-game payments), Miro (to be discussed), Nuclino (to be discussed)
-REQUIRES ADDITIONAL ASSESSMENT - Research Software (only if for research, not entertainment): Boardgamearena, Purchase of games, Debug Magazine
+    ## Cover Sheet
 
-CONFIRMED NON-ELIGIBLE SOFTWARE:
-Ascend (Accounts payable), Canva (Marketing), Clipdrop (Marketing art), Discord (Communication software), Epidemic sounds (Royalty free music), Ethereum (Bitcoin wallet), FastSpring (SaaS e-commerce platform), Feature Upvote (Customer feedback software), Fiverr (Freelance programmers), FreeScout (Customer support ticketing software), Game Discover Co (Newsletter), GoDaddy (Domain/website registry), Google (General business infrastructure), G-Suite (General business infrastructure), Hootsuite (Social media management), icompetech (Royalty free music), Loomly (Social media management), Microsoft (General business infrastructure), Orchestra (Payroll), Pantheon (Website design), PayPro (Global e-commerce solution), re-purpose.io (Social media and marketing tool), Restream (Multistreaming platform), RSS Comms (Cyber security, cabling/installation, VOIP solutions), Shutterstock (Stock images), Skrapp.io (Email tool), Slack (Team communications tool), Soundly (Sound effect tool), Soundsnap (Sound effect website), Sprout Social (Social Media Management), Synology (Security and back ups), Tailscale (VPN - general business infrastructure), Thinkcell (Microsoft PowerPoint and Excel add-in), TimeOS (Time management software), TIMG (Security), Video game insights (Market analysis), Wavetoys Music (Royalty free music), Webflow (Website design), Wix.com (Website design and hosting), WorkWithIndies (Freelance programmers), YMCA, Flexi-time, Dikas Studio (Fonts - not software as a service), DropBox (File transfer and storage), Zendesk (Customer support ticketing software)
+    | Field | Value |
+    |-------|-------|
+    | Applicant name | Example Games Ltd |
+    | Funding round | FY25 Final Applications |
+    | Games eligibility assessors | A. Reviewer |
+    | Financial information assessors | B. Analyst |
+    | Assessor conflict of Interest Declarations | I A. Reviewer declare I have no interest in Example Games Ltd or this application. |
+    | Amount of GDSR Applied For | $925,448 |
+    | Amount of GDSR recommended for approval | $747,471 |
+    | Reason for difference (if any) | Non-eligible marketing software and overseas contractors removed from the claim. |
+    | Have all queries raised during the assessment been satisfactorily addressed? | Yes |
+    | Selected for Audit? | No |
+    | Financial Assessment peer reviewed by | C. Peer |
+    | Agreed amount recommended for approval after peer review | $747,471 |
 
-Financial Information Required and Assessment
+    ## Key Information
 
-Required Documentation
-1. Financial Statements:
-   o Profit and loss statement, cash flow statement, and balance sheet for the current tax year (from April 1)
-   o Management accounts from April 1 of the eligibility period
-   o Consolidated financial information for head/parent companies if applicable
-   o Annual financial statements audited or compiled by a qualified accountant
+    **Documents submitted:**
+    - FY25 GDSR Application Form
+    - Example Games Financial Template (XLSX)
+    - 2024 Payroll Summary (CSV)
 
-2. Personnel Information (in Financial Template):
-   o Detailed list of personnel roles involved in game development activities
-   o Specific salary/costs attributed to eligible game development activities
-   o Complete list of contractors who worked in the games development space
-   o Non-NZ tax resident contractors/staff and detailed accounting of time spent on eligible activities
-   o Documentation of well-structured market-level remuneration packages
-   o Evidence of payment via regular payroll systems including PAYE and other taxes
+    **Contact details:** Sam Manager -- sam@examplegames.nz -- +64 20 123 4567
+    **Group structure:** Example Games Ltd is a subsidiary of Example Group Holdings; no other entities lodged a claim this period.
+    **Other govt funding listed as:** (total $55,000)
+    - Callaghan Innovation Experience Grant ($40,000)
+    - RDTI 2023 rebate disclosed for reference
+    - CODE Travel Micro-grant ($15,000)
 
-3. Company Structure (in Financial Template):
-   o Clear indication of subsidiary status
-   o Detailed explanation of related party transaction treatment
-   o Documentation of cost attribution methodology between parent and subsidiary
-   o Ownership structure and any changes during the eligibility period
+    **Loot boxes:** Yes
+    Loot chests award cosmetic skins only; no monetary value or tradable items were identified.
 
-4. Non-Eligible Games Development (in Financial Template):
-   o Detailed breakdown of costs associated with non-eligible games
-   o Evidence of cost allocation methodology (pro-rata basis or timesheet system)
-   o Clear separation between eligible and non-eligible game development activities
+    ## Game Development Activity Verified
 
-5. Other Funding Sources (in Financial Template):
-   o Comprehensive list of claims under other domestic/international funding or grants
-   o Amounts received and applied for during the eligibility period
-   o Documentation showing how these funds were used separately from GDSR-claimed expenses
+    Interactivity: Look for elements such as player input, decision-making, and responsive feedback from the game system. Does the player have agency to make meaningful decisions that affect the outcome?
+    Yes - gameplay footage evidences branching missions and player-driven difficulty modifiers.
 
-6. Additional Financial Information:
-   o Any other relevant financial statements or documentation that assists in determining eligibility
+    Rules and Mechanics: Look for structured gameplay systems that govern player behavior and progression. Are there clear objectives, challenges, or constraints that guide player actions?
+    Yes - sprint backlog outlines core progression systems with milestone criteria and fail states.
 
-Financial Assessment Methodology
-1. Accounting Systems Requirements:
-   o Applicants must have an accounting system that allows tracking of expenditure on individual projects and across eligible/ineligible GDSR expenditure
-   o Advanced financial capabilities and financial statements prepared on an accrual accounting basis
-   o Payroll system able to track time spent on individual projects
+    Player Influence on Outcome: Look for dynamic systems where player decisions have consequences within the game world. Are there multiple paths or outcomes based on player choices and actions?
+    Yes - narrative design doc shows divergent endings driven by alliance selections.
 
-2. Eligible Expenditure Verification:
-   o All expenditure is checked to ensure it falls within the eligibility period (April 1 - March 31)
-   o Verification that expenses are directly related to game development activities
-   o Confirmation that staff are NZ-domiciled for personnel expenses
-   o Validation that software expenses fall within eligible categories
-   o Cross-checking to ensure no double-claiming by contractors and main applicants
+    Final Evaluation: Do you think this product/s meets the definition of a digital game as per the GDSR policy wording?
+    Meets the GDSR definition of an eligible digital game; no gambling or prohibited content identified.
 
-3. Related Party Transaction Assessment:
-   o Careful review to ensure commercial reasonableness
-   o Verification of arm's length pricing
-   o Assessment of cost attribution methodologies between related entities
-   o Documentation of transfer pricing policies if applicable
+    Other information from online application:
+    - Studio employs 24 FTE and 5 contractors; none flagged as international.
+    - Payroll allocations between eligible and live-ops projects supplied with evidence.
 
-4. Exclusion of GST:
-   o Confirmation that all claimed amounts exclude GST
-   o Verification of correct currency conversion for international expenses
+    ## Recommended for Approval
 
-5. Cross-Checking with Other Government Funding:
-   o Verification that expenses claimed have not been funded by other government grants or subsidies
-   o Coordination with other funding agencies to confirm no double-funding has occurred
+    | Category of expenditure | Amount claimed | Amount recommended for approval | Reason for adjustment |
+    |-------------------------|----------------|---------------------------------|-----------------------|
+    | Employee Costs | $789,353 | $632,912 | Removed Malignant team costs tied to ineligible loot box rewards. |
+    | Other staff costs | $105,194 | $77,678 | Excluded international contractor invoices and marketing retainers. |
+    | Hosting/subs/IT | $77,822 | $77,822 | Eligible hosting and engine subscriptions confirmed. |
+    | Depreciation costs | $1,500 | $1,500 | Fixed asset register supports claimed hardware. |
+    | Conference and travel costs | $14,259 | $14,259 | Travel aligns with eligible development milestones. |
+    | Other costs (insert additional lines below as needed) | $0 | $0 | None claimed. |
+    | xxx | $0 | $0 | Not used. |
+    | **Total** | $925,448 | $747,471 | |
+    | **Capped at max allowable** | $15,000,000 |  | |
+    | **GDSR at 20%** | $185,090 | $149,494 | $747,471 x 20% = $149,494.20 (rounded to nearest dollar). |
 
-6. Audit Procedures:
-   o Approximately 20% of applications undergo detailed audit
-   o Cost reporting and accounting systems assessment
-   o Verification of eligible staff and contractors
-   o Cross-verification of game development activities with submitted game details
-   o Independent assessment of cost allocations
+    ## Tests to be Performed
 
-7. Financial Readiness Evaluation:
-   o Assessment of applicant's ability to accurately track and report expenses
-   o Evaluation of financial management capabilities
-   o Verification of appropriate separation between personal and business expenses
-   o Confirmation of proper documentation retention practices
+    | # | Purpose | Task | Comment | Done |
+    |---|---------|------|---------|------|
+    | 1 | Eligible projects/activities have been correctly identified and all games identified as eligible meet the guideline criteria. | Review the list of projects provided. Consider whether the applicant's assessment of eligible projects aligns with the Guidelines. | Three eligible projects confirmed; Malignant flagged as ineligible due to loot boxes with monetised rewards. | AR ✅ |
+    | 2 | To determine if the figures used for the application relate back to the underlying financial statements | Agree figures in workings to management or final accounts. | Financial template reconciles to FY24 P&L and balance sheet; variance worksheet attached. | BA ✅ |
+    | 3 | Consider whether the application is being made at the correct group level and which entities are included. | Review the group structure and confirm that the financial information provided is for the applicant, not another member of the group. | Companies Office records confirm the claim is lodged at Example Games Ltd level only; no duplication. | BA ✅ |
+    | 4 | Assess if other government grants/funding sources have been correctly treated. | Review information provided (documents and online application) on other grants received and confirm related expenditure is excluded from the GDSR claim. | Callaghan and CODE grants relate to earlier prototypes; excluded from eligible expenditure. | BA ✅ |
+    | 5 | Other government grants/funding sources disclosed are complete. | Cross-check tax filings and grant registries; no additional funding identified. | BA ✅ |
+    | 6 | To determine if remuneration expenditure claimed is eligible. | Reconcile remuneration schedules, confirm NZ tax residency, and ensure allocations exclude ineligible titles. | Allocation workbook ties staff splits to sprint plans; non-NZ contractors removed. | BA ✅ |
+    | 7 | External resources claimed are eligible (NZ domiciled contractor, sub-contractor or consultant). | Review contractor, sub-contractor, or consultant expenditure and confirm it relates to eligible game development and NZ domiciled providers. | Contractor schedule confirms NZ residency for all claimed providers; overseas QA vendor excluded. | BA ✅ |
+    | 8 | Inter-entity expenses are claimed at the right level and not duplicated. | Review inter-entity transactions to identify duplicate or misallocated expenditure. | No intercompany charges identified in GL review. | BA ✅ |
+    | 9 | Game development activities performed for other entities (same group or an external entity) are eligible and not claimed twice. | Confirm related or external entity arrangements do not result in double counting and remain eligible. | Publishing support for partner titles tracked separately and excluded from claim. | BA ✅ |
+    | 10 | Depreciation expenditure claimed is eligible. | Review depreciation to ensure it relates only to eligible assets; obtain fixed asset register where required. | Fixed asset register evidences eligible hardware; no office fit-out included. | BA ✅ |
+    | 11 | Other (non-staff) expenditure claimed is eligible. | Review other expenditure against the Guidelines and document eligibility decisions. | Marketing sponsorship and legal fees removed; remaining costs align with guidelines. | BA ✅ |
+    | 12 | To confirm that the calculation for the submitted claim amount is correct. | Trace all figures in the claim summary to supporting information and verify the amount claimed represents 20% of eligible expenditure. | Verified summary schedule; $747,471 x 20% reconciles to $149,494 rebate request. | BA ✅ |
+    """
+)
 
-Application Templates
-The application requires completion of several templates:
-1. Financial Details Template with sections for:
-   o Employee and Contractor Summary
-   o Expense Summary
-   o Profit and Loss
-   o Project Eligibility
-   o Company Structure
-   o Depreciation
-   o Other Government Funding
+# Reference library --------------------------------------------------------------------
 
-2. Game Details Template
+GDSR_REFERENCE_SECTIONS = {
+    "Programme Overview": dedent(
+        """\
+        - Rebate rate: 20% of eligible expenditure with a maximum rebate of $3,000,000 NZD per applicant per eligibility year.
+        - Minimum eligible expenditure: $250,000 NZD within the eligibility period (1 April – 31 March).
+        - Administrator: NZ On Air; policy owner: MBIE.
+        - Annual funding pool: $40 million (less administration costs).
+        - Evidence of New Zealand presence: NZ Company Number or permanent establishment.
+        """
+    ),
+    "Application Timeline": dedent(
+        """\
+        1. Registration (early calendar year): submit eligibility information; receive acknowledgement or decline.
+        2. Application phase (April): covers the prior eligibility period; six-week submission window.
+        3. Assessment & payment: NZ On Air reviews, may request clarification, and can audit ~20% of successful applicants.
+        4. Publication: recipient names published; funding amounts released in dollar bands two years later.
+        """
+    ),
+    "Eligibility Criteria": dedent(
+        """\
+        **Eligible businesses** must be NZ residents (or have a permanent establishment) undertaking game development.
 
-Terms and Conditions
+        **Eligible games include** digital games for public release (entertainment, educational, serious games, VR/AR, mobile, console, PC, hybrid).
 
-General Terms
-• NZ On Air may vary Guidelines and Terms of Trade without notice
-• All information submitted must be accurate and complete
-• Expenditure must be in New Zealand Dollars
-• Businesses must respond timely to NZ On Air questions
-• Successful applicants may need to participate in evaluation activities
-• NZ On Air will publish recipient names and funding amounts
+        **Excluded games**: gambling services or titles with real-money winnings, refused classification material, pornography, primarily advertising content, and largely linear or non-interactive experiences.
 
-Registration-Specific Terms
-• Registration approval doesn't guarantee application approval
-• Registered businesses must inform NZ On Air of material changes affecting eligibility
-• Businesses must disclose government funding received or applied for
-• Businesses ceasing to be eligible during the period may not receive rebate
-• NZ On Air has the right to audit accounting processes and systems
-• NZ On Air has the right to visit business premises to observe game development activity
+        **Digital assets** (3D models, environments, animations, UI assets) qualify when destined for the game development sector.
 
-Application-Specific Terms
-• Only registered businesses can submit Final Applications
-• Applications must be submitted within specified timeframe
-• Related party transactions will be carefully reviewed
-• Applications may be independently assessed
-• If demand exceeds available funds, rebates may be proportionally distributed
-• NZ On Air retains audit rights within 12 months of period end
-• False information may require repayment of funds plus interest
-• Successful applicants must meet Accreditation Requirements
+        **Loot boxes** are permitted unless tied to real-money winnings; usage must be disclosed.
+        """
+    ),
+    "Eligible Expenditure": dedent(
+        """\
+        **Personnel costs (eligible)**: NZ-domiciled staff/contractors working on production, design, engineering, writing, art, production, live ops, community, marketing tied to game launches, player research, and QA.
 
-Over-Subscription Protocol
-If eligible applications collectively exceed the annual funding available, NZ On Air will allocate funding on a pro-rata basis. NZ On Air will attempt to indicate the likelihood of over-subscription based on registration information.
+        **Development costs (eligible)**: research, prototyping, user testing, debugging, hosting, game engines, production software, infrastructure, classification, IP trademarks, NZ content licensing, conference participation, auditing costs related to GDSR.
 
-Auditing and Verification
-• NZ On Air reserves the right to conduct audits on approximately 20% of successful applicants each year
-• Independent assessments of cost reporting and accounting processes
-• On-site evaluations to observe game development activity
-• Audit rights retained within 12 months of eligibility period end
+        **Exclusions**:
+        - General overheads (insurance, HR, legal, travel, visas, financing).
+        - Non-game staff or non-NZ domiciled personnel.
+        - Premises, unrelated depreciation, duplicate claims across entities, or expenditures financed by other government support.
+        """
+    ),
+    "Software Guidance": dedent(
+        """\
+        **Confirmed eligible software (examples)**: Adobe Creative Cloud, Affinity, Animbot, Apple Developer Program, Articy, Atlassian Jira, Autodesk Maya, BorisFX, Bugsplat, CircleCI, ClickUp, Cloudflare (hosting), Codecks, Confluence, Crowdin, Epic Games tools, GitHub, Harvest Forecast, JetBrains IDEs, Marmoset, Milanote, Movella, PagerDuty, Parsec, Perforce Helix Core, Unity, Unreal, Plastic SCM, Planyway, Red Giant, Sentry, SideFX, Steam, Syncsketch, TestGuild, Trello, Whole Tomato, Whimsical, Xsolla, ZBrush, FontLab.
 
-Fraudulent Claims
-Fraudulent claims will be pursued under relevant legislation and may incur penalties. Businesses found to have provided false information may be required to repay funds plus interest calculated on IRD's Underpayment of Tax (UOMI) rate.
+        **Requires additional assessment** (document usage context): AI tools (ChatGPT, MidJourney, Claude, Runway, Suno, etc.), analytics (Appfigures, Appsflyer), training programmes, cloud hosts (Azure, Vultr, Dreamhost, Backblaze, Wasabi, Zappie Host), NZ-only audio tools (Soundtrap, Ableton, Cargo Cult Envy), conditional tools (Figma, Sketchfab, Librato, SolarWinds, Hexnode, Paddle.net, Miro, Nuclino), and research subscriptions.
 
-Additional Requirements for Recipients
-• Apply GDSR accreditation to acknowledge support
-• Contribute information for a catalogue of supported projects
-• Participate in evaluation activities to assess program performance"""
+        **Confirmed non-eligible software**: Ascend, Canva, Clipdrop, Discord, Epidemic Sound, Ethereum wallets, FastSpring, Feature Upvote, Fiverr, FreeScout, GameDiscoverCo, GoDaddy, Google Workspace, G-Suite, Hootsuite, Loomly, Microsoft 365, Orchestra, Pantheon, PayPro, Repurpose.io, Restream, RSS Comms, Shutterstock, Skrapp.io, Slack, Soundly, Soundsnap, Sprout Social, Synology, Tailscale, Thinkcell, TimeOS, TIMG, Video Game Insights, Wavetoys Music, Webflow, Wix, WorkWithIndies, YMCA services, Flexitime, Dikas Studio, Dropbox, Zendesk.
+        """
+    ),
+    "Financial & Verification Requirements": dedent(
+        """\
+        **Documentation**: Profit & loss, cash flow, balance sheet from 1 April; management accounts; detailed payroll summaries; supporting schedules for depreciation, software, contractor costs, and other government funding.
 
-# Assessment template structure
+        **Cross-check expectations**:
+        - Reconcile claim totals to financial statements.
+        - Confirm personnel allocations (NZ residency, role eligibility, allocation between eligible vs non-eligible titles).
+        - Validate software costs against the approved list and usage context.
+        - Identify double-funding from other grants (Callaghan, Kānoa, MBIE, RDTI).
+        - Ensure hardware/software depreciation relates to eligible assets and is backed by the fixed asset register.
+
+        **Verification tests (1–12)**: Eligible project identification, linkage to financial statements, correct group-level entity, other government funding treatment and completeness, remuneration eligibility, NZ-domiciled external resources, inter-entity duplication, cross-entity work, depreciation eligibility, other expenditure eligibility, software eligibility, and final calculation accuracy (including 20% rebate check).
+        """
+    ),
+    "Compliance & Audit": dedent(
+        """\
+        - NZ On Air may audit approximately 20% of successful applicants each eligibility year.
+        - Retain audit rights for 12 months after the eligibility period; onsite inspections may occur.
+        - Related party transactions undergo enhanced scrutiny.
+        - False or misleading information can trigger repayment with interest (IRD UOMI rate) and potential legal action.
+        - Successful applicants must display GDSR accreditation, support programme evaluation requests, and contribute to recipient catalogues.
+        """
+    ),
+}
+
+GDSR_REFERENCE = "\n\n".join(
+    f"### {title}\n{content}" for title, content in GDSR_REFERENCE_SECTIONS.items()
+)
+
+# Assessment template ------------------------------------------------------------------
+
 ASSESSMENT_TEMPLATE = """
-# GDSR Assessment Checklist Cover Sheet
+# GDSR Assessment Checklist
 
-**Applicant name**:
-- …
-**Funding round**:
-- …
-**Games eligibility assessors**:
-- …
-**Financial information assessors**:
-- …
+## Cover Sheet
 
-**Assessor conflict of Interest Declarations**:
-I [insert assessor name] declare I have no interest in [name of applicant] or this application.
-
-**Amount of GDSR Applied For**: $xxx,xxx
-**Amount of GDSR recommended for approval**: $yyy,yyy
-**Reason for difference (if any)**: [Summarise reasons for adjustment]
-
-**Have all queries raised during the assessment been satisfactorily addressed?** Yes/No
-**Selected for Audit?** Yes/No
-**Financial Assessment peer reviewed by**:
-**Agreed amount recommended for approval after peer review**:
+| Field | Value |
+|-------|-------|
+| Applicant name | [Applicant name] |
+| Funding round | [Funding round] |
+| Games eligibility assessors | [Names and roles] |
+| Financial information assessors | [Names and roles] |
+| Assessor conflict of Interest Declarations | [Declaration covering each assessor or `Not provided`] |
+| Amount of GDSR Applied For | $[Amount applied] |
+| Amount of GDSR recommended for approval | $[Amount recommended] |
+| Reason for difference (if any) | [Summary of adjustments or `No difference`] |
+| Have all queries raised during the assessment been satisfactorily addressed? | [Yes/No - add follow-up if No] |
+| Selected for Audit? | [Yes/No] |
+| Financial Assessment peer reviewed by | [Peer reviewer or `Not applicable`] |
+| Agreed amount recommended for approval after peer review | $[Peer review amount or `Not applicable`] |
 
 ## Key Information
 
-**Documents submitted**:
--
--
+**Documents submitted:**
+- [List each document title exactly as provided]
 
-**Contact details**:
+**Contact details:** [Name; email; phone number]
+**Group structure:** [Summary from the application or `Not provided`]
+**Other govt funding listed as:** (total $[amount])
+- [Funding source 1]
+- [Funding source 2]
+- [Add rows as needed]
 
-**Group structure**: [note: review Companies Register to understand shareholdings]
-
-**Other govt funding listed as**: (total $xxxx)
-- …
-- …
-
-**Loot boxes**: yes/no. Loot boxes assessed as acceptable/not acceptable. Add relevant detail
+**Loot boxes:** [Yes/No]
+[Notes on loot box treatment, eligibility, or follow-up actions]
 
 ## Game Development Activity Verified
 
-**Interactivity**: Look for elements such as player input, decision-making, and responsive feedback from the game system. Does the player have agency to make meaningful decisions that affect the outcome? Yes/No
+Interactivity: Look for elements such as player input, decision-making, and responsive feedback from the game system. Does the player have agency to make meaningful decisions that affect the outcome?
+[Yes/No - include supporting evidence drawn from the application]
 
-**Rules and Mechanics**: Look for structured gameplay systems that govern player behavior and progression. Are there clear objectives, challenges, or constraints that guide player actions? Yes/No
+Rules and Mechanics: Look for structured gameplay systems that govern player behavior and progression. Are there clear objectives, challenges, or constraints that guide player actions?
+[Yes/No - include supporting evidence drawn from the application]
 
-**Player Influence on Outcome**: Look for dynamic systems where player decisions have consequences within the game world. Are there multiple paths or outcomes based on player choices and actions? Yes/No
+Player Influence on Outcome: Look for dynamic systems where player decisions have consequences within the game world. Are there multiple paths or outcomes based on player choices and actions?
+[Yes/No - include supporting evidence drawn from the application]
 
-**Final Evaluation**: Do you think this product/s meets the definition of a digital game as per the GDSR policy wording?
+Final Evaluation: Do you think this product/s meets the definition of a digital game as per the GDSR policy wording?
+[Conclusion with rationale and policy references]
 
-**Other information from online application**:
+Other information from online application:
+- [Key risks, clarifications, or action items]
 
-## Software Eligibility Assessment
-
-**Software claimed in application**:
-- List all software mentioned in the application
-
-**Software assessment summary**:
-| Software | Category | Assessment | Eligible | Reason |
-|----------|----------|------------|----------|--------|
-| [Software Name] | [Art/Development/etc.] | [Approved/Conditional/Rejected] | [Yes/No/Partial] | [Justification] |
-
-**Key software findings**:
-- **Confirmed eligible**: [List software that is clearly eligible]
-- **Requires further assessment**: [List software needing additional justification]
-- **Not eligible**: [List software that is excluded with reasons]
-
-**Software cost adjustments**:
-- **Total software costs claimed**: $[amount]
-- **Eligible software costs**: $[amount]
-- **Excluded software costs**: $[amount] - [reasons for exclusion]
-
-## Financial Data Validation
-
-**Supporting financial data provided**: Yes/No
-
-**Cross-validation status**: ✅ Passed / ⚠️ Minor discrepancies / ❌ Major discrepancies
-
-**Key validation findings**:
-- **Application total claimed**: $[amount from application]
-- **Supporting data total**: $[amount from financial template]
-- **Variance**: $[difference] - [explanation if any]
-
-**Project cost allocation validation**:
-| Project | Application Status | Supporting Data Amount | Validation Status | Notes |
-|---------|-------------------|----------------------|-------------------|-------|
-| [Project Name] | [Eligible/Ineligible] | $[amount] | [✅/⚠️/❌] | [Comments] |
-
-**Personnel cost validation**:
-- **Total staff costs claimed**: $[amount]
-- **NZ residents verified**: [X]/[Y] staff
-- **Non-eligible exclusions**: $[amount] - [reason]
-
-**Software expense validation**:
-- **Total software costs**: $[amount from supporting data]
-- **Confirmed eligible**: $[amount]
-- **Requires assessment**: $[amount]
-- **Not eligible**: $[amount]
-
-**Other government funding cross-check**:
-- **Funding sources identified**: [list from supporting data]
-- **Potential double-funding risk**: Yes/No - [explanation]
-
-**12 verification tests summary**:
-| Test # | Purpose | Status | Findings |
-|--------|---------|--------|----------|
-| 1-12 | [Brief test descriptions] | [✅/⚠️/❌] | [Key findings] |
 
 ## Recommended for Approval
 
 | Category of expenditure | Amount claimed | Amount recommended for approval | Reason for adjustment |
-|-------------------------|----------------|----------------------------------|------------------------|
-| Employee Costs | X | X | |
-| Other staff costs | X | X | |
-| Hosting/subs/IT | X | X | |
-| Depreciation costs | X | X | |
-| Conference and travel costs | X | X | |
-| Other costs | X | X | |
-| xxx | X | X | |
-| **Total** | $Total | | |
-| **Capped at max allowable** | $15,000,000 | | |
-| **GDSR at 20%** | $ | | |
-
-**Subject to**:…
+|-------------------------|----------------|---------------------------------|-----------------------|
+| Employee Costs | $[amount] | $[amount] | [Reason or `None`] |
+| Other staff costs | $[amount] | $[amount] | [Reason or `None`] |
+| Hosting/subs/IT | $[amount] | $[amount] | [Reason or `None`] |
+| Depreciation costs | $[amount] | $[amount] | [Reason or `None`] |
+| Conference and travel costs | $[amount] | $[amount] | [Reason or `None`] |
+| Other costs (insert additional lines below as needed) | $[amount] | $[amount] | [Reason or `None`] |
+| xxx | $[amount] | $[amount] | [Reason or `None`] |
+| **Total** | $[claim total] | $[recommended total] | |
+| **Capped at max allowable** | $15,000,000 |  | |
+| **GDSR at 20%** | $[20% of claim] | $[20% of recommended total] | [Notes on calculation] |
 
 ## Tests to be Performed
 
 | # | Purpose | Task | Comment | Done |
 |---|---------|------|---------|------|
-| 1 | Eligible projects/activities have been correctly identified and all games identified as eligible meet the guideline criteria. | Review the list of projects provided. Consider whether the applicant's assessment of whether the projects are eligible or not is correct in terms of the Guidelines. | | |
-| 2 | To determine if the figures used for the application relate back to the underlying financial statements | Agree figures in workings to management or final accounts. | | |
-| 3 | Consider whether the application is being made at the correct group level and which entities are included. | Review the group structure and confirm that the financial information provided is for the applicant, not another member of the group. | | |
-| 4 | Assess if other government grants/funding sources have been correctly treated. | Review information provided (documents and online application) on other grants received. Assess whether any relates to eligible GDSR expenditure. If so, ensure this expenditure has been excluded from the GDSR claim. | | |
-| 5 | Other government grants/funding sources disclosed are complete. | Review other information for evidence of government funding: (for grants received in the application period but relate to previous years R&D activities which are not covered in this application, note the amount received only)<br>Previous tax returns of the applicant for RDTI<br>MBIE grants here.<br>Kānoa (MBIE) grants here.<br>Callaghan Innovation grants here. | | |
-| 6 | To determine if remuneration expenditure claimed is eligible. [note; the applicant may treat staff costs as expenditure in the profit and loss in the period; they may also be treated as capital expenditure – any staff costs incurred and capitalised in the period of the claim are eligible, staff costs capitalised in previous periods are NOT eligible, nor is any amortisation relating to these eligible] | Review information provided on remuneration expenditure and:<br>Reconcile it to the management accounts/financial statements for the period<br>Review how staff are identified as NZ tax resident/non-resident and ensure non-resident costs are not claimed<br>Review how staff costs are allocated to eligible and non-eligible activities.<br>Check that the allocation is based on reasonable assumptions and is linked to the projects and activities undertaken by the applicant<br>Consider whether any staff costs relating to administration or other ineligible activities have been included in the GDSR claim.<br>Review the costs included in remuneration for eligibility. We would expect gross salary, employer Kiwisaver contribution; annual leave; any other reasonable benefits included in the applicant's remuneration packages (e.g. wellness allowance, Southern cross). This should NOT generally include sick leave allowances.<br>If the application does not provide sufficient detail to perform these tests, request more detail as required. | | |
-| 7 | External resources claimed are eligible (NZ domiciled Contractor, sub-contractor or consultant) | Review the details of contractor, sub-contractors or consultant expenditure claimed and assess whether it is related to develop eligible games production. | | |
-| 8 | Inter-entity expenses are claimed at the right level and not duplicated. | Review any inter-entity transactions to identify if expenditure is being claimed twice. | | |
-| 9 | Game development activities performed for other entities (same group or an external entity) are eligible and not claimed twice | | | |
-| 10 | Depreciation expenditure claimed is eligible. | For hardware depreciation we will need to see fixed asset register<br>Review the depreciation claimed and ensure it relates only to eligible assets (hardware and software that relates to game development activities).<br>For depreciation claimed, the applicant needs to provide the fixed asset register to enable this assessment. | | |
-| 11 | Other (non-staff) expenditure claimed is eligible. | Review the details of any other expenditure claimed against the Guidelines and assess whether it is eligible. | | |
-| 11a | Software expenditure claimed is eligible according to approved software master sheet. | Review all software claimed against the Approved Software Master Sheet Reference:<br>- Check if software is in CONFIRMED ELIGIBLE list<br>- For software requiring additional assessment, verify usage context (dev team vs marketing/ops, NZ-based staff, etc.)<br>- Exclude software in CONFIRMED NON-ELIGIBLE list<br>- Apply conditional eligibility tests for edge cases<br>- Document specific software assessment decisions | | |
-| 12 | To confirm that the calculation for the submitted claim amount is correct. | Trace all figures included in the summary of the claim to the supporting information that is reviewed under other steps to check the overall calculation is based on the correct figures.<br>Check the amount claimed represents 20% of the eligible expenditure. | | |"""
+| 1 | Eligible projects/activities have been correctly identified and all games identified as eligible meet the guideline criteria. | Review the list of projects provided. Consider whether the applicant's assessment of eligible projects aligns with the Guidelines. | [Findings or `Not provided`] | [Initials + status] |
+| 2 | To determine if the figures used for the application relate back to the underlying financial statements | Agree figures in workings to management or final accounts. | [Findings or `Not provided`] | [Initials + status] |
+| 3 | Consider whether the application is being made at the correct group level and which entities are included. | Review the group structure and confirm that the financial information provided is for the applicant, not another member of the group. | [Findings or `Not provided`] | [Initials + status] |
+| 4 | Assess if other government grants/funding sources have been correctly treated. | Review information provided (documents and online application) on other grants received and confirm related expenditure is excluded from the GDSR claim. | [Findings or `Not provided`] | [Initials + status] |
+| 5 | Other government grants/funding sources disclosed are complete. | Cross-check tax returns, MBIE/Kanoa records, Callaghan Innovation grants, and other disclosures to ensure completeness. | [Findings or `Not provided`] | [Initials + status] |
+| 6 | To determine if remuneration expenditure claimed is eligible. | Reconcile remuneration to financial statements, confirm NZ tax residency, test allocation between eligible and ineligible work, and request more detail if evidence is insufficient. | [Findings or `Not provided`] | [Initials + status] |
+| 7 | External resources claimed are eligible (NZ domiciled contractor, sub-contractor or consultant). | Review contractor, sub-contractor, or consultant expenditure and confirm it relates to eligible game development and NZ domiciled providers. | [Findings or `Not provided`] | [Initials + status] |
+| 8 | Inter-entity expenses are claimed at the right level and not duplicated. | Review inter-entity transactions to identify duplicate or misallocated expenditure. | [Findings or `Not provided`] | [Initials + status] |
+| 9 | Game development activities performed for other entities (same group or an external entity) are eligible and not claimed twice. | Confirm related or external entity arrangements do not result in double counting and remain within eligibility. | [Findings or `Not provided`] | [Initials + status] |
+| 10 | Depreciation expenditure claimed is eligible. | Review depreciation to ensure it relates only to eligible assets; obtain fixed asset register where required. | [Findings or `Not provided`] | [Initials + status] |
+| 11 | Other (non-staff) expenditure claimed is eligible. | Review other expenditure against the Guidelines and document eligibility decisions. | [Findings or `Not provided`] | [Initials + status] |
+| 12 | To confirm that the calculation for the submitted claim amount is correct. | Trace all figures in the claim summary to supporting information and verify the amount claimed represents 20% of eligible expenditure. | [Findings or `Not provided`] | [Initials + status] |"""
+
+# Composed prompt ----------------------------------------------------------------------
+
+GDSR_ASSESSMENT_PROMPT = "\n\n".join(
+    [
+        ROLE_AND_OBJECTIVES,
+        ASSESSMENT_WORKFLOW,
+        OUTPUT_RULES,
+        EVIDENCE_EXPECTATIONS,
+        ADJUSTMENT_EXPECTATIONS,
+        ENTITY_EXTRACTION_PROTOCOL,
+        NUMERIC_PRECISION_PROTOCOL,
+        "## Inputs",
+        "### Application\n```\n{document_content}\n```",
+        "### Supporting Financial Data\n```\n{supporting_data_content}\n```",
+        "### Reference Library (select only the excerpts you need)\n{gdsr_reference}",
+        "### Assessment Template\n```\n{assessment_template}\n```",
+        "### Example Response (abbreviated)\n```\n{assessment_example}\n```",
+    ]
+)
+
+__all__ = [
+    "ASSESSMENT_EXAMPLE",
+    "ASSESSMENT_TEMPLATE",
+    "GDSR_ASSESSMENT_PROMPT",
+    "GDSR_REFERENCE",
+    "GDSR_REFERENCE_SECTIONS",
+    "ROLE_AND_OBJECTIVES",
+    "ASSESSMENT_WORKFLOW",
+    "OUTPUT_RULES",
+    "EVIDENCE_EXPECTATIONS",
+    "ADJUSTMENT_EXPECTATIONS",
+    "ENTITY_EXTRACTION_PROTOCOL",
+    "NUMERIC_PRECISION_PROTOCOL",
+]
