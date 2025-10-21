@@ -6,7 +6,12 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
-from prompts import ASSESSMENT_TEMPLATE, GDSR_ASSESSMENT_PROMPT, GDSR_REFERENCE
+from prompts import (
+    ASSESSMENT_EXAMPLE,
+    ASSESSMENT_TEMPLATE,
+    GDSR_ASSESSMENT_PROMPT,
+    GDSR_REFERENCE,
+)
 
 MAX_TOKENS = 16000
 
@@ -82,6 +87,7 @@ def _assess(document_content: str, supporting_data_content: str = "") -> str:
         supporting_data_content=supporting_data_content,
         gdsr_reference=GDSR_REFERENCE,
         assessment_template=ASSESSMENT_TEMPLATE,
+        assessment_example=ASSESSMENT_EXAMPLE,
     )
 
     response = model.run(query=formatted_prompt, name_for_logging="gdsr_assessment")
