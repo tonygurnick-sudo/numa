@@ -63,7 +63,6 @@ variables:
         - lambdas/node/token-adjuster
         - lambdas/node/vector-db-init
         - lib/client-config-node
-        - numa-management
 
 .python-lambdas-matrix:
   matrix:

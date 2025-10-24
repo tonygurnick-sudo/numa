@@ -326,6 +326,8 @@ export class NumaClientStack extends TerraformStack {
         Q_RETRIEVER_ID: core.qBusinessRetrieverId,
         API_ENDPOINT: '/api',
         BRANDING_PROVIDER_ENABLED: clientConfig.brandingProviderEnabled ?? false,
+        BRANDING_ASSETS_BUCKET: fe.frontendBucket.bucket,
+        BRANDING_ASSETS_PREFIX: fe.brandingAssetsPrefix,
         CLIENT_NAME: props.clientName,
         OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
         HONEYCOMB_KEY: honeycombFrontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.

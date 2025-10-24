@@ -197,6 +197,17 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         route: { verb: 'GET', path: 'branding/{clientId}' },
       });
 
+      // GET branding version history
+      this.addLambdaFunction(this, 'branding-config-history', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/branding-config',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        environment: brandingEnv,
+        additionalPolicyStatements: brandingReadPolicy,
+        route: { verb: 'GET', path: 'branding/{clientId}/versions' },
+      });
+
       // PUT branding config per client
       this.addLambdaFunction(this, 'branding-config-put', {
         addAuthorizer: true,
@@ -206,6 +217,17 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         environment: brandingEnv,
         additionalPolicyStatements: [...brandingReadPolicy, ...brandingWritePolicy],
         route: { verb: 'PUT', path: 'branding/{clientId}' },
+      });
+
+      // POST branding version revert
+      this.addLambdaFunction(this, 'branding-config-revert', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/branding-config',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        environment: brandingEnv,
+        additionalPolicyStatements: [...brandingReadPolicy, ...brandingWritePolicy],
+        route: { verb: 'POST', path: 'branding/{clientId}/versions/{versionId}/revert' },
       });
     }
 

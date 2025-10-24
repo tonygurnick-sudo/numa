@@ -5,7 +5,6 @@
     "infra",
     "tools",
     "numa-frontend",
-    "numa-management",
     "numa-customer-success-portal",
     "lambdas/node/*",
     "lib/client-config-node"

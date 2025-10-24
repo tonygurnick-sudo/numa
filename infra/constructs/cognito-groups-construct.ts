@@ -50,273 +50,308 @@ const createFeatureSets = (props: {
   brandingTable?: TableType;
   knowledgeBase: KnowledgeBase;
   pipedreamRelayLambdaArn?: string;
-}): Record<string, PolicyStatement[]> => ({
-  // Chat Feature Set
-  chat: [
-    // Outputs bucket permissions
-    {
-      effect: 'Allow',
-      actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
-      resources: [`${props.outputsBucket.bucket.arn}/*/$\${aws:PrincipalTag/username}/**`],
-    },
-    // Read public agent icons for all users
-    {
-      effect: 'Allow',
-      actions: ['s3:GetObject'],
-      resources: [`${props.outputsBucket.bucket.arn}/numa-chat/agent-icons/public/*`],
-    },
-    // Chat history permissions with row-level security
-    {
-      effect: 'Allow',
-      actions: ['dynamodb:PutItem', 'dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
-      resources: ['*'],
-      condition: [
-        {
-          test: 'ForAllValues:StringEquals',
-          values: ['$\${aws:PrincipalTag/username}'],
-          variable: 'dynamodb:LeadingKeys',
-        },
-      ],
-    },
+  brandingAssetsBucketArn?: string;
+  brandingAssetsPrefix?: string;
+}): Record<string, PolicyStatement[]> => {
+  const brandingPrefixRaw = props.brandingAssetsPrefix ?? 'branding/';
+  const brandingPrefixNoLeadingSlash = brandingPrefixRaw.replace(/^\/+/, '');
+  const brandingPrefix = brandingPrefixNoLeadingSlash.endsWith('/')
+    ? brandingPrefixNoLeadingSlash
+    : `${brandingPrefixNoLeadingSlash}/`;
+  const brandingObjectsArn = props.brandingAssetsBucketArn
+    ? `${props.brandingAssetsBucketArn}/${brandingPrefix}*`
+    : undefined;
 
-    // Company Context permissions
-    {
-      effect: 'Allow',
-      actions: ['s3:GetObject'],
-      resources: [`${props.companyBucket.bucket.arn}/company-data.json`],
-    },
+  return {
+    // Chat Feature Set
+    chat: [
+      // Outputs bucket permissions
+      {
+        effect: 'Allow',
+        actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
+        resources: [`${props.outputsBucket.bucket.arn}/*/$\${aws:PrincipalTag/username}/**`],
+      },
+      // Read public agent icons for all users
+      {
+        effect: 'Allow',
+        actions: ['s3:GetObject'],
+        resources: [`${props.outputsBucket.bucket.arn}/numa-chat/agent-icons/public/*`],
+      },
+      // Chat history permissions with row-level security
+      {
+        effect: 'Allow',
+        actions: [
+          'dynamodb:PutItem',
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
+        ],
+        resources: ['*'],
+        condition: [
+          {
+            test: 'ForAllValues:StringEquals',
+            values: ['$\${aws:PrincipalTag/username}'],
+            variable: 'dynamodb:LeadingKeys',
+          },
+        ],
+      },
+      // Company Context permissions
+      {
+        effect: 'Allow',
+        actions: ['s3:GetObject'],
+        resources: [`${props.companyBucket.bucket.arn}/company-data.json`],
+      },
+      // Bedrock permissions
+      {
+        effect: 'Allow',
+        actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+        resources: ['*'], // TODO: Update to specific models and agents when implemented
+      },
+      // Bedrock knowledge base retrieval for chat
+      {
+        effect: 'Allow',
+        actions: ['bedrock:Retrieve'],
+        resources: [props.knowledgeBase.knowledgeBaseArn],
+      },
+      // KMS permissions (only when invoked by Q)
+      {
+        effect: 'Allow',
+        actions: ['kms:GenerateDataKey'],
+        resources: ['*'], // TODO: Update to specific KMS keys when implemented
+        condition: [
+          {
+            test: 'StringEquals',
+            variable: 'aws:SourceService',
+            values: ['qbusiness.amazonaws.com'],
+          },
+        ],
+      },
+      {
+        effect: 'Allow',
+        actions: ['kms:Decrypt'],
+        resources: [`arn:aws:kms:${props.region}:${props.callerAccountId}:key/*`],
+        condition: [
+          {
+            test: 'StringLike',
+            variable: 'kms:ViaService',
+            values: [`qbusiness.${props.region}.amazonaws.com`, `qapps.${props.region}.amazonaws.com`],
+          },
+        ],
+      },
+    ],
 
-    // Bedrock permissions
-    {
-      effect: 'Allow',
-      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-      resources: ['*'], // TODO: Update to specific models and agents when implemented
-    },
-    // Bedrock knowledge base retrieval for chat
-    {
-      effect: 'Allow',
-      actions: ['bedrock:Retrieve'],
-      resources: [props.knowledgeBase.knowledgeBaseArn],
-    },
-    // KMS permissions (only when invoked by Q)
-    {
-      effect: 'Allow',
-      actions: ['kms:GenerateDataKey'],
-      resources: ['*'], // TODO: Update to specific KMS keys when implemented
-      condition: [
-        {
-          test: 'StringEquals',
-          variable: 'aws:SourceService',
-          values: ['qbusiness.amazonaws.com'],
-        },
-      ],
-    },
-    {
-      effect: 'Allow',
-      actions: ['kms:Decrypt'],
-      resources: [`arn:aws:kms:${props.region}:${props.callerAccountId}:key/*`],
-      condition: [
-        {
-          test: 'StringLike',
-          variable: 'kms:ViaService',
-          values: [`qbusiness.${props.region}.amazonaws.com`, `qapps.${props.region}.amazonaws.com`],
-        },
-      ],
-    },
-  ],
+    // Use Apps Feature Set
+    useApps: [
+      // Outputs bucket permissions for files
+      {
+        effect: 'Allow',
+        actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
+        resources: [`${props.outputsBucket.bucket.arn}/*/$\${aws:PrincipalTag/username}/**`],
+      },
+      // Read public agent icons for all users
+      {
+        effect: 'Allow',
+        actions: ['s3:GetObject'],
+        resources: [`${props.outputsBucket.bucket.arn}/numa-chat/agent-icons/public/*`],
+      },
+    ],
 
-  // Use Apps Feature Set
-  useApps: [
-    // Outputs bucket permissions for files
-    {
-      effect: 'Allow',
-      actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
-      resources: [`${props.outputsBucket.bucket.arn}/*/$\${aws:PrincipalTag/username}/**`],
-    },
-    // Read public agent icons for all users
-    {
-      effect: 'Allow',
-      actions: ['s3:GetObject'],
-      resources: [`${props.outputsBucket.bucket.arn}/numa-chat/agent-icons/public/*`],
-    },
-  ],
+    // Use Company Data Feature Set
+    useCompanyData: [
+      {
+        effect: 'Allow',
+        actions: ['s3:ListBucket'],
+        resources: [props.dataBucket.bucket.arn],
+      },
+      {
+        effect: 'Allow',
+        actions: ['s3:GetObject', 's3:GetObjectTagging'],
+        resources: [`${props.dataBucket.bucket.arn}/*`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['s3:GetObject'],
+        resources: [`${props.companyBucket.bucket.arn}/company-data.json`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['qbusiness:SearchRelevantContent'],
+        resources: ['*'], // TODO: Change to specific resource
+      },
+      {
+        effect: 'Allow',
+        actions: ['qbusiness:ListDataSources'],
+        resources: ['*'], // TODO: Change to specific resource
+      },
+      {
+        effect: 'Allow',
+        resources: ['*'], // TODO: Change to specific resource
+        actions: ['qbusiness:ListDataSourceSyncJobs'],
+      },
+      {
+        effect: 'Allow',
+        actions: ['qbusiness:ListDocuments'],
+        resources: ['*'], // TODO: Change to specific resource
+      },
+      {
+        effect: 'Allow',
+        actions: ['user-subscriptions:CreateClaim'],
+        resources: ['*'], // Wild card, because we don't know the user's subscription ID
+      },
 
-  // Use Company Data Feature Set
-  useCompanyData: [
-    {
-      effect: 'Allow',
-      actions: ['s3:ListBucket'],
-      resources: [props.dataBucket.bucket.arn],
-    },
-    {
-      effect: 'Allow',
-      actions: ['s3:GetObject', 's3:GetObjectTagging'],
-      resources: [`${props.dataBucket.bucket.arn}/*`],
-    },
-    {
-      effect: 'Allow',
-      actions: ['s3:GetObject'],
-      resources: [`${props.companyBucket.bucket.arn}/company-data.json`],
-    },
-    {
-      effect: 'Allow',
-      actions: ['qbusiness:SearchRelevantContent'],
-      resources: ['*'], // TODO: Change to specific resource
-    },
-    {
-      effect: 'Allow',
-      actions: ['qbusiness:ListDataSources'],
-      resources: ['*'], // TODO: Change to specific resource
-    },
-    {
-      effect: 'Allow',
-      resources: ['*'], // TODO: Change to specific resource
-      actions: ['qbusiness:ListDataSourceSyncJobs'],
-    },
-    {
-      effect: 'Allow',
-      actions: ['qbusiness:ListDocuments'],
-      resources: ['*'], // TODO: Change to specific resource
-    },
-    {
-      effect: 'Allow',
-      actions: ['user-subscriptions:CreateClaim'],
-      resources: ['*'], // Wild card, because we don't know the user's subscription ID
-    },
+      // ListDocuments is used in S3 uploader for knowledge base status. All users with data access need it.
+      {
+        effect: 'Allow',
+        actions: ['qbusiness:ListDocuments'],
+        resources: ['*'], // TODO: Change to specific resource
+      },
 
-    // ListDocuments is used in S3 uploader for knowledge base status. All users with data access need it.
-    {
-      effect: 'Allow',
-      actions: ['qbusiness:ListDocuments'],
-      resources: ['*'], // TODO: Change to specific resource
-    },
+      // Bedrock knowledge base read-only permissions for viewing status
+      {
+        effect: 'Allow',
+        actions: [
+          'bedrock:ListKnowledgeBases',
+          'bedrock:ListDataSources',
+          'bedrock:ListIngestionJobs',
+          'bedrock:GetIngestionJob',
+          'bedrock:ListKnowledgeBaseDocuments',
+        ],
+        resources: [props.knowledgeBase.knowledgeBaseArn],
+      },
+    ],
 
-    // Bedrock knowledge base read-only permissions for viewing status
-    {
-      effect: 'Allow',
-      actions: [
-        'bedrock:ListKnowledgeBases',
-        'bedrock:ListDataSources',
-        'bedrock:ListIngestionJobs',
-        'bedrock:GetIngestionJob',
-        'bedrock:ListKnowledgeBaseDocuments',
-      ],
-      resources: [props.knowledgeBase.knowledgeBaseArn],
-    },
-  ],
+    // Delete from Company Data Feature Set
+    deleteFromCompanyData: [
+      {
+        effect: 'Allow',
+        actions: ['s3:DeleteObject'],
+        resources: [`${props.dataBucket.bucket.arn}/*`],
+      },
+    ],
 
-  // Delete from Company Data Feature Set
-  deleteFromCompanyData: [
-    {
-      effect: 'Allow',
-      actions: ['s3:DeleteObject'],
-      resources: [`${props.dataBucket.bucket.arn}/*`],
-    },
-  ],
+    // Add to Company Data Feature Set
+    addToCompanyData: [
+      {
+        effect: 'Allow',
+        actions: ['s3:PutObject'],
+        resources: [`${props.dataBucket.bucket.arn}/*`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['qbusiness:ListDocuments'],
+        resources: ['*'],
+      },
+    ],
 
-  // Add to Company Data Feature Set
-  addToCompanyData: [
-    {
-      effect: 'Allow',
-      actions: ['s3:PutObject'],
-      resources: [`${props.dataBucket.bucket.arn}/*`],
-    },
+    // Edit Company Profile Feature Set
+    editCompanyProfile: [
+      {
+        effect: 'Allow',
+        actions: ['s3:PutObject'],
+        resources: [`${props.companyBucket.bucket.arn}/company-data.json`],
+      },
+    ],
 
-    {
-      effect: 'Allow',
-      actions: ['qbusiness:ListDocuments'],
-      resources: ['*'],
-    },
-  ],
+    // Self Service Feature Set
+    selfService: [
+      {
+        effect: 'Allow',
+        actions: ['cognito-idp:GetUser'],
+        resources: [`arn:aws:cognito-idp:${props.region}:${props.callerAccountId}:userpool/${props.userPoolId}`],
+      },
+    ],
 
-  // Edit Company Profile Feature Set
-  editCompanyProfile: [
-    {
-      effect: 'Allow',
-      actions: ['s3:PutObject'],
-      resources: [`${props.companyBucket.bucket.arn}/company-data.json`],
-    },
-  ],
+    // Branding read access
+    brandingRead: [
+      ...(props.brandingTable?.arn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
+              resources: [props.brandingTable.arn],
+            },
+          ]
+        : []),
+      ...(brandingObjectsArn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['s3:GetObject'],
+              resources: [brandingObjectsArn],
+            },
+          ]
+        : []),
+    ],
 
-  // Self Service Feature Set
-  selfService: [
-    {
-      effect: 'Allow',
-      actions: ['cognito-idp:GetUser'],
-      resources: [`arn:aws:cognito-idp:${props.region}:${props.callerAccountId}:userpool/${props.userPoolId}`],
-    },
-  ],
+    // Branding management (admin)
+    manageBranding: [
+      ...(props.brandingTable?.arn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
+              resources: [props.brandingTable.arn],
+            },
+          ]
+        : []),
+      ...(brandingObjectsArn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['s3:PutObject', 's3:DeleteObject'],
+              resources: [brandingObjectsArn],
+            },
+          ]
+        : []),
+    ],
 
-  // Branding read access
-  brandingRead: props.brandingTable?.arn
-    ? [
-        {
-          effect: 'Allow',
-          actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
-          resources: [props.brandingTable.arn],
-        },
-      ]
-    : [],
+    // Manage Users Feature Set
+    manageUsers: [
+      {
+        effect: 'Allow',
+        actions: [
+          'cognito-idp:ListUsers',
+          'cognito-idp:ListUsersInGroup',
+          'cognito-idp:AdminCreateUser',
+          'cognito-idp:AdminDeleteUser',
+          'cognito-idp:AdminResetUserPassword',
+          'cognito-idp:AdminSetUserPassword',
+          'cognito-idp:AdminGetUser',
+          'cognito-idp:AdminAddUserToGroup',
+          'cognito-idp:AdminRemoveUserFromGroup',
+          'cognito-idp:ListGroups',
+          'cognito-idp:DescribeUserPool',
+          'cognito-idp:AdminUserGlobalSignOut',
+        ],
+        resources: [`arn:aws:cognito-idp:${props.region}:${props.callerAccountId}:userpool/${props.userPoolId}`],
+      },
+      // Only include Q Business permissions if Q Business is enabled
+      ...(props.qBusinessApplicationId
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['qbusiness:DeleteUser', 'qbusiness:GetUser'],
+              resources: [
+                `arn:aws:qbusiness:${props.region}:${props.callerAccountId}:application/${props.qBusinessApplicationId}`,
+              ],
+            },
+          ]
+        : []),
+    ],
 
-  // Branding management (admin)
-  manageBranding: props.brandingTable?.arn
-    ? [
-        {
-          effect: 'Allow',
-          actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
-          resources: [props.brandingTable.arn],
-        },
-      ]
-    : [],
-
-  // Manage Users Feature Set
-  manageUsers: [
-    {
-      effect: 'Allow',
-      actions: [
-        'cognito-idp:ListUsers',
-        'cognito-idp:ListUsersInGroup',
-        'cognito-idp:AdminCreateUser',
-        'cognito-idp:AdminDeleteUser',
-        'cognito-idp:AdminResetUserPassword',
-        'cognito-idp:AdminSetUserPassword',
-        'cognito-idp:AdminGetUser',
-        'cognito-idp:AdminAddUserToGroup',
-        'cognito-idp:AdminRemoveUserFromGroup',
-        'cognito-idp:ListGroups',
-        'cognito-idp:DescribeUserPool',
-        'cognito-idp:AdminUserGlobalSignOut',
-      ],
-      resources: [`arn:aws:cognito-idp:${props.region}:${props.callerAccountId}:userpool/${props.userPoolId}`],
-    },
-    // Only include Q Business permissions if Q Business is enabled
-    ...(props.qBusinessApplicationId
+    // Pipedream Integration Feature Set
+    pipedreamIntegration: props.pipedreamRelayLambdaArn
       ? [
           {
             effect: 'Allow',
-            actions: ['qbusiness:DeleteUser', 'qbusiness:GetUser'],
-            resources: [
-              `arn:aws:qbusiness:${props.region}:${props.callerAccountId}:application/${props.qBusinessApplicationId}`,
-            ],
+            actions: ['lambda:InvokeFunction'],
+            resources: [props.pipedreamRelayLambdaArn],
           },
         ]
-      : []),
-  ],
-
-  // Pipedream Integration Feature Set
-  pipedreamIntegration: props.pipedreamRelayLambdaArn
-    ? [
-        {
-          effect: 'Allow',
-          actions: ['lambda:InvokeFunction'],
-          resources: [
-            // Allow invoking local Pipedream relay lambda
-            props.pipedreamRelayLambdaArn,
-          ],
-        },
-      ]
-    : [],
-});
+      : [],
+  };
+};
 
 // Derive feature set names from the factory function return type
 export type FeatureSetName = keyof ReturnType<typeof createFeatureSets>;
@@ -359,6 +394,8 @@ export const cognitoGroupsConstructPropsSchema = z.object({
   companyBucket: bucketSchema,
   chatHistoryTable: tableSchema,
   brandingTable: tableSchema.optional(),
+  brandingAssetsBucketArn: z.string().optional(),
+  brandingAssetsPrefix: z.string().optional(),
   qBusinessApplicationId: z.string().optional(), // Add optional Q Business application ID
   groups: z.record(z.string(), z.array(z.enum(FEATURE_SET_NAMES as [FeatureSetName, ...FeatureSetName[]]))).optional(),
   pipedreamIntegrations: z.boolean().optional().default(false),
@@ -408,6 +445,8 @@ export class CognitoGroupsConstruct extends Construct {
       qBusinessApplicationId: props.qBusinessApplicationId,
       knowledgeBase: props.knowledgeBase,
       pipedreamRelayLambdaArn: props.pipedreamRelayLambdaArn,
+      brandingAssetsBucketArn: props.brandingAssetsBucketArn,
+      brandingAssetsPrefix: props.brandingAssetsPrefix,
     });
 
     // Create a managed policy, store it in the featureSetPolicies object to attach it to the role

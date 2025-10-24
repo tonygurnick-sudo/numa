@@ -121,8 +121,8 @@ __metadata:
     "@testing-library/jest-dom": "npm:^6.6.3"
     "@testing-library/react": "npm:^16.0.1"
     "@types/node": "npm:^24.6.2"
-    "@types/react": "npm:^19.0.0"
-    "@types/react-dom": "npm:^19.0.0"
+    "@types/react": "npm:^19.2.2"
+    "@types/react-dom": "npm:^19.2.2"
     "@typescript-eslint/eslint-plugin": "npm:^8.41.0"
     "@typescript-eslint/parser": "npm:^8.41.0"
     "@vitejs/plugin-react": "npm:^4.2.1"
@@ -1033,7 +1033,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aws-sdk/client-iam@npm:^3.696.0, @aws-sdk/client-iam@npm:^3.738.0, @aws-sdk/client-iam@npm:^3.810.0":
+"@aws-sdk/client-iam@npm:^3.738.0, @aws-sdk/client-iam@npm:^3.810.0":
   version: 3.879.0
   resolution: "@aws-sdk/client-iam@npm:3.879.0"
   dependencies:
@@ -1133,7 +1133,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aws-sdk/client-qapps@npm:^3.682.0, @aws-sdk/client-qapps@npm:^3.692.0":
+"@aws-sdk/client-qapps@npm:^3.682.0":
   version: 3.879.0
   resolution: "@aws-sdk/client-qapps@npm:3.879.0"
   dependencies:
@@ -1180,7 +1180,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aws-sdk/client-qbusiness@npm:^3.675.0, @aws-sdk/client-qbusiness@npm:^3.692.0, @aws-sdk/client-qbusiness@npm:^3.699.0, @aws-sdk/client-qbusiness@npm:^3.714.0":
+"@aws-sdk/client-qbusiness@npm:^3.675.0, @aws-sdk/client-qbusiness@npm:^3.699.0, @aws-sdk/client-qbusiness@npm:^3.714.0":
   version: 3.879.0
   resolution: "@aws-sdk/client-qbusiness@npm:3.879.0"
   dependencies:
@@ -1508,7 +1508,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aws-sdk/client-secrets-manager@npm:^3.712.0, @aws-sdk/client-secrets-manager@npm:^3.810.0":
+"@aws-sdk/client-secrets-manager@npm:^3.810.0":
   version: 3.879.0
   resolution: "@aws-sdk/client-secrets-manager@npm:3.879.0"
   dependencies:
@@ -5081,15 +5081,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@electron/remote@npm:^2.1.2":
-  version: 2.1.3
-  resolution: "@electron/remote@npm:2.1.3"
-  peerDependencies:
-    electron: ">= 13.0.0"
-  checksum: 10c0/f91146c7fcb51bc7d5cfd0a276e76a84de8155249e66dfec444256e3c827da53159f9f92d3017b2d99983dbb33720f6c64fa19fdb2907c91901bfe135421a430
-  languageName: node
-  linkType: hard
-
 "@esbuild/aix-ppc64@npm:0.21.5":
   version: 0.21.5
   resolution: "@esbuild/aix-ppc64@npm:0.21.5"
@@ -6692,28 +6683,6 @@ __metadata:
     react: ">= 18 || >= 19"
     react-dom: ">= 18 || >= 19"
   checksum: 10c0/d0b34b521c1344a5358c90d775f5f9108c7eadddefe63f00c23e5cf22d93dbce1b90bf712e66f159d5fa0b1c3f8cb835880fcf7a52cbc1b6e9ad7f5611596c9e
-  languageName: node
-  linkType: hard
-
-"@monaco-editor/loader@npm:^1.5.0":
-  version: 1.5.0
-  resolution: "@monaco-editor/loader@npm:1.5.0"
-  dependencies:
-    state-local: "npm:^1.0.6"
-  checksum: 10c0/d8e1fd75fea113b4d91405784ed4db757df450c6e57a85e87728281e819a73a3ef9fe0cbb1dc1509456f1e895ad9c11e4748f80b68900cb6cf600170e14ce6ed
-  languageName: node
-  linkType: hard
-
-"@monaco-editor/react@npm:^4.6.0":
-  version: 4.7.0
-  resolution: "@monaco-editor/react@npm:4.7.0"
-  dependencies:
-    "@monaco-editor/loader": "npm:^1.5.0"
-  peerDependencies:
-    monaco-editor: ">= 0.25.0 < 1"
-    react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-    react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-  checksum: 10c0/a4e91c6eda1a71f5fd23871bd801de435490ccbc43934d23cba65cefe2be7e9d02c9a57c4ef80fc9fe99e4d4deea51e5db19cb4e0ecf3f51818dda0eb9cdbf12
   languageName: node
   linkType: hard
 
@@ -9712,7 +9681,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@smithy/shared-ini-file-loader@npm:^4.0.0, @smithy/shared-ini-file-loader@npm:^4.0.5":
+"@smithy/shared-ini-file-loader@npm:^4.0.5":
   version: 4.0.5
   resolution: "@smithy/shared-ini-file-loader@npm:4.0.5"
   dependencies:
@@ -11167,6 +11136,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/react-dom@npm:^19.2.2":
+  version: 19.2.2
+  resolution: "@types/react-dom@npm:19.2.2"
+  peerDependencies:
+    "@types/react": ^19.2.0
+  checksum: 10c0/6154dfb8e7a638313d7fa15b2b16494f2235afda4c43be37d10f34e5c7a730f6b95117facb5e6eebc73b15cceea7f6da23be46cda5d2262fd00fd7e6069547e3
+  languageName: node
+  linkType: hard
+
 "@types/react-transition-group@npm:^4.4.6":
   version: 4.4.12
   resolution: "@types/react-transition-group@npm:4.4.12"
@@ -11182,6 +11160,15 @@ __metadata:
   dependencies:
     csstype: "npm:^3.0.2"
   checksum: 10c0/0d1629e065413be79c949f011845836e7f515c8f97dbfef057719be2f312b404405d2d064cb28e03363c62c153c100e84268c09dd9aeda488858d45033b520f0
+  languageName: node
+  linkType: hard
+
+"@types/react@npm:^19.2.2":
+  version: 19.2.2
+  resolution: "@types/react@npm:19.2.2"
+  dependencies:
+    csstype: "npm:^3.0.2"
+  checksum: 10c0/f830b1204aca4634ce3c6cb3477b5d3d066b80a4dd832a4ee0069acb504b6debd2416548a43a11c1407c12bc60e2dc6cf362934a18fe75fe06a69c0a98cba8ab
   languageName: node
   linkType: hard
 
@@ -13310,7 +13297,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cognito-srp-helper@npm:^2.2.3, cognito-srp-helper@npm:^2.3.1":
+"cognito-srp-helper@npm:^2.2.3":
   version: 2.3.4
   resolution: "cognito-srp-helper@npm:2.3.4"
   dependencies:
@@ -13517,15 +13504,6 @@ __metadata:
   version: 1.0.6
   resolution: "crelt@npm:1.0.6"
   checksum: 10c0/e0fb76dff50c5eb47f2ea9b786c17f9425c66276025adee80876bdbf4a84ab72e899e56d3928431ab0cb057a105ef704df80fe5726ef0f7b1658f815521bdf09
-  languageName: node
-  linkType: hard
-
-"cronstrue@npm:^2.51.0":
-  version: 2.59.0
-  resolution: "cronstrue@npm:2.59.0"
-  bin:
-    cronstrue: bin/cli.js
-  checksum: 10c0/f04c9720eacae8cc58ee700a33ced44947c7d722f9deb8a0d0a9a9b533f493b8c2fabed0e72e6bf9d6d1e5191b7b8325e107496ed93a85a2789e57954084b055
   languageName: node
   linkType: hard
 
@@ -16021,13 +15999,6 @@ __metadata:
   version: 2.0.4
   resolution: "inherits@npm:2.0.4"
   checksum: 10c0/4e531f648b29039fb7426fb94075e6545faa1eb9fe83c29f0b6d9e7263aceb4289d2d4557db0d428188eeb449cc7c5e77b0a0b2c4e248ff2a65933a0dee49ef2
-  languageName: node
-  linkType: hard
-
-"ini@npm:^5.0.0":
-  version: 5.0.0
-  resolution: "ini@npm:5.0.0"
-  checksum: 10c0/657491ce766cbb4b335ab221ee8f72b9654d9f0e35c32fe5ff2eb7ab8c5ce72237ff6456555b50cde88e6507a719a70e28e327b450782b4fc20c90326ec8c1a8
   languageName: node
   linkType: hard
 
@@ -18737,44 +18708,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"numa-managment@workspace:numa-management":
-  version: 0.0.0-use.local
-  resolution: "numa-managment@workspace:numa-management"
-  dependencies:
-    "@arcanumai/style": "workspace:*"
-    "@aws-sdk/client-cognito-identity-provider": "npm:^3.693.0"
-    "@aws-sdk/client-iam": "npm:^3.696.0"
-    "@aws-sdk/client-qapps": "npm:^3.692.0"
-    "@aws-sdk/client-qbusiness": "npm:^3.692.0"
-    "@aws-sdk/client-secrets-manager": "npm:^3.712.0"
-    "@aws-sdk/client-sts": "npm:^3.692.0"
-    "@aws-sdk/credential-providers": "npm:^3.692.0"
-    "@electron/remote": "npm:^2.1.2"
-    "@eslint/js": "npm:^9.13.0"
-    "@monaco-editor/react": "npm:^4.6.0"
-    "@smithy/shared-ini-file-loader": "npm:^4.0.0"
-    "@types/react": "npm:^19.0.0"
-    "@types/react-dom": "npm:^19.0.0"
-    "@vitejs/plugin-react": "npm:^4.3.3"
-    bootstrap: "npm:^5.3.3"
-    cognito-srp-helper: "npm:^2.3.1"
-    cronstrue: "npm:^2.51.0"
-    eslint: "npm:^9.13.0"
-    eslint-plugin-import: "npm:^2.31.0"
-    eslint-plugin-react: "npm:^7.37.2"
-    eslint-plugin-react-hooks: "npm:^5.0.0"
-    eslint-plugin-react-refresh: "npm:^0.4.14"
-    globals: "npm:^16.0.0"
-    ini: "npm:^5.0.0"
-    react: "npm:^19.0.0"
-    react-bootstrap: "npm:^2.10.5"
-    react-bootstrap-icons: "npm:^1.11.4"
-    react-dom: "npm:^19.0.0"
-    vite: "npm:^6.0.0"
-    vite-plugin-mkcert: "npm:^1.17.6"
-  languageName: unknown
-  linkType: soft
-
 "nwsapi@npm:^2.2.16":
   version: 2.2.21
   resolution: "nwsapi@npm:2.2.21"
@@ -21129,13 +21062,6 @@ __metadata:
   version: 2.7.0
   resolution: "stackblur-canvas@npm:2.7.0"
   checksum: 10c0/df290d0629056d5bb43d37548d0b24cb8593c79d742650e68489abf61013db578c9980724c2508bb738d107204f2e2494ab94c3cf69d6b725caa9c63b8c7e272
-  languageName: node
-  linkType: hard
-
-"state-local@npm:^1.0.6":
-  version: 1.0.7
-  resolution: "state-local@npm:1.0.7"
-  checksum: 10c0/8dc7daeac71844452fafb514a6d6b6f40d7e2b33df398309ea1c7b3948d6110c57f112b7196500a10c54fdde40291488c52c875575670fb5c819602deca48bd9
   languageName: node
   linkType: hard
 

@@ -1,5 +1,4 @@
 import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
-import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { AcmCertificate } from '@cdktf/provider-aws/lib/acm-certificate';
 import { AcmCertificateValidation } from '@cdktf/provider-aws/lib/acm-certificate-validation';
 import { Apigatewayv2Api } from '@cdktf/provider-aws/lib/apigatewayv2-api';
@@ -75,9 +74,16 @@ export class NumaFrontendInfra extends Construct {
     });
 
     const numaClient = `numa-${props.clientName}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}`;
-    this.frontendBucket = new PrivateBucket(this, 'frontend-bucket', {
-      bucket: numaClient + '-fe',
-    }).bucket;
+    const frontendBucket = new NumaCorsEnabledBucket(this, 'frontend-bucket', {
+      bucketName: 'fe',
+      clientName: props.clientName,
+      origin: props.domainName,
+      environmentName: props.environmentName,
+      clientAccountId: props.accountId,
+      allowedMethods: ['GET', 'HEAD', 'PUT', 'POST'],
+      allowLocalhostOrigin: props.devInstance ?? props.environmentName !== 'prod',
+    });
+    this.frontendBucket = frontendBucket.bucket;
 
     new S3Object(this, 'iframe-object', {
       bucket: this.frontendBucket.bucket,
@@ -432,4 +438,5 @@ export interface NumaFrontendInfraProps {
   knowledgeBase: KnowledgeBase;
   chatAgentFunctionUrl: string;
   cloudfrontSecretParam?: SsmParameter;
+  devInstance?: boolean;
 }

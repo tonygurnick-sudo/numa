@@ -900,6 +900,8 @@ export class CoreNumaInfra extends Construct {
       qBusinessApplicationId: qBusinessApplicationIdForIdp,
       brandingTable: this.brandingTable,
       knowledgeBase: props.knowledgeBase,
+      brandingAssetsBucketArn: props.brandingAssetsBucketArn ?? `arn:aws:s3:::${numaClient}-fe`,
+      brandingAssetsPrefix: props.brandingAssetsPrefix ?? 'branding/',
     });
 
     // Expose whichever role Cognito decided should be the default web‑identity role.
@@ -1043,6 +1045,8 @@ export const coreNumaInfraPropsSchema = _coreNumaInfraPropsSchema
   .merge(
     z.object({
       groups: z.record(z.string(), z.array(z.enum(FEATURE_SET_NAMES as [string, ...string[]]))).optional(),
+      brandingAssetsBucketArn: z.string().optional(),
+      brandingAssetsPrefix: z.string().optional(),
     }),
   );
 export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {

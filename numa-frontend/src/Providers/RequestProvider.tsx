@@ -1,18 +1,22 @@
 import axios from 'axios';
+import { useCallback, useMemo } from 'react';
 import { useAuth } from './AuthProvider';
 import { NumaRequestContext } from './NumaRequestContext';
 
 export const NumaRequestProvider = ({ children }) => {
   const { user } = useAuth();
 
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-    ...(user?.tokens?.accessToken && {
-      authorization: user.tokens.accessToken,
+  const defaultHeaders = useMemo(
+    () => ({
+      'Content-Type': 'application/json',
+      ...(user?.tokens?.accessToken && {
+        authorization: user.tokens.accessToken,
+      }),
     }),
-  };
+    [user],
+  );
 
-  const parseNestedJson = (data) => {
+  const parseNestedJson = useCallback((data) => {
     if (typeof data === 'string') {
       try {
         return JSON.parse(data);
@@ -35,65 +39,83 @@ export const NumaRequestProvider = ({ children }) => {
     }
 
     return data;
-  };
+  }, []);
 
-  const axiosConfig = {
-    transformResponse: [
-      (data) => {
-        try {
-          const parsedData = JSON.parse(data);
-          return parseNestedJson(parsedData);
-        } catch {
-          return data;
-        }
-      },
-    ],
-  };
+  const axiosConfig = useMemo(
+    () => ({
+      transformResponse: [
+        (data) => {
+          try {
+            const parsedData = JSON.parse(data);
+            return parseNestedJson(parsedData);
+          } catch {
+            return data;
+          }
+        },
+      ],
+    }),
+    [parseNestedJson],
+  );
 
   // Common request methods
-  const numaGet = async (url, params, headers = {}) => {
-    try {
-      const response = await axios.get(url, {
-        ...axiosConfig,
-        params,
+  const numaGet = useCallback(
+    async (url, params, headers = {}) => {
+      try {
+        const response = await axios.get(url, {
+          ...axiosConfig,
+          params,
+          headers: { ...defaultHeaders, ...headers },
+        });
+        return response.data;
+      } catch (error) {
+        console.error('Request failed:', error.message);
+        console.error('Response status:', error.response?.status);
+        console.error('Response data:', error.response?.data);
+        throw error;
+      }
+    },
+    [axiosConfig, defaultHeaders],
+  );
+
+  const numaPost = useCallback(
+    async (url, data, headers = {}) => {
+      const response = await axios.post(url, data, {
         headers: { ...defaultHeaders, ...headers },
       });
       return response.data;
-    } catch (error) {
-      console.error('Request failed:', error.message);
-      console.error('Response status:', error.response?.status);
-      console.error('Response data:', error.response?.data);
-      throw error;
-    }
-  };
+    },
+    [defaultHeaders],
+  );
 
-  const numaPost = async (url, data, headers = {}) => {
-    const response = await axios.post(url, data, {
-      headers: { ...defaultHeaders, ...headers },
-    });
-    return response.data;
-  };
+  const numaPut = useCallback(
+    async (url, data, headers = {}) => {
+      const response = await axios.put(url, data, {
+        headers: { ...defaultHeaders, ...headers },
+      });
+      return response.data;
+    },
+    [defaultHeaders],
+  );
 
-  const numaPut = async (url, data, headers = {}) => {
-    const response = await axios.put(url, data, {
-      headers: { ...defaultHeaders, ...headers },
-    });
-    return response.data;
-  };
+  const numaDelete = useCallback(
+    async (url, headers = {}) => {
+      const response = await axios.delete(url, {
+        headers: { ...defaultHeaders, ...headers },
+      });
+      return response.data;
+    },
+    [defaultHeaders],
+  );
 
-  const numaDelete = async (url, headers = {}) => {
-    const response = await axios.delete(url, {
-      headers: { ...defaultHeaders, ...headers },
-    });
-    return response.data;
-  };
-
-  const value = {
-    numaGet,
-    numaPost,
-    numaPut,
-    numaDelete,
-  };
+  const value = useMemo(
+    () => ({
+      numaGet,
+      numaPost,
+      numaPut,
+      numaDelete,
+    }),
+    [numaGet, numaPost, numaPut, numaDelete],
+  );
 
   return <NumaRequestContext.Provider value={value}>{children}</NumaRequestContext.Provider>;
 };

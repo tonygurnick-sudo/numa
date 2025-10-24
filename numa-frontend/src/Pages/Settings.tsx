@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   Container,
   Row,
@@ -25,13 +25,49 @@ import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import BrandingAdminPanel from '../Components/Branding/BrandingAdminPanel';
+import { UNSAFE_NavigationContext } from 'react-router-dom';
 
 const AVAILABLE_INTEGRATIONS: IntegrationListItem[] = getIntegrationsListFormat();
+
+const useNavigationConfirm = (when: boolean, message: string) => {
+  const navigationContext = useContext(UNSAFE_NavigationContext);
+
+  useEffect(() => {
+    if (!when) {
+      return;
+    }
+
+    const navigator = navigationContext?.navigator as {
+      block?: (blocker: (tx: { retry: () => void }) => void) => () => void;
+    } | null;
+    if (!navigator?.block) {
+      return;
+    }
+
+    const unblock = navigator.block((tx: { retry: () => void }) => {
+      const confirmLeave = window.confirm(message);
+      if (confirmLeave) {
+        unblock();
+        tx.retry();
+      }
+    });
+
+    return () => {
+      unblock();
+    };
+  }, [navigationContext, when, message]);
+};
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const [activeKey, setActiveKey] = useState<string>('users');
+  const brandingFlag =
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('BRANDING_PROVIDER_ENABLED') : null;
+  const brandingApiEnabled = brandingFlag === 'true';
+  const isAdmin = Boolean(user?.groups?.includes('admin'));
+  const allowBrandingTab = brandingApiEnabled && isAdmin;
 
   // Global (admin) settings
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
@@ -124,7 +160,12 @@ export default function SettingsPage() {
   const [toolsError, setToolsError] = useState<string | null>(null);
   const [toolList, setToolList] = useState<{ name: string; description?: string }[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
-  // No need to keep initial snapshot in this view currently
+  const [isBrandingDirty, setIsBrandingDirty] = useState<boolean>(false);
+
+  useNavigationConfirm(
+    activeKey === 'branding' && isBrandingDirty,
+    'You have unsaved branding changes. Leaving this page will discard them. Continue?',
+  );
 
   const openManageTools = async (integrationId: string) => {
     if (!lambdaClient || !user) return;
@@ -186,6 +227,33 @@ export default function SettingsPage() {
       setError((e as Error).message || 'Failed to update integration');
     }
   };
+
+  const handleBrandingDirtyChange = useCallback((dirty: boolean) => {
+    setIsBrandingDirty(dirty);
+  }, []);
+
+  const handleTabSelect = useCallback(
+    (nextKey: string | null) => {
+      if (!nextKey) {
+        return;
+      }
+
+      if (activeKey === 'branding' && nextKey !== 'branding' && isBrandingDirty) {
+        const confirmLeave = window.confirm(
+          'You have unsaved branding changes. Leaving this tab will discard them. Continue?',
+        );
+
+        if (!confirmLeave) {
+          return;
+        }
+
+        setIsBrandingDirty(false);
+      }
+
+      setActiveKey(nextKey);
+    },
+    [activeKey, isBrandingDirty],
+  );
 
   const renderIntegrationRow = (integration: IntegrationListItem) => {
     const id = integration.name_slug;
@@ -307,7 +375,7 @@ export default function SettingsPage() {
 
           <Card className="border-0 shadow-sm">
             <Card.Body>
-              <Tabs activeKey={activeKey} onSelect={(k) => setActiveKey(k || 'users')} className="mb-3">
+              <Tabs activeKey={activeKey} onSelect={handleTabSelect} className="mb-3">
                 <Tab
                   eventKey="users"
                   title={
@@ -465,6 +533,18 @@ export default function SettingsPage() {
                     </div>
                   )}
                 </Tab>
+                {allowBrandingTab && (
+                  <Tab
+                    eventKey="branding"
+                    title={
+                      <span>
+                        <i className="bi bi-palette-fill me-2"></i>Branding
+                      </span>
+                    }
+                  >
+                    <BrandingAdminPanel onDirtyChange={handleBrandingDirtyChange} />
+                  </Tab>
+                )}
               </Tabs>
             </Card.Body>
           </Card>
