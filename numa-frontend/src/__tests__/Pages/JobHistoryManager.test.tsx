@@ -104,9 +104,6 @@ describe('JobHistoryManager Component', () => {
   it('should render job history', async () => {
     renderJobHistoryManager();
 
-    // Debug what's being rendered
-    console.log('DEBUG: Screen content in first test:', screen.debug());
-
     // Wait for the jobs to load and check for the Job History heading
     await waitFor(
       () => {
@@ -133,9 +130,6 @@ describe('JobHistoryManager Component', () => {
   // Core functionality test - rendering job history table
   it('should render job history table', async () => {
     renderJobHistoryManager();
-
-    // Debug what's being rendered
-    console.log('DEBUG: Screen content:', screen.debug());
 
     // Wait for jobs to load
     await waitFor(

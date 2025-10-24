@@ -39,7 +39,7 @@ class BrandingService {
             'Numa is a generative AI-powered platform that will empower your employees to be more creative, data-driven, efficient and productive.',
         },
         loginPage: {
-          title: '{clientName} Login',
+          title: '',
           welcomeMessage: '',
         },
         colors: {

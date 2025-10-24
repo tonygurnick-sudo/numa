@@ -1,0 +1,95 @@
+/**
+ * @vitest-environment jsdom
+ */
+
+import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import '@testing-library/jest-dom';
+
+import SettingsPage from '../../Pages/Settings';
+
+const mockUseAuth = vi.fn();
+const mockNumaGet = vi.fn();
+const mockNumaPut = vi.fn();
+
+vi.mock('../../Providers/AuthProvider', () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
+vi.mock('../../Providers/NumaRequestContext', () => ({
+  useNumaRequest: () => ({
+    numaGet: mockNumaGet,
+    numaPut: mockNumaPut,
+  }),
+}));
+
+vi.mock('../../Services/AdminIntegrationsService', () => ({
+  AdminIntegrationsService: {
+    listWithNuma: vi.fn().mockResolvedValue({}),
+    updateWithNuma: vi.fn(),
+  },
+}));
+
+vi.mock('../../Services/PipedreamProxyService', () => ({
+  PipedreamProxyService: {
+    deriveExternalUserId: vi.fn(),
+    listMcpTools: vi.fn().mockResolvedValue({ tools: [] }),
+  },
+}));
+
+vi.mock('@aws-sdk/client-lambda', () => ({
+  LambdaClient: vi.fn(),
+}));
+
+vi.mock('@aws-sdk/credential-providers', () => ({
+  fromWebToken: vi.fn(),
+}));
+
+vi.mock('../../Components/Nav', () => ({
+  Nav: () => <nav data-testid="nav" />,
+}));
+
+vi.mock('../../Components/Breadcrumbs', () => ({
+  Breadcrumbs: ({ label }: { label: string }) => <div data-testid="breadcrumbs">{label}</div>,
+}));
+
+vi.mock('../../Components/Branding/BrandingAdminPanel', () => ({
+  __esModule: true,
+  default: () => <div data-testid="branding-panel" />,
+}));
+
+vi.mock('../../Pages/UserManagement', () => ({
+  __esModule: true,
+  default: () => <div data-testid="user-management" />,
+}));
+
+describe('SettingsPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    sessionStorage.setItem('PIPEDREAM_INTEGRATIONS', 'false');
+    mockNumaGet.mockResolvedValue([]);
+    mockNumaPut.mockResolvedValue(undefined);
+    mockUseAuth.mockReturnValue({
+      user: {
+        groups: ['admin'],
+        tokens: { idToken: 'token' },
+        decoded_tokens: { idToken: { 'cognito:groups': ['admin'], sub: 'user' } },
+      },
+    });
+  });
+
+  it('shows the Branding tab for admin users when branding is enabled', async () => {
+    sessionStorage.setItem('BRANDING_PROVIDER_ENABLED', 'true');
+    render(<SettingsPage />);
+
+    expect(await screen.findByTestId('branding-panel')).toBeInTheDocument();
+  });
+
+  it('hides the Branding tab when branding feature is disabled', () => {
+    sessionStorage.setItem('BRANDING_PROVIDER_ENABLED', 'false');
+    render(<SettingsPage />);
+
+    expect(screen.queryByTestId('branding-panel')).not.toBeInTheDocument();
+  });
+});

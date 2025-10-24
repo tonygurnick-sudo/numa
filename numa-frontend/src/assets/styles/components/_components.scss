@@ -54,9 +54,9 @@
 
 /* Forms */
 .btn-primary {
-  background-color: var(--color-bg-lightest);
-  border: 1px solid var(--color-primary) !important;
-  color: var(--color-primary);
+  background-color: var(--brand-buttonPrimary, var(--color-bg-lightest));
+  border: 1px solid var(--brand-buttonPrimaryBorder, var(--color-primary)) !important;
+  color: var(--brand-buttonPrimaryText, var(--color-primary));
   transition: all 0.2s ease-in-out;
 
   .bi-arrow-right {
