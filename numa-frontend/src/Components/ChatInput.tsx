@@ -113,8 +113,8 @@ const ChatInput = ({
       // Remove connection
       setEnabledConnections(enabledConnections.filter((id) => id !== connectionId));
     } else {
-      // Add connection (max 2)
-      if (enabledConnections.length < 2) {
+      // Add connection (max 4)
+      if (enabledConnections.length < 4) {
         setEnabledConnections([...enabledConnections, connectionId]);
       }
     }

@@ -524,12 +524,7 @@ export default function SettingsPage() {
                     </div>
                   ) : (
                     <div>
-                      {AVAILABLE_INTEGRATIONS.sort((a, b) => {
-                        const enabledA = globalSettings[a.name_slug]?.status === 'enabled';
-                        const enabledB = globalSettings[b.name_slug]?.status === 'enabled';
-                        if (enabledA !== enabledB) return enabledA ? -1 : 1;
-                        return a.name.localeCompare(b.name);
-                      }).map(renderIntegrationRow)}
+                      {AVAILABLE_INTEGRATIONS.sort((a, b) => a.name.localeCompare(b.name)).map(renderIntegrationRow)}
                     </div>
                   )}
                 </Tab>

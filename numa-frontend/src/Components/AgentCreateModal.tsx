@@ -67,6 +67,8 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
   const [activeAccordionKey, setActiveAccordionKey] = useState<string | null>('0');
   const [showKbComparison, setShowKbComparison] = useState(false);
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
+  // Local string inputs for time saved (to allow clearing and free typing)
+  const [timeInputs, setTimeInputs] = useState<{ hours: string; minutes: string }>({ hours: '', minutes: '' });
 
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const authorName = useMemo(() => idToken.name || idToken.email || 'Unknown User', [idToken]);
@@ -118,95 +120,82 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
     const loadConnections = async () => {
       try {
         setLoadingConnections(true);
-        if (!relayLambdaArn) {
-          console.warn('AgentCreateModal: Pipedream integrations enabled but relay Lambda ARN missing');
-          if (!cancelled) setConnections([]);
-          return;
-        }
-        if (!user || !REGION) {
-          if (!cancelled) setConnections([]);
-          return;
-        }
 
-        const userGroups = window.sessionStorage.getItem('GROUPS');
-        const groupConfig = userGroups ? JSON.parse(userGroups) : {};
-        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-        const roleArn = groupConfig?.[userGroup]?.roleArn;
-        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-        const idTokenValue = user.tokens?.idToken;
+        // Start with all known integrations from config
+        const { getAllConnections } = await import('../config/integrationsConfig');
+        const allKnownIntegrations = getAllConnections();
+        const connectedSet = new Set<string>();
 
-        if (!roleArn || !cognitoUserId || !idTokenValue) {
-          console.warn('AgentCreateModal: missing role ARN, user id, or id token for integration lookup');
-          if (!cancelled) setConnections([]);
-          return;
-        }
+        // Try to get connected integrations from Pipedream
+        if (relayLambdaArn && user && REGION) {
+          try {
+            const userGroups = window.sessionStorage.getItem('GROUPS');
+            const groupConfig = userGroups ? JSON.parse(userGroups) : {};
+            const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
+            const roleArn = groupConfig?.[userGroup]?.roleArn;
+            const cognitoUserId = user.decoded_tokens?.idToken?.sub;
+            const idTokenValue = user.tokens?.idToken;
 
-        const credentials = fromWebToken({
-          webIdentityToken: idTokenValue,
-          roleArn,
-          roleSessionName: cognitoUserId,
-        });
-        const lambdaClient = new LambdaClient({ region: REGION, credentials });
-        const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+            if (roleArn && cognitoUserId && idTokenValue) {
+              const credentials = fromWebToken({
+                webIdentityToken: idTokenValue,
+                roleArn,
+                roleSessionName: cognitoUserId,
+              });
+              const lambdaClient = new LambdaClient({ region: REGION, credentials });
+              const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
 
-        const status = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
-          forceRefresh: true,
-          ttlMs: 0,
-        });
+              const status = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
+                ttlMs: 30 * 60 * 1000, // cache for 30 minutes (refresh button or connect/disconnect invalidates)
+              });
 
-        const connectedAppNames = new Set(status.connected_apps || []);
-        const rawConnections = Array.isArray(status.connections) ? status.connections : [];
+              const connectedAppNames = new Set(status.connected_apps || []);
+              const rawConnections = Array.isArray(status.connections) ? status.connections : [];
 
-        const mapped = rawConnections
-          .map((conn: Record<string, unknown>) => {
-            const appId =
-              (conn.app_name as string) ||
-              (conn.integration as string) ||
-              (conn.app as string) ||
-              (conn.id as string) ||
-              '';
-            if (!appId) return null;
-            const displayName =
-              (conn.display_name as string) ||
-              (conn.app_display as string) ||
-              (conn.app_name as string) ||
-              (conn.name as string) ||
-              appId;
-            const statusValue =
-              (
-                (conn.status as string) ||
-                (conn.connection_status as string) ||
-                (conn.state as string) ||
-                (conn.connectionStatus as string) ||
-                ''
-              )?.toLowerCase?.() ?? '';
-            const isConnected =
-              Boolean(conn.isConnected) || statusValue === 'connected' || connectedAppNames.has(appId);
-            return {
-              id: appId,
-              name: displayName,
-              isConnected,
-              mcpServerUrl: (conn.mcp_server_url as string) || (conn.mcpServerUrl as string),
-            };
-          })
-          .filter((item): item is ConnectionInfo => Boolean(item && item.id && item.isConnected));
+              // Parse connected apps
+              rawConnections.forEach((conn: Record<string, unknown>) => {
+                const appId =
+                  (conn.app_name as string) ||
+                  (conn.integration as string) ||
+                  (conn.app as string) ||
+                  (conn.id as string) ||
+                  '';
+                if (!appId) return;
+                const statusValue =
+                  (
+                    (conn.status as string) ||
+                    (conn.connection_status as string) ||
+                    (conn.state as string) ||
+                    (conn.connectionStatus as string) ||
+                    ''
+                  )?.toLowerCase?.() ?? '';
+                const isConnected =
+                  Boolean(conn.isConnected) || statusValue === 'connected' || connectedAppNames.has(appId);
+                if (isConnected) {
+                  connectedSet.add(appId);
+                }
+              });
 
-        if (mapped.length === 0 && connectedAppNames.size > 0) {
-          connectedAppNames.forEach((name) => {
-            mapped.push({
-              id: name,
-              name,
-              isConnected: true,
-            });
-          });
+              // Add any apps from connected_apps that weren't in connections array
+              connectedAppNames.forEach((name) => connectedSet.add(name));
+            }
+          } catch (err) {
+            console.warn('AgentCreateModal: failed to fetch connected integrations, showing all as unconnected', err);
+          }
         }
 
-        const filtered = mapped.filter(
-          (conn) => integrationSettings[conn.id]?.status !== 'disabled' && conn.isConnected,
-        );
+        // Build the final list: all known integrations with connection status
+        const allIntegrations: ConnectionInfo[] = allKnownIntegrations
+          .map((config) => ({
+            id: config.id,
+            name: config.name,
+            isConnected: connectedSet.has(config.id),
+            mcpServerUrl: undefined,
+          }))
+          .filter((conn) => integrationSettings[conn.id]?.status !== 'disabled'); // Only filter disabled ones
 
         if (!cancelled) {
-          setConnections(filtered);
+          setConnections(allIntegrations);
         }
       } catch (err) {
         console.error('AgentCreateModal: failed to load integrations', err);
@@ -283,6 +272,19 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
     }
   }, [editingAgent, show, authorName]);
 
+  // Initialize local time input fields when opening or switching the editing agent
+  useEffect(() => {
+    if (!show) return;
+    const total = editingAgent?.estimatedTimeSavedMinutes;
+    if (typeof total === 'number' && Number.isFinite(total)) {
+      const h = Math.floor(total / 60);
+      const m = total % 60;
+      setTimeInputs({ hours: String(h), minutes: String(m) });
+    } else {
+      setTimeInputs({ hours: '', minutes: '' });
+    }
+  }, [show, editingAgent]);
+
   const handleChange = (field: keyof AgentPayload, value: unknown) => {
     setFormState((prev) => ({
       ...prev,
@@ -290,12 +292,52 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
     }));
   };
 
-  const handleTimeSavedChange = (hours: number, minutes: number) => {
-    const h = Number.isFinite(hours) && hours > 0 ? Math.floor(hours) : 0;
-    const mRaw = Number.isFinite(minutes) && minutes > 0 ? Math.floor(minutes) : 0;
-    const m = Math.max(0, Math.min(59, mRaw));
+  // Legacy numeric handler removed in favor of string-based inputs
+
+  // String-input friendly handlers for time saved fields
+  const updateTimeFromStrings = (next: { hours: string; minutes: string }) => {
+    const h = next.hours === '' ? 0 : Math.min(999, parseInt(next.hours, 10) || 0);
+    const m = next.minutes === '' ? 0 : Math.min(59, parseInt(next.minutes, 10) || 0);
     const total = h * 60 + m;
     setFormState((prev) => ({ ...prev, estimatedTimeSavedMinutes: total || undefined }));
+  };
+
+  const onHoursInputChange = (raw: string) => {
+    // Allow only digits; empty string permitted
+    const sanitized = raw.replace(/\D/g, '').slice(0, 3);
+    setTimeInputs((prev) => {
+      const next = { ...prev, hours: sanitized };
+      updateTimeFromStrings(next);
+      return next;
+    });
+  };
+
+  const onMinutesInputChange = (raw: string) => {
+    // Allow only digits; empty string permitted
+    const sanitized = raw.replace(/\D/g, '').slice(0, 2);
+    setTimeInputs((prev) => {
+      const next = { ...prev, minutes: sanitized };
+      updateTimeFromStrings(next);
+      return next;
+    });
+  };
+
+  const clampHoursOnBlur = () => {
+    setTimeInputs((prev) => {
+      let h = prev.hours === '' ? '' : String(Math.min(999, parseInt(prev.hours, 10) || 0));
+      const next = { ...prev, hours: h } as { hours: string; minutes: string };
+      updateTimeFromStrings(next);
+      return next;
+    });
+  };
+
+  const clampMinutesOnBlur = () => {
+    setTimeInputs((prev) => {
+      let m = prev.minutes === '' ? '' : String(Math.min(59, parseInt(prev.minutes, 10) || 0));
+      const next = { ...prev, minutes: m } as { hours: string; minutes: string };
+      updateTimeFromStrings(next);
+      return next;
+    });
   };
 
   const handleToolsChange = (field: keyof NonNullable<AgentPayload['toolsConfig']>, value: unknown) => {
@@ -317,6 +359,11 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
         enabled.delete(integrationId);
         requiredIntegrations.delete(integrationId);
       } else {
+        // Check if we've reached the limit of 4 integrations
+        if (enabled.size >= 4) {
+          window.alert('You can select a maximum of 4 integrations per agent.');
+          return prev;
+        }
         enabled.add(integrationId);
         requiredIntegrations.add(integrationId);
       }
@@ -437,7 +484,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
       downloadAgentExport(exp, formState.title);
     } catch (e) {
       console.error('Failed to export agent JSON', e);
-      setError('Failed to export JSON');
+      setError('Failed to export agent');
     }
   };
 
@@ -448,17 +495,24 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
       const text = await file.text();
       const { payload, warnings } = parseAgentImport(text);
       setFormState({ ...payload });
+      // Sync local time inputs with imported payload
+      const total = payload?.estimatedTimeSavedMinutes;
+      if (typeof total === 'number' && Number.isFinite(total)) {
+        setTimeInputs({ hours: String(Math.floor(total / 60)), minutes: String(total % 60) });
+      } else {
+        setTimeInputs({ hours: '', minutes: '' });
+      }
       setReferenceFiles([]);
       if (warnings.length) {
-        window.alert(`Imported from JSON. Notes:\n- ${warnings.join('\n- ')}`);
+        window.alert(`Agent imported. Notes:\n- ${warnings.join('\n- ')}`);
       } else {
-        window.alert('Imported from JSON. Review details and click Save to create/update the agent.');
+        window.alert('Agent imported successfully. Review details and click Save to create/update the agent.');
       }
       // Reset file input so the same file can be chosen again if needed
       e.target.value = '';
     } catch (err) {
       console.error('Failed to import agent JSON', err);
-      setError((err as Error)?.message || 'Failed to import JSON');
+      setError((err as Error)?.message || 'Failed to import agent');
     }
   };
 
@@ -586,7 +640,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                   </Col>
                   <Col md={6}>
                     <Form.Group controlId="agentDescription">
-                      <Form.Label className="fw-semibold">Card Description</Form.Label>
+                      <Form.Label className="fw-semibold">Agent Description</Form.Label>
                       <Form.Control
                         as="textarea"
                         rows={4}
@@ -603,7 +657,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                   </Col>
                   <Col md={6}>
                     <Form.Group controlId="agentUserWelcomeMessage">
-                      <Form.Label className="fw-semibold">Welcome Message</Form.Label>
+                      <Form.Label className="fw-semibold">Welcome Message and/or User Instructions</Form.Label>
                       <Form.Control
                         as="textarea"
                         rows={4}
@@ -613,7 +667,9 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                         disabled={saving}
                         className="border-2"
                       />
-                      <Form.Text muted>First message users see when starting a chat</Form.Text>
+                      <Form.Text muted>
+                        Message the agent shows users when starting a chat (can include instructions for the user)
+                      </Form.Text>
                     </Form.Group>
                   </Col>
                 </Row>
@@ -746,37 +802,34 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                     <Form.Group controlId="agentTimeSaved">
                       <Form.Label className="fw-semibold">Time Saved Estimate</Form.Label>
                       <div className="d-flex gap-2 align-items-center">
-                        {(() => {
-                          const total = formState.estimatedTimeSavedMinutes ?? 0;
-                          const hours = Math.floor(total / 60);
-                          const minutes = total % 60;
-                          return (
-                            <>
-                              <Form.Control
-                                type="number"
-                                min={0}
-                                max={999}
-                                step={1}
-                                value={hours}
-                                disabled={saving}
-                                onChange={(e) => handleTimeSavedChange(parseInt(e.target.value || '0', 10), minutes)}
-                                style={{ width: 80 }}
-                              />
-                              <span className="text-muted small">hrs</span>
-                              <Form.Control
-                                type="number"
-                                min={0}
-                                max={59}
-                                step={5}
-                                value={minutes}
-                                disabled={saving}
-                                onChange={(e) => handleTimeSavedChange(hours, parseInt(e.target.value || '0', 10))}
-                                style={{ width: 80 }}
-                              />
-                              <span className="text-muted small">min</span>
-                            </>
-                          );
-                        })()}
+                        <>
+                          <Form.Control
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            placeholder="0"
+                            maxLength={3}
+                            value={timeInputs.hours}
+                            disabled={saving}
+                            onChange={(e) => onHoursInputChange(e.target.value)}
+                            onBlur={clampHoursOnBlur}
+                            style={{ width: 80 }}
+                          />
+                          <span className="text-muted small">hrs</span>
+                          <Form.Control
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            placeholder="0"
+                            maxLength={2}
+                            value={timeInputs.minutes}
+                            disabled={saving}
+                            onChange={(e) => onMinutesInputChange(e.target.value)}
+                            onBlur={clampMinutesOnBlur}
+                            style={{ width: 80 }}
+                          />
+                          <span className="text-muted small">min</span>
+                        </>
                       </div>
                       <Form.Text muted className="small">
                         Estimated time saved vs manual process
@@ -937,9 +990,22 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                   <Col md={12}>
                     <div className="border-top pt-3 mt-2">
                       <div className="d-flex align-items-center justify-content-between mb-3">
-                        <div>
-                          <div className="fw-semibold">Connected Integrations</div>
-                          <small className="text-muted">Select which integrations this agent can access</small>
+                        <div className="flex-grow-1">
+                          <div className="d-flex align-items-center gap-2">
+                            <div className="fw-semibold">Integrations</div>
+                            {!loadingConnections && (
+                              <span
+                                className={`badge ${(formState.toolsConfig?.enabledConnections?.length ?? 0) >= 4 ? 'bg-danger' : 'bg-secondary'}`}
+                                style={{ fontSize: '0.7rem' }}
+                              >
+                                {formState.toolsConfig?.enabledConnections?.length ?? 0} / 4
+                              </span>
+                            )}
+                          </div>
+                          <small className="text-muted">
+                            Select which integrations this agent can access (selecting an integration you have not
+                            connected will raise an error when you try to use the agent). Maximum 4 integrations.
+                          </small>
                         </div>
                         {loadingConnections && <Spinner size="sm" animation="border" />}
                       </div>
@@ -951,7 +1017,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                       ) : connections.length === 0 ? (
                         <div className="p-3 bg-white border rounded-2 text-muted">
                           <i className="bi bi-info-circle me-2"></i>
-                          No integrations connected yet. Connect apps from the Integrations page.
+                          No integrations available. Contact your administrator.
                         </div>
                       ) : (
                         <div className="d-flex flex-wrap gap-2">
@@ -963,12 +1029,12 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                                 key={conn.id}
                                 role="button"
                                 onClick={() => !saving && handleIntegrationToggle(conn.id)}
-                                className={`d-flex align-items-center gap-2 p-2 px-3 border rounded-2 ${
+                                className={`d-flex align-items-center gap-2 p-2 px-3 border rounded-2 position-relative ${
                                   isEnabled ? 'border-primary bg-white border-2' : 'bg-white'
                                 }`}
                                 style={{
                                   cursor: saving ? 'not-allowed' : 'pointer',
-                                  opacity: saving ? 0.6 : 1,
+                                  opacity: saving ? 0.6 : conn.isConnected ? 1 : 0.7,
                                   transition: 'all 0.2s ease',
                                 }}
                               >
@@ -984,6 +1050,14 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                                 <span className="fw-medium" style={{ fontSize: '0.9rem' }}>
                                   {config?.name || conn.name}
                                 </span>
+                                {!conn.isConnected && (
+                                  <span
+                                    className="badge bg-warning text-dark"
+                                    style={{ fontSize: '0.65rem', padding: '2px 6px' }}
+                                  >
+                                    Not connected
+                                  </span>
+                                )}
                                 {isEnabled && (
                                   <i className="bi bi-check-circle-fill ms-1" style={{ color: '#8e50a7' }}></i>
                                 )}
@@ -1112,7 +1186,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                 className="d-flex align-items-center gap-1"
               >
                 <i className="bi bi-download"></i>
-                Download JSON
+                Export Agent
               </Button>
               <Button
                 variant="outline-secondary"
@@ -1122,7 +1196,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                 className="d-flex align-items-center gap-1"
               >
                 <i className="bi bi-upload"></i>
-                Create from JSON
+                Import Agent
               </Button>
             </div>
             <div className="d-flex align-items-center gap-2">

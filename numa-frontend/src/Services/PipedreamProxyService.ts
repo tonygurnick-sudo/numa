@@ -43,7 +43,8 @@ export class PipedreamProxyService {
     externalUserId: string,
     options?: { forceRefresh?: boolean; ttlMs?: number },
   ): Promise<IntegrationStatusResult> {
-    const { forceRefresh = false, ttlMs = 60_000 } = options || {};
+    // Default to 30 seconds for safety; callers that want longer cache explicitly override
+    const { forceRefresh = false, ttlMs = 30_000 } = options || {};
     const now = Date.now();
     const storageKey = `NUMA_INTEGRATIONS_STATUS:${externalUserId}`;
 
