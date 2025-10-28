@@ -217,13 +217,13 @@ export function createMessageHelpers(setMessages: (updater: (prev: UiMessage[]) 
 
       if (idx >= 0) {
         const seg = segs[idx] as UiToolCardSegment;
-        const updated: UiToolCardSegment = {
+        const updatedSegment: UiToolCardSegment = {
           ...seg,
           result: toolResult,
           toolName: toolName || seg.toolName,
           isLoading: false,
         };
-        segs[idx] = updated;
+        segs[idx] = updatedSegment;
         lastMsg.segments = segs;
         updated[lastIdx] = lastMsg;
       } else {
