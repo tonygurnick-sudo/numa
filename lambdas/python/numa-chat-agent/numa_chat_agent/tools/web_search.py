@@ -33,7 +33,7 @@ import structlog
 from bs4 import BeautifulSoup, Tag
 from ddgs import DDGS
 
-from .summarization import summarize_combined_content
+from ..summarization import summarize_combined_content
 
 logger = structlog.get_logger()
 

@@ -5,10 +5,13 @@ import { MarkdownContent } from './MarkdownContent';
 import numaIcon from '../../public/numa-logo.svg';
 import { ChatReferencesDropdown } from '../Components/ChatReferencesDropdown';
 import { useAuth } from '../Providers/AuthProvider';
-import { TOOL_CONFIG } from '../utils/ToolConfig';
+// Tool rendering is handled via unified tool cards; direct TOOL_CONFIG use removed
+import { UnifiedToolCard } from './UnifiedToolCard';
+import { FileMessage } from './FileMessage';
 import AgentAvatar from './AgentAvatar';
 import type { AgentSummary } from '../types/agents';
 import { formatAgentDisplayName } from '../utils/agentUtils';
+import { downloadFileFromS3 } from '../utils/s3Utils';
 
 /**
  * A small helper bubble for opening doc if docTitle/docContent exist
@@ -31,7 +34,24 @@ function DocOpenBubble({ docTitle, docContent, onClick }) {
 type TextSegment = { kind: 'text'; text: string; finalized?: boolean };
 type ToolSegment = { kind: 'tool'; label: string; isLoading?: boolean };
 type ResultSegment = { kind: 'result'; toolName?: string; payload: unknown };
-type MessageSegment = TextSegment | ToolSegment | ResultSegment;
+type ToolCardSegment = {
+  kind: 'tool_card';
+  toolName: string;
+  label: string;
+  toolUseId: string | null;
+  isLoading?: boolean;
+  steps: string[];
+  result?: unknown;
+};
+type FileUploadSegment = {
+  kind: 'file_upload';
+  filename: string;
+  type?: 'success' | 'processing';
+  s3Key?: string;
+  s3Bucket?: string;
+  region?: string;
+};
+type MessageSegment = TextSegment | ToolSegment | ResultSegment | ToolCardSegment | FileUploadSegment;
 
 type ChatMessage = {
   role: 'assistant' | 'user' | 'system';
@@ -51,6 +71,10 @@ const ChatMessages = ({
   onOpenDocument,
   isConversationLoading,
   currentAgent,
+  conversationId,
+  sub,
+  numaChatDynamoUtils,
+  setMessages,
 }: {
   messages: ChatMessage[];
   messageEndRef: RefObject<HTMLDivElement>;
@@ -58,6 +82,20 @@ const ChatMessages = ({
   onOpenDocument: (title: string, content: string) => void;
   isConversationLoading: boolean;
   currentAgent?: AgentSummary | null;
+  conversationId?: string;
+  sub?: string;
+  numaChatDynamoUtils?: {
+    addFileMessage: (args: {
+      conversationId: string;
+      userId: string;
+      fileName: string;
+      fileType: string;
+      s3Key: string;
+      s3Bucket: string;
+      extractedContentS3Key?: string;
+    }) => Promise<unknown>;
+  };
+  setMessages?: (fn: (prev: ChatMessage[]) => ChatMessage[]) => void;
 }) => {
   const { getCredentials } = useAuth();
 
@@ -184,11 +222,47 @@ const ChatMessages = ({
                         )}
                       </div>
                     );
-                  } else if (seg.kind === 'result') {
-                    const toolName = seg.toolName || 'unknown';
-                    const descriptor = TOOL_CONFIG[toolName] || TOOL_CONFIG._default;
-                    const Renderer = descriptor.renderer;
-                    return <Renderer key={idx} result={seg.payload} />;
+                  } else if (seg.kind === 'tool_card') {
+                    const sc = seg as ToolCardSegment;
+                    return (
+                      <UnifiedToolCard
+                        key={idx}
+                        toolName={sc.toolName}
+                        label={sc.label}
+                        steps={sc.steps}
+                        result={sc.result}
+                        isLoading={!!sc.isLoading}
+                        conversationId={conversationId}
+                        sub={sub}
+                        numaChatDynamoUtils={numaChatDynamoUtils}
+                        setMessages={setMessages}
+                      />
+                    );
+                  } else if (seg.kind === 'file_upload') {
+                    const fs = seg as FileUploadSegment;
+                    const hasS3Data = fs.s3Key && fs.s3Bucket && fs.region;
+
+                    const handleFileClick = async () => {
+                      if (hasS3Data) {
+                        try {
+                          await downloadFileFromS3(fs.s3Key!, fs.s3Bucket!, fs.region!, getCredentials, fs.filename);
+                        } catch (error) {
+                          console.error('Error downloading file:', error);
+                        }
+                      }
+                    };
+
+                    return (
+                      <div key={idx} className="file-upload-message">
+                        <div className="file-upload-text">File &apos;{fs.filename}&apos; uploaded successfully.</div>
+                        <FileMessage
+                          filename={fs.filename}
+                          type={fs.type || 'success'}
+                          onClick={hasS3Data ? handleFileClick : undefined}
+                          clickable={hasS3Data}
+                        />
+                      </div>
+                    );
                   }
                   return null;
                 })

@@ -21,6 +21,7 @@ export interface ChatAgentHttpProps {
   userPoolClientId: string;
   chatHistoryTableName: string;
   outputsBucketArn: string;
+  outputsBucketName: string;
   dataBucketArn: string;
   pipedreamProxyLambdaArn?: string;
   pipedreamIntegrationsEnabled?: boolean;
@@ -73,9 +74,10 @@ export class NumaChatAgent extends Construct {
         Q_RETRIEVER_ID: config.qRetrieverId ?? '',
         BEDROCK_KNOWLEDGE_BASE_ID: config.bedrockKnowledgeBaseId ?? '',
         PREFERRED_KNOWLEDGE_BASE: config.preferredKnowledgeBase,
-        BUCKET: props.outputsBucketArn.split(':').pop() ?? '',
+        BUCKET: props.outputsBucketName,
         CLIENT_NAME: props.clientName,
         SUPPORTED_INTEGRATIONS: JSON.stringify(SUPPORTED_INTEGRATIONS),
+        EXTRACT_CONTENT_LAMBDA_NAME: `${props.clientName}_extract-content`,
         ...(props.pipedreamProxyLambdaArn && { PIPEDREAM_PROXY_LAMBDA_ARN: props.pipedreamProxyLambdaArn }),
         ...(props.globalIntegrationSettingsTableName && {
           GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME: props.globalIntegrationSettingsTableName,
@@ -111,6 +113,18 @@ export class NumaChatAgent extends Construct {
           effect: 'Allow',
           actions: ['s3:GetObject'],
           resources: [`${props.outputsBucketArn}/*`, `${props.dataBucketArn}/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:PutObject'],
+          resources: [`${props.outputsBucketArn}/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['lambda:InvokeFunction'],
+          resources: [
+            `arn:aws:lambda:${props.region}:${callerIdentity.accountId}:function:${props.clientName}_extract-content`,
+          ],
         },
         {
           effect: 'Allow',

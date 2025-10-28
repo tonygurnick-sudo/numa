@@ -98,6 +98,7 @@ You need to think of it like you manage a team of specialist assistants through 
 - Be specific about what outcome you need, not just what data to retrieve
 - Include context for why you need it and how detailed the response should be
 - Give instructions relevant to each tool. E.g. don't ask google_drive-find-file with instructions to download the tool, instead ask for the file id and then call the download tool separately.
+- For all API calls where times are relevant, use the time/timezone/date/day information available in your system prompt.
 
 **Expected Response Patterns:**
 - Small-medium/structured data (events, contacts) → Ask specialist to return actual data for your analysis
@@ -122,10 +123,37 @@ const CONNECTION_PROMPTS: Record<string, string> = {
     '- When using Slack tools: Always use as_user: true and include_sent_via_pipedream_flag: false parameters. Only list channels the user is in and that are not archived unless they specifically ask.',
   notion:
     "- When using Notion tools: Focus on the user's accessible pages and databases. Provide structured responses when creating or updating content.",
-  google_calendar:
-    "- When using Google Calendar tools: Always specify the user's timezone (available to you in your system prompt) with UTC offset (e.g., 'Australia/Brisbane UTC+10, 'Pacific/Auckland UTC+12' or 'Pacific/Auckland UTC+13' during daylight saving'), explicitly state the current day/date as reference point, and request correct day-of-week calculations to avoid timezone conversion errors. When creating events, ask for confirmation of key details.",
-  gmail:
-    "- When using Gmail tools: All timestamps are returned in UTC format regardless of timezone indicators shown. Always convert to user's local timezone before presenting. When doing time-based searches use newer_than:1h/2h/1d syntax instead of after: with specific timestamps. When in doubt, ask user to verify times against their Gmail interface.",
+  google_calendar: `When using Google Calendar tools:
+  - Always explicitly specify the user's timezone from system context in every instruction using format 'in [USER_TIMEZONE] timezone'. Use absolute dates only (e.g., 'October 22, 2025 to October 25, 2025')
+  - never ask sub-agent to calculate relative dates. Break complex operations into separate tool calls. Always include clear purpose, specific date ranges, timezone specification, and required data fields. Be explicit about API parameters like 'Order events by start time', 'Show single events only', 'Set timeMin/timeMax to [DATE] at 00:00/23:59 [USER_TIMEZONE]'. Handle date calculations and gap analysis yourself
+  - "Finding mutual availability": When trying to find free spots between people's calendars, use a two-step approach: (1) First call google_calendar-list-events to get the user's detailed schedule, then (2) call google_calendar-query-free-busy-calendars for other participants to get their busy periods without private details. Cross-reference both datasets yourself to identify mutual availability windows. never ask the sub-agent to perform this analysis or comparison.
+  - "Creating events": prefer quick event tool unless additional details are required by the user. Request detailed required parameters first.
+  - "Updating events": when updating an event, always fetch the current event details first to maintain data integrity.
+  - “Calendar targeting”: If the user mentions “team calendar” or “personal calendar,” don't assume primary in that instance but resolve calendarId first via list-calendars, then use that ID for all follow-up actions.
+  - “Reschedule vs. Update”: To move a meeting, update the existing eventId (keep attendees and conference data) instead of delete+recreate—this preserves history and RSVPs. Then send updates. `,
+  gmail: `When using Gmail tools:
+  - Use Find Email when you need a messageId, threadId, headers, or attachment IDs, or just general email content.
+  - Always confirm recipients + subject with the user before calling Send Email unless the user was explicit. (Good safety default.)
+  - You cannot download by filename alone. First find the email, then call the download email tool with the messageId and attachmentId.
+  - To keep a conversation thread, supply In-Reply-To (Message-ID header) rather than starting a new thread.
+  - Offer to create draft emails that the user can review if applicable.
+  - Use List Labels to map human label names to label IDs before any label-based filtering or mutations. Pass labelIds (not names) when required by actions.`,
+  microsoft_outlook: `When using Microsoft Outlook tools:
+  - Attachment retrieval pattern: ou cannot download by name alone. First search or get message to obtain messageId and enumerate its attachments to obtain each attachmentId → then download attachment with both IDs.
+  - Contact enrichment before emailing: If you only have a name, List Contacts (optionally filter by email) to resolve the correct address and avoid mis-sends, then draft/send.
+  - Always confirm recipients + subject with the user before calling Send Email unless the user was explicit. (Good safety default.)
+  - Offer to create draft emails that the user can review if applicable.
+  - Calendar: If a user is wanting to use the microsoft outlook calendar, that is a different integration they need to enable in Numa.`,
+  microsoft_outlook_calendar: `When using Microsoft Outlook Calendar tools:
+  - "Finding mutual availability": When trying to find free spots between people's calendars, use a two-step approach: (1) First call list events to get the user's detailed schedule, then (2) call get free/busy schedule for other participants to get their busy periods without private details. Cross-reference both datasets yourself to identify mutual availability windows. never ask the sub-agent to perform this analysis or comparison.
+  - Absolute dates only: Compute relative ranges; never ask the sub-agent to “figure out next week.” `,
+  xero_accounting_api: `When using Xero tools:
+  -Tenant resolution first: If the user hasn't specified which Xero org/tenant to use, resolve it before any data call via get-tenant-connections, then include the chosen tenantId in subsequent instructions.
+  - Dates, currency, decimals: Use absolute YYYY-MM-DD for all Xero date fields. Avoid relative dates. (Many actions explicitly expect this.). Treat money as strings/decimals, not floats, and specify CurrencyCode when amounts aren't in the org base currency.
+	- Line amounts & tax handling: Always decide and set LineAmountTypes Explicit / Inclusive / NoTax; don't rely on defaults. Explicitly pass the choice to the sub-agent.
+	- Statuses & lifecycle: Prefer creating DRAFT documents, then AUTHORISE when ready.
+  Reports
+	- Bank statement pulls: require a bank account and (ideally) a date range; stage these calls carefully due to volume.`,
 };
 
 /**
@@ -141,9 +169,10 @@ export const generateSystemPrompt = (enabledTools, email, companyProfile, enable
   const TODAY = {
     date: NOW.toLocaleDateString(),
     time: NOW.toLocaleTimeString(),
+    dayOfWeek: NOW.toLocaleDateString(undefined, { weekday: 'long' }),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     toString: function () {
-      return `Local date: ${this.date}, Local time: ${this.time} (${this.timezone})`;
+      return `Local date: ${this.dayOfWeek}, ${this.date}, Local time: ${this.time} (${this.timezone})`;
     },
   };
 

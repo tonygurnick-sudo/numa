@@ -1467,6 +1467,10 @@ const NumaChatAgents = () => {
                             onOpenDocument={openDocument}
                             isConversationLoading={false}
                             currentAgent={currentAgent}
+                            conversationId={conversationId}
+                            sub={sub}
+                            numaChatDynamoUtils={numaChatDynamoUtils}
+                            setMessages={setMessages}
                           />
                         )}
                       </div>

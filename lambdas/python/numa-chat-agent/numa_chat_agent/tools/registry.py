@@ -1,15 +1,33 @@
 """
-Agent tools module for Numa Chat Agent.
+Agent tool registry for the Numa chat agent.
 
-Contains the @tool decorated functions that the Agent can use, along with
-the dynamic tool registry for flexible tool selection.
+Provides @tool-decorated functions and helpers to construct the tool list that
+the agent exposes at runtime.
 """
+
+from importlib import import_module
 
 import structlog
 from strands import tool
 
-from .knowledge_base import query_knowledge_base_impl
-from .web_search import web_search_impl
+logger = structlog.get_logger(__name__)
+
+
+def _get_query_impl():
+    # Lazy import so unit tests can patch numa_chat_agent.tools.* symbols.
+    module = import_module("numa_chat_agent.tools")
+    impl = getattr(module, "query_knowledge_base_impl")
+    logger.debug(
+        "Resolved query_knowledge_base_impl", resolved_type=type(impl).__name__
+    )
+    return impl
+
+
+def _get_web_search_impl():
+    module = import_module("numa_chat_agent.tools")
+    impl = getattr(module, "web_search_impl")
+    logger.debug("Resolved web_search_impl", resolved_type=type(impl).__name__)
+    return impl
 
 
 @tool
@@ -34,7 +52,7 @@ def query_knowledge_base(query: str, user_intent: str, max_results: int = 6):
     Returns:
         ToolResult: Structured JSON content containing knowledge base results
     """
-    return query_knowledge_base_impl(query, user_intent, max_results)
+    return _get_query_impl()(query, user_intent, max_results)
 
 
 @tool
@@ -67,7 +85,7 @@ def web_search(query: str, user_intent: str, max_results: int = 2):
     Returns:
         ToolResult: Structured JSON content containing search results
     """
-    return web_search_impl(query, user_intent, max_results)
+    return _get_web_search_impl()(query, user_intent, max_results)
 
 
 # Tool registry for dynamic construction
@@ -118,8 +136,8 @@ def get_tools_for_agent(enabled_tools=None):
     # Validate tools
     invalid_tools = validate_enabled_tools(enabled_tools)
     if invalid_tools:
-        logger = structlog.get_logger()
-        logger.warning(
+        log = structlog.get_logger()
+        log.warning(
             "Invalid tools requested",
             invalid_tools=invalid_tools,
             available_tools=get_available_tool_names(),

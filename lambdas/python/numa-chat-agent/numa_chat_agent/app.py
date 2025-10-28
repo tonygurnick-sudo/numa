@@ -265,6 +265,9 @@ async def http_stream(request: Request) -> Response:
         enabled_connections = body.get("enabledConnections", []) or []
         system_prompt = body.get("systemPrompt", "") or ""
         model_id = body.get("modelId")
+        # Capture optional client-local time info for downstream tools/prompts
+        client_time_info = body.get("timeInfo") or {}
+
         user_auth = {
             **(
                 {
@@ -275,6 +278,15 @@ async def http_stream(request: Request) -> Response:
             ),
             **(body.get("userAuth") or {}),
         }
+        if client_time_info:
+            # Attach to auth context for request-scoped access by tools/routers
+            try:
+                if isinstance(client_time_info, dict):
+                    user_auth["timeInfo"] = client_time_info
+                else:
+                    user_auth["timeInfo"] = {"raw": client_time_info}
+            except Exception:  # defensive
+                user_auth["timeInfo"] = {"raw": str(client_time_info)}
 
         messages = _build_messages_from_history(conversation_id, user_auth, prompt)
 
@@ -303,6 +315,11 @@ async def http_stream(request: Request) -> Response:
                         cleanup_mcp_clients(mcp_clients)
                     except Exception as e:  # pylint: disable=broad-except
                         logger.warning("MCP client cleanup failed", error=str(e))
+                    # Clear per-request user auth context after streaming completes
+                    try:
+                        clear_current_user_auth()
+                    except Exception:
+                        pass
 
             return StreamingResponse(
                 generator(),
@@ -314,8 +331,17 @@ async def http_stream(request: Request) -> Response:
                 status_code=200,
             )
         finally:
-            clear_current_user_auth()
+            # Do not clear auth context here for streaming responses.
+            # The generator runs after this function returns; clearing here would
+            # remove context needed by downstream tools/prompts (e.g., local time).
+            # Auth context is cleared in the generator's finally block instead.
+            pass
     except Exception as exc:  # pylint: disable=broad-except
+        # Ensure any previously set auth context is cleared on failure paths
+        try:
+            clear_current_user_auth()
+        except Exception:
+            pass
         logger.error("HTTP stream handler failed", error=str(exc), exc_info=True)
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
@@ -353,6 +379,9 @@ async def http_invoke(request: Request) -> Response:
         enabled_connections = body.get("enabledConnections", []) or []
         system_prompt = body.get("systemPrompt", "") or ""
         model_id = body.get("modelId")
+        # Capture optional client-local time info for downstream tools/prompts
+        client_time_info = body.get("timeInfo") or {}
+
         user_auth = {
             **(
                 {
@@ -363,6 +392,14 @@ async def http_invoke(request: Request) -> Response:
             ),
             **(body.get("userAuth") or {}),
         }
+        if client_time_info:
+            try:
+                if isinstance(client_time_info, dict):
+                    user_auth["timeInfo"] = client_time_info
+                else:
+                    user_auth["timeInfo"] = {"raw": client_time_info}
+            except Exception:  # defensive
+                user_auth["timeInfo"] = {"raw": str(client_time_info)}
 
         messages = _build_messages_from_history(conversation_id, user_auth, prompt)
 

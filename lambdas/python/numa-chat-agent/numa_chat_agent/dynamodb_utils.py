@@ -4,6 +4,7 @@ DynamoDB utilities for Numa Chat Agent.
 Python equivalent of the frontend DynamoDBUtils.ts for loading conversation history.
 """
 
+import json
 import os
 from typing import Any, Dict, List, Optional
 
@@ -85,11 +86,11 @@ class NumaChatDynamoUtils:
 
             # Reverse to get oldest first (for conversation history)
             items.reverse()
-
             logger.info(
                 "Successfully loaded conversation history",
                 conversation_id=conversation_id,
                 message_count=len(items),
+                messages=items,
             )
 
             return items
@@ -324,6 +325,9 @@ def format_messages_for_chat(
                     }
                 )
 
+        elif message_type == "document_metadata":
+            _append_document_metadata(item, formatted_messages)
+
         elif message_type == "meta":
             # Meta messages (like "New conversation started")
             content = item.get("content", "")
@@ -455,6 +459,80 @@ def validate_message_level_tool_counts(
     return validated_messages
 
 
+def _append_document_metadata(
+    item: Dict[str, Any], formatted_messages: List[Dict[str, Any]]
+) -> None:
+    """Append document metadata as a formatted assistant message, or inline-rewrite if applicable."""
+    raw_content = item.get("content") or ""
+    doc_data: Dict[str, Any] = {}
+
+    if raw_content:
+        try:
+            doc_data = json.loads(raw_content)
+        except (TypeError, ValueError) as parse_error:
+            logger.warning(
+                "Failed to parse document metadata",
+                error=str(parse_error),
+                raw_content_preview=raw_content[:200],
+            )
+
+    doc_title = doc_data.get("docTitle")
+    doc_content = doc_data.get("docContent")
+
+    if not (doc_title or doc_content):
+        return
+
+    escaped_title = (doc_title or "").replace('"', '\\"')
+    doc_body_raw = doc_content or ""
+    doc_block = (
+        f'<!--BEGIN_DOC title="{escaped_title}"-->\n{doc_body_raw}\n<!--END_DOC-->'
+        if escaped_title or doc_body_raw
+        else ""
+    )
+
+    handled_inline = False
+
+    if (
+        formatted_messages
+        and formatted_messages[-1].get("role") == "assistant"
+        and isinstance(formatted_messages[-1].get("content"), list)
+    ):
+        last_message = formatted_messages[-1]
+        content_list = last_message["content"]
+
+        start_tag = f'<!--BEGIN_DOC title="{escaped_title}"-->'
+        end_tag = "<!--END_DOC-->"
+        normalized_doc_body = doc_body_raw.replace("\r\n", "\n").strip("\n")
+
+        for block in content_list:
+            if not isinstance(block, dict) or "text" not in block:
+                continue
+
+            original_text = block["text"] or ""
+            normalized_text = original_text.replace("\r\n", "\n")
+
+            pattern = f"---\n{normalized_doc_body}\n---"
+            replaced_text = None
+
+            if normalized_doc_body and pattern in normalized_text:
+                replaced_text = normalized_text.replace(pattern, doc_block, 1)
+            elif normalized_text.count("---") >= 2:
+                # Replace first two standalone --- markers
+                replaced_text = normalized_text
+                replaced_text = replaced_text.replace("---", start_tag, 1)
+                replaced_text = replaced_text.replace("---", end_tag, 1)
+
+            if replaced_text is not None and replaced_text != normalized_text:
+                block["text"] = replaced_text
+                handled_inline = True
+                break
+
+    if not handled_inline and doc_block.strip():
+        formatted_messages.append(
+            {"role": "assistant", "content": [{"text": doc_block}]}
+        )
+
+
 def validate_and_clean_tool_pairs(
     messages: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
@@ -559,6 +637,11 @@ def format_conversation_for_bedrock(
 
     # Format messages for Bedrock (chat agents mode - don't load files)
     formatted_messages = format_messages_for_chat(sorted_history, load_files=False)
+    logger.info(
+        "Successfully loaded conversation history for chat",
+        message_count=len(formatted_messages),
+        formatted_messages_for_chat=formatted_messages,
+    )
 
     # Validate and clean tool call/result pairs
     cleaned_messages = validate_and_clean_tool_pairs(formatted_messages)

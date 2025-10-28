@@ -286,6 +286,8 @@ class PipedreamOperations:
                 "Authorization": f"Bearer {access_token}",
                 "x-pd-project-id": credentials["project_id"],
                 "x-pd-environment": credentials["environment"],
+                "x-pd-external-user-id": external_user_id,
+                "x-pd-app-slug": app_name,
             }
 
             logger.info(

@@ -1,6 +1,6 @@
 import { MAX_DYNAMO_MESSAGES } from './bedrockMessageHistoryUtils';
 import { extractSingleDocBlock } from './streamingProcessors';
-import { TOOL_CONFIG } from './ToolConfig';
+import { resolveToolDescriptor, getToolActionSteps } from './ToolConfig';
 
 /**
  * Loads and reconstructs a conversation from DynamoDB
@@ -132,6 +132,42 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
             }
           }
 
+          // Handle single assistant tool messages as unified cards
+          if (
+            group.role === 'assistant' &&
+            (item.message_type === 'tool_call' || item.message_type === 'tool_result')
+          ) {
+            const segments: Array<{ kind: string; [key: string]: unknown }> = [];
+            let toolName = item.tool_name || item.tool_payload?.name || 'unknown';
+            const descriptor = resolveToolDescriptor(toolName);
+            const label = descriptor.label || toolName;
+            if (item.message_type === 'tool_call') {
+              const inputPayload = item.tool_payload?.input ?? item.tool_payload ?? {};
+              const steps = getToolActionSteps(toolName, inputPayload);
+              segments.push({
+                kind: 'tool_card',
+                toolName,
+                label,
+                toolUseId: item.tool_use_id || null,
+                isLoading: false,
+                steps: steps || [],
+              });
+            } else {
+              const payload = item.tool_payload || {};
+              payload.name = toolName;
+              segments.push({
+                kind: 'tool_card',
+                toolName,
+                label,
+                toolUseId: item.tool_use_id || null,
+                isLoading: false,
+                steps: [],
+                result: payload,
+              });
+            }
+            return { role: 'assistant', content: '', segments };
+          }
+
           const baseMsg: {
             role: string;
             content: string;
@@ -160,10 +196,32 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
             if (item.messageContext === 'agent_reference') {
               return null;
             }
-            baseMsg.content = `File '${item.fileInfo.fileName}' uploaded and processed successfully.`;
+            // Use file_upload segment for styled file message display with S3 metadata for download
+            const region = window.sessionStorage.getItem('REGION');
+            baseMsg.segments = [
+              {
+                kind: 'file_upload',
+                filename: item.fileInfo.fileName,
+                type: 'success',
+                s3Key: item.fileInfo.s3Key,
+                s3Bucket: item.fileInfo.s3Bucket,
+                region: region || undefined,
+              },
+            ];
             baseMsg.role = 'assistant';
           } else if (item.message_type === 'image_description') {
-            baseMsg.content = `File '${item.fileInfo.fileName}' uploaded and processed successfully.`;
+            // Use file_upload segment for styled file message display with S3 metadata for download
+            const region = window.sessionStorage.getItem('REGION');
+            baseMsg.segments = [
+              {
+                kind: 'file_upload',
+                filename: item.fileInfo.fileName,
+                type: 'success',
+                s3Key: item.fileInfo.s3Key,
+                s3Bucket: item.fileInfo.s3Bucket,
+                region: region || undefined,
+              },
+            ];
             baseMsg.role = 'assistant';
           } else if (item.message_type === 'knowledge') {
             baseMsg.content = `Retrieving data source knowledge...`;
@@ -176,6 +234,7 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
         } else {
           // Multiple assistant messages - reconstruct segments
           const segments: Array<{ kind: string; [key: string]: unknown }> = [];
+          const toolCardIndexById = new Map<string, number>();
           let content = '';
           const references = [];
           let docTitle = null;
@@ -206,38 +265,64 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
                 references.push(...item.references);
               }
             } else if (item.message_type === 'tool_call') {
-              // Reconstruct tool call segment
-              // Extract tool name from DynamoDB record
+              // Reconstruct unified tool card for tool call
               let toolName = item.tool_name;
-              if (!toolName && item.tool_payload?.name) {
-                toolName = item.tool_payload.name;
-              }
+              if (!toolName && item.tool_payload?.name) toolName = item.tool_payload.name;
+              const name = toolName || 'unknown';
+              const descriptor = resolveToolDescriptor(name);
+              const label = descriptor.label || name;
+              const inputPayload = item.tool_payload?.input ?? item.tool_payload ?? {};
+              const steps = getToolActionSteps(name, inputPayload);
 
-              const toolLabel = TOOL_CONFIG[toolName]?.label || toolName || 'Unknown Tool';
-              segments.push({
-                kind: 'tool',
-                label: `Calling ${toolLabel} tool`,
-                toolUseId: item.tool_use_id,
-                isLoading: false, // Never loading when reconstructing from history
-              });
+              const card = {
+                kind: 'tool_card',
+                toolName: name,
+                label,
+                toolUseId: item.tool_use_id || null,
+                isLoading: false,
+                steps: steps || [],
+              };
+              const idx = segments.push(card) - 1;
+              if (item.tool_use_id) toolCardIndexById.set(item.tool_use_id, idx);
             } else if (item.message_type === 'tool_result') {
-              // Reconstruct tool result segment with full payload
-              // Extract tool name from DynamoDB record
+              // Attach result to existing card (by tool_use_id) or create a new one
               let toolName = item.tool_name;
-              if (!toolName && item.tool_payload?.name) {
-                toolName = item.tool_payload.name;
+              if (!toolName && item.tool_payload?.name) toolName = item.tool_payload.name;
+              const name = toolName || item.tool_payload?.name || 'unknown';
+              const payload = item.tool_payload || {};
+              payload.name = name;
+
+              let attached = false;
+              if (item.tool_use_id && toolCardIndexById.has(item.tool_use_id)) {
+                const idx = toolCardIndexById.get(item.tool_use_id)!;
+                type ToolCardSegLocal = {
+                  kind: 'tool_card';
+                  toolName: string;
+                  label: string;
+                  toolUseId: string | null;
+                  isLoading: boolean;
+                  steps: string[];
+                  result?: unknown;
+                };
+                const seg = segments[idx] as ToolCardSegLocal;
+                const updated: ToolCardSegLocal = { ...seg, result: payload, isLoading: false };
+                segments[idx] = updated;
+                attached = true;
               }
 
-              // Use the tool_payload directly - it contains the complete tool result structure
-              const payload = item.tool_payload || {};
-              // Ensure the name property is set for renderer selection
-              payload.name = toolName || 'unknown';
-
-              segments.push({
-                kind: 'result',
-                toolName: toolName || 'unknown',
-                payload: payload,
-              });
+              if (!attached) {
+                const descriptor = resolveToolDescriptor(name);
+                const label = descriptor.label || name;
+                segments.push({
+                  kind: 'tool_card',
+                  toolName: name,
+                  label,
+                  toolUseId: item.tool_use_id || null,
+                  isLoading: false,
+                  steps: [],
+                  result: payload,
+                });
+              }
             } else if (item.message_type === 'document_metadata') {
               // Extract document metadata and apply to the message
               try {

@@ -327,6 +327,16 @@ export interface ChatAgentRequest {
   systemPrompt?: string;
   modelId?: string | null;
   userAuth?: Record<string, unknown> | null;
+  // Optional client-local time information to assist backend tool routing/prompts
+  timeInfo?: {
+    date: string; // locale-formatted date
+    time: string; // locale-formatted time
+    weekday?: string; // e.g., "Monday"
+    timezone: string; // IANA timezone, e.g., "America/Los_Angeles"
+    iso?: string; // ISO string for precise timestamp
+    summary?: string; // human-readable summary
+    [key: string]: unknown;
+  };
 }
 
 // NDJSON frames coming back from the HTTP stream
