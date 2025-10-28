@@ -5,6 +5,7 @@ Centralizes environment variables, constants, and client initialization.
 """
 
 import os
+from functools import lru_cache
 
 import boto3
 import structlog
@@ -88,6 +89,16 @@ PIPEDREAM_PROXY_LAMBDA_ARN = os.getenv("PIPEDREAM_PROXY_LAMBDA_ARN")
 GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME = os.getenv(
     "GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME"
 )
+OUTPUTS_BUCKET_NAME = os.getenv("BUCKET")
+TOOL_OUTPUTS_PREFIX = os.getenv("TOOL_OUTPUTS_PREFIX", "numa-chat/tool-outputs")
+EXTRACT_CONTENT_LAMBDA_NAME = os.getenv(
+    "EXTRACT_CONTENT_LAMBDA_NAME",
+    (
+        f"{os.getenv('CLIENT_NAME')}_extract-content"
+        if os.getenv("CLIENT_NAME")
+        else None
+    ),
+)
 
 logger = structlog.get_logger()
 
@@ -123,9 +134,42 @@ def get_apigateway_management_client(endpoint_url: str):
     return boto3.client("apigatewaymanagementapi", endpoint_url=endpoint_url)
 
 
-def get_lambda_client():
-    """Get Lambda client instance for proxy calls."""
-    return boto3.client("lambda", region_name="us-east-1")
+def get_lambda_client(region_name: str | None = None):
+    """Get Lambda client instance."""
+    return boto3.client("lambda", region_name=region_name or "us-east-1")
+
+
+@lru_cache(maxsize=1)
+def get_pipedream_routing_overrides() -> dict[str, str]:  # backward compat no-op
+    """Deprecated. Environment-based routing overrides have been removed.
+
+    Kept for backward compatibility with older imports; always returns empty.
+    """
+    return {}
+
+
+def get_pipedream_routing_mode(
+    app_name: str,
+) -> str:  # backward compat
+    """Deprecated. Always returns "numa" (tools-only) as integration default.
+
+    Accepts ``app_name`` for backward compatibility; argument is intentionally unused.
+    """
+    # Explicitly consume argument to satisfy linters while keeping signature stable
+    _ = app_name
+    return "numa"
+
+
+def get_pipedream_tool_routing_mode(
+    app_name: str, tool_name: str | None
+) -> str:  # backward compat
+    """Deprecated. Always returns "numa" (tools-only). Use static overrides instead.
+
+    Accepts ``app_name`` and ``tool_name`` for backward compatibility; arguments are unused.
+    """
+    # Explicitly consume arguments to satisfy linters while keeping signature stable
+    _ = (app_name, tool_name)
+    return "numa"
 
 
 # ── Model Configuration ───────────────────────────────────────────────────

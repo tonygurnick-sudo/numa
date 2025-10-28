@@ -1,4 +1,4 @@
-import { TOOL_CONFIG } from './ToolConfig';
+import { resolveToolDescriptor, getToolActionSteps } from './ToolConfig';
 import type {
   AgentEventFrame,
   ToolResult,
@@ -71,10 +71,18 @@ type UiToolSegment = {
   label: string;
   isLoading: boolean;
   toolUseId: string | null;
-  // inputPayload intentionally omitted from UI; we do not display tool input
 };
 type UiResultSegment = { kind: 'result'; toolName: string | null; payload: ToolResult | unknown };
-type UiSegment = UiTextSegment | UiToolSegment | UiResultSegment;
+type UiToolCardSegment = {
+  kind: 'tool_card';
+  toolName: string;
+  label: string;
+  toolUseId: string | null;
+  isLoading: boolean;
+  steps: string[];
+  result?: ToolResult | unknown;
+};
+type UiSegment = UiTextSegment | UiToolSegment | UiResultSegment | UiToolCardSegment;
 type UiMessage = {
   segments?: UiSegment[];
   status?: string | null;
@@ -84,21 +92,73 @@ type UiMessage = {
 };
 
 export function createMessageHelpers(setMessages: (updater: (prev: UiMessage[]) => UiMessage[]) => void) {
-  const appendToolEvent = (label: string, toolUseId: string | null = null, isLoading = false) => {
+  const addToolCard = (toolName: string, label: string, toolUseId: string | null = null, isLoading = false) => {
     setMessages((prev) => {
       if (prev.length === 0) return prev;
       const updated = [...prev];
       const lastIdx = updated.length - 1;
       const lastMsg: UiMessage = { ...updated[lastIdx] };
       const segs: UiSegment[] = [...(lastMsg.segments || [])];
-      segs.push({
-        kind: 'tool',
-        label,
-        isLoading,
-        toolUseId,
-      });
+      segs.push({ kind: 'tool_card', toolName, label, toolUseId, isLoading, steps: ['Initialising tool...'] });
       lastMsg.segments = segs;
       updated[lastIdx] = lastMsg;
+      return updated;
+    });
+  };
+
+  const addToolCardSteps = (toolUseId: string, steps: string[]) => {
+    setMessages((prev) => {
+      if (prev.length === 0) return prev;
+      const updated = [...prev];
+      const lastIdx = updated.length - 1;
+      const lastMsg: UiMessage = { ...updated[lastIdx] };
+      const segs: UiSegment[] = [...(lastMsg.segments || [])];
+      const idx = segs.findIndex(
+        (seg) => seg.kind === 'tool_card' && (seg as UiToolCardSegment).toolUseId === toolUseId,
+      );
+      if (idx >= 0) {
+        const seg = segs[idx] as UiToolCardSegment;
+        segs[idx] = { ...seg, steps: [...(seg.steps || []), ...steps] };
+        lastMsg.segments = segs;
+        updated[lastIdx] = lastMsg;
+      }
+      return updated;
+    });
+  };
+
+  const clearToolCardInitialStep = (toolUseId: string | null, toolName?: string | null) => {
+    setMessages((prev) => {
+      if (prev.length === 0) return prev;
+      const updated = [...prev];
+      const lastIdx = updated.length - 1;
+      const lastMsg: UiMessage = { ...updated[lastIdx] };
+      const segs: UiSegment[] = [...(lastMsg.segments || [])];
+      let idx = -1;
+      if (toolUseId) {
+        idx = segs.findIndex((seg) => seg.kind === 'tool_card' && (seg as UiToolCardSegment).toolUseId === toolUseId);
+      }
+      if (idx < 0 && toolName) {
+        for (let i = segs.length - 1; i >= 0; i--) {
+          const seg = segs[i];
+          if (seg.kind === 'tool_card') {
+            const tc = seg as UiToolCardSegment;
+            if (!tc.toolUseId && tc.toolName === toolName) {
+              idx = i;
+              break;
+            }
+          }
+        }
+      }
+      if (idx >= 0) {
+        const seg = segs[idx] as UiToolCardSegment;
+        const filtered = (seg.steps || []).filter((s) => {
+          const lower = String(s).toLowerCase();
+          return !(lower.includes('initialis') || lower.includes('initializ'));
+        });
+        segs[idx] = { ...seg, steps: filtered };
+        lastMsg.segments = segs;
+        updated[lastIdx] = lastMsg;
+      }
       return updated;
     });
   };
@@ -112,40 +172,86 @@ export function createMessageHelpers(setMessages: (updater: (prev: UiMessage[]) 
       const segs: UiSegment[] = [...(lastMsg.segments || [])];
 
       // Find the tool segment with matching toolUseId
-      const toolSegIndex = segs.findIndex(
-        (seg) => seg.kind === 'tool' && (seg as UiToolSegment).toolUseId === toolUseId,
-      );
+      const toolSegIndex = segs.findIndex((seg) => {
+        if (seg.kind === 'tool') return (seg as UiToolSegment).toolUseId === toolUseId;
+        if (seg.kind === 'tool_card') return (seg as UiToolCardSegment).toolUseId === toolUseId;
+        return false;
+      });
 
       if (toolSegIndex >= 0) {
-        const seg = segs[toolSegIndex] as UiToolSegment;
-        segs[toolSegIndex] = { ...seg, isLoading };
+        const seg = segs[toolSegIndex] as UiToolSegment | UiToolCardSegment;
+        const updatedSeg =
+          seg.kind === 'tool' ? ({ ...seg, isLoading } as UiToolSegment) : ({ ...seg, isLoading } as UiToolCardSegment);
+        segs[toolSegIndex] = updatedSeg;
         lastMsg.segments = segs;
         updated[lastIdx] = lastMsg;
-        // minimal logging: omit per-segment updates
       }
 
       return updated;
     });
   };
 
-  const addToolResult = (toolName: string | null, toolResult: ToolResult | unknown) => {
+  const setToolCardResult = (toolUseId: string | null, toolName: string | null, toolResult: ToolResult | unknown) => {
     setMessages((prev) => {
       if (prev.length === 0) return prev;
       const updated = [...prev];
       const lastIdx = updated.length - 1;
       const lastMsg: UiMessage = { ...updated[lastIdx] };
       const segs: UiSegment[] = [...(lastMsg.segments || [])];
-      segs.push({ kind: 'result', toolName, payload: toolResult });
-      lastMsg.segments = segs;
-      updated[lastIdx] = lastMsg;
+      let idx = -1;
+      if (toolUseId) {
+        idx = segs.findIndex((seg) => seg.kind === 'tool_card' && (seg as UiToolCardSegment).toolUseId === toolUseId);
+      } else if (toolName) {
+        // Find the most recent tool_card with matching toolName and null toolUseId
+        for (let i = segs.length - 1; i >= 0; i--) {
+          const seg = segs[i];
+          if (seg.kind === 'tool_card') {
+            const tc = seg as UiToolCardSegment;
+            if (!tc.toolUseId && tc.toolName === toolName) {
+              idx = i;
+              break;
+            }
+          }
+        }
+      }
+
+      if (idx >= 0) {
+        const seg = segs[idx] as UiToolCardSegment;
+        const updated: UiToolCardSegment = {
+          ...seg,
+          result: toolResult,
+          toolName: toolName || seg.toolName,
+          isLoading: false,
+        };
+        segs[idx] = updated;
+        lastMsg.segments = segs;
+        updated[lastIdx] = lastMsg;
+      } else {
+        // If no matching card, create one inline
+        const tName = toolName || 'unknown';
+        const newSeg: UiToolCardSegment = {
+          kind: 'tool_card',
+          toolName: tName,
+          label: tName,
+          toolUseId: toolUseId || null,
+          isLoading: false,
+          steps: [],
+          result: toolResult,
+        };
+        segs.push(newSeg);
+        lastMsg.segments = segs;
+        updated[lastIdx] = lastMsg;
+      }
       return updated;
     });
   };
 
   return {
-    appendToolEvent,
+    addToolCard,
+    addToolCardSteps,
     updateToolLoadingState,
-    addToolResult,
+    clearToolCardInitialStep,
+    setToolCardResult,
   };
 }
 
@@ -166,14 +272,15 @@ export function handleToolUseStart(
   const toolInfo = eventMsg.contentBlockStart?.start?.toolUse || nestedStart?.start?.toolUse;
   if (!toolInfo) return;
   const toolName = toolInfo.name || 'tool';
-  const toolLabel = TOOL_CONFIG[toolName]?.label || toolName;
+  const toolLabel = resolveToolDescriptor(toolName).label || toolName;
   const useIdVal = toolInfo.toolUseId ?? (toolInfo as unknown as Record<string, unknown>)['id'];
   const useId = typeof useIdVal === 'string' ? useIdVal : null;
 
   // minimal logging: omit tool start
 
   flushPendingText(conversationId); // Don't preserve content for mid-stream flushes
-  messageHelpers.appendToolEvent(`Calling ${toolLabel} tool`, useId, true); // Set loading=true
+  // Create unified tool card
+  messageHelpers.addToolCard(toolName, toolLabel, useId, true);
 
   // Record mapping from toolUseId → toolName for later lookup
   if (useId) {
@@ -250,11 +357,6 @@ export function handleToolResults(
     }
     // minimal logging: omit per-result processing logs
 
-    // Stop loading indicator for this tool
-    if (toolResult.toolUseId) {
-      messageHelpers.updateToolLoadingState(toolResult.toolUseId, false);
-    }
-
     // Persist name onto payload for renderer selection
     toolResult.name = tName;
 
@@ -273,7 +375,16 @@ export function handleToolResults(
       toolUseMap.delete(toolResult.toolUseId);
     }
 
-    messageHelpers.addToolResult(tName, toolResult);
+    // Stop loading indicator for this tool
+    if (toolResult.toolUseId) {
+      messageHelpers.clearToolCardInitialStep(toolResult.toolUseId, tName);
+      messageHelpers.updateToolLoadingState(toolResult.toolUseId, false);
+      messageHelpers.setToolCardResult(toolResult.toolUseId, tName, toolResult);
+    } else {
+      // Attach to (or create) a unified tool card even without explicit id
+      messageHelpers.clearToolCardInitialStep(null, tName);
+      messageHelpers.setToolCardResult(null, tName, toolResult);
+    }
   });
 }
 
@@ -399,6 +510,17 @@ export function processToolEvent(
               toolPayload: fullPayload,
               content: `Tool call: ${tName}`,
             });
+          }
+
+          // Clear initialising step and append custom action steps into the unified card
+          try {
+            messageHelpers.clearToolCardInitialStep(tId, tName);
+            const steps = getToolActionSteps(tName, payload);
+            if (Array.isArray(steps) && steps.length > 0) {
+              messageHelpers.addToolCardSteps(tId, steps);
+            }
+          } catch {
+            // best-effort only
           }
         }
         // Only add one input per frame

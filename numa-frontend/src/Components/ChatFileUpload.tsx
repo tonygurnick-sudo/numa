@@ -127,11 +127,21 @@ const ChatFileUpload = ({
           });
 
           // Add individual success message for this file
+          const region = window.sessionStorage.getItem('REGION');
           setMessages((prev) => [
             ...prev,
             {
               role: 'assistant',
-              content: `Successfully processed "${fileName}".`,
+              segments: [
+                {
+                  kind: 'file_upload',
+                  filename: fileName,
+                  type: 'success',
+                  s3Key: s3Key,
+                  s3Bucket: s3Bucket,
+                  region: region || undefined,
+                },
+              ],
             },
           ]);
         } catch (error) {

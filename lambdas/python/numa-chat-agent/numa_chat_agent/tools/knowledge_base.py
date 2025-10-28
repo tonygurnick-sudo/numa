@@ -1,21 +1,21 @@
 """
-Knowledge base module for Numa Chat Agent.
+Knowledge base utilities for the Numa chat agent.
 
-Handles Q Business and Bedrock knowledge base querying with unified interface.
+Handles Q Business and Bedrock knowledge base querying with a unified interface.
 """
 
 import structlog
 
-from .auth import get_current_user_auth, get_qbusiness_client_for_user
-from .config import (
+from ..auth import get_current_user_auth, get_qbusiness_client_for_user
+from ..config import (
     BEDROCK_KNOWLEDGE_BASE_ID,
     PREFERRED_KNOWLEDGE_BASE,
     QB_APPLICATION_ID,
     QB_RETRIEVER_ID,
     get_bedrock_agent_runtime_client,
 )
-from .summarization import summarize_combined_content
-from .utils import retry_aurora_operation
+from ..summarization import summarize_combined_content
+from ..utils import retry_aurora_operation
 
 logger = structlog.get_logger()
 

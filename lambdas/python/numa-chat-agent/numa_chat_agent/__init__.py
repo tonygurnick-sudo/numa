@@ -17,7 +17,7 @@ from .auth import clear_current_user_auth, set_current_user_auth
 
 # Import main components
 from .config import MODEL_ID, get_bedrock_model, validate_config
-from .mcp_tools import SUPPORTED_MCP_APPS, get_mcp_tools_and_clients_for_agent
+from .mcp.manager import get_mcp_tools_and_clients_for_agent, get_supported_mcp_apps
 from .tools import AVAILABLE_TOOLS, get_available_tool_names, get_tools_for_agent
 from .utils import cleanup_mcp_clients
 
@@ -60,6 +60,8 @@ os.environ.setdefault(
 )
 
 logger = structlog.get_logger()
+
+SUPPORTED_MCP_APPS = get_supported_mcp_apps()
 
 
 def create_fresh_agent(

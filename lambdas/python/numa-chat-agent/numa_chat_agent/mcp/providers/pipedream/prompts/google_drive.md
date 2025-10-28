@@ -1,0 +1,1 @@
+- For files, always set getBufferResponse and as false (if applicable) so we don't get bytes streamed back.

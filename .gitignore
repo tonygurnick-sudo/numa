@@ -143,3 +143,5 @@ tools/email-verification-report.json
 # Tool Reports
 **/tools/reports/
 **/.tsbuildinfo
+
+docs

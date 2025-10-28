@@ -143,6 +143,18 @@ class ChatAgentHttpStream {
       }
     });
 
+    // Capture client local time information for backend routing/prompting (timezone-aware)
+    const NOW = new Date();
+    const timeInfo = {
+      date: NOW.toLocaleDateString(),
+      time: NOW.toLocaleTimeString(),
+      // Include dayOfWeek for better calendaring context (e.g., "Monday")
+      dayOfWeek: NOW.toLocaleDateString(undefined, { weekday: 'long' }),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      iso: NOW.toISOString(),
+      summary: `Local date: ${NOW.toLocaleDateString(undefined, { weekday: 'long' })}, ${NOW.toLocaleDateString()}, Local time: ${NOW.toLocaleTimeString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`,
+    };
+
     const payload: ChatAgentRequest = {
       prompt,
       conversationId,
@@ -150,6 +162,7 @@ class ChatAgentHttpStream {
       enabledConnections,
       systemPrompt,
       modelId,
+      timeInfo,
     };
 
     const idToken = localStorage.getItem('idToken');

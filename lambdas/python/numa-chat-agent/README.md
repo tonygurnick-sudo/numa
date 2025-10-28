@@ -45,9 +45,8 @@ lambdas/python/numa-chat-agent/
 │   ├── auth.py                     # Cognito verification helpers
 │   ├── config.py                   # Env + model config
 │   ├── dynamodb_utils.py           # Conversation history helpers
-│   ├── knowledge_base.py           # Q Business + Bedrock querying
-│   ├── web_search.py               # Web search helper
-│   ├── tools.py                    # Tools registry
+│   ├── mcp/                        # MCP orchestration + providers
+│   ├── tools/                      # Built-in tool implementations
 │   ├── utils.py                    # Utilities
 │   └── (websocket.py removed)      # Legacy WS support removed after HTTP cutover
 ├── pyproject.toml                  # Poetry dependencies
@@ -131,3 +130,17 @@ http :8081/api/numa-chat-agent/invoke Authorization:"Bearer <id-token>" prompt="
 
 - CloudFront routes `/api/numa-chat-agent/stream` to the Function URL. To expose `/api/numa-chat-agent/invoke` via CloudFront, add that path to the same origin behavior in `infra/constructs/numa-frontend-infra-construct.ts` (e.g., widen to `/api/numa-chat-agent/*`).
 - The legacy WebSocket artifacts remain temporarily and will be removed after full cutover.
+
+## MCP/Pipedream Integrations (Overview)
+
+This Lambda can attach optional MCP/Pipedream integrations that expose SaaS actions as Strands tools. Highlights:
+
+- Single Strands tool per integration (e.g., `google_calendar_integration`) with an action name and a natural‑language instruction.
+- Tools‑only path: the router uses a prompt to build a JSON payload per action schema, validates it, and executes the MCP action.
+- Dynamic props handling: if schemas indicate dynamic fields (`reloadProps`/`remoteOptions`) or the tools‑only result contains validation‑style errors (e.g., time/date field issues), the router automatically retries once via the instruction‑only sub‑agent.
+- Header routing: provider constructs two transports per integration — tools‑only requests send `x-pd-tool-mode: tools-only`; sub‑agent requests omit that header.
+- Static per‑tool overrides in code: force a specific action to the sub‑agent or tools‑only path in `numa_chat_agent/mcp/providers/pipedream/config.py`.
+- Normalized error payloads for the frontend when not retryable:
+  `{ integration, tool, type: "integration-error", error_message, error_details? }`.
+
+See `numa_chat_agent/mcp/providers/pipedream/README.md` for architecture and details.

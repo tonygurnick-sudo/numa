@@ -171,6 +171,46 @@ export const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
+/**
+ * Map file extension to Bootstrap icon class name
+ * Used for displaying file type icons in the UI
+ * @param {string} filename - The filename to extract extension from
+ * @returns {string} - Bootstrap icon class name
+ */
+export const getFileIconClass = (filename: string): string => {
+  if (!filename) return 'bi bi-file-earmark';
+
+  const extension = filename.split('.').pop()?.toLowerCase();
+
+  const iconMap: Record<string, string> = {
+    docx: 'bi bi-filetype-docx',
+    doc: 'bi bi-filetype-doc',
+    pdf: 'bi bi-filetype-pdf',
+    csv: 'bi bi-filetype-csv',
+    xlsx: 'bi bi-filetype-xlsx',
+    xls: 'bi bi-filetype-xlsx',
+    txt: 'bi bi-filetype-txt',
+    jpg: 'bi bi-filetype-jpg',
+    jpeg: 'bi bi-filetype-jpg',
+    json: 'bi bi-filetype-json',
+    html: 'bi bi-filetype-html',
+    htm: 'bi bi-filetype-html',
+    heic: 'bi bi-filetype-heic',
+    m4p: 'bi bi-filetype-m4p',
+    md: 'bi bi-filetype-md',
+    mp3: 'bi bi-filetype-mp3',
+    png: 'bi bi-filetype-png',
+    pptx: 'bi bi-filetype-pptx',
+    ppt: 'bi bi-filetype-pptx',
+    svg: 'bi bi-filetype-svg',
+    mp4: 'bi bi-filetype-mp4',
+    wav: 'bi bi-filetype-wav',
+    xml: 'bi bi-filetype-xml',
+  };
+
+  return iconMap[extension || ''] || 'bi bi-file-earmark';
+};
+
 // For backward compatibility
 export default {
   getContentType,
@@ -180,4 +220,5 @@ export default {
   isLargeFile,
   shouldShowLargeDataFileWarning,
   formatFileSize,
+  getFileIconClass,
 };

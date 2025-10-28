@@ -890,102 +890,460 @@ $border-radius-pill: 1rem;
 
 // Tool Result Card Styling (from POC)
 .tool-result-card {
-  border: 1px solid rgba(142, 80, 167, 0.15);
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 1rem;
-  background: rgba(142, 80, 167, 0.02);
-  margin: 0.5rem 0 1rem;
-  transition: all 0.2s ease;
+  padding: 1.25rem;
+  background: #ffffff;
+  margin: 0.75rem 0 1rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease, border-left 0.15s ease, box-shadow 0.15s ease;
   box-shadow: none;
 
   &:hover {
-    background: rgba(142, 80, 167, 0.04);
-    border-color: rgba(142, 80, 167, 0.25);
-    transform: none;
-    box-shadow: none;
+    background: #f9fafb;
+    border-color: #d1d5db;
+    border-left: 2px solid rgba(142, 80, 167, 0.4);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   }
 
   .d-flex.align-items-center {
-    color: #8e50a7;
+    color: #6b7280;
     font-weight: 500;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
+    margin-bottom: 0.75rem;
 
     i {
-      color: #8e50a7;
+      color: #9ca3af;
+      font-size: 1rem;
     }
 
     strong {
-      font-weight: 600;
+      font-weight: 500;
+      color: #374151;
+    }
+  }
+
+  // Tool execution steps styling
+  .tool-steps-container {
+    margin: 0.5rem 0 0.75rem;
+    position: relative;
+    padding-left: 0.25rem;
+  }
+
+  .tool-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    margin-bottom: 0.625rem;
+    position: relative;
+
+    &:last-child {
+      margin-bottom: 0.25rem;
+
+      // Remove connecting line after last step
+      .step-indicator::after {
+        display: none;
+      }
+    }
+
+    .step-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 6px;
+      height: 6px;
+      min-width: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 0.4rem;
+      position: relative;
+      z-index: 1;
+
+      &.complete {
+        background-color: #d1d5db;
+
+        // Connecting line to next step
+        &::after {
+          content: '';
+          position: absolute;
+          left: 50%;
+          top: 100%;
+          transform: translateX(-50%);
+          width: 1px;
+          height: 0.625rem;
+          background-color: #e5e7eb;
+        }
+      }
+
+      &.running {
+        background-color: $numa-primary;
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+        // Connecting line to next step (if running step isn't last)
+        &::after {
+          content: '';
+          position: absolute;
+          left: 50%;
+          top: 100%;
+          transform: translateX(-50%);
+          width: 1px;
+          height: 0.625rem;
+          background-color: #e5e7eb;
+        }
+      }
+    }
+
+    .step-text {
+      color: #4b5563;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      flex: 1;
+      padding-top: 0.05rem;
+    }
+  }
+
+  // Pulse animation for running step
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  // Pulse animation for running step
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  // When tool result is complete, make dots and lines purple
+  &.tool-complete {
+    .tool-step {
+      .step-indicator {
+        &.complete {
+          background-color: rgba(142, 80, 167, 0.6);
+
+          &::after {
+            background-color: rgba(142, 80, 167, 0.3);
+          }
+        }
+      }
+    }
+  }
+
+  // Legacy ul/li support (for other tool renderers)
+  ul {
+    padding-left: 1.5rem;
+    margin: 0.5rem 0 0.75rem;
+    line-height: 1.6;
+
+    li {
+      margin-bottom: 0.375rem;
+      color: #4b5563;
+      font-size: 0.9375rem;
     }
   }
 
   .show-toggle {
-    color: $numa-primary;
+    color: #6b7280;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     font-weight: 500;
-    margin-top: 0.5rem;
-    padding: 0.25rem 0;
+    margin-top: 0.75rem;
+    padding: 0.5rem 0;
     user-select: none;
-    transition: color 0.2s ease;
+    transition: color 0.15s ease;
+    border-top: 1px solid #f3f4f6;
+    display: block;
 
     &:hover {
-      color: darken($numa-primary, 10%);
-      text-decoration: underline;
+      color: $numa-primary;
     }
   }
 
   .card-summary {
-    margin-bottom: 0.5rem;
-    color: #6c757d;
+    margin-bottom: 0.75rem;
+    color: #6b7280;
     font-style: italic;
+    font-size: 0.9375rem;
   }
 
   .card-body-content {
-    margin-top: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 0.5rem;
 
     pre {
-      background: #f1f3f4;
-      border-radius: 4px;
-      padding: 0.75rem;
-      font-size: 0.8rem;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 0.875rem;
+      font-size: 0.8125rem;
       overflow-x: auto;
       white-space: pre-wrap;
       word-break: break-word;
+      color: #374151;
     }
 
-    .ws-query {
-      font-size: 0.9rem;
+    .ws-query,
+    .kb-query {
+      font-size: 0.9375rem;
+      margin-bottom: 0.875rem;
+      color: #4b5563;
 
       strong {
-        color: $numa-primary;
+        font-weight: 500;
+        color: #374151;
+        margin-right: 0.375rem;
+      }
+
+      em {
+        color: #6b7280;
       }
     }
 
-    .ws-sources ul {
-      padding-left: 1.25rem;
-      margin: 0.5rem 0;
+    .ws-sources,
+    .kb-sources {
+      margin-bottom: 1rem;
 
-      li {
-        margin-bottom: 0.25rem;
+      strong {
+        font-weight: 500;
+        color: #374151;
+        font-size: 0.9375rem;
+      }
 
-        a {
-          color: $numa-primary;
-          text-decoration: none;
+      ul {
+        padding-left: 1.5rem;
+        margin: 0.5rem 0;
 
-          &:hover {
-            text-decoration: underline;
+        li {
+          margin-bottom: 0.375rem;
+          color: #4b5563;
+          line-height: 1.6;
+
+          a {
+            color: $numa-primary;
+            text-decoration: none;
+            font-size: 0.9375rem;
+
+            &:hover {
+              text-decoration: underline;
+            }
           }
         }
       }
     }
 
-    .ws-summary {
-      font-size: 0.9rem;
+    .ws-summary,
+    .kb-summary {
+      font-size: 0.9375rem;
+      color: #4b5563;
 
       strong {
-        color: $numa-primary;
+        font-weight: 500;
+        color: #374151;
+        display: block;
+        margin-bottom: 0.5rem;
+      }
+
+      > div {
+        line-height: 1.6;
       }
     }
+
+    .kb-knowledge-list {
+      .kb-knowledge-item {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+
+        strong {
+          font-weight: 500;
+          color: #374151;
+          font-size: 0.875rem;
+        }
+
+        .kb-content,
+        .kb-source {
+          color: #4b5563;
+          font-size: 0.9375rem;
+          line-height: 1.6;
+
+          > div {
+            margin-top: 0.375rem;
+          }
+        }
+
+        .kb-source {
+          margin-top: 0.75rem;
+          padding-top: 0.75rem;
+          border-top: 1px solid #e5e7eb;
+
+          a {
+            color: $numa-primary;
+            text-decoration: none;
+
+            &:hover {
+              text-decoration: underline;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Shared indentation helper so non-list items align with bullet text
+.tool-result-card {
+  .tool-card-indent {
+    margin-left: 1.25rem; // match default ul padding-left
+  }
+  .tool-icon-img {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    object-fit: contain;
+  }
+}
+
+// File Message Component Styling
+.file-message {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(142, 80, 167, 0.04);
+  border: 1px solid rgba(142, 80, 167, 0.15);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  max-width: fit-content;
+
+  &:hover {
+    background: rgba(142, 80, 167, 0.08);
+    border-color: rgba(142, 80, 167, 0.25);
+  }
+
+  // File type icon
+  > i:first-child {
+    font-size: 1.25rem;
+    color: $numa-primary;
+    flex-shrink: 0;
+  }
+
+  .file-name {
+    font-size: 0.9375rem;
+    color: #374151;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  .success-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: 0.25rem;
+
+    i {
+      font-size: 1.1rem;
+      color: $numa-primary;
+    }
+  }
+
+  &.clickable {
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(142, 80, 167, 0.12);
+      border-color: rgba(142, 80, 167, 0.3);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(142, 80, 167, 0.15);
+    }
+
+    &:active {
+      transform: translateY(0);
+      box-shadow: 0 1px 2px rgba(142, 80, 167, 0.1);
+    }
+  }
+
+  &.success {
+    .file-name {
+      color: #2d3748;
+    }
+  }
+
+  &.processing {
+    background: rgba(142, 80, 167, 0.06);
+    border-color: rgba(142, 80, 167, 0.2);
+
+    .file-name {
+      color: #4b5563;
+    }
+  }
+}
+
+// Integration file item container
+.integration-file-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  // Improved "Use in chat" button styling
+  .btn-use-in-chat {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border: 1px solid $numa-primary;
+    background: white;
+    color: $numa-primary;
+
+    &:hover:not(:disabled) {
+      background: $numa-primary;
+      color: white;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(142, 80, 167, 0.2);
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(0);
+      box-shadow: 0 1px 2px rgba(142, 80, 167, 0.15);
+    }
+
+    &.added {
+      background: $numa-primary;
+      color: white;
+      cursor: default;
+
+      &:hover {
+        transform: none;
+        box-shadow: none;
+      }
+    }
+
+    i {
+      font-size: 0.875rem;
+    }
+  }
+}
+
+// File upload message container
+.file-upload-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+
+  .file-upload-text {
+    font-size: 0.9375rem;
+    color: #4b5563;
+    line-height: 1.5;
   }
 }
