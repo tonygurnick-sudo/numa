@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Button, Container, Row, Col, Alert } from 'react-bootstrap';
+import { Button, Container, Row, Col, Alert, Modal } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
@@ -63,16 +63,20 @@ const NumaChatAgents = () => {
   const [isManuallyLoading, setIsManuallyLoading] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<AgentSummary | null>(null);
   const [pendingAgent, setPendingAgent] = useState<AgentSummary | null>(null);
+  const [queuedPreselectedAgent, setQueuedPreselectedAgent] = useState<AgentSummary | null>(null);
   const [agentError, setAgentError] = useState<React.ReactNode | null>(null);
   const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [personalAgentsLoading, setPersonalAgentsLoading] = useState(false);
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
+  const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
 
   // Refs
   const messageEndRef = useRef(null);
   const chatHistoryRef = useRef(null);
   const agentsSidebarRef = useRef<AgentsSidebarHandle | null>(null);
   const preselectHandledRef = useRef(false);
+  const preselectActivatedRef = useRef(false);
+  const preselectTimerRef = useRef<number | null>(null);
 
   // Custom hooks
   const conversationManager = useConversationManager();
@@ -154,6 +158,16 @@ const NumaChatAgents = () => {
     loadPersonalAgents();
   }, [user, numaGet]);
 
+  // Cleanup preselect timer on unmount
+  useEffect(() => {
+    return () => {
+      if (preselectTimerRef.current) {
+        clearTimeout(preselectTimerRef.current);
+        preselectTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // Memoize constants to prevent unnecessary rerenders
   const REGION = useMemo(() => window.sessionStorage.getItem('REGION'), []);
 
@@ -202,22 +216,21 @@ const NumaChatAgents = () => {
     return message;
   };
 
-  const startAgentSession = async (agent: AgentSummary) => {
-    const missing = getMissingIntegrations(agent);
-    if (missing.length > 0) {
-      const displayNames = missing.map((id) => getConnectionConfig(id)?.name || id);
-      setAgentError(
-        <>
-          Connect {displayNames.join(', ')} before using this agent.{' '}
-          <a href="/integrations" className="alert-link">
-            Go to Integrations
-          </a>
-        </>,
-      );
-      return;
+  const doStartAgentSession = async (agent: AgentSummary, _missing: string[] = []) => {
+    // Mark preselect as consumed and clear preselect markers before starting
+    try {
+      const tok = sessionStorage.getItem('numa_preselected_agent_token');
+      if (tok) sessionStorage.setItem('numa_preselected_agent_consumed', tok);
+      sessionStorage.removeItem('numa_preselected_agent');
+      sessionStorage.removeItem('numa_preselected_agent_token');
+      // keep consumed marker optional
+    } catch {
+      /* ignore */
     }
 
+    // Do not show a banner for missing integrations; the pre-chat modal handles warnings
     setAgentError(null);
+
     setIsManuallyLoading(true);
     await handleNewChat();
     applyAgentConfiguration(agent);
@@ -226,6 +239,24 @@ const NumaChatAgents = () => {
     setMessages([{ role: 'assistant', content: createAgentWelcomeMessage(agent) }]);
     setUploadedFiles([]);
     setIsManuallyLoading(false);
+  };
+
+  const startAgentSession = async (agent: AgentSummary) => {
+    console.log('[NumaDebug] startAgentSession', {
+      agentId: agent.agentId,
+      title: agent.title,
+      requires: agent.requiredIntegrations || [],
+    });
+    const missing = getMissingIntegrations(agent);
+    console.log('[NumaDebug] startAgentSession.missingIntegrations', missing);
+    // Only suppress the modal when arriving from Agents page (payload present at navigation time)
+    const isPreselected = Boolean(sessionStorage.getItem('numa_preselected_agent'));
+    if (missing.length > 0 && !isPreselected) {
+      setMissingConfirm({ agent, missing });
+      return;
+    }
+
+    await doStartAgentSession(agent, missing);
   };
 
   const handleAgentSelect = async (agent: AgentSummary) => {
@@ -294,6 +325,32 @@ const NumaChatAgents = () => {
     init();
   }, [user, REGION, hasPipedreamFeature, relayLambdaArn]);
 
+  // When a preselected agent is queued, start the session once connections have loaded
+  useEffect(() => {
+    if (!queuedPreselectedAgent) return;
+    // If Pipedream feature is disabled, connectionsLoading should already be false
+    if (connectionsLoading) {
+      console.log('[NumaDebug] preselect:waiting for connections');
+      return;
+    }
+    if (preselectActivatedRef.current) return;
+    preselectActivatedRef.current = true;
+    if (preselectTimerRef.current) {
+      clearTimeout(preselectTimerRef.current);
+      preselectTimerRef.current = null;
+    }
+    console.log('[NumaDebug] preselect:activate', {
+      agentId: queuedPreselectedAgent.agentId,
+      title: queuedPreselectedAgent.title,
+    });
+    Promise.resolve(startAgentSession(queuedPreselectedAgent))
+      .catch((err) => {
+        console.error('Failed to activate queued preselected agent', err);
+        setAgentError((err as Error)?.message ?? 'Unable to activate selected agent');
+      })
+      .finally(() => setQueuedPreselectedAgent(null));
+  }, [queuedPreselectedAgent, connectionsLoading]);
+
   // Load global admin integration settings once
   useEffect(() => {
     (async () => {
@@ -319,24 +376,17 @@ const NumaChatAgents = () => {
   useEffect(() => {
     if (preselectHandledRef.current) return;
     const stored = sessionStorage.getItem('numa_preselected_agent');
-    if (!stored) return;
+    const token = sessionStorage.getItem('numa_preselected_agent_token');
+    const consumed = sessionStorage.getItem('numa_preselected_agent_consumed');
+    const shouldStart = (token || stored) && !consumed;
+    if (!shouldStart) return;
 
-    // Mark as handled immediately to prevent re-entry
     preselectHandledRef.current = true;
-    sessionStorage.removeItem('numa_preselected_agent');
-
+    setIsConversationLoading(false);
     try {
-      if (agentsMode === 'off') {
-        return; // ignore preselect when disabled
-      }
+      if (agentsMode === 'off' || !stored) return;
       const parsed = JSON.parse(stored) as AgentSummary;
-
-      // Start fresh chat first, then activate agent
-      // This ensures we don't load any previous conversation
-      Promise.resolve(handleAgentSelect(parsed)).catch((err) => {
-        console.error('Failed to activate preselected agent', err);
-        setAgentError((err as Error)?.message ?? 'Unable to activate selected agent');
-      });
+      setQueuedPreselectedAgent(parsed);
     } catch (error) {
       console.error('Failed to load preselected agent', error);
     }
@@ -348,7 +398,9 @@ const NumaChatAgents = () => {
     try {
       setConnectionsLoading(true);
       const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
-      const response = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId);
+      const response = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
+        ttlMs: 30 * 60 * 1000, // 30 minutes cache for chat page
+      });
 
       // Transform the connection objects to the format expected by the UI
       const allConnections = (response.connections || []).map((conn) => ({
@@ -786,6 +838,14 @@ const NumaChatAgents = () => {
       // Reset the hasUserStartedNewChat flag after first successful submit
       if (hasUserStartedNewChat) {
         resetUserNewChatFlag();
+        // Cleanup preselect session keys after first interaction
+        try {
+          sessionStorage.removeItem('numa_preselected_agent');
+          sessionStorage.removeItem('numa_preselected_agent_token');
+          sessionStorage.removeItem('numa_preselected_agent_consumed');
+        } catch {
+          /* ignore */
+        }
       }
 
       setTimeout(() => inputRef.current?.focus(), 0);
@@ -1281,6 +1341,70 @@ const NumaChatAgents = () => {
                   </Button>
                 </div>
               </div>
+
+              {/* Missing integrations confirmation modal */}
+              <Modal show={!!missingConfirm} onHide={() => setMissingConfirm(null)} centered>
+                <Modal.Header closeButton>
+                  <Modal.Title>Missing integrations</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="mb-3">
+                    This agent requests access to the following integrations which are not connected for your account:
+                  </p>
+                  <div className="d-flex flex-column gap-2 mb-3">
+                    {missingConfirm?.missing.map((id) => {
+                      const config = getConnectionConfig(id);
+                      return (
+                        <div
+                          key={id}
+                          className="d-flex align-items-center gap-3 p-3 border rounded-2 bg-light"
+                          style={{ transition: 'all 0.2s ease' }}
+                        >
+                          {config?.img_src ? (
+                            <img
+                              src={config.img_src}
+                              alt={config.name}
+                              style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
+                            />
+                          ) : (
+                            <div
+                              className="rounded-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
+                              style={{ width: 32, height: 32, flexShrink: 0 }}
+                            >
+                              <i className="bi bi-link text-secondary"></i>
+                            </div>
+                          )}
+                          <span className="fw-medium">{config?.name || id}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="mb-0 text-muted small">
+                    Continuing may result in limited or unintended behavior. You can connect integrations now from the
+                    Integrations page and try again.
+                  </p>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button variant="outline-secondary" onClick={() => setMissingConfirm(null)} className="me-auto">
+                    <i className="bi bi-arrow-left me-2"></i>
+                    Back
+                  </Button>
+                  <a className="btn btn-outline-primary" href="/integrations">
+                    <i className="bi bi-link-45deg me-2"></i>
+                    Go to Integrations
+                  </a>
+                  <Button
+                    variant="primary"
+                    onClick={async () => {
+                      const info = missingConfirm;
+                      setMissingConfirm(null);
+                      if (info) await doStartAgentSession(info.agent, info.missing);
+                    }}
+                  >
+                    Continue without
+                  </Button>
+                </Modal.Footer>
+              </Modal>
 
               {agentError && (
                 <Alert variant="warning" className="py-2" onClose={() => setAgentError(null)} dismissible>

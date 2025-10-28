@@ -19,7 +19,9 @@ const getHasPreselectedAgent = () => {
     if (typeof window === 'undefined') {
       return false;
     }
-    return window.sessionStorage.getItem('numa_preselected_agent') !== null;
+    const hasAgent = window.sessionStorage.getItem('numa_preselected_agent') !== null;
+    const hasToken = window.sessionStorage.getItem('numa_preselected_agent_token') !== null;
+    return hasAgent || hasToken;
   } catch (error) {
     console.warn('Unable to read preselected agent from sessionStorage:', error);
     return false;
@@ -52,6 +54,13 @@ export const useConversationManager = () => {
 
   useEffect(() => {
     hasUserStartedNewChatRef.current = hasUserStartedNewChat;
+  }, [hasUserStartedNewChat]);
+
+  // If a preselected agent/new chat is indicated, stop showing the loading spinner
+  useEffect(() => {
+    if (hasUserStartedNewChat) {
+      setIsConversationLoading(false);
+    }
   }, [hasUserStartedNewChat]);
 
   const ensureConversationReady = useCallback(
@@ -164,10 +173,10 @@ export const useConversationManager = () => {
         return;
       }
 
-      // Check if there's a preselected agent - if so, don't load previous conversation
+      // Check if there's a preselected agent or token - if so, don't load previous conversation
       const preselectedAgent = sessionStorage.getItem('numa_preselected_agent');
-      if (preselectedAgent) {
-        console.log('Preselected agent found; skipping conversation initialization');
+      const preselectedToken = sessionStorage.getItem('numa_preselected_agent_token');
+      if (preselectedAgent || preselectedToken) {
         return;
       }
 
@@ -178,17 +187,14 @@ export const useConversationManager = () => {
         }
 
         if (metaItems.length === 0) {
-          console.log('No conversation history found; initializing new conversation...');
           handleNewChat();
           return;
         }
 
         const savedConvoId = localStorage.getItem('currentConversationId');
         if (savedConvoId && metaItems.some((item) => item.conversation_id === savedConvoId)) {
-          console.log('Loading saved conversation:', savedConvoId);
           setConversationId(savedConvoId);
         } else {
-          console.log('Loading the most recent conversation from history.');
           setConversationId(metaItems[0].conversation_id);
         }
       } catch (err) {

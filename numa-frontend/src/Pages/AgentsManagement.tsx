@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Col, Container, Row, Spinner, Alert } from 'react-bootstrap';
+import { Button, Col, Container, Row, Spinner, Alert, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
@@ -11,6 +11,10 @@ import { AgentCreateModal } from '../Components/AgentCreateModal';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
+import { LambdaClient } from '@aws-sdk/client-lambda';
+import { fromWebToken } from '@aws-sdk/credential-providers';
+import { PipedreamProxyService } from '../Services/PipedreamProxyService';
+import { getConnectionConfig } from '../config/integrationsConfig';
 
 type FilterOption = 'all' | 'personal' | 'public';
 
@@ -21,12 +25,19 @@ export const AgentsManagement = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentSummary | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [myAgents, setMyAgents] = useState<AgentSummary[]>([]);
   const [workspaceAgents, setWorkspaceAgents] = useState<AgentSummary[]>([]);
   const [filter, setFilter] = useState<FilterOption>('all');
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
+  const [missingModal, setMissingModal] = useState<{
+    show: boolean;
+    loading: boolean;
+    agent: AgentSummary | null;
+    missing: string[];
+    error?: string | null;
+  }>({ show: false, loading: false, agent: null, missing: [], error: null });
 
   const userId = user?.decoded_tokens?.idToken?.sub ?? '';
 
@@ -142,14 +153,96 @@ export const AgentsManagement = () => {
     }
   };
 
-  const handleStartChat = (agent: AgentSummary) => {
+  const proceedToChat = (agent: AgentSummary) => {
+    const token = String(Date.now());
     sessionStorage.setItem('numa_preselected_agent', JSON.stringify(agent));
+    sessionStorage.setItem('numa_preselected_agent_token', token);
+    sessionStorage.removeItem('numa_preselected_agent_consumed');
     navigate('/chat');
+  };
+
+  const handleStartChat = async (agent: AgentSummary) => {
+    const needs = agent.requiredIntegrations || [];
+    const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+    if (!hasPipedreamFeature || needs.length === 0) {
+      proceedToChat(agent);
+      return;
+    }
+    // Open modal in loading state while we resolve connections
+    setMissingModal({ show: true, loading: true, agent, missing: [], error: null });
+
+    try {
+      if (!user) {
+        setMissingModal({ show: true, loading: false, agent, missing: needs, error: null });
+        return;
+      }
+      const REGION = window.sessionStorage.getItem('REGION') || '';
+      const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
+      const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
+      const roleArn = GROUPS?.[userGroup]?.roleArn;
+      const cognitoUserId = user.decoded_tokens?.idToken?.sub;
+      const idTokenValue = user.tokens?.idToken;
+      if (!REGION || !roleArn || !cognitoUserId || !idTokenValue) {
+        setMissingModal({ show: true, loading: false, agent, missing: needs, error: null });
+        return;
+      }
+
+      const credentials = fromWebToken({
+        webIdentityToken: idTokenValue,
+        roleArn,
+        roleSessionName: cognitoUserId,
+      });
+      const lambdaClient = new LambdaClient({ region: REGION, credentials });
+      const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+      const status = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
+        ttlMs: 30 * 60 * 1000,
+      });
+      const connected = new Set((status.connected_apps || []).map((n) => String(n)));
+      const missing = needs.filter((n) => !connected.has(n));
+      if (missing.length === 0) {
+        setMissingModal({ show: false, loading: false, agent: null, missing: [] });
+        proceedToChat(agent);
+        return;
+      }
+      setMissingModal({ show: true, loading: false, agent, missing, error: null });
+    } catch {
+      setMissingModal({ show: true, loading: false, agent, missing: needs, error: null });
+    }
   };
 
   const handleModalSaved = async () => {
     await loadAgents();
   };
+
+  // Warm integrations cache on page load to make pre-chat checks instant
+  useEffect(() => {
+    const warmCache = async () => {
+      try {
+        const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+        if (!hasPipedreamFeature || !user) return;
+        const REGION = window.sessionStorage.getItem('REGION') || '';
+        const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
+        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
+        const roleArn = GROUPS?.[userGroup]?.roleArn;
+        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
+        const idTokenValue = user.tokens?.idToken;
+        if (!REGION || !roleArn || !cognitoUserId || !idTokenValue) return;
+        const credentials = fromWebToken({
+          webIdentityToken: idTokenValue,
+          roleArn,
+          roleSessionName: cognitoUserId,
+        });
+        const lambdaClient = new LambdaClient({ region: REGION, credentials });
+        const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+        await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
+          ttlMs: 30 * 60 * 1000,
+        });
+      } catch {
+        // best-effort warm
+      }
+    };
+    warmCache();
+  }, [user]);
 
   const renderAgentsGrid = (agents: AgentSummary[], emptyMessage: string, isMyAgentsSection = false) => {
     if (!agents.length) {
@@ -486,6 +579,83 @@ export const AgentsManagement = () => {
               editingAgent={editingAgent}
               onAgentSaved={handleModalSaved}
             />
+            {/* Missing integrations confirmation modal (pre-chat) */}
+            <Modal show={missingModal.show} onHide={() => setMissingModal((m) => ({ ...m, show: false }))} centered>
+              <Modal.Header closeButton>
+                <Modal.Title>Missing integrations</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                {missingModal.loading ? (
+                  <div className="d-flex align-items-center">
+                    <Spinner animation="border" size="sm" className="me-2" /> Checking your integrations…
+                  </div>
+                ) : (
+                  <>
+                    <p className="mb-3">
+                      This agent requests access to the following integrations which are not connected for your account:
+                    </p>
+                    <div className="d-flex flex-column gap-2 mb-3">
+                      {missingModal.missing.map((id) => {
+                        const config = getConnectionConfig(id);
+                        return (
+                          <div
+                            key={id}
+                            className="d-flex align-items-center gap-3 p-3 border rounded-2 bg-light"
+                            style={{ transition: 'all 0.2s ease' }}
+                          >
+                            {config?.img_src ? (
+                              <img
+                                src={config.img_src}
+                                alt={config.name}
+                                style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
+                              />
+                            ) : (
+                              <div
+                                className="rounded-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
+                                style={{ width: 32, height: 32, flexShrink: 0 }}
+                              >
+                                <i className="bi bi-link text-secondary"></i>
+                              </div>
+                            )}
+                            <span className="fw-medium">{config?.name || id}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="mb-0 text-muted small">
+                      Continuing may result in limited or unintended behavior. You can connect integrations now from the
+                      Integrations page and try again.
+                    </p>
+                  </>
+                )}
+              </Modal.Body>
+              {!missingModal.loading && (
+                <Modal.Footer>
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setMissingModal((m) => ({ ...m, show: false }))}
+                    className="me-auto"
+                  >
+                    <i className="bi bi-arrow-left me-2"></i>
+                    Back
+                  </Button>
+                  <a className="btn btn-outline-primary" href="/integrations">
+                    <i className="bi bi-link-45deg me-2"></i>
+                    Go to Integrations
+                  </a>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      const a = missingModal.agent;
+                      setMissingModal({ show: false, loading: false, agent: null, missing: [] });
+                      if (a) proceedToChat(a);
+                    }}
+                  >
+                    Continue without
+                  </Button>
+                </Modal.Footer>
+              )}
+            </Modal>
           </Container>
         </LayoutDashboard>
       </div>

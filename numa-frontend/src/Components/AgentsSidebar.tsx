@@ -164,12 +164,7 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
                         </div>
                       </div>
                       <div className="d-flex gap-1">
-                        <Button
-                          variant="outline-success"
-                          size="sm"
-                          onClick={() => handleSelectAgent(agent)}
-                          disabled={isActive}
-                        >
+                        <Button variant="outline-success" size="sm" onClick={() => handleSelectAgent(agent)}>
                           Use
                         </Button>
                       </div>

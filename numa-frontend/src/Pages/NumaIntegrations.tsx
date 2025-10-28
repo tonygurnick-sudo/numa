@@ -142,7 +142,7 @@ export const NumaIntegrations = () => {
         const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
         const response = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
           forceRefresh,
-          ttlMs: 5 * 60 * 1000, // 5 minutes default cache TTL for page loads
+          ttlMs: 30 * 60 * 1000, // 30 minutes default cache TTL for page loads
         });
         // Transform connection objects from response
         // Use connected_apps array as source of truth for connection status
@@ -214,6 +214,8 @@ export const NumaIntegrations = () => {
           } catch {
             /* ignore invalidate errors */
           }
+          // Refresh status in background to reflect new connection everywhere
+          await loadConnectionStatus(true);
           // Apply default tool policy (deny list) immediately after connection
           try {
             setDefaultsApplying((prev) => ({ ...prev, [appName]: true }));
