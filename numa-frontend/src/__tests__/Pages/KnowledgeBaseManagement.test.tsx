@@ -146,7 +146,7 @@ describe('KnowledgeBaseManagement', () => {
   it('refresh button is in the Knowledge Base Status box and triggers refresh', async () => {
     renderComponent();
 
-    const refreshButton = await screen.findByText(/Refresh/i);
+    const refreshButton = await screen.findByTestId('kb-status-refresh');
     expect(refreshButton).toBeInTheDocument();
 
     fireEvent.click(refreshButton);
