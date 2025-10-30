@@ -1,42 +1,13 @@
 {
-  "arcanum-demo-nathan-2": {
-    "allApps": true,
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "devInstance": true,
-    "region": "us-east-1",
-    "provisionQResources": true,
-    "preferredKnowledgeBase": "bedrock"
-  },
-  "arcanum-demo-nick": {
-    "allApps": true,
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "devInstance": true,
-    "region": "us-east-1"
-  },
-  "arcanum-demo-sam": {
-    "allApps": true,
-    "clientAccountId": "905418183804",
-    "createServiceLinkedRole": false,
-    "devInstance": true,
-    "region": "us-east-1",
-    "provisionQResources": true,
-    "preferredKnowledgeBase": "bedrock",
-    "vectorStorageType": "s3vectors",
-    "budget": {
-      "name": "monthly-budget",
-      "limitAmount": 1500,
-      "alertThresholds": [100]
-    }
-  },
   "dev-hams": {
     "allApps": true,
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
     "devInstance": true,
     "region": "us-east-1",
-    "brandingProviderEnabled": true
+    "brandingProviderEnabled": true,
+    "provisionQResources": false,
+    "preferredKnowledgeBase": "bedrock"
   },
   "arcanum-demo-sydney": {
     "clientAccountId": "905418183804",
@@ -48,6 +19,11 @@
     "preferredKnowledgeBase": "bedrock",
     "allowBedrockQuotaSharing": false,
     "pipedreamIntegrations": true,
-    "vectorStorageType": "s3vectors"
+    "vectorStorageType": "s3vectors",
+    "budget": {
+      "name": "monthly-budget",
+      "limitAmount": 1500,
+      "alertThresholds": [100]
+    }
   }
 }
