@@ -4,6 +4,9 @@ import {
   GetUserCommand,
   GlobalSignOutCommand,
   RespondToAuthChallengeCommand,
+  AssociateSoftwareTokenCommand,
+  VerifySoftwareTokenCommand,
+  SetUserMFAPreferenceCommand,
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider'
@@ -26,6 +29,20 @@ export interface AuthSession {
 
 export interface PasswordChangeRequired {
   requiresPasswordChange: true
+  session: string
+  username: string
+}
+
+export interface MfaSetupRequired {
+  requiresMfaSetup: true
+  session: string
+  username: string
+  secretCode: string
+  otpauthUrl: string
+}
+
+export interface MfaCodeRequired {
+  requiresMfaCode: true
   session: string
   username: string
 }
@@ -85,7 +102,31 @@ class AuthService {
     }
   }
 
-  async signIn(email: string, password: string): Promise<AuthSession | PasswordChangeRequired> {
+  private async buildMfaSetupRequired(session: string, username: string): Promise<MfaSetupRequired> {
+    const assoc = await this.client.send(new AssociateSoftwareTokenCommand({
+      Session: session,
+    }))
+
+    const secret = assoc.SecretCode
+    if (!secret) {
+      throw new Error('Failed to initiate MFA setup')
+    }
+
+    const nextSession = assoc.Session || session
+    const issuer = 'Arcanum Customer Success Portal'
+    const label = encodeURIComponent(`${issuer}:${username}`)
+    const otpauthUrl = `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}`
+
+    return {
+      requiresMfaSetup: true,
+      session: nextSession,
+      username,
+      secretCode: secret,
+      otpauthUrl,
+    }
+  }
+
+  async signIn(email: string, password: string): Promise<AuthSession | PasswordChangeRequired | MfaSetupRequired | MfaCodeRequired> {
     // Ensure config is loaded
     if (!this.updateConfig()) {
       throw new Error('Configuration not loaded. Please refresh the page.');
@@ -112,6 +153,20 @@ class AuthService {
         }
       }
 
+      // MFA setup required (no device enrolled yet)
+      if (response.ChallengeName === 'MFA_SETUP') {
+        return await this.buildMfaSetupRequired(response.Session!, email)
+      }
+
+      // MFA required (user already enrolled)
+      if (response.ChallengeName === 'SOFTWARE_TOKEN_MFA') {
+        return {
+          requiresMfaCode: true,
+          session: response.Session!,
+          username: email,
+        }
+      }
+
       if (!response.AuthenticationResult) {
         throw new Error('Authentication failed')
       }
@@ -122,7 +177,6 @@ class AuthService {
         throw new Error('Incomplete authentication response')
       }
 
-      // Get user information
       const userInfo = await this.getUserInfo(AccessToken)
 
       const session: AuthSession = {
@@ -143,7 +197,123 @@ class AuthService {
     }
   }
 
-  async completePasswordChange(session: string, username: string, newPassword: string, fullName: string): Promise<AuthSession> {
+  async completeMfaSetupAndSignIn(username: string, session: string, code: string): Promise<AuthSession> {
+    // Ensure config is loaded
+    if (!this.updateConfig()) {
+      throw new Error('Configuration not loaded. Please refresh the page.');
+    }
+
+    try {
+      // Verify the software token code
+      const verify = await this.client.send(new VerifySoftwareTokenCommand({
+        Session: session,
+        UserCode: code,
+        FriendlyDeviceName: 'Arcanum CSP',
+      }))
+
+      if (verify.Status !== 'SUCCESS') {
+        throw new Error('Invalid verification code')
+      }
+
+      const nextSession = verify.Session || session
+
+      // Complete the MFA setup challenge, choosing software token as the factor
+      const finalize = await this.client.send(new RespondToAuthChallengeCommand({
+        ChallengeName: 'MFA_SETUP',
+        ClientId: this.clientId,
+        Session: nextSession,
+        ChallengeResponses: {
+          USERNAME: username,
+          ANSWER: 'SOFTWARE_TOKEN_MFA',
+        },
+      }))
+
+      if (!finalize.AuthenticationResult) {
+        throw new Error('MFA setup completion failed')
+      }
+
+      const { AccessToken, IdToken, RefreshToken, ExpiresIn } = finalize.AuthenticationResult
+      if (!AccessToken || !IdToken || !RefreshToken) {
+        throw new Error('Incomplete authentication response after MFA setup')
+      }
+
+      try {
+        await this.client.send(new SetUserMFAPreferenceCommand({
+          AccessToken,
+          SoftwareTokenMfaSettings: {
+            Enabled: true,
+            PreferredMfa: true,
+          },
+        }))
+      } catch (setMfaError) {
+        console.warn('Failed to set software token MFA preference:', setMfaError)
+      }
+
+      const userInfo = await this.getUserInfo(AccessToken)
+      const authSession: AuthSession = {
+        accessToken: AccessToken,
+        idToken: IdToken,
+        refreshToken: RefreshToken,
+        expiresAt: Date.now() + (ExpiresIn! * 1000),
+        user: userInfo,
+      }
+      this.session = authSession
+      this.storeSession(authSession)
+      return authSession
+    } catch (error) {
+      console.error('MFA setup error:', error)
+      throw (error instanceof Error ? error : new Error('Failed to complete MFA setup'))
+    }
+  }
+
+  async respondToMfaCodeAndSignIn(username: string, session: string, code: string): Promise<AuthSession> {
+    // Ensure config is loaded
+    if (!this.updateConfig()) {
+      throw new Error('Configuration not loaded. Please refresh the page.');
+    }
+    try {
+      const challenge = await this.client.send(new RespondToAuthChallengeCommand({
+        ChallengeName: 'SOFTWARE_TOKEN_MFA',
+        ClientId: this.clientId,
+        Session: session,
+        ChallengeResponses: {
+          USERNAME: username,
+          SOFTWARE_TOKEN_MFA_CODE: code,
+        },
+      }))
+
+      if (!challenge.AuthenticationResult) {
+        throw new Error('Invalid MFA code')
+      }
+
+      const { AccessToken, IdToken, RefreshToken, ExpiresIn } = challenge.AuthenticationResult
+      if (!AccessToken || !IdToken || !RefreshToken) {
+        throw new Error('Incomplete authentication response after MFA')
+      }
+
+      const userInfo = await this.getUserInfo(AccessToken)
+      const authSession: AuthSession = {
+        accessToken: AccessToken,
+        idToken: IdToken,
+        refreshToken: RefreshToken,
+        expiresAt: Date.now() + (ExpiresIn! * 1000),
+        user: userInfo,
+      }
+      this.session = authSession
+      this.storeSession(authSession)
+      return authSession
+    } catch (error) {
+      console.error('MFA code error:', error)
+      throw (error instanceof Error ? error : new Error('Failed to verify MFA code'))
+    }
+  }
+
+  async completePasswordChange(
+    session: string,
+    username: string,
+    newPassword: string,
+    fullName: string,
+  ): Promise<AuthSession | MfaSetupRequired | MfaCodeRequired> {
     // Ensure config is loaded
     if (!this.updateConfig()) {
       throw new Error('Configuration not loaded. Please refresh the page.');
@@ -162,6 +332,18 @@ class AuthService {
       })
 
       const response = await this.client.send(command)
+
+      if (response.ChallengeName === 'MFA_SETUP') {
+        return await this.buildMfaSetupRequired(response.Session!, username)
+      }
+
+      if (response.ChallengeName === 'SOFTWARE_TOKEN_MFA') {
+        return {
+          requiresMfaCode: true,
+          session: response.Session!,
+          username,
+        }
+      }
 
       if (!response.AuthenticationResult) {
         throw new Error('Password change failed')

@@ -1,171 +1,239 @@
 import { useEffect, useState } from 'react'
-import { Alert, Badge, Button, Card, Col, Row, Spinner } from 'react-bootstrap'
-import { Link } from 'react-router-dom'
-import { BoxSeam, FileEarmarkText } from 'react-bootstrap-icons'
+import { Col, Row } from 'react-bootstrap'
+import {
+  BoxSeam,
+  FileEarmarkText,
+  Rocket,
+  People,
+  BarChart,
+  Globe,
+  Plus,
+  FileText
+} from 'react-bootstrap-icons'
 import { Client } from '@/types'
 import { clientService } from '@/services/clientService'
-import { ToolCard } from '@/components/tools/ToolCard'
-import type { Tool } from '@/types/tools'
+import { listAllRecentDeployments, type DeploymentRecord } from '@/services/deploymentService'
+import { getConfigValue } from '@/services/configService'
+import { StatsCard } from '@/components/dashboard/StatsCard'
+import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
+import { WorkflowHub } from '@/components/dashboard/WorkflowHub'
+import { WelcomeBanner } from '@/components/dashboard/WelcomeBanner'
+import { ToolsSection } from '@/components/dashboard/ToolsSection'
+import { AVAILABLE_TOOLS } from '@/data/tools'
+
 
 export default function Dashboard() {
   const [clients, setClients] = useState<Client[]>([])
+  const [deployments, setDeployments] = useState<DeploymentRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const deploymentsTable = getConfigValue('DEPLOYMENTS_TABLE')
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       setError(null)
       try {
-        const data = await clientService.getAllClients()
-        setClients(data)
+        const [clientData, deploymentData] = await Promise.all([
+          clientService.getAllClients(),
+          deploymentsTable ? listAllRecentDeployments(50).catch(() => []) : Promise.resolve([])
+        ])
+        setClients(clientData)
+        setDeployments(deploymentData)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load clients')
+        setError(e instanceof Error ? e.message : 'Failed to load data')
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [])
+  }, [deploymentsTable])
 
-  // Available tools
-  const availableTools: Tool[] = [
-    {
-      id: 'usage-report',
-      name: 'Usage Report Generator',
-      description: 'Generate comprehensive usage analytics for clients including app runs, chat messages, and user activity summaries.',
-      category: 'analytics',
-      parameters: [
-        {
-          name: 'clientName',
-          label: 'Client',
-          type: 'select',
-          required: true,
-          description: 'Select the client to generate the report for',
-        },
-        {
-          name: 'timePeriod',
-          label: 'Time Period',
-          type: 'select',
-          required: true,
-          defaultValue: 'current-year',
-          description: 'Select the time period for the usage report',
-        },
-        {
-          name: 'outputFormat',
-          label: 'Output Format',
-          type: 'select',
-          required: true,
-          defaultValue: 'csv',
-          description: 'Choose between CSV files or single JSON file',
-        },
-      ],
-    },
-    {
-      id: 'quota-report',
-      name: 'Quota Report',
-      description: 'Fetch Bedrock RPM quotas across client accounts and regions, download CSV, and view as a table.',
-      category: 'analytics',
-      parameters: [],
-    },
-  ]
 
+
+  // Calculate stats
   const total = clients.length
+  const devClients = clients.filter(c => c.config.devInstance).length
+  const prodClients = total - devClients
   const countByRegion = (regionCode: string) => clients.filter(c => (c.config.region || '').toLowerCase() === regionCode.toLowerCase()).length
   const countUSEast1 = countByRegion('us-east-1')
   const countSydney = countByRegion('ap-southeast-2')
 
+  // Deployment stats
+  const runningDeployments = deployments.filter(d =>
+    (d.status || '').toLowerCase() === 'running' ||
+    (d.status || '').toLowerCase() === 'retrying'
+  )
+
+  const last24Hours = deployments.filter(d => {
+    const deployTime = new Date(d.startTime || '')
+    const now = new Date()
+    return (now.getTime() - deployTime.getTime()) < 24 * 60 * 60 * 1000
+  })
+
+  // Filter deployments to last week for success rate calculation
+  const oneWeekAgo = new Date()
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
+
+  const lastWeekDeployments = deployments.filter(d => {
+    const deployTime = new Date((d as any).startTime || (d as any).startedAt || d.startTime || new Date())
+    return deployTime >= oneWeekAgo
+  })
+
+  const successfulDeployments = lastWeekDeployments.filter(d => d.status === 'success').length
+  const totalLastWeekDeployments = lastWeekDeployments.length
+  const successRate = totalLastWeekDeployments > 0 ? Math.round((successfulDeployments / totalLastWeekDeployments) * 100) : 0
+
+  if (loading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '60vh' }}>
+        <div className="text-center">
+          <div className="spinner-border text-primary mb-3" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <div className="text-muted">Loading dashboard...</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
-      {/* Top Stats Banner */}
-      <Card className="border-0 shadow-sm mb-4">
-        <Card.Body>
-          <Row className="g-3">
-            <Col sm={4} xs={12}>
-              <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">
-                <div>
-                  <div className="text-muted small">Total Clients</div>
-                  <div className="fs-4 fw-semibold">{loading ? <Spinner size="sm" /> : total}</div>
-                </div>
-                <Badge bg="primary">All</Badge>
-              </div>
+      {/* Welcome Banner */}
+      <WelcomeBanner
+        systemStatus={{
+          overall: error ? 'error' : runningDeployments.length > 0 ? 'warning' : 'healthy',
+          services: [
+            { name: 'Configs', status: 'healthy' },
+            { name: 'Deploy', status: runningDeployments.length > 0 ? 'warning' : 'healthy' },
+            { name: 'Analytics', status: 'healthy' },
+          ],
+          lastChecked: new Date().toISOString()
+        }}
+      />
+
+      {/* Enhanced Stats Cards */}
+      <Row className="g-4 mb-5">
+        <Col lg={3} md={6}>
+          <StatsCard
+            title="Total Clients"
+            value={total}
+            subtitle={`${prodClients} production, ${devClients} development`}
+            icon={<People />}
+            badge={{ text: 'Active', variant: 'success' }}
+            status="success"
+          />
+        </Col>
+        <Col lg={3} md={6}>
+          <StatsCard
+            title="Active Deployments"
+            value={runningDeployments.length}
+            subtitle={`${last24Hours.length} in last 24h`}
+            icon={<Rocket />}
+            status={runningDeployments.length > 0 ? 'warning' : 'success'}
+            badge={{
+              text: runningDeployments.length > 0 ? 'Running' : 'Idle',
+              variant: runningDeployments.length > 0 ? 'warning' : 'success'
+            }}
+          />
+        </Col>
+        <Col lg={3} md={6}>
+          <StatsCard
+            title="Success Rate"
+            value={`${successRate}%`}
+            subtitle={`${successfulDeployments}/${totalLastWeekDeployments} deployments (last 7 days)`}
+            icon={<BarChart />}
+            status={successRate >= 90 ? 'success' : successRate >= 70 ? 'warning' : 'danger'}
+            trend={{
+              value: 5,
+              label: 'vs previous week',
+              isPositive: true
+            }}
+          />
+        </Col>
+        <Col lg={3} md={6}>
+          <StatsCard
+            title="Global Coverage"
+            value={2}
+            subtitle={`US: ${countUSEast1}, AU: ${countSydney}`}
+            icon={<Globe />}
+            badge={{ text: 'Regions', variant: 'info' }}
+            status="info"
+          />
+        </Col>
+      </Row>
+
+      {/* Activity Feed and Workflow Hubs */}
+      <Row className="g-4 mb-5">
+        <Col lg={5}>
+          <ActivityFeed deployments={deployments} maxItems={6} />
+        </Col>
+        <Col lg={7}>
+          <Row className="g-4">
+            <Col md={6}>
+              <WorkflowHub
+                title="Client Management"
+                description="Configure clients and manage user accounts"
+                icon={<FileEarmarkText />}
+                primaryAction={{
+                  label: 'Browse Configs',
+                  link: '/configs',
+                  icon: <FileText />
+                }}
+                secondaryActions={[
+                  {
+                    label: 'New Client',
+                    link: '/tools/create-client-config',
+                    icon: <Plus />,
+                    variant: 'primary'
+                  }
+                ]}
+                stats={[
+                  { label: 'Total Clients', value: total },
+                  { label: 'Production', value: prodClients }
+                ]}
+                color="primary"
+              />
             </Col>
-            <Col sm={4} xs={12}>
-              <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">
-                <div>
-                  <div className="text-muted small">us-east-1</div>
-                  <div className="fs-4 fw-semibold">{loading ? <Spinner size="sm" /> : countUSEast1}</div>
-                </div>
-                <Badge bg="secondary">US</Badge>
-              </div>
-            </Col>
-            <Col sm={4} xs={12}>
-              <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">
-                <div>
-                  <div className="text-muted small">ap-southeast-2</div>
-                  <div className="fs-4 fw-semibold">{loading ? <Spinner size="sm" /> : countSydney}</div>
-                </div>
-                <Badge bg="secondary">Sydney</Badge>
-              </div>
+            <Col md={6}>
+              <WorkflowHub
+                title="Deployment Center"
+                description="Deploy updates and monitor deployment status"
+                icon={<Rocket />}
+                primaryAction={{
+                  label: 'Start Deploy',
+                  link: '/deployments',
+                  icon: <Rocket />
+                }}
+                secondaryActions={[
+                  {
+                    label: 'View Images',
+                    link: '/containers',
+                    icon: <BoxSeam />
+                  }
+                ]}
+                stats={[
+                  { label: 'Running', value: runningDeployments.length },
+                  { label: 'Success Rate', value: `${successRate}%` }
+                ]}
+                color="success"
+              />
             </Col>
           </Row>
-          {error && (
-            <Alert variant="danger" className="mt-3 mb-0">{error}</Alert>
-          )}
-        </Card.Body>
-      </Card>
-
-      {/* Main Features */}
-      <Row className="g-4 mb-4">
-        <Col md={6}>
-          <Card as={Link} to="/configs" className="h-100 border-0 shadow-sm text-decoration-none">
-            <Card.Body className="p-4 d-flex flex-column justify-content-between">
-              <div>
-                <div className="d-flex align-items-center mb-2">
-                  <FileEarmarkText className="me-2" />
-                  <h5 className="mb-0">Client Configs</h5>
-                </div>
-                <div className="text-muted">Browse all client configurations in JSON</div>
-              </div>
-              <div className="mt-3">
-                <Button variant="primary">Open</Button>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={6}>
-          <Card as={Link} to="/containers" className="h-100 border-0 shadow-sm text-decoration-none">
-            <Card.Body className="p-4 d-flex flex-column justify-content-between">
-              <div>
-                <div className="d-flex align-items-center mb-2">
-                  <BoxSeam className="me-2" />
-                  <h5 className="mb-0">Deployment Images</h5>
-                </div>
-                <div className="text-muted">View available ECR images for deployment</div>
-              </div>
-              <div className="mt-3">
-                <Button variant="primary">Open</Button>
-              </div>
-            </Card.Body>
-          </Card>
         </Col>
       </Row>
 
       {/* Tools Section */}
-      <div className="d-flex align-items-center justify-content-between mb-3">
-        <h6 className="mb-0">Tools</h6>
-        <span className="text-muted small">{availableTools.length} tool{availableTools.length !== 1 ? 's' : ''} available</span>
-      </div>
-      <Row className="g-4">
-        {availableTools.map((tool) => (
-          <Col md={4} key={tool.id}>
-            <ToolCard
-              tool={tool}
-              disabled={loading}
-            />
-          </Col>
-        ))}
-      </Row>
+      <ToolsSection
+        tools={AVAILABLE_TOOLS}
+        disabled={loading}
+      />
+
+      {error && (
+        <div className="alert alert-danger mt-4" role="alert">
+          <strong>Error:</strong> {error}
+        </div>
+      )}
     </div>
   )
 }

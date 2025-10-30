@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
-import { authService, User, AuthSession, PasswordChangeRequired } from '@/services/authService'
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react'
+import { authService, User, AuthSession, PasswordChangeRequired, MfaSetupRequired, MfaCodeRequired } from '@/services/authService'
 
 interface AuthContextType {
   user: User | null
@@ -7,8 +7,12 @@ interface AuthContextType {
   loading: boolean
   error: string | null
   passwordChangeRequired: PasswordChangeRequired | null
+  mfaSetupRequired: MfaSetupRequired | null
+  mfaCodeRequired: MfaCodeRequired | null
   signIn: (email: string, password: string) => Promise<void>
   completePasswordChange: (newPassword: string, fullName: string) => Promise<void>
+  completeMfaSetup: (code: string) => Promise<void>
+  submitMfaCode: (code: string) => Promise<void>
   requestPasswordReset: (email: string) => Promise<void>
   confirmPasswordReset: (email: string, code: string, newPassword: string) => Promise<void>
   signOut: () => Promise<void>
@@ -28,7 +32,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [passwordChangeRequired, setPasswordChangeRequired] = useState<PasswordChangeRequired | null>(null)
-  const [refreshTimerId, setRefreshTimerId] = useState<number | null>(null)
+  const [mfaSetupRequired, setMfaSetupRequired] = useState<MfaSetupRequired | null>(null)
+  const [mfaCodeRequired, setMfaCodeRequired] = useState<MfaCodeRequired | null>(null)
+  // Use a ref for the interval id to avoid re-render loops caused by changing dependencies
+  const refreshTimerRef = useRef<number | null>(null)
 
   const signIn = async (email: string, password: string) => {
     setLoading(true)
@@ -41,6 +48,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if ('requiresPasswordChange' in result) {
         // Password change is required
         setPasswordChangeRequired(result)
+      } else if ('requiresMfaSetup' in result) {
+        // User must enroll TOTP
+        setMfaSetupRequired(result)
+      } else if ('requiresMfaCode' in result) {
+        // User must provide TOTP code
+        setMfaCodeRequired(result)
       } else {
         // Successful authentication
         setSession(result)
@@ -65,19 +78,79 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setError(null)
 
     try {
-      const authSession = await authService.completePasswordChange(
+      const result = await authService.completePasswordChange(
         passwordChangeRequired.session,
         passwordChangeRequired.username,
         newPassword,
         fullName
       )
 
-      setSession(authSession)
+      if ('requiresMfaSetup' in result) {
+        setMfaSetupRequired(result)
+        setMfaCodeRequired(null)
+      } else if ('requiresMfaCode' in result) {
+        setMfaCodeRequired(result)
+      } else {
+        setSession(result)
+        startBackgroundRefresh()
+      }
       setPasswordChangeRequired(null)
-      // Kick off background refresh loop
-      startBackgroundRefresh()
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Password change failed'
+      setError(errorMessage)
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const completeMfaSetup = async (code: string) => {
+    if (!mfaSetupRequired) {
+      throw new Error('No MFA setup session available')
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const authSession = await authService.completeMfaSetupAndSignIn(
+        mfaSetupRequired.username,
+        mfaSetupRequired.session,
+        code,
+      )
+      setSession(authSession)
+      setMfaSetupRequired(null)
+      setMfaCodeRequired(null)
+      startBackgroundRefresh()
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'MFA setup failed'
+      setError(errorMessage)
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const submitMfaCode = async (code: string) => {
+    if (!mfaCodeRequired) {
+      throw new Error('No MFA challenge session available')
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const authSession = await authService.respondToMfaCodeAndSignIn(
+        mfaCodeRequired.username,
+        mfaCodeRequired.session,
+        code,
+      )
+      setSession(authSession)
+      setMfaSetupRequired(null)
+      setMfaCodeRequired(null)
+      startBackgroundRefresh()
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Invalid MFA code'
       setError(errorMessage)
       throw err
     } finally {
@@ -95,6 +168,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setPasswordChangeRequired(null)
       // Stop background refresh loop
       stopBackgroundRefresh()
+      setMfaSetupRequired(null)
+      setMfaCodeRequired(null)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Sign out failed'
       setError(errorMessage)
@@ -139,6 +214,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return authService.hasRole(role)
   }
 
+  // Background refresh loop (every 30s) to keep tokens fresh
+  const stopBackgroundRefresh = useCallback(() => {
+    if (refreshTimerRef.current) {
+      window.clearInterval(refreshTimerRef.current)
+      refreshTimerRef.current = null
+    }
+  }, [])
+
+  const startBackgroundRefresh = useCallback(() => {
+    stopBackgroundRefresh()
+    const id = window.setInterval(async () => {
+      const ensured = await authService.ensureValidSession(5 * 60 * 1000)
+      setSession(ensured)
+    }, 30000)
+    refreshTimerRef.current = id
+  }, [stopBackgroundRefresh])
+
   // Check for existing session on mount
   useEffect(() => {
     let cancelled = false
@@ -164,31 +256,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [startBackgroundRefresh, stopBackgroundRefresh])
 
-  // Background refresh loop (every 30s) to keep tokens fresh
-  const stopBackgroundRefresh = useCallback(() => {
-    if (refreshTimerId) {
-      window.clearInterval(refreshTimerId)
-      setRefreshTimerId(null)
-    }
-  }, [refreshTimerId])
-
-  const startBackgroundRefresh = useCallback(() => {
-    stopBackgroundRefresh()
-    const id = window.setInterval(async () => {
-      const ensured = await authService.ensureValidSession(5 * 60 * 1000)
-      setSession(ensured)
-    }, 30000)
-    setRefreshTimerId(id)
-  }, [stopBackgroundRefresh])
-
   const value: AuthContextType = {
     user: session?.user || null,
     session,
     loading,
     error,
     passwordChangeRequired,
+    mfaSetupRequired,
+    mfaCodeRequired,
     signIn,
     completePasswordChange,
+    completeMfaSetup,
+    submitMfaCode,
     requestPasswordReset,
     confirmPasswordReset,
     signOut,

@@ -14,14 +14,15 @@ export default function ConfigLoader({ children }: ConfigLoaderProps) {
     const loadConfig = async () => {
       try {
         setError(null)
-
-        // Check if config is already in session
+        // If we already have config, render immediately, but trigger a background refresh
         if (hasConfigInSession()) {
           setIsLoading(false)
+          // Background refresh respects cache TTL and will reload if changed
+          fetchConfigAndAddToSession().catch((e) => console.debug('Background config refresh skipped:', e))
           return
         }
 
-        // Fetch config from server
+        // Otherwise, fetch config before rendering
         await fetchConfigAndAddToSession()
         setIsLoading(false)
       } catch (error) {

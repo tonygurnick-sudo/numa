@@ -1,8 +1,12 @@
 import { getAllClientConfigs, listClients, putClientConfig, getClientConfig } from '@arcanumai/client-config'
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
+import { DynamoDBDocumentClient, DeleteCommand } from '@aws-sdk/lib-dynamodb'
 import { fromCognitoIdentityPool } from '@aws-sdk/credential-providers'
 import { Client, ClientConfig } from '@/types'
 import { getConfigValue } from './configService'
 import { authService } from './authService'
+import { activityService } from './activityService'
+import { clientConfigSchema } from '@/types'
 
 export class ClientService {
   private cachedClients: Client[] = []
@@ -101,11 +105,13 @@ export class ClientService {
   }
 
   async updateClientConfig(name: string, configUpdates: Partial<ClientConfig>): Promise<void> {
+    let currentConfig: ClientConfig | null = null
+
     try {
       const credentials = this.getCredentialsProvider()
 
       // Get current config
-      const currentConfig = await getClientConfig<ClientConfig>(name, undefined, credentials)
+      currentConfig = await getClientConfig<ClientConfig>(name, undefined, credentials)
       if (!currentConfig) {
         throw new Error(`Client ${name} not found`)
       }
@@ -118,9 +124,198 @@ export class ClientService {
 
       // Clear cache to force refresh
       this.clearCache()
+
+      // Log activity - determine what changed
+      const changes: string[] = []
+      Object.keys(configUpdates).forEach(key => {
+        const oldValue = currentConfig![key as keyof ClientConfig]
+        const newValue = configUpdates[key as keyof ClientConfig]
+        if (oldValue !== newValue) {
+          changes.push(`${key}: ${String(oldValue)} → ${String(newValue)}`)
+        }
+      })
+
+      await activityService.logActivity({
+        type: 'config',
+        action: 'updated',
+        resourceType: 'client-config',
+        resourceId: name,
+        details: {
+          before: currentConfig,
+          after: updatedConfig,
+          changes: changes
+        },
+        success: true
+      })
+
     } catch (error) {
+      // Log failed activity
+      await activityService.logActivity({
+        type: 'config',
+        action: 'updated',
+        resourceType: 'client-config',
+        resourceId: name,
+        details: {
+          before: currentConfig,
+          changes: Object.keys(configUpdates)
+        },
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error'
+      })
+
       console.error(`Failed to update client config for ${name}:`, error)
       throw new Error(`Unable to update client configuration. Please check your permissions.`)
+    }
+  }
+
+  async replaceClientConfig(name: string, newConfig: ClientConfig): Promise<void> {
+    let beforeConfig: ClientConfig | null = null
+    try {
+      const credentials = this.getCredentialsProvider()
+
+      // Validate strictly using portal schema
+      clientConfigSchema.strict().parse(newConfig)
+
+      // Get current for activity logging
+      beforeConfig = await getClientConfig<ClientConfig>(name, undefined, credentials)
+
+      // Write full replacement
+      await putClientConfig(name, newConfig, undefined, credentials)
+
+      // Bust cache
+      this.clearCache()
+
+      // Compute changed top-level keys for summary
+      const changed: string[] = []
+      const keys = Array.from(new Set([...
+        Object.keys(beforeConfig || {}), ...Object.keys(newConfig)
+      ]))
+      for (const k of keys) {
+        const a = (beforeConfig as any)?.[k]
+        const b = (newConfig as any)?.[k]
+        if (JSON.stringify(a) !== JSON.stringify(b)) changed.push(k)
+      }
+
+      await activityService.logActivity({
+        type: 'config',
+        action: 'updated',
+        resourceType: 'client-config',
+        resourceId: name,
+        details: {
+          before: beforeConfig || undefined,
+          after: newConfig,
+          changes: changed,
+        },
+        success: true,
+      })
+    } catch (error) {
+      await activityService.logActivity({
+        type: 'config',
+        action: 'updated',
+        resourceType: 'client-config',
+        resourceId: name,
+        details: {
+          before: beforeConfig || undefined,
+          after: undefined,
+        },
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      })
+      console.error(`Failed to replace client config for ${name}:`, error)
+      throw new Error('Unable to replace client configuration. Please verify JSON and permissions.')
+    }
+  }
+
+  async createClientConfig(name: string, config: ClientConfig): Promise<void> {
+    try {
+      const credentials = this.getCredentialsProvider()
+      // Validate against schema before write
+      clientConfigSchema.parse(config)
+      await putClientConfig(name, config, undefined, credentials)
+      this.clearCache()
+
+      // Log successful activity
+      await activityService.logActivity({
+        type: 'config',
+        action: 'created',
+        resourceType: 'client-config',
+        resourceId: name,
+        details: {
+          after: config,
+          metadata: {
+            region: config.region,
+            devInstance: config.devInstance
+          }
+        },
+        success: true
+      })
+
+    } catch (error) {
+      // Log failed activity
+      await activityService.logActivity({
+        type: 'config',
+        action: 'created',
+        resourceType: 'client-config',
+        resourceId: name,
+        details: {
+          after: config
+        },
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error'
+      })
+
+      console.error(`Failed to create client config for ${name}:`, error)
+      throw new Error(`Unable to create client configuration. Please check your permissions and input.`)
+    }
+  }
+
+  async deleteClientConfig(name: string): Promise<void> {
+    let deletedConfig: ClientConfig | null = null
+
+    try {
+      const credentials = this.getCredentialsProvider()
+
+      // Get current config before deleting for activity log
+      deletedConfig = await getClientConfig<ClientConfig>(name, undefined, credentials)
+
+      const region = getConfigValue('AWS_REGION') || 'us-east-1'
+      const ddb = new DynamoDBClient({ region, credentials })
+      const doc = DynamoDBDocumentClient.from(ddb)
+      await doc.send(new DeleteCommand({ TableName: 'numa-client-config', Key: { clientName: name } }))
+      this.clearCache()
+
+      // Log successful activity
+      await activityService.logActivity({
+        type: 'config',
+        action: 'deleted',
+        resourceType: 'client-config',
+        resourceId: name,
+        details: {
+          before: deletedConfig,
+          metadata: deletedConfig ? {
+            region: deletedConfig.region,
+            devInstance: deletedConfig.devInstance
+          } : undefined
+        },
+        success: true
+      })
+
+    } catch (error) {
+      // Log failed activity
+      await activityService.logActivity({
+        type: 'config',
+        action: 'deleted',
+        resourceType: 'client-config',
+        resourceId: name,
+        details: {
+          before: deletedConfig
+        },
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error'
+      })
+
+      console.error(`Failed to delete client config for ${name}:`, error)
+      throw new Error(`Unable to delete client configuration. Please check your permissions.`)
     }
   }
 
@@ -131,3 +326,21 @@ export class ClientService {
 }
 
 export const clientService = new ClientService()
+
+// Client grouping utilities
+export interface GroupedClients {
+  devClients: Client[]
+  productionClients: Client[]
+}
+
+export function groupClientsByType(clients: Client[]): GroupedClients {
+  const devClients = clients
+    .filter(c => c.config.devInstance === true)
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const productionClients = clients
+    .filter(c => c.config.devInstance !== true)
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  return { devClients, productionClients }
+}

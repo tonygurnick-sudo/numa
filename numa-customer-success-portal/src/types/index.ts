@@ -75,6 +75,7 @@ export const clientConfigSchema = z.object({
   // Feature flags
   numaChatAgents: z.boolean().optional(), // default: true
   allowBedrockQuotaSharing: z.boolean().optional(), // default: false
+  pipedreamIntegrations: z.boolean().optional(), // default: false
 
   // Data source configurations
   webCrawlerConfigs: z.array(webCrawlerConfigSchema).optional(),
@@ -110,6 +111,68 @@ export const getDefaultClientConfigValues = () => ({
   allowBedrockQuotaSharing: false,
 })
 
+// Helper to check if a config value differs from default
+export const isCustomValue = (key: keyof ClientConfig, value: any): boolean => {
+  const defaults = getDefaultClientConfigValues()
+  const defaultValue = defaults[key as keyof typeof defaults]
+
+  // Special handling for different value types
+  if (defaultValue === undefined) {
+    return value !== undefined && value !== null && value !== ''
+  }
+
+  return value !== defaultValue
+}
+
+// Helper to get human-readable field names
+export const getFieldDisplayName = (key: keyof ClientConfig): string => {
+  const fieldNames: Record<string, string> = {
+    clientAccountId: 'Account ID',
+    region: 'Region',
+    devInstance: 'Development Instance',
+    allProdApps: 'All Production Apps',
+    apps: 'Selected Applications',
+    pipedreamIntegrations: 'Pipedream Integrations',
+    allowBedrockQuotaSharing: 'Bedrock Quota Sharing',
+    preferredKnowledgeBase: 'Knowledge Base Type',
+    qBusinessRegion: 'Q Business Region',
+    embeddingModel: 'Embedding Model',
+    bedrockParserModel: 'Parser Model',
+    visionModelType: 'Vision Model Type',
+    numaChatAgents: 'Numa Chat Agents',
+  }
+
+  return fieldNames[key] || key
+}
+
+// Helper to identify which fields are considered "advanced"
+export const isAdvancedField = (key: keyof ClientConfig): boolean => {
+  const advancedFields = [
+    'webCrawlerConfigs',
+    'sharePointConfigs',
+    'boxConfigs',
+    'teamsConfigs',
+    's3Configs',
+    'budget',
+    'embeddingModel',
+    'bedrockParserModel',
+    'visionModelType',
+    'customDomain',
+    'senderEmail',
+    'receiverEmails',
+    'bedrockAccount',
+    'indexType',
+    'indexUnits',
+    'loadSampleFile',
+    'createServiceLinkedRole',
+    'temporaryPasswordValidityDays',
+    'passwordLength',
+    'mfa',
+  ]
+
+  return advancedFields.includes(key)
+}
+
 // Client with status information
 export interface Client {
   name: string
@@ -133,6 +196,18 @@ export interface ECRImage {
   sizeMb: number
   gitCommit?: string
   gitBranch?: string
+  customName?: string
+  description?: string
+}
+
+export interface DeploymentGroup {
+  groupName: string
+  clients: string[]
+  description?: string
+  maxConcurrency?: number
+  managed?: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 // Deployment Record

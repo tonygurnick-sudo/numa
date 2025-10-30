@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Badge, Card, Col, Form, InputGroup, Row, Spinner, Table } from 'react-bootstrap'
+import { Alert, Badge, Card, Col, Form, InputGroup, Row, Spinner } from 'react-bootstrap'
 import { Search, FileEarmarkText } from 'react-bootstrap-icons'
 import { Client } from '@/types'
 import { clientService } from '@/services/clientService'
+import { ClientTableGroup } from '@/components/ClientTableGroup'
 
 export default function Configs() {
   const [clients, setClients] = useState<Client[]>([])
@@ -74,34 +75,12 @@ export default function Configs() {
               )}
 
               <div style={{ height: 'calc(100vh - 280px)', overflowY: 'auto' }}>
-                <Table hover responsive className="mb-0 w-100">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '60%' }}>Client</th>
-                      <th>Region</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {!loading && filtered.length === 0 && (
-                      <tr>
-                        <td colSpan={2} className="text-center text-muted py-4">
-                          No clients found
-                        </td>
-                      </tr>
-                    )}
-                    {filtered.map(c => (
-                      <tr
-                        key={c.name}
-                        role="button"
-                        onClick={() => setSelected(c)}
-                        className={selected?.name === c.name ? 'table-primary' : ''}
-                      >
-                        <td className="fw-semibold text-truncate" title={c.name}>{c.name}</td>
-                        <td>{c.config.region}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
+                <ClientTableGroup
+                  clients={filtered}
+                  selectedClient={selected}
+                  onSelectClient={setSelected}
+                  searchTerm={search}
+                />
               </div>
             </Card.Body>
           </Card>

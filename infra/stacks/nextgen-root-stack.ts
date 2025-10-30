@@ -72,6 +72,38 @@ export class NextGenRootStack extends TerraformStack {
       managementAccountId,
     });
 
+    // Role in the management account for the broker to rename accounts
+    const accountAdminBrokerRole = new IamRole(this, 'account-admin-broker-role', {
+      name: 'AccountAdminBrokerRole',
+      assumeRolePolicy: new DataAwsIamPolicyDocument(this, 'account-admin-broker-assume', {
+        statement: [
+          {
+            effect: 'Allow',
+            actions: ['sts:AssumeRole'],
+            principals: [
+              // Narrow to the deployer lambda execution role; consider hardening further if needed
+              { type: 'AWS', identifiers: [`arn:aws:iam::${deployerAccountId}:role/portal-nextgen-broker-execution`] },
+            ],
+          },
+        ],
+      }).json,
+    });
+    const accountAdminBrokerPolicy = new IamPolicy(this, 'account-admin-broker-policy', {
+      name: 'AccountAdminBrokerPolicy',
+      policy: new DataAwsIamPolicyDocument(this, 'account-admin-broker-policy-doc', {
+        statement: [
+          {
+            actions: ['organizations:UpdateAccount', 'organizations:DescribeAccount', 'organizations:ListAccounts'],
+            resources: ['*'],
+          },
+        ],
+      }).json,
+    });
+    new IamRolePolicyAttachment(this, 'account-admin-broker-policy-attachment', {
+      role: accountAdminBrokerRole.name,
+      policyArn: accountAdminBrokerPolicy.arn,
+    });
+
     // Unfortunately, we can't use DataAwsIamPolicyDocument for this as it causes in the StepFunction definition.
     const arcanumAIAccessRoleAssumeRolePolicyDocument = JSON.stringify({
       Version: '2012-10-17',

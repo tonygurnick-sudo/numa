@@ -45,6 +45,36 @@ export interface CustomerSuccessPortalConstructProps {
    * Optional provider for hosted zone operations
    */
   hostedZoneProvider?: AwsProvider;
+
+  /** Optional: deployments history table ARN (to grant read access) */
+  deploymentsTableArn?: string;
+  /** Optional: deployments history table name (to surface in config) */
+  deploymentsTableName?: string;
+  /** Optional: Step Functions state machine ARN for portal deploys */
+  deploymentStateMachineArn?: string;
+  /** Optional: group deployments Step Functions state machine ARN */
+  deploymentGroupStateMachineArn?: string;
+  /** Optional: image metadata table ARN (to grant read/write access) */
+  imageMetadataTableArn?: string;
+  /** Optional: image metadata table name (to surface in config) */
+  imageMetadataTableName?: string;
+  /** Optional: deployment groups configuration table ARN */
+  deploymentGroupsTableArn?: string;
+  /** Optional: deployment groups configuration table name */
+  deploymentGroupsTableName?: string;
+  /** Optional: default concurrency for group deployments */
+  deploymentGroupDefaultConcurrency?: number;
+  /** Optional: absolute max concurrency for group deployments */
+  deploymentGroupMaxConcurrency?: number;
+  /** Optional: CloudWatch Logs group for deploy task output */
+  logsGroupArn?: string;
+  logsGroupName?: string;
+  /** Optional: ECS cluster ARN used by portal deployments (for StopTask permissions + config) */
+  ecsClusterArn?: string;
+  /** Optional: NextGen broker Lambda name (for portal direct invoke) */
+  nextgenBrokerLambdaName?: string;
+  /** Optional: NextGen broker region */
+  nextgenBrokerRegion?: string;
 }
 
 export class CustomerSuccessPortalConstruct extends Construct {
@@ -53,16 +83,58 @@ export class CustomerSuccessPortalConstruct extends Construct {
   readonly userPool: CognitoUserPool;
   readonly userPoolClient: CognitoUserPoolClient;
   readonly identityPool: CognitoIdentityPool;
+  readonly activityTable: DynamodbTable;
+  /** Expose the authenticated role for further policy attachments if needed */
+  readonly authenticatedRole: IamRole;
 
   constructor(scope: Construct, name: string, props: CustomerSuccessPortalConstructProps) {
     super(scope, name);
 
-    // (Removed) Deployment history table – not needed for current portal scope
+    // Activity tracking table for audit trail
+    this.activityTable = new DynamodbTable(this, 'activity-table', {
+      name: 'numa-portal-activity',
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'activityId',
+      rangeKey: 'timestamp',
+      attribute: [
+        {
+          name: 'activityId',
+          type: 'S',
+        },
+        {
+          name: 'timestamp',
+          type: 'S',
+        },
+        {
+          name: 'type',
+          type: 'S',
+        },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'type-timestamp-index',
+          hashKey: 'type',
+          rangeKey: 'timestamp',
+          projectionType: 'ALL',
+        },
+      ],
+      pointInTimeRecovery: {
+        enabled: true,
+      },
+      lifecycle: {
+        preventDestroy: true,
+      },
+    });
 
     // Cognito User Pool for authentication
     this.userPool = new CognitoUserPool(this, 'user-pool', {
       name: 'customer-success-portal-user-pool',
       autoVerifiedAttributes: ['email'],
+      // Enforce TOTP MFA for all users
+      mfaConfiguration: 'ON',
+      softwareTokenMfaConfiguration: {
+        enabled: true,
+      },
       passwordPolicy: {
         minimumLength: 8,
         requireLowercase: true,
@@ -282,57 +354,175 @@ export class CustomerSuccessPortalConstruct extends Construct {
     });
 
     // Policy for authenticated users to access AWS resources directly
+    this.authenticatedRole = authenticatedRole;
+
+    // Base policy for authenticated users
+    const baseStatements: unknown[] = [
+      {
+        effect: 'Allow',
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:Scan',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
+        ],
+        resources: [props.clientConfigTable.arn],
+      },
+      {
+        effect: 'Allow',
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:Scan',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
+        ],
+        resources: [this.activityTable.arn, `${this.activityTable.arn}/index/*`],
+      },
+      {
+        effect: 'Allow',
+        actions: [
+          'ecr:DescribeImages',
+          'ecr:ListImages',
+          // Optional for future repository metadata reads from UI
+          'ecr:DescribeRepositories',
+        ],
+        resources: [
+          // Images account/region used by the portal Containers page
+          'arn:aws:ecr:ap-southeast-2:826326270637:repository/numa-deploy',
+        ],
+      },
+      {
+        effect: 'Allow',
+        actions: [
+          'cognito-idp:AdminCreateUser',
+          'cognito-idp:ListUsers',
+          'cognito-idp:AdminDeleteUser',
+          'cognito-idp:AdminGetUser',
+          'cognito-idp:AdminSetUserPassword',
+          'cognito-idp:DescribeUserPool',
+        ],
+        resources: [this.userPool.arn],
+      },
+      {
+        effect: 'Allow',
+        actions: ['sts:AssumeRole'],
+        resources: [
+          // Allow assuming ArcanumAIAccess role in any client account for tools execution
+          'arn:aws:iam::*:role/ArcanumAIAccess',
+        ],
+        condition: [
+          {
+            test: 'StringEquals',
+            variable: 'aws:RequestedRegion',
+            values: ['us-east-1', 'ap-southeast-2'], // Limit to supported regions
+          },
+        ],
+      },
+    ];
+
+    // Optional: add Step Functions StartExecution and DDB read for deployments UI
+    if (props.deploymentStateMachineArn) {
+      const singleExecutionArnPrefix = props.deploymentStateMachineArn.replace(':stateMachine:', ':execution:');
+      const singleStopResources = [props.deploymentStateMachineArn, `${singleExecutionArnPrefix}:*`];
+      // StartExecution on the specific state machine
+      baseStatements.push({
+        effect: 'Allow',
+        actions: ['states:StartExecution'],
+        resources: [props.deploymentStateMachineArn],
+      });
+      // StopExecution on executions from that state machine (scoped via condition)
+      baseStatements.push({
+        effect: 'Allow',
+        actions: ['states:StopExecution', 'states:DescribeExecution', 'states:GetExecutionHistory'],
+        resources: singleStopResources,
+      });
+    }
+    if (props.deploymentGroupStateMachineArn) {
+      const groupExecutionArnPrefix = props.deploymentGroupStateMachineArn.replace(':stateMachine:', ':execution:');
+      const groupStopResources = [props.deploymentGroupStateMachineArn, `${groupExecutionArnPrefix}:*`];
+      baseStatements.push({
+        effect: 'Allow',
+        actions: ['states:StartExecution'],
+        resources: [props.deploymentGroupStateMachineArn],
+      });
+      baseStatements.push({
+        effect: 'Allow',
+        actions: ['states:StopExecution', 'states:DescribeExecution', 'states:GetExecutionHistory'],
+        resources: groupStopResources,
+      });
+    }
+    if (props.deploymentsTableArn) {
+      baseStatements.push({
+        effect: 'Allow',
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:UpdateItem',
+          'dynamodb:Scan',
+          'dynamodb:DeleteItem', // allow releasing stale locks from the portal
+        ],
+        resources: [props.deploymentsTableArn, `${props.deploymentsTableArn}/index/*`],
+      });
+    }
+    if (props.deploymentGroupsTableArn) {
+      baseStatements.push({
+        effect: 'Allow',
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:Scan',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
+        ],
+        resources: [props.deploymentGroupsTableArn],
+      });
+    }
+    if (props.imageMetadataTableArn) {
+      baseStatements.push({
+        effect: 'Allow',
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
+          'dynamodb:Scan',
+        ],
+        resources: [props.imageMetadataTableArn],
+      });
+    }
+    if (props.logsGroupArn) {
+      baseStatements.push({
+        effect: 'Allow',
+        actions: ['logs:GetLogEvents', 'logs:FilterLogEvents', 'logs:DescribeLogStreams'],
+        resources: [props.logsGroupArn, `${props.logsGroupArn}:*`, `${props.logsGroupArn}:log-stream:*`],
+      });
+    }
+    if (props.ecsClusterArn) {
+      baseStatements.push({
+        effect: 'Allow',
+        actions: ['ecs:StopTask', 'ecs:DescribeTasks'],
+        resources: ['*'],
+        condition: [
+          {
+            test: 'StringEquals',
+            variable: 'ecs:cluster',
+            values: [props.ecsClusterArn],
+          },
+        ],
+      });
+    }
+
     new IamRolePolicy(this, 'authenticated-policy', {
       name: 'customer-success-portal-authenticated-policy',
       role: authenticatedRole.id,
       policy: new DataAwsIamPolicyDocument(this, 'authenticated-policy-document', {
-        statement: [
-          {
-            effect: 'Allow',
-            actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
-            resources: [props.clientConfigTable.arn],
-          },
-          {
-            effect: 'Allow',
-            actions: [
-              'ecr:DescribeImages',
-              'ecr:ListImages',
-              // Optional for future repository metadata reads from UI
-              'ecr:DescribeRepositories',
-            ],
-            resources: [
-              // Images account/region used by the portal Containers page
-              'arn:aws:ecr:ap-southeast-2:826326270637:repository/numa-deploy',
-            ],
-          },
-          {
-            effect: 'Allow',
-            actions: [
-              'cognito-idp:AdminCreateUser',
-              'cognito-idp:ListUsers',
-              'cognito-idp:AdminDeleteUser',
-              'cognito-idp:AdminGetUser',
-              'cognito-idp:AdminSetUserPassword',
-              'cognito-idp:DescribeUserPool',
-            ],
-            resources: [this.userPool.arn],
-          },
-          {
-            effect: 'Allow',
-            actions: ['sts:AssumeRole'],
-            resources: [
-              // Allow assuming ArcanumAIAccess role in any client account for tools execution
-              'arn:aws:iam::*:role/ArcanumAIAccess',
-            ],
-            condition: [
-              {
-                test: 'StringEquals',
-                variable: 'aws:RequestedRegion',
-                values: ['us-east-1', 'ap-southeast-2'], // Limit to supported regions
-              },
-            ],
-          },
-        ],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        statement: baseStatements as any,
       }).json,
     });
 
@@ -380,19 +570,60 @@ export class CustomerSuccessPortalConstruct extends Construct {
     }
 
     // Dynamic configuration file - deployed to S3 at runtime
+    // Dynamic configuration file - deployed to S3 at runtime
+    const portalConfig: Record<string, unknown> = {
+      AWS_REGION: 'us-east-1',
+      ECR_REGION: 'ap-southeast-2',
+      ECR_REGISTRY_ID: '826326270637',
+      USER_POOL_ID: this.userPool.id,
+      USER_POOL_CLIENT_ID: this.userPoolClient.id,
+      IDENTITY_POOL_ID: this.identityPool.id,
+      ECR_REPOSITORY_URI: 'https://826326270637.dkr.ecr.ap-southeast-2.amazonaws.com/numa-deploy',
+      CLIENT_CONFIG_TABLE: props.clientConfigTable.name,
+      ACTIVITY_TABLE: this.activityTable.name,
+    };
+
+    if (props.deploymentsTableName) {
+      portalConfig['DEPLOYMENTS_TABLE'] = props.deploymentsTableName;
+    }
+    if (props.deploymentStateMachineArn) {
+      portalConfig['DEPLOYMENT_SFN_ARN'] = props.deploymentStateMachineArn;
+    }
+    if (props.deploymentGroupStateMachineArn) {
+      portalConfig['DEPLOYMENT_GROUP_SFN_ARN'] = props.deploymentGroupStateMachineArn;
+    }
+    if (props.imageMetadataTableName) {
+      portalConfig['IMAGE_METADATA_TABLE'] = props.imageMetadataTableName;
+    }
+    if (props.deploymentGroupsTableName) {
+      portalConfig['DEPLOYMENT_GROUPS_TABLE'] = props.deploymentGroupsTableName;
+    }
+    if (props.logsGroupName) {
+      portalConfig['LOG_GROUP_NAME'] = props.logsGroupName;
+    }
+    if (props.logsGroupArn) {
+      portalConfig['LOG_GROUP_ARN'] = props.logsGroupArn;
+    }
+    if (props.ecsClusterArn) {
+      portalConfig['ECS_CLUSTER_ARN'] = props.ecsClusterArn;
+    }
+    if (props.nextgenBrokerLambdaName) {
+      portalConfig['NEXTGEN_BROKER_LAMBDA'] = props.nextgenBrokerLambdaName;
+    }
+    if (props.nextgenBrokerRegion) {
+      portalConfig['NEXTGEN_BROKER_REGION'] = props.nextgenBrokerRegion;
+    }
+    if (props.deploymentGroupDefaultConcurrency !== undefined) {
+      portalConfig['DEPLOYMENT_GROUP_DEFAULT_CONCURRENCY'] = props.deploymentGroupDefaultConcurrency;
+    }
+    if (props.deploymentGroupMaxConcurrency !== undefined) {
+      portalConfig['DEPLOYMENT_GROUP_MAX_CONCURRENCY'] = props.deploymentGroupMaxConcurrency;
+    }
+
     new S3Object(this, 'portal-config', {
       bucket: this.frontendBucket.bucket,
       key: 'config.json',
-      content: JSON.stringify({
-        AWS_REGION: 'us-east-1',
-        ECR_REGION: 'ap-southeast-2',
-        ECR_REGISTRY_ID: '826326270637',
-        USER_POOL_ID: this.userPool.id,
-        USER_POOL_CLIENT_ID: this.userPoolClient.id,
-        IDENTITY_POOL_ID: this.identityPool.id,
-        ECR_REPOSITORY_URI: 'https://826326270637.dkr.ecr.ap-southeast-2.amazonaws.com/numa-deploy',
-        CLIENT_CONFIG_TABLE: props.clientConfigTable.name,
-      }),
+      content: JSON.stringify(portalConfig),
       contentType: 'application/json',
     });
 
@@ -425,6 +656,11 @@ export class CustomerSuccessPortalConstruct extends Construct {
     new TerraformOutput(this, 'identity-pool-id', {
       value: this.identityPool.id,
       description: 'Cognito Identity Pool ID for AWS credentials',
+    });
+
+    new TerraformOutput(this, 'activity-table-name', {
+      value: this.activityTable.name,
+      description: 'Activity table name for audit logging',
     });
 
     // (Removed) Output for deployment history table – not needed
