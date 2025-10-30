@@ -567,7 +567,7 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
   const Q_INDEX_ID = window.sessionStorage.getItem('Q_INDEX_ID');
   const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
-  const PREFERRED_KNOWLEDGE_BASE = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'q';
+  const PREFERRED_KNOWLEDGE_BASE = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'bedrock';
   const BEDROCK_KNOWLEDGE_BASE_ID = window.sessionStorage.getItem('BEDROCK_KNOWLEDGE_BASE_ID');
   const initialFetchDone = useRef(false);
 
@@ -1248,6 +1248,7 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
                               onClick={handleRefreshStatus}
                               className="ms-2"
                               disabled={kbStateLoading}
+                              data-testid="kb-table-refresh"
                             >
                               <div>Refresh</div>
                             </Button>
@@ -1430,6 +1431,7 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
                     className="ms-2"
                     style={{ float: 'right' }}
                     disabled={kbStateLoading}
+                    data-testid="kb-status-refresh"
                   >
                     {kbStateLoading && <span className="spinner-border spinner-border-sm me-1" />}
                     <div>Refresh</div>

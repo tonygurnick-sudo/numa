@@ -61,7 +61,7 @@ lambdas/python/numa-chat-agent/
 | `Q_APPLICATION_ID` | Q Business application ID | - |
 | `Q_RETRIEVER_ID` | Q Business retriever ID | - |
 | `BEDROCK_KNOWLEDGE_BASE_ID` | Bedrock knowledge base ID | - |
-| `PREFERRED_KNOWLEDGE_BASE` | `'q'` or `'bedrock'` | `'q'` |
+| `PREFERRED_KNOWLEDGE_BASE` | `'q'` or `'bedrock'` | `'bedrock'` |
 | `CLOUDFRONT_SHARED_SECRET` | Shared secret from CloudFront custom header | required |
 | `AWS_LAMBDA_EXEC_WRAPPER` | Must be `/opt/bootstrap` (LWA ZIP) | set by infra |
 | `AWS_LWA_INVOKE_MODE` | Must be `response_stream` | set by infra |

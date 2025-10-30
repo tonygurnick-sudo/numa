@@ -61,7 +61,7 @@ export class NumaClientStack extends TerraformStack {
       embeddingModel: 'amazon.titan-embed-text-v2:0',
       bedrockParserModel: 'amazon.nova-lite-v1:0',
       visionModelType: 'haiku',
-      provisionQResources: true,
+      provisionQResources: false,
     };
     const domainName = props.clientConfig.customDomain ?? `${props.clientName}.${defaults.domainSuffix}`;
     const preferredKnowledgeBase =
@@ -334,7 +334,7 @@ export class NumaClientStack extends TerraformStack {
         HONEYCOMB_KEY: honeycombFrontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
         DATA_BUCKET: core.dataBucket.bucket.bucket,
         PROVISION_Q_RESOURCES: clientConfig.provisionQResources ?? false,
-        PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'q',
+        PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'bedrock',
         BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase.knowledgeBaseId,
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
         PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
