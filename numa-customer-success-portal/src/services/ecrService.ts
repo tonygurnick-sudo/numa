@@ -7,6 +7,7 @@ import { fromCognitoIdentityPool } from '@aws-sdk/credential-providers'
 import { ECRImage } from '@/types'
 import { getConfigValue } from './configService'
 import { authService } from './authService'
+import { getAllImageMetadata, type ImageMetadata } from './imageTagService'
 
 export class ECRService {
   private repositoryName = 'numa-deploy'  // Matches GitLab CI: ECR_REPO: ${ECR_BASE}/numa-deploy
@@ -62,20 +63,35 @@ export class ECRService {
         credentials: this.getCredentialsProvider(),
       })
       const registryId = getConfigValue('ECR_REGISTRY_ID') || undefined
-      const response = await ecrClient.send(
-        new DescribeImagesCommand({
-          repositoryName: this.repositoryName,
-          registryId,
-          maxResults: 100,
-          imageDetails: true,
-        })
-      )
+      // Add an abortable timeout so the UI doesn't feel frozen on navigation
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
+      let response
+      try {
+        response = await ecrClient.send(
+          new DescribeImagesCommand({
+            repositoryName: this.repositoryName,
+            registryId,
+            maxResults: 100,
+          }),
+          { abortSignal: controller.signal }
+        )
+      } finally {
+        clearTimeout(timeoutId)
+      }
 
       if (!response.imageDetails) {
         return []
       }
 
-      this.cachedImages = this.mapImageDetailsToECRImages(response.imageDetails)
+      // Get image metadata for custom names
+      const imageMetadata = await getAllImageMetadata()
+      const metadataMap = new Map<string, ImageMetadata>()
+      imageMetadata.forEach(meta => {
+        metadataMap.set(`${meta.imageTag}:${meta.digest}`, meta)
+      })
+
+      this.cachedImages = this.mapImageDetailsToECRImages(response.imageDetails, metadataMap)
       this.lastFetchTime = now
 
       return this.cachedImages
@@ -87,18 +103,26 @@ export class ECRService {
     }
   }
 
-  private mapImageDetailsToECRImages(imageDetails: ImageDetail[]): ECRImage[] {
+  private mapImageDetailsToECRImages(imageDetails: ImageDetail[], metadataMap?: Map<string, ImageMetadata>): ECRImage[] {
     return imageDetails
       .filter(image => image.imageTags && image.imageTags.length > 0)
-      .map(image => ({
-        repository: this.repositoryName,
-        tag: image.imageTags![0], // Use first tag
-        digest: image.imageDigest || 'sha256:unknown',
-        pushedAt: image.imagePushedAt?.toISOString() || new Date().toISOString(),
-        sizeMb: Math.round((image.imageSizeInBytes || 0) / (1024 * 1024)),
-        gitCommit: this.extractGitCommitFromTag(image.imageTags![0]),
-        gitBranch: this.extractBranchFromTag(image.imageTags![0]),
-      }))
+      .map(image => {
+        const tag = image.imageTags![0] // Use first tag
+        const digest = image.imageDigest || 'sha256:unknown'
+        const metadata = metadataMap?.get(`${tag}:${digest}`)
+
+        return {
+          repository: this.repositoryName,
+          tag,
+          digest,
+          pushedAt: image.imagePushedAt?.toISOString() || new Date().toISOString(),
+          sizeMb: Math.round((image.imageSizeInBytes || 0) / (1024 * 1024)),
+          gitCommit: this.extractGitCommitFromTag(tag),
+          gitBranch: this.extractBranchFromTag(tag),
+          customName: metadata?.customName,
+          description: metadata?.description,
+        }
+      })
       .sort((a, b) => new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime())
   }
 

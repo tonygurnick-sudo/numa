@@ -10,6 +10,8 @@ import { TerraformOutput } from 'cdktf';
 import { Honeycomb } from '../constructs/honeycomb-construct';
 import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import { CustomerSuccessPortalConstruct } from '../constructs/customer-success-portal-construct';
+import { PortalDeploymentsConstruct } from '../constructs/portal-deployments-construct';
+import { PortalNextgenBrokerConstruct } from '../constructs/portal-nextgen-broker-construct';
 
 export class QAppsDeployerStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: QAppsDeployerStackProps) {
@@ -97,13 +99,72 @@ export class QAppsDeployerStack extends ArcanumStack {
       value: zone.id,
     });
 
-    // Customer Success Portal
+    // Customer Success Portal and Deployments orchestration (POC)
     if (props.enableCustomerSuccessPortal) {
+      // Optional: portal-triggered deployments construct (keeps this stack light)
+      const portalDeployments =
+        props.enablePortalDeployments !== false
+          ? new PortalDeploymentsConstruct(this, 'portal-deployments', {
+              arcanumNumaAccount: props.arcanumNumaAccount,
+              // Backend (Terraform state) lives in root account 442483608950
+              backendRoleArn: 'arn:aws:iam::442483608950:role/terraform-backend-access',
+            })
+          : undefined;
+
+      // Portal NextGen Broker deployed in the deployer account, restrict invoke to NextGen org if desired
+      const broker = new PortalNextgenBrokerConstruct(this, 'portal-nextgen-broker', {
+        functionName: 'portal-nextgen-broker',
+        managementAccountId: '282304106064',
+        orgId: 'o-apdsu3c1a7',
+      });
+
       new CustomerSuccessPortalConstruct(this, 'customer-success-portal', {
         clientConfigTable,
         domainName: `customer-success-portal.${props.domainSuffix}`,
         hostedZoneId: zone.id,
+        // Provide optional resources for StartExecution + DDB read and to surface config to the SPA
+        deploymentsTableArn: portalDeployments?.table.arn,
+        deploymentsTableName: portalDeployments?.table.name,
+        deploymentStateMachineArn: portalDeployments?.stateMachine.arn,
+        deploymentGroupStateMachineArn: portalDeployments?.groupStateMachine.arn,
+        imageMetadataTableArn: portalDeployments?.imageMetadataTable.arn,
+        imageMetadataTableName: portalDeployments?.imageMetadataTable.name,
+        logsGroupArn: portalDeployments?.logGroup.arn,
+        logsGroupName: portalDeployments?.logGroup.name,
+        ecsClusterArn: portalDeployments?.cluster.arn,
+        deploymentGroupsTableArn: portalDeployments?.groupsTable.arn,
+        deploymentGroupsTableName: portalDeployments?.groupsTable.name,
+        deploymentGroupDefaultConcurrency: portalDeployments?.groupDefaultConcurrency,
+        deploymentGroupMaxConcurrency: portalDeployments?.groupMaxConcurrency,
+        nextgenBrokerLambdaName: broker.functionName,
+        nextgenBrokerRegion: 'us-east-1',
       });
+
+      // Useful outputs
+      if (portalDeployments) {
+        new TerraformOutput(this, 'portal-deployments-table-name', {
+          value: portalDeployments.table.name,
+        });
+        new TerraformOutput(this, 'portal-deployments-state-machine-arn', {
+          value: portalDeployments.stateMachine.arn,
+        });
+        new TerraformOutput(this, 'portal-group-deployments-state-machine-arn', {
+          value: portalDeployments.groupStateMachine.arn,
+        });
+        new TerraformOutput(this, 'portal-deployments-ecs-cluster', {
+          value: portalDeployments.cluster.arn,
+        });
+        new TerraformOutput(this, 'portal-image-metadata-table-name', {
+          value: portalDeployments.imageMetadataTable.name,
+        });
+        new TerraformOutput(this, 'portal-deployments-groups-table-name', {
+          value: portalDeployments.groupsTable.name,
+        });
+      }
+      // Inject broker config into portal config.json (see CustomerSuccessPortalConstruct)
+      // We attach via outputs from the construct section below.
+      new TerraformOutput(this, 'portal-nextgen-broker-name', { value: broker.functionName });
+      new TerraformOutput(this, 'portal-nextgen-broker-arn', { value: broker.functionArn });
     }
   }
 }
@@ -118,4 +179,9 @@ export interface QAppsDeployerStackProps extends ArcanumStackProps {
    * @default false
    */
   enableCustomerSuccessPortal?: boolean;
+  /**
+   * Enable portal-triggered deployments (Step Functions + ECS)
+   * @default true (when enableCustomerSuccessPortal=true)
+   */
+  enablePortalDeployments?: boolean;
 }

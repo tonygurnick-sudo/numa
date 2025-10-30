@@ -12,6 +12,18 @@ import UserManagement from './pages/UserManagement'
 import CreatePassword from './pages/CreatePassword'
 import UsageReportTool from './pages/UsageReportTool'
 import QuotaReportTool from './pages/QuotaReportTool'
+import Deployments from './pages/Deployments'
+import GroupDeploymentDetail from './pages/GroupDeploymentDetail'
+import CreateClientConfig from './pages/tools/CreateClientConfig'
+import UpdateClientConfig from './pages/tools/UpdateClientConfig'
+import DeleteClientConfig from './pages/tools/DeleteClientConfig'
+import SetupNextgenClient from './pages/tools/SetupNextgenClient'
+import SetupNonNextgenClient from './pages/tools/SetupNonNextgenClient'
+import GetSystemUserSecret from './pages/tools/GetSystemUserSecret'
+import DeploymentLogs from './pages/DeploymentLogs'
+import Activity from './pages/Activity'
+import Tools from './pages/Tools'
+import Docs from './pages/Docs'
 
 function App() {
   return (
@@ -32,8 +44,20 @@ function App() {
                     <Route path="/configs" element={<Configs />} />
                     <Route path="/containers" element={<Containers />} />
                     <Route path="/users" element={<UserManagement />} />
+                    <Route path="/tools" element={<Tools />} />
+                    <Route path="/docs" element={<Docs />} />
                     <Route path="/tools/usage-report" element={<UsageReportTool />} />
                     <Route path="/tools/quota-report" element={<QuotaReportTool />} />
+                    <Route path="/tools/create-client-config" element={<CreateClientConfig />} />
+                    <Route path="/tools/setup-nextgen-client" element={<SetupNextgenClient />} />
+                    <Route path="/tools/setup-non-nextgen-client" element={<SetupNonNextgenClient />} />
+                    <Route path="/tools/update-client-config" element={<UpdateClientConfig />} />
+                    <Route path="/tools/delete-client-config" element={<DeleteClientConfig />} />
+                    <Route path="/tools/get-system-user-secret" element={<GetSystemUserSecret />} />
+                    <Route path="/deployments" element={<Deployments />} />
+                    <Route path="/deployments/:id/logs" element={<DeploymentLogs />} />
+                    <Route path="/deployments/group/:groupRunId" element={<GroupDeploymentDetail />} />
+                    <Route path="/activity" element={<Activity />} />
                   </Routes>
                 </Container>
               </div>

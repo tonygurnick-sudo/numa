@@ -19,33 +19,7 @@ export default function UserManagement() {
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const [userManagementService, setUserManagementService] = useState<UserManagementService | null>(null)
 
-  useEffect(() => {
-    const initializeService = async () => {
-      if (!session?.idToken) {
-        setUsersError('Not authenticated')
-        setLoadingUsers(false)
-        return
-      }
-
-      try {
-        const config = await fetch('/config.json').then(res => res.json())
-        const service = new UserManagementService(
-          config.AWS_REGION,
-          config.IDENTITY_POOL_ID,
-          config.USER_POOL_ID,
-        )
-        setUserManagementService(service)
-        await fetchUsers(service)
-      } catch (err) {
-        console.error('Error initializing user management service:', err)
-        setUsersError('Failed to initialize user management service')
-        setLoadingUsers(false)
-      }
-    }
-
-    initializeService()
-  }, [session, fetchUsers])
-
+  // Define fetchUsers before using it in useEffect dependency array
   const fetchUsers = useCallback(async (service?: UserManagementService) => {
     if (!service && !userManagementService) return
 
@@ -63,6 +37,36 @@ export default function UserManagement() {
       setLoadingUsers(false)
     }
   }, [userManagementService])
+
+  useEffect(() => {
+    const initializeService = async () => {
+      if (!session?.idToken) {
+        setUsersError('Not authenticated')
+        setLoadingUsers(false)
+        return
+      }
+
+      try {
+        const config = await fetch('/config.json').then(res => res.json())
+        // Avoid recreating the service if already initialized
+        const service =
+          userManagementService ||
+          new UserManagementService(
+            config.AWS_REGION,
+            config.IDENTITY_POOL_ID,
+            config.USER_POOL_ID,
+          )
+        if (!userManagementService) setUserManagementService(service)
+        await fetchUsers(service)
+      } catch (err) {
+        console.error('Error initializing user management service:', err)
+        setUsersError('Failed to initialize user management service')
+        setLoadingUsers(false)
+      }
+    }
+
+    initializeService()
+  }, [session?.idToken])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

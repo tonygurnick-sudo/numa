@@ -17,6 +17,18 @@ export function ToolCard({ tool, disabled = false }: ToolCardProps) {
         return '/tools/usage-report'
       case 'quota-report':
         return '/tools/quota-report'
+      case 'setup-nextgen-client':
+        return '/tools/setup-nextgen-client'
+      case 'setup-non-nextgen-client':
+        return '/tools/setup-non-nextgen-client'
+      case 'create-client-config':
+        return '/tools/create-client-config'
+      case 'update-client-config':
+        return '/tools/update-client-config'
+      case 'delete-client-config':
+        return '/tools/delete-client-config'
+      case 'get-system-user-secret':
+        return '/tools/get-system-user-secret'
       default:
         return '/'
     }
@@ -32,6 +44,15 @@ export function ToolCard({ tool, disabled = false }: ToolCardProps) {
         return <BarChart className="me-2" />
       case 'quota-report':
         return <BarChart className="me-2" />
+      case 'setup-nextgen-client':
+        return <Play className="me-2" />
+      case 'setup-non-nextgen-client':
+        return <Play className="me-2" />
+      case 'create-client-config':
+      case 'update-client-config':
+      case 'delete-client-config':
+      case 'get-system-user-secret':
+        return <Play className="me-2" />
       default:
         return <Play className="me-2" />
     }

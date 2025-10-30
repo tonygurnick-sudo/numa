@@ -224,3 +224,33 @@ svg.text-success {
   border-color: #000000;
   transform: translateY(0px);
 }
+
+/* Custom tab styling */
+.nav-pills-custom .nav-link {
+  background-color: transparent;
+  border: 1px solid #e9ecef;
+  color: var(--arcanum-black-light);
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  margin-right: 0.5rem;
+  border-radius: 0.375rem;
+  transition: all 0.2s ease;
+}
+
+.nav-pills-custom .nav-link:hover {
+  background-color: var(--bs-primary-bg-subtle);
+  border-color: var(--arcanum-purple-light);
+  color: var(--arcanum-purple);
+}
+
+.nav-pills-custom .nav-link.active {
+  background-color: var(--arcanum-purple);
+  border-color: var(--arcanum-purple);
+  color: white;
+}
+
+.nav-pills-custom .nav-link.active:hover {
+  background-color: var(--arcanum-purple-dark);
+  border-color: var(--arcanum-purple-dark);
+  color: white;
+}

@@ -57,7 +57,17 @@ yarn cdktf plan
 `plan` will need to be followed by the identifier of the stack to plan if there is more than one stack defined, however a maximum of one stack can be supplied at a time.
 
 ```bash
+export CI_PROJECT_PATH=arcanumai/numa
+unset CLIENT_OVERRIDE
 yarn cdktf plan q-apps-deployer
+```
+
+or for the next-gen root stack:
+
+```bash
+export CI_PROJECT_PATH=arcanumai/numa
+unset CLIENT_OVERRIDE
+yarn cdktf plan next-gen-root
 ```
 
 ### Deploying stacks to customer accounts
@@ -71,6 +81,32 @@ yarn cdktf deploy --auto-approve numa-{client-id}
 ```
 
 The client-id must be the name of an entry from the clientsProd list in numa-client-stack.ts.
+
+### Terraform Backend Access (Portal Deployments)
+
+Portal-triggered deployments (ECS + Step Functions) run Terraform against the central backend:
+
+- S3 bucket: `arcanum-terraform-state` (region `ap-southeast-2`)
+- Object key pattern: `product/{client}/prod/numa-{client}/numa.tfstate`
+- DynamoDB lock table: `arcanum-terraform-lock` (region `ap-southeast-2`)
+
+When running from ECS, Terraform uses the task role credentials.
+
+### Manual IAM Trust Update
+
+Portal deployments use a small Lambda to assume the backend role for Terraform (admin-delegated-access). This requires a trust relationship on the target role. Update the trust policy for `arn:aws:iam::207567759910:role/admin-delegated-access` to allow the Lambda execution role to assume it:
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": { "AWS": "arn:aws:iam::207567759910:role/portal-deploy-assume-backend-role" },
+  "Action": "sts:AssumeRole"
+}
+```
+
+Notes:
+- This repo does not create/manage `admin-delegated-access`; the manual trust change will not be overwritten by deploys.
+- Ensure the backend role also has S3/DynamoDB permissions for the Terraform backend (bucket `arcanum-terraform-state`, table `arcanum-terraform-lock` in `ap-southeast-2`).
 
 ### Deploying the Pipedream Proxy Stack
 
@@ -111,17 +147,18 @@ export AWS_REGION=us-east-1
 yarn cdktf deploy --auto-approve pipedream-proxy
 ```
 
-  **Architecture:**
-  - **DynamoDB Tables**:
-    - `pipedream-user-mappings` - Security mapping table that tracks account-to-user relationships
-    - `pipedream-allowed-accounts` - Authorized client accounts synced from deployer account
-  - **Lambda Functions**:
-    - `pipedream-proxy` - Generic proxy that validates requests and calls Pipedream APIs
-    - `pipedream-account-sync` - Hourly sync of allowed client accounts from deployer account
-  - **EventBridge**: Hourly schedule for account synchronization
-  - **Secrets Manager**: Stores Pipedream OAuth credentials securely
-  - **IAM Roles**: Minimal permissions for lambda operations and cross-account access
-  - **CloudWatch**: Log groups for both lambda functions
+**Architecture:**
+
+- **DynamoDB Tables**:
+  - `pipedream-user-mappings` - Security mapping table that tracks account-to-user relationships
+  - `pipedream-allowed-accounts` - Authorized client accounts synced from deployer account
+- **Lambda Functions**:
+  - `pipedream-proxy` - Generic proxy that validates requests and calls Pipedream APIs
+  - `pipedream-account-sync` - Hourly sync of allowed client accounts from deployer account
+- **EventBridge**: Hourly schedule for account synchronization
+- **Secrets Manager**: Stores Pipedream OAuth credentials securely
+- **IAM Roles**: Minimal permissions for lambda operations and cross-account access
+- **CloudWatch**: Log groups for both lambda functions
 
 **Security Model:**
 - Caller validation via presigned STS GetCallerIdentity URL (generated in the caller account). The proxy verifies the URL over HTTPS and parses the STS XML.
@@ -176,7 +213,6 @@ Amazon Q Business requires an index to be configured for each application. There
 ### Index Types
 
 - **STARTER**: Default index type
-
   - Supports up to 5 units
   - Each unit provides capacity for 20,000 documents or 200 MB (whichever is reached first)
 
@@ -222,7 +258,6 @@ Budget alerting can be configured in the client config:(`clientConfigProd.json`)
 ### How It Works
 
 1. When configured, the system creates:
-
    - An AWS Budget in the client account
    - A Lambda function that forwards budget alerts with client metadata
    - An SNS topic that sends alerts to the centralised topic

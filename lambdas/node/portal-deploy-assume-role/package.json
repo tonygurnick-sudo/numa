@@ -1,0 +1,24 @@
+{
+  "name": "portal-deploy-assume-role",
+  "packageManager": "yarn@4.9.2",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "devDependencies": {
+    "@arcanumai/style": "workspace:*",
+    "@types/aws-lambda": "^8.10.149",
+    "@types/node": "^22.10.1",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.16.0",
+    "typescript": "^5.7.2"
+  },
+  "scripts": {
+    "clean": "rm -rf dist lambda_function.zip",
+    "build": "esbuild --bundle --format=esm --platform=node --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" index.ts",
+    "bundle": "yarn build && touch -d $(git log -1 --format=%cd --date=format:\"%FT%T\" .) dist/* && zip -X -j lambda_function.zip dist/*",
+    "lint": "eslint && tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sts": "^3.880.0"
+  }
+}

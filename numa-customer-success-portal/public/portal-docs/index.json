@@ -1,0 +1,22 @@
+[
+  {
+    "slug": "client-config-json-upload",
+    "title": "Client Config: JSON Upload",
+    "path": "/portal-docs/client-config-json-upload.md"
+  },
+  {
+    "slug": "setup-nextgen-client",
+    "title": "Setup NextGen Client",
+    "path": "/portal-docs/setup-nextgen-client.md"
+  },
+  {
+    "slug": "setup-non-nextgen-client",
+    "title": "Setup Non‑NextGen Client",
+    "path": "/portal-docs/setup-non-nextgen-client.md"
+  },
+  {
+    "slug": "client-config-reference",
+    "title": "Client Config Reference",
+    "path": "/portal-docs/client-config-reference.md"
+  }
+]

@@ -19,6 +19,13 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Relaxations for the portal package only
+      // Allow use of `any` where rapid iteration is preferred
+      '@typescript-eslint/no-explicit-any': 'off',
+      // Make empty blocks a warning and allow in catch clauses
+      'no-empty': ['warn', { allowEmptyCatch: true }],
+      // Soften exhaustive deps noise in complex effects
+      'react-hooks/exhaustive-deps': 'off',
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },

@@ -20,9 +20,13 @@ export default function LoginForm() {
   const {
     signIn,
     completePasswordChange,
+    completeMfaSetup,
+    submitMfaCode,
     loading,
     error,
     passwordChangeRequired,
+    mfaSetupRequired,
+    mfaCodeRequired,
     clearError
   } = useAuth()
 
@@ -31,7 +35,9 @@ export default function LoginForm() {
     password: '',
     newPassword: '',
     confirmPassword: '',
-    fullName: ''
+    fullName: '',
+    mfaCode: '',
+    mfaSetupCode: '',
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,6 +64,28 @@ export default function LoginForm() {
         await completePasswordChange(formData.newPassword, formData.fullName)
       } catch {
         // Error is handled by the AuthContext
+      }
+    } else if (mfaSetupRequired) {
+      // Handle MFA setup verify submission
+      if (!formData.mfaSetupCode) {
+        return
+      }
+
+      try {
+        await completeMfaSetup(formData.mfaSetupCode)
+      } catch {
+        // Error handled by context
+      }
+    } else if (mfaCodeRequired) {
+      // Handle MFA code submission
+      if (!formData.mfaCode) {
+        return
+      }
+
+      try {
+        await submitMfaCode(formData.mfaCode)
+      } catch {
+        // Error handled by context
       }
     } else {
       // Handle initial sign in
@@ -88,7 +116,13 @@ export default function LoginForm() {
                   Customer Success Portal
                 </h3>
                 <small className="text-muted">
-                  {passwordChangeRequired ? 'Password Change Required' : 'Authentication Required'}
+                  {passwordChangeRequired
+                    ? 'Password Change Required'
+                    : mfaSetupRequired
+                      ? 'Set Up Your Authenticator'
+                      : mfaCodeRequired
+                        ? 'Multi‑Factor Authentication'
+                        : 'Authentication Required'}
                 </small>
               </Card.Header>
 
@@ -186,6 +220,108 @@ export default function LoginForm() {
                             </>
                           ) : (
                             'Set New Password'
+                          )}
+                        </Button>
+                      </div>
+                    </>
+                  ) : mfaSetupRequired ? (
+                    // MFA setup form
+                    <>
+                      <Alert variant="info" className="mb-3">
+                        <strong>MFA is required for your account.</strong>
+                        <br />
+                        Add the account to your authenticator app using the code below, then enter a 6‑digit code to verify.
+                      </Alert>
+
+                      <Form.Group className="mb-3">
+                        <Form.Label>Secret Key</Form.Label>
+                        <div className="input-group">
+                          <Form.Control
+                            type="text"
+                            value={mfaSetupRequired.secretCode}
+                            readOnly
+                          />
+                        </div>
+                        <Form.Text className="text-muted">
+                          Add this key to Google Authenticator, 1Password, or Authy. If preferred, you can use this link: <a href={mfaSetupRequired.otpauthUrl}>otpauth://</a>
+                        </Form.Text>
+                      </Form.Group>
+
+                      <Form.Group className="mb-4">
+                        <Form.Label>Authentication Code</Form.Label>
+                        <div className="input-group">
+                          <span className="input-group-text">
+                            <Lock />
+                          </span>
+                          <Form.Control
+                            type="text"
+                            name="mfaSetupCode"
+                            value={formData.mfaSetupCode}
+                            onChange={handleInputChange}
+                            placeholder="Enter the 6‑digit code"
+                            pattern="[0-9]*"
+                            inputMode="numeric"
+                            required
+                            disabled={loading}
+                          />
+                        </div>
+                      </Form.Group>
+
+                      <div className="d-grid gap-2">
+                        <Button
+                          type="submit"
+                          className="btn-login"
+                          size="lg"
+                          disabled={loading || !formData.mfaSetupCode}
+                        >
+                          {loading ? (
+                            <>
+                              <Spinner animation="border" size="sm" className="me-2" />
+                              Verifying...
+                            </>
+                          ) : (
+                            'Verify and Continue'
+                          )}
+                        </Button>
+                      </div>
+                    </>
+                  ) : mfaCodeRequired ? (
+                    // MFA code prompt
+                    <>
+                      <Form.Group className="mb-4">
+                        <Form.Label>Authentication Code</Form.Label>
+                        <div className="input-group">
+                          <span className="input-group-text">
+                            <Lock />
+                          </span>
+                          <Form.Control
+                            type="text"
+                            name="mfaCode"
+                            value={formData.mfaCode}
+                            onChange={handleInputChange}
+                            placeholder="Enter the 6‑digit code"
+                            pattern="[0-9]*"
+                            inputMode="numeric"
+                            required
+                            disabled={loading}
+                          />
+                        </div>
+                      </Form.Group>
+
+                      <div className="d-grid gap-2">
+                        <Button
+                          type="submit"
+                          className="btn-login"
+                          size="lg"
+                          disabled={loading || !formData.mfaCode}
+                        >
+                          {loading ? (
+                            <>
+                              <Spinner animation="border" size="sm" className="me-2" />
+                              Verifying...
+                            </>
+                          ) : (
+                            'Verify and Sign In'
                           )}
                         </Button>
                       </div>
