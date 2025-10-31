@@ -33,6 +33,7 @@ type AgentToolsConfig = {
   autoToolsEnabled?: boolean;
   queryDataSources?: boolean;
   webSearchEnabled?: boolean;
+  createAgentEnabled?: boolean;
   enabledConnections?: string[];
 };
 
@@ -207,6 +208,7 @@ const normaliseToolsConfig = (config?: AgentToolsConfig | null): AgentToolsConfi
     autoToolsEnabled: config.autoToolsEnabled ?? true,
     queryDataSources: config.queryDataSources ?? false,
     webSearchEnabled: config.webSearchEnabled ?? false,
+    createAgentEnabled: config.createAgentEnabled ?? false,
     enabledConnections: Array.isArray(config.enabledConnections) ? config.enabledConnections : [],
   };
 };

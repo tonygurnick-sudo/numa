@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { Card, Button, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
-import { Database, Search } from 'react-bootstrap-icons';
+import { Database, Search, Robot } from 'react-bootstrap-icons';
 import type { AgentSummary } from '../types/agents';
 import { getConnectionConfig } from '../config/integrationsConfig';
 import AgentAvatar from './AgentAvatar';
@@ -94,6 +94,8 @@ export const AgentCard = ({
   const autoMode = agent.toolsConfig?.autoToolsEnabled;
   const hasKB = autoMode || agent.toolsConfig?.queryDataSources;
   const hasWeb = autoMode || agent.toolsConfig?.webSearchEnabled;
+  // In auto mode, the agent creation tool is also available
+  const hasAgentCreation = autoMode || agent.toolsConfig?.createAgentEnabled;
   const canFavorite = Boolean(onToggleFavorite);
 
   const formatTimeSaved = (mins?: number) => {
@@ -131,7 +133,8 @@ export const AgentCard = ({
 
   // Collapsed view for agents in "My Agents" section
   if (isInMyAgentsSection && !isExpanded) {
-    const hasMetadata = agent.requiredIntegrations?.length > 0 || agent.referenceFiles?.length > 0 || hasKB || hasWeb;
+    const hasMetadata =
+      agent.requiredIntegrations?.length > 0 || agent.referenceFiles?.length > 0 || hasKB || hasWeb || hasAgentCreation;
 
     return (
       <Card
@@ -216,10 +219,11 @@ export const AgentCard = ({
                   )}
 
                   {/* Tools Icons */}
-                  {(hasKB || hasWeb) && (
+                  {(hasKB || hasWeb || hasAgentCreation) && (
                     <div className="d-flex align-items-center gap-1" style={{ flexShrink: 0 }}>
                       {hasKB && <Database size={14} style={{ color: '#8e50a7' }} />}
                       {hasWeb && <Search size={14} style={{ color: '#8e50a7' }} />}
+                      {hasAgentCreation && <Robot size={14} style={{ color: '#8e50a7' }} />}
                     </div>
                   )}
                 </div>
@@ -329,7 +333,7 @@ export const AgentCard = ({
         <div className="border-top pt-3 mb-3">
           <div className="d-flex flex-column gap-2">
             {/* Tools */}
-            {(hasKB || hasWeb) && (
+            {(hasKB || hasWeb || hasAgentCreation) && (
               <div className="d-flex align-items-start gap-2">
                 <span
                   className="text-muted small fw-semibold"
@@ -355,6 +359,16 @@ export const AgentCard = ({
                     >
                       <div>
                         <Search size={18} style={{ color: '#8e50a7' }} />
+                      </div>
+                    </OverlayTrigger>
+                  )}
+                  {hasAgentCreation && (
+                    <OverlayTrigger
+                      placement="top"
+                      overlay={<Tooltip id={`agent-${agent.agentId}-create`}>Agent Creation</Tooltip>}
+                    >
+                      <div>
+                        <Robot size={18} style={{ color: '#8e50a7' }} />
                       </div>
                     </OverlayTrigger>
                   )}

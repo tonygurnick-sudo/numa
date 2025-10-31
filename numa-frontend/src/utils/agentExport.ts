@@ -151,6 +151,7 @@ function sanitizeToolsConfig(tc: unknown): AgentToolsConfig {
   if (typeof obj.autoToolsEnabled === 'boolean') out.autoToolsEnabled = obj.autoToolsEnabled;
   if (typeof obj.queryDataSources === 'boolean') out.queryDataSources = obj.queryDataSources;
   if (typeof obj.webSearchEnabled === 'boolean') out.webSearchEnabled = obj.webSearchEnabled;
+  if (typeof obj.createAgentEnabled === 'boolean') out.createAgentEnabled = obj.createAgentEnabled;
   if (Array.isArray(obj.enabledConnections)) {
     out.enabledConnections = (obj.enabledConnections as unknown[]).filter((x): x is string => typeof x === 'string');
   }

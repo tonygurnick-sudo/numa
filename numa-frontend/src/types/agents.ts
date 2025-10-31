@@ -7,6 +7,7 @@ export type AgentToolsConfig = {
   autoToolsEnabled?: boolean;
   queryDataSources?: boolean;
   webSearchEnabled?: boolean;
+  createAgentEnabled?: boolean;
   enabledConnections?: string[];
 };
 

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { resolveToolDescriptor, resolveToolVisual } from '../utils/ToolConfig';
 import { WebSearchRenderer } from '../toolRenderers/WebSearchRenderer';
 import { KnowledgeBaseRenderer } from '../toolRenderers/KnowledgeBaseRenderer';
+import { AgentCreationRenderer } from '../toolRenderers/AgentCreationRenderer';
 import { IntegrationsRenderer } from '../toolRenderers/IntegrationsRenderer';
 import {
   getWebSearchSummary,
@@ -9,6 +10,7 @@ import {
   getIntegrationsSummary,
   getFallbackSummary,
 } from '../toolRenderers/helpers';
+import { getAgentCreationSummary } from '../toolRenderers/agentCreationHelpers';
 
 type Props = {
   toolName: string;
@@ -58,6 +60,7 @@ export const UnifiedToolCard = ({
     if (!hasResult) return null;
     if (toolName === 'web_search') return `Web Search Results (${getWebSearchSummary(result)})`;
     if (toolName === 'query_knowledge_base') return getKnowledgeBaseSummary(result);
+    if (toolName === 'create_agent_tool') return getAgentCreationSummary(result);
     // Check if it's an integration tool (ends with _integration)
     if (toolName.endsWith('_integration')) return getIntegrationsSummary(result);
     return getFallbackSummary(result);
@@ -88,6 +91,12 @@ export const UnifiedToolCard = ({
       />
     );
   }, [toolName, result, hasResult, conversationId, sub, numaChatDynamoUtils, setMessages]);
+
+  // Agent Creation tool renders inline (simple message with link)
+  const inlineAgentCreationContent = useMemo(() => {
+    if (!hasResult || toolName !== 'create_agent_tool') return null;
+    return <AgentCreationRenderer result={result} bare />;
+  }, [toolName, result, hasResult]);
 
   const toggle = () => setExpanded((e) => !e);
 
@@ -129,8 +138,9 @@ export const UnifiedToolCard = ({
           </div>
         )}
       </div>
-      {/* Inline integration content (always visible, no toggle) */}
+      {/* Inline content (always visible, no toggle) */}
       {inlineIntegrationContent && <div className="tool-card-indent mt-2">{inlineIntegrationContent}</div>}
+      {inlineAgentCreationContent && <div className="tool-card-indent mt-2">{inlineAgentCreationContent}</div>}
       {/* Toggle details for tools with collapsible details (web search, KB).
           Show the toggle as soon as the card exists; render body once results arrive. */}
       {hasDetails && (

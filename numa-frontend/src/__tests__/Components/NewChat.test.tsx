@@ -39,6 +39,8 @@ const createBaseProps = () => {
     setQueryDataSources: vi.fn(),
     webSearchEnabled: false,
     setWebSearchEnabled: vi.fn(),
+    createAgentEnabled: false,
+    setCreateAgentEnabled: vi.fn(),
     autoToolsEnabled: true,
     setAutoToolsEnabled: vi.fn(),
     availableConnections: [],

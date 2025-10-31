@@ -277,6 +277,8 @@ async def http_stream(request: Request) -> Response:
                 }
             ),
             **(body.get("userAuth") or {}),
+            "conversation_id": conversation_id,
+            "conversationId": conversation_id,
         }
         if client_time_info:
             # Attach to auth context for request-scoped access by tools/routers
@@ -391,6 +393,8 @@ async def http_invoke(request: Request) -> Response:
                 }
             ),
             **(body.get("userAuth") or {}),
+            "conversation_id": conversation_id,
+            "conversationId": conversation_id,
         }
         if client_time_info:
             try:

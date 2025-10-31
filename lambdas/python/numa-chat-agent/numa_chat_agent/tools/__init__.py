@@ -7,9 +7,13 @@ existing tests (e.g. ``query_knowledge_base_impl``).
 
 import structlog  # noqa: F401 re-exported for backward compatibility
 
+from .agent_creation import create_agent_tool as create_agent_tool_impl
 from .knowledge_base import query_knowledge_base_impl
 from .registry import (
     AVAILABLE_TOOLS,
+)
+from .registry import create_agent_tool as _create_agent_tool_tool
+from .registry import (
     get_available_tool_names,
     get_tools_for_agent,
 )
@@ -24,6 +28,7 @@ from .web_search import web_search_impl
 # than the similarly named modules (e.g. numa_chat_agent.tools.web_search).
 query_knowledge_base = _query_knowledge_base_tool
 web_search = _web_search_tool
+create_agent_tool = _create_agent_tool_tool
 
 __all__ = [
     "AVAILABLE_TOOLS",
@@ -34,5 +39,7 @@ __all__ = [
     "validate_enabled_tools",
     "web_search",
     "web_search_impl",
+    "create_agent_tool",
+    "create_agent_tool_impl",
     "structlog",
 ]

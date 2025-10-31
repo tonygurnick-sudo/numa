@@ -203,6 +203,9 @@ export class NumaClientStack extends TerraformStack {
       outputsBucketArn: core.outputsBucket.bucket.arn,
       outputsBucketName: core.outputsBucket.bucket.bucket,
       dataBucketArn: core.dataBucket.bucket.arn,
+      workspaceAgentsTableName: core.workspaceAgentsTable.name,
+      userAgentsTableName: core.userAgentsTable.name,
+      agentsSettingsTableName: core.agentsSettingsTable.name,
       pipedreamIntegrationsEnabled: clientConfig.pipedreamIntegrations,
       pipedreamProxyLambdaArn: clientConfig.pipedreamIntegrations
         ? `arn:aws:lambda:us-east-1:${PIPEDREAM_PROXY_ACCOUNT_ID}:function:pipedream-proxy`
