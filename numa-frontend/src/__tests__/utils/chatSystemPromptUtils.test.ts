@@ -28,6 +28,10 @@ describe('chatSystemPromptUtils', () => {
     // Mock console methods
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Enable Agents feature for tests that expect agent tool guidance by default
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem('AGENTS', 'true');
+    }
   });
 
   afterEach(() => {

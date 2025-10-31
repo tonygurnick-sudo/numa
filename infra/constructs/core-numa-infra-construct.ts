@@ -1037,6 +1037,13 @@ const _coreNumaInfraPropsSchema = z
      * @default false
      */
     pipedreamIntegrations: z.boolean().optional().default(false),
+    /**
+     * Feature flag to enable Agents UI and related functionality in the frontend.
+     * Infrastructure resources can still be deployed; this controls UX visibility.
+     *
+     * @default false
+     */
+    agents: z.boolean().optional().default(false),
   })
   .strict();
 

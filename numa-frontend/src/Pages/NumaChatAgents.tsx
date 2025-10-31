@@ -115,8 +115,25 @@ const NumaChatAgents = () => {
   const userEmail = idToken.email || '';
   const userName = userEmail.split('@')[0] || undefined; // Extract first part of email as name
 
-  // Load global Agents policy once
+  // Feature flag: agents enabled?
+  const agentsFeatureEnabled = useMemo(
+    () => (typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false),
+    [],
+  );
+
+  // If feature disabled, ensure no agent is selected and agent-specific flags are off
   useEffect(() => {
+    if (!agentsFeatureEnabled) {
+      resetAgentState();
+    }
+  }, [agentsFeatureEnabled]);
+
+  // Load global Agents policy once (only when feature enabled)
+  useEffect(() => {
+    if (!agentsFeatureEnabled) {
+      setAgentsMode('off');
+      return;
+    }
     (async () => {
       try {
         const res = await AdminAgentsService.get(numaGet);
@@ -127,10 +144,14 @@ const NumaChatAgents = () => {
         /* no-op */
       }
     })();
-  }, [numaGet]);
+  }, [numaGet, agentsFeatureEnabled]);
 
-  // Load personal agents once on mount
+  // Load personal agents once on mount (only when feature enabled)
   useEffect(() => {
+    if (!agentsFeatureEnabled) {
+      setPersonalAgents([]);
+      return;
+    }
     const loadPersonalAgents = async () => {
       if (!user) return;
       setPersonalAgentsLoading(true);
@@ -157,7 +178,7 @@ const NumaChatAgents = () => {
       }
     };
     loadPersonalAgents();
-  }, [user, numaGet]);
+  }, [user, numaGet, agentsFeatureEnabled]);
 
   // Cleanup preselect timer on unmount
   useEffect(() => {
@@ -508,8 +529,9 @@ const NumaChatAgents = () => {
 
   // Sort agents by favorites first, then most recently used, then updatedAt
   const sortedPersonalAgents = useMemo(() => {
+    if (!agentsFeatureEnabled) return [];
     return sortAgentsByPriority(personalAgents, recentConversations);
-  }, [personalAgents, recentConversations]);
+  }, [personalAgents, recentConversations, agentsFeatureEnabled]);
 
   const shouldShowNewChatView = showContinueSuggestions && messages.length === 0;
 
@@ -633,7 +655,12 @@ const NumaChatAgents = () => {
     console.log('[NumaChat] Using model:', modelId, 'fallback mode:', isInFallbackMode(clientName));
 
     // Determine which tools to enable based on auto mode or manual selection
-    const enabledTools = getEnabledTools(autoToolsEnabled, queryDataSources, webSearchEnabled, createAgentEnabled);
+    const enabledTools = getEnabledTools(
+      autoToolsEnabled,
+      queryDataSources,
+      webSearchEnabled,
+      agentsFeatureEnabled ? createAgentEnabled : false,
+    );
 
     // Create the system prompt based on tool availability
     const email = idToken.email || 'Unknown';
@@ -642,7 +669,7 @@ const NumaChatAgents = () => {
       email,
       companyProfile,
       enabledConnections,
-      createAgentEnabled,
+      agentsFeatureEnabled ? createAgentEnabled : false,
     );
 
     if (currentAgent) {
@@ -1327,7 +1354,7 @@ const NumaChatAgents = () => {
                   <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
                 )}
                 <div className="chat-header-buttons d-flex align-items-center gap-2">
-                  {agentsMode !== 'off' && (
+                  {agentsFeatureEnabled && agentsMode !== 'off' && (
                     <AgentsSidebar
                       ref={agentsSidebarRef}
                       onSelectAgent={handleAgentSelect}
@@ -1450,7 +1477,7 @@ const NumaChatAgents = () => {
                             setQueryDataSources={setQueryDataSources}
                             webSearchEnabled={webSearchEnabled}
                             setWebSearchEnabled={setWebSearchEnabled}
-                            createAgentEnabled={createAgentEnabled}
+                            createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                             setCreateAgentEnabled={setCreateAgentEnabled}
                             autoToolsEnabled={autoToolsEnabled}
                             setAutoToolsEnabled={setAutoToolsEnabled}
@@ -1469,9 +1496,9 @@ const NumaChatAgents = () => {
                             userName={userName}
                             onRenameConversation={handleRenameConversation}
                             onDeleteConversation={handleDeleteConversation}
-                            personalAgents={sortedPersonalAgents}
+                            personalAgents={agentsFeatureEnabled ? sortedPersonalAgents : []}
                             onSelectAgent={handleAgentSelect}
-                            agentsLoading={personalAgentsLoading}
+                            agentsLoading={agentsFeatureEnabled ? personalAgentsLoading : false}
                           />
                         ) : (
                           <ChatMessages
@@ -1502,7 +1529,7 @@ const NumaChatAgents = () => {
                             setQueryDataSources={setQueryDataSources}
                             webSearchEnabled={webSearchEnabled}
                             setWebSearchEnabled={setWebSearchEnabled}
-                            createAgentEnabled={createAgentEnabled}
+                            createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                             setCreateAgentEnabled={setCreateAgentEnabled}
                             autoToolsEnabled={autoToolsEnabled}
                             setAutoToolsEnabled={setAutoToolsEnabled}

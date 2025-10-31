@@ -41,6 +41,8 @@ const ChatInput = ({
   const internalRef = useRef(null);
   const inputRef = externalInputRef || internalRef;
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
+  const agentsFeatureEnabled =
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
 
   // Agent mode is the default and only mode; remove legacy flag checks
 
@@ -181,20 +183,26 @@ const ChatInput = ({
                 <Dropdown.Toggle
                   variant="link"
                   className={`tools-settings-toggle ${
-                    autoToolsEnabled || queryDataSources || webSearchEnabled || createAgentEnabled ? 'active' : ''
+                    autoToolsEnabled ||
+                    queryDataSources ||
+                    webSearchEnabled ||
+                    (agentsFeatureEnabled && createAgentEnabled)
+                      ? 'active'
+                      : ''
                   }`}
                   disabled={isControlsDisabled}
                   aria-label="Tools Settings"
                 >
                   <Gear size={25} />
                   {autoToolsEnabled && <span className="bubble-text">All Tools</span>}
-                  {!autoToolsEnabled && (queryDataSources || webSearchEnabled || createAgentEnabled) && (
-                    <span className="active-tools-indicators">
-                      {queryDataSources && <Database size={16} />}
-                      {webSearchEnabled && <Search size={16} />}
-                      {createAgentEnabled && <Robot size={16} />}
-                    </span>
-                  )}
+                  {!autoToolsEnabled &&
+                    (queryDataSources || webSearchEnabled || (agentsFeatureEnabled && createAgentEnabled)) && (
+                      <span className="active-tools-indicators">
+                        {queryDataSources && <Database size={16} />}
+                        {webSearchEnabled && <Search size={16} />}
+                        {agentsFeatureEnabled && createAgentEnabled && <Robot size={16} />}
+                      </span>
+                    )}
                 </Dropdown.Toggle>
 
                 <Dropdown.Menu className="p-3" style={{ minWidth: '250px', zIndex: 9999 }}>
@@ -249,30 +257,35 @@ const ChatInput = ({
                       Search the web for current information
                     </small>
                   </div>
-                  <div className="mb-2">
-                    <Form.Check
-                      type="switch"
-                      id="agent-creation-switch"
-                      label={
-                        <span>
-                          <Robot size={16} className="me-1" />
-                          Agent Creation
-                        </span>
-                      }
-                      checked={autoToolsEnabled || createAgentEnabled}
-                      onChange={(e) => !autoToolsEnabled && setCreateAgentEnabled(e.target.checked)}
-                      disabled={autoToolsEnabled}
-                    />
-                    <small className="text-muted ms-4 d-block" style={{ marginTop: '-0.25rem' }}>
-                      Allow me to create saved agents when you explicitly ask
-                    </small>
-                  </div>
-
-                  {!autoToolsEnabled && !queryDataSources && !webSearchEnabled && !createAgentEnabled && (
-                    <div className="mt-2 p-2 bg-light rounded">
-                      <small className="text-muted">Select specific tools to enable for this conversation</small>
+                  {agentsFeatureEnabled && (
+                    <div className="mb-2">
+                      <Form.Check
+                        type="switch"
+                        id="agent-creation-switch"
+                        label={
+                          <span>
+                            <Robot size={16} className="me-1" />
+                            Agent Creation
+                          </span>
+                        }
+                        checked={autoToolsEnabled || createAgentEnabled}
+                        onChange={(e) => !autoToolsEnabled && setCreateAgentEnabled(e.target.checked)}
+                        disabled={autoToolsEnabled}
+                      />
+                      <small className="text-muted ms-4 d-block" style={{ marginTop: '-0.25rem' }}>
+                        Allow me to create saved agents when you explicitly ask
+                      </small>
                     </div>
                   )}
+
+                  {!autoToolsEnabled &&
+                    !queryDataSources &&
+                    !webSearchEnabled &&
+                    !(agentsFeatureEnabled && createAgentEnabled) && (
+                      <div className="mt-2 p-2 bg-light rounded">
+                        <small className="text-muted">Select specific tools to enable for this conversation</small>
+                      </div>
+                    )}
                 </Dropdown.Menu>
               </Dropdown>
             )}
