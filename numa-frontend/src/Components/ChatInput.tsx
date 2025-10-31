@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
 import { Button, Form, Spinner, Modal, Dropdown } from 'react-bootstrap';
-import { Database, Search, Gear, Link } from 'react-bootstrap-icons';
+import { Database, Search, Gear, Link, Robot } from 'react-bootstrap-icons';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import {
   getConnectionIcon,
@@ -22,6 +22,8 @@ const ChatInput = ({
   setQueryDataSources,
   webSearchEnabled,
   setWebSearchEnabled,
+  createAgentEnabled,
+  setCreateAgentEnabled,
   autoToolsEnabled,
   setAutoToolsEnabled,
   availableConnections = [],
@@ -178,16 +180,19 @@ const ChatInput = ({
               <Dropdown drop="up" className="tools-settings-dropdown">
                 <Dropdown.Toggle
                   variant="link"
-                  className={`tools-settings-toggle ${autoToolsEnabled || queryDataSources || webSearchEnabled ? 'active' : ''}`}
+                  className={`tools-settings-toggle ${
+                    autoToolsEnabled || queryDataSources || webSearchEnabled || createAgentEnabled ? 'active' : ''
+                  }`}
                   disabled={isControlsDisabled}
                   aria-label="Tools Settings"
                 >
                   <Gear size={25} />
                   {autoToolsEnabled && <span className="bubble-text">All Tools</span>}
-                  {!autoToolsEnabled && (queryDataSources || webSearchEnabled) && (
+                  {!autoToolsEnabled && (queryDataSources || webSearchEnabled || createAgentEnabled) && (
                     <span className="active-tools-indicators">
                       {queryDataSources && <Database size={16} />}
                       {webSearchEnabled && <Search size={16} />}
+                      {createAgentEnabled && <Robot size={16} />}
                     </span>
                   )}
                 </Dropdown.Toggle>
@@ -244,8 +249,26 @@ const ChatInput = ({
                       Search the web for current information
                     </small>
                   </div>
+                  <div className="mb-2">
+                    <Form.Check
+                      type="switch"
+                      id="agent-creation-switch"
+                      label={
+                        <span>
+                          <Robot size={16} className="me-1" />
+                          Agent Creation
+                        </span>
+                      }
+                      checked={autoToolsEnabled || createAgentEnabled}
+                      onChange={(e) => !autoToolsEnabled && setCreateAgentEnabled(e.target.checked)}
+                      disabled={autoToolsEnabled}
+                    />
+                    <small className="text-muted ms-4 d-block" style={{ marginTop: '-0.25rem' }}>
+                      Allow me to create saved agents when you explicitly ask
+                    </small>
+                  </div>
 
-                  {!autoToolsEnabled && !queryDataSources && !webSearchEnabled && (
+                  {!autoToolsEnabled && !queryDataSources && !webSearchEnabled && !createAgentEnabled && (
                     <div className="mt-2 p-2 bg-light rounded">
                       <small className="text-muted">Select specific tools to enable for this conversation</small>
                     </div>

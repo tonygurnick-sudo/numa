@@ -23,6 +23,9 @@ export interface ChatAgentHttpProps {
   outputsBucketArn: string;
   outputsBucketName: string;
   dataBucketArn: string;
+  workspaceAgentsTableName?: string;
+  userAgentsTableName?: string;
+  agentsSettingsTableName?: string;
   pipedreamProxyLambdaArn?: string;
   pipedreamIntegrationsEnabled?: boolean;
   mcpPolicyTableName?: string;
@@ -58,6 +61,25 @@ export class NumaChatAgent extends Construct {
       name: agentLogGroupName,
     });
 
+    // Note: outputs bucket name is provided directly via props.outputsBucketName
+
+    const agentTableArns: string[] = [];
+    if (props.workspaceAgentsTableName) {
+      agentTableArns.push(
+        `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.workspaceAgentsTableName}`,
+        `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.workspaceAgentsTableName}/index/*`,
+      );
+    }
+    if (props.userAgentsTableName) {
+      agentTableArns.push(
+        `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.userAgentsTableName}`,
+        `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.userAgentsTableName}/index/*`,
+      );
+    }
+    const agentSettingsArn = props.agentsSettingsTableName
+      ? `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.agentsSettingsTableName}`
+      : undefined;
+
     const agentFn = new NumaLambda(this, 'chat-agent-http', {
       clientName: props.clientName,
       lambdaDirectory: 'python/numa-chat-agent/',
@@ -82,6 +104,9 @@ export class NumaChatAgent extends Construct {
         ...(props.globalIntegrationSettingsTableName && {
           GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME: props.globalIntegrationSettingsTableName,
         }),
+        ...(props.workspaceAgentsTableName && { WORKSPACE_AGENTS_TABLE: props.workspaceAgentsTableName }),
+        ...(props.userAgentsTableName && { USER_AGENTS_TABLE: props.userAgentsTableName }),
+        ...(props.agentsSettingsTableName && { AGENTS_SETTINGS_TABLE_NAME: props.agentsSettingsTableName }),
         CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
         // LWA configuration for response streaming
         AWS_LAMBDA_EXEC_WRAPPER: '/opt/bootstrap',
@@ -186,6 +211,30 @@ export class NumaChatAgent extends Construct {
                 resources: [
                   `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.globalIntegrationSettingsTableName}`,
                 ],
+              },
+            ]
+          : []),
+        ...(agentTableArns.length
+          ? [
+              {
+                effect: 'Allow',
+                actions: [
+                  'dynamodb:GetItem',
+                  'dynamodb:PutItem',
+                  'dynamodb:UpdateItem',
+                  'dynamodb:DeleteItem',
+                  'dynamodb:Query',
+                ],
+                resources: agentTableArns,
+              },
+            ]
+          : []),
+        ...(agentSettingsArn
+          ? [
+              {
+                effect: 'Allow',
+                actions: ['dynamodb:GetItem'],
+                resources: [agentSettingsArn],
               },
             ]
           : []),

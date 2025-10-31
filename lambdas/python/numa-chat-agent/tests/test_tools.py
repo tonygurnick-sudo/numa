@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from numa_chat_agent.tools import (
     AVAILABLE_TOOLS,
+    create_agent_tool,
     get_available_tool_names,
     get_tools_for_agent,
     query_knowledge_base,
@@ -59,7 +60,7 @@ class TestTools(unittest.TestCase):
     def test_tool_registry_completeness(self):
         """Test that all tools are registered in AVAILABLE_TOOLS"""
         # Verify expected tools are present
-        expected_tools = ["query_knowledge_base", "web_search"]
+        expected_tools = ["query_knowledge_base", "web_search", "create_agent_tool"]
 
         for tool_name in expected_tools:
             self.assertIn(tool_name, AVAILABLE_TOOLS)
@@ -78,13 +79,14 @@ class TestTools(unittest.TestCase):
         # Should contain expected tools
         self.assertIn("query_knowledge_base", tool_names)
         self.assertIn("web_search", tool_names)
+        self.assertIn("create_agent_tool", tool_names)
 
         # Should match registry keys
         self.assertEqual(set(tool_names), set(AVAILABLE_TOOLS.keys()))
 
     def test_validate_enabled_tools_all_valid(self):
         """Test validation of all valid tool names"""
-        valid_tools = ["query_knowledge_base", "web_search"]
+        valid_tools = ["query_knowledge_base", "web_search", "create_agent_tool"]
         invalid_tools = validate_enabled_tools(valid_tools)
 
         # Should return empty list for all valid tools
@@ -147,11 +149,16 @@ class TestTools(unittest.TestCase):
         mock_logger_instance = MagicMock()
         mock_logger.return_value = mock_logger_instance
 
-        enabled_tools = ["query_knowledge_base", "invalid_tool", "web_search"]
+        enabled_tools = [
+            "query_knowledge_base",
+            "invalid_tool",
+            "web_search",
+            "create_agent_tool",
+        ]
         tools = get_tools_for_agent(enabled_tools)
 
         # Should return only valid tools
-        self.assertEqual(len(tools), 2)
+        self.assertEqual(len(tools), 3)
 
         # Should have logged a warning
         mock_logger_instance.warning.assert_called_once()
@@ -176,14 +183,26 @@ class TestTools(unittest.TestCase):
 
         kb_tool = AVAILABLE_TOOLS["query_knowledge_base"]
         search_tool = AVAILABLE_TOOLS["web_search"]
+        agent_tool = AVAILABLE_TOOLS["create_agent_tool"]
 
-        # Both should be callable
+        # All should be callable
         self.assertTrue(callable(kb_tool))
         self.assertTrue(callable(search_tool))
+        self.assertTrue(callable(agent_tool))
 
         # Should have function names
         self.assertEqual(kb_tool.__name__, "query_knowledge_base")
         self.assertEqual(search_tool.__name__, "web_search")
+        self.assertEqual(agent_tool.__name__, "create_agent_tool")
+
+    @patch("numa_chat_agent.tools.create_agent_tool_impl")
+    def test_create_agent_tool_wrapper(self, mock_impl):
+        """Test create_agent_tool wrapper forwards kwargs"""
+        mock_impl.return_value = {"status": "success"}
+        payload = {"title": "Example", "system_prompt": "Hello"}
+        result = create_agent_tool(**payload)  # type: ignore[arg-type]
+        mock_impl.assert_called_once_with(**payload)
+        self.assertEqual(result["status"], "success")
 
 
 if __name__ == "__main__":

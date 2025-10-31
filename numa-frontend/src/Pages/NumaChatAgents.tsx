@@ -51,6 +51,7 @@ const NumaChatAgents = () => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [queryDataSources, setQueryDataSources] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [createAgentEnabled, setCreateAgentEnabled] = useState(false);
   const [availableConnections, setAvailableConnections] = useState<
     Array<{ id: string; name: string; isConnected: boolean; mcpServerUrl?: string }>
   >([]);
@@ -176,6 +177,7 @@ const NumaChatAgents = () => {
       setAutoToolsEnabled(true);
       setQueryDataSources(false);
       setWebSearchEnabled(false);
+      setCreateAgentEnabled(false);
       setEnabledConnections([]);
       return;
     }
@@ -184,6 +186,7 @@ const NumaChatAgents = () => {
     setAutoToolsEnabled(config.autoToolsEnabled ?? true);
     setQueryDataSources(config.queryDataSources ?? false);
     setWebSearchEnabled(config.webSearchEnabled ?? false);
+    setCreateAgentEnabled(config.createAgentEnabled ?? false);
     setEnabledConnections(config.enabledConnections ?? []);
   };
 
@@ -617,6 +620,7 @@ const NumaChatAgents = () => {
     autoToolsEnabled,
     queryDataSources,
     webSearchEnabled,
+    createAgentEnabled,
     idToken,
     companyProfile,
     user,
@@ -629,11 +633,17 @@ const NumaChatAgents = () => {
     console.log('[NumaChat] Using model:', modelId, 'fallback mode:', isInFallbackMode(clientName));
 
     // Determine which tools to enable based on auto mode or manual selection
-    const enabledTools = getEnabledTools(autoToolsEnabled, queryDataSources, webSearchEnabled);
+    const enabledTools = getEnabledTools(autoToolsEnabled, queryDataSources, webSearchEnabled, createAgentEnabled);
 
     // Create the system prompt based on tool availability
     const email = idToken.email || 'Unknown';
-    let systemPrompt = generateSystemPrompt(enabledTools, email, companyProfile, enabledConnections);
+    let systemPrompt = generateSystemPrompt(
+      enabledTools,
+      email,
+      companyProfile,
+      enabledConnections,
+      createAgentEnabled,
+    );
 
     if (currentAgent) {
       const agentPrompt = currentAgent.systemPrompt?.trim();
@@ -962,6 +972,7 @@ const NumaChatAgents = () => {
         autoToolsEnabled,
         queryDataSources,
         webSearchEnabled,
+        createAgentEnabled,
         idToken,
         companyProfile,
         user,
@@ -1197,7 +1208,8 @@ const NumaChatAgents = () => {
   };
 
   // Derived flag to show warning when no tools active in manual mode
-  const noToolsActive = !currentAgent && !autoToolsEnabled && !queryDataSources && !webSearchEnabled;
+  const noToolsActive =
+    !currentAgent && !autoToolsEnabled && !queryDataSources && !webSearchEnabled && !createAgentEnabled;
 
   // Helper: push buffered text as its own segment then clear buffer, and save to DynamoDB
   const flushPendingText = (currentConversationId = null, preserveContent = false) => {
@@ -1438,6 +1450,8 @@ const NumaChatAgents = () => {
                             setQueryDataSources={setQueryDataSources}
                             webSearchEnabled={webSearchEnabled}
                             setWebSearchEnabled={setWebSearchEnabled}
+                            createAgentEnabled={createAgentEnabled}
+                            setCreateAgentEnabled={setCreateAgentEnabled}
                             autoToolsEnabled={autoToolsEnabled}
                             setAutoToolsEnabled={setAutoToolsEnabled}
                             availableConnections={availableConnections}
@@ -1488,6 +1502,8 @@ const NumaChatAgents = () => {
                             setQueryDataSources={setQueryDataSources}
                             webSearchEnabled={webSearchEnabled}
                             setWebSearchEnabled={setWebSearchEnabled}
+                            createAgentEnabled={createAgentEnabled}
+                            setCreateAgentEnabled={setCreateAgentEnabled}
                             autoToolsEnabled={autoToolsEnabled}
                             setAutoToolsEnabled={setAutoToolsEnabled}
                             availableConnections={availableConnections}

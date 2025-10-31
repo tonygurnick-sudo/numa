@@ -136,9 +136,14 @@ describe('chatSystemPromptUtils', () => {
   });
 
   describe('getEnabledTools', () => {
-    it('enables both tools in auto mode', () => {
+    it('enables core tools in auto mode', () => {
       const tools = getEnabledTools(true, false, false);
-      expect(tools).toEqual(['query_knowledge_base', 'web_search']);
+      expect(tools).toEqual(['query_knowledge_base', 'web_search', 'create_agent_tool']);
+    });
+
+    it('includes create_agent_tool in auto mode when explicitly enabled', () => {
+      const tools = getEnabledTools(true, false, false, true);
+      expect(tools).toEqual(['query_knowledge_base', 'web_search', 'create_agent_tool']);
     });
 
     it('enables only query_knowledge_base when selected in manual mode', () => {
@@ -159,6 +164,11 @@ describe('chatSystemPromptUtils', () => {
     it('enables none when none selected in manual mode', () => {
       const tools = getEnabledTools(false, false, false);
       expect(tools).toEqual([]);
+    });
+
+    it('enables only create_agent_tool when toggled in manual mode', () => {
+      const tools = getEnabledTools(false, false, false, true);
+      expect(tools).toEqual(['create_agent_tool']);
     });
   });
 
@@ -181,6 +191,12 @@ describe('chatSystemPromptUtils', () => {
       const prompt = generateSystemPrompt(['query_knowledge_base', 'web_search'], email, '');
       expect(prompt).toContain(`User Email: ${email}`);
       expect(prompt).toContain("Today's Date:");
+    });
+
+    it('includes guidance for create_agent_tool when available', () => {
+      const email = 'user@example.com';
+      const prompt = generateSystemPrompt(['create_agent_tool'], email, '', [], true);
+      expect(prompt).toContain('Use create_agent_tool');
     });
   });
 });

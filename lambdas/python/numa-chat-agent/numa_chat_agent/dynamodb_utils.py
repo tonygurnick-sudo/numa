@@ -5,6 +5,7 @@ Python equivalent of the frontend DynamoDBUtils.ts for loading conversation hist
 """
 
 import json
+import mimetypes
 import os
 from typing import Any, Dict, List, Optional
 
@@ -203,54 +204,7 @@ def format_messages_for_chat(
             )
 
         elif message_type == "file":
-            if item.get("messageContext") == "agent_reference":
-                i += 1
-                continue
-            file_info = item.get("fileInfo", {})
-            s3_bucket = file_info.get("s3Bucket")
-            extracted_content_s3_key = file_info.get("extractedContentS3Key")
-            file_type = file_info.get("fileType")
-            file_name = file_info.get("fileName", "unknown file")
-            region = os.environ.get("AWS_REGION", "us-east-1")
-
-            if load_files:
-                # TODO: Implement S3 file loading if needed
-                # For now, use placeholder content
-                logger.warning("File loading not implemented in backend yet")
-                formatted_messages.append(
-                    {
-                        "role": "assistant",
-                        "content": [
-                            {
-                                "text": f"User has uploaded file:: {file_name} ({file_type}). Extracting content..."
-                            },
-                            {
-                                "text": "File content loading not implemented in backend yet"
-                            },
-                        ],
-                    }
-                )
-            else:
-                # Pass file reference instead of content - for chat agents mode
-                formatted_messages.append(
-                    {
-                        "role": "assistant",
-                        "content": [
-                            {
-                                "text": f"User has uploaded file:: {file_name} ({file_type}). Extracting content..."
-                            },
-                            {
-                                "fileRef": {
-                                    "s3Bucket": s3_bucket,
-                                    "extractedContentS3Key": extracted_content_s3_key,
-                                    "fileType": file_type,
-                                    "fileName": file_name,
-                                    "region": region,
-                                }
-                            },
-                        ],
-                    }
-                )
+            formatted_messages.extend(_format_file_event(item, load_files))
 
         elif message_type == "text":
             # Text messages - assistant or user role as stored
@@ -531,6 +485,92 @@ def _append_document_metadata(
         formatted_messages.append(
             {"role": "assistant", "content": [{"text": doc_block}]}
         )
+
+
+def _format_file_event(item: Dict[str, Any], load_files: bool) -> List[Dict[str, Any]]:
+    """Format a single DynamoDB file event into assistant messages."""
+    is_agent_reference = item.get("messageContext") == "agent_reference"
+    file_info = item.get("fileInfo", {})
+    s3_bucket = file_info.get("s3Bucket")
+    extracted_content_s3_key = file_info.get("extractedContentS3Key")
+    file_type = file_info.get("fileType")
+    file_name = file_info.get("fileName", "unknown file")
+    region = os.environ.get("AWS_REGION", "us-east-1")
+
+    # If extracted content key is missing but s3Key looks like a JSON key, treat it as extracted
+    if not extracted_content_s3_key:
+        maybe_key = file_info.get("s3Key")
+        if isinstance(maybe_key, str) and maybe_key.endswith(".json"):
+            if maybe_key.startswith("s3://"):
+                try:
+                    without = maybe_key[5:]
+                    bkt, key = without.split("/", 1)
+                    s3_bucket = s3_bucket or bkt
+                    extracted_content_s3_key = key
+                except Exception:  # defensive
+                    extracted_content_s3_key = maybe_key
+            else:
+                extracted_content_s3_key = maybe_key
+
+    # Infer file type when missing
+    if not file_type:
+        name_for_infer = file_name or ""
+        if name_for_infer.endswith(".json") and ":" not in name_for_infer:
+            name_for_infer = name_for_infer[:-5]
+        inferred, _ = mimetypes.guess_type(name_for_infer)
+        if inferred:
+            file_type = inferred
+
+    # Header text differs for agent-provided references vs user uploads
+    if is_agent_reference:
+        header_text = (
+            f"Agent reference document: {file_name} ({file_type}) - This file was provided as part of the agent's "
+            f"configuration and knowledge base. Extracting content..."
+        )
+        logger.info(
+            "Including agent reference file in formatted history",
+            file_name=file_name,
+            file_type=file_type,
+        )
+    else:
+        header_text = (
+            f"User has uploaded file: {file_name} ({file_type}). Extracting content..."
+        )
+
+    if load_files:
+        logger.warning("File loading not implemented in backend yet")
+        return [
+            {
+                "role": "assistant",
+                "content": [
+                    {"text": header_text},
+                    {"text": "File content loading not implemented in backend yet"},
+                ],
+            }
+        ]
+
+    # Pass file reference instead of content - for chat agents mode
+    content_blocks: List[Dict[str, Any]] = [{"text": header_text}]
+    if extracted_content_s3_key and s3_bucket:
+        content_blocks.append(
+            {
+                "fileRef": {
+                    "s3Bucket": s3_bucket,
+                    "extractedContentS3Key": extracted_content_s3_key,
+                    "fileType": file_type,
+                    "fileName": file_name,
+                    "region": region,
+                }
+            }
+        )
+    else:
+        content_blocks.append(
+            {
+                "text": "Reference file present, but no extracted content is available yet.",
+            }
+        )
+
+    return [{"role": "assistant", "content": content_blocks}]
 
 
 def validate_and_clean_tool_pairs(

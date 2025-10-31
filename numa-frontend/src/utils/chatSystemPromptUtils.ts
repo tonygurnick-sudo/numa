@@ -66,12 +66,12 @@ export const loadCompanyProfile = async (companyBucket, region, getCredentials) 
  * @param {boolean} webSearchEnabled - Whether web search is enabled
  * @returns {Array} List of enabled tool names
  */
-export const getEnabledTools = (autoToolsEnabled, queryDataSources, webSearchEnabled) => {
+export const getEnabledTools = (autoToolsEnabled, queryDataSources, webSearchEnabled, createAgentEnabled = false) => {
   const enabledTools = [];
 
   if (autoToolsEnabled) {
-    // In auto mode, enable both tools for the agent to decide
-    enabledTools.push('query_knowledge_base', 'web_search');
+    // In all tools mode, enable both tools for the agent to decide
+    enabledTools.push('query_knowledge_base', 'web_search', 'create_agent_tool');
   } else {
     // In manual mode, only enable selected tools
     if (queryDataSources) {
@@ -79,6 +79,9 @@ export const getEnabledTools = (autoToolsEnabled, queryDataSources, webSearchEna
     }
     if (webSearchEnabled) {
       enabledTools.push('web_search');
+    }
+    if (createAgentEnabled) {
+      enabledTools.push('create_agent_tool');
     }
   }
 
@@ -121,6 +124,8 @@ If you anticipate follow-up actions, request supporting details upfront:
 const CONNECTION_PROMPTS: Record<string, string> = {
   slack:
     '- When using Slack tools: Always use as_user: true and include_sent_via_pipedream_flag: false parameters. Only list channels the user is in and that are not archived unless they specifically ask.',
+  google_drive: `When using google drive tools:
+  - A user may have personal or shared drives or both. You can query across all, or specify a drive id (by searching drives first) to query a particular drive only.`,
   notion:
     "- When using Notion tools: Focus on the user's accessible pages and databases. Provide structured responses when creating or updating content.",
   google_calendar: `When using Google Calendar tools:
@@ -164,7 +169,13 @@ const CONNECTION_PROMPTS: Record<string, string> = {
  * @param {Array} enabledConnections - List of enabled connection names (optional)
  * @returns {string} Complete system prompt
  */
-export const generateSystemPrompt = (enabledTools, email, companyProfile, enabledConnections: string[] = []) => {
+export const generateSystemPrompt = (
+  enabledTools,
+  email,
+  companyProfile,
+  enabledConnections: string[] = [],
+  createAgentEnabled = false,
+) => {
   const NOW = new Date();
   const TODAY = {
     date: NOW.toLocaleDateString(),
@@ -201,7 +212,7 @@ export const generateSystemPrompt = (enabledTools, email, companyProfile, enable
     baseSystemPrompt = `You are Numa, an AI assistant created by Arcanum AI who specialises in helping small to medium businesses get their work done and save time on everyday tasks.
 
 **Available Tools:**
-Note: Users can select or deselect tools, which is why you may see different tools available in different sessions.
+Note: Users can select or deselect tools. Possible tools the user can select are a KB query tool, web search tool, agent creation tool, and various integrations like gmail/google drive etc. If they ask you to use a tool but it's not available to you, you can request they enable it.
 - No tools are currently enabled.
 
 **Document Generation:**
@@ -221,13 +232,17 @@ Today's Date: ${TODAY}`;
     const toolLines: string[] = [];
 
     if (enabledTools.includes('query_knowledge_base')) {
-      toolLines.push(
-        "- Use query_knowledge_base to search your organization's documents and knowledge base with semantic search",
-      );
+      toolLines.push("- Use query_knowledge_base to search your organization's knowledge base with semantic search");
     }
 
     if (enabledTools.includes('web_search')) {
       toolLines.push('- Use web_search to find current information from the internet using natural language queries');
+    }
+
+    if (enabledTools.includes('create_agent_tool') || createAgentEnabled) {
+      toolLines.push(
+        '- Use create_agent_tool to create an Agent based on inputs from the user/current chat history. Agents in Numa are pre-configured chat agents that have custom instructions, names, knowledge, and referenced files, as well as pre-defined which tools/integrations are enabled. E.g. a meeting analyser agent or a marketing content generator agent etc would have specific instructions, files, tools etc defined for them. You can create agents through this tool at the users request. A user may want to create an agent from an existing chat, or ask you to help it create an agent in general. **IMPORTANT** Always confirm with the user the agent definition before calling this tool. After creating an agent, a user can then start new chats with that Agent if they like.',
+      );
     }
 
     if (connectionPrompts) {
@@ -239,7 +254,7 @@ Today's Date: ${TODAY}`;
     baseSystemPrompt = `You are Numa, an AI assistant created by Arcanum AI who specialises in helping small to medium businesses get their work done and save time on everyday tasks.
 
 **Available Tools:**
-Note: Users can select or deselect tools, which is why you may see different tools available in different sessions.
+Note: Users can select or deselect tools. Possible tools the user can select are a KB query tool, web search tool, agent creation tool, and various integrations like gmail/google drive etc. If they ask you to use a tool but it's not available to you, you can request they enable it.
 ${toolsSection}
 
 **Document Generation:**

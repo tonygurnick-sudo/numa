@@ -2,6 +2,7 @@ import type React from 'react';
 import { WebSearchRenderer } from '../toolRenderers/WebSearchRenderer';
 import { KnowledgeBaseRenderer } from '../toolRenderers/KnowledgeBaseRenderer';
 import { FallbackRenderer } from '../toolRenderers/FallbackRenderer';
+import { AgentCreationRenderer } from '../toolRenderers/AgentCreationRenderer';
 import { IntegrationsRenderer } from '../toolRenderers/IntegrationsRenderer';
 import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon } from '../config/integrationsConfig';
 
@@ -21,6 +22,10 @@ export const TOOL_CONFIG: Record<string, ToolDescriptor> = {
   query_knowledge_base: {
     label: 'Knowledge Base',
     renderer: KnowledgeBaseRenderer,
+  },
+  create_agent_tool: {
+    label: 'Agent Creation',
+    renderer: AgentCreationRenderer,
   },
   integrations: {
     label: 'Integration',
@@ -67,6 +72,7 @@ export function resolveToolVisual(toolName: string | null | undefined): ToolVisu
   // Core tools
   if (name === 'web_search') return { kind: 'icon', className: 'bi bi-search' };
   if (name === 'query_knowledge_base') return { kind: 'icon', className: 'bi bi-database' };
+  if (name === 'create_agent_tool') return { kind: 'icon', className: 'bi bi-robot' };
 
   // Integrations: prefer branded image; fallback to bootstrap icon class from config
   if (name.endsWith('_integration')) {

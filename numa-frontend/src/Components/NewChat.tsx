@@ -33,6 +33,8 @@ type NewChatProps = {
   setQueryDataSources: Dispatch<SetStateAction<boolean>>;
   webSearchEnabled: boolean;
   setWebSearchEnabled: Dispatch<SetStateAction<boolean>>;
+  createAgentEnabled: boolean;
+  setCreateAgentEnabled: Dispatch<SetStateAction<boolean>>;
   autoToolsEnabled: boolean;
   setAutoToolsEnabled: Dispatch<SetStateAction<boolean>>;
   availableConnections: ConnectionOption[];
@@ -128,6 +130,8 @@ const NewChat = ({
   setQueryDataSources,
   webSearchEnabled,
   setWebSearchEnabled,
+  createAgentEnabled,
+  setCreateAgentEnabled,
   autoToolsEnabled,
   setAutoToolsEnabled,
   availableConnections,
@@ -233,6 +237,8 @@ const NewChat = ({
             setQueryDataSources={setQueryDataSources}
             webSearchEnabled={webSearchEnabled}
             setWebSearchEnabled={setWebSearchEnabled}
+            createAgentEnabled={createAgentEnabled}
+            setCreateAgentEnabled={setCreateAgentEnabled}
             autoToolsEnabled={autoToolsEnabled}
             setAutoToolsEnabled={setAutoToolsEnabled}
             availableConnections={availableConnections}

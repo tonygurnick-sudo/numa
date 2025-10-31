@@ -62,3 +62,4 @@ ignore_missing_imports = true
 [tool.pyright]
 typeCheckingMode = "basic"
 reportMissingImports = "none"
+exclude = ["tests"]

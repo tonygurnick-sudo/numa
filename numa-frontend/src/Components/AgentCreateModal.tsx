@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal, Form, Button, Row, Col, Alert, Spinner, Accordion } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
-import { Database, Search } from 'react-bootstrap-icons';
+import { Database, Search, Robot } from 'react-bootstrap-icons';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { AgentFileUpload } from './AgentFileUpload';
@@ -44,6 +44,7 @@ const DEFAULT_PAYLOAD: AgentPayload = {
     autoToolsEnabled: true,
     queryDataSources: false,
     webSearchEnabled: false,
+    createAgentEnabled: false,
     enabledConnections: [],
   },
   referenceFiles: [],
@@ -253,6 +254,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
           autoToolsEnabled: editingAgent.toolsConfig?.autoToolsEnabled ?? true,
           queryDataSources: editingAgent.toolsConfig?.queryDataSources ?? false,
           webSearchEnabled: editingAgent.toolsConfig?.webSearchEnabled ?? false,
+          createAgentEnabled: editingAgent.toolsConfig?.createAgentEnabled ?? false,
           enabledConnections: editingAgent.toolsConfig?.enabledConnections ?? [],
         },
         referenceFiles: editingAgent.referenceFiles ?? [],
@@ -865,6 +867,13 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                       {(formState.toolsConfig?.autoToolsEnabled ||
                         formState.toolsConfig?.queryDataSources ||
                         formState.toolsConfig?.webSearchEnabled) &&
+                        formState.toolsConfig?.createAgentEnabled && <span className="text-muted small">·</span>}
+                      {formState.toolsConfig?.createAgentEnabled && (
+                        <span className="text-muted small">Agent creation</span>
+                      )}
+                      {(formState.toolsConfig?.autoToolsEnabled ||
+                        formState.toolsConfig?.queryDataSources ||
+                        formState.toolsConfig?.webSearchEnabled) &&
                         formState.toolsConfig?.enabledConnections &&
                         formState.toolsConfig.enabledConnections.length > 0 && (
                           <span className="text-muted small">·</span>
@@ -982,6 +991,39 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                           }
                           disabled={saving || formState.toolsConfig?.autoToolsEnabled}
                           onChange={(e) => handleToolsChange('webSearchEnabled', e.target.checked)}
+                          className="fs-5"
+                        />
+                      </div>
+                      <div
+                        className="d-flex align-items-center justify-content-between p-3 bg-white border rounded-2"
+                        style={{
+                          opacity: formState.toolsConfig?.autoToolsEnabled ? 0.6 : 1,
+                        }}
+                      >
+                        <div className="d-flex align-items-center gap-3">
+                          <div
+                            className="rounded-2 d-flex align-items-center justify-content-center"
+                            style={{ width: 40, height: 40, backgroundColor: '#6c757d' }}
+                          >
+                            <Robot size={20} color="white" />
+                          </div>
+                          <div>
+                            <div className="fw-semibold">Agent creation tool</div>
+                            <small className="text-muted">
+                              Permit this agent to create new saved agents when the user explicitly asks
+                            </small>
+                          </div>
+                        </div>
+                        <Form.Check
+                          type="switch"
+                          id="create-agent-tool-enabled"
+                          checked={
+                            formState.toolsConfig?.autoToolsEnabled ||
+                            formState.toolsConfig?.createAgentEnabled ||
+                            false
+                          }
+                          disabled={saving || formState.toolsConfig?.autoToolsEnabled}
+                          onChange={(e) => handleToolsChange('createAgentEnabled', e.target.checked)}
                           className="fs-5"
                         />
                       </div>
