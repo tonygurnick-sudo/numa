@@ -1,4 +1,4 @@
-// ChatFileUpload.jsx
+import React, { useEffect, useRef } from 'react';
 import { Modal } from 'react-bootstrap';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { UploadStatusRow } from './UploadStatusRow';
@@ -7,7 +7,71 @@ import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { processFile } from '../utils/fileProcessing';
 import type { AgentSummary } from '../types/agents';
 
-const ChatFileUpload = ({
+declare global {
+  interface Window {
+    /** NewChat calls this to inject files AND auto-start upload (no staging). */
+    __ingestAndStart?: (files: File[]) => void;
+    /** Fallback cache set by NewChat when the bridge isn’t ready yet. */
+    __pendingFiles?: File[];
+  }
+}
+
+type ReferenceFile = {
+  fileName: string;
+  fileType: string;
+  s3Key: string;
+  s3Bucket: string;
+  extractedContentS3Key?: string;
+};
+
+type AgentMeta = {
+  agentId: string;
+  title?: string;
+  version?: string;
+  icon?: string;
+  agentType?: string;
+  visibility?: string;
+};
+
+type FileResult = {
+  filePath: string;
+  fileName: string;
+  fileType: string;
+  s3Bucket: string;
+};
+
+type ChatMessage = {
+  role: 'assistant' | 'system' | 'user';
+  content: React.ReactNode | string;
+  status?: string;
+  ephemeralId?: number;
+};
+
+type SetMessages = ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[]);
+
+type ChatFileUploadProps = {
+  show: boolean;
+  onHide: () => void;
+  getAccessToken?: () => Promise<string>;
+  setMessages: (updater: SetMessages) => void;
+  conversationId?: string | null;
+  sub: string;
+  refreshSidebar: () => void;
+  setIsFileProcessing: (b: boolean) => void;
+  ensureConversationReady: (title?: string, agentMeta?: AgentMeta) => Promise<string>;
+  resetUserNewChatFlag?: () => void;
+  pendingAgent?: (AgentSummary & { referenceFiles?: ReferenceFile[] }) | null;
+  currentAgent?: AgentSummary | null;
+  setPendingAgent?: (a: AgentSummary | null) => void;
+  resetInactivityTimer?: () => void;
+};
+
+type UploaderRef = {
+  acceptUserSelection?: (files: File[], opts?: { autoStart?: boolean }) => Promise<void> | void;
+  startUpload?: () => Promise<void> | void;
+} | null;
+
+export const ChatFileUpload = ({
   show,
   onHide,
   getAccessToken: _getAccessToken,
@@ -22,41 +86,78 @@ const ChatFileUpload = ({
   currentAgent = null,
   setPendingAgent,
   resetInactivityTimer = () => {},
-}) => {
-  const { numaChatDynamoUtils, user, getCredentials, bedrockRuntimeClient: _bedrockRuntimeClient } = useAuth();
+}: ChatFileUploadProps) => {
+  const { numaChatDynamoUtils, user, getCredentials } = useAuth();
   const { numaPost } = useNumaRequest();
 
-  const handleUploadComplete = async (fileArray) => {
-    // Validate input
-    if (!fileArray || !Array.isArray(fileArray) || fileArray.length === 0) {
+  // Imperative access into S3UploadModule
+  const uploadRef = useRef<UploaderRef>(null);
+
+  // Expose a bridge while modal is open and flush any pending files
+  useEffect(() => {
+    if (!show) return;
+
+    const bridge = (files: File[]) => {
+      if (!files?.length) return;
+      const mod = uploadRef.current;
+      if (mod && typeof mod.acceptUserSelection === 'function') {
+        // Route through the same path as native input selection; auto-start is handled inside
+        mod.acceptUserSelection(files, { autoStart: true });
+      } else {
+        console.warn('[ChatFileUpload] S3UploadModule.acceptUserSelection not exposed');
+      }
+    };
+
+    window.__ingestAndStart = bridge;
+
+    // Flush fallback cache (if NewChat stashed files while we were mounting)
+    const pending = window.__pendingFiles;
+    if (pending?.length) {
+      try {
+        bridge(pending);
+      } finally {
+        delete window.__pendingFiles;
+      }
+    }
+
+    return () => {
+      if (window.__ingestAndStart === bridge) delete window.__ingestAndStart;
+    };
+  }, [show]);
+
+  const handleUploadComplete = async (fileArray: FileResult[]) => {
+    if (!Array.isArray(fileArray) || fileArray.length === 0) {
       console.log('No files were selected for upload');
       return;
     }
 
     setIsFileProcessing(true);
-    onHide();
+    onHide(); // close modal immediately — chat shows "Processing..."
 
     try {
       const activeAgent: AgentSummary | null = pendingAgent || currentAgent || null;
       const previewName = fileArray[0]?.fileName || '';
       const conversationWasNew = !conversationId;
       let cid: string;
+
       if (activeAgent) {
-        cid = await ensureConversationReady(previewName, {
+        const agentMeta: AgentMeta = {
           agentId: activeAgent.agentId,
           title: activeAgent.title,
-          version: activeAgent.version,
-          icon: activeAgent.icon,
+          // @ts-expect-error optional custom fields may exist on agent
+          version: (activeAgent as Record<string, unknown>)['version'] as string | undefined,
+          // @ts-expect-error optional custom fields may exist on agent
+          icon: (activeAgent as Record<string, unknown>)['icon'] as string | undefined,
           agentType: activeAgent.agentType,
           visibility: activeAgent.visibility,
-        });
+        };
+        cid = await ensureConversationReady(previewName, agentMeta);
       } else {
         cid = await ensureConversationReady(previewName);
       }
-      if (conversationWasNew) {
-        // Reset the new chat flag when creating conversation from file upload
-        resetUserNewChatFlag();
 
+      if (conversationWasNew) {
+        resetUserNewChatFlag();
         if (pendingAgent?.referenceFiles?.length && numaChatDynamoUtils) {
           for (const file of pendingAgent.referenceFiles) {
             try {
@@ -78,15 +179,12 @@ const ChatFileUpload = ({
         }
       }
 
-      // Reset inactivity timer so we don't bounce back to the new-chat suggestion view
-      resetInactivityTimer();
+      resetInactivityTimer?.();
 
-      // Create auth context to pass to process function
       const authContext = { user };
-
-      // Show a single generic processing message with spinner
       const processingMessageId = Date.now();
-      setMessages((prev) => [
+
+      setMessages((prev: ChatMessage[]) => [
         ...prev,
         {
           role: 'assistant',
@@ -96,14 +194,10 @@ const ChatFileUpload = ({
         },
       ]);
 
-      const results = [];
-      const errors = [];
-
-      // Process all files
       for (let i = 0; i < fileArray.length; i++) {
         const fileObj = fileArray[i];
         if (!fileObj || !fileObj.filePath || !fileObj.fileName) {
-          errors.push(`Invalid file object at index ${i}`);
+          setMessages((prev: ChatMessage[]) => [...prev, { role: 'system', content: `Invalid file at index ${i}` }]);
           continue;
         }
 
@@ -112,57 +206,33 @@ const ChatFileUpload = ({
         try {
           const processedFile = await processFile({ s3Key, s3Bucket, fileName }, authContext, getCredentials, numaPost);
 
-          // Store the result
-          results.push(processedFile);
-
-          // Add file message to DynamoDB
           await numaChatDynamoUtils.addFileMessage({
             conversationId: cid,
             userId: sub,
-            fileName: fileName,
-            fileType: fileType,
-            s3Key: s3Key,
-            s3Bucket: s3Bucket,
+            fileName,
+            fileType,
+            s3Key,
+            s3Bucket,
             extractedContentS3Key: processedFile.extractedContentS3Key,
           });
 
-          // Add individual success message for this file
-          const region = window.sessionStorage.getItem('REGION');
-          setMessages((prev) => [
+          setMessages((prev: ChatMessage[]) => [
             ...prev,
-            {
-              role: 'assistant',
-              segments: [
-                {
-                  kind: 'file_upload',
-                  filename: fileName,
-                  type: 'success',
-                  s3Key: s3Key,
-                  s3Bucket: s3Bucket,
-                  region: region || undefined,
-                },
-              ],
-            },
+            { role: 'assistant', content: `Successfully processed "${fileName}".` },
           ]);
         } catch (error) {
-          console.error(`Error processing file ${fileName}:`, error);
-          errors.push(`${fileName}: ${error.message}`);
+          const msg = error instanceof Error ? error.message : String(error);
 
-          // Add individual error message for this file
-          setMessages((prev) => [
+          console.error(`Error processing file ${fileName}:`, error);
+          setMessages((prev: ChatMessage[]) => [
             ...prev,
-            {
-              role: 'system',
-              content: `Failed to process "${fileName}": ${error.message}`,
-            },
+            { role: 'system', content: `Failed to process "${fileName}": ${msg}` },
           ]);
         }
       }
 
-      // Remove initial processing message
-      setMessages((prev) => prev.filter((msg) => msg.ephemeralId !== processingMessageId));
+      setMessages((prev: ChatMessage[]) => prev.filter((m) => m.ephemeralId !== processingMessageId));
 
-      // Update the conversation meta so the chat appears immediately in sidebar
       try {
         const uploadedNames = fileArray
           .map((f) => f?.fileName)
@@ -170,12 +240,8 @@ const ChatFileUpload = ({
           .slice(0, 2)
           .join(', ');
         const moreCount = Math.max(0, fileArray.length - 2);
-        let latestMessage: string;
-        if (moreCount > 0) {
-          latestMessage = `Uploaded ${uploadedNames} and ${moreCount} more`;
-        } else {
-          latestMessage = `Uploaded ${uploadedNames}`;
-        }
+        const latestMessage =
+          moreCount > 0 ? `Uploaded ${uploadedNames} and ${moreCount} more` : `Uploaded ${uploadedNames}`;
         await numaChatDynamoUtils.updateMetaItem(cid, sub, {
           latestTimestamp: Date.now(),
           latestMessage,
@@ -184,16 +250,14 @@ const ChatFileUpload = ({
         console.error('Failed to update meta after file upload:', e);
       }
 
-      // Refresh sidebar to show new/updated conversation
       refreshSidebar();
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+
       console.error('Error processing uploaded files:', error);
-      setMessages((prev) => [
+      setMessages((prev: ChatMessage[]) => [
         ...prev,
-        {
-          role: 'system',
-          content: `Error while processing files: ${error.message}`,
-        },
+        { role: 'system', content: `Error while processing files: ${msg}` },
       ]);
     } finally {
       setIsFileProcessing(false);
@@ -207,6 +271,7 @@ const ChatFileUpload = ({
       </Modal.Header>
       <Modal.Body data-testid="upload-modal-body">
         <S3UploadModule
+          ref={uploadRef}
           task={{
             id: 'chatFileUpload',
             parameters: {
@@ -214,11 +279,11 @@ const ChatFileUpload = ({
                 // PDF
                 'application/pdf',
                 // Documents
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                 'text/plain',
                 // Spreadsheets
                 'text/csv',
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 // Images
                 'image/jpeg',
                 'image/png',
@@ -249,12 +314,13 @@ const ChatFileUpload = ({
               ],
             },
           }}
-          // @ts-ignore S3UploadModule passes selected files to onComplete
+          // @ts-expect-error uploader passes raw results (with filePath/fileName) to onComplete
           onComplete={handleUploadComplete}
           onNotComplete={() => {}}
           onChange={() => {}}
         />
-        <div className="supported-file-types">
+
+        <div className="supported-file-types mt-3">
           <h6>Supported File Types:</h6>
           <ul>
             <li>PDF (pdf)</li>
@@ -270,5 +336,3 @@ const ChatFileUpload = ({
     </Modal>
   );
 };
-
-export { ChatFileUpload };
