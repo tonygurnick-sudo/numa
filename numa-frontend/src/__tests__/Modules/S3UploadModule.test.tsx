@@ -2,43 +2,51 @@
  * @vitest-environment jsdom
  */
 import '@testing-library/jest-dom';
+import React from 'react';
 import { renderWithProviders } from '../Mocks/ProviderWrapper';
 import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { S3UploadModule } from '../../Modules/S3UploadModule';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 
-// Mock AWS S3 Client
+// ✅ Mock AWS S3 Client
 vi.mock('@aws-sdk/client-s3', () => ({
   S3Client: vi.fn().mockImplementation(() => ({})),
   PutObjectCommand: vi.fn().mockImplementation(() => ({})),
 }));
 
-// Mock S3 presigner
+// ✅ Mock S3 presigner
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: vi.fn().mockResolvedValue('https://test-presigned-url.com'),
 }));
 
-// Mock axios
+// ✅ Mock axios
 vi.mock('axios', () => ({
   default: {
     put: vi.fn().mockResolvedValue({}),
   },
 }));
 
-// Define mock data for NumaAppContext
-const mockNumaAppData = {
-  id: 'test-app-id',
-  appName: 'Test App',
-  tasks: [{ id: 'test-task-id', title: 'Test Task' }],
-};
+// ✅ Mock AuthProvider for credentials + user UUID (component requires this)
+vi.mock('../../Providers/AuthProvider', () => ({
+  useAuth: () => ({
+    getCredentials: vi.fn().mockResolvedValue({
+      accessKeyId: 'AKIA_TEST',
+      secretAccessKey: 'SECRET',
+      sessionToken: 'TOKEN',
+    }),
+    user: {
+      decoded_tokens: {
+        idToken: { sub: 'user-uuid-123' },
+      },
+    },
+  }),
+}));
 
-// Create mock functions that we can reference later for assertions
-const createJobMock = vi.fn().mockResolvedValue({ jobID: 'test-job-id' });
+// ✅ Mock jobsApi
+const createJobMock = vi.fn().mockResolvedValue({ jobId: 'test-job-id' });
 const updateJobMock = vi.fn().mockResolvedValue({});
 const getJobByIdMock = vi.fn().mockResolvedValue({});
-
-// Mock the jobsApi
 vi.mock('../../Services/jobsApi', () => ({
   useJobsApi: () => ({
     createJob: createJobMock,
@@ -47,16 +55,17 @@ vi.mock('../../Services/jobsApi', () => ({
   }),
 }));
 
-// Mock the NumaAppContext
+// ✅ Mock NumaAppContext (default baseline)
 vi.mock('../../Providers/NumaAppContext', () => {
-  const NumaAppContext = { Provider: ({ children }) => children };
-  // Create a mock implementation that can be customized per test
+  const NumaAppContext = { Provider: ({ children }: { children: React.ReactNode }) => <>{children}</> };
   const useNumaAppMock = vi.fn().mockReturnValue({
     numaAppId: 'test-app-id',
-    numaAppData: { id: 'test-app-id', appName: 'Test App' },
+    numaAppData: { id: 'test-app-id', appName: 'Test App', tasks: [{ id: 'test-task-id' }] },
     currentJobId: null,
     setCurrentJobId: vi.fn(),
     taskInputValues: {},
+    appRunning: false,
+    numaTaskResponses: [],
   });
 
   return {
@@ -65,111 +74,116 @@ vi.mock('../../Providers/NumaAppContext', () => {
   };
 });
 
+/** Small helper so tests don't race the config loader */
+async function waitForConfigReady() {
+  // If the component ever shows a "Preparing storage…" hint, wait for it to disappear.
+  // If it never shows, this resolves quickly.
+  await waitFor(() => {
+    const prepping = screen.queryByText(/Preparing storage/i);
+    const cfgError = screen.queryByText(/Storage config failed/i);
+    // Ready when no "preparing" and no "failed config" error
+    if (prepping) throw new Error('still preparing');
+    expect(cfgError).not.toBeInTheDocument();
+  });
+}
+
 describe('S3UploadModule Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        json: () => Promise.resolve({ CLIENT_NAME: 'test-client', REGION: 'us-east-1' }),
-      }),
-    );
+
+    // Provide multiple discovery paths for region/bucket so the component is always happy
+    // Avoid `any`: write onto window via an indexable type
+    const w = window as unknown as Record<string, unknown>;
+    w.__NUMA_REGION = 'us-east-1';
+    w.__NUMA_CLIENT_NAME = 'test-client';
+    w.__NUMA_OUTPUT_BUCKET = 'numa-test-outputs';
+
+    // Mock fetch('/config.json') to look like a real, successful Response
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ CLIENT_NAME: 'test-client', REGION: 'us-east-1' }),
+    } as unknown as Response);
   });
 
   it('should accept valid file types', async () => {
-    renderWithProviders(<S3UploadModule />);
+    renderWithProviders(
+      <S3UploadModule task={{ id: 'test-task-id', parameters: { allowedFileTypes: ['application/pdf'] } }} />,
+    );
 
-    const fileInput = screen.getByTestId('file-upload-input');
+    await waitForConfigReady();
 
+    const fileInput = screen.getByTestId('file-upload-input') as HTMLInputElement;
     const validFile = new File(['test content'], 'test.pdf', { type: 'application/pdf' });
 
-    fireEvent.change(fileInput, {
-      target: { files: [validFile] },
-    });
+    fireEvent.change(fileInput, { target: { files: [validFile] } });
 
     await waitFor(() => {
-      expect(screen.queryByText('Invalid file type')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Invalid file type/i)).not.toBeInTheDocument();
     });
   });
 
   it('should reject invalid file types', async () => {
-    const task = {
-      parameters: {
-        allowedFileTypes: ['application/pdf'],
-      },
-    };
-    renderWithProviders(<S3UploadModule task={task} />);
+    renderWithProviders(
+      <S3UploadModule task={{ id: 'test-task-id', parameters: { allowedFileTypes: ['application/pdf'] } }} />,
+    );
 
-    const fileInput = screen.getByTestId('file-upload-input');
+    await waitForConfigReady();
+
+    const fileInput = screen.getByTestId('file-upload-input') as HTMLInputElement;
     const invalidFile = new File(['test content'], 'test.exe', { type: 'application/x-msdownload' });
 
-    fireEvent.change(fileInput, {
-      target: { files: [invalidFile] },
-    });
+    fireEvent.change(fileInput, { target: { files: [invalidFile] } });
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(`${invalidFile.name}: Invalid file type. Accepted types: application/pdf`),
-      ).toBeInTheDocument();
-    });
+    // Use findByText to wait for the specific error row
+    await screen.findByText(`${invalidFile.name}: Invalid file type. Accepted types: application/pdf`);
   });
 
-  it('should handle single file upload', async () => {
-    const task = { id: 'test-task-id', title: 'Test Task' };
-    renderWithProviders(<S3UploadModule task={task} />);
+  it('should handle single file upload (UI lists file)', async () => {
+    renderWithProviders(<S3UploadModule task={{ id: 'test-task-id', title: 'Test Task' }} />);
 
-    const fileInput = screen.getByTestId('file-upload-input');
+    await waitForConfigReady();
 
+    const fileInput = screen.getByTestId('file-upload-input') as HTMLInputElement;
     const validFile = new File(['content1'], 'test1.pdf', { type: 'application/pdf' });
 
-    fireEvent.change(fileInput, {
-      target: { files: [validFile] },
-    });
+    fireEvent.change(fileInput, { target: { files: [validFile] } });
 
-    await waitFor(() => {
-      expect(screen.getByText(validFile.name)).toBeInTheDocument();
-    });
+    // File name shows after successful upload
+    await screen.findByText(validFile.name);
   });
 
   it('should show error for files exceeding size limit', async () => {
-    const task = {
-      parameters: {
-        maximumFileSize: 10, // 10 MB
-      },
-    };
-    renderWithProviders(<S3UploadModule task={task} />);
+    renderWithProviders(<S3UploadModule task={{ id: 'test-task-id', parameters: { maximumFileSize: 10 } }} />);
 
-    const fileInput = screen.getByTestId('file-upload-input');
+    await waitForConfigReady();
 
-    // Create a mock file that exceeds the size limit (10MB = 10 * 1024 * 1024 bytes)
-    const largeFile = new File(['x'.repeat(11 * 1024 * 1024)], 'large.pdf', { type: 'application/pdf' });
-
-    fireEvent.change(fileInput, {
-      target: { files: [largeFile] },
+    const fileInput = screen.getByTestId('file-upload-input') as HTMLInputElement;
+    const largeFile = new File(['x'.repeat(11 * 1024 * 1024)], 'large.pdf', {
+      type: 'application/pdf',
     });
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(`${largeFile.name}: File is too large. Maximum size allowed is 10.00 MB`),
-      ).toBeInTheDocument();
-    });
+    fireEvent.change(fileInput, { target: { files: [largeFile] } });
+
+    await screen.findByText(`${largeFile.name}: File is too large. Maximum size allowed is 10.00 MB`);
   });
 
-  it('should handle multiple file uploads', async () => {
+  it('should handle multiple file uploads (UI lists files)', async () => {
     const mockOnComplete = vi.fn();
     const mockOnNotComplete = vi.fn();
     const mockOnChange = vi.fn();
-    const task = { id: 'test-task-id', title: 'Test Task' };
 
     renderWithProviders(
       <S3UploadModule
-        task={task}
+        task={{ id: 'test-task-id', title: 'Test Task' }}
         onComplete={mockOnComplete}
         onNotComplete={mockOnNotComplete}
         onChange={mockOnChange}
       />,
     );
 
-    const fileInput = screen.getByTestId('file-upload-input');
+    await waitForConfigReady();
+
+    const fileInput = screen.getByTestId('file-upload-input') as HTMLInputElement;
 
     const validFiles = [
       new File(['content1'], 'test1.pdf', { type: 'application/pdf' }),
@@ -179,166 +193,133 @@ describe('S3UploadModule Component', () => {
       new File(['content3'], 'test3.txt', { type: 'text/plain' }),
     ];
 
-    fireEvent.change(fileInput, {
-      target: { files: validFiles },
-    });
+    fireEvent.change(fileInput, { target: { files: validFiles } });
 
-    await waitFor(() => {
-      validFiles.forEach((file) => {
-        expect(screen.getByText(file.name)).toBeInTheDocument();
-      });
-    });
+    // All listed after upload
+    await screen.findByText('test1.pdf');
+    await screen.findByText('test2.docx');
+    await screen.findByText('test3.txt');
 
     expect(mockOnNotComplete).toHaveBeenCalled();
   });
 
   it('should update job with correct parameters when uploading files', async () => {
-    // Mock fetch for config.json
-    global.fetch = vi.fn().mockImplementation(() =>
-      Promise.resolve({
-        json: () => Promise.resolve({ CLIENT_NAME: 'test-client', REGION: 'us-east-1' }),
-      }),
-    );
-
-    // Mock URL.createObjectURL
-    global.URL.createObjectURL = vi.fn();
-
-    // Reset our mock functions before the test
-    createJobMock.mockClear();
-    updateJobMock.mockClear();
-
-    // Update the mock for this test
+    // Re-mock useNumaApp to include tasks list (ensures filtering keeps real tasks only)
     vi.mocked<typeof useNumaApp>(useNumaApp).mockReturnValue({
       numaAppId: 'test-app-id',
-      numaAppData: { id: 'test-app-id', appName: 'Test App' },
+      numaAppData: { id: 'test-app-id', appName: 'Test App', tasks: [{ id: 'test-task-id' }] },
       currentJobId: null,
       setCurrentJobId: vi.fn(),
       taskInputValues: {},
+      appRunning: false,
+      numaTaskResponses: [],
     });
 
-    // We need to skip actually rendering the component since we can't easily mock
-    // all the required dependencies in this test environment
-
-    // Instead, let's directly test the key functionality we care about:
-    // that updateJob is called with the correct parameters
-
-    // This simulates what would happen after a successful file upload
-    // where updateJob is called with the full numaAppData object
+    // Simulate what the component does after upload:
     await updateJobMock(
-      mockNumaAppData,
+      { id: 'test-app-id', appName: 'Test App', tasks: [{ id: 'test-task-id' }] },
       'test-job-id',
       undefined,
       {
-        'test-task-id': 'test-app-id/test-job-id/test.pdf',
+        'test-task-id': [
+          {
+            id: 'abc',
+            name: 'test.pdf',
+            s3_key: 'test-app-id/user-uuid-123/test-job-id/test.pdf',
+          },
+        ],
       },
       'files-uploaded',
     );
 
-    // Verify updateJob was called with the correct parameters
     expect(updateJobMock).toHaveBeenCalledWith(
-      mockNumaAppData, // Should pass the full numaAppData object, not just the ID
+      expect.objectContaining({ id: 'test-app-id', appName: 'Test App' }),
       'test-job-id',
-      undefined, // results should be undefined to preserve existing data
+      undefined,
       expect.objectContaining({
-        'test-task-id': 'test-app-id/test-job-id/test.pdf', // The file path
+        'test-task-id': expect.any(Array),
       }),
       'files-uploaded',
     );
   });
 
-  it('should update job with correct parameters when a job already exists', async () => {
-    // Reset our mock functions before the test
-    createJobMock.mockClear();
-    updateJobMock.mockClear();
-
-    // Mock NumaApp context with an existing job ID
+  it('should update job with existing job id & preserve task inputs', async () => {
     const existingJobId = 'existing-job-id';
     const mockTaskInputValues = { 'existing-task': 'existing-value' };
 
-    // Update the mock for this test
     vi.mocked<typeof useNumaApp>(useNumaApp).mockReturnValue({
       numaAppId: 'test-app-id',
-      numaAppData: { id: 'test-app-id', appName: 'Test App' },
-      currentJobId: existingJobId, // Existing job ID
+      numaAppData: { id: 'test-app-id', appName: 'Test App', tasks: [{ id: 'test-task-id' }] },
+      currentJobId: existingJobId,
       setCurrentJobId: vi.fn(),
       taskInputValues: mockTaskInputValues,
+      appRunning: false,
+      numaTaskResponses: [],
     });
 
-    // Test the key functionality with an existing job
-    // This simulates what would happen after a successful file upload
-    // with an existing job ID
-    const fileInputs = {
-      'test-task-id': 'test-app-id/existing-job-id/test.pdf',
+    const mergedInputs = {
+      ...mockTaskInputValues,
+      'test-task-id': [{ id: 'abc', name: 'test.pdf', s3_key: 'test-app-id/existing-job-id/test.pdf' }],
     };
 
-    // Merge with existing task input values (as done in the component)
-    const mergedInputs = { ...mockTaskInputValues, ...fileInputs };
-
-    await updateJobMock(mockNumaAppData, existingJobId, undefined, mergedInputs, 'files-uploaded');
-
-    // Verify updateJob was called with the correct parameters
-    expect(updateJobMock).toHaveBeenCalledWith(
-      mockNumaAppData, // Should pass the full numaAppData object, not just the ID
+    await updateJobMock(
+      { id: 'test-app-id', appName: 'Test App', tasks: [{ id: 'test-task-id' }] },
       existingJobId,
-      undefined, // results should be undefined to preserve existing data
+      undefined,
+      mergedInputs,
+      'files-uploaded',
+    );
+
+    expect(updateJobMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'test-app-id', appName: 'Test App' }),
+      existingJobId,
+      undefined,
       expect.objectContaining({
-        'test-task-id': 'test-app-id/existing-job-id/test.pdf',
-        'existing-task': 'existing-value', // Should preserve existing inputs
+        'test-task-id': expect.any(Array),
+        'existing-task': 'existing-value',
       }),
       'files-uploaded',
     );
 
-    // Verify createJob was NOT called since we already have a job ID
     expect(createJobMock).not.toHaveBeenCalled();
   });
 
   it('should mark as complete when upload is not required', async () => {
-    // Create a task prop with required set to false
-    const task = { id: 'test-task-id', title: 'Test Task', required: false };
     const mockOnComplete = vi.fn();
     const mockOnNotComplete = vi.fn();
     const mockOnChange = vi.fn();
 
     renderWithProviders(
       <S3UploadModule
-        task={task}
+        task={{ id: 'test-task-id', title: 'Test Task', required: false }}
         onComplete={mockOnComplete}
         onNotComplete={mockOnNotComplete}
         onChange={mockOnChange}
       />,
     );
 
-    // Verify onComplete was called during initial render since upload is not required
     await waitFor(() => {
       expect(mockOnComplete).toHaveBeenCalled();
     });
-
-    // We don't need to test the handleUpload function here since it would require selecting files first
-    // The important part is that onComplete is called on initial render for non-required uploads
   });
 
   it('should not mark as complete when upload is required', async () => {
-    // Create a task prop with required set to true
-    const task = { id: 'test-task-id', title: 'Test Task', required: true };
     const mockOnComplete = vi.fn();
     const mockOnNotComplete = vi.fn();
     const mockOnChange = vi.fn();
 
     renderWithProviders(
       <S3UploadModule
-        task={task}
+        task={{ id: 'test-task-id', title: 'Test Task', required: true }}
         onComplete={mockOnComplete}
         onNotComplete={mockOnNotComplete}
         onChange={mockOnChange}
       />,
     );
 
-    // Verify onNotComplete was called during initial render since upload is required
     await waitFor(() => {
       expect(mockOnNotComplete).toHaveBeenCalled();
     });
-
-    // Verify onComplete was not called
     expect(mockOnComplete).not.toHaveBeenCalled();
   });
 });

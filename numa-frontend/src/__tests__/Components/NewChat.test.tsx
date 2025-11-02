@@ -7,6 +7,12 @@ import React from 'react';
 import '@testing-library/jest-dom';
 import { NewChat } from '../../Components/NewChat';
 
+// ✅ Minimal mock so ConversationAvatar’s hook doesn’t require a provider
+vi.mock('../../hooks/useAgentById', () => ({
+  useAgentById: (_agentId?: string) => ({ agent: null }),
+}));
+
+// ✅ Keep ChatInput lightweight and controllable
 vi.mock('../../Components/ChatInput', () => ({
   ChatInput: ({
     placeholderOverride,
@@ -55,6 +61,11 @@ const createBaseProps = () => {
       conversation_id: string;
       conversationName?: string | null;
       latestTimestamp: number;
+      // Optional agent metadata (not used in these tests)
+      isAgentConversation?: boolean;
+      agentId?: string | null;
+      agentIcon?: string | null;
+      agentTitle?: string | null;
     }>,
     hideSuggestions: vi.fn(),
     onContinueConversation: vi.fn(),

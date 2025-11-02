@@ -1,4 +1,13 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+  type ForwardRefRenderFunction,
+  type WeakValidationMap,
+} from 'react';
 import { Button } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { useAuth } from '../Providers/AuthProvider';
@@ -10,7 +19,7 @@ import { UploadStatusRow } from '../Components/UploadStatusRow';
 import PropTypes from 'prop-types';
 import { useJobsApi } from '../Services/jobsApi';
 
-// ---------- Types added ----------
+// ---------- Types ----------
 type NumaAppWithTasks = { tasks?: Array<{ id: string }> };
 type TaskInputMap = Record<string, unknown>;
 
@@ -45,92 +54,183 @@ export interface S3UploadModuleProps {
   onComplete?: (results?: StandardizedFile[] | []) => void;
   onNotComplete?: (results?: StandardizedFile[] | []) => void;
   onChange?: (value: StandardizedFile[] | null | string) => void;
-  value?: unknown;
+  value?: StandardizedFile | StandardizedFile[] | string;
   disabled?: boolean;
 }
 
-// put this near the top of the file (after imports is fine)
 type TaskResponse = {
   taskId: string;
   result?: unknown;
 };
 
+type MaybeIdToken = { sub?: string };
+type MaybeDecodedTokens = { idToken?: MaybeIdToken };
+type MaybeUser = { decoded_tokens?: MaybeDecodedTokens };
+
+type JobCreateResult = { jobId: string };
+
+type UploaderHandle = {
+  acceptUserSelection?: (files: File[], opts?: { autoStart?: boolean }) => Promise<void> | void;
+  startUpload?: () => Promise<void> | void;
+};
+
 // Default no-op functions
 const noop: (..._args: unknown[]) => void = () => {};
 
-// Utility function to standardize file format
-const standardizeFileFormat = (file) => {
+// Safe getter for simple config values
+const safeGet = (obj: Record<string, unknown> | null, key: string): string =>
+  obj && typeof obj[key] === 'string' ? (obj[key] as string) : '';
+
+/** Convert assorted inputs to a StandardizedFile */
+const standardizeFileFormat = (file: unknown): StandardizedFile | null => {
   if (!file) return null;
 
-  // If it's a string, treat it as a file path
   if (typeof file === 'string') {
+    const name = file.split('/').pop() || 'Unknown';
     return {
-      id: Math.random().toString(36).substring(2, 15),
-      name: file.split('/').pop(),
+      id: Math.random().toString(36).slice(2),
+      name,
       s3_key: file,
     };
   }
 
-  // If it's already in the standard format, return as is
-  if (file.id && file.name && file.s3_key) {
-    return file;
+  if (typeof file === 'object') {
+    const f = file as Record<string, unknown>;
+    if (typeof f.id === 'string' && typeof f.name === 'string' && typeof f.s3_key === 'string') {
+      return f as unknown as StandardizedFile;
+    }
+
+    const filePath = (f.filePath ?? f.s3_key ?? f.key ?? '') as string;
+    const nameFromPath = filePath.split('/').pop() || 'Unknown file';
+    const name = (f.fileName as string | undefined) ?? (f.name as string | undefined) ?? nameFromPath;
+
+    return {
+      id: (f.randomId as string | undefined) ?? (typeof f.id === 'string' ? f.id : Math.random().toString(36).slice(2)),
+      name,
+      s3_key: filePath,
+    };
   }
 
-  // Convert from various formats to standard
-  return {
-    id: file.randomId || file.id || Math.random().toString(36).substring(2, 15),
-    name: file.fileName || file.name || (file.filePath || file.s3_key || '').split('/').pop() || 'Unknown file',
-    s3_key: file.filePath || file.s3_key || file.key || '',
-  };
+  return null;
 };
 
-function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChange = noop, value, disabled = false }) {
+const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModuleProps> = (
+  { task, onComplete = noop, onNotComplete = noop, onChange = noop, value, disabled = false },
+  ref,
+) => {
   const { numaAppId, appRunning, numaTaskResponses, currentJobId, setCurrentJobId, numaAppData, taskInputValues } =
     useNumaApp();
   const jobsApi = useJobsApi();
   const { getCredentials, user } = useAuth();
 
-  // Extract parameters from task with defaults
+  // ---- Config (region/bucket) with race-proofing ----
+  const [bucketName, setBucketName] = useState('');
+  const [region, setRegion] = useState<string | undefined>();
+  const [isConfigReady, setIsConfigReady] = useState(false);
+  const configPromiseRef = useRef<Promise<void> | null>(null);
+  const pendingUploadsRef = useRef<File[] | null>(null);
+
+  const fetchConfigOnce = useCallback((): Promise<void> => {
+    if (configPromiseRef.current) return configPromiseRef.current;
+
+    configPromiseRef.current = (async () => {
+      try {
+        const res = await fetch('/config.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`config.json HTTP ${res.status}`);
+        const cfg = (await res.json()) as Record<string, unknown>;
+
+        // Fallbacks allow multiple deployment styles
+        const cfgRegion =
+          safeGet(cfg, 'REGION') ||
+          safeGet(cfg, 'awsRegion') ||
+          (typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).__NUMA_REGION
+            ? String((window as unknown as Record<string, unknown>).__NUMA_REGION)
+            : '') ||
+          process.env.NEXT_PUBLIC_AWS_REGION ||
+          '';
+
+        const explicitBucket =
+          safeGet(cfg, 'OUTPUT_BUCKET') ||
+          (typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).__NUMA_OUTPUT_BUCKET
+            ? String((window as unknown as Record<string, unknown>).__NUMA_OUTPUT_BUCKET)
+            : '') ||
+          process.env.NEXT_PUBLIC_AWS_OUTPUT_BUCKET ||
+          '';
+
+        const clientName =
+          safeGet(cfg, 'CLIENT_NAME') ||
+          (typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).__NUMA_CLIENT_NAME
+            ? String((window as unknown as Record<string, unknown>).__NUMA_CLIENT_NAME)
+            : '') ||
+          process.env.NEXT_PUBLIC_NUMA_CLIENT_NAME ||
+          'unknown';
+
+        const bucket = explicitBucket || (clientName ? `numa-${clientName}-outputs` : '');
+
+        if (!cfgRegion) throw new Error('Missing REGION in config/environment');
+        if (!bucket) throw new Error('Missing OUTPUT_BUCKET/CLIENT_NAME for S3 bucket');
+
+        setRegion(cfgRegion);
+        setBucketName(bucket);
+        setIsConfigReady(true);
+      } catch (err) {
+        console.error('[S3UploadModule] Failed to load config:', err);
+        setIsConfigReady(false);
+        throw err;
+      }
+    })();
+
+    return configPromiseRef.current;
+  }, []);
+
+  useEffect(() => {
+    fetchConfigOnce().catch(() => {
+      // visible error will be shown if user tries to upload before ready
+    });
+  }, [fetchConfigOnce]);
+
+  // If files arrived before config was ready, flush them now
+  useEffect(() => {
+    if (isConfigReady && pendingUploadsRef.current && pendingUploadsRef.current.length) {
+      const files = pendingUploadsRef.current.slice();
+      pendingUploadsRef.current = null;
+      void handleFileSelection(files);
+    }
+  }, [isConfigReady]);
+
+  // ---- Uploader state ----
   const acceptedFileTypes = task?.parameters?.allowedFileTypes ?? [];
   const maxFileSize = task?.parameters?.maximumFileSize ?? null;
   const minFiles = task?.parameters?.minFiles ?? 0;
   const maxFiles = task?.parameters?.maxFiles ?? null;
   const userMessage = task?.parameters?.userMessage;
 
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [uploadStatus, setUploadStatus] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState<StandardizedFile[]>([]);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [bucketName, setBucketName] = useState('');
-  const [region, setRegion] = useState();
   const [isCreatingJob, setIsCreatingJob] = useState(false);
 
-  const fileInputRef = useRef(null);
-  // Single promise to ensure atomic job creation across concurrent uploads
-  const jobCreationPromiseRef = useRef(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const jobCreationPromiseRef = useRef<Promise<JobCreateResult> | null>(null);
 
   const taskResponse = Array.isArray(numaTaskResponses)
     ? (numaTaskResponses as TaskResponse[]).find((r) => r?.taskId === task.id)
     : undefined;
 
-  const userUuid = user?.decoded_tokens?.idToken?.sub;
+  const userUuid = (user as MaybeUser | undefined)?.decoded_tokens?.idToken?.sub;
 
   // Handle value prop changes
-  // Uses standardizeFileFormat to convert any input format to our standard format:
-  // { id: string, name: string, s3_key: string }
   useEffect(() => {
-    if (!value) {
-      return;
-    }
+    if (!value) return;
+    let processedFiles: StandardizedFile[] | undefined;
 
-    let processedFiles;
-
-    // Process the value based on its format
     if (Array.isArray(value)) {
-      processedFiles = value.map(standardizeFileFormat).filter(Boolean);
+      const arr = value as (StandardizedFile | string)[];
+      processedFiles = arr.map((v) => standardizeFileFormat(v)).filter((v): v is StandardizedFile => Boolean(v));
     } else if (value) {
-      const standardized = standardizeFileFormat(value);
+      const standardized = standardizeFileFormat(value as StandardizedFile | string);
       processedFiles = standardized ? [standardized] : [];
     }
 
@@ -138,82 +238,56 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       setSelectedFiles(processedFiles);
       const fileNames = processedFiles.map((f) => f.name).join(', ');
       setUploadStatus(`Files uploaded: ${fileNames}`);
-      // Don't call onComplete here to avoid infinite loop
-      // onComplete is only called after actual file uploads
     } else {
       setSelectedFiles([]);
       setUploadStatus(null);
     }
   }, [value]);
 
-  const fetchConfig = useCallback(async () => {
-    const config = await (await fetch('/config.json')).json();
-    setBucketName(`numa-${config.CLIENT_NAME}-outputs`);
-    setRegion(config.REGION);
-  }, []);
-
+  // Initial completion status
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
-
-  // Handle initial completion status based on whether the upload is required
-  useEffect(() => {
-    // Check if this is a chat file upload (special case)
     const isChatFileUpload = task?.id === 'chatFileUpload';
+    if (isChatFileUpload) return;
 
-    // For chat file uploads, don't automatically call onComplete
-    if (isChatFileUpload) {
-      return;
-    }
-
-    // For other cases, proceed with normal behavior
-    // Check if the task is required (default to false for better user experience)
     const isRequired = task?.required !== undefined ? task.required : false;
 
-    // If the upload is not required, mark as complete by default
     if (!isRequired) {
-      // Always pass an empty array to onComplete to avoid undefined errors
       onComplete([]);
     } else {
-      // For required uploads, check if there's already a value
       if (value) {
-        // Pass the value as an array to onComplete
-        onComplete(Array.isArray(value) ? value : [value]);
+        onComplete(Array.isArray(value) ? (value as StandardizedFile[]) : [value as StandardizedFile]);
       } else {
         onNotComplete();
       }
     }
   }, []);
 
-  // Warning when fewer than minFiles have been selected (only after initial selection)
   const warning =
     minFiles > 0 && selectedFiles.length > 0 && selectedFiles.length < minFiles
       ? `At least ${minFiles} file${minFiles > 1 ? 's' : ''} required`
       : null;
 
-  const validateFile = (file) => {
-    // Check file type if acceptedFileTypes is specified
+  const validateFile = (file: File) => {
     if (acceptedFileTypes && acceptedFileTypes.length > 0) {
       if (!acceptedFileTypes.includes(file.type)) {
         return {
-          validFile: null,
+          validFile: null as File | null,
           error: `${file.name}: Invalid file type. Accepted types: ${acceptedFileTypes.join(', ')}`,
         };
       }
     }
 
-    // Check file size if maxFileSize is specified (convert MB to bytes)
     if (maxFileSize && file.size > maxFileSize * 1024 * 1024) {
       return {
-        validFile: null,
+        validFile: null as File | null,
         error: `${file.name}: File is too large. Maximum size allowed is ${maxFileSize.toFixed(2)} MB`,
       };
     }
 
-    return { validFile: file, error: null };
+    return { validFile: file, error: null as string | null };
   };
 
-  const removeFile = (fileToRemove) => {
+  const removeFile = (fileToRemove: StandardizedFile) => {
     setSelectedFiles((prev) => {
       const updated = prev.filter((file) => file.name !== fileToRemove.name);
       onChange(updated);
@@ -223,28 +297,41 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     onNotComplete();
   };
 
-  const handleFileSelection = async (fileList) => {
-    const newFiles = Array.from(fileList);
+  // ---- Selection / Drag handlers ----
+  const handleFileSelection = async (fileList: FileList | File[]) => {
+    // Ensure config is ready
+    if (!isConfigReady) {
+      try {
+        await fetchConfigOnce();
+      } catch {
+        setError('Storage config failed to load (missing REGION/BUCKET). Please refresh or contact support.');
+        onNotComplete();
+        return;
+      }
+      if (!isConfigReady) {
+        // queue files until config is ready
+        pendingUploadsRef.current = Array.from(fileList instanceof FileList ? Array.from(fileList) : fileList);
+        setUploadStatus('Preparing storage…');
+        return;
+      }
+    }
+
+    const newFiles = fileList instanceof FileList ? Array.from(fileList) : fileList;
     const totalFileCount = selectedFiles.length + newFiles.length;
 
-    // Check file count constraints with total count
     if (maxFiles && totalFileCount > maxFiles) {
-      const fileCountError = `Maximum of ${maxFiles} file${maxFiles > 1 ? 's' : ''} allowed`;
-      setError(fileCountError);
+      setError(`Maximum of ${maxFiles} file${maxFiles > 1 ? 's' : ''} allowed`);
+      onNotComplete();
       return;
     }
 
-    const validFiles = [];
-    const errors = [];
+    const validFiles: File[] = [];
+    const errors: string[] = [];
 
     newFiles.forEach((file) => {
       const { validFile, error: fileError } = validateFile(file);
-      if (validFile) {
-        validFiles.push(validFile);
-      }
-      if (fileError) {
-        errors.push(fileError);
-      }
+      if (validFile) validFiles.push(validFile);
+      if (fileError) errors.push(fileError);
     });
 
     if (errors.length > 0) {
@@ -259,17 +346,15 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       setError(null);
       onNotComplete();
       onChange(null);
-
-      // Automatically trigger upload after file selection
       await handleUpload(validFiles);
     }
   };
 
-  const handleFileChange = (e) => {
-    handleFileSelection(e.target.files);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) void handleFileSelection(e.target.files);
   };
 
-  const handleDragEnter = (e) => {
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!disabled && !isCreatingJob) {
@@ -277,7 +362,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     }
   };
 
-  const handleDragLeave = (e) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!disabled && !isCreatingJob) {
@@ -285,33 +370,36 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
     }
   };
 
-  const handleDragOver = (e) => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
     if (!disabled && !isCreatingJob) {
-      handleFileSelection(e.dataTransfer.files);
+      void handleFileSelection(e.dataTransfer.files);
     }
   };
 
-  const handleZoneClick = (e) => {
+  const handleZoneClick = (e: React.MouseEvent) => {
     if (!selectedFiles.length && e.target === e.currentTarget && !disabled && !isCreatingJob) {
-      fileInputRef.current.click();
+      fileInputRef.current?.click();
     }
   };
 
-  const handleUpload = async (filesToUpload = selectedFiles) => {
+  // ---- Upload core ----
+  const handleUpload = async (filesToUpload: File[] | StandardizedFile[] = selectedFiles) => {
+    const isChatFileUpload = task?.id === 'chatFileUpload';
+
     if (!userUuid) {
       setError('Authentication required for file uploads');
       onNotComplete();
       return;
     }
-    // Check if the task is required (default to false for better user experience)
+
     const isRequired = task?.required !== undefined ? task.required : false;
 
     if (!filesToUpload.length) {
@@ -319,7 +407,6 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         setError('Please select at least one file');
         return;
       } else {
-        // If upload is not required and no file is selected, mark as complete and return
         setUploadStatus('No file uploaded');
         onChange('');
         onComplete();
@@ -327,12 +414,15 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       }
     }
 
-    // Initialize results array at the beginning to ensure it's always available
-    const results = [];
+    if (!isConfigReady || !region || !bucketName) {
+      setError('Storage not configured (missing region/bucket). Please refresh or contact support.');
+      onNotComplete();
+      return;
+    }
 
-    // Declare variables outside try block so they're accessible in catch block
-    const isChatFileUpload = task?.id === 'chatFileUpload';
-    let jobId = currentJobId;
+    let jobId = typeof currentJobId === 'string' ? currentJobId : undefined;
+
+    const results: StandardizedFile[] = [];
 
     try {
       setError(null);
@@ -340,56 +430,53 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       // For non-chat uploads, ensure we have a job ID
       if (!isChatFileUpload && numaAppData) {
         if (!jobId) {
-          // If no job creation is in progress, start it
           if (!jobCreationPromiseRef.current) {
-            console.log('Creating new job for file upload');
             setIsCreatingJob(true);
             setUploadStatus('Creating job...');
-            jobCreationPromiseRef.current = jobsApi.createJob(numaAppData, {}, 'uploading');
+            jobCreationPromiseRef.current = jobsApi.createJob(numaAppData, {}, 'uploading') as Promise<JobCreateResult>;
           }
 
-          // Wait for job creation to complete (whether started by this upload or another)
           try {
             const jobCreationResult = await jobCreationPromiseRef.current;
             jobId = jobCreationResult.jobId;
             setCurrentJobId(jobId);
-            setIsCreatingJob(false);
-            console.log(`Using job ID: ${jobId}`);
           } catch (error) {
-            console.error('Failed to create job:', error);
-            jobCreationPromiseRef.current = null; // Reset on error
+            jobCreationPromiseRef.current = null;
             setIsCreatingJob(false);
             throw error;
+          } finally {
+            setIsCreatingJob(false);
           }
-        } else {
-          // Use existing job ID
-          console.log(`Using existing job ID: ${jobId}`);
         }
         setUploadStatus('Uploading files...');
       }
 
+      const credentials = await getCredentials().catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error(`Authentication error: ${msg}`);
+      });
+
       const s3Client = new S3Client({
         region,
-        credentials: await getCredentials(),
+        credentials,
       });
-      for (let i = 0; i < filesToUpload.length; i++) {
-        const file = filesToUpload[i];
-        setUploadStatus(`Uploading file ${i + 1} of ${filesToUpload.length}: ${file.name}`);
+
+      // Only raw File objects should be uploaded here
+      const rawFiles: File[] = (filesToUpload as unknown[]).filter((f): f is File => f instanceof File);
+
+      for (let i = 0; i < rawFiles.length; i++) {
+        const file = rawFiles[i];
+        setUploadStatus(`Uploading file ${i + 1} of ${rawFiles.length}: ${file.name}`);
         setUploadProgress(0);
 
-        // Generate a random string to prevent name clashes
-        const randomId = Math.random().toString(36).substring(2, 15);
-
-        // Split the filename and extension for better formatting
+        const randomId = Math.random().toString(36).slice(2);
         const lastDotIndex = file.name.lastIndexOf('.');
         const fileName = lastDotIndex !== -1 ? file.name.substring(0, lastDotIndex) : file.name;
         const fileExt = lastDotIndex !== -1 ? file.name.substring(lastDotIndex) : '';
 
-        // Create the S3 key with path appropriate to the context
-        // For chat uploads, we use a different path structure that doesn't rely on job IDs
-        let s3Key;
+        let s3Key: string;
         if (isChatFileUpload) {
-          const chatId = Math.random().toString(36).substring(2, 10);
+          const chatId = Math.random().toString(36).slice(2, 10);
           s3Key = `numa-chat/uploads/${userUuid}/${chatId}/${fileName}_${randomId}${fileExt}`;
         } else {
           s3Key = `${numaAppId}/${userUuid}/${jobId}/${fileName}_${randomId}${fileExt}`;
@@ -400,144 +487,130 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           Key: s3Key,
         });
 
-        const presignedUrl = await getSignedUrl(s3Client, command, {
-          expiresIn: 3600,
-        });
+        const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
 
         await axios.put(presignedUrl, file, {
           headers: {
             'Content-Type': file.type || 'application/octet-stream',
           },
           onUploadProgress: (progressEvent) => {
-            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            const total = progressEvent.total || 1;
+            const progress = Math.round((progressEvent.loaded * 100) / total);
             setUploadProgress(progress);
           },
         });
 
-        // Create standardized file object
         const standardizedFile = standardizeFileFormat({
           id: randomId,
           name: file.name,
           s3_key: s3Key,
-          filePath: s3Key, // Keep for backward compatibility
-          fileName: file.name, // Keep for backward compatibility
+          filePath: s3Key,
+          fileName: file.name,
           fileType: file.type,
           s3Bucket: bucketName,
-          file, // Keep the original file for chat compatibility
-        });
+          file,
+        }) as StandardizedFile;
 
         results.push(standardizedFile);
       }
 
-      // Create the standardized format objects with id, name, s3_key
-      // This is the new format required by the task system
       const fileObjects = results.map((r) => ({
         id: r.id,
         name: r.name,
         s3_key: r.s3_key,
       }));
 
-      // Update the job with the standardized file format only if this is not a chat file upload
       if (!isChatFileUpload) {
         try {
-          // Create an object with just this task's input
-          // ALWAYS store the standardized format (array of objects with id, name, s3_key)
-          const fileInputs = {
-            [task.id]: fileObjects,
-          };
+          const fileInputs = { [task.id]: fileObjects };
 
-          // Filter out internal fields from taskInputValues before merging
-          // Only include fields that correspond to actual task IDs
           const filteredTaskInputValues: TaskInputMap = {};
-
           const appWithTasks = numaAppData as NumaAppWithTasks | null;
           if (appWithTasks?.tasks && Array.isArray(appWithTasks.tasks)) {
             const taskIds = new Set(appWithTasks.tasks.map((t) => t.id));
-
-            Object.entries(taskInputValues as TaskInputMap).forEach(([key, value]) => {
-              if (taskIds.has(key)) {
-                filteredTaskInputValues[key] = value;
-              }
+            Object.entries(taskInputValues as TaskInputMap).forEach(([key, val]) => {
+              if (taskIds.has(key)) filteredTaskInputValues[key] = val;
             });
           }
-
-          // Merge with existing task input values (filtered)
           const mergedInputs = { ...filteredTaskInputValues, ...fileInputs };
-
-          // Update the job with the standardized format and status, but don't modify results
           await jobsApi.updateJob(numaAppData, jobId, undefined, mergedInputs, 'files-uploaded');
         } catch (updateError) {
           console.error('Failed to save file paths to job:', updateError);
-          // Don't continue if job update fails - this is a critical error
-          throw new Error(`Upload completed but failed to update job status: ${updateError.message}`);
+          const msg = updateError instanceof Error ? updateError.message : String(updateError);
+          throw new Error(`Upload completed but failed to update job status: ${msg}`);
         }
       }
 
-      setUploadStatus(`Upload successful!`);
-
-      // Store the file objects in the component state and pass to task system
+      setUploadStatus('Upload successful!');
       setSelectedFiles((prev) => {
         const updatedFiles = [...prev, ...fileObjects];
-        // Pass the accumulated files to the task system
         onChange(updatedFiles);
         return updatedFiles;
       });
+      onComplete(results || []);
+    } catch (err) {
+      console.error('Error during file upload:', err);
 
-      // Pass the raw results to onComplete for chat page compatibility
-      // ALWAYS ensure we pass a valid array, even if results is undefined
-      onComplete(results || []); // needed for numa chat
-
-      // Indicate that files are uploaded and ready for processing
-      if (!isChatFileUpload && jobId) {
-        console.log(`Files uploaded successfully to job ${jobId}`);
-      } else {
-        console.log(`Files uploaded successfully for chat`);
-      }
-    } catch (error) {
-      console.error('Error during file upload:', error);
-
-      // Handle job cleanup if upload failed but job creation might have succeeded
-      if (!isChatFileUpload && jobId) {
+      if (!isChatFileUpload && typeof currentJobId === 'string' && currentJobId) {
         try {
-          await jobsApi.updateJob(numaAppData, jobId, null, {}, 'upload-failed');
-          console.log(`Marked job ${jobId} as failed due to upload error`);
+          await jobsApi.updateJob(numaAppData, currentJobId, null, {}, 'upload-failed');
         } catch (jobError) {
           console.error('Failed to mark job:', jobError);
         }
       }
 
-      let errorMessage;
-      if (error.response?.status === 403) {
-        errorMessage = 'Permission denied - please check your access rights';
-      } else if (error.response?.status === 401) {
-        errorMessage = 'Session expired - please log in again';
-      } else if (error.message.includes('Authentication error')) {
-        errorMessage = error.message;
-      } else if (error.message.includes('upload URL')) {
-        errorMessage = 'Server configuration error - please contact support';
-      } else if (error.code === 'ERR_NETWORK') {
-        errorMessage = 'Network error - please check your internet connection';
+      const e = err as unknown;
+      const anyLike = e as Record<string, unknown>;
+      let errorMessage = '';
+
+      const message = typeof anyLike.message === 'string' ? anyLike.message : '';
+      const response = anyLike.response as { status?: number; data?: { error?: string; message?: string } } | undefined;
+      const code = typeof anyLike.code === 'string' ? anyLike.code : '';
+
+      if (message.includes('Missing REGION') || message.includes('region/bucket')) {
+        errorMessage = 'Storage not configured (region/bucket). Check /config.json or environment.';
+      } else if (response?.status === 403) {
+        errorMessage = 'Permission denied — check IAM & bucket policy for PUT Object.';
+      } else if (response?.status === 401) {
+        errorMessage = 'Session expired — please log in again.';
+      } else if (message.includes('Authentication error')) {
+        errorMessage = message;
+      } else if (message.includes('upload URL')) {
+        errorMessage = 'Server configuration error (presign).';
+      } else if (code === 'ERR_NETWORK') {
+        errorMessage = 'Network error — please check your internet connection.';
       } else {
-        errorMessage =
-          error.response?.data?.error || error.response?.data?.message || error.message || 'Error uploading file';
+        errorMessage = response?.data?.error || response?.data?.message || message || 'Error uploading file';
       }
 
       setError(errorMessage);
-
-      // Ensure onComplete is called with an empty array in case of errors
-      // This prevents 'Cannot read properties of undefined (reading \'length\')' errors
-      if (onComplete) {
-        onComplete([]);
-      }
+      onComplete?.([]);
     }
   };
 
-  // Ensure selectedFiles is always an array
-  useEffect(() => {
-    if (selectedFiles && !Array.isArray(selectedFiles)) {
-      setSelectedFiles([selectedFiles]);
-    }
-  }, [selectedFiles]);
+  // --------- Imperative API for ChatFileUpload bridge ----------
+  useImperativeHandle(ref, () => ({
+    acceptUserSelection: async (files: File[]) => {
+      if (!isConfigReady) {
+        pendingUploadsRef.current = files;
+        setUploadStatus('Preparing storage…');
+        try {
+          await fetchConfigOnce();
+        } catch {
+          // error shown by guards
+        }
+        if (isConfigReady) {
+          await handleFileSelection(files);
+        }
+        return;
+      }
+      await handleFileSelection(files);
+    },
+    startUpload: async () => {
+      await handleUpload();
+    },
+  }));
+  // -------------------------------------------------------------
 
   return (
     <div className="task-container">
@@ -567,6 +640,14 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
           >
             Select Files
           </Button>
+
+          {/* Config readiness hint */}
+          {!isConfigReady && !error && (
+            <div className="mt-3">
+              <UploadStatusRow text="Preparing storage…" showSpinner className="mb-2" />
+            </div>
+          )}
+
           {error && (
             <div className="mt-3">
               <UploadStatusRow text={error} variant="error" className="mb-2" />
@@ -582,11 +663,15 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
             <div className="mt-3">
               <UploadStatusRow
                 text={uploadStatus}
-                showSpinner={uploadStatus.includes('Uploading') || uploadStatus.includes('Finalising')}
+                showSpinner={
+                  uploadStatus.includes('Uploading') ||
+                  uploadStatus.includes('Finalising') ||
+                  uploadStatus.includes('Creating job') ||
+                  uploadStatus.includes('Preparing storage')
+                }
                 showCheckmark={uploadStatus.includes('successful') || uploadStatus.includes('uploaded:')}
                 className="mb-2"
               />
-              {/* Show progress bar if between 0 and 100 */}
               {uploadProgress > 0 && uploadProgress < 100 && (
                 <div className="progress">
                   <div
@@ -606,6 +691,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
         </div>
 
         {appRunning && !taskResponse?.result && <Preloader smallscreen={true} overlayParent={true} />}
+
         {selectedFiles.length > 0 && (
           <div className="s3-files-section">
             <div className="files-header">
@@ -616,7 +702,7 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
                 className="clear-all-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const clearedFiles = [];
+                  const clearedFiles: StandardizedFile[] = [];
                   setSelectedFiles(clearedFiles);
                   setError(null);
                   onNotComplete();
@@ -668,22 +754,33 @@ function S3UploadModule({ task, onComplete = noop, onNotComplete = noop, onChang
       </div>
     </div>
   );
-}
+};
+
+// Attach propTypes without introducing `any`
+export const S3UploadModule = forwardRef(S3UploadModuleInner) as unknown as React.ForwardRefExoticComponent<
+  React.PropsWithoutRef<S3UploadModuleProps> & React.RefAttributes<UploaderHandle>
+> & { propTypes?: WeakValidationMap<S3UploadModuleProps> };
 
 S3UploadModule.propTypes = {
   task: PropTypes.shape({
-    id: PropTypes.string,
+    id: PropTypes.string.isRequired,
     title: PropTypes.string,
     required: PropTypes.bool,
     parameters: PropTypes.shape({
       allowedFileTypes: PropTypes.arrayOf(PropTypes.string),
       maximumFileSize: PropTypes.number,
+      minFiles: PropTypes.number,
+      maxFiles: PropTypes.number,
+      userMessage: PropTypes.string,
     }),
-  }),
-  onComplete: PropTypes.func,
-  onNotComplete: PropTypes.func,
-  onChange: PropTypes.func,
-  value: PropTypes.oneOfType([PropTypes.string, PropTypes.array, PropTypes.object]),
+  }) as unknown as WeakValidationMap<S3UploadModuleProps>,
+  onComplete: PropTypes.func as unknown as WeakValidationMap<S3UploadModuleProps>,
+  onNotComplete: PropTypes.func as unknown as WeakValidationMap<S3UploadModuleProps>,
+  onChange: PropTypes.func as unknown as WeakValidationMap<S3UploadModuleProps>,
+  value: PropTypes.oneOfType([
+    PropTypes.string,
+    PropTypes.array,
+    PropTypes.object,
+  ]) as unknown as WeakValidationMap<S3UploadModuleProps>,
+  disabled: PropTypes.bool as unknown as WeakValidationMap<S3UploadModuleProps>,
 };
-
-export { S3UploadModule };

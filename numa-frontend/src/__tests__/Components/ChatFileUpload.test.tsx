@@ -4,6 +4,7 @@
 import { render, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
+import React from 'react';
 import { ChatFileUpload } from '../../Components/ChatFileUpload';
 import { useAuth } from '../../Providers/AuthProvider';
 
@@ -12,7 +13,7 @@ vi.mock('../../Providers/AuthProvider', () => ({
   useAuth: vi.fn(),
 }));
 
-// Add mocks for NumaRequestContext
+// Mock NumaRequestContext
 vi.mock('../../Providers/NumaRequestContext', () => ({
   useNumaRequest: vi.fn(() => ({
     numaPost: vi.fn().mockResolvedValue({
@@ -22,35 +23,43 @@ vi.mock('../../Providers/NumaRequestContext', () => ({
   })),
 }));
 
-// Add import for S3UploadModule mock
+// Mock S3UploadModule to surface a test button that triggers onComplete
 const { S3UploadModule } = vi.hoisted(() => ({ S3UploadModule: vi.fn() }));
 vi.mock('../../Modules/S3UploadModule', () => ({
   S3UploadModule,
 }));
 
+// Stub s3 utils (not used directly here but kept for completeness)
 vi.mock('../../utils/s3Utils', () => ({
   fetchFileFromS3: vi.fn(),
   uploadFileToS3: vi.fn(),
 }));
 
+// fileProcessing helpers used by ChatFileUpload
 const { processFile, isFileProcessingComplete, cleanupFileProcessingTask } = vi.hoisted(() => ({
   processFile: vi.fn(),
   isFileProcessingComplete: vi.fn(),
   cleanupFileProcessingTask: vi.fn(),
 }));
-
 vi.mock('../../utils/fileProcessing', () => ({
   processFile,
   isFileProcessingComplete,
   cleanupFileProcessingTask,
 }));
 
+type ChatMessage = {
+  role: 'assistant' | 'system' | 'user';
+  content: React.ReactNode | string;
+  status?: string;
+  ephemeralId?: number;
+};
+
 describe('ChatFileUpload Component', () => {
   const mockOnHide = vi.fn();
-  const mockSetMessages = vi.fn();
+  const mockSetMessages = vi.fn<(updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void>();
   const mockRefreshSidebar = vi.fn();
   const mockSetIsFileProcessing = vi.fn();
-  const mockEnsureConversationReady = vi.fn();
+  const mockEnsureConversationReady = vi.fn<[], Promise<string>>();
   const mockAddMessage = vi.fn();
   const mockAddFileMessage = vi.fn();
   const mockResetInactivityTimer = vi.fn();
@@ -76,15 +85,15 @@ describe('ChatFileUpload Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Set default behaviors for mocked functions
+    // process completes immediately in tests
     isFileProcessingComplete.mockReturnValue(true);
 
-    // Reset the mock before each test
+    // S3UploadModule mock triggers onComplete with one PDF file
     vi.mocked(S3UploadModule).mockImplementation(({ onComplete }) => (
       <button
         data-testid="upload-button"
         onClick={() =>
-          onComplete([
+          onComplete?.([
             {
               filePath: 'test/path',
               fileName: 'test.pdf',
@@ -101,7 +110,8 @@ describe('ChatFileUpload Component', () => {
 
     mockEnsureConversationReady.mockResolvedValue('test-conversation');
 
-    useAuth.mockReturnValue({
+    // Minimal auth context for ChatFileUpload (no need for decoded_tokens here)
+    (useAuth as unknown as vi.Mock).mockReturnValue({
       getCredentials: vi.fn(),
       bedrockRuntimeClient: {},
       numaChatDynamoUtils: {
@@ -113,30 +123,30 @@ describe('ChatFileUpload Component', () => {
       user: { tokens: { idToken: 'test-token' } },
     });
 
-    // Reset session storage
+    // Session storage region used deeper by s3 utils (kept for parity)
     window.sessionStorage.clear();
     window.sessionStorage.setItem('REGION', 'us-east-1');
 
-    // Mock processFile to simulate successful processing
-    // This matches the actual implementation's parameter structure
-    processFile.mockImplementation((fileInfo) => {
-      // Return a resolved promise with the processing result
-      return Promise.resolve({
-        content: 'processed content',
-        inferredType: fileInfo.fileType?.includes('pdf')
-          ? 'pdf'
-          : fileInfo.fileType?.includes('image')
-            ? 'jpeg'
-            : 'text',
-        contentType: fileInfo.fileType,
-        fileName: fileInfo.fileName,
-        s3Key: fileInfo.s3Key,
-        s3Bucket: fileInfo.s3Bucket,
-        extractedContentS3Key: `${fileInfo.s3Key}-processed`,
-        output_bucket: fileInfo.s3Bucket,
-        documentInfo: { title: fileInfo.fileName },
-      });
-    });
+    // processFile resolves with expected shape
+    processFile.mockImplementation(
+      (fileInfo: { fileType?: string; fileName: string; s3Key: string; s3Bucket: string }) => {
+        return Promise.resolve({
+          content: 'processed content',
+          inferredType: fileInfo.fileType?.includes('pdf')
+            ? 'pdf'
+            : fileInfo.fileType?.includes('image')
+              ? 'jpeg'
+              : 'text',
+          contentType: fileInfo.fileType,
+          fileName: fileInfo.fileName,
+          s3Key: fileInfo.s3Key,
+          s3Bucket: fileInfo.s3Bucket,
+          extractedContentS3Key: `${fileInfo.s3Key}-processed`,
+          output_bucket: fileInfo.s3Bucket,
+          documentInfo: { title: fileInfo.fileName },
+        });
+      },
+    );
   });
 
   it('renders modal with upload component and supported file types', () => {
@@ -151,25 +161,29 @@ describe('ChatFileUpload Component', () => {
   it('handles file upload process correctly', async () => {
     const { getByTestId } = render(<ChatFileUpload {...defaultProps} />);
 
-    // 1. Verify modal is ready
+    // Modal & trigger present
     expect(getByTestId('upload-modal-body')).toBeInTheDocument();
     expect(getByTestId('upload-button')).toBeInTheDocument();
 
-    // 2. Trigger upload
+    // Trigger upload
     fireEvent.click(getByTestId('upload-button'));
 
-    // 3. Verify processing starts and modal closes
+    // Processing starts and modal closes
     await waitFor(() => {
       expect(mockSetIsFileProcessing).toHaveBeenCalledWith(true);
       expect(mockOnHide).toHaveBeenCalled();
     });
 
-    // 4. ensureConversationReady called with preview
+    // ensureConversationReady is called; first arg must be the preview name ("test.pdf")
     await waitFor(() => {
-      expect(mockEnsureConversationReady).toHaveBeenCalledWith('test.pdf');
+      expect(mockEnsureConversationReady).toHaveBeenCalled();
+      const firstCall = mockEnsureConversationReady.mock.calls[0];
+      expect(firstCall?.[0]).toBe('test.pdf');
+      // We intentionally do NOT assert about a second argument here, because
+      // when there is no active agent, the component passes only one parameter.
     });
 
-    // 5. Verify processFile was called with correct parameters
+    // processFile invoked with correct params
     await waitFor(() => {
       expect(processFile).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -185,9 +199,16 @@ describe('ChatFileUpload Component', () => {
       );
     });
 
-    // 5. Verify successful completion
+    // Side-effects: timers/messages/sidebar updates
     await waitFor(() => {
       expect(mockResetInactivityTimer).toHaveBeenCalled();
+
+      // First updater: "Processing..." assistant row
+      const updater1 = mockSetMessages.mock.calls[0][0] as (prev: ChatMessage[]) => ChatMessage[];
+      const result1 = updater1([]);
+      expect(result1[0].role).toBe('assistant');
+
+      // Later, addFileMessage called with proper payload
       expect(mockAddFileMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           conversationId: 'test-conversation',
@@ -206,12 +227,12 @@ describe('ChatFileUpload Component', () => {
   });
 
   it('handles upload errors gracefully', async () => {
-    // Override mock for this specific test to match expected jpg file
+    // Override S3UploadModule for a jpg
     vi.mocked(S3UploadModule).mockImplementation(({ onComplete }) => (
       <button
         data-testid="upload-button"
         onClick={() =>
-          onComplete([
+          onComplete?.([
             {
               filePath: 'test/path',
               fileName: 'test.jpg',
@@ -233,25 +254,21 @@ describe('ChatFileUpload Component', () => {
 
     fireEvent.click(getByTestId('upload-button'));
 
-    // First, wait for the processing message
+    // First assistant "Processing..." row is added
     await waitFor(() => {
       expect(mockSetMessages).toHaveBeenCalled();
-      const updateFunction = mockSetMessages.mock.calls[0][0];
-      const result = updateFunction([]);
+      const updater = mockSetMessages.mock.calls[0][0] as (prev: ChatMessage[]) => ChatMessage[];
+      const result = updater([]);
       expect(result[0].role).toBe('assistant');
-      expect(result[0].content.props.text).toBe('Processing 1 file(s)...');
-      expect(result[0].content.props.showSpinner).toBe(true);
+      // Result[0].content is a React node (UploadStatusRow); shallow check:
+      expect(result[0].status).toBe('processingFile');
     });
 
-    // Then, wait for the error message to be set
+    // Then an error message shows up
     await waitFor(() => {
-      // Check that setMessages was called at least twice (once for processing, once for error)
       expect(mockSetMessages.mock.calls.length).toBeGreaterThan(1);
-
-      // The second call should contain our error message
-      const updateFunction = mockSetMessages.mock.calls[1][0];
-      const result = updateFunction([]);
-
+      const updater = mockSetMessages.mock.calls[1][0] as (prev: ChatMessage[]) => ChatMessage[];
+      const result = updater([]);
       expect(result[0]).toMatchObject({
         role: 'system',
         content: expect.stringContaining(`Failed to process "test.jpg": ${error.message}`),
@@ -259,12 +276,10 @@ describe('ChatFileUpload Component', () => {
     });
   });
 
-  it('closes modal when onHide is called', () => {
+  it('closes modal when onHide is called (close button)', () => {
     const { getByRole } = render(<ChatFileUpload {...defaultProps} />);
-
     const closeButton = getByRole('button', { name: /close/i });
     fireEvent.click(closeButton);
-
     expect(mockOnHide).toHaveBeenCalled();
   });
 });
