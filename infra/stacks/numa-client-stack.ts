@@ -342,6 +342,7 @@ export class NumaClientStack extends TerraformStack {
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
         PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
         PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
+        AGENTS: clientConfig.agents ?? false,
       }),
       contentType: 'application/json',
     });

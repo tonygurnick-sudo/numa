@@ -68,6 +68,8 @@ export default function SettingsPage() {
   const brandingApiEnabled = brandingFlag === 'true';
   const isAdmin = Boolean(user?.groups?.includes('admin'));
   const allowBrandingTab = brandingApiEnabled && isAdmin;
+  const agentsFeatureEnabled =
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
 
   // Global (admin) settings
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
@@ -386,111 +388,113 @@ export default function SettingsPage() {
                 >
                   <UserManagement />
                 </Tab>
-                <Tab
-                  eventKey="agents"
-                  title={
-                    <span>
-                      <i className="bi bi-robot me-2"></i>Agents
-                    </span>
-                  }
-                >
-                  <div className="mb-3">
-                    <Alert variant="secondary" className="mb-3">
-                      <div className="d-flex align-items-start">
-                        <i className="bi bi-building-gear me-2 mt-1"></i>
-                        <div>
-                          <div className="fw-semibold">Company-wide agents policy</div>
-                          <div className="small text-muted">
-                            Choose how agents work across your company. Changes take effect immediately for everyone.
+                {agentsFeatureEnabled && (
+                  <Tab
+                    eventKey="agents"
+                    title={
+                      <span>
+                        <i className="bi bi-robot me-2"></i>Agents
+                      </span>
+                    }
+                  >
+                    <div className="mb-3">
+                      <Alert variant="secondary" className="mb-3">
+                        <div className="d-flex align-items-start">
+                          <i className="bi bi-building-gear me-2 mt-1"></i>
+                          <div>
+                            <div className="fw-semibold">Company-wide agents policy</div>
+                            <div className="small text-muted">
+                              Choose how agents work across your company. Changes take effect immediately for everyone.
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </Alert>
-                    {agentsLoading ? (
-                      <div className="text-center py-4">
-                        <Spinner animation="border" />
-                      </div>
-                    ) : (
-                      <div className="d-flex flex-column gap-2">
-                        {[
-                          {
-                            key: 'off',
-                            label: 'Agents Off',
-                            desc: 'Agents are disabled for everyone. The Agents UI shows a notice that it is disabled and to contact an admin.',
-                          },
-                          {
-                            key: 'personal_only',
-                            label: 'Personal Agents Only',
-                            desc: 'Users can create and use personal agents. Company sharing is disabled and the Company Agent Marketplace is hidden.',
-                          },
-                          {
-                            key: 'full',
-                            label: 'Agents On (Full)',
-                            desc: 'Users can create and use personal agents and share company agents. The marketplace is available.',
-                          },
-                        ].map((opt) => {
-                          const selected = agentsMode === (opt.key as AgentsMode);
-                          return (
-                            <div
-                              key={opt.key}
-                              className={`p-3 border rounded-3 bg-white d-flex align-items-start justify-content-between ${selected ? 'border-primary border-2' : ''}`}
-                              role="button"
-                              onClick={async () => {
-                                if (agentsSaving || agentsMode === (opt.key as AgentsMode)) return;
-                                // Confirmation copy per mode transition
-                                let message = '';
-                                if (opt.key === 'off') {
-                                  message =
-                                    'Turn off Agents for everyone? Users will not be able to create or use agents. The Agents UI will display a disabled notice. Continue?';
-                                } else if (opt.key === 'personal_only') {
-                                  message =
-                                    'Disable company agent sharing? The Company Agent Marketplace will be hidden and users can only create and use personal agents. Existing company agents will be hidden. Continue?';
-                                } else {
-                                  message = 'Enable Agents and company sharing for everyone?';
-                                }
-                                const ok = window.confirm(message);
-                                if (!ok) return;
-                                try {
-                                  setAgentsSaving(true);
-                                  await AdminAgentsService.update(opt.key as AgentsMode, numaPut);
-                                  setAgentsMode(opt.key as AgentsMode);
-                                } catch (e) {
-                                  alert((e as Error).message || 'Failed to update agents policy');
-                                } finally {
-                                  setAgentsSaving(false);
-                                }
-                              }}
-                              style={{
-                                cursor: agentsSaving ? 'not-allowed' : 'pointer',
-                                opacity: agentsSaving ? 0.7 : 1,
-                              }}
-                            >
-                              <div className="me-3">
-                                <div className="fw-semibold" style={{ fontSize: '0.95rem' }}>
-                                  {opt.label}
-                                </div>
-                                <div className="text-muted small" style={{ maxWidth: 720 }}>
-                                  {opt.desc}
-                                </div>
-                              </div>
-                              <div className="ms-3 align-self-center">
-                                {selected ? (
-                                  <i className="bi bi-check-circle-fill text-primary"></i>
-                                ) : (
-                                  <i className="bi bi-circle text-secondary"></i>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                        <div className="text-muted small mt-2">
-                          Users will still see gentle hints where agents are disabled (e.g., “Agents are disabled.
-                          Contact your admin”).
+                      </Alert>
+                      {agentsLoading ? (
+                        <div className="text-center py-4">
+                          <Spinner animation="border" />
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </Tab>
+                      ) : (
+                        <div className="d-flex flex-column gap-2">
+                          {[
+                            {
+                              key: 'off',
+                              label: 'Agents Off',
+                              desc: 'Agents are disabled for everyone. The Agents UI shows a notice that it is disabled and to contact an admin.',
+                            },
+                            {
+                              key: 'personal_only',
+                              label: 'Personal Agents Only',
+                              desc: 'Users can create and use personal agents. Company sharing is disabled and the Company Agent Marketplace is hidden.',
+                            },
+                            {
+                              key: 'full',
+                              label: 'Agents On (Full)',
+                              desc: 'Users can create and use personal agents and share company agents. The marketplace is available.',
+                            },
+                          ].map((opt) => {
+                            const selected = agentsMode === (opt.key as AgentsMode);
+                            return (
+                              <div
+                                key={opt.key}
+                                className={`p-3 border rounded-3 bg-white d-flex align-items-start justify-content-between ${selected ? 'border-primary border-2' : ''}`}
+                                role="button"
+                                onClick={async () => {
+                                  if (agentsSaving || agentsMode === (opt.key as AgentsMode)) return;
+                                  // Confirmation copy per mode transition
+                                  let message = '';
+                                  if (opt.key === 'off') {
+                                    message =
+                                      'Turn off Agents for everyone? Users will not be able to create or use agents. The Agents UI will display a disabled notice. Continue?';
+                                  } else if (opt.key === 'personal_only') {
+                                    message =
+                                      'Disable company agent sharing? The Company Agent Marketplace will be hidden and users can only create and use personal agents. Existing company agents will be hidden. Continue?';
+                                  } else {
+                                    message = 'Enable Agents and company sharing for everyone?';
+                                  }
+                                  const ok = window.confirm(message);
+                                  if (!ok) return;
+                                  try {
+                                    setAgentsSaving(true);
+                                    await AdminAgentsService.update(opt.key as AgentsMode, numaPut);
+                                    setAgentsMode(opt.key as AgentsMode);
+                                  } catch (e) {
+                                    alert((e as Error).message || 'Failed to update agents policy');
+                                  } finally {
+                                    setAgentsSaving(false);
+                                  }
+                                }}
+                                style={{
+                                  cursor: agentsSaving ? 'not-allowed' : 'pointer',
+                                  opacity: agentsSaving ? 0.7 : 1,
+                                }}
+                              >
+                                <div className="me-3">
+                                  <div className="fw-semibold" style={{ fontSize: '0.95rem' }}>
+                                    {opt.label}
+                                  </div>
+                                  <div className="text-muted small" style={{ maxWidth: 720 }}>
+                                    {opt.desc}
+                                  </div>
+                                </div>
+                                <div className="ms-3 align-self-center">
+                                  {selected ? (
+                                    <i className="bi bi-check-circle-fill text-primary"></i>
+                                  ) : (
+                                    <i className="bi bi-circle text-secondary"></i>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          <div className="text-muted small mt-2">
+                            Users will still see gentle hints where agents are disabled (e.g., “Agents are disabled.
+                            Contact your admin”).
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Tab>
+                )}
                 <Tab
                   eventKey="integrations"
                   title={

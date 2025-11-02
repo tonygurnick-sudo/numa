@@ -22,6 +22,10 @@ export const AgentsManagement = () => {
   const { numaGet, numaDelete, numaPost, numaPut } = useNumaRequest();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const agentsFeatureEnabled =
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
+
+  // Feature flag UX: do not redirect; show disabled preview panel instead
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentSummary | null>(null);
@@ -76,9 +80,16 @@ export const AgentsManagement = () => {
   };
 
   useEffect(() => {
-    // Load policy first, then agents
     let cancelled = false;
     (async () => {
+      if (!agentsFeatureEnabled) {
+        // When feature is off, present preview/disabled state, no API calls
+        setAgentsMode('off');
+        setLoading(false);
+        setMyAgents([]);
+        setWorkspaceAgents([]);
+        return;
+      }
       try {
         const res = await AdminAgentsService.get(numaGet);
         if (!cancelled) setAgentsMode(res.mode);
@@ -92,7 +103,7 @@ export const AgentsManagement = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [agentsFeatureEnabled]);
 
   const filteredMyAgents = useMemo(() => {
     if (filter === 'public') return [];
@@ -305,7 +316,7 @@ export const AgentsManagement = () => {
                     <Button variant="outline-secondary" onClick={loadAgents} disabled={loading}>
                       <i className="bi bi-arrow-clockwise me-1"></i> Refresh
                     </Button>
-                    {agentsMode !== 'off' && (
+                    {agentsFeatureEnabled && agentsMode !== 'off' && (
                       <Button
                         onClick={handleCreate}
                         size="lg"
@@ -336,119 +347,121 @@ export const AgentsManagement = () => {
                 <div style={{ borderBottom: '1px solid #e0e0e0', marginBottom: '1.5rem' }}></div>
 
                 {/* Stats Cards */}
-                <Row className="g-3 mb-4">
-                  <Col xs={6} md={4}>
-                    <div
-                      className="p-3 rounded-3 border bg-white"
-                      role="button"
-                      onClick={() => setFilter('all')}
-                      style={{
-                        boxShadow:
-                          filter === 'all' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        borderColor: filter === 'all' ? '#8e50a7' : undefined,
-                        borderWidth: filter === 'all' ? '2px' : '1px',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow =
-                          filter === 'all' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)';
-                      }}
-                    >
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div>
-                          <div className="text-muted small mb-1">Total Agents</div>
-                          <div className="fs-4 fw-bold">{totalAgents}</div>
-                        </div>
-                        <div
-                          className="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center"
-                          style={{ width: 48, height: 48 }}
-                        >
-                          <i className="bi bi-robot text-primary fs-5"></i>
-                        </div>
-                      </div>
-                    </div>
-                  </Col>
-                  <Col xs={6} md={4}>
-                    <div
-                      className="p-3 rounded-3 border bg-white"
-                      role="button"
-                      onClick={() => setFilter('personal')}
-                      style={{
-                        boxShadow:
-                          filter === 'personal' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        borderColor: filter === 'personal' ? '#8e50a7' : undefined,
-                        borderWidth: filter === 'personal' ? '2px' : '1px',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow =
-                          filter === 'personal' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)';
-                      }}
-                    >
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div>
-                          <div className="text-muted small mb-1">Personal</div>
-                          <div className="fs-4 fw-bold">{personalCount}</div>
-                        </div>
-                        <div
-                          className="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
-                          style={{ width: 48, height: 48 }}
-                        >
-                          <i className="bi bi-person-fill text-secondary fs-5"></i>
+                {agentsFeatureEnabled && (
+                  <Row className="g-3 mb-4">
+                    <Col xs={6} md={4}>
+                      <div
+                        className="p-3 rounded-3 border bg-white"
+                        role="button"
+                        onClick={() => setFilter('all')}
+                        style={{
+                          boxShadow:
+                            filter === 'all' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          borderColor: filter === 'all' ? '#8e50a7' : undefined,
+                          borderWidth: filter === 'all' ? '2px' : '1px',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow =
+                            filter === 'all' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)';
+                        }}
+                      >
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div>
+                            <div className="text-muted small mb-1">Total Agents</div>
+                            <div className="fs-4 fw-bold">{totalAgents}</div>
+                          </div>
+                          <div
+                            className="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center"
+                            style={{ width: 48, height: 48 }}
+                          >
+                            <i className="bi bi-robot text-primary fs-5"></i>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Col>
-                  <Col xs={6} md={4}>
-                    <div
-                      className="p-3 rounded-3 border bg-white"
-                      role="button"
-                      onClick={() => setFilter('public')}
-                      style={{
-                        boxShadow:
-                          filter === 'public' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        borderColor: filter === 'public' ? '#8e50a7' : undefined,
-                        borderWidth: filter === 'public' ? '2px' : '1px',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow =
-                          filter === 'public' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)';
-                      }}
-                    >
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div>
-                          <div className="text-muted small mb-1">Company</div>
-                          <div className="fs-4 fw-bold">{publicCount}</div>
-                        </div>
-                        <div
-                          className="rounded-circle d-flex align-items-center justify-content-center"
-                          style={{ width: 48, height: 48, backgroundColor: 'rgba(142, 80, 167, 0.1)' }}
-                        >
-                          <i className="bi bi-shop fs-5" style={{ color: '#8e50a7' }}></i>
+                    </Col>
+                    <Col xs={6} md={4}>
+                      <div
+                        className="p-3 rounded-3 border bg-white"
+                        role="button"
+                        onClick={() => setFilter('personal')}
+                        style={{
+                          boxShadow:
+                            filter === 'personal' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          borderColor: filter === 'personal' ? '#8e50a7' : undefined,
+                          borderWidth: filter === 'personal' ? '2px' : '1px',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow =
+                            filter === 'personal' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)';
+                        }}
+                      >
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div>
+                            <div className="text-muted small mb-1">Personal</div>
+                            <div className="fs-4 fw-bold">{personalCount}</div>
+                          </div>
+                          <div
+                            className="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
+                            style={{ width: 48, height: 48 }}
+                          >
+                            <i className="bi bi-person-fill text-secondary fs-5"></i>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Col>
-                </Row>
+                    </Col>
+                    <Col xs={6} md={4}>
+                      <div
+                        className="p-3 rounded-3 border bg-white"
+                        role="button"
+                        onClick={() => setFilter('public')}
+                        style={{
+                          boxShadow:
+                            filter === 'public' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          borderColor: filter === 'public' ? '#8e50a7' : undefined,
+                          borderWidth: filter === 'public' ? '2px' : '1px',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow =
+                            filter === 'public' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)';
+                        }}
+                      >
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div>
+                            <div className="text-muted small mb-1">Company</div>
+                            <div className="fs-4 fw-bold">{publicCount}</div>
+                          </div>
+                          <div
+                            className="rounded-circle d-flex align-items-center justify-content-center"
+                            style={{ width: 48, height: 48, backgroundColor: 'rgba(142, 80, 167, 0.1)' }}
+                          >
+                            <i className="bi bi-shop fs-5" style={{ color: '#8e50a7' }}></i>
+                          </div>
+                        </div>
+                      </div>
+                    </Col>
+                  </Row>
+                )}
               </Col>
             </Row>
           </Container>
@@ -456,122 +469,150 @@ export const AgentsManagement = () => {
 
         <LayoutDashboard>
           <Container className="py-4">
-            {error && (
+            {!agentsFeatureEnabled && (
+              <>
+                <Alert variant="info" className="mb-3">
+                  <div className="d-flex align-items-start">
+                    <i className="bi bi-robot me-2 mt-1"></i>
+                    <div>
+                      <div className="fw-semibold">Agents are not enabled for your company</div>
+                      <div className="small text-muted">
+                        Create agents to automate tasks, standardize workflows, and reuse expert setups across your
+                        team. Contact your account administrator to request access.
+                      </div>
+                    </div>
+                  </div>
+                </Alert>
+                <div className="text-center py-5">
+                  <div className="mb-4">
+                    <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
+                  </div>
+                  <h3 className="h5 mb-2">Agents are disabled</h3>
+                  <p className="text-muted mb-0" style={{ maxWidth: 640, margin: '0 auto' }}>
+                    Agents let you define reusable AI assistants with custom instructions, reference files, and tool
+                    access. When enabled, you can create personal agents or share company agents for common tasks.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {agentsFeatureEnabled && error && (
               <Alert variant="danger" onClose={() => setError(null)} dismissible>
                 {error}
               </Alert>
             )}
 
-            {loading ? (
-              <div className="d-flex justify-content-center align-items-center py-5">
-                <Spinner animation="border" />
-              </div>
-            ) : (
-              <>
-                {filter !== 'public' && filteredMyAgents.length > 0 && (
-                  <section className="mb-5">
-                    <div className="mb-4">
-                      <div className="d-flex align-items-center gap-3">
-                        <div
-                          className="rounded-3 d-flex align-items-center justify-content-center"
-                          style={{
-                            width: 56,
-                            height: 56,
-                            backgroundColor: '#8e50a7',
-                            flexShrink: 0,
-                          }}
-                        >
-                          <i className="bi bi-person-circle" style={{ fontSize: '28px', color: 'white' }}></i>
-                        </div>
-                        <div className="flex-grow-1">
-                          <div className="d-flex justify-content-between align-items-center mb-1">
-                            <h2 className="h4 mb-0 fw-bold">My Agents</h2>
-                            <span
-                              className="badge rounded-pill px-3 py-2"
-                              style={{ backgroundColor: '#8e50a7', color: 'white', fontSize: '0.9rem' }}
-                            >
-                              {filteredMyAgents.length}
-                            </span>
+            {agentsFeatureEnabled &&
+              (loading ? (
+                <div className="d-flex justify-content-center align-items-center py-5">
+                  <Spinner animation="border" />
+                </div>
+              ) : (
+                <>
+                  {filter !== 'public' && filteredMyAgents.length > 0 && (
+                    <section className="mb-5">
+                      <div className="mb-4">
+                        <div className="d-flex align-items-center gap-3">
+                          <div
+                            className="rounded-3 d-flex align-items-center justify-content-center"
+                            style={{
+                              width: 56,
+                              height: 56,
+                              backgroundColor: '#8e50a7',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <i className="bi bi-person-circle" style={{ fontSize: '28px', color: 'white' }}></i>
                           </div>
-                          <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-                            Your personal AI assistants
-                          </p>
+                          <div className="flex-grow-1">
+                            <div className="d-flex justify-content-between align-items-center mb-1">
+                              <h2 className="h4 mb-0 fw-bold">My Agents</h2>
+                              <span
+                                className="badge rounded-pill px-3 py-2"
+                                style={{ backgroundColor: '#8e50a7', color: 'white', fontSize: '0.9rem' }}
+                              >
+                                {filteredMyAgents.length}
+                              </span>
+                            </div>
+                            <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+                              Your personal AI assistants
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    {renderAgentsGrid(
-                      filteredMyAgents,
-                      filter === 'personal'
-                        ? 'You have not created any personal agents yet. Click "Create Agent" to get started.'
-                        : 'No agents found.',
-                      true,
-                    )}
-                  </section>
-                )}
+                      {renderAgentsGrid(
+                        filteredMyAgents,
+                        filter === 'personal'
+                          ? 'You have not created any personal agents yet. Click "Create Agent" to get started.'
+                          : 'No agents found.',
+                        true,
+                      )}
+                    </section>
+                  )}
 
-                {agentsMode !== 'personal_only' && filter !== 'personal' && filteredWorkspaceAgents.length > 0 && (
-                  <section>
-                    <div className="mb-4">
-                      <div className="d-flex align-items-center gap-3">
-                        <div
-                          className="rounded-3 d-flex align-items-center justify-content-center"
-                          style={{
-                            width: 56,
-                            height: 56,
-                            backgroundColor: '#8e50a7',
-                            flexShrink: 0,
-                          }}
-                        >
-                          <i className="bi bi-shop" style={{ fontSize: '28px', color: 'white' }}></i>
-                        </div>
-                        <div className="flex-grow-1">
-                          <div className="d-flex justify-content-between align-items-center mb-1">
-                            <h2 className="h4 mb-0 fw-bold">Company Agent Marketplace</h2>
-                            <span
-                              className="badge rounded-pill px-3 py-2"
-                              style={{ backgroundColor: '#8e50a7', color: 'white', fontSize: '0.9rem' }}
-                            >
-                              {filteredWorkspaceAgents.length}
-                            </span>
+                  {agentsMode !== 'personal_only' && filter !== 'personal' && filteredWorkspaceAgents.length > 0 && (
+                    <section>
+                      <div className="mb-4">
+                        <div className="d-flex align-items-center gap-3">
+                          <div
+                            className="rounded-3 d-flex align-items-center justify-content-center"
+                            style={{
+                              width: 56,
+                              height: 56,
+                              backgroundColor: '#8e50a7',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <i className="bi bi-shop" style={{ fontSize: '28px', color: 'white' }}></i>
                           </div>
-                          <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-                            Discover and copy agents shared by other users in your organization
-                          </p>
+                          <div className="flex-grow-1">
+                            <div className="d-flex justify-content-between align-items-center mb-1">
+                              <h2 className="h4 mb-0 fw-bold">Company Agent Marketplace</h2>
+                              <span
+                                className="badge rounded-pill px-3 py-2"
+                                style={{ backgroundColor: '#8e50a7', color: 'white', fontSize: '0.9rem' }}
+                              >
+                                {filteredWorkspaceAgents.length}
+                              </span>
+                            </div>
+                            <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+                              Discover and copy agents shared by other users in your organization
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    {renderAgentsGrid(
-                      filteredWorkspaceAgents,
-                      'No company agents are available in your workspace yet.',
-                    )}
-                  </section>
-                )}
+                      {renderAgentsGrid(
+                        filteredWorkspaceAgents,
+                        'No company agents are available in your workspace yet.',
+                      )}
+                    </section>
+                  )}
 
-                {filteredMyAgents.length === 0 && filteredWorkspaceAgents.length === 0 && (
-                  <div className="text-center py-5">
-                    <div className="mb-4">
-                      <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
+                  {filteredMyAgents.length === 0 && filteredWorkspaceAgents.length === 0 && (
+                    <div className="text-center py-5">
+                      <div className="mb-4">
+                        <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
+                      </div>
+                      <h3 className="h5 mb-2">No agents found</h3>
+                      <p className="text-muted mb-4">
+                        {agentsMode === 'off'
+                          ? 'Agents are disabled. Contact your admin to enable Agents.'
+                          : filter === 'all'
+                            ? 'Get started by creating your first AI agent'
+                            : filter === 'personal'
+                              ? 'You have not created any personal agents yet'
+                              : 'No company agents are available in your workspace'}
+                      </p>
+                      {agentsMode !== 'off' && (
+                        <Button variant="primary" onClick={handleCreate}>
+                          <i className="bi bi-plus-circle me-2"></i>
+                          Create Your First Agent
+                        </Button>
+                      )}
                     </div>
-                    <h3 className="h5 mb-2">No agents found</h3>
-                    <p className="text-muted mb-4">
-                      {agentsMode === 'off'
-                        ? 'Agents are disabled. Contact your admin to enable Agents.'
-                        : filter === 'all'
-                          ? 'Get started by creating your first AI agent'
-                          : filter === 'personal'
-                            ? 'You have not created any personal agents yet'
-                            : 'No company agents are available in your workspace'}
-                    </p>
-                    {agentsMode !== 'off' && (
-                      <Button variant="primary" onClick={handleCreate}>
-                        <i className="bi bi-plus-circle me-2"></i>
-                        Create Your First Agent
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
+                  )}
+                </>
+              ))}
 
             <AgentCreateModal
               show={isModalOpen}
