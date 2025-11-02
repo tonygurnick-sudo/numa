@@ -31,6 +31,7 @@ export default function CreateClientConfig() {
   const [allowQuotaSharing, setAllowQuotaSharing] = useState(defaults.allowBedrockQuotaSharing)
   const [provisionQResources, setProvisionQResources] = useState(defaults.provisionQResources)
   const [preferredKnowledgeBase, setPreferredKnowledgeBase] = useState<"q" | "bedrock">(defaults.preferredKnowledgeBase)
+  const [agents, setAgents] = useState(defaults.agents)
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES))
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES))
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -80,6 +81,7 @@ export default function CreateClientConfig() {
       minimal['apps'] = Object.fromEntries(selectedApps.map(a => [a, { enabled: true }])) as Record<string, { enabled?: boolean }>
     }
     if (pipedream) minimal['pipedreamIntegrations'] = true
+    if (agents) minimal['agents'] = true
 
     // Always include these two fields so defaults are written explicitly
     minimal['provisionQResources'] = provisionQResources
@@ -230,6 +232,14 @@ export default function CreateClientConfig() {
                   onChange={setPipedream}
                   type="switch"
                   helpText="Enable external API integrations"
+                />
+                <ConfigField
+                  label="Agents"
+                  value={agents}
+                  defaultValue={defaults.agents}
+                  onChange={setAgents}
+                  type="switch"
+                  helpText="Enable Agents UI and related functionality"
                 />
                 <ConfigField
                   label="Bedrock Quota Sharing"

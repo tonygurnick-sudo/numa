@@ -34,6 +34,7 @@ export default function UpdateClientConfig() {
   const [allApps, setAllApps] = useState<boolean>(false)
   const [selectedApps, setSelectedApps] = useState<string[]>([])
   const [pipedream, setPipedream] = useState<boolean>(false)
+  const [agents, setAgents] = useState<boolean>(false)
   const [devInstance, setDevInstance] = useState<boolean>(false)
   const [allowQuotaSharing, setAllowQuotaSharing] = useState<boolean>(false)
   const [provisionQResources, setProvisionQResources] = useState<boolean>(false)
@@ -85,6 +86,8 @@ export default function UpdateClientConfig() {
     setSelectedApps(apps)
     const pd = (cfg as unknown as Record<string, unknown>)['pipedreamIntegrations']
     setPipedream(Boolean(pd))
+    const ag = (cfg as unknown as Record<string, unknown>)['agents']
+    setAgents(Boolean(ag))
     setDevInstance(Boolean(cfg.devInstance))
     setAllowQuotaSharing(Boolean(cfg.allowBedrockQuotaSharing))
     setProvisionQResources(Boolean((cfg as any).provisionQResources))
@@ -105,6 +108,7 @@ export default function UpdateClientConfig() {
       devInstance: current?.devInstance ?? defaults.devInstance,
       allowBedrockQuotaSharing: current?.allowBedrockQuotaSharing ?? defaults.allowBedrockQuotaSharing,
       pipedreamIntegrations: current?.pipedreamIntegrations ?? false,
+      agents: (current as any)?.agents ?? false,
       provisionQResources: (current as any)?.provisionQResources ?? defaults.provisionQResources,
       preferredKnowledgeBase: ((current as any)?.preferredKnowledgeBase as 'q' | 'bedrock') ?? defaults.preferredKnowledgeBase,
     }
@@ -125,6 +129,9 @@ export default function UpdateClientConfig() {
 
     // Only include pipedreamIntegrations if changed
     if (eff.pipedreamIntegrations !== pipedream) updates.pipedreamIntegrations = pipedream
+
+    // Only include agents if changed
+    if (eff.agents !== agents) updates.agents = agents
 
     // Only include other flags if changed vs effective current
     if (eff.devInstance !== devInstance) updates.devInstance = devInstance
@@ -284,6 +291,14 @@ export default function UpdateClientConfig() {
                       onChange={setPipedream}
                       type="switch"
                       helpText="Enable external API integrations"
+                    />
+                    <ConfigField
+                      label="Agents"
+                      value={agents}
+                      defaultValue={defaults.agents}
+                      onChange={setAgents}
+                      type="switch"
+                      helpText="Enable Agents UI and related functionality"
                     />
                     <ConfigField
                       label="Bedrock Quota Sharing"
