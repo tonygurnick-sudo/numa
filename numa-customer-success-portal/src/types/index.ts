@@ -76,6 +76,7 @@ export const clientConfigSchema = z.object({
   numaChatAgents: z.boolean().optional(), // default: true
   allowBedrockQuotaSharing: z.boolean().optional(), // default: false
   pipedreamIntegrations: z.boolean().optional(), // default: false
+  agents: z.boolean().optional(), // default: false
 
   // Data source configurations
   webCrawlerConfigs: z.array(webCrawlerConfigSchema).optional(),
@@ -109,6 +110,7 @@ export const getDefaultClientConfigValues = () => ({
   visionModelType: 'haiku' as const,
   numaChatAgents: true,
   allowBedrockQuotaSharing: false,
+  agents: false,
 })
 
 // Helper to check if a config value differs from default
@@ -140,6 +142,7 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     bedrockParserModel: 'Parser Model',
     visionModelType: 'Vision Model Type',
     numaChatAgents: 'Numa Chat Agents',
+    agents: 'Agents',
   }
 
   return fieldNames[key] || key
