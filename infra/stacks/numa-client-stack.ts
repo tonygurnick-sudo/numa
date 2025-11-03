@@ -154,7 +154,7 @@ export class NumaClientStack extends TerraformStack {
     });
 
     // Conditionally create either RDS-based or S3 Vectors-based knowledge base
-    const vectorStorageType = clientConfig.vectorStorageType ?? 'rds';
+    const vectorStorageType = clientConfig.vectorStorageType ?? 's3vectors';
     const knowledgeBase =
       vectorStorageType === 's3vectors'
         ? new S3VectorsKnowledgeBase(this, 'knowledge-base', {
@@ -515,15 +515,15 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         /**
          * Vector storage type for Bedrock knowledge base
          *
-         * - 'rds': Aurora PostgreSQL with pgvector (default, production-ready)
-         * - 's3vectors': Amazon S3 Vectors (preview, 90% cost reduction)
+         * - 's3vectors': Amazon S3 Vectors (default, 90% cost reduction)
+         * - 'rds': Aurora PostgreSQL with pgvector (production-ready alternative)
          *
          * Note: S3 Vectors is in preview and only available in us-east-1, us-east-2,
          * us-west-2, eu-central-1, ap-southeast-2
          *
-         * @default 'rds'
+         * @default 's3vectors'
          */
-        vectorStorageType: z.enum(['rds', 's3vectors']).optional().default('rds'),
+        vectorStorageType: z.enum(['rds', 's3vectors']).optional().default('s3vectors'),
 
         /**
          * Model to use for document embedding in knowledge base
