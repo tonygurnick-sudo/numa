@@ -389,12 +389,6 @@ claude-cli-layer-build:
     - chmod +x infra/assets/layers/claude-cli/bin/claude
     - (cd infra/assets/layers/claude-cli && zip -r claude-x86_64.zip bin)
     - ls -lh infra/assets/layers/claude-cli/claude-x86_64.zip
-    # Package as Lambda Layer at expected path for CDKTF
-    - mkdir -p infra/assets/layers/claude-cli/bin
-    - cp "$CLAUDE_BIN" infra/assets/layers/claude-cli/bin/claude
-    - chmod +x infra/assets/layers/claude-cli/bin/claude
-    - (cd infra/assets/layers/claude-cli && zip -r claude-x86_64.zip bin)
-    - ls -lh infra/assets/layers/claude-cli/claude-x86_64.zip
   artifacts:
     paths:
       - infra/assets/layers/claude-cli/claude-x86_64.zip
