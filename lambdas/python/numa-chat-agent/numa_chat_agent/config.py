@@ -176,7 +176,7 @@ def get_pipedream_tool_routing_mode(
 def get_bedrock_model(
     model_id=None,
     streaming: bool = True,
-    temperature: float = 0.15,
+    temperature: float = 1,
 ):
     """Create BedrockModel instance with specified or default model configuration."""
     effective_model_id = model_id or MODEL_ID
@@ -197,6 +197,9 @@ def get_bedrock_model(
         streaming=streaming,
         temperature=temperature,
         max_tokens=max_tokens,
+        additional_request_fields={
+            "thinking": {"type": "enabled", "budget_tokens": 4096}  # Minimum of 1,024
+        },
     )
 
 

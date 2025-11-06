@@ -122,6 +122,51 @@ def _build_local_time_context() -> str:
         return "not provided"
 
 
+def _get_user_timezone() -> Optional[str]:
+    """Extract the user's timezone from the current user auth context.
+
+    Returns the timezone string (e.g., "Australia/Brisbane") if available,
+    otherwise None.
+    """
+    try:
+        ua = get_current_user_auth() or {}
+        ti = (ua.get("timeInfo") or {}) if isinstance(ua, dict) else {}
+        if isinstance(ti, dict):
+            tz = str(ti.get("timezone") or "").strip()
+            if tz:
+                return tz
+        return None
+    except Exception:
+        return None
+
+
+def _append_timezone_guidance(instruction: str) -> str:
+    """Append timezone-aware guidance to the instruction string.
+
+    This ensures the sub-agent always considers the user's timezone when handling
+    time-sensitive data, even if Numa forgets to include timezone information in
+    the original instruction.
+
+    Args:
+        instruction: The original instruction string from Numa
+
+    Returns:
+        The instruction with timezone guidance appended (if timezone is available)
+    """
+    timezone = _get_user_timezone()
+    if not timezone:
+        return instruction
+
+    guidance = (
+        f"\n\nIMPORTANT: All dates in instructions use DD/MM/YYYY format (day/month/year). "
+        f"If this tool involves timestamps, dates, or time-sensitive data, "
+        f"use the user's local timezone ({timezone}) in the request if applicable or for display "
+        f"and convert any UTC timestamps to {timezone} format."
+    )
+
+    return instruction + guidance
+
+
 def load_prompt_for_integration(integration_namespace: str) -> str:
     base_template = _safe_read_text(BASE_PROMPT_FILE)
     integration_prompt = _safe_read_text(
@@ -377,6 +422,18 @@ class ToolsOnlyIntegrationRouter:
             raise ValueError(
                 f"Unknown Pipedream tool '{tool_name}'. Available: {', '.join(sorted(self._definitions))}"
             )
+
+        # Augment instruction with timezone guidance to ensure sub-agent always
+        # considers user's timezone for time-sensitive operations
+        instruction = _append_timezone_guidance(instruction)
+
+        logger.info(
+            "Appended timezone guidance to instruction",
+            integration=self.integration_name,
+            tool=tool_name,
+            timezone=_get_user_timezone(),
+            augmented_instruction=instruction,
+        )
 
         logger.info(
             "Executing Pipedream router tool",
