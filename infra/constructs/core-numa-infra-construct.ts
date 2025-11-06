@@ -14,6 +14,7 @@ import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
+import { S3BucketCorsConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-cors-configuration';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 import { SecretsmanagerSecretVersion } from '@cdktf/provider-aws/lib/secretsmanager-secret-version';
 import { password } from '@cdktf/provider-random';
@@ -43,6 +44,7 @@ import { z } from 'zod';
 import { WebCrawlerConstruct } from './web-crawler-construct';
 import { CognitoGroupsConstruct, FEATURE_SET_NAMES } from './cognito-groups-construct';
 import { KnowledgeBase } from './knowledge-base-construct';
+import { PublicS3Bucket } from './public-s3-bucket-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly userPoolId: string;
@@ -60,6 +62,10 @@ export class CoreNumaInfra extends Construct {
   readonly dataBucket: NumaCorsEnabledBucket;
   readonly chatHistoryTable: DynamodbTable;
   readonly brandingTable: DynamodbTable;
+  readonly brandingAssetsBucket: PublicS3Bucket;
+  readonly brandingAssetsBucketArn: string;
+  readonly brandingAssetsBucketName: string;
+  readonly brandingAssetsPrefix: string;
   readonly workspaceAgentsTable: DynamodbTable;
   readonly userAgentsTable: DynamodbTable;
   readonly agentsSettingsTable: DynamodbTable;
@@ -82,6 +88,7 @@ export class CoreNumaInfra extends Construct {
     const callerId = new DataAwsCallerIdentity(this, 'caller-id', {});
 
     const numaClient = `numa-${props.clientName}${props.environmentName != 'prod' ? `-${props.environmentName}` : ''}`;
+    const brandingPrefix = '';
 
     // TODO: Typing
     let appIdentityConfig;
@@ -250,6 +257,45 @@ export class CoreNumaInfra extends Construct {
       region: props.region,
     });
     this.outputsBucket.bucket.moveFromId('aws_s3_bucket.outputs-bucket_1F269801');
+
+    const brandingBucketName = `${numaClient}-branding`;
+    this.brandingAssetsBucket = new PublicS3Bucket(this, 'branding-assets-bucket', {
+      bucket: brandingBucketName,
+      forceDestroy: props.environmentName !== 'prod',
+      tags: {
+        Name: brandingBucketName,
+        Environment: props.environmentName,
+        Purpose: 'branding-assets',
+      },
+    });
+
+    const brandingAllowedOrigins = [`https://${props.domainName}`];
+    if (props.devInstance ?? props.environmentName !== 'prod') {
+      brandingAllowedOrigins.push('http://localhost:5173');
+    }
+
+    new S3BucketCorsConfiguration(this, 'branding-assets-cors', {
+      bucket: this.brandingAssetsBucket.id,
+      corsRule: [
+        {
+          allowedHeaders: ['*'],
+          allowedMethods: ['GET', 'HEAD', 'PUT', 'POST', 'DELETE'],
+          allowedOrigins: brandingAllowedOrigins,
+          exposeHeaders: ['ETag'],
+          maxAgeSeconds: 3000,
+        },
+      ],
+    });
+
+    new S3Object(this, 'branding-prefix-placeholder', {
+      bucket: this.brandingAssetsBucket.bucket,
+      key: brandingPrefix ? `${brandingPrefix}.keep` : '.keep',
+      content: 'placeholder',
+    });
+
+    this.brandingAssetsBucketArn = this.brandingAssetsBucket.arn;
+    this.brandingAssetsBucketName = this.brandingAssetsBucket.bucket;
+    this.brandingAssetsPrefix = brandingPrefix;
 
     // Create chat history table
     this.chatHistoryTable = new DynamodbTable(this, 'numa-chat-history-table', {
@@ -900,8 +946,8 @@ export class CoreNumaInfra extends Construct {
       qBusinessApplicationId: qBusinessApplicationIdForIdp,
       brandingTable: this.brandingTable,
       knowledgeBase: props.knowledgeBase,
-      brandingAssetsBucketArn: props.brandingAssetsBucketArn ?? `arn:aws:s3:::${numaClient}-fe`,
-      brandingAssetsPrefix: props.brandingAssetsPrefix ?? 'branding/',
+      brandingAssetsBucketArn: this.brandingAssetsBucketArn,
+      brandingAssetsPrefix: this.brandingAssetsPrefix,
     });
 
     // Expose whichever role Cognito decided should be the default web‑identity role.

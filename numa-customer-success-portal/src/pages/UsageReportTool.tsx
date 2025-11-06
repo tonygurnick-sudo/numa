@@ -110,7 +110,7 @@ export default function UsageReportTool() {
       {/* Header */}
       <div className="d-flex align-items-center mb-4">
         <Button
-          variant="outline-secondary"
+          variant="secondary"
           onClick={() => navigate('/')}
           className="me-3"
           disabled={isRunning}
@@ -262,8 +262,8 @@ export default function UsageReportTool() {
               {execution?.status && (
                 <Badge bg={
                   execution.status === 'completed' ? 'success' :
-                  execution.status === 'failed' ? 'danger' :
-                  execution.status === 'running' ? 'primary' : 'secondary'
+                    execution.status === 'failed' ? 'danger' :
+                      execution.status === 'running' ? 'primary' : 'secondary'
                 }>
                   {execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}
                 </Badge>

@@ -30,7 +30,7 @@
       .search-icon {
         position: absolute;
         left: 1rem;
-        color: var(--color-magenta-700);
+        color: var(--brand-primary, var(--color-magenta-700));
         font-size: 1rem;
         z-index: 1;
       }
@@ -148,8 +148,8 @@
           transition: all 0.2s ease;
 
           &:hover {
-            border-color: var(--color-primary);
-            color: var(--color-primary);
+            background-color: var(--brand-primary, var(--color-primary));
+            color: var(--brand-primaryContrast, white);
           }
 
           &[data-category='legal'] {

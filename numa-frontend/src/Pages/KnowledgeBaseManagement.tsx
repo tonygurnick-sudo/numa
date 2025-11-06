@@ -1198,7 +1198,7 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
                             </span>
                             <div>
                               <Button
-                                variant="outline-secondary"
+                                variant="secondary"
                                 size="sm"
                                 className="me-2"
                                 disabled={
@@ -1344,7 +1344,7 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
                                     </td>
                                   )}
                                   <FeatureWrapper requiredFeature="deleteFromCompanyData">
-                                    <td className="checkbox-purple">
+                                    <td className="checkbox">
                                       <input
                                         type="checkbox"
                                         className="form-check-input"

@@ -1,12 +1,12 @@
 @keyframes highlight {
   0% {
-    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.4);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-primary, var(--color-primary)) 40%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 10px rgba(147, 51, 234, 0);
+    box-shadow: 0 0 0 10px transparent;
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 

@@ -493,7 +493,7 @@ export const NumaIntegrations = () => {
                       </span>
                     </OverlayTrigger>
                     <Button
-                      variant="outline-secondary"
+                      variant="secondary"
                       size="sm"
                       onClick={() => disconnectApp(integration.name_slug)}
                       disabled={!!disconnectingApp}
@@ -626,13 +626,8 @@ export const NumaIntegrations = () => {
                 <Col md={3}>
                   <div className="text-center p-2">
                     <div className="d-flex align-items-center justify-content-center mb-2">
-                      <div
-                        className="rounded-circle text-white d-inline-flex align-items-center justify-content-center me-2"
-                        style={{ width: '32px', height: '32px', background: 'var(--color-primary)' }}
-                      >
-                        <span className="fw-bold" style={{ fontSize: '1rem' }}>
-                          1
-                        </span>
+                      <div className="integration-step-circle me-2">
+                        <span className="fw-bold">1</span>
                       </div>
                       <h6 className="text-primary fw-semibold mb-0">Connect Integration</h6>
                     </div>
@@ -642,13 +637,8 @@ export const NumaIntegrations = () => {
                 <Col md={3}>
                   <div className="text-center p-2">
                     <div className="d-flex align-items-center justify-content-center mb-2">
-                      <div
-                        className="rounded-circle text-white d-inline-flex align-items-center justify-content-center me-2"
-                        style={{ width: '32px', height: '32px', background: 'var(--color-primary)' }}
-                      >
-                        <span className="fw-bold" style={{ fontSize: '1rem' }}>
-                          2
-                        </span>
+                      <div className="integration-step-circle me-2">
+                        <span className="fw-bold">2</span>
                       </div>
                       <h6 className="text-primary fw-semibold mb-0">Sign In Securely</h6>
                     </div>
@@ -660,13 +650,8 @@ export const NumaIntegrations = () => {
                 <Col md={3}>
                   <div className="text-center p-2">
                     <div className="d-flex align-items-center justify-content-center mb-2">
-                      <div
-                        className="rounded-circle text-white d-inline-flex align-items-center justify-content-center me-2"
-                        style={{ width: '32px', height: '32px', background: 'var(--color-primary)' }}
-                      >
-                        <span className="fw-bold" style={{ fontSize: '1rem' }}>
-                          3
-                        </span>
+                      <div className="integration-step-circle me-2">
+                        <span className="fw-bold">3</span>
                       </div>
                       <h6 className="text-primary fw-semibold mb-0">Optimize Security</h6>
                     </div>
@@ -678,13 +663,8 @@ export const NumaIntegrations = () => {
                 <Col md={3}>
                   <div className="text-center p-2">
                     <div className="d-flex align-items-center justify-content-center mb-2">
-                      <div
-                        className="rounded-circle text-white d-inline-flex align-items-center justify-content-center me-2"
-                        style={{ width: '32px', height: '32px', background: 'var(--color-primary)' }}
-                      >
-                        <span className="fw-bold" style={{ fontSize: '1rem' }}>
-                          4
-                        </span>
+                      <div className="integration-step-circle me-2">
+                        <span className="fw-bold">4</span>
                       </div>
                       <h6 className="text-primary fw-semibold mb-0">Get Work Done</h6>
                     </div>
@@ -951,9 +931,8 @@ export const SettingsModal = ({
                 return (
                   <div
                     key={t.name}
-                    className={`rounded-3 p-3 border ${
-                      index < sorted.length - 1 ? 'mb-2' : ''
-                    } ${isEnabled ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
+                    className={`rounded-3 p-3 border ${index < sorted.length - 1 ? 'mb-2' : ''}
+                      ${isEnabled ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
                     style={{
                       transition: 'all 0.2s ease',
                       borderColor: isEnabled ? 'var(--bs-border-color)' : 'var(--bs-border-color-translucent)',
@@ -1028,7 +1007,7 @@ export const SettingsModal = ({
             )}
           </small>
           <div>
-            <Button variant="outline-secondary" onClick={handleClose} className="me-2">
+            <Button variant="secondary" onClick={handleClose} className="me-2">
               Cancel
             </Button>
             <Button variant="primary" onClick={onSave} disabled={loading || !!error}>

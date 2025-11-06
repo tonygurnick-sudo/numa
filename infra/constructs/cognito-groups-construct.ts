@@ -53,13 +53,11 @@ const createFeatureSets = (props: {
   brandingAssetsBucketArn?: string;
   brandingAssetsPrefix?: string;
 }): Record<string, PolicyStatement[]> => {
-  const brandingPrefixRaw = props.brandingAssetsPrefix ?? 'branding/';
-  const brandingPrefixNoLeadingSlash = brandingPrefixRaw.replace(/^\/+/, '');
-  const brandingPrefix = brandingPrefixNoLeadingSlash.endsWith('/')
-    ? brandingPrefixNoLeadingSlash
-    : `${brandingPrefixNoLeadingSlash}/`;
+  const rawPrefix = props.brandingAssetsPrefix ?? 'branding/';
+  const normalizedPrefix = rawPrefix.replace(/^\/+/u, '').replace(/\/+$|$/, '/');
+  const prefixForArn = normalizedPrefix === '/' ? '' : normalizedPrefix;
   const brandingObjectsArn = props.brandingAssetsBucketArn
-    ? `${props.brandingAssetsBucketArn}/${brandingPrefix}*`
+    ? `${props.brandingAssetsBucketArn}/${prefixForArn}*`.replace(/\/{2,}/g, '/').replace('/*/', '/*')
     : undefined;
 
   return {

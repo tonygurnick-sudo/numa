@@ -680,7 +680,7 @@ export const PolicyBuilderDetail = () => {
                     <Dropdown>
                       {isMobile ? (
                         <Dropdown.Toggle
-                          variant="outline-secondary"
+                          variant="secondary"
                           size="sm"
                           disabled={
                             policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId
@@ -699,7 +699,7 @@ export const PolicyBuilderDetail = () => {
                         </Dropdown.Toggle>
                       ) : (
                         <Dropdown.Toggle
-                          variant="outline-secondary"
+                          variant="secondary"
                           size="sm"
                           disabled={
                             policy.status !== 'SUCCESS' || isDownloading === policy.jobDetails.stepFunctionJobId

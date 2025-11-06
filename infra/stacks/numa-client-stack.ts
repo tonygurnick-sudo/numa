@@ -250,7 +250,7 @@ export class NumaClientStack extends TerraformStack {
       // Branding API (disabled until lambda and finalized table wiring are added)
       brandingProviderEnabled: true,
       brandingTableName: core.brandingTable.name,
-      brandingAssetsPrefix: 'branding/',
+      brandingAssetsPrefix: core.brandingAssetsPrefix,
       outputsBucketArn: core.outputsBucket.bucket.arn,
       outputsBucketName: core.outputsBucket.bucket.bucket,
       workspaceAgentsTableName: core.workspaceAgentsTable.name,
@@ -330,8 +330,8 @@ export class NumaClientStack extends TerraformStack {
         Q_RETRIEVER_ID: core.qBusinessRetrieverId,
         API_ENDPOINT: '/api',
         BRANDING_PROVIDER_ENABLED: clientConfig.brandingProviderEnabled ?? false,
-        BRANDING_ASSETS_BUCKET: fe.frontendBucket.bucket,
-        BRANDING_ASSETS_PREFIX: fe.brandingAssetsPrefix,
+        BRANDING_ASSETS_BUCKET: core.brandingAssetsBucketName,
+        BRANDING_ASSETS_PREFIX: core.brandingAssetsPrefix,
         CLIENT_NAME: props.clientName,
         OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
         HONEYCOMB_KEY: honeycombFrontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.

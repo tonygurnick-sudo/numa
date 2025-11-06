@@ -362,17 +362,8 @@ const ChatInput = ({
                 id="send-message-button"
                 disabled={true}
                 className="send-button spinner-button-bold"
-                style={{ fontSize: '2.4rem', color: '#4b007d' }}
               >
-                <Spinner
-                  as="span"
-                  animation="border"
-                  size="sm"
-                  role="status"
-                  aria-hidden="true"
-                  className="me-2"
-                  style={{ fontSize: '2.4rem', color: '#4b007d' }}
-                />
+                <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
               </Button>
             ) : (
               <Button
@@ -382,7 +373,7 @@ const ChatInput = ({
                 className="send-button"
                 disabled={isSendDisabled || !inputMessage.trim()}
               >
-                <i className="bi bi-arrow-up-circle-fill" style={{ fontSize: '2.4rem', color: '#4b007d' }}></i>
+                <i className="bi bi-arrow-up-circle-fill"></i>
               </Button>
             )}
           </div>

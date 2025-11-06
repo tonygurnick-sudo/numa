@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Nav, Spinner } from 'react-bootstrap';
+import { Button, Spinner } from 'react-bootstrap';
 import axios from 'axios';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -173,38 +173,28 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
       </div>
 
       <div className="p-3">
-        <style>
-          {`
-            .agent-avatar-nav .nav-link.active {
-              background-color: #8e50a7 !important;
-              color: white !important;
-            }
-            .agent-avatar-nav .nav-link {
-              color: #6c757d;
-            }
-            .agent-avatar-nav .nav-link:hover:not(.active) {
-              background-color: #f0e6f5;
-            }
-          `}
-        </style>
-        <Nav
-          variant="pills"
-          activeKey={activeTab}
-          onSelect={(k) => setActiveTab((k as 'icons' | 'upload') || 'icons')}
-          className="mb-3 agent-avatar-nav"
-          style={{ gap: '0.5rem' }}
-        >
-          <Nav.Item>
-            <Nav.Link eventKey="icons" className="px-3">
-              <i className="bi bi-grid-3x3-gap me-2"></i>Choose Icon
-            </Nav.Link>
-          </Nav.Item>
-          <Nav.Item>
-            <Nav.Link eventKey="upload" className="px-3">
-              <i className="bi bi-upload me-2"></i>Upload Image
-            </Nav.Link>
-          </Nav.Item>
-        </Nav>
+        <div className="d-flex gap-2 mb-3">
+          <Button
+            type="button"
+            variant={activeTab === 'icons' ? 'primary' : 'outline-secondary'}
+            className="flex-fill d-flex align-items-center justify-content-center gap-2"
+            aria-pressed={activeTab === 'icons'}
+            onClick={() => setActiveTab('icons')}
+          >
+            <i className="bi bi-grid-3x3-gap"></i>
+            Choose Icon
+          </Button>
+          <Button
+            type="button"
+            variant={activeTab === 'upload' ? 'primary' : 'outline-secondary'}
+            className="flex-fill d-flex align-items-center justify-content-center gap-2"
+            aria-pressed={activeTab === 'upload'}
+            onClick={() => setActiveTab('upload')}
+          >
+            <i className="bi bi-upload"></i>
+            Upload Image
+          </Button>
+        </div>
 
         {activeTab === 'icons' ? (
           <div className="d-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(44px, 1fr))', gap: 6 }}>
@@ -213,7 +203,7 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
               return (
                 <Button
                   key={opt.value}
-                  variant="outline-secondary"
+                  variant={isActive ? 'primary' : 'outline-secondary'}
                   size="sm"
                   onClick={() => onChange({ icon: opt.value, iconImage: null })}
                   aria-pressed={isActive}
@@ -221,21 +211,9 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
                   style={{
                     aspectRatio: '1',
                     padding: '0.5rem',
-                    backgroundColor: isActive ? '#8e50a7' : 'white',
-                    borderColor: isActive ? '#8e50a7' : '#dee2e6',
-                    color: isActive ? 'white' : '#6c757d',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.borderColor = '#8e50a7';
-                      e.currentTarget.style.color = '#8e50a7';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.borderColor = '#dee2e6';
-                      e.currentTarget.style.color = '#6c757d';
-                    }
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
                   <i className={opt.value} style={{ fontSize: '1.25rem' }} />
@@ -244,7 +222,7 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
             })}
           </div>
         ) : (
-          <div className="p-3 rounded-3" style={{ backgroundColor: '#f8f4fb' }}>
+          <div className="p-3 rounded-3 bg-light">
             <div className="mb-3">
               <small className="text-muted d-block">
                 <i className="bi bi-info-circle me-1"></i>
@@ -259,46 +237,13 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
               onChange={handleUpload}
               disabled={disabled || isUploading}
             />
-            <button
+            <Button
               type="button"
+              variant="primary"
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled || isUploading}
-              style={{
-                width: '100%',
-                minHeight: '44px',
-                maxHeight: '44px',
-                height: '44px',
-                padding: '0.75rem 1rem',
-                backgroundColor: '#8e50a7',
-                borderColor: '#8e50a7',
-                border: '1px solid #8e50a7',
-                color: 'white',
-                borderRadius: '0.375rem',
-                cursor: disabled || isUploading ? 'not-allowed' : 'pointer',
-                fontSize: '1rem',
-                fontWeight: 500,
-                transition: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.5rem',
-                boxSizing: 'border-box',
-                overflow: 'hidden',
-              }}
-              onMouseEnter={(e) => {
-                if (!isUploading && !disabled) {
-                  e.currentTarget.style.backgroundColor = '#a366bd';
-                  e.currentTarget.style.borderColor = '#a366bd';
-                  e.currentTarget.style.height = '44px';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isUploading && !disabled) {
-                  e.currentTarget.style.backgroundColor = '#8e50a7';
-                  e.currentTarget.style.borderColor = '#8e50a7';
-                  e.currentTarget.style.height = '44px';
-                }
-              }}
+              className="w-100 d-flex align-items-center justify-content-center gap-2"
+              style={{ minHeight: '44px', fontWeight: 500 }}
             >
               {isUploading ? (
                 <>
@@ -311,7 +256,7 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
                   <span style={{ lineHeight: '1' }}>Choose File</span>
                 </>
               )}
-            </button>
+            </Button>
             {error && (
               <div className="alert alert-danger mb-0 py-2 mt-3">
                 <i className="bi bi-exclamation-triangle me-2"></i>

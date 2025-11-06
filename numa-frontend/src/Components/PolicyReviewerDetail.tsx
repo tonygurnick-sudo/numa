@@ -874,7 +874,7 @@ export const PolicyReviewerDetail = () => {
                       </>
                     )}
 
-                    <Button variant="outline-secondary" size="sm" onClick={() => handleEditConfig(p.id)}>
+                    <Button variant="secondary" size="sm" onClick={() => handleEditConfig(p.id)}>
                       <GearIcon className="me-1" />
                       {!isMobile && 'Edit Config'}
                     </Button>
@@ -1112,7 +1112,7 @@ export const PolicyReviewerDetail = () => {
             ) : (
               <div className="d-flex gap-2">
                 {isEditing && (
-                  <Button variant="outline-secondary" onClick={resetForm} className="flex-grow-1">
+                  <Button variant="secondary" onClick={resetForm} className="flex-grow-1">
                     Cancel
                   </Button>
                 )}

@@ -5,6 +5,7 @@ import { fromWebToken } from '@aws-sdk/credential-providers';
 import { Database, Search, Robot } from 'react-bootstrap-icons';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { useBranding } from '../Providers/BrandingContext';
 import { AgentFileUpload } from './AgentFileUpload';
 import { AgentAvatarSelector } from './AgentAvatarSelector';
 import AgentAvatar from './AgentAvatar';
@@ -55,6 +56,7 @@ const DEFAULT_PAYLOAD: AgentPayload = {
 export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSaved }: AgentCreateModalProps) => {
   const { user } = useAuth();
   const { numaGet, numaPost, numaPut } = useNumaRequest();
+  const { branding } = useBranding();
 
   const deriveWelcomeMessage = (agent?: AgentSummary | null): string => agent?.userWelcomeMessage?.trim() ?? '';
 
@@ -70,6 +72,13 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
   // Local string inputs for time saved (to allow clearing and free typing)
   const [timeInputs, setTimeInputs] = useState<{ hours: string; minutes: string }>({ hours: '', minutes: '' });
+
+  const brandPrimaryColor = branding.colors.primary ?? 'var(--brand-primary, var(--color-primary))';
+  const brandPrimaryContrast = branding.colors.primaryContrast ?? 'white';
+  const primaryButtonColor = branding.colors.buttonPrimary ?? brandPrimaryColor;
+  const primaryButtonBorderColor =
+    branding.colors.buttonPrimaryBorder ?? branding.colors.buttonPrimary ?? brandPrimaryColor;
+  const primaryButtonTextColor = branding.colors.buttonPrimaryText ?? brandPrimaryContrast;
 
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const authorName = useMemo(() => idToken.name || idToken.email || 'Unknown User', [idToken]);
@@ -592,7 +601,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                   <div className="d-flex align-items-center gap-2">
                     <span
                       className="fw-bold text-uppercase"
-                      style={{ fontSize: '0.85rem', letterSpacing: '0.5px', color: '#8e50a7' }}
+                      style={{ fontSize: '0.85rem', letterSpacing: '0.5px', color: brandPrimaryColor }}
                     >
                       <i className="bi bi-sliders me-2"></i>Agent Setup
                     </span>
@@ -685,7 +694,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                   <div className="d-flex align-items-center gap-2">
                     <span
                       className="fw-bold text-uppercase"
-                      style={{ fontSize: '0.85rem', letterSpacing: '0.5px', color: '#8e50a7' }}
+                      style={{ fontSize: '0.85rem', letterSpacing: '0.5px', color: brandPrimaryColor }}
                     >
                       <i className="bi bi-palette me-2"></i>Appearance & Sharing
                     </span>
@@ -743,14 +752,14 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                           <div className="d-flex align-items-center gap-2">
                             <i
                               className="bi bi-person-fill fs-5"
-                              style={{ color: formState.visibility !== 'public' ? '#8e50a7' : '#6c757d' }}
+                              style={{ color: formState.visibility !== 'public' ? brandPrimaryColor : '#6c757d' }}
                             ></i>
                             <div className="flex-grow-1">
                               <div className="fw-semibold">Personal</div>
                               <small className="text-muted">Only you can see and use this agent</small>
                             </div>
                             {formState.visibility !== 'public' && (
-                              <i className="bi bi-check-circle-fill" style={{ color: '#8e50a7' }}></i>
+                              <i className="bi bi-check-circle-fill" style={{ color: brandPrimaryColor }}></i>
                             )}
                           </div>
                         </div>
@@ -774,7 +783,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                           <div className="d-flex align-items-center gap-2">
                             <i
                               className="bi bi-shop fs-5"
-                              style={{ color: formState.visibility === 'public' ? '#8e50a7' : '#6c757d' }}
+                              style={{ color: formState.visibility === 'public' ? brandPrimaryColor : '#6c757d' }}
                             ></i>
                             <div className="flex-grow-1">
                               <div className="fw-semibold">Public</div>
@@ -783,7 +792,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                               </small>
                             </div>
                             {formState.visibility === 'public' && (
-                              <i className="bi bi-check-circle-fill" style={{ color: '#8e50a7' }}></i>
+                              <i className="bi bi-check-circle-fill" style={{ color: brandPrimaryColor }}></i>
                             )}
                           </div>
                         </div>
@@ -849,7 +858,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                   <div className="d-flex align-items-center gap-2">
                     <span
                       className="fw-bold text-uppercase"
-                      style={{ fontSize: '0.85rem', letterSpacing: '0.5px', color: '#8e50a7' }}
+                      style={{ fontSize: '0.85rem', letterSpacing: '0.5px', color: brandPrimaryColor }}
                     >
                       <i className="bi bi-tools me-2"></i>Tools & Capabilities
                     </span>
@@ -897,7 +906,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                         <div className="d-flex align-items-center gap-3">
                           <div
                             className="rounded-2 d-flex align-items-center justify-content-center"
-                            style={{ width: 40, height: 40, backgroundColor: '#8e50a7' }}
+                            style={{ width: 40, height: 40, backgroundColor: brandPrimaryColor }}
                           >
                             <i className="bi bi-magic text-white"></i>
                           </div>
@@ -1101,7 +1110,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                                   </span>
                                 )}
                                 {isEnabled && (
-                                  <i className="bi bi-check-circle-fill ms-1" style={{ color: '#8e50a7' }}></i>
+                                  <i className="bi bi-check-circle-fill ms-1" style={{ color: brandPrimaryColor }}></i>
                                 )}
                               </div>
                             );
@@ -1121,7 +1130,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                   <div className="d-flex align-items-center gap-2">
                     <span
                       className="fw-bold text-uppercase"
-                      style={{ fontSize: '0.85rem', letterSpacing: '0.5px', color: '#8e50a7' }}
+                      style={{ fontSize: '0.85rem', letterSpacing: '0.5px', color: brandPrimaryColor }}
                     >
                       <i className="bi bi-file-earmark-text me-2"></i>Reference Files
                     </span>
@@ -1137,10 +1146,10 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                 {showKbComparison && (
                   <div
                     className="bg-white p-3 rounded-3 border mb-3"
-                    style={{ borderColor: '#8e50a7', borderWidth: '2px' }}
+                    style={{ borderColor: brandPrimaryColor, borderWidth: '2px' }}
                   >
                     <div className="d-flex justify-content-between align-items-center mb-3">
-                      <h6 className="mb-0 fw-semibold" style={{ color: '#8e50a7' }}>
+                      <h6 className="mb-0 fw-semibold" style={{ color: brandPrimaryColor }}>
                         <i className="bi bi-info-circle-fill me-2"></i>
                         Reference Files vs Knowledge Base
                       </h6>
@@ -1151,7 +1160,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                     <Row className="g-3">
                       <Col xs={6}>
                         <div className="p-3 bg-light rounded-2 h-100">
-                          <div className="fw-semibold mb-3" style={{ color: '#8e50a7' }}>
+                          <div className="fw-semibold mb-3" style={{ color: brandPrimaryColor }}>
                             <i className="bi bi-file-earmark-text me-2"></i>Reference Files
                           </div>
                           <div className="small mb-2">
@@ -1221,7 +1230,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
           <div className="d-flex align-items-center justify-content-between w-100">
             <div className="d-flex align-items-center gap-2">
               <Button
-                variant="outline-secondary"
+                variant="secondary"
                 size="sm"
                 onClick={handleExportJson}
                 disabled={saving}
@@ -1231,7 +1240,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                 Export Agent
               </Button>
               <Button
-                variant="outline-secondary"
+                variant="secondary"
                 size="sm"
                 onClick={triggerImportPicker}
                 disabled={saving}
@@ -1242,7 +1251,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
               </Button>
             </div>
             <div className="d-flex align-items-center gap-2">
-              <Button variant="outline-secondary" onClick={onHide} disabled={saving} className="px-4">
+              <Button variant="secondary" onClick={onHide} disabled={saving} className="px-4">
                 Cancel
               </Button>
               <Button
@@ -1250,21 +1259,9 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                 disabled={saving}
                 className="px-4"
                 style={{
-                  backgroundColor: '#8e50a7',
-                  borderColor: '#8e50a7',
-                  color: 'white',
-                }}
-                onMouseEnter={(e) => {
-                  if (!saving) {
-                    e.currentTarget.style.backgroundColor = '#a366bd';
-                    e.currentTarget.style.borderColor = '#a366bd';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!saving) {
-                    e.currentTarget.style.backgroundColor = '#8e50a7';
-                    e.currentTarget.style.borderColor = '#8e50a7';
-                  }
+                  backgroundColor: primaryButtonColor,
+                  borderColor: primaryButtonBorderColor,
+                  color: primaryButtonTextColor,
                 }}
               >
                 {saving ? (

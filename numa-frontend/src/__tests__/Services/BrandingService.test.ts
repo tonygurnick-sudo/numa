@@ -54,6 +54,7 @@ describe('BrandingService', () => {
     const storageData = new Map<string, string>([
       ['CLIENT_NAME', 'testco'],
       ['BRANDING_PROVIDER_ENABLED', 'true'],
+      ['API_ENDPOINT', 'https://api.example.com'],
     ]);
 
     const sessionStorageMock = {
@@ -78,6 +79,8 @@ describe('BrandingService', () => {
       configurable: true,
     });
 
+    window.localStorage.setItem('accessToken', 'fakeAccessToken');
+
     document.head.innerHTML = '<link rel="icon" href="/favicon.ico" />';
   });
 
@@ -98,13 +101,23 @@ describe('BrandingService', () => {
     const { brandingService } = await import('../../Services/BrandingService');
 
     await vi.waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/branding.json', expect.any(Object));
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.example.com/branding/testco',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Accept: 'application/json',
+            Authorization: 'fakeAccessToken',
+          }),
+        }),
+      );
     });
 
-    const branding = brandingService.getBranding();
-    expect(branding.name).toBe('TestCo');
-    expect(branding.loginPage?.title).toBe('testco Portal');
-    expect(brandingService.getClientName()).toBe('testco');
+    await vi.waitFor(() => {
+      const branding = brandingService.getBranding();
+      expect(branding.name).toBe('TestCo');
+      expect(branding.loginPage?.title).toBe('testco Portal');
+      expect(brandingService.getClientName()).toBe('testco');
+    });
 
     const styleEl = document.getElementById('branding-vars') as HTMLStyleElement | null;
     expect(styleEl).not.toBeNull();
@@ -117,6 +130,11 @@ describe('BrandingService', () => {
   });
 
   it('falls back to defaults when remote branding fails', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('', {
+        status: 404,
+      }),
+    );
     fetchMock.mockResolvedValueOnce(
       new Response('', {
         status: 404,

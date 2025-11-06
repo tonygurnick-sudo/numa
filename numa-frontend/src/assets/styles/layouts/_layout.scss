@@ -4,23 +4,23 @@
 
 /* Login Page */
 .numalogin-right {
-  background-color: var(--color-magenta-700);
+  background-color: var(--brand-primary, var(--color-magenta-700));
 
   h1,
   p {
     text-align: center;
-    color: white;
+    color: var(--brand-primaryContrast, white);
   }
 }
 
 /* Reset Password Page */
 .numa-reset-password-right {
-  background-color: var(--color-magenta-700);
+  background-color: var(--brand-primary, var(--color-magenta-700));
 
   h1,
   p {
     text-align: center;
-    color: white;
+    color: var(--brand-primaryContrast, white);
   }
 }
 
@@ -35,7 +35,7 @@
   h1 {
     font-size: 1.75rem;
     font-weight: 600;
-    color: var(--color-dk-gray);
+    color: var(--brand-textDark, var(--color-dk-gray));
     margin: 0;
     display: flex;
     align-items: center;
@@ -55,7 +55,7 @@ nav {
   position: fixed;
   top: 0;
   left: 0;
-  color: var(--color-eggplant-200);
+  color: var(--brand-textMuted, var(--color-eggplant-200));
   z-index: 1000;
 
   @media (max-width: 768px) {
@@ -78,7 +78,7 @@ nav {
   border-bottom: 1px solid var(--color-lt-gray);
 
   .dropdown, #nav-dropdown {
-    color: var(--color-primary);
+    color: var(--brand-primary, var(--color-primary));
     border: none;
     padding: 0;
     display: flex;
@@ -96,7 +96,7 @@ nav {
   }
 
   .navbar-toggler {
-    color: var(--color-primary);
+    color: var(--brand-primary, var(--color-primary));
     padding: 0;
     border: none;
     box-shadow: none;
@@ -118,15 +118,15 @@ nav {
     border: none;
 
     .dropdown-item {
-      color: var(--color-dark);
+      color: var(--brand-text, var(--color-dark));
       padding: 0.5rem 1rem;
 
       i {
-        color: var(--color-primary);
+        color: var(--brand-primary, var(--color-primary));
       }
 
       &:hover, &:focus, &:active {
-        background-color: rgba(var(--color-primary-rgb), 0.1);
+        background-color: rgba(var(--brand-primary-rgb, var(--color-primary-rgb)), 0.1);
         outline: none;
         box-shadow: none;
       }
@@ -140,7 +140,7 @@ nav {
 }
 
 #root {
-  background: var(--color-bg-lightest);
+  background: var(--brand-background, var(--color-bg-lightest));
   min-height: 100vh;
   width: 100%;
 
@@ -176,7 +176,7 @@ nav {
   width: 100%;
   max-width: 1250px;
   padding: 0 15px;
-  background: var(--color-bg-lightest);
+  background: var(--brand-background, var(--color-bg-lightest));
 
   @media (max-width: 768px) {
     margin-left: 0;
@@ -190,6 +190,14 @@ header {
     .breadcrumb {
       margin-bottom: 1rem;
       padding-left: 3rem;
+      a {
+        color: var(--brand-primary, var(--color-primary));
+        text-decoration: none;
+
+        &:hover {
+          color: var(--brand-primaryHover, var(--color-primary-hover));
+        }
+      }
     }
 
     .row {
@@ -315,7 +323,7 @@ header {
         display: block;
 
         &:hover {
-          color: var(--color-primary);
+          color: var(--brand-primary, var(--color-primary));
         }
       }
     }
@@ -344,6 +352,7 @@ header {
         .description-text {
           display: -webkit-box;
           -webkit-line-clamp: 4;
+          line-clamp: 4;
           -webkit-box-orient: vertical;
           overflow: hidden;
           text-overflow: ellipsis;

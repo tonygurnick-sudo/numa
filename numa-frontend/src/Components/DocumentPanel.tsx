@@ -9,7 +9,7 @@ const DocumentPanel = ({ documentContent, onClose }) => {
       <div className="document-panel-container">
         <div className="document-panel-header">
           <div className="document-panel-title">No Document</div>
-          <Button variant="outline-secondary" size="sm" onClick={onClose}>
+          <Button variant="secondary" size="sm" onClick={onClose}>
             Close
           </Button>
         </div>
@@ -28,7 +28,7 @@ const DocumentPanel = ({ documentContent, onClose }) => {
       {/* Header: title + close button */}
       <div className="document-panel-header">
         <div className="document-panel-title">{title}</div>
-        <Button variant="outline-secondary" size="sm" onClick={onClose}>
+        <Button variant="secondary" size="sm" onClick={onClose}>
           Close
         </Button>
       </div>

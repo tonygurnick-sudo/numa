@@ -8,12 +8,12 @@
         margin-bottom: 1.5rem;
 
         .card-header {
-            background-color: var(--color-eggplant-100);
-            border-bottom: 1px solid var(--color-eggplant-200);
+            background-color: var(--brand-surface, var(--color-eggplant-100));
+            border-bottom: 1px solid var(--brand-border, var(--color-eggplant-200));
             padding: 1rem 1.25rem;
 
             .card-title {
-                color: var(--color-eggplant-900);
+                color: var(--brand-primary, var(--color-eggplant-900));
                 font-weight: 600;
             }
         }
@@ -35,14 +35,14 @@
             border-bottom: 2px solid transparent;
 
             &:hover {
-                color: var(--color-primary);
-                border-bottom: 2px solid var(--color-eggplant-200);
+                color: var(--brand-primary, var(--color-primary));
+                border-bottom: 2px solid color-mix(in srgb, var(--brand-primary, var(--color-primary)) 25%, transparent);
             }
 
             &.active {
-                color: var(--color-primary);
+                color: var(--brand-primary, var(--color-primary));
                 background-color: transparent;
-                border-bottom: 2px solid var(--color-primary);
+                border-bottom: 2px solid var(--brand-primary, var(--color-primary));
                 font-weight: 500;
             }
         }
@@ -134,10 +134,10 @@
         cursor: default;
         position: sticky;
         top: 0;
-        background-color: var(--color-eggplant-100);
+        background-color: var(--brand-surface, var(--color-eggplant-100));
         z-index: 10;
-        border-bottom: 2px solid var(--color-eggplant-200);
-        color: var(--color-eggplant-900);
+        border-bottom: 2px solid var(--brand-border, var(--color-eggplant-200));
+        color: var(--brand-primary, var(--color-eggplant-900));
         font-weight: 600;
 
         &.sortable-header {
@@ -226,7 +226,7 @@
 
     // File and folder icons
     .folder-icon {
-      color: #4b007d;
+      color: var(--brand-primary, var(--color-primary));
     }
 
     .file-icon {
@@ -318,14 +318,14 @@
     }
 
     // Checkbox styling
-    .checkbox-purple {
+    .checkbox {
       input[type="checkbox"]:checked {
-        background-color: var(--color-primary) !important;
-        border-color: var(--color-primary) !important;
+        background-color: var(--brand-primary, var(--color-primary)) !important;
+        border-color: var(--brand-primary, var(--color-primary)) !important;
       }
 
       input[type="checkbox"]:focus {
-        border-color: var(--color-primary) !important;
+        border-color: var(--brand-primary, var(--color-primary)) !important;
         box-shadow: 0 0 0 0.25rem rgba(142, 80, 167, 0.25) !important;
       }
     }

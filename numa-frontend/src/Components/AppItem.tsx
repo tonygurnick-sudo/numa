@@ -127,7 +127,7 @@ const AppItem = ({ app, onCategoryClick }) => {
             </div>
             <div className="footer-right">
               {app.status === 'Active' ? (
-                <a href={`/app/${app.id}`} rel="noopener" className="btn btn-primary">
+                <a href={`/app/${app.id}`} rel="noopener" className="btn btn-secondary">
                   Launch <i className="bi bi-arrow-right ms-2"></i>
                 </a>
               ) : (

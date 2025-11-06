@@ -210,7 +210,7 @@ export const AgentCard = ({
                     <div className="d-flex align-items-center gap-1" style={{ flexShrink: 0 }}>
                       <i
                         className="bi bi-file-earmark-text"
-                        style={{ fontSize: '13px', color: '#8e50a7', lineHeight: 1 }}
+                        style={{ fontSize: '13px', color: 'var(--brand-primary, var(--color-primary))', lineHeight: 1 }}
                       ></i>
                       <span className="text-muted" style={{ fontSize: '0.7rem' }}>
                         {agent.referenceFiles.length}
@@ -221,9 +221,11 @@ export const AgentCard = ({
                   {/* Tools Icons */}
                   {(hasKB || hasWeb || hasAgentCreation) && (
                     <div className="d-flex align-items-center gap-1" style={{ flexShrink: 0 }}>
-                      {hasKB && <Database size={14} style={{ color: '#8e50a7' }} />}
-                      {hasWeb && <Search size={14} style={{ color: '#8e50a7' }} />}
-                      {hasAgentCreation && <Robot size={14} style={{ color: '#8e50a7' }} />}
+                      {hasAgentCreation && (
+                        <Robot size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+                      )}
+                      {hasKB && <Database size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />}
+                      {hasWeb && <Search size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />}
                     </div>
                   )}
                 </div>
@@ -348,7 +350,7 @@ export const AgentCard = ({
                       overlay={<Tooltip id={`agent-${agent.agentId}-kb`}>Knowledge Base</Tooltip>}
                     >
                       <div>
-                        <Database size={18} style={{ color: '#8e50a7' }} />
+                        <Database size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                       </div>
                     </OverlayTrigger>
                   )}
@@ -358,7 +360,7 @@ export const AgentCard = ({
                       overlay={<Tooltip id={`agent-${agent.agentId}-web`}>Web Search</Tooltip>}
                     >
                       <div>
-                        <Search size={18} style={{ color: '#8e50a7' }} />
+                        <Search size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                       </div>
                     </OverlayTrigger>
                   )}
@@ -368,7 +370,7 @@ export const AgentCard = ({
                       overlay={<Tooltip id={`agent-${agent.agentId}-create`}>Agent Creation</Tooltip>}
                     >
                       <div>
-                        <Robot size={18} style={{ color: '#8e50a7' }} />
+                        <Robot size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                       </div>
                     </OverlayTrigger>
                   )}
@@ -418,7 +420,10 @@ export const AgentCard = ({
                     }
                   >
                     <div className="d-flex align-items-center gap-1">
-                      <i className="bi bi-file-earmark-text" style={{ fontSize: '16px', color: '#8e50a7' }}></i>
+                      <i
+                        className="bi bi-file-earmark-text"
+                        style={{ fontSize: '16px', color: 'var(--brand-primary, var(--color-primary))' }}
+                      ></i>
                       <span className="text-muted small">{agent.referenceFiles.length}</span>
                     </div>
                   </OverlayTrigger>
@@ -467,14 +472,14 @@ export const AgentCard = ({
           <div className="d-flex gap-1">
             {onEdit && (
               <OverlayTrigger placement="top" overlay={<Tooltip id={`edit-${agent.agentId}`}>Edit</Tooltip>}>
-                <Button variant="outline-secondary" size="sm" onClick={() => onEdit(agent)} disabled={disabled}>
+                <Button variant="secondary" size="sm" onClick={() => onEdit(agent)} disabled={disabled}>
                   <i className="bi bi-pencil-square"></i>
                 </Button>
               </OverlayTrigger>
             )}
             {onDuplicate && (
               <OverlayTrigger placement="top" overlay={<Tooltip id={`copy-${agent.agentId}`}>Duplicate</Tooltip>}>
-                <Button variant="outline-secondary" size="sm" onClick={() => onDuplicate(agent)} disabled={disabled}>
+                <Button variant="secondary" size="sm" onClick={() => onDuplicate(agent)} disabled={disabled}>
                   <i className="bi bi-files"></i>
                 </Button>
               </OverlayTrigger>
@@ -482,7 +487,7 @@ export const AgentCard = ({
             {/* Export JSON just to the left of Delete */}
             <OverlayTrigger placement="top" overlay={<Tooltip id={`export-${agent.agentId}`}>Export JSON</Tooltip>}>
               <Button
-                variant="outline-secondary"
+                variant="secondary"
                 size="sm"
                 onClick={handleExportClick}
                 disabled={disabled}

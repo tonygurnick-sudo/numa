@@ -15,6 +15,7 @@ import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { getConnectionConfig } from '../config/integrationsConfig';
+import { useBranding } from '../Providers/BrandingContext';
 
 type FilterOption = 'all' | 'personal' | 'public';
 
@@ -26,6 +27,13 @@ export const AgentsManagement = () => {
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
 
   // Feature flag UX: do not redirect; show disabled preview panel instead
+  const { branding } = useBranding();
+  const brandPrimaryColor = branding.colors.primary ?? 'var(--brand-primary, var(--color-primary))';
+  const brandPrimaryContrast = branding.colors.primaryContrast ?? branding.colors.buttonPrimaryText ?? '#ffffff';
+  const brandPrimaryBorderColor =
+    branding.colors.buttonPrimaryBorder ?? branding.colors.buttonPrimary ?? brandPrimaryColor;
+  const brandPrimarySoftBackground = `color-mix(in srgb, ${brandPrimaryColor} 12%, transparent)`;
+  const brandSelectedShadow = `0 4px 12px color-mix(in srgb, ${brandPrimaryColor} 20%, transparent)`;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentSummary | null>(null);
@@ -301,42 +309,23 @@ export const AgentsManagement = () => {
                       style={{
                         width: 56,
                         height: 56,
-                        backgroundColor: '#8e50a7',
+                        backgroundColor: brandPrimaryColor,
                         flexShrink: 0,
                       }}
                     >
-                      <i className="bi bi-robot" style={{ fontSize: '28px', color: 'white' }}></i>
+                      <i className="bi bi-robot" style={{ fontSize: '28px', color: brandPrimaryContrast }}></i>
                     </div>
                     <div>
-                      <h1 className="mb-1 fs-2 fw-bold">AI Agents</h1>
+                      <h1 className="mb-1 fs-2">AI Agents</h1>
                       <p className="text-muted mb-0 fs-6">Design, deploy, and manage your intelligent AI assistants</p>
                     </div>
                   </div>
                   <div className="d-flex gap-2">
-                    <Button variant="outline-secondary" onClick={loadAgents} disabled={loading}>
+                    <Button variant="secondary" onClick={loadAgents} disabled={loading}>
                       <i className="bi bi-arrow-clockwise me-1"></i> Refresh
                     </Button>
                     {agentsFeatureEnabled && agentsMode !== 'off' && (
-                      <Button
-                        onClick={handleCreate}
-                        size="lg"
-                        className="fw-bold"
-                        style={{
-                          backgroundColor: '#8e50a7',
-                          borderColor: '#8e50a7',
-                          color: 'white',
-                          paddingLeft: '1.5rem',
-                          paddingRight: '1.5rem',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#a366bd';
-                          e.currentTarget.style.borderColor = '#a366bd';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = '#8e50a7';
-                          e.currentTarget.style.borderColor = '#8e50a7';
-                        }}
-                      >
+                      <Button onClick={handleCreate} size="lg">
                         <i className="bi bi-plus-circle me-2"></i> Create Agent
                       </Button>
                     )}
@@ -355,21 +344,20 @@ export const AgentsManagement = () => {
                         role="button"
                         onClick={() => setFilter('all')}
                         style={{
-                          boxShadow:
-                            filter === 'all' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                          boxShadow: filter === 'all' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          borderColor: filter === 'all' ? '#8e50a7' : undefined,
+                          borderColor: filter === 'all' ? brandPrimaryBorderColor : undefined,
                           borderWidth: filter === 'all' ? '2px' : '1px',
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                          e.currentTarget.style.boxShadow = brandSelectedShadow;
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.transform = 'translateY(0)';
                           e.currentTarget.style.boxShadow =
-                            filter === 'all' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)';
+                            filter === 'all' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
                         }}
                       >
                         <div className="d-flex align-items-center justify-content-between">
@@ -378,10 +366,10 @@ export const AgentsManagement = () => {
                             <div className="fs-4 fw-bold">{totalAgents}</div>
                           </div>
                           <div
-                            className="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center"
-                            style={{ width: 48, height: 48 }}
+                            className="rounded-circle d-flex align-items-center justify-content-center"
+                            style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
                           >
-                            <i className="bi bi-robot text-primary fs-5"></i>
+                            <i className="bi bi-robot fs-5" style={{ color: brandPrimaryColor }}></i>
                           </div>
                         </div>
                       </div>
@@ -392,21 +380,20 @@ export const AgentsManagement = () => {
                         role="button"
                         onClick={() => setFilter('personal')}
                         style={{
-                          boxShadow:
-                            filter === 'personal' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                          boxShadow: filter === 'personal' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          borderColor: filter === 'personal' ? '#8e50a7' : undefined,
+                          borderColor: filter === 'personal' ? brandPrimaryBorderColor : undefined,
                           borderWidth: filter === 'personal' ? '2px' : '1px',
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                          e.currentTarget.style.boxShadow = brandSelectedShadow;
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.transform = 'translateY(0)';
                           e.currentTarget.style.boxShadow =
-                            filter === 'personal' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)';
+                            filter === 'personal' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
                         }}
                       >
                         <div className="d-flex align-items-center justify-content-between">
@@ -418,7 +405,7 @@ export const AgentsManagement = () => {
                             className="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
                             style={{ width: 48, height: 48 }}
                           >
-                            <i className="bi bi-person-fill text-secondary fs-5"></i>
+                            <i className="bi bi-person-fill" style={{ color: brandPrimaryColor }}></i>
                           </div>
                         </div>
                       </div>
@@ -429,21 +416,20 @@ export const AgentsManagement = () => {
                         role="button"
                         onClick={() => setFilter('public')}
                         style={{
-                          boxShadow:
-                            filter === 'public' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                          boxShadow: filter === 'public' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          borderColor: filter === 'public' ? '#8e50a7' : undefined,
+                          borderColor: filter === 'public' ? brandPrimaryBorderColor : undefined,
                           borderWidth: filter === 'public' ? '2px' : '1px',
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                          e.currentTarget.style.boxShadow = brandSelectedShadow;
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.transform = 'translateY(0)';
                           e.currentTarget.style.boxShadow =
-                            filter === 'public' ? '0 4px 12px rgba(142, 80, 167, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)';
+                            filter === 'public' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
                         }}
                       >
                         <div className="d-flex align-items-center justify-content-between">
@@ -453,9 +439,9 @@ export const AgentsManagement = () => {
                           </div>
                           <div
                             className="rounded-circle d-flex align-items-center justify-content-center"
-                            style={{ width: 48, height: 48, backgroundColor: 'rgba(142, 80, 167, 0.1)' }}
+                            style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
                           >
-                            <i className="bi bi-shop fs-5" style={{ color: '#8e50a7' }}></i>
+                            <i className="bi bi-shop fs-5" style={{ color: brandPrimaryColor }}></i>
                           </div>
                         </div>
                       </div>
@@ -518,18 +504,25 @@ export const AgentsManagement = () => {
                             style={{
                               width: 56,
                               height: 56,
-                              backgroundColor: '#8e50a7',
+                              backgroundColor: brandPrimaryColor,
                               flexShrink: 0,
                             }}
                           >
-                            <i className="bi bi-person-circle" style={{ fontSize: '28px', color: 'white' }}></i>
+                            <i
+                              className="bi bi-person-circle"
+                              style={{ fontSize: '28px', color: brandPrimaryContrast }}
+                            ></i>
                           </div>
                           <div className="flex-grow-1">
                             <div className="d-flex justify-content-between align-items-center mb-1">
                               <h2 className="h4 mb-0 fw-bold">My Agents</h2>
                               <span
                                 className="badge rounded-pill px-3 py-2"
-                                style={{ backgroundColor: '#8e50a7', color: 'white', fontSize: '0.9rem' }}
+                                style={{
+                                  backgroundColor: brandPrimaryColor,
+                                  color: brandPrimaryContrast,
+                                  fontSize: '0.9rem',
+                                }}
                               >
                                 {filteredMyAgents.length}
                               </span>
@@ -559,18 +552,22 @@ export const AgentsManagement = () => {
                             style={{
                               width: 56,
                               height: 56,
-                              backgroundColor: '#8e50a7',
+                              backgroundColor: brandPrimaryColor,
                               flexShrink: 0,
                             }}
                           >
-                            <i className="bi bi-shop" style={{ fontSize: '28px', color: 'white' }}></i>
+                            <i className="bi bi-shop" style={{ fontSize: '28px', color: brandPrimaryContrast }}></i>
                           </div>
                           <div className="flex-grow-1">
                             <div className="d-flex justify-content-between align-items-center mb-1">
                               <h2 className="h4 mb-0 fw-bold">Company Agent Marketplace</h2>
                               <span
                                 className="badge rounded-pill px-3 py-2"
-                                style={{ backgroundColor: '#8e50a7', color: 'white', fontSize: '0.9rem' }}
+                                style={{
+                                  backgroundColor: brandPrimaryColor,
+                                  color: brandPrimaryContrast,
+                                  fontSize: '0.9rem',
+                                }}
                               >
                                 {filteredWorkspaceAgents.length}
                               </span>

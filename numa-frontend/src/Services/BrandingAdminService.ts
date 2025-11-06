@@ -44,14 +44,64 @@ type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>)
 type NumaPut = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 type NumaPost = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 
-const getBaseUrl = () =>
-  sessionStorage.getItem('BRANDING_API_BASE_URL') || sessionStorage.getItem('API_ENDPOINT') || '/api';
+const getBaseUrl = () => sessionStorage.getItem('API_ENDPOINT') || '/api';
 const getClientId = () => sessionStorage.getItem('CLIENT_NAME') || 'numa';
 
 type PresignResponse = {
-  uploadUrl: string;
-  assetUrl: string;
+  uploadUrl?: string;
+  url?: string;
+  putUrl?: string;
+  presignedUrl?: string;
+  assetUrl?: string;
+  asset_url?: string;
+  publicUrl?: string;
+  public_url?: string;
   headers?: Record<string, string>;
+  fields?: Record<string, string>;
+};
+
+export const sanitizeFileName = (name: string): string => {
+  return name.trim().replace(/\s+/g, '-');
+};
+
+const normalizePresignResponse = (raw: unknown): PresignResponse => {
+  if (!raw) {
+    return {};
+  }
+
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return {};
+    }
+
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return JSON.parse(trimmed) as PresignResponse;
+      } catch (error) {
+        console.error('Branding presign response JSON parse failed', error);
+        return {};
+      }
+    }
+
+    if (trimmed.startsWith('<')) {
+      console.error(
+        'Branding presign response returned HTML payload. Check API base URL or auth.',
+        trimmed.slice(0, 200),
+      );
+      throw new Error(
+        'Branding asset upload endpoint returned HTML instead of JSON. Verify Branding API configuration.',
+      );
+    }
+
+    return {};
+  }
+
+  if (typeof raw === 'object') {
+    return raw as PresignResponse;
+  }
+
+  return {};
 };
 
 export const BrandingAdminService = {
@@ -69,18 +119,75 @@ export const BrandingAdminService = {
     const clientId = getClientId();
     await numaPut(`${getBaseUrl()}/branding/${clientId}`, payload);
   },
-  async requestAssetUpload(
-    numaPost: NumaPost,
-    assetType: string,
-    file: File,
-  ): Promise<PresignResponse & { fields?: Record<string, string> }> {
+  async requestAssetUpload(numaPost: NumaPost, assetType: string, file: File): Promise<PresignResponse> {
     const clientId = getClientId();
-    const response = (await numaPost(`${getBaseUrl()}/branding/${clientId}/assets`, {
+    const sanitizedFileName = sanitizeFileName(file.name || `${assetType}-asset`);
+    const rawResponse = await numaPost(`${getBaseUrl()}/branding/${clientId}/assets`, {
       assetType,
       contentType: file.type,
-      fileName: file.name,
-    })) as PresignResponse & { fields?: Record<string, string> };
-    return response;
+      fileName: sanitizedFileName,
+    });
+
+    const response = normalizePresignResponse(rawResponse);
+
+    const normalizedUploadUrl = response.uploadUrl ?? response.url ?? response.putUrl ?? response.presignedUrl ?? null;
+
+    let normalizedAssetUrl =
+      response.assetUrl ?? response.asset_url ?? response.publicUrl ?? response.public_url ?? undefined;
+
+    if (!normalizedAssetUrl) {
+      const fields = response.fields ?? {};
+      const rawKey = (fields.key ?? fields.Key)?.toString();
+      const rawBucket = (fields.bucket ?? fields.Bucket)?.toString();
+
+      if (rawKey) {
+        const normalizedKey = rawKey.replace(/^\/+/, '');
+
+        if (rawBucket) {
+          normalizedAssetUrl = `s3://${rawBucket}/${normalizedKey}`;
+        } else if (normalizedUploadUrl) {
+          const baseUrl = normalizedUploadUrl.split('?')[0];
+
+          try {
+            const parsed = new URL(baseUrl);
+            const hostParts = parsed.hostname.split('.');
+            const s3Index = hostParts.findIndex((part) => part === 's3');
+
+            if (s3Index > 0) {
+              const bucketName = hostParts.slice(0, s3Index).join('.');
+              normalizedAssetUrl = `s3://${bucketName}/${normalizedKey}`;
+            } else if (
+              parsed.hostname === 's3.amazonaws.com' ||
+              parsed.hostname.startsWith('s3-') ||
+              parsed.hostname.startsWith('s3.')
+            ) {
+              const firstSegment = parsed.pathname.replace(/^\/+/, '').split('/')[0];
+              if (firstSegment) {
+                normalizedAssetUrl = `s3://${firstSegment}/${normalizedKey}`;
+              }
+            }
+          } catch {
+            const trimmedBase = baseUrl.replace(/\/+$/, '');
+            normalizedAssetUrl = `${trimmedBase}/${normalizedKey}`;
+          }
+
+          if (!normalizedAssetUrl) {
+            const trimmedBase = baseUrl.replace(/\/+$/, '');
+            normalizedAssetUrl = `${trimmedBase}/${normalizedKey}`;
+          }
+        }
+      }
+    }
+
+    if (!normalizedAssetUrl && normalizedUploadUrl) {
+      normalizedAssetUrl = normalizedUploadUrl.split('?')[0];
+    }
+
+    return {
+      ...response,
+      uploadUrl: normalizedUploadUrl ?? undefined,
+      assetUrl: normalizedAssetUrl,
+    };
   },
   async revertVersion(numaPost: NumaPost, versionId: string): Promise<BrandingConfigResponse> {
     const clientId = getClientId();
