@@ -54,7 +54,9 @@
     "update-q-deploy-config": "node --import tsx update-q-deploy-config.ts",
     "teardown-client": "node --import tsx teardown-client.ts",
     "provision-access": "node --import tsx provision-access.ts",
-    "quota-report": "node --import tsx quota-report.ts"
+    "quota-report": "node --import tsx quota-report.ts",
+    "build-claude-cli-layer": "node --import tsx build-claude-cli-layer.ts",
+    "fetch-claude-cli-layer": "node --import tsx fetch-claude-cli-layer.ts"
   },
   "packageManager": "yarn@4.9.2",
   "devDependencies": {

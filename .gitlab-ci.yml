@@ -356,6 +356,57 @@ node-package:
   rules:
     - !reference [.rules, if-main]
 
+# Build Claude CLI layer ZIP (branch pipelines)
+claude-cli-layer-build:
+  stage: package
+  image: amazonlinux:2023
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+  variables:
+    CLAUDE_CLI_VERSION: "1.0.100"
+  before_script:
+    - dnf -y install curl tar gzip zip which
+  script:
+    - test -n "$CLAUDE_CLI_VERSION" || (echo "CLAUDE_CLI_VERSION is required" >&2; exit 1)
+    # Install Claude CLI (pinned version)
+    - curl -fsSL https://claude.ai/install.sh | bash -s ${CLAUDE_CLI_VERSION}
+    - CLAUDE_BIN="$(command -v claude)" && echo "CLAUDE_BIN=$CLAUDE_BIN"
+    - test -x "$CLAUDE_BIN" || (echo "claude not found" && exit 1)
+    - ${CLAUDE_BIN} --version
+    # Package as Lambda Layer at expected path for CDKTF
+    - mkdir -p infra/assets/layers/claude-cli/bin
+    - cp "$CLAUDE_BIN" infra/assets/layers/claude-cli/bin/claude
+    - chmod +x infra/assets/layers/claude-cli/bin/claude
+    - (cd infra/assets/layers/claude-cli && zip -r claude-x86_64.zip bin)
+    - ls -lh infra/assets/layers/claude-cli/claude-x86_64.zip
+  artifacts:
+    paths:
+      - infra/assets/layers/claude-cli/claude-x86_64.zip
+    expire_in: 7 days
+
+# Publish the layer ZIP to deployer S3 (main only)
+claude-cli-layer-publish:
+  stage: package
+  image: registry.gitlab.com/arcanumai/ci/all-inclusive
+  needs: ["claude-cli-layer-build"]
+  rules:
+    - !reference [.rules, if-main]
+  variables:
+    CLAUDE_CLI_VERSION: "1.0.100"
+    CLAUDE_LAYER_S3_PREFIX: "claude-layers"
+    AWS_REGION: us-east-1
+  before_script:
+    - export AWS_ROLE=${AWS_DEPLOYER_ROLE_ARN:-$AWS_CLIENT_ROLE_ARN}
+    - !reference [.common-steps, aws-assume-role]
+  script:
+    - set -euo pipefail
+    - export CLAUDE_LAYER_S3_BUCKET=${CLAUDE_LAYER_S3_BUCKET:-numa-claude-cli-layers}
+    - test -f infra/assets/layers/claude-cli/claude-x86_64.zip || (echo "Missing layer zip to publish" && exit 1)
+    - export LAYER_KEY="${CLAUDE_LAYER_S3_PREFIX}/${CLAUDE_CLI_VERSION}/claude-x86_64.zip"
+    - echo "Publishing to s3://${CLAUDE_LAYER_S3_BUCKET}/${LAYER_KEY}"
+    - aws s3 cp --only-show-errors infra/assets/layers/claude-cli/claude-x86_64.zip "s3://${CLAUDE_LAYER_S3_BUCKET}/${LAYER_KEY}"
+    - aws s3 ls "s3://${CLAUDE_LAYER_S3_BUCKET}/${LAYER_KEY}"
+
 build-deployment-container:
   stage: image-build
   image: registry.gitlab.com/arcanumai/ci/all-inclusive # don't need a lot of this, but it gets us started
@@ -366,6 +417,8 @@ build-deployment-container:
   variables:
     BUILD_DIR: .
     ECR_REPO: ${ECR_BASE}/numa-deploy
+    CLAUDE_CLI_VERSION: "1.0.100"
+    CLAUDE_LAYER_S3_PREFIX: "claude-layers"
   before_script:
     - !reference [.yarn, setup-private-auth]
     - !reference [.node_job, before_script]
@@ -374,11 +427,31 @@ build-deployment-container:
     # install only the infra deps
     - yarn workspaces focus @arcanumai/q-apps-deployer-infra
     # possibly swap to kaniko to remove need for dind
-    - docker build --build-arg GIT_HASH=${CI_COMMIT_SHORT_SHA} --build-arg GIT_BRANCH=${CI_COMMIT_BRANCH} --build-arg CI_PROJECT_PATH=$CI_PROJECT_PATH -f infra/container/Dockerfile . -t deploy:${CI_COMMIT_SHORT_SHA}
+    - |
+      # Assume deployer role for S3 presign
+      export AWS_ROLE=${AWS_DEPLOYER_ROLE_ARN:-$AWS_CLIENT_ROLE_ARN}
+      ! reference [.common-steps, aws-assume-role]
+    - |
+      PRESIGNED=""
+      export CLAUDE_LAYER_S3_BUCKET=${CLAUDE_LAYER_S3_BUCKET:-numa-claude-cli-layers}
+      if [ -n "${CLAUDE_LAYER_S3_BUCKET}" ]; then
+        export LAYER_KEY="${CLAUDE_LAYER_S3_PREFIX}/${CLAUDE_CLI_VERSION}/claude-x86_64.zip"
+        echo "Generating presigned URL for s3://${CLAUDE_LAYER_S3_BUCKET}/${LAYER_KEY}"
+        PRESIGNED=$(aws s3 presign "s3://${CLAUDE_LAYER_S3_BUCKET}/${LAYER_KEY}" --expires-in 7200) || PRESIGNED=""
+      fi
+      docker build \
+        --build-arg GIT_HASH=${CI_COMMIT_SHORT_SHA} \
+        --build-arg GIT_BRANCH=${CI_COMMIT_BRANCH} \
+        --build-arg CI_PROJECT_PATH=$CI_PROJECT_PATH \
+        --build-arg CLAUDE_CLI_VERSION=${CLAUDE_CLI_VERSION} \
+        --build-arg CLAUDE_LAYER_URL="${PRESIGNED}" \
+        -f infra/container/Dockerfile . -t deploy:${CI_COMMIT_SHORT_SHA}
+    - |
+      # Re-assume client/images role for ECR push
+      export AWS_ROLE=${AWS_CLIENT_ROLE_ARN}
+      ! reference [.common-steps, aws-assume-role]
     - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:latest
     - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:${CI_COMMIT_SHORT_SHA}
-    - export AWS_ROLE=${AWS_CLIENT_ROLE_ARN}
-    - !reference [.common-steps, aws-assume-role]
     - aws ecr get-login-password | docker login -u AWS --password-stdin "https://${ECR_REPO}"
     - docker push ${ECR_REPO}:latest
     - docker push ${ECR_REPO}:${CI_COMMIT_SHORT_SHA}
@@ -392,6 +465,7 @@ build-deployment-container:
     TF_ENVIRONMENT: prod
     AWS_REGION: us-east-1
     CLIENT_OVERRIDE: $CLIENT_NAME
+  needs: ["claude-cli-layer-build"]
   script:
     - yarn exec cdktf deploy --auto-approve numa-${CLIENT_NAME}
   needs:
