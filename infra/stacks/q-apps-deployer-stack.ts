@@ -30,6 +30,12 @@ export class QAppsDeployerStack extends ArcanumStack {
       bucket: props.appsBucketName,
     });
 
+    // Private bucket to host prebuilt Lambda layer artifacts (e.g., Claude CLI)
+    // CI publishes s3://<bucket>/claude-layers/<version>/claude-x86_64.zip
+    const claudeLayerBucket = new PrivateBucket(this, 'claude-cli-layer-bucket', {
+      bucket: 'numa-claude-cli-layers',
+    });
+
     const zone = new Route53Zone(this, 'route53-zone', {
       name: props.domainSuffix,
     });
@@ -97,6 +103,10 @@ export class QAppsDeployerStack extends ArcanumStack {
 
     new TerraformOutput(this, 'zone-id', {
       value: zone.id,
+    });
+
+    new TerraformOutput(this, 'claude-cli-layer-bucket-name', {
+      value: claudeLayerBucket.bucket,
     });
 
     // Customer Success Portal and Deployments orchestration (POC)
