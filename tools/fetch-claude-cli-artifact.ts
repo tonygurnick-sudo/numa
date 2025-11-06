@@ -12,7 +12,7 @@ const streamPipeline = promisify(pipeline);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
-const DEST_DIR = path.join(ROOT_DIR, 'infra', 'assets', 'layers', 'claude-cli');
+const DEST_DIR = path.join(ROOT_DIR, 'infra', 'assets', 'artifacts', 'claude-cli');
 const DEST_ZIP = path.join(DEST_DIR, 'claude-x86_64.zip');
 
 function parseArgs(): Record<string, string | boolean> {
@@ -32,14 +32,14 @@ function parseArgs(): Record<string, string | boolean> {
 function usage(): void {
   console.log(
     [
-      'Fetch the prebuilt Claude CLI Lambda layer ZIP from S3 into infra/assets/layers/claude-cli.',
+      'Fetch the prebuilt Claude CLI artifact ZIP from S3 into infra/assets/artifacts/claude-cli.',
       '',
       'Usage:',
-      '  yarn workspace @arcanumai/q-apps-deployer-tools fetch-claude-cli-layer [--bucket <name>] [--prefix <key-prefix>] [--version <ver>] [--region <aws-region>] [--force]',
+      '  yarn workspace @arcanumai/q-apps-deployer-tools fetch-claude-cli-artifact [--bucket <name>] [--prefix <key-prefix>] [--version <ver>] [--region <aws-region>] [--force]',
       '',
       'Defaults:',
-      '  --bucket  $CLAUDE_LAYER_S3_BUCKET or numa-claude-cli-layers',
-      '  --prefix  $CLAUDE_LAYER_S3_PREFIX or claude-layers',
+      '  --bucket  $CLAUDE_ARTIFACT_S3_BUCKET or numa-claude-cli-artifacts',
+      '  --prefix  $CLAUDE_ARTIFACT_S3_PREFIX or claude-artifacts',
       '  --version $CLAUDE_CLI_VERSION or 1.0.100',
       '  --region  $AWS_REGION (optional; uses SDK default if unset)',
     ].join('\n'),
@@ -50,8 +50,8 @@ async function main(): Promise<void> {
   const argv = parseArgs();
   if (argv.help) return usage();
 
-  const bucket = (argv.bucket as string) || process.env.CLAUDE_LAYER_S3_BUCKET || 'numa-claude-cli-layers';
-  const prefix = (argv.prefix as string) || process.env.CLAUDE_LAYER_S3_PREFIX || 'claude-layers';
+  const bucket = (argv.bucket as string) || process.env.CLAUDE_ARTIFACT_S3_BUCKET || 'numa-claude-cli-artifacts';
+  const prefix = (argv.prefix as string) || process.env.CLAUDE_ARTIFACT_S3_PREFIX || 'claude-artifacts';
   const version = (argv.version as string) || process.env.CLAUDE_CLI_VERSION || '1.0.100';
   const region = (argv.region as string) || process.env.AWS_REGION || undefined;
   const force = Boolean(argv.force);
@@ -80,12 +80,12 @@ async function main(): Promise<void> {
   const zip = new AdmZip(DEST_ZIP);
   const entry = zip.getEntry('bin/claude');
   if (!entry) {
-    throw new Error('ZIP missing bin/claude. Is this the correct layer artifact?');
+    throw new Error('ZIP missing bin/claude. Is this the correct artifact?');
   }
   console.log('Verified bin/claude present. Success.');
 }
 
 main().catch((err) => {
-  console.error('Failed to fetch Claude CLI layer:', err);
+  console.error('Failed to fetch Claude CLI artifact:', err);
   process.exit(1);
 });
