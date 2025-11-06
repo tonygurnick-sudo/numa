@@ -365,14 +365,30 @@ claude-cli-layer-build:
   variables:
     CLAUDE_CLI_VERSION: "1.0.100"
   before_script:
-    - dnf -y install curl tar gzip zip which
+    - dnf -y install tar gzip zip which jq
   script:
+    - set -euo pipefail
     - test -n "$CLAUDE_CLI_VERSION" || (echo "CLAUDE_CLI_VERSION is required" >&2; exit 1)
-    # Install Claude CLI (pinned version)
-    - curl -fsSL https://claude.ai/install.sh | bash -s ${CLAUDE_CLI_VERSION}
-    - CLAUDE_BIN="$(command -v claude)" && echo "CLAUDE_BIN=$CLAUDE_BIN"
-    - test -x "$CLAUDE_BIN" || (echo "claude not found" && exit 1)
-    - ${CLAUDE_BIN} --version
+    # Download claude binary directly from the official GCS bucket and package as a layer
+    - GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"
+    - ARCH=$(uname -m); ARCH_LABEL=$([ "$ARCH" = x86_64 ] && echo x64 || echo arm64)
+    - if ldd /bin/ls 2>&1 | grep -q musl; then PLATFORM="linux-${ARCH_LABEL}-musl"; else PLATFORM="linux-${ARCH_LABEL}"; fi
+    - |
+      if [ "$CLAUDE_CLI_VERSION" = "stable" ] || [ "$CLAUDE_CLI_VERSION" = "latest" ]; then
+        VERSION=$(curl -fsSL "$GCS_BUCKET/stable")
+      else
+        VERSION="$CLAUDE_CLI_VERSION"
+      fi
+      echo "Using Claude CLI version: $VERSION for $PLATFORM"
+    - MANIFEST=$(curl -fsSL "$GCS_BUCKET/$VERSION/manifest.json")
+    - CHECKSUM=$(echo "$MANIFEST" | jq -r --arg p "$PLATFORM" '.platforms[$p].checksum')
+    - test -n "$CHECKSUM" || (echo "Failed to resolve checksum for $PLATFORM" >&2; exit 1)
+    - mkdir -p infra/assets/layers/claude-cli/bin
+    - curl -fsSL -o infra/assets/layers/claude-cli/bin/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude"
+    - echo "$CHECKSUM  infra/assets/layers/claude-cli/bin/claude" | sha256sum -c -
+    - chmod +x infra/assets/layers/claude-cli/bin/claude
+    - (cd infra/assets/layers/claude-cli && zip -r claude-x86_64.zip bin)
+    - ls -lh infra/assets/layers/claude-cli/claude-x86_64.zip
     # Package as Lambda Layer at expected path for CDKTF
     - mkdir -p infra/assets/layers/claude-cli/bin
     - cp "$CLAUDE_BIN" infra/assets/layers/claude-cli/bin/claude
