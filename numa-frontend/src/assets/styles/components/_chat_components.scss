@@ -217,10 +217,15 @@ $border-radius-pill: 1rem;
         color: black;
         border-radius: 20px;
         cursor: pointer;
-        &:hover {
-          background: var(--brand-buttonSecondaryHover, #f3f4f6);
-          color: var(--brand-primary, var(--color-primary));
+        &:hover,
+        &:focus-visible {
+          background: var(--brand-primary, var(--color-primary));
+          color: var(--brand-buttonPrimaryText, var(--brand-primaryContrast, #ffffff));
           transform: scale(1.1);
+        }
+
+        &:focus-visible {
+          outline: none;
         }
       }
 
@@ -236,6 +241,33 @@ $border-radius-pill: 1rem;
 
         .bubble-text {
           @include bubble-text;
+        }
+      }
+
+      .btn-link.tools-settings-toggle {
+        color: var(--brand-textMuted, var(--color-text-body));
+        text-decoration: none;
+
+        &:hover:not(:disabled),
+        &:focus-visible {
+          color: var(--brand-buttonPrimaryText, var(--brand-primaryContrast, #ffffff));
+          background-color: var(--brand-primary, var(--color-primary));
+
+          svg {
+            color: var(--brand-buttonPrimaryText, var(--brand-primaryContrast, #ffffff));
+            fill: currentColor;
+            stroke: currentColor;
+          }
+
+          .bubble-text {
+            color: var(--brand-buttonPrimaryText, var(--brand-primaryContrast, #ffffff));
+            background-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 35%, transparent);
+            border-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 60%, transparent);
+          }
+        }
+
+        &:disabled {
+          color: var(--brand-textMuted, var(--color-text-body));
         }
       }
 

@@ -47,7 +47,7 @@
   --color-error-text: #c62828;
 
   /* Common background colors */
-  --bg-message-user: color-mix(in srgb, var(--brand-primary, var(--color-eggplant-200)) 8%, white 92%);
+  --bg-message-user: color-mix(in srgb, var(--brand-primary, var(--color-eggplant-200)) 20%, white 80%);
   --bg-message-assistant: white;
 
   /* Common spacing */
