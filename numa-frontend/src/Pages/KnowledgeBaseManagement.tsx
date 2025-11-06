@@ -180,7 +180,7 @@ function filterTree(node: TreeNode, searchTerm: string): TreeNode {
 
   // Filter files
   filtered.files = node.files.filter((f) =>
-    decodeURIComponent(f.Key.split('/').pop() || '')
+    safeDecodeURIComponent(f.Key.split('/').pop() || '')
       .toLowerCase()
       .includes(lower),
   );
@@ -244,8 +244,8 @@ function sortTree(node: TreeNode, sortColumn: SortColumn = 'name', sortDirection
       case 'name':
       default: {
         // Sort by filename (default)
-        const A = decodeURIComponent(a.Key.split('/').pop() || '').toLowerCase();
-        const B = decodeURIComponent(b.Key.split('/').pop() || '').toLowerCase();
+        const A = safeDecodeURIComponent(a.Key.split('/').pop() || '').toLowerCase();
+        const B = safeDecodeURIComponent(b.Key.split('/').pop() || '').toLowerCase();
         comparison = A.localeCompare(B);
         break;
       }
@@ -293,7 +293,7 @@ function buildRowsForTree(node: TreeNode, depth: number, parentPath: string): Ta
 
   // Process files and attach KB status if available
   node.files.forEach((f) => {
-    const fileName = decodeURIComponent(f.Key.split('/').pop() || '');
+    const fileName = safeDecodeURIComponent(f.Key.split('/').pop() || '');
     const rowId = parentPath ? `${parentPath}/${fileName}` : fileName;
     const kbStatus = f.kbDoc ? (f.kbDoc.error && Object.keys(f.kbDoc.error).length > 0 ? 'FAILED' : 'SUCCESS') : null;
     const errorMessage = f.kbDoc ? f.kbDoc.error?.errorMessage : null;
@@ -340,6 +340,25 @@ function flattenRows(rows: TableRow[], expandedSet: Set<string>): TableRow[] {
  */
 function formatKB(bytes: number): string {
   return `${(bytes / 1024).toFixed(2)} KB`;
+}
+
+/**
+ * Safely decode a URI component, only attempting decode if valid percent-encoding is detected.
+ * Returns the original string if no encoding is present or if decoding fails.
+ */
+function safeDecodeURIComponent(str: string): string {
+  try {
+    // Only decode if the string contains valid percent-encoding patterns
+    // Valid pattern: % followed by two hex digits
+    if (/%[0-9A-Fa-f]{2}/.test(str)) {
+      return decodeURIComponent(str);
+    }
+    return str;
+  } catch (error) {
+    // If decoding still fails despite the check, return original
+    console.warn('Failed to decode URI component:', str, error);
+    return str;
+  }
 }
 
 /**
@@ -1856,7 +1875,7 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
                         </thead>
                         <tbody>
                           {failedDocuments.map((doc) => {
-                            const fileName = decodeURIComponent(documentIdToKey(doc.documentId).split('/').pop());
+                            const fileName = safeDecodeURIComponent(documentIdToKey(doc.documentId).split('/').pop());
                             // File name is already properly decoded
                             return (
                               <tr key={doc.documentId}>
