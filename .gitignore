@@ -145,3 +145,7 @@ tools/email-verification-report.json
 **/.tsbuildinfo
 
 docs
+
+# Claude CLI layer artifacts (built locally or in CI)
+infra/assets/layers/claude-cli/bin/
+infra/assets/layers/claude-cli/*.zip

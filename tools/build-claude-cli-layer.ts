@@ -4,7 +4,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const VERSION = process.env.CLAUDE_CLI_VERSION || '1.0.100';
+// Accept an explicit version, or default to "stable" which maps via the manifest
+const VERSION = process.env.CLAUDE_CLI_VERSION || 'stable';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
 const LAYER_DIR = path.join(ROOT_DIR, 'infra', 'assets', 'layers', 'claude-cli');
@@ -32,10 +33,19 @@ function buildWithDocker(): void {
     'bash',
     '-lc',
     [
-      'dnf -y install curl tar gzip zip which',
-      `curl -fsSL https://claude.ai/install.sh | bash -s ${VERSION}`,
-      'CLAUDE_BIN=$(command -v claude)',
-      `cp "$CLAUDE_BIN" ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'bin', 'claude')}`,
+      'set -euo pipefail',
+      'dnf -y install tar gzip zip which jq',
+      'GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"',
+      'ARCH=$(uname -m); ARCH_LABEL=$([ "$ARCH" = x86_64 ] && echo x64 || echo arm64)',
+      'if ldd /bin/ls 2>&1 | grep -q musl; then PLATFORM="linux-${ARCH_LABEL}-musl"; else PLATFORM="linux-${ARCH_LABEL}"; fi',
+      `if [ "${VERSION}" = "stable" ] || [ "${VERSION}" = "latest" ]; then VERSION=$(curl -fsSL "$GCS_BUCKET/stable"); else VERSION="${VERSION}"; fi`,
+      'echo "Using Claude CLI version: $VERSION for $PLATFORM"',
+      'MANIFEST=$(curl -fsSL "$GCS_BUCKET/$VERSION/manifest.json")',
+      'CHECKSUM=$(echo "$MANIFEST" | jq -r --arg p "$PLATFORM" \'\.platforms[$p]\.checksum\')',
+      'test -n "$CHECKSUM"',
+      `mkdir -p ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'bin')}`,
+      `curl -fsSL -o ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'bin', 'claude')} "$GCS_BUCKET/$VERSION/$PLATFORM/claude"`,
+      `echo "$CHECKSUM  ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'bin', 'claude')}" | sha256sum -c -`,
       `chmod +x ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'bin', 'claude')}`,
       `(cd ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli')} && zip -r claude-x86_64.zip bin)`,
       `ls -lh ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'claude-x86_64.zip')}`,
