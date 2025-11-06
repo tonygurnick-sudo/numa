@@ -356,8 +356,8 @@ node-package:
   rules:
     - !reference [.rules, if-main]
 
-# Build Claude CLI layer ZIP (branch pipelines)
-claude-cli-layer-build:
+# Build Claude CLI artifact ZIP (branch pipelines)
+claude-cli-artifact-build:
   stage: package
   image: amazonlinux:2023
   rules:
@@ -369,7 +369,7 @@ claude-cli-layer-build:
   script:
     - set -euo pipefail
     - test -n "$CLAUDE_CLI_VERSION" || (echo "CLAUDE_CLI_VERSION is required" >&2; exit 1)
-    # Download claude binary directly from the official GCS bucket and package as a layer
+    # Download claude binary directly from the official GCS bucket and package as an artifact
     - GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"
     - ARCH=$(uname -m); ARCH_LABEL=$([ "$ARCH" = x86_64 ] && echo x64 || echo arm64)
     - if ldd /bin/ls 2>&1 | grep -q musl; then PLATFORM="linux-${ARCH_LABEL}-musl"; else PLATFORM="linux-${ARCH_LABEL}"; fi
@@ -383,39 +383,39 @@ claude-cli-layer-build:
     - MANIFEST=$(curl -fsSL "$GCS_BUCKET/$VERSION/manifest.json")
     - CHECKSUM=$(echo "$MANIFEST" | jq -r --arg p "$PLATFORM" '.platforms[$p].checksum')
     - test -n "$CHECKSUM" || (echo "Failed to resolve checksum for $PLATFORM" >&2; exit 1)
-    - mkdir -p infra/assets/layers/claude-cli/bin
-    - curl -fsSL -o infra/assets/layers/claude-cli/bin/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude"
-    - echo "$CHECKSUM  infra/assets/layers/claude-cli/bin/claude" | sha256sum -c -
-    - chmod +x infra/assets/layers/claude-cli/bin/claude
-    - (cd infra/assets/layers/claude-cli && zip -r claude-x86_64.zip bin)
-    - ls -lh infra/assets/layers/claude-cli/claude-x86_64.zip
+    - mkdir -p infra/assets/artifacts/claude-cli/bin
+    - curl -fsSL -o infra/assets/artifacts/claude-cli/bin/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude"
+    - echo "$CHECKSUM  infra/assets/artifacts/claude-cli/bin/claude" | sha256sum -c -
+    - chmod +x infra/assets/artifacts/claude-cli/bin/claude
+    - (cd infra/assets/artifacts/claude-cli && zip -r claude-x86_64.zip bin)
+    - ls -lh infra/assets/artifacts/claude-cli/claude-x86_64.zip
   artifacts:
     paths:
-      - infra/assets/layers/claude-cli/claude-x86_64.zip
+      - infra/assets/artifacts/claude-cli/claude-x86_64.zip
     expire_in: 7 days
 
-# Publish the layer ZIP to deployer S3 (main only)
-claude-cli-layer-publish:
+# Publish the artifact ZIP to deployer S3 (main only)
+claude-cli-artifact-publish:
   stage: package
   image: registry.gitlab.com/arcanumai/ci/all-inclusive
-  needs: ["claude-cli-layer-build"]
+  needs: ["claude-cli-artifact-build"]
   rules:
     - !reference [.rules, if-main]
   variables:
     CLAUDE_CLI_VERSION: "1.0.100"
-    CLAUDE_LAYER_S3_PREFIX: "claude-layers"
+    CLAUDE_ARTIFACT_S3_PREFIX: "claude-artifacts"
     AWS_REGION: us-east-1
   before_script:
     - export AWS_ROLE=${AWS_DEPLOYER_ROLE_ARN:-$AWS_CLIENT_ROLE_ARN}
     - !reference [.common-steps, aws-assume-role]
   script:
     - set -euo pipefail
-    - export CLAUDE_LAYER_S3_BUCKET=${CLAUDE_LAYER_S3_BUCKET:-numa-claude-cli-layers}
-    - test -f infra/assets/layers/claude-cli/claude-x86_64.zip || (echo "Missing layer zip to publish" && exit 1)
-    - export LAYER_KEY="${CLAUDE_LAYER_S3_PREFIX}/${CLAUDE_CLI_VERSION}/claude-x86_64.zip"
-    - echo "Publishing to s3://${CLAUDE_LAYER_S3_BUCKET}/${LAYER_KEY}"
-    - aws s3 cp --only-show-errors infra/assets/layers/claude-cli/claude-x86_64.zip "s3://${CLAUDE_LAYER_S3_BUCKET}/${LAYER_KEY}"
-    - aws s3 ls "s3://${CLAUDE_LAYER_S3_BUCKET}/${LAYER_KEY}"
+    - export CLAUDE_ARTIFACT_S3_BUCKET=${CLAUDE_ARTIFACT_S3_BUCKET:-numa-claude-cli-artifacts}
+    - test -f infra/assets/artifacts/claude-cli/claude-x86_64.zip || (echo "Missing artifact zip to publish" && exit 1)
+    - export ARTIFACT_KEY="${CLAUDE_ARTIFACT_S3_PREFIX}/${CLAUDE_CLI_VERSION}/claude-x86_64.zip"
+    - echo "Publishing to s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}"
+    - aws s3 cp --only-show-errors infra/assets/artifacts/claude-cli/claude-x86_64.zip "s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}"
+    - aws s3 ls "s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}"
 
 build-deployment-container:
   stage: image-build
@@ -428,7 +428,7 @@ build-deployment-container:
     BUILD_DIR: .
     ECR_REPO: ${ECR_BASE}/numa-deploy
     CLAUDE_CLI_VERSION: "1.0.100"
-    CLAUDE_LAYER_S3_PREFIX: "claude-layers"
+    CLAUDE_ARTIFACT_S3_PREFIX: "claude-artifacts"
   before_script:
     - !reference [.yarn, setup-private-auth]
     - !reference [.node_job, before_script]
@@ -443,18 +443,18 @@ build-deployment-container:
       ! reference [.common-steps, aws-assume-role]
     - |
       PRESIGNED=""
-      export CLAUDE_LAYER_S3_BUCKET=${CLAUDE_LAYER_S3_BUCKET:-numa-claude-cli-layers}
-      if [ -n "${CLAUDE_LAYER_S3_BUCKET}" ]; then
-        export LAYER_KEY="${CLAUDE_LAYER_S3_PREFIX}/${CLAUDE_CLI_VERSION}/claude-x86_64.zip"
-        echo "Generating presigned URL for s3://${CLAUDE_LAYER_S3_BUCKET}/${LAYER_KEY}"
-        PRESIGNED=$(aws s3 presign "s3://${CLAUDE_LAYER_S3_BUCKET}/${LAYER_KEY}" --expires-in 7200) || PRESIGNED=""
+      export CLAUDE_ARTIFACT_S3_BUCKET=${CLAUDE_ARTIFACT_S3_BUCKET:-numa-claude-cli-artifacts}
+      if [ -n "${CLAUDE_ARTIFACT_S3_BUCKET}" ]; then
+        export ARTIFACT_KEY="${CLAUDE_ARTIFACT_S3_PREFIX}/${CLAUDE_CLI_VERSION}/claude-x86_64.zip"
+        echo "Generating presigned URL for s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}"
+        PRESIGNED=$(aws s3 presign "s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}" --expires-in 7200) || PRESIGNED=""
       fi
       docker build \
         --build-arg GIT_HASH=${CI_COMMIT_SHORT_SHA} \
         --build-arg GIT_BRANCH=${CI_COMMIT_BRANCH} \
         --build-arg CI_PROJECT_PATH=$CI_PROJECT_PATH \
         --build-arg CLAUDE_CLI_VERSION=${CLAUDE_CLI_VERSION} \
-        --build-arg CLAUDE_LAYER_URL="${PRESIGNED}" \
+        --build-arg CLAUDE_ARTIFACT_URL="${PRESIGNED}" \
         -f infra/container/Dockerfile . -t deploy:${CI_COMMIT_SHORT_SHA}
     - |
       # Re-assume client/images role for ECR push
@@ -475,7 +475,7 @@ build-deployment-container:
     TF_ENVIRONMENT: prod
     AWS_REGION: us-east-1
     CLIENT_OVERRIDE: $CLIENT_NAME
-  needs: ["claude-cli-layer-build"]
+  needs: ["claude-cli-artifact-build"]
   script:
     - yarn exec cdktf deploy --auto-approve numa-${CLIENT_NAME}
   needs:

@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 const VERSION = process.env.CLAUDE_CLI_VERSION || 'stable';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
-const LAYER_DIR = path.join(ROOT_DIR, 'infra', 'assets', 'layers', 'claude-cli');
-const BIN_DIR = path.join(LAYER_DIR, 'bin');
-const ZIP_PATH = path.join(LAYER_DIR, 'claude-x86_64.zip');
+const ARTIFACT_DIR = path.join(ROOT_DIR, 'infra', 'assets', 'artifacts', 'claude-cli');
+const BIN_DIR = path.join(ARTIFACT_DIR, 'bin');
+const ZIP_PATH = path.join(ARTIFACT_DIR, 'claude-x86_64.zip');
 
 function which(cmd: string): string | null {
   const r = spawnSync('bash', ['-lc', `command -v ${cmd}`], { encoding: 'utf8' });
@@ -20,7 +20,7 @@ function which(cmd: string): string | null {
 
 function ensureDocker(): void {
   if (!which('docker')) {
-    console.error('Docker is required to build the Claude CLI layer (amazonlinux:2023).');
+    console.error('Docker is required to build the Claude CLI artifact (amazonlinux:2023).');
     process.exit(1);
   }
 }
@@ -43,12 +43,12 @@ function buildWithDocker(): void {
       'MANIFEST=$(curl -fsSL "$GCS_BUCKET/$VERSION/manifest.json")',
       'CHECKSUM=$(echo "$MANIFEST" | jq -r --arg p "$PLATFORM" \'\.platforms[$p]\.checksum\')',
       'test -n "$CHECKSUM"',
-      `mkdir -p ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'bin')}`,
-      `curl -fsSL -o ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'bin', 'claude')} "$GCS_BUCKET/$VERSION/$PLATFORM/claude"`,
-      `echo "$CHECKSUM  ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'bin', 'claude')}" | sha256sum -c -`,
-      `chmod +x ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'bin', 'claude')}`,
-      `(cd ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli')} && zip -r claude-x86_64.zip bin)`,
-      `ls -lh ${path.posix.join('/work', 'infra', 'assets', 'layers', 'claude-cli', 'claude-x86_64.zip')}`,
+      `mkdir -p ${path.posix.join('/work', 'infra', 'assets', 'artifacts', 'claude-cli', 'bin')}`,
+      `curl -fsSL -o ${path.posix.join('/work', 'infra', 'assets', 'artifacts', 'claude-cli', 'bin', 'claude')} "$GCS_BUCKET/$VERSION/$PLATFORM/claude"`,
+      `echo "$CHECKSUM  ${path.posix.join('/work', 'infra', 'assets', 'artifacts', 'claude-cli', 'bin', 'claude')}" | sha256sum -c -`,
+      `chmod +x ${path.posix.join('/work', 'infra', 'assets', 'artifacts', 'claude-cli', 'bin', 'claude')}`,
+      `(cd ${path.posix.join('/work', 'infra', 'assets', 'artifacts', 'claude-cli')} && zip -r claude-x86_64.zip bin)`,
+      `ls -lh ${path.posix.join('/work', 'infra', 'assets', 'artifacts', 'claude-cli', 'claude-x86_64.zip')}`,
     ].join(' && '),
   ];
   const args = ['run', '--rm', ...mountArgs, image, ...shell];
@@ -61,11 +61,11 @@ function buildWithDocker(): void {
 }
 
 function main(): void {
-  console.log(`Building Claude CLI layer → ${ZIP_PATH}`);
+  console.log(`Building Claude CLI artifact → ${ZIP_PATH}`);
   ensureDocker();
   buildWithDocker();
   if (!fs.existsSync(ZIP_PATH)) {
-    console.error('Expected layer ZIP not found after build.');
+    console.error('Expected artifact ZIP not found after build.');
     process.exit(1);
   }
   console.log('Success:', ZIP_PATH);

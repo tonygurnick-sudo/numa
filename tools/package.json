@@ -55,8 +55,9 @@
     "teardown-client": "node --import tsx teardown-client.ts",
     "provision-access": "node --import tsx provision-access.ts",
     "quota-report": "node --import tsx quota-report.ts",
-    "build-claude-cli-layer": "node --import tsx build-claude-cli-layer.ts",
-    "fetch-claude-cli-layer": "node --import tsx fetch-claude-cli-layer.ts"
+    "build-claude-cli-artifact": "node --import tsx build-claude-cli-artifact.ts",
+    "fetch-claude-cli-artifact": "node --import tsx fetch-claude-cli-artifact.ts",
+    "build-deployment-container": "node --import tsx build-deployment-container.ts"
   },
   "packageManager": "yarn@4.9.2",
   "devDependencies": {
