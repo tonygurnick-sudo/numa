@@ -467,7 +467,7 @@ const UserManagement = () => {
                         <p className="mb-0">If you have any questions, please contact your administrator.</p>
                       </div>
                       <div className="d-flex justify-content-end mt-3">
-                        <Button variant="outline-secondary" size="sm" className="me-2" onClick={handleCopyEmail}>
+                        <Button variant="secondary" size="sm" className="me-2" onClick={handleCopyEmail}>
                           {copiedEmail ? 'Copied!' : 'Copy Address'}
                         </Button>
                         <Button variant="outline-primary" size="sm" onClick={handleCopyInstructions}>
@@ -596,7 +596,7 @@ const UserManagement = () => {
                                       )}
                                       {isAdmin ? (
                                         <Button
-                                          variant="outline-secondary"
+                                          variant="secondary"
                                           size="sm"
                                           onClick={handleAttemptDeleteAdmin}
                                           title="Admin users must be demoted to standard users before they can be deleted"

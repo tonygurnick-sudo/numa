@@ -1,4 +1,4 @@
-import { createContext } from 'react';
+import { createContext, useContext } from 'react';
 
 /**
  * Context for client branding
@@ -16,6 +16,8 @@ export type BrandingColors = {
   buttonPrimaryHover?: string;
   buttonSecondary?: string;
   buttonSecondaryText?: string;
+  buttonSecondaryHover?: string;
+  buttonSecondaryHoverText?: string;
   buttonSecondaryBorder?: string;
   [key: string]: string | undefined;
 };
@@ -41,6 +43,16 @@ export type BrandingTheme = {
   splashScreen?: SplashScreen;
   loginPage?: LoginPage;
   colors: BrandingColors;
+  assets?: {
+    logoNav?: string | null;
+    logoLoginRight?: string | null;
+    favicon?: string | null;
+  };
+  resolvedAssets?: {
+    logoNav?: string;
+    logoLoginRight?: string;
+    favicon?: string;
+  };
 };
 
 export type BrandingContextType = {
@@ -55,16 +67,17 @@ export const DEFAULT_BRANDING_THEME: BrandingTheme = {
   name: 'Numa',
   logo: '/numa-logo.svg',
   logoSmall: '/numa-logo.svg',
-  favicon: '/favicon.ico',
+  favicon: '/numa-logo.svg',
   showNameWithLogo: true,
   splashScreen: {
     image: null,
     showText: true,
-    title: 'Welcome to {clientName}',
-    description: '',
+    title: 'Supercharge your workforce with AI and scale your business',
+    description:
+      'Numa is a generative AI-powered platform that will empower your employees to be more creative, data-driven, efficient and productive.',
   },
   loginPage: {
-    title: '',
+    title: 'Please Login',
     welcomeMessage: '',
   },
   colors: {
@@ -72,7 +85,6 @@ export const DEFAULT_BRANDING_THEME: BrandingTheme = {
     secondary: '#6b3c85',
     hover: '#744188',
     primaryContrast: '#ffffff',
-    accent: '#ff9d43',
     surface: '#ffffff',
     surfaceContrast: '#111827',
     border: '#d1d5db',
@@ -80,19 +92,37 @@ export const DEFAULT_BRANDING_THEME: BrandingTheme = {
     textMuted: '#6b7280',
     background: '#f3f4f6',
     buttonPrimary: '#8e50a7',
-    buttonPrimaryText: '#ffffff',
-    buttonPrimaryHover: '#5b3173',
-    buttonPrimaryBorder: '#8e50a7',
     buttonSecondary: '#ffffff',
     buttonSecondaryText: '#6b3c85',
+    buttonSecondaryHover: '#8e50a7',
+    buttonSecondaryHoverText: '#ffffff',
     buttonSecondaryBorder: '#6b3c85',
   },
 };
 
 export const BrandingContext = createContext<BrandingContextType>({
   clientName: 'numa',
-  branding: DEFAULT_BRANDING_THEME,
+  branding: {
+    name: 'Numa',
+    logo: '/numa-logo.svg',
+    colors: {
+      primary: '#8e50a7',
+      secondary: '#8e50a7',
+      hover: '#744188',
+    },
+    assets: {
+      logoNav: '/numa-logo.svg',
+      logoLoginRight: null,
+      favicon: '/numa-logo.svg',
+    },
+    resolvedAssets: {
+      logoNav: '/numa-logo.svg',
+      favicon: '/numa-logo.svg',
+    },
+  },
   initialized: false,
   isFeatureEnabled: () => false,
   replaceClientName: (text: string) => text,
 });
+
+export const useBranding = (): BrandingContextType => useContext(BrandingContext);

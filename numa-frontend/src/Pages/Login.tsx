@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert, Spinner } from 'react-bootstrap';
 import { useAuth } from '../Providers/AuthProvider';
+import { useBranding } from '../Providers/BrandingContext';
 
 const NumaLogin = () => {
   const usernameRef = useRef();
@@ -10,6 +11,7 @@ const NumaLogin = () => {
   const newPasswordRef = useRef();
   const confirmPasswordRef = useRef();
   const navigate = useNavigate();
+  const { branding } = useBranding();
 
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -99,9 +101,13 @@ const NumaLogin = () => {
     }
   };
 
+  const loginTitle = branding.loginPage?.title || 'Login';
+  const welcomeMessage = branding.loginPage?.welcomeMessage;
+
   const loginContent = (
     <>
-      <h2>Numa Login</h2>
+      <h2>{loginTitle}</h2>
+      {welcomeMessage && <p className="text-muted mb-3">{welcomeMessage}</p>}
 
       {error && <Alert variant="danger">{error}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}

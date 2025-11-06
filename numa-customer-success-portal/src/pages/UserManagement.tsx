@@ -209,7 +209,7 @@ If you have any questions, please contact your administrator.`
                   Copy Instructions
                 </Button>
                 <Button
-                  variant="outline-secondary"
+                  variant="secondary"
                   size="sm"
                   onClick={() => window.open(`${window.location.origin}/create-password?email=${encodeURIComponent(createdEmail)}`, '_blank')}
                 >
@@ -263,13 +263,12 @@ If you have any questions, please contact your administrator.`
                       <td>{user.email}</td>
                       <td>
                         <span
-                          className={`badge bg-${
-                            user.enabled
+                          className={`badge bg-${user.enabled
                               ? user.status === 'CONFIRMED'
                                 ? 'success'
                                 : 'warning'
                               : 'danger'
-                          }`}
+                            }`}
                         >
                           {user.status}
                         </span>

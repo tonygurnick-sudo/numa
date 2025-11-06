@@ -1,17 +1,23 @@
 import { useNavigate } from 'react-router-dom';
-import Logo from '../../public/numa-logo.svg';
 import { useAuth } from '../Providers/AuthProvider';
 import { useState, useEffect } from 'react';
 import { Navbar, Button, Dropdown } from 'react-bootstrap';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
+import { useBranding } from '../Providers/BrandingContext';
+import DefaultLogo from '../../public/numa-logo.svg';
+import { useBrandingAsset } from '../hooks/useBrandingAsset';
 
 const Nav = () => {
   const navigate = useNavigate();
   const { logout: authLogout } = useAuth();
+  const { branding } = useBranding();
+  const rawNavLogo = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || DefaultLogo;
+  const navLogo = useBrandingAsset(rawNavLogo, DefaultLogo);
+  const navName = branding.name || 'Numa';
+
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [navItems, setNavItems] = useState([]);
   const [isExpanded, setIsExpanded] = useState(false);
-
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
@@ -54,7 +60,13 @@ const Nav = () => {
               onClick={() => navigate('/dash')}
               role="button"
             >
-              <img src={Logo} className="logo-bk" alt="Numa" /> Numa
+              <img
+                src={navLogo}
+                className="logo-bk"
+                alt={navName}
+                style={{ maxHeight: 48, maxWidth: '100%', objectFit: 'contain' }}
+              />{' '}
+              {navName}
             </div>
           </div>
           <Button
@@ -107,8 +119,13 @@ const Nav = () => {
         }}
         role="button"
       >
-        <img src={Logo} className="logo-bk" alt="Arcanum" />
-        {isExpanded && <span className="logo-text">Numa</span>}
+        <img
+          src={navLogo}
+          className="logo-bk"
+          alt={navName}
+          style={{ maxHeight: 48, maxWidth: '100%', objectFit: 'contain' }}
+        />
+        {isExpanded && <span className="logo-text">{navName}</span>}
       </div>
       <div className="divider"></div>
 
@@ -129,7 +146,7 @@ const Nav = () => {
                   role="button"
                 >
                   <div className="nav-icon-container">
-                    <i className={`${item.icon} icon`} style={{ color: 'var(--color-icon)' }}></i>
+                    <i className={`${item.icon} icon`}></i>
                   </div>
                   <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>
                     {isExpanded ? getExpandedLabel(item.label) : ''}
@@ -158,7 +175,7 @@ const Nav = () => {
                     role="button"
                   >
                     <div className="nav-icon-container">
-                      <i className={`${item.icon} icon`} style={{ color: 'var(--color-icon)' }}></i>
+                      <i className={`${item.icon} icon`}></i>
                     </div>
                     <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>
                       {isExpanded ? getExpandedLabel(item.label) : ''}
@@ -170,13 +187,13 @@ const Nav = () => {
           <li>
             <div className="nav-link nav-item" onClick={authLogout} title="Log out" role="button">
               <div className="nav-icon-container">
-                <i className="bi bi-box-arrow-right icon" style={{ color: 'var(--color-icon)' }}></i>
+                <i className="bi bi-box-arrow-right icon"></i>
               </div>
               <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>{isExpanded ? 'Log out' : ''}</span>
             </div>
           </li>
         </ul>
-        <span className="version">v0.1</span>
+        <span className="version">v1.5</span>
       </footer>
     </nav>
   );

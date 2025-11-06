@@ -161,7 +161,10 @@ export const AgentAvatar = ({
       }}
       aria-label={alt || agent?.title || 'Agent'}
     >
-      <i className={effectiveIconClass} style={{ fontSize: Math.round(size * 0.6), color: '#8e50a7' }} />
+      <i
+        className={effectiveIconClass}
+        style={{ fontSize: Math.round(size * 0.6), color: 'var(--brand-primary, var(--color-primary))' }}
+      />
     </div>
   );
 };

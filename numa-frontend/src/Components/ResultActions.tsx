@@ -581,11 +581,11 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
               padding: 20px;
             }
             .header {
-              border-bottom: 2px solid #8e50a7;
+              border-bottom: 2px solid var(--brand-primary, var(--color-primary));
               margin-bottom: 20px;
             }
             h1 {
-              color: #8e50a7;
+              color: var(--brand-primary, var(--color-primary));
               margin: 0;
               padding: 10px 0;
             }
@@ -635,7 +635,7 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
           <div class="no-print" style="position: fixed; top: 20px; right: 20px;">
             <button onclick="window.print()" style="
               padding: 8px 16px;
-              background: #8e50a7;
+              background: var(--brand-primary, var(--color-primary));
               color: white;
               border: none;
               border-radius: 4px;

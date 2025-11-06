@@ -203,7 +203,7 @@ describe('NotificationModal Component', () => {
       const cancelButton = screen.getByRole('button', { name: 'Cancel' });
 
       expect(confirmButton).toHaveClass('btn-warning'); // Based on default warning type
-      expect(cancelButton).toHaveClass('btn-outline-secondary');
+      expect(cancelButton).toHaveClass('btn-secondary');
     });
   });
 

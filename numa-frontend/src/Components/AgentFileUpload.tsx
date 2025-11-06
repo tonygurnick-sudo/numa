@@ -170,7 +170,7 @@ export const AgentFileUpload = ({
         />
         <Button
           size="sm"
-          variant="outline-primary"
+          variant="primary"
           disabled={disabled || isUploading}
           onClick={() => fileInputRef.current?.click()}
         >

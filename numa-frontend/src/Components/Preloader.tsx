@@ -20,11 +20,11 @@ const Preloader = ({ smallscreen, overlayParent }) => {
       <>
         <div className="wrap">
           <svg width="40" height="40" viewBox="0 0 34 33" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect className="animate preloader-top" x="15.3877" width="3.2252" height="23.456" fill="#9D64B5" />
+            <rect className="animate preloader-top" x="15.3877" width="3.2252" height="23.456" fill="currentColor" />
             <path
               className="animate preloader-top"
               d="M18.6123 0H21.8375V3.0786L20.6647 6.15719H18.6123V0Z"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <rect
               className="animate preloader-bottom"
@@ -33,12 +33,12 @@ const Preloader = ({ smallscreen, overlayParent }) => {
               width="3.2252"
               height="23.456"
               transform="rotate(-180 18.6123 32.252)"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <path
               className="animate preloader-bottom"
               d="M15.3877 32.252L12.1625 32.252L12.1625 29.1734L13.3353 26.0948L15.3877 26.0948L15.3877 32.252Z"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <rect
               className="animate preloader-mid"
@@ -47,12 +47,12 @@ const Preloader = ({ smallscreen, overlayParent }) => {
               width="3.2252"
               height="23.456"
               transform="rotate(90 33.126 14.5134)"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <path
               className="animate preloader-mid"
               d="M33.126 17.7386L33.126 20.9638L30.0474 20.9638L26.9688 19.791L26.9688 17.7386L33.126 17.7386Z"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <rect
               className="animate preloader-mid"
@@ -61,12 +61,12 @@ const Preloader = ({ smallscreen, overlayParent }) => {
               width="3.2252"
               height="23.456"
               transform="rotate(-90 0.874023 17.7386)"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <path
               className="animate preloader-mid"
               d="M0.874023 14.5134L0.874024 11.2882L3.95262 11.2882L7.03122 12.461L7.03122 14.5134L0.874023 14.5134Z"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <rect
               className="animate preloader-top"
@@ -75,12 +75,12 @@ const Preloader = ({ smallscreen, overlayParent }) => {
               width="3.2252"
               height="23.456"
               transform="rotate(45 27.2627 3.58289)"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <path
               className="animate preloader-top"
               d="M29.543 5.86346L31.8235 8.14402L29.6466 10.3209L26.6404 11.6685L25.1892 10.2173L29.543 5.86346Z"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <rect
               className="animate preloader-bottom"
@@ -89,12 +89,12 @@ const Preloader = ({ smallscreen, overlayParent }) => {
               width="3.2252"
               height="23.456"
               transform="rotate(-135 6.7373 28.6691)"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <path
               className="animate preloader-bottom"
               d="M4.45703 26.3885L2.17647 24.1079L4.35337 21.931L7.35956 20.5834L8.81082 22.0347L4.45703 26.3885Z"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <rect
               className="animate preloader-bottom"
@@ -103,12 +103,12 @@ const Preloader = ({ smallscreen, overlayParent }) => {
               width="3.2252"
               height="23.456"
               transform="rotate(135 29.543 26.3885)"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <path
               className="animate preloader-bottom"
               d="M27.2627 28.6691L24.9821 30.9496L22.8052 28.7727L21.4576 25.7665L22.9089 24.3153L27.2627 28.6691Z"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <rect
               className="animate preloader-top"
@@ -117,12 +117,12 @@ const Preloader = ({ smallscreen, overlayParent }) => {
               width="3.2252"
               height="23.456"
               transform="rotate(-45 4.45703 5.86346)"
-              fill="#9D64B5"
+              fill="currentColor"
             />
             <path
               className="animate preloader-top"
               d="M6.7373 3.58289L9.01786 1.30233L11.1948 3.47923L12.5424 6.48541L11.0911 7.93668L6.7373 3.58289Z"
-              fill="#9D64B5"
+              fill="currentColor"
             />
           </svg>
         </div>

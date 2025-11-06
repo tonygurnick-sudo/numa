@@ -9,6 +9,28 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+const SIGNED_URL_CACHE = new Map<string, { url: string; expiresAt: number }>();
+const SIGNED_URL_EXPIRY_SKEW_MS = 5000;
+
+export const getCachedBrandingAssetUrl = (value: unknown): string | undefined => {
+  const location = resolveS3Location(value);
+  if (!location) {
+    return undefined;
+  }
+
+  const cached = SIGNED_URL_CACHE.get(`${location.bucket}|${location.key}`);
+  if (!cached) {
+    return undefined;
+  }
+
+  if (cached.expiresAt - SIGNED_URL_EXPIRY_SKEW_MS <= Date.now()) {
+    SIGNED_URL_CACHE.delete(`${location.bucket}|${location.key}`);
+    return undefined;
+  }
+
+  return cached.url;
+};
+
 export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getCredentials) => {
   const credentials = await getCredentials(); // Fetch credentials from AuthProvider
 
@@ -65,6 +87,32 @@ export const doesObjectExist = async (s3Key, s3Bucket, region, getCredentials) =
   }
 };
 
+export const getInitialBrandingAssetUrl = (
+  value: unknown,
+  fallback: string,
+  options: { useCache?: boolean } = {},
+): string => {
+  if (options.useCache) {
+    const cached = getCachedBrandingAssetUrl(value);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  const location = resolveS3Location(value);
+  if (!location) {
+    return fallback;
+  }
+
+  const region = typeof window !== 'undefined' ? window.sessionStorage?.getItem('REGION') : null;
+  if (!region) {
+    return fallback;
+  }
+
+  const unsigned = buildS3HttpsUrl(location.bucket, location.key, region);
+  return unsigned ?? fallback;
+};
+
 export const uploadFileToS3 = async (content, contentType, s3Bucket, s3Key, region, getCredentials) => {
   const credentials = await getCredentials();
   const s3Client = new S3Client({ region, credentials });
@@ -110,6 +158,142 @@ export const getSignedUrlForS3Object = async (s3Key, s3Bucket, region, getCreden
   });
 
   return await getSignedUrl(s3Client, command, { expiresIn });
+};
+
+type S3Location = {
+  bucket: string;
+  key: string;
+  region?: string;
+};
+
+export const resolveS3Location = (value: unknown): S3Location | null => {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string' && value.startsWith('s3://')) {
+    const withoutScheme = value.slice('s3://'.length);
+    const slashIndex = withoutScheme.indexOf('/');
+    if (slashIndex === -1) {
+      return null;
+    }
+
+    return {
+      bucket: withoutScheme.slice(0, slashIndex),
+      key: withoutScheme.slice(slashIndex + 1),
+    };
+  }
+
+  try {
+    const url = new URL(String(value));
+    const path = url.pathname.replace(/^\/+/u, '');
+    if (!path) {
+      return null;
+    }
+
+    const hostParts = url.hostname.split('.');
+    const s3Index = hostParts.findIndex((part) => part === 's3');
+
+    if (s3Index > 0) {
+      const bucket = hostParts.slice(0, s3Index).join('.');
+      const regionPart = hostParts[s3Index + 1];
+      const region = regionPart && regionPart !== 'amazonaws' ? regionPart : undefined;
+
+      return {
+        bucket,
+        key: path,
+        region,
+      };
+    }
+
+    if (url.hostname === 's3.amazonaws.com' || url.hostname.startsWith('s3.')) {
+      const segments = path.split('/');
+      const bucket = segments.shift();
+      const key = segments.join('/');
+      if (bucket && key) {
+        return { bucket, key };
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+export const buildS3HttpsUrl = (bucket: string | undefined, key: string | undefined, region?: string | null) => {
+  if (!bucket || !key) {
+    return undefined;
+  }
+
+  const normalizedKey = key.replace(/^\/+/u, '');
+  if (region) {
+    return `https://${bucket}.s3.${region}.amazonaws.com/${normalizedKey}`;
+  }
+
+  return `https://${bucket}.s3.amazonaws.com/${normalizedKey}`;
+};
+
+type ResolveBrandingAssetOptions = {
+  region?: string | null;
+  sign?: boolean;
+  expiresIn?: number;
+};
+
+export const resolveBrandingAssetUrl = async (
+  value: unknown,
+  getCredentials?: () => Promise<unknown>,
+  options: ResolveBrandingAssetOptions = {},
+): Promise<string | undefined> => {
+  if (!value) {
+    return undefined;
+  }
+
+  const rawValue = typeof value === 'string' ? value : String(value);
+  const location = resolveS3Location(value);
+  if (!location) {
+    return rawValue;
+  }
+
+  const inferredRegion =
+    options.region ??
+    location.region ??
+    (typeof window !== 'undefined' ? window.sessionStorage?.getItem('REGION') : null);
+
+  const unsignedUrl = inferredRegion ? buildS3HttpsUrl(location.bucket, location.key, inferredRegion) : rawValue;
+
+  const cacheKey = `${location.bucket}|${location.key}`;
+  const expiresInSeconds = options.expiresIn ?? 900;
+
+  if (inferredRegion) {
+    const cached = SIGNED_URL_CACHE.get(cacheKey);
+    if (cached && cached.expiresAt - SIGNED_URL_EXPIRY_SKEW_MS > Date.now()) {
+      return cached.url;
+    }
+  }
+
+  if (options.sign === false || !getCredentials || !inferredRegion) {
+    SIGNED_URL_CACHE.delete(cacheKey);
+    return unsignedUrl;
+  }
+
+  try {
+    const signedUrl = await getSignedUrlForS3Object(
+      location.key,
+      location.bucket,
+      inferredRegion,
+      getCredentials,
+      options.expiresIn ?? 900,
+    );
+    SIGNED_URL_CACHE.set(cacheKey, {
+      url: signedUrl,
+      expiresAt: Date.now() + expiresInSeconds * 1000,
+    });
+    return signedUrl;
+  } catch (error) {
+    console.error('Failed to sign S3 asset URL', { value, error });
+    return unsignedUrl;
+  }
 };
 
 /**

@@ -13,11 +13,11 @@ h3 {
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--brand-primary, var(--color-primary));
   text-decoration: none;
 
   &:hover {
-    color: var(--color-primary-hover);
+    color: var(--brand-hover, var(--color-primary-hover));
   }
 
   &.disabled {
@@ -29,7 +29,7 @@ a {
   font-size: xxx-large;
 }
 .text-primary {
-  color: var(--color-primary) !important;
+  color: var(--brand-primary, var(--color-primary)) !important;
 }
 .extra_light_grey_bg {
   background: var(--color-bg-lighter);
@@ -104,19 +104,6 @@ a {
 
 strong {
   font-family: 'Metropolis Bold';
-}
-
-a {
-  color: var(--color-primary);
-  text-decoration: none;
-
-  &:hover {
-    color: var(--color-primary-hover);
-  }
-
-  &.disabled {
-    pointer-events: none;
-  }
 }
 
 .h-100vh {

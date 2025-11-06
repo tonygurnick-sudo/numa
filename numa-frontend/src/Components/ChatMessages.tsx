@@ -2,7 +2,6 @@
 import type { CSSProperties, RefObject } from 'react';
 import { Spinner, Button } from 'react-bootstrap';
 import { MarkdownContent } from './MarkdownContent';
-import numaIcon from '../../public/numa-logo.svg';
 import { ChatReferencesDropdown } from '../Components/ChatReferencesDropdown';
 import { useAuth } from '../Providers/AuthProvider';
 // Tool rendering is handled via unified tool cards; direct TOOL_CONFIG use removed
@@ -12,6 +11,7 @@ import AgentAvatar from './AgentAvatar';
 import type { AgentSummary } from '../types/agents';
 import { formatAgentDisplayName } from '../utils/agentUtils';
 import { downloadFileFromS3 } from '../utils/s3Utils';
+import { useBranding } from '../Providers/BrandingContext';
 
 /**
  * A small helper bubble for opening doc if docTitle/docContent exist
@@ -98,6 +98,7 @@ const ChatMessages = ({
   setMessages?: (fn: (prev: ChatMessage[]) => ChatMessage[]) => void;
 }) => {
   const { getCredentials } = useAuth();
+  const { branding } = useBranding();
 
   // Agent mode is the default and only mode; remove legacy flag checks
 
@@ -142,18 +143,20 @@ const ChatMessages = ({
                   </>
                 ) : (
                   <>
-                    <img
-                      src={numaIcon}
-                      alt="Numa"
-                      style={{
-                        width: '20px',
-                        height: '20px',
-                        marginRight: '7px',
-                        marginBottom: '2px',
-                        verticalAlign: 'middle',
-                      }}
-                    />
-                    Numa:
+                    {branding.resolvedAssets?.logoNav ? (
+                      <img
+                        src={branding.resolvedAssets.logoNav}
+                        alt={`${branding.name ?? 'Assistant'} logo`}
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          marginRight: '7px',
+                          marginBottom: '2px',
+                          verticalAlign: 'middle',
+                        }}
+                      />
+                    ) : null}
+                    {branding.name ?? 'Numa'}:
                   </>
                 )}
               </strong>
@@ -182,18 +185,20 @@ const ChatMessages = ({
                   </>
                 ) : (
                   <>
-                    <img
-                      src={numaIcon}
-                      alt="Numa"
-                      style={{
-                        width: '20px',
-                        height: '20px',
-                        marginRight: '7px',
-                        marginBottom: '2px',
-                        verticalAlign: 'middle',
-                      }}
-                    />
-                    Numa:
+                    {branding.resolvedAssets?.logoNav ? (
+                      <img
+                        src={branding.resolvedAssets.logoNav}
+                        alt={`${branding.name ?? 'Assistant'} logo`}
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          marginRight: '7px',
+                          marginBottom: '2px',
+                          verticalAlign: 'middle',
+                        }}
+                      />
+                    ) : null}
+                    {branding.name ?? 'Numa'}:
                   </>
                 )
               ) : message.role === 'user' ? (

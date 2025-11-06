@@ -1344,7 +1344,10 @@ const NumaChatAgents = () => {
                   <div className="d-flex align-items-center gap-2">
                     <AgentAvatar agent={currentAgent} size={32} />
                     <div>
-                      <div className="fw-semibold" style={{ fontSize: '1.1rem', color: '#8e50a7' }}>
+                      <div
+                        className="fw-semibold"
+                        style={{ fontSize: '1.1rem', color: 'var(--brand-primary, var(--color-primary))' }}
+                      >
                         {formatAgentDisplayName(currentAgent.title)}
                       </div>
                       <div className="small text-muted">AI Agent Assistant</div>
@@ -1362,20 +1365,11 @@ const NumaChatAgents = () => {
                       recentConversations={recentConversations}
                     />
                   )}
-                  <Button
-                    variant="outline-secondary"
-                    className="chat-history-btn"
-                    onClick={toggleChatHistory}
-                    title="Chat History"
-                  >
+                  <Button variant="secondary" onClick={toggleChatHistory} title="Chat History">
                     <i className="bi bi-clock-history me-1"></i>
                     History
                   </Button>
-                  <Button
-                    className="btn btn-primary new-chat-btn"
-                    onClick={handleNewChatClick}
-                    style={{ marginRight: '15px' }}
-                  >
+                  <Button variant="primary" onClick={handleNewChatClick} style={{ marginRight: '15px' }}>
                     New Chat
                   </Button>
                 </div>

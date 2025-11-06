@@ -112,7 +112,7 @@ describe('Nav Component', () => {
       );
 
       // Check for version number which should always be present
-      expect(screen.getByText('v0.1')).toBeInTheDocument();
+      expect(screen.getByText('v1.5')).toBeInTheDocument();
 
       // Check for logout button which should always be present
       const logoutButton = document.querySelector('.nav-link[title="Log out"]');
@@ -183,7 +183,7 @@ describe('Nav Component', () => {
       expect(document.querySelector('.nav-link[title="Log out"]')).not.toBeNull();
 
       // Version number should still be visible as text
-      expect(screen.getByText('v0.1')).toBeInTheDocument();
+      expect(screen.getByText('v1.5')).toBeInTheDocument();
     });
 
     it('renders navigation items in correct order: Dash, Favs, Chat, Company, Knowledge Base', async () => {

@@ -186,7 +186,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         },
       ];
 
-      // GET branding config per client
+      // GET branding config per client (authenticated)
       this.addLambdaFunction(this, 'branding-config-get', {
         addAuthorizer: true,
         lambdaDirectory: 'node/branding-config',
@@ -195,6 +195,20 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         environment: brandingEnv,
         additionalPolicyStatements: brandingReadPolicy,
         route: { verb: 'GET', path: 'branding/{clientId}' },
+      });
+
+      // GET branding config per client (public)
+      this.addLambdaFunction(this, 'branding-config-public-get', {
+        addAuthorizer: false,
+        lambdaDirectory: 'node/branding-config',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        environment: {
+          ...brandingEnv,
+          BRANDING_PUBLIC_MODE: 'true',
+        },
+        additionalPolicyStatements: brandingReadPolicy,
+        route: { verb: 'GET', path: 'public/branding/{clientId}' },
       });
 
       // GET branding version history

@@ -320,7 +320,6 @@ export default function SettingsPage() {
                     id={`toggle-${id}`}
                     checked={enabled}
                     disabled
-                    onChange={() => {}}
                     label={<span className="small">{enabled ? 'Enabled' : 'Disabled'}</span>}
                   />
                 </div>
@@ -638,9 +637,7 @@ export default function SettingsPage() {
                     return (
                       <div
                         key={t.name}
-                        className={`d-flex align-items-start justify-content-between p-3 border rounded-3 ${
-                          allowed ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'
-                        }`}
+                        className={`d-flex align-items-start justify-content-between p-3 border rounded-3 ${allowed ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
                         style={{
                           transition: 'all 0.2s ease',
                           borderColor: allowed ? 'var(--bs-border-color)' : 'var(--bs-border-color-translucent)',
@@ -706,7 +703,7 @@ export default function SettingsPage() {
                   )}
                 </small>
                 <div>
-                  <Button variant="outline-secondary" onClick={() => setManageToolsFor(null)} className="me-2">
+                  <Button variant="secondary" onClick={() => setManageToolsFor(null)} className="me-2">
                     Cancel
                   </Button>
                   <Button variant="primary" onClick={saveManageTools} disabled={toolsLoading || !!toolsError}>

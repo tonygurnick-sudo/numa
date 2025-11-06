@@ -101,7 +101,7 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
 
   return (
     <>
-      <Button variant="primary" className="agents-btn" onClick={() => setShow(true)} disabled={agentsMode === 'off'}>
+      <Button variant="secondary" className="btn" onClick={() => setShow(true)} disabled={agentsMode === 'off'}>
         <i className="bi bi-robot me-1"></i> Agents
       </Button>
       <Offcanvas show={show} placement="end" onHide={() => setShow(false)} backdrop scroll>
@@ -109,7 +109,7 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
           <div className="d-flex align-items-center justify-content-between w-100">
             <Offcanvas.Title className="mb-0">My Agents</Offcanvas.Title>
             <Button
-              variant="outline-secondary"
+              variant="secondary"
               size="sm"
               onClick={() => {
                 setShow(false);

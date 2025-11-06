@@ -92,7 +92,7 @@ export function NotificationModal({
       </Modal.Body>
       <Modal.Footer className="d-flex justify-content-start">
         {showCancelButton && (
-          <Button variant="outline-secondary" onClick={onHide} className="me-2">
+          <Button variant="secondary" onClick={onHide} className="me-2">
             {cancelText}
           </Button>
         )}

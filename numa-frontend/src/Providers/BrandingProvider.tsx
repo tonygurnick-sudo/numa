@@ -1,6 +1,6 @@
 import React, { useEffect, useState, type ReactNode } from 'react';
 import { brandingService } from '../Services/BrandingService';
-import { BrandingContext } from './BrandingContext';
+import { BrandingContext, DEFAULT_BRANDING_THEME } from './BrandingContext';
 import type { BrandingTheme } from './BrandingContext';
 
 /**
@@ -9,27 +9,42 @@ import type { BrandingTheme } from './BrandingContext';
  */
 export const BrandingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [clientName, setClientName] = useState<string>('numa');
-  const [branding, setBranding] = useState<BrandingTheme>({
-    name: 'Numa',
-    logo: '/numa-logo.svg',
-    colors: {
-      primary: '#8e50a7',
-      secondary: '#8e50a7',
-      hover: '#744188',
-    },
-  });
+  const [branding, setBranding] = useState<BrandingTheme>(DEFAULT_BRANDING_THEME);
   const [initialized, setInitialized] = useState<boolean>(false);
 
   // Initialize client branding on mount
   useEffect(() => {
+    let isMounted = true;
+    let unsubscribe: (() => void) | null = null;
+
     const initBranding = async () => {
       await brandingService.initialize();
+      if (!isMounted) {
+        return;
+      }
+
       setClientName(brandingService.getClientName());
       setBranding(brandingService.getBranding());
       setInitialized(true);
+
+      unsubscribe = brandingService.subscribe(() => {
+        if (!isMounted) {
+          return;
+        }
+
+        setBranding(brandingService.getBranding());
+        setClientName(brandingService.getClientName());
+      });
     };
 
-    initBranding();
+    void initBranding();
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   // Helper function to check if a feature is enabled
@@ -57,5 +72,26 @@ export const BrandingProvider: React.FC<{ children: ReactNode }> = ({ children }
     replaceClientName,
   };
 
-  return React.createElement(BrandingContext.Provider, { value: contextValue }, children);
+  const loadingPlaceholder = (
+    <div
+      role="status"
+      style={{
+        alignItems: 'center',
+        display: 'flex',
+        height: '100vh',
+        justifyContent: 'center',
+        width: '100%',
+      }}
+    >
+      Loading…
+    </div>
+  );
+
+  return React.createElement(
+    BrandingContext.Provider,
+    { value: contextValue },
+    initialized ? children : loadingPlaceholder,
+  );
 };
+
+export default BrandingProvider;

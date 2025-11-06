@@ -9,6 +9,54 @@
   padding: 10px 0 0 0;
 }
 
+.form-check-input {
+  &:checked {
+    background-color: var(--brand-buttonPrimary, var(--brand-primary, var(--color-primary)));
+    border-color: var(--brand-buttonPrimaryBorder, var(--brand-primary, var(--color-primary)));
+    box-shadow: none;
+  }
+
+  &:focus {
+    border-color: var(--brand-buttonPrimaryBorder, var(--brand-primary, var(--color-primary)));
+    box-shadow: 0 0 0 0.2rem
+      color-mix(in srgb, var(--brand-buttonPrimary, var(--brand-primary, var(--color-primary))) 25%, transparent);
+  }
+}
+
+.form-switch .form-check-input {
+  height: 1.3rem;
+  width: 2.5rem;
+  cursor: pointer;
+
+  &:checked {
+    background-color: var(--brand-buttonPrimary, var(--brand-primary, var(--color-primary)));
+    border-color: var(--brand-buttonPrimaryBorder, var(--brand-primary, var(--color-primary)));
+  }
+}
+
+.border-primary {
+  --bs-border-opacity: 1;
+  border-color: var(--brand-border, var(--brand-primary, var(--color-primary))) !important;
+}
+
+.border-light {
+  border-color: var(--brand-surface, #ffffff) !important;
+  background-color: var(--brand-surface, #ffffff) !important;
+}
+
+.integration-step-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--brand-primaryContrast, white);
+  background: var(--brand-primary, var(--color-primary));
+}
+
 /* Star Animation */
 @keyframes pulse-star {
   0% {
@@ -54,9 +102,9 @@
 
 /* Forms */
 .btn-primary {
-  background-color: var(--brand-buttonPrimary, var(--color-bg-lightest));
+  background-color: var(--brand-buttonPrimary, var(--color-primary));
   border: 1px solid var(--brand-buttonPrimaryBorder, var(--color-primary)) !important;
-  color: var(--brand-buttonPrimaryText, var(--color-primary));
+  color: var(--brand-buttonPrimaryText, white);
   transition: all 0.2s ease-in-out;
 
   .bi-arrow-right {
@@ -66,8 +114,8 @@
   }
 
   &:hover:not([disabled]):not(.disabled) {
-    background-color: var(--color-primary);
-    color: white;
+    background-color: var(--brand-buttonPrimaryHover, var(--color-primary-hover));
+    color: var(--brand-buttonPrimaryText, white);
   }
 
   &.new-chat-btn {
@@ -78,8 +126,12 @@
     }
   }
 
-  &:active:not([disabled]):not(.disabled) {
-    background-color: var(--color-primary-hover);
+  &:active:not([disabled]):not(.disabled),
+  &:focus:not([disabled]):not(.disabled),
+  &.active:not([disabled]):not(.disabled) {
+    background-color: var(--brand-hover, var(--color-primary-hover)) !important;
+    border-color: var(--brand-hover, var(--color-primary-hover)) !important;
+    color: var(--brand-buttonPrimaryText, white) !important;
   }
 
   &[disabled],
@@ -108,12 +160,24 @@ fieldset:disabled .btn {
 }
 
 .btn-secondary {
-  background: none;
-  border: 1px solid var(--color-primary) !important;
-  color: var(--color-primary);
+  background-color: var(--brand-buttonSecondary, #ffffff);
+  border: 1px solid var(--brand-buttonSecondaryBorder, var(--color-primary)) !important;
+  color: var(--brand-buttonSecondaryText, var(--color-primary));
+  transition: all 0.2s ease-in-out;
 
-  &:hover {
-    background-color: var(--color-primary-hover) !important;
+  &:hover:not([disabled]):not(.disabled),
+  &:focus-visible {
+    background-color: var(--brand-buttonSecondaryHover, var(--color-primary));
+    border-color: var(--brand-buttonSecondaryBorder, var(--color-primary)) !important;
+    color: var(--brand-buttonSecondaryHoverText, #ffffff);
+  }
+
+  &:active:not([disabled]):not(.disabled),
+  &.active:not([disabled]):not(.disabled) {
+    background-color: var(--brand-buttonSecondaryHover, var(--color-primary)) !important;
+    border-color: var(--brand-buttonSecondaryBorder, var(--color-primary)) !important;
+    color: var(--brand-buttonSecondaryHoverText, #ffffff) !important;
+    filter: brightness(0.95);
   }
 }
 
@@ -183,14 +247,14 @@ label {
     padding: 0 26px 0 0;
     line-height: 40px;
     border: none;
-    color: var(--color-gray);
-    border-bottom: 3px solid var(--color-gray);
+    color: var(--brand-textMuted, var(--color-gray));
+    border-bottom: 3px solid var(--brand-border, var(--color-gray));
     font-family: 'Metropolis Bold';
 
     &.active {
       background: none;
-      color: var(--color-primary-hover);
-      border-bottom: 3px solid var(--color-primary-hover);
+      color: var(--brand-primary, var(--color-primary-hover));
+      border-bottom: 3px solid var(--brand-primary, var(--color-primary-hover));
     }
   }
 }
@@ -230,7 +294,7 @@ label {
   .divider {
     width: 80%;
     height: 1px;
-    background-color: var(--color-primary);
+    background-color: var(--brand-border, var(--color-primary));
     margin: 1rem 0;
     margin-top: 0;
     opacity: 1;
@@ -256,7 +320,7 @@ label {
     display: flex;
 
     padding: calc(var(--spacing-xs) / 2);
-    color: var(--color-primary);
+    color: var(--brand-primary, var(--color-primary));
     cursor: pointer;
     width: 100%;
     transition: var(--transition-default);
@@ -267,6 +331,10 @@ label {
       justify-content: center;
       width: 24px;
       min-width: 24px;
+
+      i {
+        color: var(--brand-primary, var(--color-primary));
+      }
     }
   }
 
@@ -297,6 +365,7 @@ label {
 
   .icon {
     font-size: 1.2rem;
+    color: var(--brand-primary, var(--color-primary));
   }
 
   // Logo text styling
@@ -309,7 +378,7 @@ label {
 
     .logo-text {
       font-weight: 600;
-      color: var(--color-primary);
+      color: var(--brand-primary, var(--color-primary));
       white-space: nowrap;
     }
   }
@@ -351,7 +420,7 @@ label {
       width: 100%;
       background: none;
       border: none;
-      color: var(--color-primary);
+      color: var(--brand-primary, var(--color-primary));
       padding: calc(var(--spacing-xs) / 2);
       cursor: pointer;
 
@@ -359,6 +428,10 @@ label {
         display: flex;
         align-items: center;
         justify-content: center;
+
+        i {
+          color: var(--brand-primary, var(--color-primary));
+        }
       }
     }
   }
@@ -376,14 +449,14 @@ label {
   }
 
   .version {
-    color: var(--color-primary);
+    color: var(--brand-primary, var(--color-primary));
     font-size: 0.8rem;
   }
 
   .icon-label {
     font-size: 0.7rem;
     margin-top: 0.15rem;
-    color: var(--color-primary);
+    color: var(--brand-primary, var(--color-primary));
     text-align: center;
   }
 }
@@ -405,7 +478,9 @@ label {
   bottom: 10px;
   width: 189px;
   right: 10px;
-  color:white
+  color:white;
+  text-align: right;
+  width: 100%;
 }
 
 .app-item-icon {
@@ -649,7 +724,7 @@ label {
   justify-content: center;
   border: none;
   background: none;
-  color: #9d64b5;
+  color: var(--brand-primary, var(--color-primary));
   margin: 0 auto;
   padding: 8px;
   width: 48px;
@@ -675,7 +750,7 @@ label {
 
   &:hover {
     opacity: 1;
-    color: #9d64b5;
+    color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 85%, white);
     transform: scale(1.1);
   }
 }
@@ -691,14 +766,15 @@ label {
   }
 }
 
+.progress {
+  border-radius: 5px;
+  background-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 12%, transparent) !important;
+}
+
 .progress-bar {
   height: 16px;
   border-radius: 5px;
-  background-color: #bc85d3 !important;
-
-  &.progress {
-    background-color: #e9d7fe !important;
-  }
+  background-color: var(--brand-primary, var(--color-primary)) !important;
 }
 
 .step-group.post-run {
@@ -724,10 +800,11 @@ label {
   }
 
   a {
-    color: var(--color-primary);
+    color: var(--brand-primary, var(--color-primary)) !important;
     text-decoration: none;
 
     &:hover {
+      color: var(--brand-hover, var(--brand-primary, var(--color-primary))) !important;
       text-decoration: underline;
     }
   }
@@ -852,16 +929,16 @@ label {
 .pagination {
   .page-item {
     .page-link {
-      border-color: #e9ecef;
-      color: var(--color-gray-700);
+      border-color: var(--brand-border, #e9ecef);
+      color: var(--brand-textMuted, var(--color-gray-700));
       padding: 0.5rem 0.75rem;
       min-width: 2.5rem;
       text-align: center;
 
       &:hover {
-        background-color: var(--color-gray-50);
-        border-color: #dee2e6;
-        color: var(--color-gray-900);
+        background-color: var(--brand-hover, var(--color-gray-50));
+        border-color: var(--brand-border, #dee2e6);
+        color: var(--brand-primaryContrast, #ffffff);
       }
 
       &:focus {
@@ -870,19 +947,19 @@ label {
     }
 
     &.active .page-link {
-      background-color: var(--color-primary) !important;
-      border-color: var(--color-primary);
-      color: white;
+      background-color: var(--brand-primary, var(--color-primary)) !important;
+      border-color: var(--brand-primary, var(--color-primary));
+      color: var(--brand-primaryContrast, white);
 
       &:hover {
-        background-color: var(--color-primary-hover);
+        background-color: var(--brand-primaryHover, var(--color-primary-hover));
       }
     }
 
     &.disabled .page-link {
-      color: var(--color-gray-400);
+      color: var(--brand-textMuted, var(--color-gray-400));
       background-color: #fff;
-      border-color: #e9ecef;
+      border-color: var(--brand-border, #e9ecef);
     }
   }
 }
@@ -1098,7 +1175,7 @@ label {
     }
 
     .status-icon {
-      color: var(--color-primary);
+      color: var(--brand-primary, var(--color-primary));
     }
   }
 

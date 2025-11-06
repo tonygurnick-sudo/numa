@@ -53,28 +53,28 @@ const editorStyles = {
 const CustomToolbar = () => (
   <div className="border-bottom p-2 d-flex gap-2">
     <ButtonGroup size="sm">
-      <Button variant="outline-secondary" title="Undo">
+      <Button variant="secondary" title="Undo">
         <ArrowCounterclockwise />
       </Button>
-      <Button variant="outline-secondary" title="Redo">
+      <Button variant="secondary" title="Redo">
         <ArrowClockwise />
       </Button>
     </ButtonGroup>
 
     <ButtonGroup size="sm">
-      <Button variant="outline-secondary" title="Bold">
+      <Button variant="secondary" title="Bold">
         <TypeBold />
       </Button>
-      <Button variant="outline-secondary" title="Italic">
+      <Button variant="secondary" title="Italic">
         <TypeItalic />
       </Button>
-      <Button variant="outline-secondary" title="Underline">
+      <Button variant="secondary" title="Underline">
         <TypeUnderline />
       </Button>
     </ButtonGroup>
 
     <Dropdown as={ButtonGroup} size="sm">
-      <Dropdown.Toggle variant="outline-secondary" id="block-type">
+      <Dropdown.Toggle variant="secondary" id="block-type">
         <TextParagraph className="me-1" />
         Block Type
       </Dropdown.Toggle>
@@ -94,7 +94,7 @@ const CustomToolbar = () => (
       </Dropdown.Menu>
     </Dropdown>
 
-    <Button variant="outline-secondary" size="sm" title="Insert Link">
+    <Button variant="secondary" size="sm" title="Insert Link">
       <Link45deg />
     </Button>
   </div>

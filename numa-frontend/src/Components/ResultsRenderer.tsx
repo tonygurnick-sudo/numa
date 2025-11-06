@@ -172,7 +172,7 @@ const JsonRenderer = ({ data }) => {
                       <h6
                         className="mb-1 me-2"
                         style={{
-                          color: isTopLevel ? 'var(--color-primary)' : 'var(--bs-secondary)',
+                          color: isTopLevel ? 'var(--brand-primary, var(--color-primary))' : 'var(--bs-secondary)',
                           fontWeight: '600',
                           minWidth: '150px',
                         }}
@@ -210,7 +210,7 @@ const JsonRenderer = ({ data }) => {
                       <h6
                         className="mb-1 me-2"
                         style={{
-                          color: isTopLevel ? 'var(--color-primary)' : 'var(--bs-secondary)',
+                          color: isTopLevel ? 'var(--brand-primary, var(--color-primary))' : 'var(--bs-secondary)',
                           fontWeight: '600',
                           minWidth: '150px',
                         }}
@@ -459,7 +459,7 @@ const CsvRenderer = ({ data }) => {
                   <h6
                     className="mb-1 me-2"
                     style={{
-                      color: 'var(--color-primary)',
+                      color: 'var(--brand-primary, var(--color-primary))',
                       fontWeight: '600',
                       minWidth: '150px',
                       marginBottom: hasMultilineContent ? '0.5rem' : '0',

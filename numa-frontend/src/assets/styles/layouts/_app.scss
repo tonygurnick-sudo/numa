@@ -150,7 +150,6 @@
       display: flex;
       flex-direction: column;
       gap: 1rem;
-      background: var(--color-bg-light);
       border-radius: 8px;
 
       .processing-status {
@@ -224,7 +223,7 @@
         }
 
         .step-label {
-          color: var(--color-primary);
+          color: var(--brand-primary, var(--color-primary));
         }
       }
 
@@ -248,7 +247,7 @@
         height: 35px;
         border-radius: 50%;
         background: white;
-        border: 2px solid rgb(75.25, 129, 161.25);
+        border: 2px solid var(--brand-primary, var(--color-primary));
         display: flex;
         align-items: center;
         justify-content: center;
@@ -280,12 +279,12 @@
         background-color: rgba(75, 129, 161, 0.08);
 
         .step-number {
-          border-color: var(--color-primary);
-          color: var(--color-primary);
+          border-color: var(--brand-primary, var(--color-primary));
+          color: var(--brand-primary, var(--color-primary));
         }
 
         .step-label {
-          color: var(--color-primary);
+          color: var(--brand-primary, var(--color-primary));
           font-weight: 500;
         }
       }
@@ -298,7 +297,7 @@
 
       .step-label {
         font-size: 14px;
-        color: #6c757d;
+        color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 60%, #6c757d 40%);
         text-align: center;
         transition: color 0.2s ease;
       }
@@ -375,7 +374,7 @@
             height: 24px;
             border-radius: 50%;
             background-color: #e1ebf1;
-            color: rgb(75.25, 129, 161.25);
+            color: var(--brand-primary, var(--color-primary));
             display: flex;
             align-items: center;
             justify-content: center;
@@ -385,13 +384,13 @@
 
           &.active {
             .step-number {
-              background-color: var(--color-primary);
+              background-color: var(--brand-primary, var(--color-primary));
               color: white;
             }
 
             .step-label-container {
               .step-label {
-                color: var(--color-primary);
+                color: var(--brand-primary, var(--color-primary));
                 font-family: 'Metropolis Semi Bold';
               }
             }

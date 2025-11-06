@@ -3,6 +3,7 @@
  */
 import { render, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import '@testing-library/jest-dom';
 import { NumaLogin } from '../../Pages/Login';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -17,6 +18,9 @@ vi.mock('../../Providers/AuthProvider', () => ({
   useAuth: vi.fn(),
 }));
 
+const mockedUseNavigate = useNavigate as unknown as Mock;
+const mockedUseAuth = useAuth as unknown as Mock;
+
 describe('NumaLogin Component', () => {
   const mockNavigate = vi.fn();
   const mockLogin = vi.fn();
@@ -25,30 +29,30 @@ describe('NumaLogin Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    useNavigate.mockReturnValue(mockNavigate);
-    useAuth.mockReturnValue({
+    mockedUseNavigate.mockReturnValue(mockNavigate);
+    mockedUseAuth.mockReturnValue({
       login: mockLogin,
       setNewPassword: mockSetNewPassword,
     });
   });
 
   it('renders login form correctly', () => {
-    const { getByLabelText, getByText } = render(<NumaLogin />);
+    const { getByLabelText, getByText, getByRole } = render(<NumaLogin />);
 
     expect(getByLabelText('Username')).toBeInTheDocument();
     expect(getByLabelText('Password')).toBeInTheDocument();
-    expect(getByText('Login')).toBeInTheDocument();
+    expect(getByRole('button', { name: 'Login' })).toBeInTheDocument();
     expect(getByText('Forgot password')).toBeInTheDocument();
   });
 
   it('handles successful login', async () => {
     mockLogin.mockResolvedValueOnce({ requiresNewPassword: false });
 
-    const { getByLabelText, getByText } = render(<NumaLogin />);
+    const { getByLabelText, getByRole } = render(<NumaLogin />);
 
     const usernameInput = getByLabelText('Username');
     const passwordInput = getByLabelText('Password');
-    const submitButton = getByText('Login');
+    const submitButton = getByRole('button', { name: 'Login' });
 
     fireEvent.change(usernameInput, { target: { value: 'testuser' } });
     fireEvent.change(passwordInput, { target: { value: 'password123' } });
@@ -63,11 +67,11 @@ describe('NumaLogin Component', () => {
   it('handles login with required password change', async () => {
     mockLogin.mockResolvedValueOnce({ requiresNewPassword: true });
 
-    const { getByLabelText, getByText, findByLabelText } = render(<NumaLogin />);
+    const { getByLabelText, getByRole, findByLabelText } = render(<NumaLogin />);
 
     const usernameInput = getByLabelText('Username');
     const passwordInput = getByLabelText('Password');
-    const submitButton = getByText('Login');
+    const submitButton = getByRole('button', { name: 'Login' });
 
     fireEvent.change(usernameInput, { target: { value: 'testuser' } });
     fireEvent.change(passwordInput, { target: { value: 'password123' } });
@@ -84,12 +88,12 @@ describe('NumaLogin Component', () => {
     mockLogin.mockResolvedValueOnce({ requiresNewPassword: true });
     mockSetNewPassword.mockResolvedValueOnce({});
 
-    const { getByLabelText, getByText, findByLabelText } = render(<NumaLogin />);
+    const { getByLabelText, getByText, getByRole, findByLabelText } = render(<NumaLogin />);
 
     // First login attempt
     fireEvent.change(getByLabelText('Username'), { target: { value: 'testuser' } });
     fireEvent.change(getByLabelText('Password'), { target: { value: 'oldpass' } });
-    fireEvent.click(getByText('Login'));
+    fireEvent.click(getByRole('button', { name: 'Login' }));
 
     // New password form
     await waitFor(async () => {
@@ -110,12 +114,12 @@ describe('NumaLogin Component', () => {
   it('shows error for mismatched passwords', async () => {
     mockLogin.mockResolvedValueOnce({ requiresNewPassword: true });
 
-    const { getByLabelText, getByText, findByLabelText, findByText } = render(<NumaLogin />);
+    const { getByLabelText, getByText, getByRole, findByLabelText, findByText } = render(<NumaLogin />);
 
     // First login attempt
     fireEvent.change(getByLabelText('Username'), { target: { value: 'testuser' } });
     fireEvent.change(getByLabelText('Password'), { target: { value: 'oldpass' } });
-    fireEvent.click(getByText('Login'));
+    fireEvent.click(getByRole('button', { name: 'Login' }));
 
     // New password form with mismatched passwords
     await waitFor(async () => {
@@ -137,11 +141,11 @@ describe('NumaLogin Component', () => {
     const errorMessage = 'Invalid credentials';
     mockLogin.mockRejectedValueOnce(new Error(errorMessage));
 
-    const { getByLabelText, getByText, findByText } = render(<NumaLogin />);
+    const { getByLabelText, getByRole, findByText } = render(<NumaLogin />);
 
     fireEvent.change(getByLabelText('Username'), { target: { value: 'testuser' } });
     fireEvent.change(getByLabelText('Password'), { target: { value: 'wrongpass' } });
-    fireEvent.click(getByText('Login'));
+    fireEvent.click(getByRole('button', { name: 'Login' }));
 
     await waitFor(async () => {
       expect(await findByText(errorMessage)).toBeInTheDocument();
@@ -150,9 +154,9 @@ describe('NumaLogin Component', () => {
   });
 
   it('validates required fields', async () => {
-    const { getByText, findByText } = render(<NumaLogin />);
+    const { getByRole, findByText } = render(<NumaLogin />);
 
-    fireEvent.click(getByText('Login'));
+    fireEvent.click(getByRole('button', { name: 'Login' }));
 
     await waitFor(async () => {
       expect(await findByText('Username and password are required')).toBeInTheDocument();
@@ -161,11 +165,11 @@ describe('NumaLogin Component', () => {
   });
 
   it('validates no spaces in credentials', async () => {
-    const { getByLabelText, getByText, findByText } = render(<NumaLogin />);
+    const { getByLabelText, getByRole, findByText } = render(<NumaLogin />);
 
     fireEvent.change(getByLabelText('Username'), { target: { value: 'test user' } });
     fireEvent.change(getByLabelText('Password'), { target: { value: 'pass word' } });
-    fireEvent.click(getByText('Login'));
+    fireEvent.click(getByRole('button', { name: 'Login' }));
 
     await waitFor(async () => {
       expect(await findByText('Username and password cannot contain spaces')).toBeInTheDocument();

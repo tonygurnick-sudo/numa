@@ -7,6 +7,7 @@ const ddbDoc = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 const CLIENT_NAME = process.env.CLIENT_NAME as string | undefined;
 const BRANDING_PROVIDER_ENABLED = (process.env.BRANDING_PROVIDER_ENABLED ?? 'false') === 'true';
+const BRANDING_PUBLIC_MODE = (process.env.BRANDING_PUBLIC_MODE ?? 'false') === 'true';
 
 const CURRENT_CONFIG_ID = 'branding#current';
 const VERSION_PREFIX = 'branding#version#';
@@ -101,6 +102,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     const hasVersions = remainder[0] === 'versions';
     const versionId = hasVersions && remainder[1] ? decodeURIComponent(remainder[1]) : undefined;
     if (!clientId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'clientId required' }) };
+
+    if (BRANDING_PUBLIC_MODE && clientId !== CLIENT_NAME) {
+      return { statusCode: 404, headers, body: JSON.stringify({ error: 'not_found' }) };
+    }
+
+    if (BRANDING_PUBLIC_MODE) {
+      if (method !== 'GET') {
+        return { statusCode: 405, headers, body: JSON.stringify({ error: 'method_not_allowed' }) };
+      }
+      if (hasVersions) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'forbidden' }) };
+      }
+    }
 
     if (method === 'GET' && hasVersions) {
       const { admin } = isAdminFromAuth(event);

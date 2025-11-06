@@ -5,6 +5,7 @@ import type { FormEvent, MouseEvent } from 'react';
 import { ChatInput } from './ChatInput';
 import type { ConversationMeta } from '../hooks/useChatInactivity';
 import numaIcon from '../../public/numa-logo.svg';
+import { useBranding } from '../Providers/BrandingContext';
 import AgentAvatar from './AgentAvatar';
 import { useAgentById } from '../hooks/useAgentById';
 
@@ -119,6 +120,12 @@ const formatUserName = (name?: string) => {
   if (!name) return '';
   const parts = name.split(/[.\s]+/);
   return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+};
+
+// Helper function to convert hex color to RGB
+const hexToRgb = (hex: string): string => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '75, 0, 125';
 };
 
 export const NewChat = ({
@@ -300,6 +307,9 @@ export const NewChat = ({
   };
   // ------- End DnD -------
 
+  const { branding } = useBranding();
+  const logoSrc = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || numaIcon;
+  const logoAlt = branding.name || 'Numa';
   const handleContinueClick = (conversationId: string) => {
     hideSuggestions();
     onContinueConversation(conversationId);
@@ -349,8 +359,24 @@ export const NewChat = ({
             animation: 'fadeIn 0.6s ease-in-out',
           }}
         >
-          <img src={numaIcon} alt="Numa" style={{ width: 32, height: 32, opacity: 0.9 }} />
-          <span style={{ fontSize: '1.75rem', fontWeight: 600, color: '#212529' }}>{greeting}</span>
+          <img
+            src={logoSrc}
+            alt={logoAlt}
+            style={{
+              width: '32px',
+              height: '32px',
+              opacity: 0.9,
+            }}
+          />
+          <span
+            style={{
+              fontSize: '1.75rem',
+              fontWeight: 600,
+              color: branding.colors.primaryText,
+            }}
+          >
+            {greeting}
+          </span>
         </div>
 
         <div
@@ -396,9 +422,9 @@ export const NewChat = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 40,
-                  height: 40,
-                  color: '#4b007d',
+                  width: '40px',
+                  height: '40px',
+                  color: 'var(--brand-primary, var(--color-primary))',
                   flexShrink: 0,
                 }}
               >
@@ -411,7 +437,7 @@ export const NewChat = ({
                   overlay={<Tooltip id={`agent-${agent.agentId}`}>{agent.title}</Tooltip>}
                 >
                   <Button
-                    variant="outline-secondary"
+                    variant="secondary"
                     className="agent-quick-select-btn"
                     style={{
                       padding: '0.25rem',
@@ -423,8 +449,12 @@ export const NewChat = ({
                     }}
                     onClick={() => onSelectAgent?.(agent)}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(75,0,125,0.05)';
-                      e.currentTarget.style.borderColor = 'rgba(75,0,125,0.3)';
+                      const primaryColor =
+                        getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
+                        '75, 0, 125';
+                      const rgb = primaryColor.startsWith('#') ? hexToRgb(primaryColor) : primaryColor;
+                      e.currentTarget.style.backgroundColor = `rgba(${rgb}, 0.05)`;
+                      e.currentTarget.style.borderColor = `rgba(${rgb}, 0.3)`;
                       e.currentTarget.style.transform = 'translateY(-2px)';
                       e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
                     }}
@@ -450,24 +480,13 @@ export const NewChat = ({
               className="d-flex justify-content-center align-items-center"
               style={{ minHeight: 100, animation: 'fadeIn 0.3s ease-in-out' }}
             >
-              <Spinner animation="border" role="status" size="sm" style={{ color: '#4b007d' }}>
+              <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
                 <span className="visually-hidden">Loading recent conversations...</span>
               </Spinner>
             </div>
           ) : recentConversations.length > 0 ? (
-            <div className="conversation-suggestions" style={{ animation: 'fadeIn 0.6s ease-in-out' }}>
-              <div
-                className="mb-3"
-                style={{
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
-                  letterSpacing: '0.025em',
-                  textTransform: 'uppercase',
-                  color: '#4b007d',
-                }}
-              >
-                Continue where you left off
-              </div>
+            <div className="conversation-suggestions">
+              <div className="suggestions-header">Continue where you left off</div>
               <div className="d-flex flex-column" style={{ gap: '0.75rem', paddingBottom: '1rem' }}>
                 {recentConversations.map((convo) => (
                   <div
@@ -475,21 +494,6 @@ export const NewChat = ({
                     className="text-start conversation-suggestion-btn"
                     role="button"
                     tabIndex={0}
-                    style={{
-                      padding: '0.75rem 1rem',
-                      borderRadius: 10,
-                      border: '1px solid rgba(0,0,0,0.1)',
-                      backgroundColor: 'rgba(255,255,255,0.8)',
-                      transition: 'all 0.2s ease-in-out',
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      color: '#212529',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.65rem',
-                      position: 'relative',
-                      cursor: 'pointer',
-                    }}
                     onClick={() => handleContinueClick(convo.conversation_id)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
@@ -498,8 +502,12 @@ export const NewChat = ({
                       }
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(75,0,125,0.05)';
-                      e.currentTarget.style.borderColor = 'rgba(75,0,125,0.3)';
+                      const primaryColor =
+                        getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
+                        '75, 0, 125';
+                      const rgb = primaryColor.startsWith('#') ? hexToRgb(primaryColor) : primaryColor;
+                      e.currentTarget.style.backgroundColor = `rgba(${rgb}, 0.05)`;
+                      e.currentTarget.style.borderColor = `rgba(${rgb}, 0.3)`;
                       e.currentTarget.style.transform = 'translateY(-2px)';
                       e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
                     }}
@@ -581,3 +589,5 @@ export const NewChat = ({
     </div>
   );
 };
+
+export default NewChat;

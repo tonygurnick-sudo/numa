@@ -74,7 +74,7 @@ export const CreatePolicyModal = ({
             >
               <span>
                 <Button
-                  variant="outline-secondary"
+                  variant="secondary"
                   onClick={handleAddUrl}
                   className="btn-numa-outline d-flex align-items-center gap-2"
                   size="sm"

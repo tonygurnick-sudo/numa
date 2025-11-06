@@ -22,8 +22,10 @@
     100% 0;
   background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
   background-image:
-    linear-gradient(90deg, #9d64b5 70%, transparent 70%), linear-gradient(90deg, #9d64b5 70%, transparent 70%),
-    linear-gradient(0deg, #9d64b5 70%, transparent 70%), linear-gradient(0deg, #9d64b5 70%, transparent 70%);
+    linear-gradient(90deg, color-mix(in srgb, var(--brand-primary, var(--color-primary)) 70%, transparent) 70%, transparent 70%),
+    linear-gradient(90deg, color-mix(in srgb, var(--brand-primary, var(--color-primary)) 70%, transparent) 70%, transparent 70%),
+    linear-gradient(0deg, color-mix(in srgb, var(--brand-primary, var(--color-primary)) 70%, transparent) 70%, transparent 70%),
+    linear-gradient(0deg, color-mix(in srgb, var(--brand-primary, var(--color-primary)) 70%, transparent) 70%, transparent 70%);
   background-color: var(--color-bg-lightest) !important;
 
   &.disabled {
@@ -64,11 +66,13 @@
   }
 
   &.dragging {
-    background-color: rgba(111, 66, 193, 0.05) !important;
+    background-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 5%, transparent) !important;
     animation: dashedBorder 8s linear infinite;
     background-image:
-      linear-gradient(90deg, #6f42c1 70%, transparent 70%), linear-gradient(90deg, #6f42c1 70%, transparent 70%),
-      linear-gradient(0deg, #6f42c1 70%, transparent 70%), linear-gradient(0deg, #6f42c1 70%, transparent 70%);
+      linear-gradient(90deg, color-mix(in srgb, var(--brand-hover, var(--brand-primary, var(--color-primary))) 70%, transparent) 70%, transparent 70%),
+      linear-gradient(90deg, color-mix(in srgb, var(--brand-hover, var(--brand-primary, var(--color-primary))) 70%, transparent) 70%, transparent 70%),
+      linear-gradient(0deg, color-mix(in srgb, var(--brand-hover, var(--brand-primary, var(--color-primary))) 70%, transparent) 70%, transparent 70%),
+      linear-gradient(0deg, color-mix(in srgb, var(--brand-hover, var(--brand-primary, var(--color-primary))) 70%, transparent) 70%, transparent 70%);
   }
 
   p {
@@ -252,8 +256,8 @@
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 
     &:hover {
-      border-color: var(--color-primary);
-      box-shadow: 0 2px 4px rgba(139, 90, 159, 0.1);
+      border-color: var(--brand-primary, var(--color-primary));
+      box-shadow: 0 2px 4px color-mix(in srgb, var(--brand-primary, var(--color-primary)) 10%, transparent);
     }
 
     // Support for tree indentation
@@ -314,7 +318,7 @@
 
         i {
           font-size: 16px;
-          color: var(--color-primary);
+          color: var(--brand-primary, var(--color-primary));
         }
       }
 

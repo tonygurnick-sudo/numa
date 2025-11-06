@@ -14,6 +14,7 @@ const serviceMocks = vi.hoisted(() => ({
   mockFetchHistory: vi.fn(),
   mockSaveConfig: vi.fn(),
   mockRevertVersion: vi.fn(),
+  sanitizeFileName: vi.fn((name: string) => name),
 }));
 
 const toastMocks = vi.hoisted(() => ({
@@ -36,6 +37,7 @@ vi.mock('../../Services/BrandingAdminService', () => ({
     saveConfig: serviceMocks.mockSaveConfig,
     revertVersion: serviceMocks.mockRevertVersion,
   },
+  sanitizeFileName: serviceMocks.sanitizeFileName,
 }));
 
 vi.mock('../../Providers/AuthProvider', () => ({
@@ -241,7 +243,12 @@ describe('BrandingAdminPanel', () => {
       expect(serviceMocks.mockFetchConfig).toHaveBeenCalled();
     });
 
-    const fileInput = container.querySelector('input[type="file"][accept]') as HTMLInputElement;
+    const fileInput = container.querySelector('input[type="file"][accept]') as HTMLInputElement | null;
+    expect(fileInput).not.toBeNull();
+    if (!fileInput) {
+      throw new Error('File input not found');
+    }
+
     const invalidFile = new File([''], 'invalid.txt', { type: 'text/plain' });
 
     fireEvent.change(fileInput, {
@@ -250,7 +257,10 @@ describe('BrandingAdminPanel', () => {
       },
     });
 
-    expect(s3Mocks.uploadFileToS3).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(s3Mocks.uploadFileToS3).not.toHaveBeenCalled();
+    });
+
     expect(toastMocks.showToast).toHaveBeenCalledWith(
       expect.objectContaining({
         variant: 'warning',
@@ -267,7 +277,12 @@ describe('BrandingAdminPanel', () => {
       expect(serviceMocks.mockFetchConfig).toHaveBeenCalled();
     });
 
-    const fileInput = container.querySelector('input[type="file"][accept]') as HTMLInputElement;
+    const fileInput = container.querySelector('input[type="file"][accept]') as HTMLInputElement | null;
+    expect(fileInput).not.toBeNull();
+    if (!fileInput) {
+      throw new Error('File input not found');
+    }
+
     const validFile = new File(['image'], 'logo.png', { type: 'image/png' });
     Object.defineProperty(validFile, 'arrayBuffer', {
       value: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
@@ -280,15 +295,15 @@ describe('BrandingAdminPanel', () => {
     });
 
     await waitFor(() => {
-      expect(s3Mocks.uploadFileToS3).toHaveBeenCalled();
+      expect(toastMocks.showToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'success',
+          title: 'Navigation Logo',
+        }),
+      );
     });
 
-    expect(toastMocks.showToast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variant: 'success',
-        title: 'Navigation Logo',
-      }),
-    );
+    expect(s3Mocks.uploadFileToS3).toHaveBeenCalledTimes(1);
   });
 
   it('shows error toast when asset upload fails', async () => {
@@ -300,7 +315,12 @@ describe('BrandingAdminPanel', () => {
       expect(serviceMocks.mockFetchConfig).toHaveBeenCalled();
     });
 
-    const fileInput = container.querySelector('input[type="file"][accept]') as HTMLInputElement;
+    const fileInput = container.querySelector('input[type="file"][accept]') as HTMLInputElement | null;
+    expect(fileInput).not.toBeNull();
+    if (!fileInput) {
+      throw new Error('File input not found');
+    }
+
     const validFile = new File(['image'], 'logo.png', { type: 'image/png' });
     Object.defineProperty(validFile, 'arrayBuffer', {
       value: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
@@ -313,15 +333,15 @@ describe('BrandingAdminPanel', () => {
     });
 
     await waitFor(() => {
-      expect(s3Mocks.uploadFileToS3).toHaveBeenCalled();
+      expect(toastMocks.showToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'error',
+          title: 'Navigation Logo',
+        }),
+      );
     });
 
-    expect(toastMocks.showToast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variant: 'error',
-        title: 'Navigation Logo',
-      }),
-    );
+    expect(s3Mocks.uploadFileToS3).toHaveBeenCalledTimes(1);
   });
 
   it('reverts a selected history entry and shows success toast', async () => {
