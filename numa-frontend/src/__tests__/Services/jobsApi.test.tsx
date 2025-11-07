@@ -164,6 +164,22 @@ describe('jobsApi', () => {
     });
   });
 
+  it('should override job name when provided', async () => {
+    mockNumaPost.mockResolvedValueOnce({ jobId: 'override', status: 'PROCESSING', name: 'Custom Label' });
+
+    const { result } = renderHook(() => useJobsApi(), { wrapper });
+
+    const numaAppData = { id: 'test-app', appName: 'Test App', type: 'test-type' };
+
+    await act(async () => {
+      await result.current.createJob(numaAppData, {}, 'PROCESSING', { name: '  Custom Label  ' });
+    });
+
+    expect(mockNumaPost).toHaveBeenCalledTimes(1);
+    const payload = mockNumaPost.mock.calls[0][1];
+    expect(payload.name).toBe('Custom Label');
+  });
+
   describe('getJobById', () => {
     it('should fetch a job by ID', async () => {
       // Mock the numaGet response
@@ -290,9 +306,8 @@ describe('jobsApi', () => {
       const results = { output: 'test-output' };
 
       // Call updateJob with only results and status
-      const userId = 'test-user-id';
       await act(async () => {
-        await result.current.updateJob(numaAppData, jobId, results, undefined, 'completed', userId);
+        await result.current.updateJob(numaAppData, jobId, results, undefined, 'completed', { name: 'Client Run' });
       });
 
       // Check that numaPut was called with the correct parameters and headers
@@ -304,9 +319,9 @@ describe('jobsApi', () => {
           output: 'test-output',
         },
         status: 'completed',
+        name: 'Client Run',
       });
       expect(call[1]).toHaveProperty('lastUpdated');
-      expect(call[1]).toHaveProperty('name');
 
       // Verify inputs is not in the update data
       const updateData = mockNumaPut.mock.calls[0][1];
@@ -328,9 +343,8 @@ describe('jobsApi', () => {
       const jobId = 'test-job-id';
 
       // Call updateJob with only status and userId
-      const userId = 'test-user-id';
       await act(async () => {
-        await result.current.updateJob(numaAppData, jobId, undefined, undefined, 'completed', userId);
+        await result.current.updateJob(numaAppData, jobId, undefined, undefined, 'completed');
       });
 
       // Check that numaPut was called with the correct parameters and headers
@@ -341,7 +355,7 @@ describe('jobsApi', () => {
         status: 'completed',
       });
       expect(call[1]).toHaveProperty('lastUpdated');
-      expect(call[1]).toHaveProperty('name');
+      expect(call[1]).not.toHaveProperty('name');
 
       // Verify results and inputs are not in the update data
       const updateData = mockNumaPut.mock.calls[0][1];
@@ -364,10 +378,9 @@ describe('jobsApi', () => {
       const jobId = 'test-job-id';
       const inputs = { file: 'test.pdf' };
 
-      // Call updateJob with only inputs and userId
-      const userId = 'test-user-id';
+      // Call updateJob with only inputs
       await act(async () => {
-        await result.current.updateJob(numaAppData, jobId, undefined, inputs, undefined, userId);
+        await result.current.updateJob(numaAppData, jobId, undefined, inputs);
       });
 
       // Check that numaPut was called with the correct parameters and headers
@@ -380,7 +393,7 @@ describe('jobsApi', () => {
         },
       });
       expect(call[1]).toHaveProperty('lastUpdated');
-      expect(call[1]).toHaveProperty('name');
+      expect(call[1]).not.toHaveProperty('name');
       expect(call[1]).toHaveProperty('status');
 
       // Verify results is not in the update data

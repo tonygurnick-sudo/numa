@@ -1,5 +1,13 @@
 import json
 import os
+from datetime import datetime
+
+try:  # Python < 3.11 compatibility
+    from datetime import UTC  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - legacy runtimes
+    from datetime import timezone
+
+    UTC = timezone.utc
 
 import boto3
 
@@ -35,9 +43,18 @@ def handler(event, _context):
 
         for key, value in body.items():
             if key not in ["jobId", "dateTime"]:  # Protect primary keys
+                expression_names[f"#{key}"] = key
+
+                if key == "name":
+                    if isinstance(value, str):
+                        value = value.strip()
+                    else:
+                        value = ""
+                    if not value:
+                        value = f"Run {datetime.now(UTC).strftime('%Y-%m-%d %H:%M')}"
+
                 update_expression.append(f"#{key} = :{key}")
                 expression_values[f":{key}"] = value
-                expression_names[f"#{key}"] = key
 
         if not update_expression:
             return {

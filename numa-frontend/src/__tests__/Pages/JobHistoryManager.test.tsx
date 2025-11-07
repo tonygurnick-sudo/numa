@@ -69,6 +69,8 @@ vi.mock('../../Providers/NumaAppContext', () => {
       setCurrentJobId: mockSetCurrentJobId,
       setLoadingJobId: mockSetLoadingJobId,
       loadJobResults: mockLoadJobResults,
+      runName: '',
+      setRunName: vi.fn(),
     }),
   };
 });

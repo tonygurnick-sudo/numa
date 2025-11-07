@@ -11,6 +11,8 @@ import { JobStatusContext } from '../Providers/JobStatusContext';
 
 import { getDisplayStatusUpper } from '../utils/jobStatus';
 
+const JOB_NAME_DISPLAY_LIMIT = 60;
+
 const JobHistoryManager = () => {
   useAuth();
   const { setNumaAppId } = useNumaApp();
@@ -337,6 +339,70 @@ const JobHistoryManager = () => {
     setCurrentPage(1); // Reset to first page when search changes
   };
 
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Unknown';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString('en-NZ', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Unknown';
+    }
+  };
+
+  const getAppDisplayName = (job) => {
+    const manifestApp = manifestApps.find((app) => app.id === job.appId);
+    if (manifestApp?.appName) {
+      return manifestApp.appName;
+    }
+    if (job.appName) {
+      return job.appName;
+    }
+    return job.appId || 'Unknown';
+  };
+
+  const getBaseJobName = (job) => {
+    const rawName = (job.name || '').trim();
+    if (rawName) {
+      return rawName;
+    }
+    const startedAt = job.startedAt || job.dateTime || job.createdAt;
+    const formatted = formatDate(startedAt);
+    return formatted === 'Unknown' ? 'Untitled run' : `Run ${formatted}`;
+  };
+
+  const formatJobDisplayName = (job) => {
+    const appLabel = getAppDisplayName(job);
+    const baseName = getBaseJobName(job);
+    const suffix = ` — ${appLabel}`;
+    const available = Math.max(JOB_NAME_DISPLAY_LIMIT - suffix.length, 10);
+
+    let truncatedBase = baseName;
+    if (baseName.length > available) {
+      truncatedBase = `${baseName.slice(0, available - 1)}…`;
+    }
+
+    return `${truncatedBase}${suffix}`;
+  };
+
+  const getSearchableText = (job) => {
+    const parts = [
+      (job.name || '').toLowerCase(),
+      getAppDisplayName(job).toLowerCase(),
+      formatJobDisplayName(job).toLowerCase(),
+      (job.jobId || '').toLowerCase(),
+    ];
+
+    return parts.join(' ');
+  };
+
   // Status logic centralised in utils/jobStatus.js via getDisplayStatusUpper
 
   // Filter and sort jobs
@@ -362,10 +428,9 @@ const JobHistoryManager = () => {
       // Apply search filter
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
-        return (
-          (job.appName && job.appName.toLowerCase().includes(searchLower)) ||
-          (job.jobId && job.jobId.toLowerCase().includes(searchLower))
-        );
+        if (!getSearchableText(job).includes(searchLower)) {
+          return false;
+        }
       }
 
       return true;
@@ -378,9 +443,14 @@ const JobHistoryManager = () => {
         return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
       }
       if (sortField === 'appId') {
-        const nameA = (a.appName || '').toLowerCase();
-        const nameB = (b.appName || '').toLowerCase();
+        const nameA = getAppDisplayName(a).toLowerCase();
+        const nameB = getAppDisplayName(b).toLowerCase();
         return sortDirection === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+      }
+      if (sortField === 'name') {
+        const runNameA = formatJobDisplayName(a).toLowerCase();
+        const runNameB = formatJobDisplayName(b).toLowerCase();
+        return sortDirection === 'asc' ? runNameA.localeCompare(runNameB) : runNameB.localeCompare(runNameA);
       }
       if (sortField === 'jobId') {
         const idA = (a.jobId || '').toLowerCase();
@@ -408,25 +478,6 @@ const JobHistoryManager = () => {
   const currentJobs = filteredJobs.slice(indexOfFirstItem, indexOfLastItem);
 
   const paginate = (pageNumber) => setCurrentPage(pageNumber);
-
-  // Format date for display
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Unknown';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleString('en-NZ', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return 'Invalid Date';
-    }
-  };
 
   // Duration formatting centralised in utils/jobStatus.js via formatDuration
 
@@ -635,7 +686,7 @@ const JobHistoryManager = () => {
                     <div className="position-relative">
                       <Form.Control
                         type="text"
-                        placeholder="Search by app name or job ID..."
+                        placeholder="Search by run name, app name, or job ID..."
                         value={searchTerm}
                         onChange={handleSearch}
                       />
@@ -666,21 +717,15 @@ const JobHistoryManager = () => {
                     <Table hover className="mb-0 file-table auto-layout">
                       <thead className="sticky-table-header numa-table-header">
                         <tr>
-                          <th onClick={() => handleSort('appId')} className="sortable-header">
-                            App{' '}
-                            {sortField === 'appId' && (
-                              <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                            )}
-                          </th>
-                          {/* <th onClick={() => handleSort('jobId')} className="sortable-header">
-                            Job ID{' '}
-                            {sortField === 'jobId' && (
-                              <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                            )}
-                          </th> */}
                           <th onClick={() => handleSort('startedAt')} className="sortable-header">
                             Started{' '}
                             {sortField === 'startedAt' && (
+                              <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                            )}
+                          </th>
+                          <th onClick={() => handleSort('name')} className="sortable-header">
+                            Run{' '}
+                            {sortField === 'name' && (
                               <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                             )}
                           </th>
@@ -690,39 +735,28 @@ const JobHistoryManager = () => {
                               <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                             )}
                           </th>
-                          {/* <th onClick={() => handleSort('duration')} className="sortable-header">
-                            Duration{' '}
-                            {sortField === 'duration' && (
-                              <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                            )}
-                          </th> */}
                           <th className="sortable-header">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {currentJobs.map((job) => (
-                          <tr key={`${job.appId}-${job.jobId}`}>
-                            <td>
-                              <div className="text-muted">
-                                {manifestApps.find((app) => app.id === job.appId)?.appName || job.appId || 'Unknown'}
-                              </div>
-                            </td>
-                            {/* <td>
-                              <div className="text-primary">
-                                {job.displayId || job.jobId?.substring(0, 8) || 'Unknown'}
-                              </div>
-                            </td> */}
+                        {currentJobs.map((job) => {
+                          const startedLabel = formatDate(job.startedAt || job.dateTime);
+                          const displayName = formatJobDisplayName(job);
 
-                            <td>
-                              <div className="text-muted small">{formatDate(job.startedAt || job.dateTime)}</div>
-                            </td>
-                            <td>{renderStatusBadge(job)}</td>
-                            {/* <td>
-                              <div className="text-muted small">{formatDuration(job.duration, job)}</div>
-                            </td> */}
-                            <td className="text-end align-middle">{renderActionButton(job)}</td>
-                          </tr>
-                        ))}
+                          return (
+                            <tr key={`${job.appId}-${job.jobId}`}>
+                              <td>
+                                <div className="text-muted small">{startedLabel}</div>
+                              </td>
+                              <td>
+                                <div className="fw-medium text-break">{displayName}</div>
+                                <div className="text-muted small">{job.jobId || '—'}</div>
+                              </td>
+                              <td>{renderStatusBadge(job)}</td>
+                              <td className="text-end align-middle">{renderActionButton(job)}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </Table>
                   </div>

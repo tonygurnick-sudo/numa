@@ -63,6 +63,8 @@ vi.mock('../../Providers/NumaAppContext', () => {
     numaAppData: { id: 'test-app-id', appName: 'Test App', tasks: [{ id: 'test-task-id' }] },
     currentJobId: null,
     setCurrentJobId: vi.fn(),
+    runName: '',
+    setRunName: vi.fn(),
     taskInputValues: {},
     appRunning: false,
     numaTaskResponses: [],

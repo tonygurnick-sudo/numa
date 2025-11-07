@@ -25,9 +25,13 @@ export const useJobsApi = () => {
   const { user } = useAuth();
   const userId = user?.decoded_tokens?.idToken?.['sub'];
 
-  const createJob = async (numaAppData, taskInputs, status = 'PROCESSING') => {
+  const createJob = async (numaAppData, taskInputs, status = 'PROCESSING', options = {}) => {
     try {
       const jobData = createJobData(numaAppData, taskInputs, null, status);
+      if (typeof options?.name === 'string') {
+        const trimmedName = options.name.trim();
+        jobData.name = trimmedName.length > 0 ? trimmedName : jobData.name;
+      }
       const endpoint_call = `/api/${numaAppData.id}/jobs`;
 
       const requestBody = {
@@ -56,7 +60,7 @@ export const useJobsApi = () => {
     }
   };
 
-  const updateJob = async (numaAppData, jobId, results, inputs = null, status = 'PROCESSING') => {
+  const updateJob = async (numaAppData, jobId, results, inputs = null, status = 'PROCESSING', options = {}) => {
     // User ID is now handled by RequestProvider
     try {
       const { displayDate, isoDate } = createFormattedDate();
@@ -64,8 +68,12 @@ export const useJobsApi = () => {
       // Start with basic update data
       const updateData = {
         lastUpdated: isoDate,
-        name: `Run ${displayDate}`,
       };
+
+      if (Object.prototype.hasOwnProperty.call(options, 'name')) {
+        const providedName = typeof options.name === 'string' ? options.name.trim() : '';
+        updateData.name = providedName.length > 0 ? providedName : `Run ${displayDate}`;
+      }
 
       // Only include status if it's provided
       if (status !== undefined && status !== null) {

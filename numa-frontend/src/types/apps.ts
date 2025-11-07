@@ -97,9 +97,15 @@ export interface NumaAppContextValue {
   processingProgress: number;
   setProcessingProgress: (v: number) => void;
 
+  // Run naming
+  runName: string;
+  setRunName: (value: string) => void;
+  isJobNamingEnabled: boolean;
+  setIsJobNamingEnabled: (enabled: boolean) => void;
+
   // Job and task management
   job: Job | null;
-  handleRunButtonClick: (app: NumaApp | null) => Promise<void>;
+  handleRunButtonClick: (app: NumaApp | null, options?: { runName?: string }) => Promise<void>;
   getAppJobs: () => Job[];
   loadAppJobs: () => Promise<void>;
   appRunning: boolean;

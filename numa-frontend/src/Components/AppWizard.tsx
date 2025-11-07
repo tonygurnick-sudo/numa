@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Col, Container, Row, Tab, Tabs } from 'react-bootstrap';
+import { Button, Col, Container, Row, Tab, Tabs, Modal, Form } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { S3UploadModule } from '../Modules/S3UploadModule';
 import { TextInputModule } from '../Modules/TextInputModule';
@@ -13,6 +13,8 @@ import { MarkdownContent } from './MarkdownContent';
 import { RunActiveState } from '@/types/apps.ts';
 
 import type { ReactElement } from 'react';
+
+const JOB_NAME_MAX_LENGTH = 60;
 
 export type TaskId = string;
 
@@ -240,13 +242,27 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
     setHasRun,
     job,
     loadingJobId,
+    runName,
+    setRunName,
+    isJobNamingEnabled,
   } = useNumaApp();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => (job?.results ? 'results' : 'inputs'));
+  const [showRunNameModal, setShowRunNameModal] = useState(false);
+  const [runNameDraft, setRunNameDraft] = useState('');
+  const [runNameError, setRunNameError] = useState('');
+  const [isRunNameSubmitting, setIsRunNameSubmitting] = useState(false);
 
   useEffect(() => {
     setActiveTab(job && (job as JobLike)?.results ? 'results' : 'inputs');
   }, [job]);
+
+  useEffect(() => {
+    if (showRunNameModal) {
+      setRunNameDraft((runName ?? '').trim());
+      setRunNameError('');
+    }
+  }, [showRunNameModal, runName]);
 
   const visibleTasks = useMemo<VisibleTask[]>(() => manifest?.tasks?.filter(isVisibleTask) ?? [], [manifest?.tasks]);
 
@@ -340,7 +356,8 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
     ],
   );
 
-  const handleRunApp = async (): Promise<void> => {
+  const runApp = async (runNameOverride?: string): Promise<void> => {
+    const sanitizedRunName = runNameOverride?.trim() ?? '';
     try {
       const updatedStatus: Record<TaskId, boolean> = {};
       visibleTasks.forEach((task) => {
@@ -358,7 +375,9 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
       setHasRun(true);
       setAppRunning(true);
       setActiveTab('results');
-      await handleRunButtonClick(numaAppData);
+      const runNameOption = sanitizedRunName.length > 0 ? sanitizedRunName : undefined;
+      setRunName(sanitizedRunName);
+      await handleRunButtonClick(numaAppData, { runName: runNameOption });
     } catch (error) {
       console.error('Error running app:', error);
       setError(error instanceof Error ? error.message : String(error));
@@ -366,6 +385,47 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
       setAppRunning(false);
     }
   };
+
+  const handleRunAppClick = async (): Promise<void> => {
+    if (isJobNamingEnabled) {
+      setShowRunNameModal(true);
+      return;
+    }
+
+    setRunName('');
+    await runApp();
+  };
+
+  const handleRunNameModalClose = () => {
+    if (isRunNameSubmitting) {
+      return;
+    }
+    setShowRunNameModal(false);
+    setRunNameError('');
+  };
+
+  const handleRunNameSubmit = async () => {
+    const trimmedName = runNameDraft.trim();
+    if (!trimmedName) {
+      setRunNameError('Please enter a job name.');
+      return;
+    }
+
+    setIsRunNameSubmitting(true);
+    setShowRunNameModal(false);
+    try {
+      await runApp(trimmedName);
+      setRunNameDraft(trimmedName);
+    } catch (error) {
+      console.error('Failed to run app with named job:', error);
+      setShowRunNameModal(true);
+    } finally {
+      setIsRunNameSubmitting(false);
+    }
+  };
+
+  const runNameRemaining = Math.max(0, JOB_NAME_MAX_LENGTH - runNameDraft.length);
+  const canSubmitRunName = runNameDraft.trim().length > 0 && !isRunNameSubmitting;
 
   // --- completion reflects minFiles (reads parameters.minFiles too) ---
   const handleTaskCompletion: TaskCompletionHandler = (taskId, isComplete, results = null) => {
@@ -541,47 +601,142 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
   }
 
   return (
-    <Container fluid className="app-wizard">
-      <Row>
-        <Col xs={12} className="px-2 px-md-4">
-          <WizardNavigation
-            preRunSteps={preRunTasks}
-            postRunSteps={postRunTasks}
-            activeStep={activeStep}
-            handlePrevStep={handlePrevStep}
-            handleNextStep={handleNextStep}
-            visibleTasks={visibleTasks}
-            taskCompletionStatus={taskCompletionStatus}
-            onStepClick={handleStepClick}
-            isStepComplete={isStepComplete}
-            isStepDisabled={isStepDisabled}
-            runButtonProps={{
-              disabled: runActive === RunActiveState.Disabled,
-              isRunning: appRunning,
-              onClick: handleRunApp,
-            }}
-            processingProgress={processingProgress}
-            processingStatus={processingStatus}
-            hasRun={hasRun}
-            results={(job as JobLike)?.results}
-            typicalDurationMinutes={manifest.typicalDurationMinutes}
-          />
-        </Col>
-      </Row>
-
-      <Row>
-        <Col xs={12} className="px-2 px-md-4 position-relative">
-          {(job as JobLike)?.results && (job as JobLike)?.results!.length > 0 ? (
-            <Tabs
-              activeKey={activeTab}
-              onSelect={(k: string | null) => {
-                if (k === 'inputs' || k === 'results') setActiveTab(k);
+    <>
+      <Modal
+        show={showRunNameModal}
+        onHide={handleRunNameModalClose}
+        centered
+        size="sm"
+        dialogClassName="run-name-modal"
+        contentClassName="run-name-modal__content"
+      >
+        <Modal.Header closeButton className="run-name-modal__header">
+          <div>
+            <Modal.Title className="run-name-modal__title">Name this run</Modal.Title>
+            <p className="run-name-modal__subtitle mb-0">Create a short label so you can spot it in job history.</p>
+          </div>
+        </Modal.Header>
+        <Modal.Body className="run-name-modal__body">
+          <Form.Group controlId="job-name-input">
+            <Form.Label className="run-name-modal__label">Run name</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="e.g. Client Review • March 10"
+              value={runNameDraft}
+              autoFocus
+              maxLength={JOB_NAME_MAX_LENGTH}
+              onChange={(event) => {
+                setRunNameDraft(event.target.value);
+                if (runNameError) {
+                  setRunNameError('');
+                }
               }}
-              className="mb-4"
+              disabled={isRunNameSubmitting}
+              isInvalid={!!runNameError}
+              className="run-name-modal__input"
+            />
+            <Form.Control.Feedback type="invalid" className="run-name-modal__feedback">
+              {runNameError}
+            </Form.Control.Feedback>
+            <Form.Text className="run-name-modal__hint">This is visible to everyone viewing job history.</Form.Text>
+            <span className={`run-name-modal__counter ${runNameRemaining <= 10 ? 'text-danger' : 'text-muted'}`}>
+              {runNameRemaining} characters remaining
+            </span>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer className="run-name-modal__footer">
+          <div className="run-name-modal__actions">
+            <Button
+              variant="outline-secondary"
+              onClick={handleRunNameModalClose}
+              disabled={isRunNameSubmitting}
+              className="run-name-modal__button"
             >
-              <Tab eventKey="inputs" title="Inputs">
-                {activeStep < visibleTasks.length ? (
-                  <div className="mb-4 position-relative">
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleRunNameSubmit}
+              disabled={!canSubmitRunName}
+              className="run-name-modal__button"
+            >
+              {isRunNameSubmitting ? 'Saving…' : 'Save and Run'}
+            </Button>
+          </div>
+        </Modal.Footer>
+      </Modal>
+
+      <Container fluid className="app-wizard">
+        <Row>
+          <Col xs={12} className="px-2 px-md-4">
+            <WizardNavigation
+              preRunSteps={preRunTasks}
+              postRunSteps={postRunTasks}
+              activeStep={activeStep}
+              handlePrevStep={handlePrevStep}
+              handleNextStep={handleNextStep}
+              visibleTasks={visibleTasks}
+              taskCompletionStatus={taskCompletionStatus}
+              onStepClick={handleStepClick}
+              isStepComplete={isStepComplete}
+              isStepDisabled={isStepDisabled}
+              runButtonProps={{
+                disabled: runActive === RunActiveState.Disabled,
+                isRunning: appRunning,
+                onClick: handleRunAppClick,
+              }}
+              processingProgress={processingProgress}
+              processingStatus={processingStatus}
+              hasRun={hasRun}
+              results={(job as JobLike)?.results}
+              typicalDurationMinutes={manifest.typicalDurationMinutes}
+            />
+          </Col>
+        </Row>
+
+        <Row>
+          <Col xs={12} className="px-2 px-md-4 position-relative">
+            {(job as JobLike)?.results && (job as JobLike)?.results!.length > 0 ? (
+              <Tabs
+                activeKey={activeTab}
+                onSelect={(k: string | null) => {
+                  if (k === 'inputs' || k === 'results') setActiveTab(k);
+                }}
+                className="mb-4"
+              >
+                <Tab eventKey="inputs" title="Inputs">
+                  {activeStep < visibleTasks.length ? (
+                    <div className="mb-4 position-relative">
+                      {renderTask(visibleTasks[activeStep], activeStep)}
+                      <div
+                        className="task-navigation position-absolute start-0 end-0 d-flex justify-content-between"
+                        style={{ bottom: '-50px' }}
+                      >
+                        {activeStep < visibleTasks.length && (
+                          <>
+                            <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
+                              <i className="bi bi-arrow-left me-2"></i>
+                              Previous Input
+                            </Button>
+                            {/* Results tab ignores incomplete-step rule (original behaviour) */}
+                            <Button variant="primary" onClick={handleNextStep} disabled={nextDisabledResultsView}>
+                              Next Input
+                              <i className="bi bi-arrow-right ms-2"></i>
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </Tab>
+                <Tab eventKey="results" title="Results">
+                  <ResultsRenderer results={(job as JobLike)?.results} />
+                </Tab>
+              </Tabs>
+            ) : (
+              <div className="mb-4 position-relative">
+                {activeStep < visibleTasks.length && (
+                  <>
                     {renderTask(visibleTasks[activeStep], activeStep)}
                     <div
                       className="task-navigation position-absolute start-0 end-0 d-flex justify-content-between"
@@ -593,51 +748,22 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
                             <i className="bi bi-arrow-left me-2"></i>
                             Previous Input
                           </Button>
-                          {/* Results tab ignores incomplete-step rule (original behaviour) */}
-                          <Button variant="primary" onClick={handleNextStep} disabled={nextDisabledResultsView}>
+                          {/* Inputs view enforces completeness (original logic) */}
+                          <Button variant="primary" onClick={handleNextStep} disabled={nextDisabledInputsView}>
                             Next Input
                             <i className="bi bi-arrow-right ms-2"></i>
                           </Button>
                         </>
                       )}
                     </div>
-                  </div>
-                ) : null}
-              </Tab>
-              <Tab eventKey="results" title="Results">
-                <ResultsRenderer results={(job as JobLike)?.results} />
-              </Tab>
-            </Tabs>
-          ) : (
-            <div className="mb-4 position-relative">
-              {activeStep < visibleTasks.length && (
-                <>
-                  {renderTask(visibleTasks[activeStep], activeStep)}
-                  <div
-                    className="task-navigation position-absolute start-0 end-0 d-flex justify-content-between"
-                    style={{ bottom: '-50px' }}
-                  >
-                    {activeStep < visibleTasks.length && (
-                      <>
-                        <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
-                          <i className="bi bi-arrow-left me-2"></i>
-                          Previous Input
-                        </Button>
-                        {/* Inputs view enforces completeness (original logic) */}
-                        <Button variant="primary" onClick={handleNextStep} disabled={nextDisabledInputsView}>
-                          Next Input
-                          <i className="bi bi-arrow-right ms-2"></i>
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </Col>
-      </Row>
-    </Container>
+                  </>
+                )}
+              </div>
+            )}
+          </Col>
+        </Row>
+      </Container>
+    </>
   );
 };
 

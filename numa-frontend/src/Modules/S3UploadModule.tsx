@@ -67,7 +67,7 @@ type MaybeIdToken = { sub?: string };
 type MaybeDecodedTokens = { idToken?: MaybeIdToken };
 type MaybeUser = { decoded_tokens?: MaybeDecodedTokens };
 
-type JobCreateResult = { jobId: string };
+type JobCreateResult = { jobId: string; name?: string };
 
 type UploaderHandle = {
   acceptUserSelection?: (files: File[], opts?: { autoStart?: boolean }) => Promise<void> | void;
@@ -118,10 +118,20 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
   { task, onComplete = noop, onNotComplete = noop, onChange = noop, value, disabled = false },
   ref,
 ) => {
-  const { numaAppId, appRunning, numaTaskResponses, currentJobId, setCurrentJobId, numaAppData, taskInputValues } =
-    useNumaApp();
+  const {
+    numaAppId,
+    appRunning,
+    numaTaskResponses,
+    currentJobId,
+    setCurrentJobId,
+    numaAppData,
+    taskInputValues,
+    runName,
+    setRunName,
+  } = useNumaApp();
   const jobsApi = useJobsApi();
   const { getCredentials, user } = useAuth();
+  const normalizedRunName = (runName || '').trim();
 
   // ---- Config (region/bucket) with race-proofing ----
   const [bucketName, setBucketName] = useState('');
@@ -433,12 +443,21 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
           if (!jobCreationPromiseRef.current) {
             setIsCreatingJob(true);
             setUploadStatus('Creating job...');
-            jobCreationPromiseRef.current = jobsApi.createJob(numaAppData, {}, 'uploading') as Promise<JobCreateResult>;
+            const createOptions = normalizedRunName ? { name: normalizedRunName } : undefined;
+            jobCreationPromiseRef.current = jobsApi.createJob(
+              numaAppData,
+              {},
+              'uploading',
+              createOptions,
+            ) as Promise<JobCreateResult>;
           }
 
           try {
             const jobCreationResult = await jobCreationPromiseRef.current;
             jobId = jobCreationResult.jobId;
+            if (jobCreationResult?.name) {
+              setRunName(jobCreationResult.name);
+            }
             setCurrentJobId(jobId);
           } catch (error) {
             jobCreationPromiseRef.current = null;
@@ -533,7 +552,8 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
             });
           }
           const mergedInputs = { ...filteredTaskInputValues, ...fileInputs };
-          await jobsApi.updateJob(numaAppData, jobId, undefined, mergedInputs, 'files-uploaded');
+          const updateOptions = normalizedRunName ? { name: normalizedRunName } : undefined;
+          await jobsApi.updateJob(numaAppData, jobId, undefined, mergedInputs, 'files-uploaded', updateOptions);
         } catch (updateError) {
           console.error('Failed to save file paths to job:', updateError);
           const msg = updateError instanceof Error ? updateError.message : String(updateError);
@@ -553,7 +573,8 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
 
       if (!isChatFileUpload && typeof currentJobId === 'string' && currentJobId) {
         try {
-          await jobsApi.updateJob(numaAppData, currentJobId, null, {}, 'upload-failed');
+          const updateOptions = normalizedRunName ? { name: normalizedRunName } : undefined;
+          await jobsApi.updateJob(numaAppData, currentJobId, null, {}, 'upload-failed', updateOptions);
         } catch (jobError) {
           console.error('Failed to mark job:', jobError);
         }

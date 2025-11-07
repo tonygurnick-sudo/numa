@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Button, ProgressBar } from 'react-bootstrap';
+import { Button, Form, ProgressBar } from 'react-bootstrap';
 import { CheckCircleFill } from 'react-bootstrap-icons';
 import { useEffect, useState } from 'react';
 import { useNumaApp } from '../Providers/NumaAppContext';
@@ -57,7 +57,7 @@ const WizardNavigation: React.FC<WizardNavigationProps> = ({
   hasRun,
   typicalDurationMinutes,
 }) => {
-  const { resetAppState } = useNumaApp();
+  const { resetAppState, isJobNamingEnabled, setIsJobNamingEnabled } = useNumaApp();
   const { isRunning, disabled, onClick, ...otherRunButtonProps } = runButtonProps;
 
   const [wasDisabled, setWasDisabled] = useState<boolean>(true);
@@ -77,6 +77,16 @@ const WizardNavigation: React.FC<WizardNavigationProps> = ({
 
   return (
     <div className="wizard-navigation">
+      <div className="job-naming-toggle">
+        <Form.Check
+          type="switch"
+          id="job-naming-toggle"
+          label="Turn on job naming for all apps"
+          checked={isJobNamingEnabled}
+          onChange={(event) => setIsJobNamingEnabled(event.target.checked)}
+        />
+      </div>
+
       <div className="input-section-wrapper">
         <div className="step-section">
           <div className="section-label">Inputs</div>

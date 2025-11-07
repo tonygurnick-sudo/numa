@@ -40,6 +40,7 @@ class TestLambdaFunction(unittest.TestCase):
         self.assertIn("jobId", body)
         self.assertIn("dateTime", body)
         self.assertEqual(body["results"]["task1"], "result1")
+        self.assertTrue(body.get("name"))
 
         self.table_mock.put_item.assert_called_once()
 
@@ -117,7 +118,11 @@ class TestLambdaFunction(unittest.TestCase):
             "pathParameters": {"jobId": "job1"},
             "httpMethod": "PUT",
             "body": json.dumps(
-                {"results": {"task1": "updated"}, "status": "COMPLETED"}
+                {
+                    "results": {"task1": "updated"},
+                    "status": "COMPLETED",
+                    "name": "   ",
+                }
             ),
         }
 
@@ -127,6 +132,11 @@ class TestLambdaFunction(unittest.TestCase):
 
         self.assertEqual(response["statusCode"], 200, response["body"])
         self.table_mock.update_item.assert_called_once()
+
+        call_kwargs = self.table_mock.update_item.call_args.kwargs
+        expression_values = call_kwargs.get("ExpressionAttributeValues", {})
+        self.assertIn(":name", expression_values)
+        self.assertTrue(expression_values[":name"].startswith("Run "))
 
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { Preloader } from './Preloader';
 import { CheckCircleFill, ArrowClockwise, ExclamationCircleFill, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 
+const SIDEBAR_NAME_LIMIT = 60;
+
 const JobHistorySidebar = () => {
   const {
     getAppJobs,
@@ -103,6 +105,47 @@ const JobHistorySidebar = () => {
     }
   }, [loadAppJobs, nextToken, loadingMore, hasMore, jobHistorySidebarOpen]);
 
+  const formatRunLabel = (job) => {
+    const appLabel = job.appName || numaAppData?.appName || 'App';
+    const rawName = (job.name || '').trim();
+    const startedAt = job.startedAt || job.dateTime || job.createdAt;
+
+    let baseLabel = rawName;
+    if (!baseLabel) {
+      try {
+        if (startedAt) {
+          const date = new Date(startedAt);
+          if (!Number.isNaN(date.valueOf())) {
+            baseLabel = `Run ${date.toLocaleString('en-NZ', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            })}`;
+          } else {
+            baseLabel = 'Untitled run';
+          }
+        } else {
+          baseLabel = 'Untitled run';
+        }
+      } catch (error) {
+        console.error('Error formatting run label for sidebar:', error);
+        baseLabel = 'Untitled run';
+      }
+    }
+
+    const suffix = ` — ${appLabel}`;
+    const available = Math.max(SIDEBAR_NAME_LIMIT - suffix.length, 10);
+    let truncatedBase = baseLabel;
+    if (baseLabel.length > available) {
+      truncatedBase = `${baseLabel.slice(0, available - 1)}…`;
+    }
+
+    return `${truncatedBase}${suffix}`;
+  };
+
   // Intersection Observer setup
   useEffect(() => {
     if (!loaderRef.current) return;
@@ -182,6 +225,7 @@ const JobHistorySidebar = () => {
                 <ListGroup.Item key={job.jobId} className="mb-2 rounded shadow-sm border">
                   <div className="d-flex justify-content-between align-items-start">
                     <div>
+                      <div className="fw-semibold text-break">{formatRunLabel(job)}</div>
                       <div className="fw-bold">
                         {(() => {
                           try {
