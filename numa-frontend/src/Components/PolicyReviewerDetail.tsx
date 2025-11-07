@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Container, Table, Badge, Button, Tabs, Tab, Toast, Form, Card, Spinner } from 'react-bootstrap';
+import { Container, Table, Badge, Button, Tabs, Tab, Toast, Form, Card, Spinner, Modal } from 'react-bootstrap';
 import axios from 'axios';
 import {
   Upload as UploadIcon,
@@ -13,11 +13,13 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useJobsApi } from '../Services/jobsApi';
 import { ResultsRenderer } from './ResultsRenderer';
+import { useNumaApp } from '../Providers/NumaAppContext';
 
 /*********************************************************
  * Constants / Enums                                     *
  *********************************************************/
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const JOB_NAME_MAX_LENGTH = 60;
 
 export const JobStatus = Object.freeze({
   UPLOADED: 'UPLOADED',
@@ -131,6 +133,13 @@ export const PolicyReviewerDetail = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
 
+  const { isJobNamingEnabled, setIsJobNamingEnabled, runName, setRunName } = useNumaApp();
+  const [showRunNameModal, setShowRunNameModal] = useState(false);
+  const [runNameDraft, setRunNameDraft] = useState('');
+  const [runNameError, setRunNameError] = useState('');
+  const [isRunNameSubmitting, setIsRunNameSubmitting] = useState(false);
+  const runNameRemaining = Math.max(0, JOB_NAME_MAX_LENGTH - runNameDraft.length);
+  const canSubmitRunName = runNameDraft.trim().length > 0 && !isRunNameSubmitting;
   // Deep polling refs
   const pollingIntervalsRef = useRef({});
   const pollingPoliciesRef = useRef(new Set());
@@ -263,6 +272,7 @@ export const PolicyReviewerDetail = () => {
       setEditingJobId(jobId);
       setPolicyName(job.name);
       setPolicyContext(job.jobDetails.inputs?.policyContext || '');
+      setRunName(job.jobDetails?.name || '');
 
       // parse URLs
       let urls = [];
@@ -332,6 +342,7 @@ export const PolicyReviewerDetail = () => {
     setNewUrl('');
     setIsEditing(false);
     setEditingJobId(null);
+    setRunName('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -343,7 +354,7 @@ export const PolicyReviewerDetail = () => {
     legislationContent: JSON.stringify(urlList),
   });
 
-  const createOrUpdateJob = async () => {
+  const createOrUpdateJob = async (nameOverride?: string) => {
     try {
       if (!policyName) throw new Error('Please enter a policy name');
       if (!policyContext) throw new Error('Please provide policy context');
@@ -355,6 +366,8 @@ export const PolicyReviewerDetail = () => {
       ) {
         throw new Error('A policy with this name already exists');
       }
+
+      const normalizedRunName = (nameOverride ?? (isJobNamingEnabled ? runName : '') ?? '').trim();
 
       if (!isEditing && !selectedFile) {
         throw new Error('Please select a file to upload');
@@ -370,10 +383,16 @@ export const PolicyReviewerDetail = () => {
         jobData = policies.find((p) => p.id === editingJobId)?.jobDetails;
         if (!jobData) throw new Error('Could not find policy data');
 
-        updatedJob = await numaPut(`${config.API_ENDPOINT}/policy-reviewer/jobs/${editingJobId}`, {
+        const payload = {
           ...jobData,
           inputs: buildJobInputs(),
-        });
+        };
+
+        if (normalizedRunName) {
+          payload.name = normalizedRunName;
+        }
+
+        updatedJob = await numaPut(`${config.API_ENDPOINT}/policy-reviewer/jobs/${editingJobId}`, payload);
       } else {
         jobData = {
           type: 'POLICY_REVIEW',
@@ -381,10 +400,16 @@ export const PolicyReviewerDetail = () => {
           userId: userId,
         };
 
-        updatedJob = await numaPost(`${config.API_ENDPOINT}/policy-reviewer/jobs`, {
+        const payload = {
           ...jobData,
           inputs: buildJobInputs(),
-        });
+        };
+
+        if (normalizedRunName) {
+          payload.name = normalizedRunName;
+        }
+
+        updatedJob = await numaPost(`${config.API_ENDPOINT}/policy-reviewer/jobs`, payload);
       }
 
       setUploadProgress(40);
@@ -437,6 +462,10 @@ export const PolicyReviewerDetail = () => {
         message: isEditing ? 'Policy configuration updated' : 'Policy uploaded successfully',
       });
 
+      if (normalizedRunName) {
+        setRunName(normalizedRunName);
+      }
+
       setActiveTab('policies');
       resetForm();
       fetchPolicies();
@@ -449,6 +478,49 @@ export const PolicyReviewerDetail = () => {
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
+    }
+  };
+
+  const handleFormSubmit = async (event) => {
+    event.preventDefault();
+    if (isUploading) return;
+
+    if (isJobNamingEnabled) {
+      const draftName = (runName || policyName || '').trim();
+      setRunNameDraft(draftName);
+      setRunNameError('');
+      setShowRunNameModal(true);
+      return;
+    }
+
+    await createOrUpdateJob();
+  };
+
+  const handleRunNameModalClose = () => {
+    if (isRunNameSubmitting) {
+      return;
+    }
+    setShowRunNameModal(false);
+    setRunNameError('');
+  };
+
+  const handleRunNameSubmit = async () => {
+    const trimmedName = runNameDraft.trim();
+    if (!trimmedName) {
+      setRunNameError('Please enter a job name.');
+      return;
+    }
+
+    setIsRunNameSubmitting(true);
+    setShowRunNameModal(false);
+    try {
+      await createOrUpdateJob(trimmedName);
+    } catch (error) {
+      console.error('Failed to create or update policy job with name:', error);
+      setShowRunNameModal(true);
+      setRunNameError(error?.message || 'Failed to save job name. Please try again.');
+    } finally {
+      setIsRunNameSubmitting(false);
     }
   };
 
@@ -926,12 +998,7 @@ export const PolicyReviewerDetail = () => {
               : 'Upload a policy document to the dashboard for easy access and management.'}
           </Card.Text>
 
-          <Form
-            onSubmit={(e) => {
-              e.preventDefault();
-              createOrUpdateJob();
-            }}
-          >
+          <Form onSubmit={handleFormSubmit}>
             <Form.Group className="mb-3">
               <Form.Label>Policy Name</Form.Label>
               <Form.Control
@@ -1151,22 +1218,97 @@ export const PolicyReviewerDetail = () => {
   }
 
   return (
-    <Container fluid className="px-0">
-      <div style={{ backgroundColor: '#f8f7fa' }} className="border-bottom">
-        <Tabs activeKey={activeTab} onSelect={setActiveTab} className="mb-0">
-          <Tab eventKey="upload" title="Upload Policy">
-            {renderUploadTab()}
-          </Tab>
-          <Tab eventKey="policies" title="Policy Dashboard">
-            {renderPoliciesTab()}
-          </Tab>
-          <Tab eventKey="results" title="Review Results" disabled={!selectedResultPolicy}>
-            {renderResultsTab()}
-          </Tab>
-        </Tabs>
-      </div>
-      {renderToast('danger')}
-      {renderToast('success')}
-    </Container>
+    <>
+      <Modal
+        show={showRunNameModal}
+        onHide={handleRunNameModalClose}
+        centered
+        size="sm"
+        dialogClassName="run-name-modal"
+        contentClassName="run-name-modal__content"
+      >
+        <Modal.Header closeButton className="run-name-modal__header">
+          <div>
+            <Modal.Title className="run-name-modal__title">Name this run</Modal.Title>
+            <p className="run-name-modal__subtitle mb-0">Create a short label so you can spot it in job history.</p>
+          </div>
+        </Modal.Header>
+        <Modal.Body className="run-name-modal__body">
+          <Form.Group controlId="policy-reviewer-job-name">
+            <Form.Label className="run-name-modal__label">Run name</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="e.g. Policy Review • March 10"
+              value={runNameDraft}
+              autoFocus
+              maxLength={JOB_NAME_MAX_LENGTH}
+              onChange={(event) => {
+                setRunNameDraft(event.target.value);
+                if (runNameError) {
+                  setRunNameError('');
+                }
+              }}
+              disabled={isRunNameSubmitting}
+              isInvalid={!!runNameError}
+              className="run-name-modal__input"
+            />
+            <Form.Control.Feedback type="invalid" className="run-name-modal__feedback">
+              {runNameError}
+            </Form.Control.Feedback>
+            <Form.Text className="run-name-modal__hint">This is visible to everyone viewing job history.</Form.Text>
+            <span className={`run-name-modal__counter ${runNameRemaining <= 10 ? 'text-danger' : 'text-muted'}`}>
+              {runNameRemaining} characters remaining
+            </span>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer className="run-name-modal__footer">
+          <div className="run-name-modal__actions">
+            <Button
+              variant="outline-secondary"
+              onClick={handleRunNameModalClose}
+              disabled={isRunNameSubmitting}
+              className="run-name-modal__button"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleRunNameSubmit}
+              disabled={!canSubmitRunName}
+              className="run-name-modal__button"
+            >
+              {isRunNameSubmitting ? 'Saving…' : 'Save and Run'}
+            </Button>
+          </div>
+        </Modal.Footer>
+      </Modal>
+
+      <Container fluid className="px-0">
+        <div style={{ backgroundColor: '#f8f7fa' }} className="border-bottom">
+          <div className="d-flex justify-content-end align-items-center px-4 py-3">
+            <Form.Check
+              type="switch"
+              id="policy-reviewer-job-naming-toggle"
+              label="Turn on job naming for all apps"
+              checked={isJobNamingEnabled}
+              onChange={(event) => setIsJobNamingEnabled(event.target.checked)}
+            />
+          </div>
+          <Tabs activeKey={activeTab} onSelect={setActiveTab} className="mb-0">
+            <Tab eventKey="upload" title="Upload Policy">
+              {renderUploadTab()}
+            </Tab>
+            <Tab eventKey="policies" title="Policy Dashboard">
+              {renderPoliciesTab()}
+            </Tab>
+            <Tab eventKey="results" title="Review Results" disabled={!selectedResultPolicy}>
+              {renderResultsTab()}
+            </Tab>
+          </Tabs>
+        </div>
+        {renderToast('danger')}
+        {renderToast('success')}
+      </Container>
+    </>
   );
 };

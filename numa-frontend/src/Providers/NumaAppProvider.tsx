@@ -21,8 +21,23 @@ import {
 
 // Provider component
 export const NumaAppProvider = ({ children }) => {
-  const { qAppsClient, user } = useAuth();
+  const { qAppsClient } = useAuth();
   const jobsApi = useJobsApi();
+
+  const JOB_NAMING_STORAGE_KEY = 'numa-job-naming-enabled';
+
+  const getStoredJobNamingPreference = () => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    try {
+      const storedValue = window.localStorage.getItem(JOB_NAMING_STORAGE_KEY);
+      return storedValue === 'true';
+    } catch (error) {
+      console.error('Failed to read job naming preference:', error);
+      return false;
+    }
+  };
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -49,6 +64,24 @@ export const NumaAppProvider = ({ children }) => {
   const [qAppData, setqAppData] = useState([]);
   const [qSsessionId, setQSessionId] = useState(null);
   const [qCardInputValues, setQCardInputValues] = useState({});
+
+  const [runName, setRunName] = useState('');
+  const [isJobNamingEnabled, setIsJobNamingEnabled] = useState(getStoredJobNamingPreference);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      window.localStorage.setItem(JOB_NAMING_STORAGE_KEY, String(isJobNamingEnabled));
+    } catch (error) {
+      console.error('Failed to persist job naming preference:', error);
+    }
+
+    if (!isJobNamingEnabled) {
+      setRunName('');
+    }
+  }, [isJobNamingEnabled]);
 
   const [jobs, setJobs] = useState([]);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -79,6 +112,7 @@ export const NumaAppProvider = ({ children }) => {
     setSelectedTaskId(null);
     setActiveStep(0);
     setHasRun(false);
+    setRunName('');
     setCurrentJobId(null);
     setJob(null);
     setLoadingJobId(null);
@@ -671,11 +705,12 @@ export const NumaAppProvider = ({ children }) => {
     return sessionResponse;
   };
 
-  const initializeJob = async () => {
+  const initializeJob = async (nameOverride?: string) => {
     setAppRunning(true);
     setLoading(true);
 
     try {
+      const normalizedRunName = (nameOverride ?? runName ?? '').trim();
       // If we already have a job ID (from file uploads), use it
       // Otherwise, create a new job
       let jobResponse;
@@ -687,14 +722,16 @@ export const NumaAppProvider = ({ children }) => {
             jobResponse = {
               jobId: currentJobId,
               startedAt: existingJob.startedAt || new Date().toISOString(),
+              name: existingJob.name,
             };
           } else {
             // Only update to PROCESSING if job is not already completed
-            const userId = user?.decoded_tokens?.idToken?.['sub'];
-            await jobsApi.updateJob(numaAppData, currentJobId, null, taskInputValues, 'PROCESSING', userId);
+            const updateOptions = normalizedRunName ? { name: normalizedRunName } : undefined;
+            await jobsApi.updateJob(numaAppData, currentJobId, null, taskInputValues, 'PROCESSING', updateOptions);
             jobResponse = {
               jobId: currentJobId,
               startedAt: new Date().toISOString(),
+              name: normalizedRunName,
             };
           }
         } catch (updateError) {
@@ -703,13 +740,20 @@ export const NumaAppProvider = ({ children }) => {
           jobResponse = {
             jobId: currentJobId,
             startedAt: new Date().toISOString(),
+            name: normalizedRunName,
           };
         }
       } else {
         // No job exists yet, create one with 'PROCESSING' status
-        const userId = user?.decoded_tokens?.idToken?.['sub'];
-        jobResponse = await jobsApi.createJob(numaAppData, taskInputValues, 'PROCESSING', userId);
+        const createOptions = normalizedRunName ? { name: normalizedRunName } : undefined;
+        jobResponse = await jobsApi.createJob(numaAppData, taskInputValues, 'PROCESSING', createOptions);
         setCurrentJobId(jobResponse.jobId);
+      }
+
+      if (jobResponse?.name) {
+        setRunName(jobResponse.name);
+      } else if (normalizedRunName) {
+        setRunName(normalizedRunName);
       }
 
       return {
@@ -842,7 +886,7 @@ export const NumaAppProvider = ({ children }) => {
     return title.replace(/\b(process(ing)?|running)\b/gi, '').trim();
   };
 
-  const handleRunButtonClick = async () => {
+  const handleRunButtonClick = async (_app = null, options: { runName?: string } = {}) => {
     if (!numaAppData || !numaAppData.tasks) return;
 
     setProcessingStatus('Starting process...');
@@ -850,7 +894,7 @@ export const NumaAppProvider = ({ children }) => {
     setError(null); // Clear any previous errors
 
     try {
-      const { jobId } = await initializeJob();
+      const { jobId } = await initializeJob(options.runName);
       let currentResults = {};
 
       const orderedTasks = numaAppData.tasks.slice().sort((a, b) => a.order - b.order);
@@ -1165,6 +1209,9 @@ export const NumaAppProvider = ({ children }) => {
         setProcessingStatus('Complete!');
       }
 
+      setJob(job);
+      setRunName((job.name || '').trim());
+
       // Set appRunning to false after all results are processed
       setAppRunning(false);
 
@@ -1225,6 +1272,10 @@ export const NumaAppProvider = ({ children }) => {
     setProcessingStatus,
     processingProgress,
     setProcessingProgress,
+    runName,
+    setRunName,
+    isJobNamingEnabled,
+    setIsJobNamingEnabled,
     handleRunButtonClick,
     getAppJobs,
     loadAppJobs,

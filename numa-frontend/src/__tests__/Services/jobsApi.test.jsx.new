@@ -60,6 +60,28 @@ describe('jobsApi', () => {
         })
       );
     });
+
+    it('should use provided name when supplied', async () => {
+      mockNumaPost.mockResolvedValueOnce({ jobID: 'job-name', status: 'running' });
+
+      const { result } = renderHook(() => useJobsApi(), { wrapper });
+
+      await act(async () => {
+        await result.current.createJob(
+          { id: 'test-app', appName: 'Test App', type: 'test-type' },
+          {},
+          'running',
+          { name: 'Named Run' }
+        );
+      });
+
+      expect(mockNumaPost).toHaveBeenCalledWith(
+        `/api/test-app/jobs`,
+        expect.objectContaining({
+          name: 'Named Run',
+        })
+      );
+    });
   });
 
   describe('getJobById', () => {
@@ -171,7 +193,9 @@ describe('jobsApi', () => {
 
       // Call updateJob with only results and status
       await act(async () => {
-        await result.current.updateJob(numaAppData, jobId, results, undefined, 'completed');
+        await result.current.updateJob(numaAppData, jobId, results, undefined, 'completed', {
+          name: 'Client Run',
+        });
       });
 
       // Check that numaPut was called with the correct parameters
@@ -181,6 +205,7 @@ describe('jobsApi', () => {
         expect.objectContaining({
           status: 'completed',
           results: results,
+          name: 'Client Run',
           // inputs should not be present
         })
       );
@@ -223,6 +248,7 @@ describe('jobsApi', () => {
       const updateData = mockNumaPut.mock.calls[0][1];
       expect(updateData).not.toHaveProperty('results');
       expect(updateData).not.toHaveProperty('inputs');
+      expect(updateData).not.toHaveProperty('name');
     });
 
     it('should update only inputs when only inputs is provided', async () => {
@@ -257,6 +283,7 @@ describe('jobsApi', () => {
       // Verify results is not in the update data
       const updateData = mockNumaPut.mock.calls[0][1];
       expect(updateData).not.toHaveProperty('results');
+      expect(updateData).not.toHaveProperty('name');
 
       // Note: status will be 'running' because it's the default parameter value
       // in the updateJob function when undefined is passed

@@ -49,8 +49,14 @@ export const NumaAppContext = createContext<NumaAppContextValue>({
   processingProgress: 0,
   setProcessingProgress: (_v: number) => {},
 
+  // Run naming
+  runName: '',
+  setRunName: (_value: string) => {},
+  isJobNamingEnabled: false,
+  setIsJobNamingEnabled: (_enabled: boolean) => {},
+
   // Job and task management
-  handleRunButtonClick: async (_app: NumaApp | null) => {},
+  handleRunButtonClick: async (_app: NumaApp | null, _options?: { runName?: string }) => {},
   getAppJobs: () => [],
   loadAppJobs: async () => {},
   appRunning: false,
