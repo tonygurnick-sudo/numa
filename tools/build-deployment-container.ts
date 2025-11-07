@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --import tsx
 import { spawnSync } from 'node:child_process';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,19 +35,24 @@ async function generatePresignedUrl(): Promise<string> {
   const bucket = process.env.CLAUDE_ARTIFACT_S3_BUCKET || 'numa-claude-cli-artifacts';
   const prefix = process.env.CLAUDE_ARTIFACT_S3_PREFIX || 'claude-artifacts';
   const version = process.env.CLAUDE_CLI_VERSION || '1.0.100';
+  const region = process.env.CLAUDE_ARTIFACT_S3_REGION || 'us-east-1';
   const key = `${prefix}/${version}/claude-x86_64.zip`;
 
   try {
     console.log(`Generating presigned URL for s3://${bucket}/${key}...`);
-    const s3 = new S3Client({ credentials: fromNodeProviderChain() });
+    const s3 = new S3Client({ region, credentials: fromNodeProviderChain() });
 
-    // Test if the object exists first
-    await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    // Test if the object exists first (HEAD, not GET)
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
 
-    // Generate presigned URL using AWS CLI since SDK doesn't have built-in presign
-    const result = spawnSync('aws', ['s3', 'presign', `s3://${bucket}/${key}`, '--expires-in', '7200'], {
-      encoding: 'utf8',
-    });
+    // Generate presigned URL using AWS CLI (explicit region to match bucket)
+    const result = spawnSync(
+      'aws',
+      ['s3', 'presign', `s3://${bucket}/${key}`, '--region', region, '--expires-in', '7200'],
+      {
+        encoding: 'utf8',
+      },
+    );
 
     if (result.status === 0) {
       const url = result.stdout.trim();

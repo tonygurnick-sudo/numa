@@ -71,7 +71,12 @@ RUN bash -c 'set -euo pipefail \
        && chmod +x /workspace/infra/assets/artifacts/claude-cli/bin/claude \
        && (cd /workspace/infra/assets/artifacts/claude-cli && zip -r claude-x86_64.zip bin); \
      fi \
-  && ls -lh /workspace/infra/assets/artifacts/claude-cli/claude-x86_64.zip'
+  && ACT=/workspace/infra/assets/artifacts/claude-cli/claude-x86_64.zip \
+  && echo "Verifying artifact size..." \
+  && SZ=$(stat -c%s "$ACT" 2>/dev/null || stat -f%z "$ACT") \
+  && echo "Artifact size: $SZ bytes" \
+  && [ "$SZ" -gt 1048576 ] \
+  && ls -lh "$ACT"'
 USER node
 
 ENV GIT_HASH=${GIT_HASH:-unknown}
