@@ -429,6 +429,7 @@ build-deployment-container:
     ECR_REPO: ${ECR_BASE}/numa-deploy
     CLAUDE_CLI_VERSION: "1.0.100"
     CLAUDE_ARTIFACT_S3_PREFIX: "claude-artifacts"
+    CLAUDE_ARTIFACT_S3_REGION: "us-east-1"
   before_script:
     - !reference [.yarn, setup-private-auth]
     - !reference [.node_job, before_script]
@@ -436,33 +437,28 @@ build-deployment-container:
   script:
     # install only the infra deps
     - yarn workspaces focus @arcanumai/q-apps-deployer-infra
-    # possibly swap to kaniko to remove need for dind
-    - |
-      # Assume deployer role for S3 presign
-      export AWS_ROLE=${AWS_DEPLOYER_ROLE_ARN:-$AWS_CLIENT_ROLE_ARN}
-      ! reference [.common-steps, aws-assume-role]
-    - |
-      PRESIGNED=""
-      export CLAUDE_ARTIFACT_S3_BUCKET=${CLAUDE_ARTIFACT_S3_BUCKET:-numa-claude-cli-artifacts}
-      if [ -n "${CLAUDE_ARTIFACT_S3_BUCKET}" ]; then
-        export ARTIFACT_KEY="${CLAUDE_ARTIFACT_S3_PREFIX}/${CLAUDE_CLI_VERSION}/claude-x86_64.zip"
-        echo "Generating presigned URL for s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}"
-        PRESIGNED=$(aws s3 presign "s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}" --expires-in 7200) || PRESIGNED=""
-      fi
-      docker build \
+    # Assume deployer role for S3 presign
+    - export AWS_ROLE=${AWS_DEPLOYER_ROLE_ARN:-$AWS_CLIENT_ROLE_ARN}
+    - !reference [.common-steps, aws-assume-role]
+    - export CLAUDE_ARTIFACT_S3_BUCKET=${CLAUDE_ARTIFACT_S3_BUCKET:-numa-claude-cli-artifacts}
+    - export ARTIFACT_KEY="${CLAUDE_ARTIFACT_S3_PREFIX}/${CLAUDE_CLI_VERSION}/claude-x86_64.zip"
+    - export AWS_REGION=${CLAUDE_ARTIFACT_S3_REGION}
+    - echo "Generating presigned URL for s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY} in ${AWS_REGION}"
+    - PRESIGNED=$(aws s3 presign "s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}" --region "${AWS_REGION}" --expires-in 7200) || PRESIGNED=""
+    - docker build \
         --build-arg GIT_HASH=${CI_COMMIT_SHORT_SHA} \
         --build-arg GIT_BRANCH=${CI_COMMIT_BRANCH} \
         --build-arg CI_PROJECT_PATH=$CI_PROJECT_PATH \
         --build-arg CLAUDE_CLI_VERSION=${CLAUDE_CLI_VERSION} \
         --build-arg CLAUDE_ARTIFACT_URL="${PRESIGNED}" \
         -f infra/container/Dockerfile . -t deploy:${CI_COMMIT_SHORT_SHA}
-    - |
-      # Re-assume client/images role for ECR push
-      export AWS_ROLE=${AWS_CLIENT_ROLE_ARN}
-      ! reference [.common-steps, aws-assume-role]
+    # Re-assume client/images role for ECR push
+    - export AWS_ROLE=${AWS_CLIENT_ROLE_ARN}
+    - !reference [.common-steps, aws-assume-role]
+    - export ECR_REGION=${ECR_REGION:-ap-southeast-2}
     - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:latest
     - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:${CI_COMMIT_SHORT_SHA}
-    - aws ecr get-login-password | docker login -u AWS --password-stdin "https://${ECR_REPO}"
+    - aws ecr get-login-password --region "${ECR_REGION}" | docker login -u AWS --password-stdin "https://${ECR_REPO}"
     - docker push ${ECR_REPO}:latest
     - docker push ${ECR_REPO}:${CI_COMMIT_SHORT_SHA}
   rules:
