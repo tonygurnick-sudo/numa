@@ -57,21 +57,13 @@ USER node
 # without relying on CI artifacts or local builds.
 USER root
 RUN bash -c 'set -euo pipefail \
-  && mkdir -p /workspace/infra/assets/artifacts/claude-cli \
-  && if [ -n "${CLAUDE_ARTIFACT_URL}" ]; then \
-       echo "Downloading Claude artifact from presigned URL" \
-       && curl -fSL "${CLAUDE_ARTIFACT_URL}" -o /workspace/infra/assets/artifacts/claude-cli/claude-x86_64.zip; \
-     else \
-       echo "No CLAUDE_ARTIFACT_URL provided; building from installer (version: ${CLAUDE_CLI_VERSION})" \
-       && curl -fsSL https://claude.ai/install.sh | bash -s ${CLAUDE_CLI_VERSION} \
-       && CLAUDE_BIN="${HOME}/.local/bin/claude" \
-       && test -f "$CLAUDE_BIN" || { echo "Claude binary not found at $CLAUDE_BIN"; exit 1; } \
-       && mkdir -p /workspace/infra/assets/artifacts/claude-cli/bin \
-       && cp "$CLAUDE_BIN" /workspace/infra/assets/artifacts/claude-cli/bin/claude \
-       && chmod +x /workspace/infra/assets/artifacts/claude-cli/bin/claude \
-       && (cd /workspace/infra/assets/artifacts/claude-cli && zip -r claude-x86_64.zip bin); \
-     fi \
-  && ACT=/workspace/infra/assets/artifacts/claude-cli/claude-x86_64.zip \
+  && ART_DIR=/workspace/infra/assets/artifacts/claude-cli \
+  && ART_ZIP="$ART_DIR/claude-x86_64.zip" \
+  && mkdir -p "$ART_DIR" \
+  && test -n "${CLAUDE_ARTIFACT_URL}" || { echo "CLAUDE_ARTIFACT_URL is required but empty"; exit 1; } \
+  && echo "Downloading Claude artifact from presigned URL" \
+  && curl -fSL "${CLAUDE_ARTIFACT_URL}" -o "$ART_ZIP" \
+  && ACT="$ART_ZIP" \
   && echo "Verifying artifact size..." \
   && SZ=$(stat -c%s "$ACT" 2>/dev/null || stat -f%z "$ACT") \
   && echo "Artifact size: $SZ bytes" \

@@ -339,6 +339,7 @@ python-lambdas-package:
   rules:
     - !reference [.rules, if-main]
 
+
 node-package:
   extends: .node_job
   stage: package
@@ -445,13 +446,17 @@ build-deployment-container:
     - export AWS_REGION=${CLAUDE_ARTIFACT_S3_REGION}
     - echo "Generating presigned URL for s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY} in ${AWS_REGION}"
     - PRESIGNED=$(aws s3 presign "s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}" --region "${AWS_REGION}" --expires-in 7200) || PRESIGNED=""
-    - docker build \
-        --build-arg GIT_HASH=${CI_COMMIT_SHORT_SHA} \
-        --build-arg GIT_BRANCH=${CI_COMMIT_BRANCH} \
-        --build-arg CI_PROJECT_PATH=$CI_PROJECT_PATH \
-        --build-arg CLAUDE_CLI_VERSION=${CLAUDE_CLI_VERSION} \
+    - |
+      set -euo pipefail
+      docker build \
+        -f infra/container/Dockerfile \
+        --build-arg GIT_HASH="${CI_COMMIT_SHORT_SHA}" \
+        --build-arg GIT_BRANCH="${CI_COMMIT_BRANCH}" \
+        --build-arg CI_PROJECT_PATH="${CI_PROJECT_PATH}" \
+        --build-arg CLAUDE_CLI_VERSION="${CLAUDE_CLI_VERSION}" \
         --build-arg CLAUDE_ARTIFACT_URL="${PRESIGNED}" \
-        -f infra/container/Dockerfile . -t deploy:${CI_COMMIT_SHORT_SHA}
+        -t deploy:${CI_COMMIT_SHORT_SHA} \
+        .
     # Re-assume client/images role for ECR push
     - export AWS_ROLE=${AWS_CLIENT_ROLE_ARN}
     - !reference [.common-steps, aws-assume-role]
