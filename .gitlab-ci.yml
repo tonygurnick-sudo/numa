@@ -432,10 +432,10 @@ build-deployment-container:
   before_script:
     - !reference [.yarn, setup-private-auth]
     - !reference [.node_job, before_script]
-    - (cd infra && yarn exec cdktf get)
   script:
     # install only the infra deps
     - yarn workspaces focus @arcanumai/q-apps-deployer-infra
+    - (cd infra && yarn exec cdktf get)
     # Build will pick up the artifact from infra/assets/artifacts/claude-cli/claude-x86_64.zip
     - |
       set -euo pipefail
