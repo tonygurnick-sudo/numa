@@ -428,9 +428,7 @@ build-deployment-container:
   variables:
     BUILD_DIR: .
     ECR_REPO: ${ECR_BASE}/numa-deploy
-    CLAUDE_CLI_VERSION: "1.0.100"
-    CLAUDE_ARTIFACT_S3_PREFIX: "claude-artifacts"
-    CLAUDE_ARTIFACT_S3_REGION: "us-east-1"
+  needs: ["claude-cli-artifact-build"]
   before_script:
     - !reference [.yarn, setup-private-auth]
     - !reference [.node_job, before_script]
@@ -438,14 +436,7 @@ build-deployment-container:
   script:
     # install only the infra deps
     - yarn workspaces focus @arcanumai/q-apps-deployer-infra
-    # Assume deployer role for S3 presign
-    - export AWS_ROLE=${AWS_DEPLOYER_ROLE_ARN:-$AWS_CLIENT_ROLE_ARN}
-    - !reference [.common-steps, aws-assume-role]
-    - export CLAUDE_ARTIFACT_S3_BUCKET=${CLAUDE_ARTIFACT_S3_BUCKET:-numa-claude-cli-artifacts}
-    - export ARTIFACT_KEY="${CLAUDE_ARTIFACT_S3_PREFIX}/${CLAUDE_CLI_VERSION}/claude-x86_64.zip"
-    - export AWS_REGION=${CLAUDE_ARTIFACT_S3_REGION}
-    - echo "Generating presigned URL for s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY} in ${AWS_REGION}"
-    - PRESIGNED=$(aws s3 presign "s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}" --region "${AWS_REGION}" --expires-in 7200) || PRESIGNED=""
+    # Build will pick up the artifact from infra/assets/artifacts/claude-cli/claude-x86_64.zip
     - |
       set -euo pipefail
       docker build \
@@ -453,17 +444,18 @@ build-deployment-container:
         --build-arg GIT_HASH="${CI_COMMIT_SHORT_SHA}" \
         --build-arg GIT_BRANCH="${CI_COMMIT_BRANCH}" \
         --build-arg CI_PROJECT_PATH="${CI_PROJECT_PATH}" \
-        --build-arg CLAUDE_CLI_VERSION="${CLAUDE_CLI_VERSION}" \
-        --build-arg CLAUDE_ARTIFACT_URL="${PRESIGNED}" \
         -t deploy:${CI_COMMIT_SHORT_SHA} \
         .
-    # Re-assume client/images role for ECR push
+    # Assume client/images role for ECR push
+    - unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_PROFILE
     - export AWS_ROLE=${AWS_CLIENT_ROLE_ARN}
     - !reference [.common-steps, aws-assume-role]
     - export ECR_REGION=${ECR_REGION:-ap-southeast-2}
     - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:latest
     - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:${CI_COMMIT_SHORT_SHA}
-    - aws ecr get-login-password --region "${ECR_REGION}" | docker login -u AWS --password-stdin "https://${ECR_REPO}"
+    # Login should target the ECR registry domain (not the repo path)
+    - ECR_REGISTRY=$(echo "${ECR_REPO}" | cut -d/ -f1)
+    - aws ecr get-login-password --region "${ECR_REGION}" | docker login -u AWS --password-stdin "${ECR_REGISTRY}"
     - docker push ${ECR_REPO}:latest
     - docker push ${ECR_REPO}:${CI_COMMIT_SHORT_SHA}
   rules:
