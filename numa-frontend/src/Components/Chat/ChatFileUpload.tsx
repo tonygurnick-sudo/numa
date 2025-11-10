@@ -1,11 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { Modal } from 'react-bootstrap';
-import { S3UploadModule } from '../Modules/S3UploadModule';
-import { UploadStatusRow } from './UploadStatusRow';
-import { useAuth } from '../Providers/AuthProvider';
-import { useNumaRequest } from '../Providers/NumaRequestContext';
-import { processFile } from '../utils/fileProcessing';
-import type { AgentSummary } from '../types/agents';
+import { S3UploadModule } from '../../Modules/S3UploadModule';
+import { UploadStatusRow } from '../Status/UploadStatusRow';
+import { useAuth } from '../../Providers/AuthProvider';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { processFile } from '../../utils/fileProcessing';
+import type { AgentSummary } from '../../types/agents';
 
 declare global {
   interface Window {

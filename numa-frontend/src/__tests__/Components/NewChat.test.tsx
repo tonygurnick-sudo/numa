@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import '@testing-library/jest-dom';
-import { NewChat } from '../../Components/NewChat';
+import { NewChat } from '../../Components/Chat/NewChat';
 
 // ✅ Minimal mock so ConversationAvatar’s hook doesn’t require a provider
 vi.mock('../../hooks/useAgentById', () => ({
@@ -13,7 +13,7 @@ vi.mock('../../hooks/useAgentById', () => ({
 }));
 
 // ✅ Keep ChatInput lightweight and controllable
-vi.mock('../../Components/ChatInput', () => ({
+vi.mock('../../Components/Chat/ChatInput', () => ({
   ChatInput: ({
     placeholderOverride,
     handleSubmit,

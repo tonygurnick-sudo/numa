@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
-import { getContentType } from '../utils/fileUtils';
-import { getUrlTagFromS3Object } from '../utils/s3Utils';
+import { getContentType } from '../../utils/fileUtils';
+import { getUrlTagFromS3Object } from '../../utils/s3Utils';
 import { Button, Collapse } from 'react-bootstrap';
 
 type ChatReferencesDropdownProps = {

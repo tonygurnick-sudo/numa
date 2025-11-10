@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '../Mocks/ProviderWrapper';
-import { PolicyBuilderDetail } from '../../Components/PolicyBuilderDetail';
+import { PolicyBuilderDetail } from '../../Components/Policy/PolicyBuilderDetail';
 import axios from 'axios';
 
 // Mock axios directly

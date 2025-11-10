@@ -6,15 +6,14 @@ import { StarFill, Star } from 'react-bootstrap-icons';
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { JobHistorySidebar } from '../Components/JobHistorySidebar';
-import { JobIdSidebar } from '../Components/JobIdSidebar';
+import { JobIdSidebar } from '../Components/Status/JobIdSidebar';
 
-import { QAppDetail } from '../Components/QAppDetail';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { useFavorites } from '../hooks/useFavorites';
-import AppWizard from '../Components/AppWizard';
+import AppWizard from '../Components/Apps/AppWizard';
 import { formatCategory } from '../utils/textUtils';
-import { PolicyBuilderDetail } from '../Components/PolicyBuilderDetail';
-import { PolicyReviewerDetail } from '../Components/PolicyReviewerDetail';
+import { PolicyBuilderDetail } from '../Components/Policy/PolicyBuilderDetail';
+import { PolicyReviewerDetail } from '../Components/Policy/PolicyReviewerDetail';
 import { manifestService } from '../Services/manifestService';
 
 const AppDetail = () => {
@@ -137,8 +136,6 @@ const AppDetail = () => {
             <Col>
               {loading ? (
                 <div>Loading...</div>
-              ) : numaAppData?.type === 'q-app' ? (
-                <QAppDetail manifest={numaAppData} />
               ) : numaAppData?.type === 'policy-builder' ? (
                 <PolicyBuilderDetail id={numaAppData.id} />
               ) : numaAppData?.id === 'policy-reviewer' ? (

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Button, OverlayTrigger, Tooltip } from 'react-bootstrap';
-import { useAuth } from '../Providers/AuthProvider';
-import AgentAvatar from './AgentAvatar';
-import { useAgentById } from '../hooks/useAgentById';
+import { useAuth } from '../../Providers/AuthProvider';
+import AgentAvatar from '../Agents/AgentAvatar';
+import { useAgentById } from '../../hooks/useAgentById';
 
 type ChatHistorySidebarProps = {
   onSelectConversation: (conversationId: string) => void;

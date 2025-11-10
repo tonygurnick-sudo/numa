@@ -5,11 +5,11 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 
 import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
-import { AppSearch } from '../Components/AppSearch';
-import { AppItem } from '../Components/AppItem';
+import { AppSearch } from '../Components/Apps/AppSearch';
+import { AppItem } from '../Components/Apps/AppItem';
 import { Pagination } from '../Components/Pagination';
 import { Preloader } from '../Components/Preloader';
-import { StatusDashboard } from '../Components/StatusDashboard';
+import { StatusDashboard } from '../Components/Status/StatusDashboard';
 import { StarFill } from 'react-bootstrap-icons';
 
 import { useNumaApp } from '../Providers/NumaAppContext';
@@ -161,9 +161,6 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
                     ? 'Your favorite apps at a glance'
                     : 'Get started uncovering insights from your data with Numa.'}
                 </p>
-              </Col>
-              <Col lg={3} className="ps-5">
-                <>{/* <QAppCreate /> */}</>
               </Col>
             </Row>
           </Container>

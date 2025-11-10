@@ -1,17 +1,17 @@
 // ChatMessages.tsx
 import type { CSSProperties, RefObject } from 'react';
 import { Spinner, Button } from 'react-bootstrap';
-import { MarkdownContent } from './MarkdownContent';
-import { ChatReferencesDropdown } from '../Components/ChatReferencesDropdown';
-import { useAuth } from '../Providers/AuthProvider';
+import { MarkdownContent } from '../MarkdownContent';
+import { ChatReferencesDropdown } from './ChatReferencesDropdown';
+import { useAuth } from '../../Providers/AuthProvider';
 // Tool rendering is handled via unified tool cards; direct TOOL_CONFIG use removed
-import { UnifiedToolCard } from './UnifiedToolCard';
-import { FileMessage } from './FileMessage';
-import AgentAvatar from './AgentAvatar';
-import type { AgentSummary } from '../types/agents';
-import { formatAgentDisplayName } from '../utils/agentUtils';
-import { downloadFileFromS3 } from '../utils/s3Utils';
-import { useBranding } from '../Providers/BrandingContext';
+import { UnifiedToolCard } from '../UnifiedToolCard';
+import { FileMessage } from '../FileMessage';
+import AgentAvatar from '../Agents/AgentAvatar';
+import type { AgentSummary } from '../../types/agents';
+import { formatAgentDisplayName } from '../../utils/agentUtils';
+import { downloadFileFromS3 } from '../../utils/s3Utils';
+import { useBranding } from '../../Providers/BrandingContext';
 
 /**
  * A small helper bubble for opening doc if docTitle/docContent exist

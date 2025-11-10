@@ -4,7 +4,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
-import { ChatMessages } from '../../Components/ChatMessages';
+import { ChatMessages } from '../../Components/Chat/ChatMessages';
 import '@testing-library/jest-dom';
 
 // Mock the useAuth hook

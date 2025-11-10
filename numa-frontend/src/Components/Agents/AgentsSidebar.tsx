@@ -1,13 +1,13 @@
 import { useState, useEffect, forwardRef, useImperativeHandle, ForwardRefRenderFunction } from 'react';
 import { Button, Offcanvas, Spinner, Alert } from 'react-bootstrap';
-import { useNumaRequest } from '../Providers/NumaRequestContext';
-import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
-import { listAgents } from '../Services/AgentsService';
-import type { AgentSummary } from '../types/agents';
-import type { ConversationMeta } from '../hooks/useChatInactivity';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsService';
+import { listAgents } from '../../Services/AgentsService';
+import type { AgentSummary } from '../../types/agents';
+import type { ConversationMeta } from '../../hooks/useChatInactivity';
 import { useNavigate } from 'react-router-dom';
 import AgentAvatar from './AgentAvatar';
-import { sortAgentsByPriority } from '../utils/agentSortingUtils';
+import { sortAgentsByPriority } from '../../utils/agentSortingUtils';
 
 type AgentsSidebarProps = {
   onSelectAgent?: (agent: AgentSummary) => void;

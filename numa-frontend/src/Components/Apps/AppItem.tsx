@@ -1,8 +1,8 @@
-import { Preloader } from './Preloader';
+import { Preloader } from '../Preloader';
 import { StarFill, Star } from 'react-bootstrap-icons';
-import { useFavorites } from '../hooks/useFavorites';
+import { useFavorites } from '../../hooks/useFavorites';
 import { useState } from 'react';
-import { FlyingStarAnimation } from './FlyingStarAnimation';
+import { FlyingStarAnimation } from '../FlyingStarAnimation';
 
 const AppItem = ({ app, onCategoryClick }) => {
   // Get first 3 tags for display

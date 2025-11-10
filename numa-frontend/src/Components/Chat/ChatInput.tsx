@@ -1,13 +1,13 @@
 import { useRef, useEffect, useState } from 'react';
 import { Button, Form, Spinner, Modal, Dropdown } from 'react-bootstrap';
 import { Database, Search, Gear, Link, Robot } from 'react-bootstrap-icons';
-import { FeatureWrapper } from './RequiredFeaturesWrapper';
+import { FeatureWrapper } from '../RequiredFeaturesWrapper';
 import {
   getConnectionIcon,
   getConnectionFallbackIcon,
   getConnectionFallbackColor,
   getConnectionDisplayName,
-} from '../config/integrationsConfig';
+} from '../../config/integrationsConfig';
 
 // WebSocket message size limit (AWS API Gateway limit is 32KB)
 const MAX_MESSAGE_LENGTH = 20000; // Conservative limit accounting for JSON overhead

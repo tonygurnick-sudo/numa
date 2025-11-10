@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 
 import { QAppWizard } from './QAppWizard';
-import { Preloader } from './Preloader';
+import { Preloader } from '../Preloader';
 
-import { useAuth } from '../Providers/AuthProvider';
-import { useNumaApp } from '../Providers/NumaAppContext';
+import { useAuth } from '../../Providers/AuthProvider';
+import { useNumaApp } from '../../Providers/NumaAppContext';
 
 import { GetQAppCommand, GetQAppSessionCommand, StartQAppSessionCommand } from '@aws-sdk/client-qapps';
 

@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../Mocks/ProviderWrapper';
-import AppWizard from '../../Components/AppWizard';
+import AppWizard from '../../Components/Apps/AppWizard';
 
 describe('AppWizard Component', () => {
   const defaultContext = {
