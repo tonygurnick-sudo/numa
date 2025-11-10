@@ -1,4 +1,4 @@
-import { ChatReferencesDropdown } from '../Components/ChatReferencesDropdown';
+import { ChatReferencesDropdown } from '../Components/Chat/ChatReferencesDropdown';
 import { useAuth } from '../Providers/AuthProvider';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import { getKnowledgeBasePayload } from './helpers';

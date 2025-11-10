@@ -5,7 +5,7 @@ import { render, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import React from 'react';
-import { ChatFileUpload } from '../../Components/ChatFileUpload';
+import { ChatFileUpload } from '../../Components/Chat/ChatFileUpload';
 import { useAuth } from '../../Providers/AuthProvider';
 
 // Mock the required modules and hooks

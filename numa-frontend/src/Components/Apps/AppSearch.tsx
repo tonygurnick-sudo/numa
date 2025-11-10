@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Row, Col, Dropdown } from 'react-bootstrap';
-import { formatCategory } from '../utils/textUtils';
+import { formatCategory } from '../../utils/textUtils';
 
 export const AppSearch = ({
   onSearch,

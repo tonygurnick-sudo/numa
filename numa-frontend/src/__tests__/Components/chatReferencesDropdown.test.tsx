@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { ChatReferencesDropdown } from '../../Components/ChatReferencesDropdown';
+import { ChatReferencesDropdown } from '../../Components/Chat/ChatReferencesDropdown';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import * as fileUtils from '../../utils/fileUtils';

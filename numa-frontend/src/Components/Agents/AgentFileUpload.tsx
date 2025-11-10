@@ -3,10 +3,10 @@ import { Button, Form, Alert, ListGroup } from 'react-bootstrap';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
-import { useAuth } from '../Providers/AuthProvider';
-import { useNumaRequest } from '../Providers/NumaRequestContext';
-import { processFile } from '../utils/fileProcessing';
-import type { AgentReferenceFile } from '../types/agents';
+import { useAuth } from '../../Providers/AuthProvider';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { processFile } from '../../utils/fileProcessing';
+import type { AgentReferenceFile } from '../../types/agents';
 
 type AgentFileUploadProps = {
   onFilesUploaded: (files: AgentReferenceFile[]) => void;

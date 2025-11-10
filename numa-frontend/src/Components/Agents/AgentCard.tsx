@@ -2,10 +2,10 @@ import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { Card, Button, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Database, Search, Robot } from 'react-bootstrap-icons';
-import type { AgentSummary } from '../types/agents';
-import { getConnectionConfig } from '../config/integrationsConfig';
+import type { AgentSummary } from '../../types/agents';
+import { getConnectionConfig } from '../../config/integrationsConfig';
 import AgentAvatar from './AgentAvatar';
-import { downloadAgentExport, serializeAgentSummaryToExport } from '../utils/agentExport';
+import { downloadAgentExport, serializeAgentSummaryToExport } from '../../utils/agentExport';
 
 type AgentCardProps = {
   agent: AgentSummary;

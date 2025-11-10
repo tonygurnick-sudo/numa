@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Col, Container, Row, Tab, Tabs, Modal, Form } from 'react-bootstrap';
-import { useNumaApp } from '../Providers/NumaAppContext';
-import { S3UploadModule } from '../Modules/S3UploadModule';
-import { TextInputModule } from '../Modules/TextInputModule';
-import { TextOutputModule } from '../Modules/TextOutputModule';
-import { DropdownTableModule } from '../Modules/DropdownTableModule';
-import { DropdownModule } from '../Modules/DropdownModule';
-import { WizardNavigation } from './WizardNavigation';
-import { Preloader } from '../Components/Preloader';
-import { ResultsRenderer } from './ResultsRenderer';
-import { MarkdownContent } from './MarkdownContent';
+import { useNumaApp } from '../../Providers/NumaAppContext';
+import { S3UploadModule } from '../../Modules/S3UploadModule';
+import { TextInputModule } from '../../Modules/TextInputModule';
+import { TextOutputModule } from '../../Modules/TextOutputModule';
+import { DropdownTableModule } from '../../Modules/DropdownTableModule';
+import { DropdownModule } from '../../Modules/DropdownModule';
+import { WizardNavigation } from '../WizardNavigation';
+import { Preloader } from '../Preloader';
+import { ResultsRenderer } from '../ResultsRenderer';
+import { MarkdownContent } from '../MarkdownContent';
 import { RunActiveState } from '@/types/apps.ts';
 
 import type { ReactElement } from 'react';

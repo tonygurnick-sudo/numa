@@ -1,9 +1,9 @@
 import { useContext } from 'react';
 import { Col, Row, Badge, Table, Card, Button, Spinner } from 'react-bootstrap';
-import { JobStatusContext } from '../Providers/JobStatusContext';
+import { JobStatusContext } from '../../Providers/JobStatusContext';
 import { useNavigate } from 'react-router-dom';
-import { useNumaApp } from '../Providers/NumaAppContext';
-import { NicetyContext } from '../Providers/NicetyContext';
+import { useNumaApp } from '../../Providers/NumaAppContext';
+import { NicetyContext } from '../../Providers/NicetyContext';
 
 const JOB_DISPLAY_LIMIT = 5;
 

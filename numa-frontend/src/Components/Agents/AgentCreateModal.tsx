@@ -3,18 +3,18 @@ import { Modal, Form, Button, Row, Col, Alert, Spinner, Accordion } from 'react-
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { Database, Search, Robot } from 'react-bootstrap-icons';
-import { useAuth } from '../Providers/AuthProvider';
-import { useNumaRequest } from '../Providers/NumaRequestContext';
-import { useBranding } from '../Providers/BrandingContext';
+import { useAuth } from '../../Providers/AuthProvider';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { useBranding } from '../../Providers/BrandingContext';
 import { AgentFileUpload } from './AgentFileUpload';
 import { AgentAvatarSelector } from './AgentAvatarSelector';
 import AgentAvatar from './AgentAvatar';
-import type { AgentPayload, AgentSummary, AgentUpdatePayload, AgentReferenceFile } from '../types/agents';
-import { createAgent, updateAgent } from '../Services/AgentsService';
-import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
-import { PipedreamProxyService } from '../Services/PipedreamProxyService';
-import { getConnectionConfig } from '../config/integrationsConfig';
-import { downloadAgentExport, parseAgentImport, serializeAgentPayloadToExport } from '../utils/agentExport';
+import type { AgentPayload, AgentSummary, AgentUpdatePayload, AgentReferenceFile } from '../../types/agents';
+import { createAgent, updateAgent } from '../../Services/AgentsService';
+import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsService';
+import { PipedreamProxyService } from '../../Services/PipedreamProxyService';
+import { getConnectionConfig } from '../../config/integrationsConfig';
+import { downloadAgentExport, parseAgentImport, serializeAgentPayloadToExport } from '../../utils/agentExport';
 
 type AgentCreateModalProps = {
   show: boolean;
@@ -132,7 +132,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
         setLoadingConnections(true);
 
         // Start with all known integrations from config
-        const { getAllConnections } = await import('../config/integrationsConfig');
+        const { getAllConnections } = await import('../../config/integrationsConfig');
         const allKnownIntegrations = getAllConnections();
         const connectedSet = new Set<string>();
 

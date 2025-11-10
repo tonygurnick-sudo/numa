@@ -1,8 +1,8 @@
 import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import type { AgentSummary } from '../types/agents';
-import { useAuth } from '../Providers/AuthProvider';
+import type { AgentSummary } from '../../types/agents';
+import { useAuth } from '../../Providers/AuthProvider';
 
 type IconImage = { s3Bucket: string; s3Key: string };
 

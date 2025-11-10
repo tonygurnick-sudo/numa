@@ -3,9 +3,9 @@ import { Button, Spinner } from 'react-bootstrap';
 import axios from 'axios';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { useAuth } from '../Providers/AuthProvider';
-import type { AgentSummary } from '../types/agents';
-import { AGENT_ICON_CATALOG } from '../config/agentIconCatalog';
+import { useAuth } from '../../Providers/AuthProvider';
+import type { AgentSummary } from '../../types/agents';
+import { AGENT_ICON_CATALOG } from '../../config/agentIconCatalog';
 import AgentAvatar from './AgentAvatar';
 
 type IconImage = { s3Bucket: string; s3Key: string };

@@ -7,13 +7,13 @@ import {
   Gear as GearIcon,
   ArrowLeft as ArrowLeftIcon,
 } from 'react-bootstrap-icons';
-import { useAuth } from '../Providers/AuthProvider';
+import { useAuth } from '../../Providers/AuthProvider';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { useNumaRequest } from '../Providers/NumaRequestContext';
-import { useJobsApi } from '../Services/jobsApi';
-import { ResultsRenderer } from './ResultsRenderer';
-import { useNumaApp } from '../Providers/NumaAppContext';
+import { useNumaApp } from '../../Providers/NumaAppContext';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { useJobsApi } from '../../Services/jobsApi';
+import { ResultsRenderer } from '../ResultsRenderer';
 
 /*********************************************************
  * Constants / Enums                                     *

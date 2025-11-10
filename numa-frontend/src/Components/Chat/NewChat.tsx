@@ -3,11 +3,11 @@ import { Button, Spinner, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Dispatch, SetStateAction, RefObject, useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import { ChatInput } from './ChatInput';
-import type { ConversationMeta } from '../hooks/useChatInactivity';
-import numaIcon from '../../public/numa-logo.svg';
-import { useBranding } from '../Providers/BrandingContext';
-import AgentAvatar from './AgentAvatar';
-import { useAgentById } from '../hooks/useAgentById';
+import type { ConversationMeta } from '../../hooks/useChatInactivity';
+import numaIcon from '/numa-logo.svg?url';
+import { useBranding } from '../../Providers/BrandingContext';
+import AgentAvatar from '../Agents/AgentAvatar';
+import { useAgentById } from '../../hooks/useAgentById';
 
 declare global {
   interface Window {
