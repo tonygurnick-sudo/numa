@@ -146,6 +146,7 @@ type CreateAgentPayload = {
   toolsConfig?: AgentToolsConfig;
   referenceFiles?: ReferenceFile[];
   createdByName?: string;
+  sourceAgentId?: string;
 };
 
 type UpdateAgentPayload = CreateAgentPayload & {
@@ -202,6 +203,28 @@ const ensureEnv = (): void => {
 
 const generateAgentId = (): string => `agt_${randomUUID().replace(/-/g, '')}`;
 
+const COPY_SUFFIX_REGEX = /\s+\(Copy(?:\s+\d+)?\)$/i;
+
+const normaliseDuplicateBaseTitle = (title?: string): string => {
+  if (!title) return 'Untitled Agent';
+  const trimmed = title.trim();
+  if (!trimmed) return 'Untitled Agent';
+  return trimmed.replace(COPY_SUFFIX_REGEX, '').trim() || 'Untitled Agent';
+};
+
+export const generateDuplicateTitle = (originalTitle: string | undefined, existingAgents: UserAgentItem[]): string => {
+  const base = normaliseDuplicateBaseTitle(originalTitle);
+  const existingTitles = new Set(existingAgents.map((agent) => (agent.title || '').toLowerCase()));
+
+  let candidate = `${base} (Copy)`;
+  let counter = 2;
+  while (existingTitles.has(candidate.toLowerCase())) {
+    candidate = `${base} (Copy ${counter})`;
+    counter += 1;
+  }
+  return candidate;
+};
+
 const normaliseToolsConfig = (config?: AgentToolsConfig | null): AgentToolsConfig => {
   if (!config) return {};
   return {
@@ -227,6 +250,42 @@ const normaliseReferenceFiles = (files?: ReferenceFile[] | null): ReferenceFile[
       uploadedAt: file.uploadedAt,
       source: file.source,
     }));
+};
+
+const resolveSourceAgentId = (agent: WorkspaceAgentItem | UserAgentItem): string => {
+  if ('source_agent_id' in agent && agent.source_agent_id) {
+    return agent.source_agent_id;
+  }
+  return agent.agent_id;
+};
+
+const buildPersonalDuplicatePayload = (
+  agent: WorkspaceAgentItem | UserAgentItem,
+  duplicateTitle: string,
+  referenceFileFallbackSource?: string,
+): CreateAgentPayload => {
+  const referenceFiles = normaliseReferenceFiles(agent.reference_files);
+  const processedReferenceFiles = referenceFiles.length
+    ? referenceFiles.map((file) =>
+        referenceFileFallbackSource && !file.source ? { ...file, source: referenceFileFallbackSource } : file,
+      )
+    : undefined;
+
+  return {
+    visibility: 'personal',
+    agentType: agent.agent_type,
+    title: duplicateTitle,
+    description: agent.description,
+    systemPrompt: agent.system_prompt,
+    userWelcomeMessage: agent.user_instructions,
+    estimatedTimeSavedMinutes: agent.estimated_time_saved_minutes,
+    icon: agent.icon,
+    iconImage: agent.icon_image,
+    requiredIntegrations: agent.required_integrations ?? [],
+    toolsConfig: agent.tools_config ?? {},
+    referenceFiles: processedReferenceFiles,
+    sourceAgentId: resolveSourceAgentId(agent),
+  };
 };
 
 const normaliseWelcomeMessage = (value?: string | null): string | undefined => {
@@ -877,33 +936,18 @@ const handleDeleteAgent = async (agentId: string, auth: AuthContext): Promise<Re
   return errorResponse(404, 'Agent not found');
 };
 
-const handleDuplicateAgent = async (agentId: string, auth: AuthContext): Promise<ReturnType<typeof jsonResponse>> => {
-  const workspaceAgent = await getWorkspaceAgentById(agentId);
-  if (!workspaceAgent) {
-    return errorResponse(404, 'Public agent not found');
-  }
+const duplicateWorkspaceAgent = async (
+  agentId: string,
+  workspaceAgent: WorkspaceAgentItem,
+  auth: AuthContext,
+): Promise<ReturnType<typeof jsonResponse>> => {
+  const existingAgents = await listUserAgents(auth.sub);
+  const duplicateTitle = generateDuplicateTitle(workspaceAgent.title, existingAgents);
+  const duplicatePayload = buildPersonalDuplicatePayload(workspaceAgent, duplicateTitle, 'workspace');
 
   const now = Date.now();
   const newId = generateAgentId();
-  const duplicatePayload: CreateAgentPayload = {
-    visibility: 'personal',
-    agentType: workspaceAgent.agent_type,
-    title: workspaceAgent.title,
-    description: workspaceAgent.description,
-    systemPrompt: workspaceAgent.system_prompt,
-    userWelcomeMessage: workspaceAgent.user_instructions,
-    estimatedTimeSavedMinutes: workspaceAgent.estimated_time_saved_minutes,
-    icon: workspaceAgent.icon,
-    iconImage: undefined,
-    requiredIntegrations: workspaceAgent.required_integrations,
-    toolsConfig: workspaceAgent.tools_config,
-    referenceFiles: workspaceAgent.reference_files?.map((file) => ({
-      ...file,
-      source: file.source || 'workspace',
-    })),
-  };
 
-  // If source has an uploaded icon, copy it into the user's namespace
   if (workspaceAgent.icon_image?.s3Bucket && workspaceAgent.icon_image?.s3Key && OUTPUTS_BUCKET_NAME) {
     try {
       const s3 = new S3Client({});
@@ -923,7 +967,6 @@ const handleDuplicateAgent = async (agentId: string, auth: AuthContext): Promise
         }),
       );
       duplicatePayload.iconImage = { s3Bucket: OUTPUTS_BUCKET_NAME, s3Key: destKey };
-      // prefer image over icon class for the duplicate
       delete duplicatePayload.icon;
     } catch (e) {
       console.warn('DuplicateAgent: failed to copy icon image', { agentId, error: (e as Error)?.message });
@@ -931,16 +974,64 @@ const handleDuplicateAgent = async (agentId: string, auth: AuthContext): Promise
   }
 
   const userItem = buildUserItem(duplicatePayload, auth, now, newId);
-  userItem.source_agent_id = agentId;
 
   await dynamo.send(
     new PutCommand({
       TableName: USER_TABLE,
       Item: userItem,
+      ConditionExpression: 'attribute_not_exists(agent_id) AND attribute_not_exists(user_id)',
     }),
   );
 
   return jsonResponse(201, { agent: mapUserAgent(userItem) });
+};
+
+const duplicatePersonalAgent = async (
+  agent: UserAgentItem,
+  auth: AuthContext,
+): Promise<ReturnType<typeof jsonResponse>> => {
+  if (agent.user_id !== auth.sub) {
+    return errorResponse(403, 'You do not have permission to duplicate this agent');
+  }
+
+  const existingAgents = await listUserAgents(auth.sub);
+  const duplicateTitle = generateDuplicateTitle(agent.title, existingAgents);
+  const duplicatePayload = buildPersonalDuplicatePayload(agent, duplicateTitle);
+
+  const now = Date.now();
+  const newId = generateAgentId();
+  const userItem = buildUserItem(duplicatePayload, auth, now, newId);
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: USER_TABLE,
+      Item: userItem,
+      ConditionExpression: 'attribute_not_exists(agent_id) AND attribute_not_exists(user_id)',
+    }),
+  );
+
+  return jsonResponse(201, { agent: mapUserAgent(userItem) });
+};
+
+const handleDuplicateAgent = async (agentId: string, auth: AuthContext): Promise<ReturnType<typeof jsonResponse>> => {
+  const personalAgent = await getUserAgentById(agentId, auth.sub);
+  if (personalAgent) {
+    return duplicatePersonalAgent(personalAgent, auth);
+  }
+
+  const workspaceAgent = await getWorkspaceAgentById(agentId);
+  if (!workspaceAgent) {
+    return errorResponse(404, 'Agent not found');
+  }
+
+  return duplicateWorkspaceAgent(agentId, workspaceAgent, auth);
+};
+
+export const __testExports = {
+  normaliseDuplicateBaseTitle,
+  buildPersonalDuplicatePayload,
+  buildUserItem,
+  resolveSourceAgentId,
 };
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
