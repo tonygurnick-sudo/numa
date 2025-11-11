@@ -428,7 +428,6 @@ build-deployment-container:
   variables:
     BUILD_DIR: .
     ECR_REPO: ${ECR_BASE}/numa-deploy
-  needs: ["claude-cli-artifact-build"]
   before_script:
     - !reference [.yarn, setup-private-auth]
     - !reference [.node_job, before_script]
