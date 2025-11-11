@@ -68,7 +68,7 @@ const AppDetail = () => {
             </Alert>
           </div>
         )}
-        {/* Hide JobHistorySidebar for policy apps */}
+        {/* Hide JobHistorySidebar for policy custom pages */}
         {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && <JobHistorySidebar />}
         <JobIdSidebar />
         <header className="mb-1">

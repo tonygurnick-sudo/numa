@@ -13,7 +13,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useJobsApi } from '../../Services/jobsApi';
-import { ResultsRenderer } from '../ResultsRenderer';
+import { ResultsRenderer } from '../Renderers/ResultsRenderer';
 
 /*********************************************************
  * Constants / Enums                                     *

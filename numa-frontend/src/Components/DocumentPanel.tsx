@@ -1,6 +1,6 @@
 // DocumentPanel.jsx
 import { Button } from 'react-bootstrap';
-import { MarkdownContent } from './MarkdownContent';
+import { MarkdownContent } from './Renderers/MarkdownContent';
 import { ResultActions } from './ResultActions';
 
 const DocumentPanel = ({ documentContent, onClose }) => {

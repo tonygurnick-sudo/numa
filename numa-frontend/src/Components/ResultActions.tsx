@@ -3,7 +3,7 @@ import { Dropdown, Button, Modal, Form, Spinner } from 'react-bootstrap';
 import { saveAs } from 'file-saver';
 import { jsPDF } from 'jspdf';
 import ReactDOMServer from 'react-dom/server';
-import { MarkdownContent } from './MarkdownContent';
+import { MarkdownContent } from './Renderers/MarkdownContent';
 import { useAuth } from '../Providers/AuthProvider';
 import { uploadFileToS3 } from '../utils/s3Utils';
 import { createDocxBlob } from '../Services/fileConverter';

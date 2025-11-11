@@ -1,7 +1,7 @@
 // ChatMessages.tsx
 import type { CSSProperties, RefObject } from 'react';
 import { Spinner, Button } from 'react-bootstrap';
-import { MarkdownContent } from '../MarkdownContent';
+import { MarkdownContent } from '../Renderers/MarkdownContent';
 import { ChatReferencesDropdown } from './ChatReferencesDropdown';
 import { useAuth } from '../../Providers/AuthProvider';
 // Tool rendering is handled via unified tool cards; direct TOOL_CONFIG use removed

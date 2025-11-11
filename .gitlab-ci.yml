@@ -69,6 +69,7 @@ variables:
     - PYTHON_WORKING_DIRECTORY:
         - lambdas/python/aggregate-candidate-results
         - lambdas/python/aggregate-document-results
+        - lambdas/python/claude-code-agent
         - lambdas/python/bedrock-model-manager
         - lambdas/python/beyond-expectations-analyse-logs
         - lambdas/python/beyond-expectations-format-error-logs

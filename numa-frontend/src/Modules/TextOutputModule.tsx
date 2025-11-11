@@ -1,6 +1,6 @@
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
-import { MarkdownContent } from '../Components/MarkdownContent';
+import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
 import { ResultActions } from '../Components/ResultActions';
 
 function TextOutputModule({ task }) {

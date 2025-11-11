@@ -1367,3 +1367,201 @@ $border-radius-pill: 1rem;
     line-height: 1.5;
   }
 }
+
+// Trace viewer styling - minimal and modern
+.trace-events-container {
+  position: relative;
+}
+
+.trace-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  position: relative;
+
+  &:last-child {
+    .step-indicator::after {
+      display: none;
+    }
+  }
+
+  .step-indicator {
+    width: 6px;
+    height: 6px;
+    min-width: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 1rem;
+    position: relative;
+    z-index: 1;
+
+    // Connecting line to next step
+    &::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 100%;
+      transform: translateX(-50%);
+      width: 1px;
+      height: 0.75rem;
+      background-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 20%, transparent);
+    }
+
+    &.system {
+      background-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 50%, #6c757d);
+    }
+
+    &.assistant {
+      background-color: var(--brand-primary, var(--color-primary));
+    }
+
+    &.result {
+      background-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 70%, #198754);
+    }
+  }
+}
+
+// Clean, minimal card styling
+.trace-event-card {
+  background: white;
+  border: 1px solid var(--color-border-light);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &.thinking-card,
+  &.tool-use-card {
+    cursor: pointer;
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 40%, transparent);
+      box-shadow: 0 1px 3px color-mix(in srgb, var(--brand-primary, var(--color-primary)) 8%, transparent);
+    }
+  }
+
+  &.system-event {
+    background: var(--color-bg-light);
+  }
+
+  &.tool-result-card {
+    cursor: pointer;
+
+    &.success {
+      background: color-mix(in srgb, #198754 4%, white);
+      border-color: color-mix(in srgb, #198754 20%, transparent);
+    }
+
+    &.error {
+      background: color-mix(in srgb, #dc3545 4%, white);
+      border-color: color-mix(in srgb, #dc3545 20%, transparent);
+    }
+
+    &:hover {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+  }
+}
+
+.trace-event-header {
+  display: flex;
+  align-items: center;
+  padding: 0.625rem 0.875rem;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+
+  i {
+    color: var(--brand-primary, var(--color-primary));
+    font-size: 0.875rem;
+  }
+
+  .numa-logo-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  .trace-event-title {
+    font-weight: 500;
+    color: var(--color-text-dark);
+  }
+
+  .trace-event-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-left: 0.25rem;
+
+    &.error {
+      color: #dc3545;
+    }
+  }
+
+  i.bi-chevron-up,
+  i.bi-chevron-down {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+  }
+}
+
+// Tighter spacing for tool result cards specifically
+.trace-event-card.tool-result-card {
+  .trace-event-header {
+    padding: 0.5rem 0.75rem;
+    min-height: 36px;
+  }
+
+  .trace-event-content {
+    padding-top: 0;
+  }
+}
+
+.trace-event-content {
+  padding: 0.625rem 0.875rem;
+  color: var(--color-text-body);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+
+  pre {
+    background: var(--color-bg-light);
+    border: 1px solid var(--color-border-light);
+    border-radius: 6px;
+    padding: 0.75rem;
+    font-size: 0.8125rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    color: var(--color-text-dark);
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+}
+
+// Text card specifically - tighter spacing
+.trace-event-card.text-card {
+  .trace-event-header {
+    padding-bottom: 0.25rem;
+  }
+
+  .trace-event-content {
+    padding-top: 0;
+    padding-bottom: 0.5rem;
+  }
+}
+
+.trace-event-details {
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+
+  > div {
+    margin-bottom: 0.25rem;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}

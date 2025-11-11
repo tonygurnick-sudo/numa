@@ -8,8 +8,8 @@ import { DropdownTableModule } from '../../Modules/DropdownTableModule';
 import { DropdownModule } from '../../Modules/DropdownModule';
 import { WizardNavigation } from '../WizardNavigation';
 import { Preloader } from '../Preloader';
-import { ResultsRenderer } from '../ResultsRenderer';
-import { MarkdownContent } from '../MarkdownContent';
+import { ResultsRenderer } from '../Renderers/ResultsRenderer';
+import { MarkdownContent } from '../Renderers/MarkdownContent';
 import { RunActiveState } from '@/types/apps.ts';
 
 import type { ReactElement } from 'react';
