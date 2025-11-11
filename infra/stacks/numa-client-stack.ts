@@ -20,6 +20,7 @@ import { CompanyProfile } from '../constructs/apps/company-profile-construct';
 import { ContractAnalysis } from '../constructs/apps/contract-analysis-construct';
 import { CostingCalculator } from '../constructs/apps/costing-calculator-construct';
 import { CouncilResourceConsents } from '../constructs/apps/council-resource-consents-construct';
+import { DataAnalysis } from '../constructs/apps/data-analysis-construct';
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
 import { FinancialAnalysis } from '../constructs/apps/financial-analysis-construct';
 import { GdsrAssessment } from '../constructs/apps/gdsr-assessment-construct';
@@ -605,6 +606,7 @@ export const appLibrary: Record<string, AppDefinition> = {
   'contract-analysis': { app: ContractAnalysis, isProdApp: true },
   'council-recourse-consents': { app: CouncilResourceConsents, isProdApp: false },
   'costing-calculator': { app: CostingCalculator, isProdApp: false },
+  'data-analysis': { app: DataAnalysis, isProdApp: false },
   'document-summariser': { app: DocumentSummariser, isProdApp: true },
   'financial-analysis': { app: FinancialAnalysis, isProdApp: true },
   'gdsr-assessment': { app: GdsrAssessment, isProdApp: false },

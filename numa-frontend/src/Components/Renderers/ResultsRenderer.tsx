@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 
-import { useAuth } from '../Providers/AuthProvider';
-import { useNumaApp } from '../Providers/NumaAppContext';
-import { downloadFileFromS3, downloadFileWithSignedUrl, openFileWithSignedUrl } from '../utils/s3Utils';
+import { useAuth } from '../../Providers/AuthProvider';
+import { useNumaApp } from '../../Providers/NumaAppContext';
+import { downloadFileFromS3, downloadFileWithSignedUrl, openFileWithSignedUrl } from '../../utils/s3Utils';
 import { MarkdownContent } from './MarkdownContent';
-import { ResultActions } from './ResultActions';
+import { ResultActions } from '../ResultActions';
+import { DataAnalysisMarkdown } from './DataAnalysisMarkdown';
 
 // Shared tab navigation component for both JSON and CSV renderers
 const TabNavigation = ({ items, activeIndex, setActiveIndex, getLabel, alwaysShow = false }) => {
@@ -591,6 +592,11 @@ const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadin
     <div className="btn-group">
       <button
         className="btn btn-primary"
+        style={{
+          backgroundColor: 'var(--color-primary)',
+          borderColor: 'var(--color-primary)',
+          color: 'white',
+        }}
         onClick={() => {
           setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-download`]: true }));
           const region = window.sessionStorage.getItem('REGION');
@@ -612,7 +618,10 @@ const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadin
             Downloading...
           </>
         ) : (
-          <>Download {output.title || 'File'}</>
+          <>
+            <i className="bi bi-download me-1"></i>
+            Download {output.title || 'File'}
+          </>
         )}
       </button>
       <button
@@ -632,7 +641,10 @@ const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadin
             Opening...
           </>
         ) : (
-          <>Open in New Tab</>
+          <>
+            <i className="bi bi-box-arrow-up-right me-1"></i>
+            Open in New Tab
+          </>
         )}
       </button>
     </div>
@@ -644,10 +656,13 @@ export const ResultsRenderer = ({ results }) => {
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
   const { getCredentials } = useAuth();
-  const { fetchS3Content } = useNumaApp();
+  const { fetchS3Content, numaAppData } = useNumaApp();
   const pendingRequests = useRef({});
   const [loadingActions, setLoadingActions] = useState({});
   const [selectedOutputIndex, setSelectedOutputIndex] = useState(0);
+
+  // Check if this is the data-analysis app
+  const isDataAnalysisApp = numaAppData?.id === 'data-analysis';
 
   useEffect(() => {
     // Parse results if it's a JSON string
@@ -870,14 +885,27 @@ export const ResultsRenderer = ({ results }) => {
         </div>
       ) : selectedOutput.content_type === 'text/markdown' || selectedOutput.content_type === 'text/plain' ? (
         <div className="mb-3">
-          <div className="markdown-content p-3 bg-white rounded border">
-            <MarkdownContent content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)} />
-          </div>
-          {!isLoading && !error && content && (
-            <ResultActions
-              content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
-              title={selectedOutput.title || `Result ${selectedOutputIndex + 1}`}
-            />
+          {isDataAnalysisApp && selectedOutput.data?.key ? (
+            <div className="markdown-content p-3 bg-white rounded border">
+              <DataAnalysisMarkdown
+                content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
+                baseS3Key={selectedOutput.data.key}
+                bucket={selectedOutput.data.bucket || window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME') || ''}
+                region={window.sessionStorage.getItem('REGION') || ''}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="markdown-content p-3 bg-white rounded border">
+                <MarkdownContent content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)} />
+              </div>
+              {!isLoading && !error && content && (
+                <ResultActions
+                  content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
+                  title={selectedOutput.title || `Result ${selectedOutputIndex + 1}`}
+                />
+              )}
+            </>
           )}
         </div>
       ) : selectedOutput.content_type === 'application/json' ? (

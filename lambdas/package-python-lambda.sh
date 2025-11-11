@@ -32,20 +32,44 @@ PIP="${VENV_DIR}"/bin/pip
 
 # some packages don't provide wheels, so have to build them manually to be compatible to --only-binary=:all:
 mkdir "${WHEEL_DIR}"
-# Build a wheel for the exact svglib version locked by Poetry (to satisfy --only-binary)
+
+# Pre-build wheels for packages that often lack prebuilt wheels on PyPI
+# so we can keep using --only-binary=:all: during installation.
 pushd "${WHEEL_DIR}"
-    # Determine locked svglib version from Poetry, if present
-    SVGLIB_VERSION=""
-    if command -v poetry >/dev/null 2>&1; then
-        pushd "${LAMBDA_DIRECTORY}" >/dev/null
-            # shellcheck disable=SC2016
-            SVGLIB_VERSION=$(poetry show --only main 2>/dev/null | awk '$1=="svglib" {print $2}') || true
-        popd >/dev/null
-    fi
+    # Helper to read a package version from the local Poetry lock file
+    function locked_version() {
+        local pkg="$1"
+        local lock_file="${LAMBDA_DIRECTORY}/poetry.lock"
+        test -f "${lock_file}" || return 0
+        awk -v pkg="${pkg}" '
+            $0 ~ /^\[\[package\]\]/ { inpkg=0 }
+            $0 == "name = \"" pkg "\"" { inpkg=1 }
+            inpkg && $1 == "version" { gsub(/"/, "", $3); print $3; exit }
+        ' "${lock_file}"
+    }
+
+    # svglib (used in some lambdas via transitive deps)
+    SVGLIB_VERSION=$(locked_version svglib || true)
     if test -n "${SVGLIB_VERSION}"; then
-        ${PIP} wheel --no-cache-dir --no-deps "svglib==${SVGLIB_VERSION}"
+        ${PIP} wheel --no-cache-dir --no-deps "svglib==${SVGLIB_VERSION}" || true
     else
-        ${PIP} wheel --no-cache-dir --no-deps svglib
+        ${PIP} wheel --no-cache-dir --no-deps svglib || true
+    fi
+
+    # red-black-tree-mod (transitive dep of extract-msg; sdist-only)
+    RBT_VERSION=$(locked_version red-black-tree-mod || true)
+    if test -n "${RBT_VERSION}"; then
+        ${PIP} wheel --no-cache-dir --no-deps "red-black-tree-mod==${RBT_VERSION}" || true
+    else
+        ${PIP} wheel --no-cache-dir --no-deps red-black-tree-mod || true
+    fi
+
+    # rtfde (transitive dep of extract-msg; may be sdist-only)
+    RTFDE_VERSION=$(locked_version rtfde || true)
+    if test -n "${RTFDE_VERSION}"; then
+        ${PIP} wheel --no-cache-dir --no-deps "rtfde==${RTFDE_VERSION}" || true
+    else
+        ${PIP} wheel --no-cache-dir --no-deps rtfde || true
     fi
 popd
 
@@ -74,7 +98,14 @@ popd
 
 # remove files that aren't required and contain paths that can differ based on clone location
 rm -rf "${BUILD_DIR:?}/bin"
-find "${BUILD_DIR}" -type d -name "*.dist-info" -not -name '*opentelemetry*' -not -name '*mcp*' -not -name '*prompt_toolkit*' -exec rm -r "{}" +
+# Keep dist-info for packages that rely on importlib.metadata at import time
+# e.g., plotly determines its version via importlib.metadata.version("plotly")
+find "${BUILD_DIR}" -type d -name "*.dist-info" \
+    -not -name '*opentelemetry*' \
+    -not -name '*mcp*' \
+    -not -name '*prompt_toolkit*' \
+    -not -name '*plotly*' \
+    -exec rm -r "{}" +
 
 # If a startup script (for LWA ZIP mode) exists in the lambda directory, include it at the ZIP root
 if test -f "${LAMBDA_DIRECTORY}/run.sh"; then

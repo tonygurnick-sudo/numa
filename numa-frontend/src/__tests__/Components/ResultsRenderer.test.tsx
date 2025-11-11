@@ -5,7 +5,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { waitFor } from '@testing-library/react/pure';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom';
-import { ResultsRenderer, JsonRenderer, CsvRenderer } from '../../Components/ResultsRenderer';
+import { ResultsRenderer, JsonRenderer, CsvRenderer } from '../../Components/Renderers/ResultsRenderer';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import * as s3Utils from '../../utils/s3Utils';

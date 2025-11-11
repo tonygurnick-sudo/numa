@@ -128,6 +128,7 @@ export class NumaLambda extends Construct {
       runtime: props.runtime,
       sourceCodeHash,
       timeout: props.timeout || 900,
+      ...(props.ephemeralStorageMb ? { ephemeralStorage: { size: props.ephemeralStorageMb } } : {}),
       tracingConfig: {
         mode: props.otelConfig?.honeycombIngestKey ? 'PassThrough' : 'Active', // Disable X-Ray sampling when using Honeycomb.
       },
@@ -189,4 +190,6 @@ export interface NumaLambdaProps {
   resourceNameSuffix: string;
   runtime?: string;
   timeout?: number;
+  /** Ephemeral storage (MB), e.g., 4096 or 10240 */
+  ephemeralStorageMb?: number;
 }

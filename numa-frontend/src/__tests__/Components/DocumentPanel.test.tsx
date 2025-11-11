@@ -14,7 +14,7 @@ vi.mock('../../Providers/AuthProvider', () => ({
 }));
 
 // Mock MarkdownContent to simply render its content in a div with a test id.
-vi.mock('../../Components/MarkdownContent', () => ({
+vi.mock('../../Components/Renderers/MarkdownContent', () => ({
   MarkdownContent: ({ content }) => <div data-testid="markdown-content">{content}</div>,
 }));
 

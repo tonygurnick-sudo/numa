@@ -44,6 +44,7 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
     const lambda = new NumaLambda(scope, name, {
       appId: props.appId,
       additionalPolicyStatements,
+      additionalLayers: props.additionalLayers,
       clientName: this.props.clientName,
       runtime: props.runtime,
       environment,
@@ -51,7 +52,8 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       lambdaDirectory: props.lambdaDirectory,
       logGroup: this.logGroup,
       memorySize: props.memorySize,
-      otelConfig: this.props.otelConfig,
+      ephemeralStorageMb: props.ephemeralStorageMb,
+      otelConfig: props.disableOtel ? undefined : this.props.otelConfig,
       resourceNameSuffix: (this.props.resourceNameInfix ?? '') + '_' + name,
       timeout: props.timeout || 29, // API Gateway will only wait 30 seconds. Let's try to come in under that
     }).lambda;
@@ -103,10 +105,16 @@ export interface AddLambdaFunctionProps {
   appId?: string;
   addAuthorizer?: boolean;
   additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
+  /** Optional additional Lambda Layer ARNs to attach */
+  additionalLayers?: string[];
+  /** Disable OpenTelemetry layers for this Lambda */
+  disableOtel?: boolean;
   environment?: Record<string, string>;
   handler?: string;
   lambdaDirectory: string;
   memorySize?: number;
+  /** Ephemeral storage (MB), e.g., 4096 or 10240 */
+  ephemeralStorageMb?: number;
   route?: RouteDefinition | RouteDefinition[];
   runtime?: string;
   timeout?: number;
