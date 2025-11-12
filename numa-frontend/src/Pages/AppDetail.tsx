@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Container, Row, Col } from 'react-bootstrap';
+import { Alert, Container, Row, Col, Form } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
 import { StarFill, Star } from 'react-bootstrap-icons';
 
@@ -18,7 +18,16 @@ import { manifestService } from '../Services/manifestService';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
-  const { error, setNumaAppId, numaAppData, setError, setNumaAppData, setCurrentJobId } = useNumaApp();
+  const {
+    error,
+    setNumaAppId,
+    numaAppData,
+    setError,
+    setNumaAppData,
+    setCurrentJobId,
+    isJobNamingEnabled,
+    setIsJobNamingEnabled,
+  } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
   const [loading, setLoading] = useState(false);
@@ -95,6 +104,17 @@ const AppDetail = () => {
                   >
                     {numaAppData.appDescription}
                   </p>
+                )}
+                {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && (
+                  <div className="app-job-naming-toggle">
+                    <Form.Check
+                      type="switch"
+                      id="layout-job-naming-toggle"
+                      label="Turn on job naming for all apps"
+                      checked={isJobNamingEnabled}
+                      onChange={(event) => setIsJobNamingEnabled(event.target.checked)}
+                    />
+                  </div>
                 )}
               </Col>
               <Col lg={4} className="">

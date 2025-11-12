@@ -190,13 +190,21 @@ fieldset:disabled .btn {
 
 .run-name-modal__content {
   border-radius: 1.25rem;
-  border: 1px solid rgba(142, 80, 167, 0.18);
-  box-shadow: 0 20px 40px rgba(23, 43, 77, 0.15);
+  border: 1px solid color-mix(in srgb, var(--brand-primary, var(--color-primary)) 18%, transparent);
+  box-shadow: 0 20px 40px color-mix(
+      in srgb,
+      rgba(23, 43, 77, 0.15) 80%,
+      var(--brand-primary, var(--color-primary)) 20%
+    );
   overflow: hidden;
 }
 
 .run-name-modal__header {
-  background: linear-gradient(135deg, rgba(142, 80, 167, 0.12), rgba(75, 129, 161, 0.08));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--brand-primary, var(--color-primary)) 12%, transparent),
+    color-mix(in srgb, var(--brand-hover, var(--brand-primary, var(--color-primary))) 8%, transparent)
+  );
   border-bottom: none;
   padding: 1.5rem 1.75rem 1.25rem;
 
@@ -208,12 +216,12 @@ fieldset:disabled .btn {
 .run-name-modal__title {
   font-size: 1.4rem;
   font-weight: 700;
-  color: #2c2c2c;
+  color: var(--color-dk-gray, #2c2c2c);
 }
 
 .run-name-modal__subtitle {
   font-size: 0.9rem;
-  color: #55637a;
+  color: var(--color-gray, #55637a);
 }
 
 .run-name-modal__body {
@@ -225,7 +233,7 @@ fieldset:disabled .btn {
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #6c63a3;
+  color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 65%, #6c63a3 35%);
   font-weight: 600;
   margin-bottom: 0.5rem;
 }
@@ -233,13 +241,13 @@ fieldset:disabled .btn {
 .run-name-modal__input {
   border-radius: 0.9rem;
   padding: 0.85rem 1rem;
-  border: 1px solid rgba(142, 80, 167, 0.3);
+  border: 1px solid color-mix(in srgb, var(--brand-primary, var(--color-primary)) 30%, transparent);
   box-shadow: none;
   font-size: 0.95rem;
 
   &:focus {
-    border-color: rgba(142, 80, 167, 0.9);
-    box-shadow: 0 0 0 0.25rem rgba(142, 80, 167, 0.15);
+    border-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 90%, transparent);
+    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--brand-primary, var(--color-primary)) 25%, transparent);
   }
 }
 
@@ -251,7 +259,7 @@ fieldset:disabled .btn {
 .run-name-modal__hint {
   display: block;
   font-size: 0.78rem;
-  color: #6e7a8a;
+  color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 10%, #6e7a8a 90%);
   margin-top: 0.75rem;
 }
 

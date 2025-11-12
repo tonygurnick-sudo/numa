@@ -242,7 +242,6 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
     setHasRun,
     job,
     loadingJobId,
-    runName,
     setRunName,
     isJobNamingEnabled,
   } = useNumaApp();
@@ -259,10 +258,9 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
 
   useEffect(() => {
     if (showRunNameModal) {
-      setRunNameDraft((runName ?? '').trim());
       setRunNameError('');
     }
-  }, [showRunNameModal, runName]);
+  }, [showRunNameModal]);
 
   const visibleTasks = useMemo<VisibleTask[]>(() => manifest?.tasks?.filter(isVisibleTask) ?? [], [manifest?.tasks]);
 
@@ -388,6 +386,8 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
 
   const handleRunAppClick = async (): Promise<void> => {
     if (isJobNamingEnabled) {
+      setRunNameDraft('');
+      setRunNameError('');
       setShowRunNameModal(true);
       return;
     }
@@ -621,7 +621,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
             <Form.Label className="run-name-modal__label">Run name</Form.Label>
             <Form.Control
               type="text"
-              placeholder="e.g. Client Review • March 10"
+              placeholder="Name it here..."
               value={runNameDraft}
               autoFocus
               maxLength={JOB_NAME_MAX_LENGTH}
