@@ -57,13 +57,24 @@ const JobHistoryManager = () => {
 
   // Set loading state based on JobStatusContext loading state
   useEffect(() => {
-    // Sync our local loading state with the global context
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
     if (jobStatusLoading) {
       setIsLoading(true);
     } else if (jobStatusHasLoaded) {
-      // Small delay to ensure UI updates properly
-      setTimeout(() => setIsLoading(false), 300);
+      // In SSR/test environments window may not exist; fall back to immediate update
+      if (typeof window === 'undefined') {
+        setIsLoading(false);
+      } else {
+        timer = window.setTimeout(() => setIsLoading(false), 300);
+      }
     }
+
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
   }, [jobStatusLoading, jobStatusHasLoaded]);
 
   // Main function to load jobs - simplified as we primarily use JobStatusContext
@@ -373,9 +384,7 @@ const JobHistoryManager = () => {
     if (rawName) {
       return rawName;
     }
-    const startedAt = job.startedAt || job.dateTime || job.createdAt;
-    const formatted = formatDate(startedAt);
-    return formatted === 'Unknown' ? 'Untitled run' : `Run ${formatted}`;
+    return 'Untitled run';
   };
 
   const formatJobDisplayName = (job) => {
@@ -397,7 +406,6 @@ const JobHistoryManager = () => {
       (job.name || '').toLowerCase(),
       getAppDisplayName(job).toLowerCase(),
       formatJobDisplayName(job).toLowerCase(),
-      (job.jobId || '').toLowerCase(),
     ];
 
     return parts.join(' ');
@@ -570,7 +578,6 @@ const JobHistoryManager = () => {
         size="sm"
         onClick={() => handleViewResults(job.jobId, job.appId)}
         disabled={loadingJobId === job.jobId}
-        title={`Job ID: ${job.jobId}`}
         className="d-flex align-items-center"
       >
         {loadingJobId === job.jobId ? (
@@ -686,7 +693,7 @@ const JobHistoryManager = () => {
                     <div className="position-relative">
                       <Form.Control
                         type="text"
-                        placeholder="Search by run name, app name, or job ID..."
+                        placeholder="Search by run name or app name..."
                         value={searchTerm}
                         onChange={handleSearch}
                       />
@@ -750,7 +757,6 @@ const JobHistoryManager = () => {
                               </td>
                               <td>
                                 <div className="fw-medium text-break">{displayName}</div>
-                                <div className="text-muted small">{job.jobId || '—'}</div>
                               </td>
                               <td>{renderStatusBadge(job)}</td>
                               <td className="text-end align-middle">{renderActionButton(job)}</td>

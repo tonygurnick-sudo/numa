@@ -486,8 +486,7 @@ export const PolicyReviewerDetail = () => {
     if (isUploading) return;
 
     if (isJobNamingEnabled) {
-      const draftName = (runName || policyName || '').trim();
-      setRunNameDraft(draftName);
+      setRunNameDraft('');
       setRunNameError('');
       setShowRunNameModal(true);
       return;
@@ -1238,7 +1237,7 @@ export const PolicyReviewerDetail = () => {
             <Form.Label className="run-name-modal__label">Run name</Form.Label>
             <Form.Control
               type="text"
-              placeholder="e.g. Policy Review • March 10"
+              placeholder="Name it here..."
               value={runNameDraft}
               autoFocus
               maxLength={JOB_NAME_MAX_LENGTH}
@@ -1285,7 +1284,7 @@ export const PolicyReviewerDetail = () => {
 
       <Container fluid className="px-0">
         <div style={{ backgroundColor: '#f8f7fa' }} className="border-bottom">
-          <div className="d-flex justify-content-end align-items-center px-4 py-3">
+          <div className="app-job-naming-toggle px-4 py-3">
             <Form.Check
               type="switch"
               id="policy-reviewer-job-naming-toggle"
