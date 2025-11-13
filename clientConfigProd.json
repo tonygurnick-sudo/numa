@@ -24,6 +24,8 @@
       "name": "monthly-budget",
       "limitAmount": 1500,
       "alertThresholds": [100]
-    }
+    },
+    "agents": true,
+    "brandingProviderEnabled": true
   }
 }

@@ -113,6 +113,51 @@ class TestClaudeCodeAgentHelpers(unittest.TestCase):
         self.assertIn("outputs/results.md (outputs/results-42.md)", payload)
         read_mock.assert_called_once()
 
+    def test_extract_result_from_trace_returns_none_if_missing(self):
+        result = lambda_function._extract_result_from_trace(
+            Path("/nonexistent/trace.jsonl")
+        )
+        self.assertIsNone(result)
+
+    def test_extract_result_from_trace_extracts_result_event(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = Path(tmp) / "trace.jsonl"
+            trace.write_text(
+                '{"type":"assistant","message":{"content":[{"type":"text","text":"Working..."}]}}\n'
+                '{"type":"result","subtype":"success",'
+                '"result":"## Analysis Complete!\\n\\nHere are the findings..."}\n',
+                encoding="utf-8",
+            )
+            result = lambda_function._extract_result_from_trace(trace)
+            self.assertIsNotNone(result)
+            assert result is not None  # Help type checker
+            self.assertIn("Analysis Complete!", result)
+            self.assertIn("findings", result)
+
+    def test_extract_result_from_trace_uses_last_result_event(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = Path(tmp) / "trace.jsonl"
+            trace.write_text(
+                '{"type":"result","result":"First result"}\n'
+                '{"type":"assistant","message":{}}\n'
+                '{"type":"result","result":"Second result"}\n',
+                encoding="utf-8",
+            )
+            result = lambda_function._extract_result_from_trace(trace)
+            self.assertEqual(result, "Second result")
+
+    def test_extract_result_from_trace_handles_malformed_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = Path(tmp) / "trace.jsonl"
+            trace.write_text(
+                '{"type":"assistant"}\n'
+                "invalid json line\n"
+                '{"type":"result","result":"Valid result"}\n',
+                encoding="utf-8",
+            )
+            result = lambda_function._extract_result_from_trace(trace)
+            self.assertEqual(result, "Valid result")
+
 
 if __name__ == "__main__":
     unittest.main()
