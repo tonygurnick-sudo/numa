@@ -116,6 +116,10 @@ export const NumaAppProvider = ({ children }) => {
     setCurrentJobId(null);
     setJob(null);
     setLoadingJobId(null);
+
+    // Clear URL query parameters to prevent auto-reload
+    const currentPath = window.location.pathname;
+    window.history.replaceState(null, '', currentPath);
   };
 
   // We now create a job directly when uploading files instead of using a session ID

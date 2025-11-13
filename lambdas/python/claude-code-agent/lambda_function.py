@@ -215,7 +215,6 @@ def _run_claude_stream(
     args += [
         "--output-format",
         "stream-json",
-        "--include-partial-messages",
         "--permission-mode",
         permission_mode,
         "--allowedTools",
@@ -328,6 +327,40 @@ def _ensure_claude_cli_available(bucket: str) -> str:
     return bin_path
 
 
+def _extract_result_from_trace(trace_path: Path) -> str | None:
+    """
+    Extract the result field from the final result event in the trace.
+
+    Parses the trace NDJSON file and looks for the last event with type="result",
+    returning its "result" field value. This is useful when Claude completes
+    successfully but doesn't write a results.md file.
+
+    Args:
+        trace_path: Path to the trace.jsonl file
+
+    Returns:
+        The result text from the trace, or None if not found or trace doesn't exist
+    """
+    if not trace_path.exists():
+        return None
+
+    result_text = None
+    try:
+        with trace_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    event = json.loads(line)
+                    if event.get("type") == "result":
+                        result_text = event.get("result")
+                except json.JSONDecodeError:
+                    continue
+    except Exception as e:
+        logger.warning("Error reading trace file", error=str(e))
+        return None
+
+    return result_text
+
+
 def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     helpers.setup_step_function_lambda_logging(event, context)
 
@@ -411,9 +444,16 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
     # Ensure required results.md exists; create fallback if missing
     if not results_md.exists():
-        logger.warning("results.md was not created by agent; generating fallback")
-        fallback_content = "# Error\n\nThe agent did not generate results. Please review the trace for details.\n"
-        results_md.write_text(fallback_content, encoding="utf-8")
+        logger.warning("results.md was not created by agent; checking trace for result")
+        trace_result = _extract_result_from_trace(trace_local)
+
+        if trace_result:
+            logger.info("Found result in trace; using as fallback results.md")
+            results_md.write_text(trace_result, encoding="utf-8")
+        else:
+            logger.warning("No result found in trace; generating error fallback")
+            fallback_content = "# Error\n\nThe agent did not generate results. Please review the trace for details.\n"
+            results_md.write_text(fallback_content, encoding="utf-8")
 
     # Rename results.md to results-<timestamp>.md
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Spinner, Button, Dropdown } from 'react-bootstrap';
+import * as Papa from 'papaparse';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { getFileIconClass } from '../../utils/fileUtils';
@@ -472,14 +473,22 @@ const constructTraceFilePath = (baseS3Key: string): string => {
 // Simple CSV preview table component
 const CsvPreviewTable: React.FC<{ csvContent: string }> = ({ csvContent }) => {
   const { headers, rows, totalRows } = useMemo(() => {
-    const lines = csvContent.split(/\r?\n/).filter((line) => line.trim());
-    if (lines.length === 0) return { headers: [], rows: [], totalRows: 0 };
+    // Use papaparse to correctly handle CSV with quoted fields, commas, and newlines
+    const result = Papa.parse(csvContent, {
+      header: true,
+      skipEmptyLines: true,
+      dynamicTyping: false, // Keep all values as strings
+    });
 
-    const parseRow = (row: string) => row.split(',').map((cell) => cell.trim().replace(/^"|"$/g, ''));
+    if (result.errors.length > 0) {
+      console.warn('CSV parsing errors:', result.errors);
+    }
 
-    const headers = parseRow(lines[0]);
-    const totalRows = lines.length - 1; // Exclude header
-    const rows = lines.slice(1, 101).map(parseRow); // Preview first 100 rows
+    const headers = result.meta.fields || [];
+    const totalRows = result.data.length;
+    const rows = result.data
+      .slice(0, 100)
+      .map((row: Record<string, string>) => headers.map((header) => row[header] || ''));
 
     return { headers, rows, totalRows };
   }, [csvContent]);
@@ -503,7 +512,17 @@ const CsvPreviewTable: React.FC<{ csvContent: string }> = ({ csvContent }) => {
             {rows.map((row, rowIdx) => (
               <tr key={rowIdx}>
                 {row.map((cell, cellIdx) => (
-                  <td key={cellIdx}>{cell}</td>
+                  <td
+                    key={cellIdx}
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      maxWidth: '300px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {cell}
+                  </td>
                 ))}
               </tr>
             ))}
