@@ -159,6 +159,11 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           effect: 'Allow',
           resources: ['*'],
         },
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:UpdateItem'],
+          resources: [`arn:aws:dynamodb:${props.region}:*:table/${props.clientName}-*-recent-jobs`],
+        },
       ],
     });
 

@@ -55,6 +55,7 @@ export const NumaAppProvider = ({ children }) => {
   const [job, setJob] = useState(null);
   const [currentJobId, setCurrentJobId] = useState(null);
   const [loadingJobId, setLoadingJobId] = useState(null);
+  const [jobEvents, setJobEvents] = useState([]);
 
   // New states for processing progress
   const [processingProgress, setProcessingProgress] = useState(0);
@@ -116,6 +117,7 @@ export const NumaAppProvider = ({ children }) => {
     setCurrentJobId(null);
     setJob(null);
     setLoadingJobId(null);
+    // Note: jobEvents are NOT cleared here - they persist until a new run starts
 
     // Clear URL query parameters to prevent auto-reload
     const currentPath = window.location.pathname;
@@ -135,8 +137,14 @@ export const NumaAppProvider = ({ children }) => {
       const items = response.items || [];
       const newNextToken = response.next_token || response.nextToken || null;
 
+      // Filter out 'files-uploaded' jobs as they are intermediate states, not actual app runs
+      const filteredItems = items.filter((job) => {
+        const status = (job.status || '').toLowerCase();
+        return status !== 'files-uploaded' && status !== 'files_uploaded';
+      });
+
       // Sort jobs by date before setting/appending
-      const sortedJobs = items.sort((a, b) => {
+      const sortedJobs = filteredItems.sort((a, b) => {
         const dateA = new Date(a.startedAt || a.dateTime);
         const dateB = new Date(b.startedAt || b.dateTime);
         return dateB - dateA;
@@ -380,7 +388,7 @@ export const NumaAppProvider = ({ children }) => {
     try {
       const { status, result } = await pollJobStatus({
         jobId: jobId,
-        pollInterval: 10000,
+        pollInterval: 5000,
         maxPollingTime: 30 * 60 * 1000, // 30 minutes
       });
 
@@ -405,7 +413,7 @@ export const NumaAppProvider = ({ children }) => {
   // Shared polling function for both initial tasks and history jobs
   const pollJobStatus = async ({
     jobId,
-    pollInterval = 10000, // Changed from 5000 to 10000 for consistency
+    pollInterval = 5000,
     maxPollingTime = 30 * 60 * 1000, // Changed from 5 * 60 * 1000 to 30 * 60 * 1000 for consistency
     initialState = null,
     onPollSuccess = null,
@@ -418,6 +426,36 @@ export const NumaAppProvider = ({ children }) => {
       while (true) {
         // Use jobsApi to get job status directly from DynamoDB
         const job = await jobsApi.getJobById(numaAppData.id, jobId);
+
+        // Extract and merge job events if present
+        if (job.events && Array.isArray(job.events)) {
+          setJobEvents((prevEvents) => {
+            // Merge frontend synthetic events with backend events
+            // Create a map of backend events by timestamp+message for deduplication
+            const backendEventsMap = new Map();
+            job.events.forEach((event) => {
+              const key = `${event.timestamp}-${event.message}`;
+              backendEventsMap.set(key, event);
+            });
+
+            // Add previous frontend events that aren't in backend
+            prevEvents.forEach((event) => {
+              const key = `${event.timestamp}-${event.message}`;
+              if (!backendEventsMap.has(key)) {
+                backendEventsMap.set(key, event);
+              }
+            });
+
+            // Convert back to array and sort by timestamp
+            const mergedEvents = Array.from(backendEventsMap.values()).sort((a, b) => {
+              return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+            });
+
+            // Only update if events have changed to avoid unnecessary re-renders
+            const eventsChanged = JSON.stringify(prevEvents) !== JSON.stringify(mergedEvents);
+            return eventsChanged ? mergedEvents : prevEvents;
+          });
+        }
 
         // For history jobs, check for changes
         if (currentState) {
@@ -890,12 +928,27 @@ export const NumaAppProvider = ({ children }) => {
     return title.replace(/\b(process(ing)?|running)\b/gi, '').trim();
   };
 
+  // Add synthetic event to job events (frontend-only, immediate feedback)
+  const addSyntheticEvent = (message) => {
+    const newEvent = {
+      timestamp: new Date().toISOString(),
+      message: message,
+    };
+    setJobEvents((prev) => [...prev, newEvent]);
+  };
+
   const handleRunButtonClick = async (_app = null, options: { runName?: string } = {}) => {
     if (!numaAppData || !numaAppData.tasks) return;
 
+    // Clear previous run's events
+    setJobEvents([]);
     setProcessingStatus('Starting process...');
     setProcessingProgress(0);
     setError(null); // Clear any previous errors
+
+    // Add initial synthetic event
+    const appName = numaAppData?.manifest?.appName || 'App';
+    addSyntheticEvent(`Starting ${appName}...`);
 
     try {
       const { jobId } = await initializeJob(options.runName);
@@ -908,7 +961,9 @@ export const NumaAppProvider = ({ children }) => {
       const totalWeight = calculateTotalWeight(orderedTasks);
 
       for (const task of orderedTasks) {
-        setProcessingStatus(`Processing: ${cleanTaskTitle(task.title)}...`);
+        const taskMessage = `Processing Input: ${cleanTaskTitle(task.title)}...`;
+        setProcessingStatus(taskMessage);
+        addSyntheticEvent(taskMessage);
         const taskWeight = calculateTaskWeight(task);
 
         switch (task.type) {
@@ -964,6 +1019,9 @@ export const NumaAppProvider = ({ children }) => {
         }));
       }
 
+      // Add completion synthetic event
+      addSyntheticEvent('Analysis complete');
+
       // After all tasks complete successfully, reload the job to get proper output processing
       // This reuses the existing loadJobResults logic which handles output tasks correctly
       await loadJobResults(jobId);
@@ -971,6 +1029,7 @@ export const NumaAppProvider = ({ children }) => {
       return currentResults;
     } catch (error) {
       console.error('Error running app:', error);
+      addSyntheticEvent(`Error: ${error.message || 'An error occurred'}`);
       setProcessingStatus('Error');
       setProcessingProgress(0);
       throw error; // Re-throw to be handled by AppWizard
@@ -1002,6 +1061,15 @@ export const NumaAppProvider = ({ children }) => {
       setTaskInputValues({});
       setActiveStep(0);
       setSelectedTaskId(null);
+
+      // Clear or load job events from the loaded job
+      if (job.events && Array.isArray(job.events)) {
+        // Load the events from the job
+        setJobEvents(job.events);
+      } else {
+        // No events in the job, clear any previous events
+        setJobEvents([]);
+      }
 
       // Set app state based on job status
       if (job.status === 'files-uploaded') {
@@ -1299,6 +1367,7 @@ export const NumaAppProvider = ({ children }) => {
     currentJobId,
     setCurrentJobId,
     job,
+    jobEvents,
     fetchS3Content,
     loadingJobId,
     setLoadingJobId,

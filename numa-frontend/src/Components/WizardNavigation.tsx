@@ -1,8 +1,9 @@
 import type React from 'react';
-import { Button, ProgressBar } from 'react-bootstrap';
+import { Button } from 'react-bootstrap';
 import { CheckCircleFill } from 'react-bootstrap-icons';
 import { useEffect, useState } from 'react';
 import { useNumaApp } from '../Providers/NumaAppContext';
+import EventStreamViewer from './EventStreamViewer';
 
 /* ---------- Local types ---------- */
 
@@ -52,12 +53,12 @@ const WizardNavigation: React.FC<WizardNavigationProps> = ({
   isStepComplete,
   isStepDisabled,
   runButtonProps,
-  processingProgress,
-  processingStatus,
+  processingProgress: _processingProgress,
+  processingStatus: _processingStatus,
   hasRun,
   typicalDurationMinutes,
 }) => {
-  const { resetAppState } = useNumaApp();
+  const { resetAppState, jobEvents, appRunning, numaAppData, job } = useNumaApp();
   const { isRunning, disabled, onClick, ...otherRunButtonProps } = runButtonProps;
 
   const [wasDisabled, setWasDisabled] = useState<boolean>(true);
@@ -161,25 +162,15 @@ const WizardNavigation: React.FC<WizardNavigationProps> = ({
       </div>
 
       <div className="step-section">
-        {isRunning && (
+        {(appRunning || (job && jobEvents && jobEvents.length > 0)) && (
           <div className="processing-container">
-            <ProgressBar
-              now={processingProgress}
-              label={`${Math.round(processingProgress)}%`}
-              animated
-              variant="primary"
-              style={{ width: '50%', margin: '0 auto 10px auto' }}
+            <EventStreamViewer
+              events={jobEvents || []}
+              isRunning={appRunning}
+              appName={numaAppData?.manifest?.appName}
+              typicalDurationMinutes={typicalDurationMinutes}
+              jobStatus={job?.status}
             />
-            <div className="processing-status">
-              {processingStatus}
-              {typeof typicalDurationMinutes === 'number' && (
-                <>
-                  <br />
-                  This app typically takes {typicalDurationMinutes} minute
-                  {typicalDurationMinutes > 1 ? 's' : ''}.
-                </>
-              )}
-            </div>
           </div>
         )}
 

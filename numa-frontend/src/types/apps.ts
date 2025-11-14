@@ -32,12 +32,18 @@ export interface ResultOutput {
   data: unknown;
 }
 
+export interface JobEvent {
+  timestamp: string;
+  message: string;
+}
+
 export interface JobResult {
   outputs: ResultOutput[];
 }
 
 export interface Job {
   results?: JobResult[];
+  events?: JobEvent[];
 }
 
 export interface NumaApp {
@@ -105,6 +111,7 @@ export interface NumaAppContextValue {
 
   // Job and task management
   job: Job | null;
+  jobEvents: JobEvent[];
   handleRunButtonClick: (app: NumaApp | null, options?: { runName?: string }) => Promise<void>;
   getAppJobs: () => Job[];
   loadAppJobs: () => Promise<void>;

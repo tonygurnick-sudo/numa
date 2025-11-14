@@ -1,18 +1,61 @@
+from __future__ import annotations
+
+import datetime as _dt
+import importlib
+import json
 import logging
 import os
 import typing
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import jwt
 import structlog
-from aws_lambda_powertools.utilities.data_classes import (
-    APIGatewayProxyEvent,
-    event_source,
-)
-from aws_lambda_powertools.utilities.typing import LambdaContext
+
+# UTC compatibility across Python versions
+try:  # Python >= 3.11
+    UTC = _dt.UTC  # type: ignore[attr-defined]
+except AttributeError:  # pragma: no cover - legacy runtimes
+    UTC = _dt.timezone.utc
+if TYPE_CHECKING:
+    from aws_lambda_powertools.utilities.data_classes import APIGatewayProxyEvent
+    from aws_lambda_powertools.utilities.typing import LambdaContext
 
 logger = structlog.get_logger()
+
+
+def _require_boto3():
+    """Dynamically import boto3 only when needed.
+
+    This avoids pylint import-error in local environments where boto3
+    isn't installed (AWS Lambda provides boto3 at runtime).
+    """
+    try:
+        return importlib.import_module("boto3")
+    except ModuleNotFoundError as exc:  # pragma: no cover - dev env warning
+        raise ImportError(
+            "boto3 is required for S3/DynamoDB helpers. Install it locally "
+            "(e.g. `poetry add boto3`) or run on AWS Lambda where it is provided."
+        ) from exc
+
+
+def _get_s3_client():
+    return _require_boto3().client("s3")
+
+
+def _get_dynamodb_resource():
+    return _require_boto3().resource("dynamodb")
+
+
+def _get_botocore_client_error_type():
+    """Return botocore.exceptions.ClientError type if available, else None.
+
+    Imported lazily to avoid a hard dependency during local lint/tests.
+    """
+    try:  # pragma: no cover - only used in S3 error handling
+        return importlib.import_module("botocore.exceptions").ClientError  # type: ignore[attr-defined]
+    except ModuleNotFoundError:  # pragma: no cover - dev envs without botocore
+        return None
 
 
 # see https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html#api-gateway-simple-proxy-for-lambda-output-format
@@ -251,3 +294,131 @@ def extract_user_id_from_token(event: APIGatewayProxyEvent) -> Optional[str]:
         )
         # Default to 'unknown' for now during testing
         return "unknown"
+
+
+def append_event(
+    message: str,
+    job_id: str,
+    user_id: str,
+    app_id: str,
+    use_dynamodb: bool = False,
+    bucket: Optional[str] = None,
+    table_name: Optional[str] = None,
+) -> None:
+    """
+    Append a timestamped event to the job's status.
+    Works for both DynamoDB and S3-based status storage.
+
+    Args:
+        message: The event message to append
+        job_id: The job identifier
+        user_id: The user identifier
+        app_id: The application identifier
+        use_dynamodb: If True, update DynamoDB; if False, update S3 status.json
+        bucket: S3 bucket name (uses BUCKET env var if not provided)
+        table_name: DynamoDB table name (uses DYNAMODB_TABLE env var if not provided)
+    """
+    timestamp = _dt.datetime.now(UTC).isoformat()
+    event_entry = {"timestamp": timestamp, "message": message}
+
+    logger.debug(
+        "Appending event",
+        message=message,
+        job_id=job_id,
+        use_dynamodb=use_dynamodb,
+    )
+
+    try:
+        if use_dynamodb:
+            _append_event_dynamodb(event_entry, job_id, table_name)
+        else:
+            _append_event_s3(event_entry, job_id, user_id, app_id, bucket)
+        logger.debug("Event appended successfully")
+    except Exception:
+        logger.exception("Error appending event")
+        # Don't raise - event logging should not break the main flow
+        # Apps can continue to work even if event logging fails
+
+
+def _append_event_dynamodb(
+    event_entry: dict,
+    job_id: str,
+    table_name: Optional[str] = None,
+) -> None:
+    """Append event to DynamoDB job record."""
+    table_name = table_name or os.environ.get("DYNAMODB_TABLE")
+    if not table_name:
+        raise ValueError("DYNAMODB_TABLE not specified")
+
+    table = _get_dynamodb_resource().Table(table_name)
+
+    # Use DynamoDB list append to add event to events array
+    # If events doesn't exist, create it; otherwise append
+    try:
+        table.update_item(
+            Key={"jobId": job_id},
+            UpdateExpression="SET events = list_append(if_not_exists(events, :empty_list), :new_event)",
+            ExpressionAttributeValues={
+                ":new_event": [event_entry],
+                ":empty_list": [],
+            },
+            ReturnValues="NONE",
+        )
+    except Exception:
+        logger.exception("Error updating DynamoDB with event")
+        raise
+
+
+def _append_event_s3(
+    event_entry: dict,
+    job_id: str,
+    user_id: str,
+    app_id: str,
+    bucket: Optional[str] = None,
+) -> None:
+    """Append event to S3 status.json file."""
+    bucket_name = bucket or os.environ.get("BUCKET")
+    if not bucket_name:
+        raise ValueError("Bucket not specified")
+
+    # Construct S3 key for status file
+    key = f"{app_id}/{user_id}/{job_id}/status.json"
+
+    try:
+        # Read existing status file
+        s3_client = _get_s3_client()
+        response = s3_client.get_object(Bucket=bucket_name, Key=key)
+        status_data = json.loads(response["Body"].read().decode("utf-8"))
+    except Exception as e:  # Handle missing key gracefully; re-raise others
+        client_error_type = _get_botocore_client_error_type()
+        if client_error_type is not None and isinstance(e, client_error_type):
+            code = getattr(e, "response", {}).get("Error", {}).get("Code")
+            if code == "NoSuchKey":
+                logger.warning("Status file not found, creating new one", key=key)
+                status_data = {"status": "PROCESSING", "events": []}
+            else:
+                logger.exception("Error reading status file from S3")
+                raise
+        else:
+            logger.exception("Error reading status file from S3")
+            raise
+
+    # Ensure events array exists
+    if "events" not in status_data:
+        status_data["events"] = []
+
+    # Append the new event
+    status_data["events"].append(event_entry)
+
+    # Write back to S3
+    try:
+        s3_client = _get_s3_client()
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=key,
+            Body=json.dumps(status_data).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception:
+        logger.exception("Error writing status file to S3")
+        raise

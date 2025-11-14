@@ -23,6 +23,14 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         template = event["template"]
         output_path = event["output_path"]
 
+        # Extract context for event streaming
+        job_id = event["job_id"]
+        user_id = event["user_id"]
+        app_id = event["app_id"]
+        use_dynamodb = bool(os.environ.get("DYNAMODB_TABLE"))
+        table_name = os.environ.get("DYNAMODB_TABLE")
+        bucket = os.environ["BUCKET"]
+
         # Create outputs array for each file
         outputs: list[
             helpers.AppOutputResultInlineOutput | helpers.AppOutputResulS3Output
@@ -30,6 +38,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
 
         # Generate outputs for each analysis type
         logger.info("Generating template output")
+        helpers.append_event(
+            message="Generating template output",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
+        )
         template_output = get_model_response(
             prompt=prompts.TEMPLATE_OUTPUT_PROMPT,
             input_data={
@@ -46,6 +63,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             template_output.encode("utf-8"),
             content_type="text/markdown",
         )
+        helpers.append_event(
+            message="Template output completed",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
+        )
         outputs.append(
             {
                 "content_type": "text/markdown",
@@ -59,6 +85,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         )
 
         logger.info("Generating summary")
+        helpers.append_event(
+            message="Generating summary",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
+        )
         summary = get_model_response(
             prompt=prompts.MEETING_SUMMARY_PROMPT,
             input_data={
@@ -71,6 +106,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         summary_key = f"{output_path}/summary.md"
         s3_helpers.write(
             summary_key, summary.encode("utf-8"), content_type="text/markdown"
+        )
+        helpers.append_event(
+            message="Summary completed",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
         )
         outputs.append(
             {
@@ -85,6 +129,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         )
 
         logger.info("Generating topic analysis")
+        helpers.append_event(
+            message="Generating topic analysis",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
+        )
         topic_analysis = get_model_response(
             prompt=prompts.TOPIC_ANALYSIS_PROMPT,
             input_data={
@@ -100,6 +153,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             topic_analysis.encode("utf-8"),
             content_type="text/markdown",
         )
+        helpers.append_event(
+            message="Topic analysis completed",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
+        )
         outputs.append(
             {
                 "content_type": "text/markdown",
@@ -113,6 +175,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         )
 
         logger.info("Generating action items")
+        helpers.append_event(
+            message="Generating action items",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
+        )
         action_items = get_model_response(
             prompt=prompts.ACTION_ITEMS_PROMPT,
             input_data={
@@ -125,6 +196,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         action_items_key = f"{output_path}/action_items.md"
         s3_helpers.write(
             action_items_key, action_items.encode("utf-8"), content_type="text/markdown"
+        )
+        helpers.append_event(
+            message="Action items completed",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
         )
         outputs.append(
             {
@@ -139,6 +219,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         )
 
         logger.info("Generating follow-up emails")
+        helpers.append_event(
+            message="Generating follow-up emails",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
+        )
         follow_up_emails = get_model_response(
             prompt=prompts.FOLLOW_UP_EMAILS_PROMPT,
             input_data={
@@ -155,6 +244,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             follow_up_emails.encode("utf-8"),
             content_type="text/markdown",
         )
+        helpers.append_event(
+            message="Follow-up emails completed",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
+        )
         outputs.append(
             {
                 "content_type": "text/markdown",
@@ -168,6 +266,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         )
 
         logger.info("Generating participant insights")
+        helpers.append_event(
+            message="Generating participant insights",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
+        )
         participant_insights = get_model_response(
             prompt=prompts.PARTICIPANT_INSIGHTS_PROMPTS,
             input_data={
@@ -182,6 +289,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             participant_insights_key,
             participant_insights.encode("utf-8"),
             content_type="text/markdown",
+        )
+        helpers.append_event(
+            message="Participant insights completed",
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=use_dynamodb,
+            table_name=table_name,
+            bucket=bucket,
         )
         outputs.append(
             {
