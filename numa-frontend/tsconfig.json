@@ -1,8 +1,17 @@
 {
   "compilerOptions": {
 
+    /* Type checking enhancements (kept relaxed) */
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": false,
+    "noFallthroughCasesInSwitch": false,
+    "noPropertyAccessFromIndexSignature": false,
 
-
+    "noImplicitOverride": true,
+    "useUnknownInCatchVariables": true,
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
@@ -18,9 +27,8 @@
     "jsx": "react-jsx",
 
     /* Migration-friendly settings (lenient so builds never block) */
-    "strict": false,
-    "noImplicitAny": false,
-    "strictNullChecks": false,
+
+
     "strictFunctionTypes": false,
     "strictBindCallApply": false,
     "strictPropertyInitialization": false,
@@ -28,7 +36,7 @@
     "noImplicitThis": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": false,
+
 
     /* Additional lenient settings */
     "noErrorTruncation": true,
@@ -64,10 +72,10 @@
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo",
 
-    /* Type checking enhancements (kept relaxed) */
-    "exactOptionalPropertyTypes": false,
-    "noPropertyAccessFromIndexSignature": false,
-    "noUncheckedIndexedAccess": false
+
+
+
+
   },
   "include": ["src/**/*", "src/**/*.json", "src/**/__tests__/**/*"],
   "exclude": [

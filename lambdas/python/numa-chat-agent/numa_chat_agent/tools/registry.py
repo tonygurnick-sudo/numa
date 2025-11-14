@@ -8,9 +8,12 @@ the agent exposes at runtime.
 import json
 import os
 from importlib import import_module
+from typing import Optional
 
 import structlog
 from strands import tool
+
+from ..auth import get_current_user_auth
 
 logger = structlog.get_logger(__name__)
 
@@ -57,7 +60,9 @@ def _get_create_agent_impl():
 
 
 @tool
-def query_knowledge_base(query: str, user_intent: str, max_results: int = 6):
+def query_knowledge_base(
+    query: str, user_intent: str, max_results: int = 6, kb_id: Optional[str] = None
+):
     """
     Search your organization's semantic knowledge base for relevant documents and information.
 
@@ -65,6 +70,7 @@ def query_knowledge_base(query: str, user_intent: str, max_results: int = 6):
     - Company documents, policies, and procedures
     - Internal knowledge base content
     - Previously uploaded files and data sources
+    - User-specific knowledge bases (if kb_id is specified)
 
     Use natural language queries that describe what you're looking for.
     Example: "employee benefits policy" rather than specific file names.
@@ -74,11 +80,26 @@ def query_knowledge_base(query: str, user_intent: str, max_results: int = 6):
         user_intent (str): Description of what the user is trying to accomplish
             (e.g., "User wants to understand employee benefits policy")
         max_results (int): Maximum number of results to return (default: 6, max: 15)
+        kb_id (str | None): Knowledge base ID to search. When omitted, the user's selected KB is used.
 
     Returns:
         ToolResult: Structured JSON content containing knowledge base results
     """
-    return _get_query_impl()(query, user_intent, max_results)
+    resolved_kb_id = kb_id.strip() if isinstance(kb_id, str) and kb_id.strip() else None
+    if not resolved_kb_id:
+        current_auth = get_current_user_auth()
+        selected = (
+            current_auth.get("selected_kb_id")
+            if isinstance(current_auth, dict)
+            else None
+        )
+        if isinstance(selected, str) and selected.strip():
+            resolved_kb_id = selected.strip()
+
+    if not resolved_kb_id:
+        resolved_kb_id = "company"
+
+    return _get_query_impl()(query, user_intent, max_results, resolved_kb_id)
 
 
 @tool

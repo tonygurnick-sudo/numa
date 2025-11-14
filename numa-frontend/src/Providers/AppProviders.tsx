@@ -2,14 +2,17 @@ import { AuthProvider } from './AuthProvider';
 import { NumaRequestProvider } from './RequestProvider';
 import { NumaAppProvider } from './NumaAppProvider';
 import { JobStatusProvider } from './JobStatusProvider';
+import { KnowledgeBaseProvider } from './KnowledgeBaseProvider';
 
 const AppProviders = ({ children }) => {
   return (
     <AuthProvider>
       <NumaRequestProvider>
-        <NumaAppProvider>
-          <JobStatusProvider>{children}</JobStatusProvider>
-        </NumaAppProvider>
+        <KnowledgeBaseProvider>
+          <NumaAppProvider>
+            <JobStatusProvider>{children}</JobStatusProvider>
+          </NumaAppProvider>
+        </KnowledgeBaseProvider>
       </NumaRequestProvider>
     </AuthProvider>
   );

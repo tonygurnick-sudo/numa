@@ -1,0 +1,512 @@
+"""Knowledge Base management utilities for split user KBs."""
+
+import os
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import boto3
+import structlog
+
+logger = structlog.get_logger()
+
+
+class KnowledgeBaseManager:
+    """Manages logical knowledge bases in DynamoDB."""
+
+    def __init__(self, client_name: Optional[str] = None):
+        self.client_name = client_name or os.environ.get("CLIENT_NAME", "")
+        self.table_name = f"numa-{self.client_name}-knowledge-bases"
+        self.dynamodb = boto3.client("dynamodb")
+        self.tenant_pk = f"TENANT#{self.client_name}"
+
+    def create_kb(
+        self,
+        name: str,
+        created_by: str,
+        viewers: List[str],
+        editors: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Create a new knowledge base.
+
+        Args:
+            name: KB display name (must be unique per tenant)
+            created_by: User ID creating the KB
+            viewers: List of user_ids or ["*"] for all
+            editors: List of user_ids with edit permission
+
+        Returns:
+            KB record dict
+        """
+        # Generate unique ID
+        kb_id = str(uuid.uuid4())
+        s3_prefix = f"documents/kb-{kb_id}/"
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Validate name uniqueness
+        if self._kb_name_exists(name):
+            raise ValueError(f"KB name '{name}' already exists")
+
+        # Normalise viewer/editor lists
+        normalized_viewers = self._normalize_id_list(viewers, allow_wildcard=True)
+        normalized_editors = self._normalize_id_list(editors)
+
+        if not normalized_viewers:
+            normalized_viewers = ["*"]
+
+        if created_by:
+            if "*" not in normalized_viewers and created_by not in normalized_viewers:
+                normalized_viewers.append(created_by)
+            if created_by not in normalized_editors:
+                normalized_editors.append(created_by)
+
+        # Final de-duplication (handles creator additions)
+        normalized_viewers = self._normalize_id_list(
+            normalized_viewers, allow_wildcard=True
+        )
+        normalized_editors = self._normalize_id_list(normalized_editors)
+
+        viewers_attribute = (
+            {"SS": normalized_viewers} if normalized_viewers else {"L": []}
+        )
+        editors_attribute = (
+            {"SS": normalized_editors} if normalized_editors else {"L": []}
+        )
+
+        kb_item = {
+            "PK": {"S": self.tenant_pk},
+            "SK": {"S": f"KB#{kb_id}"},
+            "kb_id": {"S": kb_id},
+            "kb_name": {"S": name},
+            "s3_prefix": {"S": s3_prefix},
+            "is_default": {"BOOL": False},
+            "viewers": viewers_attribute,
+            "editors": editors_attribute,
+            "created_by": {"S": created_by},
+            "created_at": {"S": now},
+            "updated_at": {"S": now},
+            "status": {"S": "ACTIVE"},
+            "document_count": {"N": "0"},
+        }
+
+        self.dynamodb.put_item(TableName=self.table_name, Item=kb_item)
+
+        # Create user-KB membership records for GSI
+        self._create_memberships(kb_id, name, normalized_viewers, normalized_editors)
+
+        logger.info("Created KB", kb_id=kb_id, kb_name=name)
+        return self._parse_kb_item(kb_item)
+
+    def get_kb(self, kb_id: str) -> Optional[Dict[str, Any]]:
+        """Get KB by ID."""
+        try:
+            response = self.dynamodb.get_item(
+                TableName=self.table_name,
+                Key={"PK": {"S": self.tenant_pk}, "SK": {"S": f"KB#{kb_id}"}},
+            )
+            item = response.get("Item")
+            return self._parse_kb_item(item) if item else None
+        except Exception as e:
+            logger.error("Error getting KB", kb_id=kb_id, error=str(e))
+            return None
+
+    def list_kbs(self) -> List[Dict[str, Any]]:
+        """List all KBs for this tenant."""
+        try:
+            response = self.dynamodb.query(
+                TableName=self.table_name,
+                KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+                ExpressionAttributeValues={
+                    ":pk": {"S": self.tenant_pk},
+                    ":sk": {"S": "KB#"},
+                },
+            )
+            kbs = [self._parse_kb_item(item) for item in response.get("Items", [])]
+            return [kb for kb in kbs if kb.get("status") != "ARCHIVED"]
+        except Exception as e:
+            logger.error("Error listing KBs", error=str(e))
+            return []
+
+    def list_user_kbs(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        List all KBs a user can view (via GSI).
+
+        Returns list of {kb_id, kb_name, role} dicts.
+        """
+        memberships: Dict[str, Dict[str, Any]] = {}
+
+        try:
+            response = self.dynamodb.query(
+                TableName=self.table_name,
+                IndexName="GSI1",
+                KeyConditionExpression="GSI1PK = :pk",
+                ExpressionAttributeValues={":pk": {"S": f"USER#{user_id}"}},
+            )
+            for item in response.get("Items", []):
+                parsed = self._parse_membership_item(item)
+                memberships[parsed["kb_id"]] = parsed
+        except Exception as e:
+            logger.error(
+                "Error listing user KB memberships", user_id=user_id, error=str(e)
+            )
+
+        try:
+            tenant_kbs = self.list_kbs()
+        except Exception as e:  # pragma: no cover - defensive
+            logger.error("Error loading tenant KBs", error=str(e))
+            tenant_kbs = []
+
+        for kb in tenant_kbs:
+            kb_id = kb.get("kb_id")
+            if not kb_id or kb_id in memberships:
+                continue
+
+            if kb.get("status") != "ACTIVE":
+                continue
+
+            editors = kb.get("editors", [])
+            viewers = kb.get("viewers", [])
+
+            role: Optional[str] = None
+            if user_id in editors:
+                role = "EDITOR"
+            elif "*" in viewers or user_id in viewers:
+                role = "VIEWER"
+
+            if role:
+                memberships[kb_id] = {
+                    "kb_id": kb_id,
+                    "kb_name": kb.get("kb_name", kb_id),
+                    "role": role,
+                }
+
+        return sorted(
+            memberships.values(),
+            key=lambda item: item["kb_name"].lower() if item.get("kb_name") else "",
+        )
+
+    def check_permission(
+        self, kb_id: str, user_id: str, required_role: str = "VIEWER"
+    ) -> bool:
+        """
+        Check if user has permission for KB.
+
+        Args:
+            kb_id: KB ID
+            user_id: User ID
+            required_role: 'VIEWER' or 'EDITOR'
+
+        Returns:
+            True if user has permission
+        """
+        kb = self.get_kb(kb_id)
+        if not kb:
+            return False
+
+        # Check viewers
+        viewers = kb.get("viewers", [])
+        if "*" in viewers or user_id in viewers:
+            if required_role == "VIEWER":
+                return True
+
+        # Check editors (editors can also view)
+        editors = kb.get("editors", [])
+        if user_id in editors:
+            return True
+
+        return False
+
+    def update_kb(
+        self,
+        kb_id: str,
+        name: Optional[str] = None,
+        viewers: Optional[List[str]] = None,
+        editors: Optional[List[str]] = None,
+    ) -> bool:
+        """
+        Update KB properties.
+
+        Args:
+            kb_id: KB ID
+            name: New name (optional)
+            viewers: New viewers list (optional)
+            editors: New editors list (optional)
+
+        Returns:
+            True if successful
+        """
+        try:
+            # Get existing KB
+            kb = self.get_kb(kb_id)
+            if not kb:
+                return False
+
+            # Build update expression
+            update_parts = []
+            expr_attr_values: Dict[str, Dict[str, Any]] = {}
+            expr_attr_names = {}
+            creator_id = kb.get("created_by")
+
+            new_viewers_list = kb.get("viewers", []) or []
+            new_editors_list = kb.get("editors", []) or []
+
+            if name is not None and name != kb["kb_name"]:
+                # Check name uniqueness
+                if self._kb_name_exists(name):
+                    raise ValueError(f"KB name '{name}' already exists")
+                update_parts.append("#name = :name")
+                expr_attr_values[":name"] = {"S": name}
+                expr_attr_names["#name"] = "kb_name"
+
+            if viewers is not None:
+                normalized_viewers = self._normalize_id_list(
+                    viewers, allow_wildcard=True
+                )
+                if not normalized_viewers:
+                    normalized_viewers = ["*"]
+                if (
+                    creator_id
+                    and "*" not in normalized_viewers
+                    and creator_id not in normalized_viewers
+                ):
+                    normalized_viewers.append(creator_id)
+                    normalized_viewers = self._normalize_id_list(
+                        normalized_viewers, allow_wildcard=True
+                    )
+
+                update_parts.append("viewers = :viewers")
+                expr_attr_values[":viewers"] = (
+                    {"SS": normalized_viewers} if normalized_viewers else {"L": []}
+                )
+                new_viewers_list = normalized_viewers
+
+            if editors is not None:
+                normalized_editors = self._normalize_id_list(editors)
+                if creator_id:
+                    normalized_editors.append(creator_id)
+                    normalized_editors = self._normalize_id_list(normalized_editors)
+
+                update_parts.append("editors = :editors")
+                expr_attr_values[":editors"] = (
+                    {"SS": normalized_editors} if normalized_editors else {"L": []}
+                )
+                new_editors_list = normalized_editors
+
+            if update_parts:
+                update_parts.append("updated_at = :updated_at")
+                expr_attr_values[":updated_at"] = {
+                    "S": datetime.now(timezone.utc).isoformat()
+                }
+
+                update_expr = "SET " + ", ".join(update_parts)
+
+                self.dynamodb.update_item(
+                    TableName=self.table_name,
+                    Key={"PK": {"S": self.tenant_pk}, "SK": {"S": f"KB#{kb_id}"}},
+                    UpdateExpression=update_expr,
+                    ExpressionAttributeValues=expr_attr_values,
+                    **(
+                        {"ExpressionAttributeNames": expr_attr_names}
+                        if expr_attr_names
+                        else {}
+                    ),
+                )
+
+                # Update memberships if viewers/editors changed
+                if viewers is not None or editors is not None:
+                    self._update_memberships(
+                        kb_id,
+                        name or kb["kb_name"],
+                        new_viewers_list,
+                        new_editors_list,
+                    )
+
+                logger.info("Updated KB", kb_id=kb_id)
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.error("Error updating KB", kb_id=kb_id, error=str(e))
+            return False
+
+    def delete_kb(self, kb_id: str) -> bool:
+        """
+        Soft-delete a KB (set status to ARCHIVED).
+
+        Args:
+            kb_id: KB ID
+
+        Returns:
+            True if successful
+        """
+        try:
+            self.dynamodb.update_item(
+                TableName=self.table_name,
+                Key={"PK": {"S": self.tenant_pk}, "SK": {"S": f"KB#{kb_id}"}},
+                UpdateExpression="SET #status = :status, updated_at = :updated_at",
+                ExpressionAttributeNames={"#status": "status"},
+                ExpressionAttributeValues={
+                    ":status": {"S": "ARCHIVED"},
+                    ":updated_at": {"S": datetime.now(timezone.utc).isoformat()},
+                },
+            )
+            self._delete_memberships(kb_id)
+            logger.info("Archived KB", kb_id=kb_id)
+            return True
+        except Exception as e:
+            logger.error("Error deleting KB", kb_id=kb_id, error=str(e))
+            return False
+
+    def _kb_name_exists(self, name: str) -> bool:
+        """Check if KB name already exists (excluding ARCHIVED KBs)."""
+        try:
+            response = self.dynamodb.query(
+                TableName=self.table_name,
+                KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+                ExpressionAttributeValues={
+                    ":pk": {"S": self.tenant_pk},
+                    ":sk": {"S": "KB#"},
+                },
+            )
+            for item in response.get("Items", []):
+                # Skip archived KBs
+                if item.get("status", {}).get("S") == "ARCHIVED":
+                    continue
+                if item.get("kb_name", {}).get("S") == name:
+                    return True
+            return False
+        except Exception as e:
+            logger.error("Error checking KB name", name=name, error=str(e))
+            return False
+
+    def _create_memberships(
+        self, kb_id: str, kb_name: str, viewers: List[str], editors: List[str]
+    ):
+        """Create user-KB membership records for GSI queries."""
+        members = {}
+
+        # Add viewers
+        for user_id in viewers:
+            if user_id != "*":
+                members[user_id] = "VIEWER"
+
+        # Add editors (overrides viewer)
+        for user_id in editors:
+            members[user_id] = "EDITOR"
+
+        # Write membership records
+        for user_id, role in members.items():
+            membership_item = {
+                "PK": {"S": self.tenant_pk},
+                "SK": {"S": f"KBMEM#{kb_id}#USER#{user_id}"},
+                "GSI1PK": {"S": f"USER#{user_id}"},
+                "GSI1SK": {"S": f"KB#{kb_id}"},
+                "kb_id": {"S": kb_id},
+                "kb_name": {"S": kb_name},
+                "role": {"S": role},
+            }
+            try:
+                self.dynamodb.put_item(TableName=self.table_name, Item=membership_item)
+            except Exception as e:
+                logger.error(
+                    "Error creating membership",
+                    kb_id=kb_id,
+                    user_id=user_id,
+                    error=str(e),
+                )
+
+    def _delete_memberships(self, kb_id: str):
+        """Delete all membership records for a KB."""
+        try:
+            response = self.dynamodb.query(
+                TableName=self.table_name,
+                KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+                ExpressionAttributeValues={
+                    ":pk": {"S": self.tenant_pk},
+                    ":sk": {"S": f"KBMEM#{kb_id}#"},
+                },
+            )
+            for item in response.get("Items", []):
+                self.dynamodb.delete_item(
+                    TableName=self.table_name,
+                    Key={"PK": item["PK"], "SK": item["SK"]},
+                )
+        except Exception as e:
+            logger.error("Error deleting memberships", kb_id=kb_id, error=str(e))
+
+    def _update_memberships(
+        self, kb_id: str, kb_name: str, viewers: List[str], editors: List[str]
+    ):
+        """Update user-KB membership records (delete old, create new)."""
+        self._delete_memberships(kb_id)
+
+        # Create new memberships
+        self._create_memberships(kb_id, kb_name, viewers, editors)
+
+    def _normalize_id_list(
+        self, items: Optional[List[str]], allow_wildcard: bool = False
+    ) -> List[str]:
+        """Normalise user identifier lists (dedupe, strip blanks, handle wildcards)."""
+        if not items:
+            return []
+
+        normalized: List[str] = []
+        seen = set()
+
+        for raw in items:
+            if raw is None:
+                continue
+            value = raw.strip() if isinstance(raw, str) else str(raw).strip()
+            if not value:
+                continue
+
+            if allow_wildcard and value == "*":
+                return ["*"]
+
+            if value not in seen:
+                normalized.append(value)
+                seen.add(value)
+
+        return normalized
+
+    def _parse_kb_item(self, item: Dict) -> Dict[str, Any]:
+        """Parse DynamoDB KB item to dict."""
+        # Handle both SS (String Set) and L (List) for viewers/editors
+        viewers_value = item.get("viewers", {})
+        if "SS" in viewers_value:
+            viewers = list(viewers_value["SS"])
+        elif "L" in viewers_value:
+            viewers = []
+        else:
+            viewers = []
+
+        editors_value = item.get("editors", {})
+        if "SS" in editors_value:
+            editors = list(editors_value["SS"])
+        elif "L" in editors_value:
+            editors = []
+        else:
+            editors = []
+
+        return {
+            "kb_id": item["kb_id"]["S"],
+            "kb_name": item["kb_name"]["S"],
+            "s3_prefix": item["s3_prefix"]["S"],
+            "is_default": item.get("is_default", {}).get("BOOL", False),
+            "viewers": viewers,
+            "editors": editors,
+            "created_by": item.get("created_by", {}).get("S"),
+            "created_at": item.get("created_at", {}).get("S"),
+            "status": item["status"]["S"],
+            "document_count": int(item.get("document_count", {}).get("N", 0)),
+        }
+
+    def _parse_membership_item(self, item: Dict) -> Dict[str, Any]:
+        """Parse DynamoDB membership item."""
+        return {
+            "kb_id": item["kb_id"]["S"],
+            "kb_name": item["kb_name"]["S"],
+            "role": item["role"]["S"],
+        }

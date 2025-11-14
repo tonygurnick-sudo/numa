@@ -327,6 +327,7 @@ export interface ChatAgentRequest {
   systemPrompt?: string;
   modelId?: string | null;
   userAuth?: Record<string, unknown> | null;
+  kb_id?: string | null;
   // Optional client-local time information to assist backend tool routing/prompts
   timeInfo?: {
     date: string; // locale-formatted date

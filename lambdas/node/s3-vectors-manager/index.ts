@@ -83,6 +83,8 @@ async function handleCreate(
         dimension: props.Dimensions,
         distanceMetric: props.DistanceMetric.toLowerCase() as 'cosine' | 'euclidean',
         metadataConfiguration: {
+          // All metadata keys are filterable by default except those listed as non-filterable
+          // tenant_id, kb_id, uploader_id, uploaded_at will be filterable
           nonFilterableMetadataKeys: [
             'AMAZON_BEDROCK_TEXT', // Bedrock stores parsed text here - can be large
             'AMAZON_BEDROCK_METADATA', // Bedrock stores document metadata here
@@ -203,20 +205,7 @@ async function handleCreate(
           type: 'S3',
           s3Configuration: {
             bucketArn: props.DataBucketArn,
-            inclusionPrefixes: ['documents/company/'],
-          },
-        },
-        vectorIngestionConfiguration: {
-          parsingConfiguration: {
-            parsingStrategy: 'BEDROCK_FOUNDATION_MODEL',
-            bedrockFoundationModelConfiguration: {
-              modelArn: props.ParserModelArn,
-              parsingModality: 'MULTIMODAL',
-              parsingPrompt: {
-                parsingPromptText:
-                  'Please extract and parse the content from this document, preserving the structure and extracting any tables, figures, or other elements. Return the content in a clear, structured format.',
-              },
-            },
+            inclusionPrefixes: ['documents/'],
           },
         },
       }),

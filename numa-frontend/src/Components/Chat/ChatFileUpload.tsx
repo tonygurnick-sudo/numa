@@ -4,6 +4,7 @@ import { S3UploadModule } from '../../Modules/S3UploadModule';
 import { UploadStatusRow } from '../Status/UploadStatusRow';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { processFile } from '../../utils/fileProcessing';
 import type { AgentSummary } from '../../types/agents';
 
@@ -89,6 +90,7 @@ export const ChatFileUpload = ({
 }: ChatFileUploadProps) => {
   const { numaChatDynamoUtils, user, getCredentials } = useAuth();
   const { numaPost } = useNumaRequest();
+  const { selectedKB, selectedKbId } = useKnowledgeBase();
 
   // Imperative access into S3UploadModule
   const uploadRef = useRef<UploaderRef>(null);
@@ -318,6 +320,7 @@ export const ChatFileUpload = ({
           onComplete={handleUploadComplete}
           onNotComplete={() => {}}
           onChange={() => {}}
+          kb_id={selectedKbId || selectedKB?.kb_id || null}
         />
 
         <div className="supported-file-types mt-3">

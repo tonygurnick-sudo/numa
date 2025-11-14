@@ -23,6 +23,14 @@ vi.mock('../../Providers/NumaRequestContext', () => ({
   })),
 }));
 
+// Mock KnowledgeBaseProvider
+vi.mock('../../Providers/KnowledgeBaseProvider', () => ({
+  useKnowledgeBase: vi.fn(() => ({
+    selectedKB: { kb_id: 'test-kb' },
+    selectedKbId: 'test-kb',
+  })),
+}));
+
 // Mock S3UploadModule to surface a test button that triggers onComplete
 const { S3UploadModule } = vi.hoisted(() => ({ S3UploadModule: vi.fn() }));
 vi.mock('../../Modules/S3UploadModule', () => ({

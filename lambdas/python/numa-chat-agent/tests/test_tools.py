@@ -29,8 +29,8 @@ class TestTools(unittest.TestCase):
             query="test query", user_intent="test intent", max_results=5  # type: ignore # Strands @tool decorator modifies function signature
         )
 
-        # Verify the implementation was called correctly
-        mock_impl.assert_called_once_with("test query", "test intent", 5)
+        # Verify the implementation was called correctly with resolved kb_id defaulting to "company"
+        mock_impl.assert_called_once_with("test query", "test intent", 5, "company")
 
         # Verify the result
         self.assertEqual(result["status"], "success")

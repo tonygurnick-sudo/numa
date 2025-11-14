@@ -11,8 +11,8 @@
     "isolatedModules": true,
     "moduleDetection": "force",
 
-    /* No output; keep builds unblocked */
-    "noEmit": true,
+    /* Project reference support */
+    "composite": true,
 
     /* Enable incremental cache (harmless for noEmit, speeds IDE) */
     "incremental": true,

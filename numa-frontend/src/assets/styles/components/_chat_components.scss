@@ -167,7 +167,7 @@ $border-radius-pill: 1rem;
       border: 1px solid #dee2e6;
       background: white;
       border-radius: 25px;
-      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
       margin: 0 auto;
       max-width: 1130px;
       max-height: 500px;
@@ -180,7 +180,6 @@ $border-radius-pill: 1rem;
         border: none;
         outline: none;
         box-shadow: none;
-        border: none;
         resize: vertical;
         min-height: 40px;
         max-height: None;
@@ -209,6 +208,21 @@ $border-radius-pill: 1rem;
         display: flex;
         align-items: center;
         gap: 10px; /* Space between items */
+
+        .kb-selector-inline {
+          display: flex;
+          align-items: center;
+
+          .kb-selector-dropdown {
+            .btn {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.35rem;
+              border-radius: 9999px;
+              white-space: nowrap;
+            }
+          }
+        }
       }
       .attachment-icon {
         background: none;
@@ -459,8 +473,6 @@ $border-radius-pill: 1rem;
     border-radius: 10px;
     border: none;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    margin-bottom: 0.5;
-    margin-top: 0.5;
 
     display: flex;
     align-items: center;

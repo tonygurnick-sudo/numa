@@ -6,7 +6,6 @@ import React, {
   forwardRef,
   useImperativeHandle,
   type ForwardRefRenderFunction,
-  type WeakValidationMap,
 } from 'react';
 import { Button } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
@@ -56,6 +55,7 @@ export interface S3UploadModuleProps {
   onChange?: (value: StandardizedFile[] | null | string) => void;
   value?: StandardizedFile | StandardizedFile[] | string;
   disabled?: boolean;
+  kb_id?: string | null;
 }
 
 type TaskResponse = {
@@ -114,8 +114,15 @@ const standardizeFileFormat = (file: unknown): StandardizedFile | null => {
   return null;
 };
 
+const resolveKbIdForMetadata = (kbId?: string | null): string => {
+  if (typeof kbId === 'string' && kbId.trim().length > 0) {
+    return kbId.trim();
+  }
+  return 'company';
+};
+
 const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModuleProps> = (
-  { task, onComplete = noop, onNotComplete = noop, onChange = noop, value, disabled = false },
+  { task, onComplete = noop, onNotComplete = noop, onChange = noop, value, disabled = false, kb_id = null },
   ref,
 ) => {
   const {
@@ -254,7 +261,6 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     }
   }, [value]);
 
-  // Initial completion status
   useEffect(() => {
     const isChatFileUpload = task?.id === 'chatFileUpload';
     if (isChatFileUpload) return;
@@ -475,8 +481,22 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
         throw new Error(`Authentication error: ${msg}`);
       });
 
+      const resolvedRegion = region || window.sessionStorage.getItem('REGION');
+      if (!resolvedRegion) {
+        throw new Error('AWS region is not configured for uploads');
+      }
+
+      const bucketForUpload = bucketName;
+
+      if (!bucketForUpload) {
+        throw new Error('No S3 bucket configured for uploads');
+      }
+
+      const resolvedKbIdForUpload = resolveKbIdForMetadata(kb_id);
+      const resolvedTenantName = (typeof window !== 'undefined' && window.sessionStorage.getItem('CLIENT_NAME')) || '';
+
       const s3Client = new S3Client({
-        region,
+        region: resolvedRegion,
         credentials,
       });
 
@@ -496,14 +516,25 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
         let s3Key: string;
         if (isChatFileUpload) {
           const chatId = Math.random().toString(36).slice(2, 10);
-          s3Key = `numa-chat/uploads/${userUuid}/${chatId}/${fileName}_${randomId}${fileExt}`;
+          const uploaderFolder = userUuid ? `${userUuid}/` : 'anonymous/';
+          s3Key = `numa-chat/uploads/${uploaderFolder}${chatId}/${fileName}_${randomId}${fileExt}`;
         } else {
           s3Key = `${numaAppId}/${userUuid}/${jobId}/${fileName}_${randomId}${fileExt}`;
         }
 
+        const metadata = isChatFileUpload
+          ? {
+              kb_id: resolvedKbIdForUpload,
+              uploaded_at: new Date().toISOString(),
+              ...(resolvedTenantName ? { tenant_id: resolvedTenantName } : {}),
+              ...(userUuid ? { uploader_id: userUuid } : {}),
+            }
+          : undefined;
+
         const command = new PutObjectCommand({
-          Bucket: bucketName,
+          Bucket: bucketForUpload,
           Key: s3Key,
+          Metadata: metadata,
         });
 
         const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
@@ -519,6 +550,29 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
           },
         });
 
+        if (isChatFileUpload) {
+          try {
+            const metadataAttributes: Record<string, string> = {
+              kb_id: resolvedKbIdForUpload,
+              uploaded_at: new Date().toISOString(),
+            };
+            if (resolvedTenantName) metadataAttributes.tenant_id = resolvedTenantName;
+            if (userUuid) metadataAttributes.uploader_id = userUuid;
+
+            await s3Client.send(
+              new PutObjectCommand({
+                Bucket: bucketForUpload,
+                Key: `${s3Key}.metadata.json`,
+                Body: JSON.stringify({ metadataAttributes }),
+                ContentType: 'application/json',
+              }),
+            );
+          } catch (metadataError) {
+            console.warn('Failed to upload metadata sidecar for chat file', metadataError);
+          }
+        }
+
+        // Create standardized file object
         const standardizedFile = standardizeFileFormat({
           id: randomId,
           name: file.name,
@@ -526,8 +580,8 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
           filePath: s3Key,
           fileName: file.name,
           fileType: file.type,
-          s3Bucket: bucketName,
-          file,
+          s3Bucket: bucketForUpload,
+          file, // Keep the original file for chat compatibility
         }) as StandardizedFile;
 
         results.push(standardizedFile);
@@ -777,10 +831,9 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
   );
 };
 
-// Attach propTypes without introducing `any`
 export const S3UploadModule = forwardRef(S3UploadModuleInner) as unknown as React.ForwardRefExoticComponent<
   React.PropsWithoutRef<S3UploadModuleProps> & React.RefAttributes<UploaderHandle>
-> & { propTypes?: WeakValidationMap<S3UploadModuleProps> };
+>;
 
 S3UploadModule.propTypes = {
   task: PropTypes.shape({
@@ -794,14 +847,10 @@ S3UploadModule.propTypes = {
       maxFiles: PropTypes.number,
       userMessage: PropTypes.string,
     }),
-  }) as unknown as WeakValidationMap<S3UploadModuleProps>,
-  onComplete: PropTypes.func as unknown as WeakValidationMap<S3UploadModuleProps>,
-  onNotComplete: PropTypes.func as unknown as WeakValidationMap<S3UploadModuleProps>,
-  onChange: PropTypes.func as unknown as WeakValidationMap<S3UploadModuleProps>,
-  value: PropTypes.oneOfType([
-    PropTypes.string,
-    PropTypes.array,
-    PropTypes.object,
-  ]) as unknown as WeakValidationMap<S3UploadModuleProps>,
-  disabled: PropTypes.bool as unknown as WeakValidationMap<S3UploadModuleProps>,
+  }).isRequired,
+  onComplete: PropTypes.func,
+  onNotComplete: PropTypes.func,
+  onChange: PropTypes.func,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.array, PropTypes.object]),
+  disabled: PropTypes.bool,
 };

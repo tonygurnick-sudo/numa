@@ -2,14 +2,30 @@ import { useState } from 'react';
 import { Form, Button, Card, Table, InputGroup, Collapse } from 'react-bootstrap';
 import { useWebCrawler, parseUrlsFromText } from '../utils/webCrawler';
 
-export const WebCrawler = ({ onCrawlerStarted }) => {
-  const [urlInput, setUrlInput] = useState('');
-  const [urlEntries, setUrlEntries] = useState([]);
-  const [crawlError, setCrawlError] = useState(null);
-  const [crawlSuccess, setCrawlSuccess] = useState(null);
-  const [isCrawling, setIsCrawling] = useState(false);
-  const [urlError, setUrlError] = useState(null);
-  const [showAbout, setShowAbout] = useState(false);
+interface UrlEntry {
+  url: string;
+  depth: number;
+}
+
+interface CrawlerResult {
+  success: boolean;
+  executionName?: string;
+  error?: string;
+}
+
+interface WebCrawlerProps {
+  onCrawlerStarted?: (result: CrawlerResult) => void;
+  kb_id?: string;
+}
+
+export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerProps) => {
+  const [urlInput, setUrlInput] = useState<string>('');
+  const [urlEntries, setUrlEntries] = useState<UrlEntry[]>([]);
+  const [crawlError, setCrawlError] = useState<string | null>(null);
+  const [crawlSuccess, setCrawlSuccess] = useState<{ message: string; executionName?: string } | null>(null);
+  const [isCrawling, setIsCrawling] = useState<boolean>(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [showAbout, setShowAbout] = useState<boolean>(false);
   const { startWebCrawler } = useWebCrawler();
 
   const handleAddUrl = () => {
@@ -50,18 +66,18 @@ export const WebCrawler = ({ onCrawlerStarted }) => {
     }
   };
 
-  const handleUrlKeyPress = (e) => {
+  const handleUrlKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       handleAddUrl();
     }
   };
 
-  const handleRemoveUrl = (index) => {
+  const handleRemoveUrl = (index: number) => {
     setUrlEntries((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleUpdateDepth = (index, depth) => {
+  const handleUpdateDepth = (index: number, depth: string) => {
     const updatedEntries = [...urlEntries];
     updatedEntries[index].depth = parseInt(depth, 10);
     setUrlEntries(updatedEntries);
@@ -88,6 +104,7 @@ export const WebCrawler = ({ onCrawlerStarted }) => {
       const urlDepthMap = Object.fromEntries(urlEntries.map((entry) => [entry.url, entry.depth]));
       const result = await startWebCrawler(urls, {
         urlDepthMap,
+        kb_id,
       });
 
       if (result.success) {
@@ -105,7 +122,7 @@ export const WebCrawler = ({ onCrawlerStarted }) => {
       }
     } catch (error) {
       console.error('Error starting crawler:', error);
-      setCrawlError(error.message || 'Failed to start web crawler');
+      setCrawlError(error instanceof Error ? error.message : 'Failed to start web crawler');
     } finally {
       setIsCrawling(false);
     }
@@ -134,7 +151,7 @@ export const WebCrawler = ({ onCrawlerStarted }) => {
                       setUrlInput(e.target.value);
                       if (urlError) setUrlError(null); // Clear error when typing
                     }}
-                    onKeyPress={handleUrlKeyPress}
+                    onKeyDown={handleUrlKeyPress}
                     disabled={isCrawling}
                     isInvalid={!!urlError}
                   />

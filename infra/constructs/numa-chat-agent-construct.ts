@@ -20,6 +20,7 @@ export interface ChatAgentHttpProps {
   userPoolId: string;
   userPoolClientId: string;
   chatHistoryTableName: string;
+  knowledgeBasesTableName: string;
   outputsBucketArn: string;
   outputsBucketName: string;
   dataBucketArn: string;
@@ -157,6 +158,20 @@ export class NumaChatAgent extends Construct {
           resources: [
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-chat-history`,
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-*-chat-history`,
+          ],
+        },
+        {
+          effect: 'Allow',
+          actions: [
+            'dynamodb:Query',
+            'dynamodb:GetItem',
+            'dynamodb:PutItem',
+            'dynamodb:UpdateItem',
+            'dynamodb:DeleteItem',
+          ],
+          resources: [
+            `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.knowledgeBasesTableName}`,
+            `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.knowledgeBasesTableName}/index/*`,
           ],
         },
         ...(props.pipedreamIntegrationsEnabled && props.pipedreamProxyLambdaArn
