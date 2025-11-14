@@ -66,6 +66,7 @@ export class CoreNumaInfra extends Construct {
   readonly brandingAssetsBucketArn: string;
   readonly brandingAssetsBucketName: string;
   readonly brandingAssetsPrefix: string;
+  readonly knowledgeBasesTable: DynamodbTable;
   readonly workspaceAgentsTable: DynamodbTable;
   readonly userAgentsTable: DynamodbTable;
   readonly agentsSettingsTable: DynamodbTable;
@@ -335,6 +336,108 @@ export class CoreNumaInfra extends Construct {
         Environment: props.environmentName,
         Purpose: 'branding-config',
       },
+    });
+
+    // Create knowledge bases table for logical KB partitioning
+    this.knowledgeBasesTable = new DynamodbTable(this, 'numa-knowledge-bases-table', {
+      name: `${numaClient}-knowledge-bases`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'PK',
+      rangeKey: 'SK',
+      attribute: [
+        {
+          name: 'PK',
+          type: 'S',
+        },
+        {
+          name: 'SK',
+          type: 'S',
+        },
+        {
+          name: 'GSI1PK',
+          type: 'S',
+        },
+        {
+          name: 'GSI1SK',
+          type: 'S',
+        },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'GSI1',
+          hashKey: 'GSI1PK',
+          rangeKey: 'GSI1SK',
+          projectionType: 'ALL',
+        },
+      ],
+      pointInTimeRecovery: {
+        enabled: true,
+      },
+      tags: {
+        Name: `${numaClient}-knowledge-bases`,
+        Environment: props.environmentName,
+        Purpose: 'knowledge-base-management',
+      },
+    });
+
+    // Create log group for core resources (needs to be before lambdas)
+    this.logGroup = new NumaLogGroup(this, 'core-log-group', {
+      logGroupName: `${props.clientName}-core`,
+    }).logGroup;
+
+    this.logGroup.addMoveTarget(`${props.clientName}-core-log-group`);
+
+    // Create seed-default-kb Lambda to initialize default knowledge base
+    const seedDefaultKbLambda = new NumaLambda(this, 'seed-default-kb', {
+      clientName: props.clientName,
+      lambdaDirectory: 'python/seed-default-kb/',
+      logGroup: this.logGroup,
+      resourceNameSuffix: '_seed-default-kb',
+      environment: {
+        CLIENT_NAME: props.clientName,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+          resources: [this.knowledgeBasesTable.arn],
+        },
+      ],
+    });
+
+    // Invoke seed-default-kb Lambda once on stack creation
+    new LambdaInvocation(this, 'seed-default-kb-invocation', {
+      functionName: seedDefaultKbLambda.lambda.functionName,
+      input: JSON.stringify({}),
+      triggers: {
+        knowledgeBasesTableName: this.knowledgeBasesTable.name,
+        seedDefaultKbSourceHash: seedDefaultKbLambda.lambda.sourceCodeHash,
+      },
+      dependsOn: [
+        this.knowledgeBasesTable,
+        seedDefaultKbLambda.lambda,
+        ...seedDefaultKbLambda.additionalPolicies,
+        ...seedDefaultKbLambda.policyAttachments,
+      ],
+    });
+
+    // Create backfill-metadata Lambda for manual invocation
+    new NumaLambda(this, 'backfill-metadata', {
+      clientName: props.clientName,
+      lambdaDirectory: 'python/backfill-metadata/',
+      logGroup: this.logGroup,
+      resourceNameSuffix: '_backfill-metadata',
+      environment: {
+        CLIENT_NAME: props.clientName,
+        BUCKET_NAME: this.dataBucket.bucket.bucket,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:HeadObject'],
+          resources: [this.dataBucket.bucket.arn, `${this.dataBucket.bucket.arn}/*`],
+        },
+      ],
     });
 
     // Agents tables
@@ -838,12 +941,6 @@ export class CoreNumaInfra extends Construct {
     // Always output bucket information
     new TerraformOutput(this, 'data-bucket', { value: this.dataBucket.bucket.bucket });
     new TerraformOutput(this, 'company-bucket', { value: companyBucket.bucket.bucket });
-
-    this.logGroup = new NumaLogGroup(this, 'core-log-group', {
-      logGroupName: `${props.clientName}-core`,
-    }).logGroup;
-
-    this.logGroup.addMoveTarget(`${props.clientName}-core-log-group`);
 
     // Create Pipedream relay lambda if Pipedream integrations are enabled
     let pipedreamRelayLambda: NumaLambda | undefined;

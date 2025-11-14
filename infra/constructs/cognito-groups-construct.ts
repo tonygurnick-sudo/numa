@@ -215,7 +215,8 @@ const createFeatureSets = (props: {
           'bedrock:GetIngestionJob',
           'bedrock:ListKnowledgeBaseDocuments',
         ],
-        resources: [props.knowledgeBase.knowledgeBaseArn],
+        // Bedrock "List*" APIs do not currently support resource-level scoping.
+        resources: ['*'],
       },
     ],
 

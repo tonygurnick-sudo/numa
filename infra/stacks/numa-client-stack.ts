@@ -201,6 +201,7 @@ export class NumaClientStack extends TerraformStack {
       userPoolId: core.userPoolId,
       userPoolClientId: core.userPoolClient.id,
       chatHistoryTableName: core.chatHistoryTable.name,
+      knowledgeBasesTableName: core.knowledgeBasesTable.name,
       outputsBucketArn: core.outputsBucket.bucket.arn,
       outputsBucketName: core.outputsBucket.bucket.bucket,
       dataBucketArn: core.dataBucket.bucket.arn,

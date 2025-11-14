@@ -31,6 +31,9 @@ import { FileUploader } from '../Components/FileUploader';
 import { FeatureWrapper } from '../Components/RequiredFeaturesWrapper';
 import { NotificationModal } from '../Components/NotificationModal';
 import { getKnowledgeBaseState } from '../utils/knowledgeBaseUtils';
+import { CreateKBModal } from '../Components/CreateKBModal';
+import { ManageKBsTable } from '../Components/ManageKBsTable';
+import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 // Knowledge Base Management specific styles
 import '../assets/styles/components/_knowledge_base_management.scss';
 
@@ -268,26 +271,101 @@ function sortTree(node: TreeNode, sortColumn: SortColumn = 'name', sortDirection
   }
 }
 
+function getFolderDisplayName(folderName: string, kbNameMap: Record<string, string>): string {
+  if (kbNameMap[folderName]) {
+    return kbNameMap[folderName];
+  }
+  if (folderName.startsWith('kb-')) {
+    const stripped = folderName.replace(/^kb-/, '');
+    if (kbNameMap[stripped]) {
+      return kbNameMap[stripped];
+    }
+  }
+  return folderName;
+}
+
 /**
  * Recursively build an array of rows (folder or file) for display in a tree-table.
  */
-function buildRowsForTree(node: TreeNode, depth: number, parentPath: string): TableRow[] {
+function buildRowsForTree(
+  node: TreeNode,
+  depth: number,
+  parentPath: string,
+  kbNameMap: Record<string, string> = {},
+): TableRow[] {
   const rows: TableRow[] = [];
 
   // Subfolders
   for (const folderName of Object.keys(node.children)) {
+    if (folderName === 'company') {
+      const companyNode = node.children[folderName];
+      const childFolderNames = Object.keys(companyNode.children);
+      const kbChildNames = childFolderNames.filter(
+        (name) => name !== 'company' && (kbNameMap[name] || name.startsWith('kb-')),
+      );
+      const nonKbChildren: Record<string, TreeNode> = {};
+      childFolderNames.forEach((name) => {
+        if (!kbChildNames.includes(name)) {
+          nonKbChildren[name] = companyNode.children[name];
+        }
+      });
+
+      // Promote KB-specific children so they appear alongside "Company"
+      kbChildNames.forEach((kbChildName) => {
+        const kbNode = companyNode.children[kbChildName];
+        const kbFolderId = parentPath ? `${parentPath}/${folderName}/${kbChildName}` : `${folderName}/${kbChildName}`;
+        const kbDisplayName = getFolderDisplayName(kbChildName, kbNameMap);
+        const kbFolderRow: TableRow = {
+          id: kbFolderId,
+          type: 'folder',
+          name: kbDisplayName,
+          depth,
+          uploadDate: '—',
+          size: '—',
+          children: buildRowsForTree(kbNode, depth + 1, kbFolderId, kbNameMap),
+        };
+        rows.push(kbFolderRow);
+      });
+
+      const companyFolderId = parentPath ? `${parentPath}/${folderName}` : folderName;
+      const companyRow: TableRow = {
+        id: companyFolderId,
+        type: 'folder',
+        name: getFolderDisplayName(folderName, kbNameMap),
+        depth,
+        uploadDate: '—',
+        size: '—',
+        children: buildRowsForTree(
+          {
+            name: companyNode.name,
+            children: nonKbChildren,
+            files: companyNode.files,
+          },
+          depth + 1,
+          companyFolderId,
+          kbNameMap,
+        ),
+      };
+      rows.push(companyRow);
+      continue;
+    }
+
     const folderId = parentPath ? `${parentPath}/${folderName}` : folderName;
+
+    // Map KB IDs to friendly names when possible
+    const displayName = getFolderDisplayName(folderName, kbNameMap);
+
     const folderRow: TableRow = {
       id: folderId,
       type: 'folder',
-      name: folderName,
+      name: displayName,
       depth,
       uploadDate: '—',
       size: '—',
       children: [],
     };
     const childNode = node.children[folderName];
-    folderRow.children = buildRowsForTree(childNode, depth + 1, folderId);
+    folderRow.children = buildRowsForTree(childNode, depth + 1, folderId, kbNameMap);
     rows.push(folderRow);
   }
 
@@ -495,7 +573,15 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
   const [pendingLargeFiles, setPendingLargeFiles] = useState<File[]>([]);
   const [clearFileUploader, setClearFileUploader] = useState<boolean>(false);
 
+  // KB Management modal state
+  const [showCreateKBModal, setShowCreateKBModal] = useState<boolean>(false);
+  const [kbManagementRefreshKey, setKbManagementRefreshKey] = useState<number>(0);
+
+  // KB selector state for file uploads and web crawler
+  const [uploadDestinationKB, setUploadDestinationKB] = useState<string>('company');
+
   const { getCredentials, qBusinessClient, bedrockAgentClient, region: authRegion } = useAuth();
+  const { refreshKBs, availableKBs, isLoadingKBs: isLoadingKBsList } = useKnowledgeBase();
   // Fallback to session storage if region is not available from auth context
   const region = authRegion || window.sessionStorage.getItem('REGION') || 'ap-southeast-2';
 
@@ -509,6 +595,23 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
       return () => clearTimeout(timer);
     }
   }, [clearFileUploader]);
+
+  // Sync uploadDestinationKB with available KBs
+  useEffect(() => {
+    if (!isLoadingKBsList) {
+      // Find the first KB with editor permissions
+      const editorKB = availableKBs.find((kb) => kb.role === 'EDITOR');
+
+      if (editorKB) {
+        // If we have a KB with editor permissions, use it
+        setUploadDestinationKB(editorKB.kb_id);
+      } else if (availableKBs.length === 0) {
+        // If no KBs available, use 'company'
+        setUploadDestinationKB('company');
+      }
+      // If there are KBs but none with editor permissions, keep current selection
+    }
+  }, [availableKBs, isLoadingKBsList]);
 
   // Helper function to toggle expanded state of a data source
   const toggleExpand = (dataSourceId: string): void => {
@@ -1082,10 +1185,27 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
   }, [indexedSearch, indexedTree]);
 
   /**
+   * Create KB name map for display
+   */
+  const kbNameMap = useMemo((): Record<string, string> => {
+    const map: Record<string, string> = {};
+    availableKBs.forEach((kb) => {
+      map[kb.kb_id] = kb.kb_name;
+    });
+    return map;
+  }, [availableKBs]);
+
+  /**
    * Convert each tree to nested row objects, then flatten them
    */
-  const pendingRowsNested = useMemo((): TableRow[] => buildRowsForTree(pendingTree, 0, ''), [pendingTree]);
-  const indexedRowsNested = useMemo((): TableRow[] => buildRowsForTree(indexedTree, 0, ''), [indexedTree]);
+  const pendingRowsNested = useMemo(
+    (): TableRow[] => buildRowsForTree(pendingTree, 0, '', kbNameMap),
+    [pendingTree, kbNameMap],
+  );
+  const indexedRowsNested = useMemo(
+    (): TableRow[] => buildRowsForTree(indexedTree, 0, '', kbNameMap),
+    [indexedTree, kbNameMap],
+  );
 
   const pendingRows = useMemo(
     (): TableRow[] => flattenRows(pendingRowsNested, expandedFoldersPending),
@@ -1531,6 +1651,28 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
             </Col>
           </Row>
 
+          {/* User Knowledge Bases Section */}
+          <Row className="g-4 mb-4">
+            <Col xs={12}>
+              <Card>
+                <Card.Header className="d-flex justify-content-between align-items-center">
+                  <Card.Title className="mb-0">Your Knowledge Bases</Card.Title>
+                  <Button variant="primary" size="sm" onClick={() => setShowCreateKBModal(true)}>
+                    <i className="bi bi-plus-circle me-2"></i>
+                    Create New KB
+                  </Button>
+                </Card.Header>
+                <Card.Body>
+                  <p className="small text-muted mb-3">
+                    Manage your personal knowledge bases. Create separate KBs for different projects or teams, and
+                    control who can view and edit them.
+                  </p>
+                  <ManageKBsTable refreshKey={kbManagementRefreshKey} />
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+
           {/* Data Sources Section */}
           <Row className="g-4 mb-4">
             <Col xs={12}>
@@ -1795,6 +1937,34 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
                       Once uploaded, files are automatically indexed every 30 minutes where they will be available for
                       querying in Numa Chat.
                     </p>
+
+                    {/* KB Selector */}
+                    <Form.Group className="mb-3">
+                      <Form.Label>
+                        <strong>Destination Knowledge Base</strong>
+                      </Form.Label>
+                      <Form.Select
+                        value={uploadDestinationKB}
+                        onChange={(e) => setUploadDestinationKB(e.target.value)}
+                        disabled={isLoadingKBsList}
+                      >
+                        {availableKBs.filter((kb) => kb.role === 'EDITOR').length === 0 && !isLoadingKBsList && (
+                          <option value="company">Company Knowledge Base</option>
+                        )}
+                        {availableKBs
+                          .filter((kb) => kb.role === 'EDITOR')
+                          .map((kb) => (
+                            <option key={kb.kb_id} value={kb.kb_id}>
+                              {kb.kb_name} (Editor)
+                            </option>
+                          ))}
+                      </Form.Select>
+                      <Form.Text className="text-muted">
+                        Select which knowledge base to upload files to. Only knowledge bases where you have editor
+                        permissions are available.
+                      </Form.Text>
+                    </Form.Group>
+
                     {fileValidationError && (
                       <Alert variant="danger" className="mb-3">
                         <strong>File Validation Error:</strong>
@@ -1806,6 +1976,7 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
                       onFileSelect={handleFileSelect}
                       validateFile={isFileTypeValidForBedrockKB}
                       clearFiles={clearFileUploader}
+                      kb_id={uploadDestinationKB}
                     />
                   </Card.Body>
                 </Card>
@@ -1817,7 +1988,41 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
           <FeatureWrapper requiredFeature="addToCompanyData">
             <Row className="g-4 mb-4">
               <Col xs={12}>
-                <WebCrawler onCrawlerStarted={fetchFiles} />
+                <Card>
+                  <Card.Header>
+                    <Card.Title className="mb-0">Web Crawler</Card.Title>
+                  </Card.Header>
+                  <Card.Body>
+                    {/* KB Selector */}
+                    <Form.Group className="mb-3">
+                      <Form.Label>
+                        <strong>Destination Knowledge Base</strong>
+                      </Form.Label>
+                      <Form.Select
+                        value={uploadDestinationKB}
+                        onChange={(e) => setUploadDestinationKB(e.target.value)}
+                        disabled={isLoadingKBsList}
+                      >
+                        {availableKBs.filter((kb) => kb.role === 'EDITOR').length === 0 && !isLoadingKBsList && (
+                          <option value="company">Company Knowledge Base</option>
+                        )}
+                        {availableKBs
+                          .filter((kb) => kb.role === 'EDITOR')
+                          .map((kb) => (
+                            <option key={kb.kb_id} value={kb.kb_id}>
+                              {kb.kb_name} (Editor)
+                            </option>
+                          ))}
+                      </Form.Select>
+                      <Form.Text className="text-muted">
+                        Select which knowledge base to crawl websites into. Only knowledge bases where you have editor
+                        permissions are available.
+                      </Form.Text>
+                    </Form.Group>
+
+                    <WebCrawler onCrawlerStarted={fetchFiles} kb_id={uploadDestinationKB} />
+                  </Card.Body>
+                </Card>
               </Col>
             </Row>
           </FeatureWrapper>
@@ -2000,6 +2205,16 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
             size="lg"
           />
         )}
+
+        {/* Create KB Modal */}
+        <CreateKBModal
+          show={showCreateKBModal}
+          onHide={() => setShowCreateKBModal(false)}
+          onSuccess={() => {
+            refreshKBs();
+            setKbManagementRefreshKey((prev) => prev + 1);
+          }}
+        />
       </div>
     </>
   );

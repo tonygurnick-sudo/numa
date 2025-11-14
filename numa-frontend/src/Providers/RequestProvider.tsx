@@ -43,16 +43,7 @@ export const NumaRequestProvider = ({ children }) => {
 
   const axiosConfig = useMemo(
     () => ({
-      transformResponse: [
-        (data) => {
-          try {
-            const parsedData = JSON.parse(data);
-            return parseNestedJson(parsedData);
-          } catch {
-            return data;
-          }
-        },
-      ],
+      transformResponse: [...axios.defaults.transformResponse, (data) => parseNestedJson(data)],
     }),
     [parseNestedJson],
   );

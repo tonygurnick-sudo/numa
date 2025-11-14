@@ -24,6 +24,9 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
 vi.mock('axios', () => ({
   default: {
     put: vi.fn().mockResolvedValue({}),
+    defaults: {
+      transformResponse: [vi.fn((data) => data)],
+    },
   },
 }));
 

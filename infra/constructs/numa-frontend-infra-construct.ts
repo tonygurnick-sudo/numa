@@ -304,13 +304,35 @@ export class NumaFrontendInfra extends Construct {
       originId: 'chat-agent-fnurl',
     });
 
-    // Build ordered cache behaviors (chat route before generic /api/*)
+    // Build ordered cache behaviors (more specific routes before generic /api/*)
     const orderedCacheBehavior: CloudfrontDistributionOrderedCacheBehavior[] = [
       {
         targetOriginId: 'chat-agent-fnurl',
         allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
         cachedMethods: ['GET', 'HEAD'],
         pathPattern: '/api/numa-chat-agent/*',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        // Use AWS managed policies to avoid custom policy deletion blockers
+        cachePolicyId: '4135ea2d-6df8-44a3-9df3-4b5a84be39ad',
+        originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac',
+      },
+      {
+        targetOriginId: 'chat-agent-fnurl',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/api/kb',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        // Use AWS managed policies to avoid custom policy deletion blockers
+        cachePolicyId: '4135ea2d-6df8-44a3-9df3-4b5a84be39ad',
+        originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac',
+      },
+      {
+        targetOriginId: 'chat-agent-fnurl',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/api/kb/*',
         viewerProtocolPolicy: 'redirect-to-https',
         compress: true,
         // Use AWS managed policies to avoid custom policy deletion blockers

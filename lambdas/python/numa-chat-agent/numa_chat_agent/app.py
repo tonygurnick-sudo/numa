@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
+import boto3
 import jwt
 import requests
 import structlog
@@ -18,6 +20,7 @@ from .dynamodb_utils import (
     NumaChatDynamoUtils,
     format_conversation_for_bedrock,
 )
+from .kb_manager import KnowledgeBaseManager
 from .progressive_summarization import ProgressiveSummarization
 from .utils import (
     cleanup_mcp_clients,
@@ -36,6 +39,100 @@ USER_POOL_CLIENT_ID = os.environ.get("COGNITO_USER_POOL_CLIENT_ID")
 CF_SHARED_SECRET = os.environ.get("CLOUDFRONT_SHARED_SECRET")
 
 _jwks_cache: Dict[str, Any] = {"data": None}
+_COGNITO_CLIENT = None
+
+
+def _get_cognito_client():
+    """Get cached Cognito client."""
+    global _COGNITO_CLIENT  # pylint: disable=global-statement
+    if _COGNITO_CLIENT is None:
+        _COGNITO_CLIENT = boto3.client("cognito-idp", region_name=REGION)
+    return _COGNITO_CLIENT
+
+
+def _is_email(value: str) -> bool:
+    """Check if a string looks like an email address."""
+    return bool(re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", value))
+
+
+def _resolve_email_to_sub(email: str, cognito_client) -> Optional[str]:
+    """
+    Resolve an email address to a Cognito sub ID.
+
+    Args:
+        email: Email address to resolve
+        cognito_client: Boto3 Cognito client
+
+    Returns:
+        Cognito sub ID if found, None otherwise
+    """
+    try:
+        response = cognito_client.list_users(
+            UserPoolId=USER_POOL_ID, Filter=f'email = "{email}"', Limit=1
+        )
+        users = response.get("Users", [])
+        if not users:
+            logger.warning("Email not found in Cognito", email=email)
+            return None
+
+        for attr in users[0].get("Attributes", []):
+            if attr.get("Name") == "sub":
+                sub_id = attr.get("Value")
+                if sub_id:
+                    logger.info("Resolved email to sub", email=email, sub=sub_id)
+                    return sub_id
+
+        logger.warning("User found but no sub attribute", email=email)
+        return None
+    except Exception as e:
+        logger.error("Error resolving email", email=email, error=str(e))
+        return None
+
+
+def _resolve_user_identifiers(identifiers: List[str]) -> List[str]:
+    """
+    Resolve a mix of emails and Cognito sub IDs to Cognito sub IDs.
+
+    Args:
+        identifiers: List of email addresses or Cognito sub IDs
+
+    Returns:
+        List of Cognito sub IDs (UUIDs)
+    """
+    if not identifiers:
+        return []
+
+    resolved = []
+    cognito_client = _get_cognito_client()
+
+    for identifier in identifiers:
+        identifier = identifier.strip()
+        if not identifier:
+            continue
+
+        # If it's a wildcard, pass through
+        if identifier == "*":
+            resolved.append(identifier)
+            continue
+
+        # If it looks like a UUID (Cognito sub), pass through
+        if re.match(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            identifier.lower(),
+        ):
+            resolved.append(identifier)
+            continue
+
+        # If it looks like an email, resolve to sub ID
+        if _is_email(identifier):
+            sub_id = _resolve_email_to_sub(identifier, cognito_client)
+            if sub_id:
+                resolved.append(sub_id)
+        else:
+            # Unknown format, skip it
+            logger.warning("Unknown identifier format", identifier=identifier)
+
+    return resolved
 
 
 def _get_jwks() -> Dict[str, Any]:
@@ -265,6 +362,29 @@ async def http_stream(request: Request) -> Response:
         enabled_connections = body.get("enabledConnections", []) or []
         system_prompt = body.get("systemPrompt", "") or ""
         model_id = body.get("modelId")
+        user_id = user.get("sub")
+
+        selected_kb_raw = body.get("kb_id")
+        if isinstance(selected_kb_raw, str) and selected_kb_raw.strip():
+            selected_kb_id = selected_kb_raw.strip()
+        else:
+            selected_kb_id = "company"
+
+        if selected_kb_id != "company":
+            kb_manager = KnowledgeBaseManager()
+            if not user_id or not kb_manager.check_permission(
+                selected_kb_id, user_id, "VIEWER"
+            ):
+                logger.warning(
+                    "User attempted to access KB without permission",
+                    user_id=user_id,
+                    kb_id=selected_kb_id,
+                )
+                return JSONResponse(
+                    {"error": "Access denied for knowledge base"},
+                    status_code=403,
+                )
+
         # Capture optional client-local time info for downstream tools/prompts
         client_time_info = body.get("timeInfo") or {}
 
@@ -277,6 +397,7 @@ async def http_stream(request: Request) -> Response:
                 }
             ),
             **(body.get("userAuth") or {}),
+            "selected_kb_id": selected_kb_id,
             "conversation_id": conversation_id,
             "conversationId": conversation_id,
         }
@@ -381,6 +502,29 @@ async def http_invoke(request: Request) -> Response:
         enabled_connections = body.get("enabledConnections", []) or []
         system_prompt = body.get("systemPrompt", "") or ""
         model_id = body.get("modelId")
+        user_id = user.get("sub")
+
+        selected_kb_raw = body.get("kb_id")
+        if isinstance(selected_kb_raw, str) and selected_kb_raw.strip():
+            selected_kb_id = selected_kb_raw.strip()
+        else:
+            selected_kb_id = "company"
+
+        if selected_kb_id != "company":
+            kb_manager = KnowledgeBaseManager()
+            if not user_id or not kb_manager.check_permission(
+                selected_kb_id, user_id, "VIEWER"
+            ):
+                logger.warning(
+                    "User attempted to access KB without permission (invoke)",
+                    user_id=user_id,
+                    kb_id=selected_kb_id,
+                )
+                return JSONResponse(
+                    {"error": "Access denied for knowledge base"},
+                    status_code=403,
+                )
+
         # Capture optional client-local time info for downstream tools/prompts
         client_time_info = body.get("timeInfo") or {}
 
@@ -393,6 +537,7 @@ async def http_invoke(request: Request) -> Response:
                 }
             ),
             **(body.get("userAuth") or {}),
+            "selected_kb_id": selected_kb_id,
             "conversation_id": conversation_id,
             "conversationId": conversation_id,
         }
@@ -465,4 +610,250 @@ async def http_invoke(request: Request) -> Response:
             clear_current_user_auth()
     except Exception as exc:  # pylint: disable=broad-except
         logger.error("HTTP invoke handler failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+# Knowledge Base Management Endpoints
+
+
+@app.post("/api/kb")
+async def create_kb(request: Request) -> Response:
+    """Create a new knowledge base.
+
+    Body:
+        {
+            "name": "KB display name",
+            "viewers": ["user_id1", "user_id2"] or ["*"] for all users,
+            "editors": ["user_id1"]
+        }
+    """
+    try:
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        if CF_SHARED_SECRET:
+            if headers.get("x-arcanum-cloudfront-secret") != CF_SHARED_SECRET:
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+        auth = headers.get("authorization")
+        if not auth:
+            return JSONResponse(
+                {"error": "Missing Authorization header"}, status_code=401
+            )
+
+        user = _verify_jwt_token(auth)
+        body = await request.json()
+
+        name = body.get("name", "").strip()
+        if not name:
+            return JSONResponse({"error": "Missing name"}, status_code=400)
+
+        viewers = body.get("viewers", [])
+        editors = body.get("editors", [])
+
+        # Resolve emails to Cognito sub IDs
+        resolved_viewers = _resolve_user_identifiers(viewers)
+        resolved_editors = _resolve_user_identifiers(editors)
+
+        # Get user sub (required for KB creation)
+        user_sub = user.get("sub")
+        if not isinstance(user_sub, str) or not user_sub:
+            return JSONResponse({"error": "Invalid user ID"}, status_code=401)
+
+        # Initialize KB manager
+        kb_manager = KnowledgeBaseManager()
+
+        # Create KB
+        kb = kb_manager.create_kb(
+            name=name,
+            created_by=user_sub,
+            viewers=resolved_viewers,
+            editors=resolved_editors,
+        )
+
+        logger.info("KB created", kb_id=kb["kb_id"], created_by=user.get("sub"))
+        return JSONResponse({"status": "success", "kb": kb}, status_code=201)
+
+    except ValueError as e:
+        logger.warning("KB creation validation error", error=str(e))
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB creation failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+@app.get("/api/kb")
+async def list_user_kbs(request: Request) -> Response:
+    """List all KBs accessible to the current user."""
+    try:
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        if CF_SHARED_SECRET:
+            if headers.get("x-arcanum-cloudfront-secret") != CF_SHARED_SECRET:
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+        auth = headers.get("authorization")
+        if not auth:
+            return JSONResponse(
+                {"error": "Missing Authorization header"}, status_code=401
+            )
+
+        user = _verify_jwt_token(auth)
+        user_id = user.get("sub")
+        if not isinstance(user_id, str) or not user_id:
+            return JSONResponse({"error": "Invalid user ID"}, status_code=401)
+
+        # Initialize KB manager
+        kb_manager = KnowledgeBaseManager()
+
+        # List user's KBs
+        kbs = kb_manager.list_user_kbs(user_id)
+
+        return JSONResponse({"status": "success", "kbs": kbs}, status_code=200)
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB list failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+@app.get("/api/kb/{kb_id}")
+async def get_kb(request: Request, kb_id: str) -> Response:
+    """Get details of a specific KB (if user has permission)."""
+    try:
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        if CF_SHARED_SECRET:
+            if headers.get("x-arcanum-cloudfront-secret") != CF_SHARED_SECRET:
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+        auth = headers.get("authorization")
+        if not auth:
+            return JSONResponse(
+                {"error": "Missing Authorization header"}, status_code=401
+            )
+
+        user = _verify_jwt_token(auth)
+        user_id = user.get("sub")
+        if not isinstance(user_id, str) or not user_id:
+            return JSONResponse({"error": "Invalid user ID"}, status_code=401)
+
+        # Initialize KB manager
+        kb_manager = KnowledgeBaseManager()
+
+        # Check permission
+        if not kb_manager.check_permission(kb_id, user_id, "VIEWER"):
+            return JSONResponse({"error": "Access denied"}, status_code=403)
+
+        # Get KB
+        kb = kb_manager.get_kb(kb_id)
+        if not kb:
+            return JSONResponse({"error": "KB not found"}, status_code=404)
+
+        return JSONResponse({"status": "success", "kb": kb}, status_code=200)
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB get failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+@app.patch("/api/kb/{kb_id}")
+async def update_kb(request: Request, kb_id: str) -> Response:
+    """Update KB properties.
+
+    Body (all fields optional):
+        {
+            "name": "New name",
+            "viewers": ["user_id1", "user_id2"],
+            "editors": ["user_id1"]
+        }
+    """
+    try:
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        if CF_SHARED_SECRET:
+            if headers.get("x-arcanum-cloudfront-secret") != CF_SHARED_SECRET:
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+        auth = headers.get("authorization")
+        if not auth:
+            return JSONResponse(
+                {"error": "Missing Authorization header"}, status_code=401
+            )
+
+        user = _verify_jwt_token(auth)
+        user_id = user.get("sub")
+        if not isinstance(user_id, str) or not user_id:
+            return JSONResponse({"error": "Invalid user ID"}, status_code=401)
+
+        # Initialize KB manager
+        kb_manager = KnowledgeBaseManager()
+
+        # Check edit permission
+        if not kb_manager.check_permission(kb_id, user_id, "EDITOR"):
+            return JSONResponse({"error": "Access denied"}, status_code=403)
+
+        body = await request.json()
+        name = body.get("name")
+        viewers = body.get("viewers")
+        editors = body.get("editors")
+
+        # Resolve emails to Cognito sub IDs if provided
+        resolved_viewers = (
+            _resolve_user_identifiers(viewers) if viewers is not None else None
+        )
+        resolved_editors = (
+            _resolve_user_identifiers(editors) if editors is not None else None
+        )
+
+        # Update KB
+        success = kb_manager.update_kb(
+            kb_id=kb_id, name=name, viewers=resolved_viewers, editors=resolved_editors
+        )
+
+        if not success:
+            return JSONResponse({"error": "Update failed"}, status_code=400)
+
+        logger.info("KB updated", kb_id=kb_id, updated_by=user_id)
+        return JSONResponse({"status": "success"}, status_code=200)
+
+    except ValueError as e:
+        logger.warning("KB update validation error", error=str(e))
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB update failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+@app.delete("/api/kb/{kb_id}")
+async def delete_kb(request: Request, kb_id: str) -> Response:
+    """Soft-delete (archive) a KB."""
+    try:
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        if CF_SHARED_SECRET:
+            if headers.get("x-arcanum-cloudfront-secret") != CF_SHARED_SECRET:
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+        auth = headers.get("authorization")
+        if not auth:
+            return JSONResponse(
+                {"error": "Missing Authorization header"}, status_code=401
+            )
+
+        user = _verify_jwt_token(auth)
+        user_id = user.get("sub")
+        if not isinstance(user_id, str) or not user_id:
+            return JSONResponse({"error": "Invalid user ID"}, status_code=401)
+
+        # Initialize KB manager
+        kb_manager = KnowledgeBaseManager()
+
+        # Check edit permission
+        if not kb_manager.check_permission(kb_id, user_id, "EDITOR"):
+            return JSONResponse({"error": "Access denied"}, status_code=403)
+
+        # Delete KB
+        success = kb_manager.delete_kb(kb_id)
+        if not success:
+            return JSONResponse({"error": "Delete failed"}, status_code=400)
+
+        logger.info("KB deleted", kb_id=kb_id, deleted_by=user_id)
+        return JSONResponse({"status": "success"}, status_code=200)
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB delete failed", error=str(exc), exc_info=True)
         return JSONResponse({"error": "Internal server error"}, status_code=500)

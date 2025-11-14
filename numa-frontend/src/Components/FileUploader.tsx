@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button, Alert } from 'react-bootstrap';
 import axios from 'axios';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -24,9 +24,17 @@ interface FileUploaderProps {
   onFileSelect?: (files: File[]) => void;
   validateFile?: (file: File) => boolean;
   clearFiles?: boolean;
+  kb_id?: string;
 }
 
-const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSelect, validateFile, clearFiles }) => {
+const FileUploader: React.FC<FileUploaderProps> = ({
+  onUploadSuccess,
+  onFileSelect,
+  validateFile,
+  clearFiles,
+  kb_id,
+}) => {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [files, setFiles] = useState<ExtendedFile[]>([]);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +52,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
     folders: new Set(),
   });
   const [config, setConfig] = useState<Config | null>(null);
-  const { getCredentials } = useAuth();
+  const { getCredentials, user } = useAuth();
 
   useEffect(() => {
     fetch('/config.json')
@@ -71,9 +79,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
       setDetailedError(null);
 
       // Clear file input value
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      if (fileInput) {
-        fileInput.value = '';
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
     }
   }, [clearFiles]);
@@ -133,6 +140,15 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
     }
   };
 
+  const buildKbPrefix = (kbId: string | null | undefined): { prefix: string; sanitizedKbId: string } => {
+    const rawId = typeof kbId === 'string' ? kbId.trim() : '';
+    if (!rawId || rawId === 'company') {
+      return { prefix: 'documents/company/', sanitizedKbId: 'company' };
+    }
+    const normalized = rawId.replace(/^kb-/, '');
+    return { prefix: `documents/kb-${normalized}/`, sanitizedKbId: normalized };
+  };
+
   const handleUpload = async (): Promise<void> => {
     if (!files.length) {
       setError('Please select files first');
@@ -156,6 +172,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
     setShowProgress(true);
 
     try {
+      // Resolve kb_id for KB-prefixed uploads
+      const { prefix: kbPrefix, sanitizedKbId } = buildKbPrefix(kb_id);
+      const resolvedKbId = sanitizedKbId === 'company' ? 'company' : sanitizedKbId;
+      const userUuid = user?.decoded_tokens?.idToken?.sub;
+
       for (let i = 0; i < files.length; i++) {
         setUploadingFileIndex(i);
         const file = files[i];
@@ -167,24 +188,38 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
           relativePath,
           type: file.type || 'application/octet-stream',
           size: `${(file.size / 1024).toFixed(2)} KB`,
+          kb_id: resolvedKbId,
         });
 
         try {
           console.log('Requesting presigned URL for:', relativePath);
 
-          const encodedPath = relativePath
-            .split('/')
-            .map((segment) => encodeURIComponent(segment))
-            .join('/');
+          // Build S3 key with KB prefix
+          const uploaderFolder = userUuid ? `${userUuid}/` : 'anonymous/';
+          const sanitizedRelativePath = relativePath.replace(/^\/+/, '');
+          const s3Key = `${kbPrefix}${uploaderFolder}${sanitizedRelativePath}`;
 
           const region = window.sessionStorage.getItem('REGION');
+
+          // Build metadata for KB uploads
+          const metadata: Record<string, string> = {
+            kb_id: resolvedKbId,
+            uploaded_at: new Date().toISOString(),
+          };
+          if (config?.CLIENT_NAME) {
+            metadata.tenant_id = config.CLIENT_NAME;
+          }
+          if (userUuid) {
+            metadata.uploader_id = userUuid;
+          }
 
           // User generates a presigned URL
           const s3Client = new S3Client({ region: region, credentials: await getCredentials() });
 
           const command = new PutObjectCommand({
             Bucket: `numa-${config.CLIENT_NAME}-data`,
-            Key: encodedPath,
+            Key: s3Key,
+            Metadata: metadata,
           });
 
           const presignedUrl = await getSignedUrl(s3Client, command, {
@@ -194,8 +229,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
           console.log('Presigned URL:', presignedUrl);
 
           console.log('S3 Upload Details:', {
-            destinationPath: relativePath,
+            destinationPath: s3Key,
             uploadUrl: presignedUrl.split('?')[0], // Show URL without query parameters
+            metadata,
           });
 
           await axios.put(presignedUrl, file, {
@@ -210,7 +246,38 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
             },
           });
 
-          console.log(`✅ Successfully uploaded to: ${relativePath}`);
+          console.log(`✅ Successfully uploaded to: ${s3Key}`);
+
+          try {
+            const metadataAttributes: Record<string, string> = {
+              kb_id: resolvedKbId,
+              uploaded_at: metadata.uploaded_at,
+            };
+            if (config?.CLIENT_NAME) {
+              metadataAttributes.tenant_id = config.CLIENT_NAME;
+            }
+            if (userUuid) {
+              metadataAttributes.uploader_id = userUuid;
+            }
+
+            const metadataPayload = {
+              metadataAttributes,
+            };
+
+            await s3Client.send(
+              new PutObjectCommand({
+                Bucket: `numa-${config.CLIENT_NAME}-data`,
+                Key: `${s3Key}.metadata.json`,
+                Body: JSON.stringify(metadataPayload),
+                ContentType: 'application/json',
+              }),
+            );
+          } catch (metadataError) {
+            console.warn('Failed to upload metadata sidecar for S3 Vectors KB', {
+              file: relativePath,
+              error: metadataError instanceof Error ? metadataError.message : metadataError,
+            });
+          }
         } catch (fileError) {
           console.error('❌ Error uploading file:', {
             file: relativePath,
@@ -233,9 +300,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
       setTotalFiles(0);
 
       // Reset file input to allow re-adding the same files
-      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-      if (fileInput) {
-        fileInput.value = '';
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
 
       onUploadSuccess();
@@ -399,9 +465,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
     setError(null);
 
     // Reset file input to allow re-adding the same file
-    const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-    if (fileInput) {
-      fileInput.value = '';
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -416,9 +481,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
     setSuccess(false);
 
     // Reset file input to allow re-adding the same files
-    const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-    if (fileInput) {
-      fileInput.value = '';
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -568,12 +632,17 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onFileSele
       )}
 
       <div className="text-center">
-        <input style={{ display: 'none' }} id="file-upload" type="file" onChange={handleFileSelect} multiple />
+        <input style={{ display: 'none' }} ref={fileInputRef} type="file" onChange={handleFileSelect} multiple />
 
         <div className="mb-3">
           <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
           <p className="mt-2">Drag and drop your files here, or</p>
-          <Button variant="primary" as="label" htmlFor="file-upload" style={{ cursor: 'pointer' }}>
+          <Button
+            variant="primary"
+            type="button"
+            style={{ cursor: 'pointer' }}
+            onClick={() => fileInputRef.current?.click()}
+          >
             Select Files
           </Button>
         </div>

@@ -8,6 +8,7 @@ import {
   getConnectionFallbackColor,
   getConnectionDisplayName,
 } from '../../config/integrationsConfig';
+import { KnowledgeBaseSelector } from '../KnowledgeBaseSelector';
 
 // WebSocket message size limit (AWS API Gateway limit is 32KB)
 const MAX_MESSAGE_LENGTH = 20000; // Conservative limit accounting for JSON overhead
@@ -355,6 +356,7 @@ const ChatInput = ({
             )}
           </div>
           <div className="right-controls">
+            <KnowledgeBaseSelector variant="compact" className="kb-selector-inline" />
             {buttonStatus === 'loading' || buttonStatus === 'streaming' || uploadsInProgress ? (
               <Button
                 variant="primary"

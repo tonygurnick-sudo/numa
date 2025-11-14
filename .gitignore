@@ -1,6 +1,6 @@
 # Secrets
 secrets.env
-
+*.log
 # Application
 data
 
@@ -146,6 +146,7 @@ tools/email-verification-report.json
 
 docs
 
-# Claude CLI artifacts (built locally or in CI)
-infra/assets/artifacts/claude-cli/bin/
-infra/assets/artifacts/claude-cli/*.zip
+# Claude CLI layer artifacts (built locally or in CI)
+infra/assets/layers/claude-cli/bin/
+infra/assets/layers/claude-cli/*.zip
+clientConfigProd.json

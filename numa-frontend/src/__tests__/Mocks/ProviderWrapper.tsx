@@ -7,6 +7,7 @@ import { NumaAppProvider } from '../../Providers/NumaAppProvider';
 import { NumaRequestProvider } from '../../Providers/RequestProvider';
 import { vi } from 'vitest';
 import { NicetyProvider } from '../../Providers/NicetyProvider';
+import { KnowledgeBaseProvider } from '../../Providers/KnowledgeBaseProvider';
 
 export const clearAllMocks = () => {
   vi.clearAllMocks();
@@ -20,7 +21,9 @@ export const renderWithProviders = (ui, options = {}) => {
       <NumaRequestProvider>
         <MockAuthProvider>
           <NumaAppProvider>
-            <MockMemoryRouter>{children}</MockMemoryRouter>
+            <KnowledgeBaseProvider>
+              <MockMemoryRouter>{children}</MockMemoryRouter>
+            </KnowledgeBaseProvider>
           </NumaAppProvider>
         </MockAuthProvider>
       </NumaRequestProvider>

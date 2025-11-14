@@ -36,12 +36,23 @@ import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { autoNameConversation } from '../utils/autoChatTitle';
 import { useChatInactivity } from '../hooks/useChatInactivity';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import type { AgentSummary } from '../types/agents';
 import { getAgent, listAgents } from '../Services/AgentsService';
 import { getConnectionConfig } from '../config/integrationsConfig';
 import { formatAgentDisplayName } from '../utils/agentUtils';
 import { sortAgentsByPriority } from '../utils/agentSortingUtils';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
+
+const resolveErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
+    return error.message;
+  }
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+  return fallback;
+};
 
 const NumaChatAgents = () => {
   // Basic UI state
@@ -108,6 +119,7 @@ const NumaChatAgents = () => {
 
   const { user, bedrockAgentRuntimeClient, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken } = useAuth();
   const { numaGet } = useNumaRequest();
+  const { selectedKB, selectedKbId } = useKnowledgeBase();
 
   // Extract user info from token
   const idToken = user?.decoded_tokens?.idToken ?? {};
@@ -1078,13 +1090,14 @@ const NumaChatAgents = () => {
               });
             } else {
               // Handle other errors normally
+              const message = resolveErrorMessage(error, 'Unknown error');
               setMessages((prev) => {
                 const updated = [...prev];
                 const thinkingIndex = updated.findIndex((m) => m.status === 'thinking');
                 if (thinkingIndex >= 0) {
                   updated.splice(thinkingIndex, 1);
                 }
-                return [...updated, { role: 'system', content: `Agent error: ${error.message || 'Unknown error'}` }];
+                return [...updated, { role: 'system', content: `Agent error: ${message}` }];
               });
             }
 
@@ -1142,6 +1155,7 @@ const NumaChatAgents = () => {
           },
           userAuth, // Pass user authentication context
           enabledConnections, // Pass enabled connections
+          selectedKbId || selectedKB?.kb_id || null, // Pass selected knowledge base ID
         );
 
         // Store the abort function for the stop button
@@ -1156,7 +1170,8 @@ const NumaChatAgents = () => {
           if (thinkingIndex >= 0) {
             updated.splice(thinkingIndex, 1);
           }
-          return [...updated, { role: 'system', content: `Agent error: ${agentErr.message || 'Unknown error'}` }];
+          const message = resolveErrorMessage(agentErr, 'Unknown error');
+          return [...updated, { role: 'system', content: `Agent error: ${message}` }];
         });
 
         setButtonStatus('idle');
@@ -1170,9 +1185,10 @@ const NumaChatAgents = () => {
       console.error('Full error details:', JSON.stringify(err, null, 2));
       isProcessingRef.current = false; // Reset processing flag on error
       setCurrentAbort(null); // Clear abort reference
+      const message = resolveErrorMessage(err, 'Failed to send message');
       const errorMsg = {
         role: 'system',
-        content: `Error: ${err.message || 'Failed to send message'}. Please try again or refresh page.`,
+        content: `Error: ${message}. Please try again or refresh page.`,
       };
       setMessages((prev) => [...prev, errorMsg]);
       setButtonStatus('idle');
@@ -1340,6 +1356,9 @@ const NumaChatAgents = () => {
             <div className="chat-content flex-grow-1 d-flex flex-column">
               {/* Header with chat instructions and buttons on the right */}
               <div className="chat-header d-flex justify-content-between align-items-center mb-3">
+                <div className="d-flex flex-column gap-2">
+                  <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
+                </div>
                 {currentAgent ? (
                   <div className="d-flex align-items-center gap-2">
                     <AgentAvatar agent={currentAgent} size={32} />

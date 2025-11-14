@@ -4,6 +4,9 @@ Knowledge base utilities for the Numa chat agent.
 Handles Q Business and Bedrock knowledge base querying with a unified interface.
 """
 
+import os
+from typing import Any, Dict
+
 import structlog
 
 from ..auth import get_current_user_auth, get_qbusiness_client_for_user
@@ -93,34 +96,79 @@ def query_qbusiness_knowledge_base(query: str, max_results: int = 6):
     }
 
 
-def query_bedrock_knowledge_base(query: str, max_results: int = 6):
+def query_bedrock_knowledge_base(
+    query: str, max_results: int = 6, kb_id: str = "company"
+):
     """
-    Query Bedrock knowledge base with Aurora retry logic.
+    Query Bedrock knowledge base with Aurora retry logic and metadata filtering.
 
     Args:
         query: Search query
         max_results: Maximum number of results
+        kb_id: Knowledge base ID to filter by (default: "company")
 
     Returns:
         Dictionary with content, references, and metadata
     """
-    logger.debug("Using Bedrock knowledge base", kb_id=BEDROCK_KNOWLEDGE_BASE_ID)
+    resolved_kb_id = (kb_id or "company").strip() or "company"
+
+    logger.debug(
+        "Using Bedrock knowledge base",
+        bedrock_kb_id=BEDROCK_KNOWLEDGE_BASE_ID,
+        filter_kb_id=resolved_kb_id,
+    )
 
     kb_client = get_bedrock_agent_runtime_client()
 
+    # Build retrieval configuration with metadata filtering
+    retrieval_config: Dict[str, Any] = {
+        "vectorSearchConfiguration": {"numberOfResults": max_results}
+    }
+    filter_applied = False
+
+    # Add metadata filter to restrict results to specific KB
+    client_name = os.environ.get("CLIENT_NAME", "")
+    if client_name and resolved_kb_id:
+        retrieval_config["vectorSearchConfiguration"]["filter"] = {
+            "andAll": [
+                {"equals": {"key": "tenant_id", "value": client_name}},
+                {"equals": {"key": "kb_id", "value": resolved_kb_id}},
+            ]
+        }
+        filter_applied = True
+        logger.debug(
+            "Applied metadata filter",
+            tenant_id=client_name,
+            kb_id=resolved_kb_id,
+        )
+
     # Create a retry-wrapped retrieve operation for Aurora auto-pause handling
-    def bedrock_retrieve_operation():
+    def bedrock_retrieve_operation(config):
         return kb_client.retrieve(
             knowledgeBaseId=BEDROCK_KNOWLEDGE_BASE_ID,
             retrievalQuery={"text": query},
-            retrievalConfiguration={
-                "vectorSearchConfiguration": {"numberOfResults": max_results}
-            },
+            retrievalConfiguration=config,
         )
 
-    # Apply retry wrapper and execute
-    retry_retrieve = retry_aurora_operation(bedrock_retrieve_operation)
-    resp = retry_retrieve()
+    # Apply retry wrapper and execute with current configuration
+    def execute_with_config(config):
+        retry_retrieve = retry_aurora_operation(
+            lambda: bedrock_retrieve_operation(config)
+        )
+        return retry_retrieve()
+
+    resp = execute_with_config(retrieval_config)
+
+    if filter_applied and not resp.get("retrievalResults"):
+        logger.warning(
+            "Bedrock KB returned no results with metadata filter; retrying without filter",
+            tenant_id=client_name,
+            kb_id=resolved_kb_id,
+        )
+        fallback_config = {
+            "vectorSearchConfiguration": {"numberOfResults": max_results}
+        }
+        resp = execute_with_config(fallback_config)
 
     items = resp.get("retrievalResults", [])
     logger.info(
@@ -148,7 +196,9 @@ def query_bedrock_knowledge_base(query: str, max_results: int = 6):
     }
 
 
-def query_knowledge_base_impl(query: str, user_intent: str, max_results: int = 6):
+def query_knowledge_base_impl(
+    query: str, user_intent: str, max_results: int = 6, kb_id: str = "company"
+):
     """
     Implementation of knowledge base querying with unified interface.
 
@@ -156,15 +206,19 @@ def query_knowledge_base_impl(query: str, user_intent: str, max_results: int = 6
         query: Natural language description of what you're searching for
         user_intent: Description of what the user is trying to accomplish
         max_results: Maximum number of results to return (default: 6, max: 15)
+        kb_id: Knowledge base ID to search (default: "company")
 
     Returns:
         Dictionary with search results and status
     """
+    resolved_kb_id = (kb_id or "company").strip() or "company"
+
     logger.info(
         "Querying knowledge base",
         query=query,
         max_results=max_results,
         provider=PREFERRED_KNOWLEDGE_BASE,
+        kb_id=resolved_kb_id,
     )
 
     # Limit max_results to reasonable bounds (max 15 sources)
@@ -177,7 +231,7 @@ def query_knowledge_base_impl(query: str, user_intent: str, max_results: int = 6
         if provider == "q" and QB_APPLICATION_ID and QB_RETRIEVER_ID:
             kb_result = query_qbusiness_knowledge_base(query, max_results)
         elif provider == "bedrock" and BEDROCK_KNOWLEDGE_BASE_ID:
-            kb_result = query_bedrock_knowledge_base(query, max_results)
+            kb_result = query_bedrock_knowledge_base(query, max_results, resolved_kb_id)
         else:
             logger.warning(
                 "Knowledge base provider not configured",
