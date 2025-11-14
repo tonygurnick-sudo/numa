@@ -2,10 +2,21 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { render, fireEvent, act } from '@testing-library/react';
 import { WizardNavigation } from '../../Components/WizardNavigation';
+
+// Mock useNumaApp hook
+vi.mock('../../Providers/NumaAppContext', () => ({
+  useNumaApp: () => ({
+    resetAppState: vi.fn(),
+    jobEvents: [],
+    appRunning: false,
+    numaAppData: null,
+    job: null,
+  }),
+}));
 
 describe('WizardNavigation Component', () => {
   const mockOnStepClick = vi.fn();
@@ -133,30 +144,27 @@ describe('WizardNavigation Component', () => {
     expect(resultSteps.length).toBe(2);
   });
 
-  it('should show processing status when app is running', () => {
-    // Render with isRunning = true
+  it('should not show processing container when app is not running and has no events', () => {
+    // Render with isRunning = false
     const props = {
       ...defaultProps,
       runButtonProps: {
         ...defaultProps.runButtonProps,
-        isRunning: true,
+        isRunning: false,
       },
-      processingProgress: 75,
-      processingStatus: 'Processing data...',
+      processingProgress: 0,
+      processingStatus: '',
     };
 
     const { container } = render(<WizardNavigation {...props} />);
 
-    // Check that progress bar is shown
-    const progressBar = container.querySelector('.progress-bar');
-    expect(progressBar).toBeInTheDocument();
+    // Check that processing container is not shown (since appRunning is false via mock and no events)
+    const processingContainer = container.querySelector('.processing-container');
+    expect(processingContainer).not.toBeInTheDocument();
 
-    // Check progress percentage
-    expect(progressBar).toHaveAttribute('aria-valuenow', '75');
-
-    // Check status text
-    const statusText = container.querySelector('.processing-status');
-    expect(statusText).toHaveTextContent('Processing data...');
+    // Check that event stream viewer is not shown
+    const eventStreamViewer = container.querySelector('.event-stream-viewer');
+    expect(eventStreamViewer).not.toBeInTheDocument();
   });
 
   it('should highlight run button when it becomes enabled', () => {

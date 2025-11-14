@@ -30,6 +30,37 @@ logger = structlog.get_logger(__name__)
 tracer = trace.get_tracer(__name__)
 
 
+def _try_append_event(
+    event_msg: str,
+    stream_events: bool,
+    job_id: str | None,
+    user_id: str | None,
+    app_id: str | None,
+    table_name: str | None,
+    bucket: str | None,
+) -> None:
+    """Attempt to append an event if stream_events is enabled and context is available."""
+    if not stream_events:
+        return
+
+    # All three IDs are required for event appending
+    if not (job_id and user_id and app_id):
+        return
+
+    try:
+        helpers.append_event(
+            message=event_msg,
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=bool(table_name),
+            table_name=table_name,
+            bucket=bucket,
+        )
+    except Exception:
+        logger.warning("Failed to append event", msg=event_msg)
+
+
 # File extension constants
 TEXT_FILE_EXTENSIONS = [
     ".bash",
@@ -170,6 +201,13 @@ def handler(event: dict, context) -> dict:
 
     # only set this to true when it's certain this will be less than 256KB
     return_content = event.get("return_content", False)
+
+    # Event streaming parameters
+    stream_events = payload.get("stream_events", False)
+    job_id = payload.get("job_id")
+    user_id = payload.get("user_id")
+    app_id = payload.get("app_id")
+    table_name = payload.get("table_name")
     # Derive a status file key alongside the output
     if output_key.endswith(".json"):
         status_key = output_key[: -len(".json")] + ".status.json"
@@ -195,6 +233,20 @@ def handler(event: dict, context) -> dict:
         ),
     )
 
+    # Determine display name for events
+    file_display_name = file_name or os.path.basename(input_key)
+
+    # Emit event before extraction
+    _try_append_event(
+        f"Extracting content from {file_display_name}",
+        stream_events=stream_events,
+        job_id=job_id,
+        user_id=user_id,
+        app_id=app_id,
+        table_name=table_name,
+        bucket=input_bucket,
+    )
+
     try:
         # Pass payload to extraction for Excel processing options
         document = _extract_content(input_bucket, input_key, file_name, payload)
@@ -217,6 +269,17 @@ def handler(event: dict, context) -> dict:
                 request_id=request_id,
                 include_completion=True,
             ),
+        )
+
+        # Emit event after successful extraction
+        _try_append_event(
+            f"Successfully extracted content from {file_display_name}",
+            stream_events=stream_events,
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            table_name=table_name,
+            bucket=input_bucket,
         )
 
         result = {

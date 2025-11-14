@@ -12,6 +12,7 @@ export const NumaAppContext = createContext<NumaAppContextValue>({
 
   // Job state
   job: null,
+  jobEvents: [],
 
   // App data states
   numaApps: [],

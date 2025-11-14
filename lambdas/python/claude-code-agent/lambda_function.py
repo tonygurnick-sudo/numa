@@ -1,13 +1,14 @@
 import io
 import json
 import os
+import random
 import shutil
 import subprocess
 import tarfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -22,6 +23,46 @@ logger = structlog.get_logger()
 # pylint: disable=broad-exception-caught,consider-using-with,too-many-arguments,too-many-positional-arguments,too-many-branches,too-many-locals,too-many-statements
 
 
+class AppContext(TypedDict, total=False):
+    """Context for event streaming."""
+
+    job_id: str
+    user_id: str
+    app_id: str
+    use_dynamodb: bool
+    bucket: Optional[str]
+
+
+def _try_append_event(event_msg: str, app_context: Optional[AppContext]) -> None:
+    """
+    Attempt to append an event using the app context.
+
+    Safely handles missing required fields in app_context.
+    """
+    if not app_context:
+        return
+
+    job_id = app_context.get("job_id")
+    user_id = app_context.get("user_id")
+    app_id = app_context.get("app_id")
+
+    # All three IDs are required for event appending
+    if not (job_id and user_id and app_id):
+        return
+
+    try:
+        helpers.append_event(
+            message=event_msg,
+            job_id=job_id,
+            user_id=user_id,
+            app_id=app_id,
+            use_dynamodb=app_context.get("use_dynamodb", False),
+            bucket=app_context.get("bucket"),
+        )
+    except Exception:
+        logger.warning("Failed to append event", msg=event_msg)
+
+
 def _s3_key(prefix: str, *parts: str | None) -> str:
     cleaned = "/".join(p.strip("/") for p in parts if p is not None)
     return f"{prefix}/{cleaned}" if cleaned else prefix
@@ -34,6 +75,83 @@ def _ensure_dirs(workdir: Path) -> Dict[str, Path]:
     for d in (inputs, outputs, tmp):
         d.mkdir(parents=True, exist_ok=True)
     return {"inputs": inputs, "outputs": outputs, "tmp": tmp}
+
+
+def _truthy(val: Optional[str | bool]) -> bool:
+    """Interpret common truthy/falsey values from env/event overrides.
+
+    Accepts bool or string. Strings like '0', 'false', 'no', 'off' are false; otherwise true.
+    None defaults to True (feature enabled by default).
+    """
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return True
+    s = str(val).strip().lower()
+    if s in {"0", "false", "no", "off"}:
+        return False
+    return True
+
+
+def _list_user_input_files(
+    inputs_dir: Path, max_files: int = 50, skip_hidden: bool = True
+) -> Tuple[List[str], int]:
+    """Return up to max_files file names in ./user-inputs and count of any extras.
+
+    - Skips directories; returns base names only.
+    - Optionally skips dotfiles.
+    - Sorts case-insensitively for deterministic ordering.
+    """
+    if not inputs_dir.exists():
+        return [], 0
+
+    names: List[str] = []
+    try:
+        for p in inputs_dir.iterdir():
+            if not p.is_file():
+                continue
+            name = p.name
+            if skip_hidden and name.startswith("."):
+                continue
+            # Truncate extremely long file names for prompt readability
+            if len(name) > 200:
+                name = name[:197] + "..."
+            names.append(name)
+    except Exception:
+        # On any listing error, fail gracefully
+        return [], 0
+
+    names.sort(key=lambda x: x.lower())
+    if len(names) <= max_files:
+        return names, 0
+    return names[:max_files], len(names) - max_files
+
+
+def _augment_prompt_with_uploads(
+    user_prompt: str, inputs_dir: Path, include: bool = True
+) -> Tuple[str, int, int]:
+    """Build a composite prompt that prefaces the user's message with uploaded files.
+
+    Returns: (final_prompt, included_count, extra_count)
+    """
+    if not include:
+        return user_prompt, 0, 0
+
+    files, extra = _list_user_input_files(inputs_dir)
+    if not files:
+        return user_prompt, 0, 0
+
+    lines: List[str] = []
+    lines.append("User uploaded files (available under ./user-inputs/):")
+    for n in files:
+        lines.append(f"- {n}")
+    if extra:
+        lines.append(f"... and {extra} more")
+    lines.append("")
+    lines.append("User prompt:")
+    lines.append(user_prompt.strip())
+
+    return "\n".join(lines), len(files), extra
 
 
 def _check_cli_or_fail(bin_path: str) -> str:
@@ -177,6 +295,127 @@ def _ensure_settings_json(home: Path) -> None:
         logger.warning("Failed writing .claude/settings.json")
 
 
+def _extract_tool_event(tool_name: str, tool_input: dict) -> Optional[str]:
+    """Extract event message for a specific tool use."""
+
+    def format_bash_command(inp: dict) -> Optional[str]:
+        """Format a bash command with truncation."""
+        command = inp.get("command", "")
+        if not command:
+            return None
+        cmd_preview = command[:60] + "..." if len(command) > 60 else command
+        return f"Running: {cmd_preview}"
+
+    tool_events = {
+        "Read": lambda inp: (
+            f"Reading file: {inp.get('file_path', '')}"
+            if inp.get("file_path")
+            else None
+        ),
+        "Write": lambda inp: (
+            f"Writing file: {inp.get('file_path', '')}"
+            if inp.get("file_path")
+            else None
+        ),
+        "Edit": lambda inp: (
+            f"Editing file: {inp.get('file_path', '')}"
+            if inp.get("file_path")
+            else None
+        ),
+        "Bash": format_bash_command,
+        "Glob": lambda _: "Searching files (Glob)",
+        "Grep": lambda _: "Searching files (Grep)",
+    }
+
+    tool_handler = tool_events.get(tool_name)
+    if tool_handler:
+        return tool_handler(tool_input)
+    if tool_name:
+        return f"Using tool: {tool_name}"
+    return None
+
+
+def _extract_content_block_event(block: dict) -> Optional[str]:
+    """Extract event message from a content block."""
+    if not isinstance(block, dict):
+        return None
+
+    block_type = block.get("type")
+
+    if block_type == "tool_use":
+        return _extract_tool_event(block.get("name", ""), block.get("input", {}))
+
+    if block_type == "text":
+        text = block.get("text", "").strip()
+        if text:
+            truncated = text[:80] + "..." if len(text) > 80 else text
+            return f"Numa: {truncated}"
+
+    if block_type == "thinking":
+        thinking_variants = [
+            "Numa: Thinking...",
+            "Numa: Analysing...",
+            "Numa: Digging deeper...",
+            "Numa: Exploring options...",
+            "Numa: Reviewing data...",
+            "Numa: Processing...",
+            "Numa: Evaluating inputs...",
+            "Numa: Reasoning...",
+            "Numa: Planning steps...",
+            "Numa: Working...",
+        ]
+        try:
+            return random.choice(thinking_variants)
+        except Exception:
+            return "Numa: Thinking..."
+
+    return None
+
+
+def _extract_meaningful_event(obj: Any) -> Optional[str]:
+    """
+    Extract meaningful event messages from Claude CLI trace events.
+
+    Filters for events that provide useful status information to the user.
+
+    Args:
+        obj: Parsed JSON object from trace line
+
+    Returns:
+        Event message string if meaningful, None otherwise
+    """
+    if not isinstance(obj, dict):
+        return None
+
+    event_type = obj.get("type")
+
+    # Map simple event types to messages
+    simple_events = {
+        "session_init": "Session initialized",
+        "result": "Task completed successfully",
+    }
+
+    if event_type in simple_events:
+        return simple_events[event_type]
+
+    # Error events with dynamic message
+    if event_type == "error":
+        error_msg = obj.get("error", "Unknown error")
+        return f"Error: {error_msg}"
+
+    # Assistant messages with nested content blocks
+    if event_type == "assistant":
+        content_array = obj.get("message", {}).get("content") or obj.get("content")
+
+        if content_array and isinstance(content_array, list):
+            for block in content_array:
+                event_msg = _extract_content_block_event(block)
+                if event_msg:
+                    return event_msg
+
+    return None
+
+
 def _run_claude_stream(
     bin_path: str,
     workdir: Path,
@@ -184,6 +423,8 @@ def _run_claude_stream(
     prompt: str,
     append_system: str,
     trace_path: Path,
+    stream_events: bool = False,
+    app_context: Optional[AppContext] = None,
 ) -> Tuple[Optional[str], int]:
     # Use verbose mode when printing with stream-json output per CLI requirements
     args = [bin_path, "-p", "--verbose"]
@@ -247,6 +488,7 @@ def _run_claude_stream(
             },
         )
         new_session_id: Optional[str] = None
+
         try:
             assert proc.stdout is not None
             for line in proc.stdout:
@@ -256,9 +498,18 @@ def _run_claude_stream(
                     obj = json.loads(line)
                     if isinstance(obj, dict) and obj.get("session_id"):
                         new_session_id = obj.get("session_id")
+
+                    # Emit meaningful events if streaming is enabled
+                    if stream_events:
+                        event_msg = _extract_meaningful_event(obj)
+                        if event_msg:
+                            _try_append_event(event_msg, app_context)
                 except Exception:
                     # Ignore non-JSON lines or partials that fail to parse
                     pass
+
+            # No buffer to flush; events appended immediately
+
         finally:
             proc.wait(timeout=840)
 
@@ -373,9 +624,14 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     uploaded_files = event.get("uploaded_files") or []
     # Future functionality: when true, restore prior session and pass --resume to CLI
     resume_session = event.get("resume_session", False)
+    # Stream events to status while running (default: false for backwards compatibility)
+    stream_events = event.get("stream_events", False)
 
     bucket = os.environ["BUCKET"]
     prefix = f"{app_id}/{user_id}/{job_id}"
+
+    # Determine if we should use DynamoDB for status (check if DYNAMODB_TABLE env var exists)
+    use_dynamodb = bool(os.environ.get("DYNAMODB_TABLE"))
 
     # Working directories
     os.environ.setdefault("HOME", "/tmp")
@@ -387,6 +643,26 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
     # Hydrate user inputs
     _hydrate_inputs(bucket, uploaded_files, dirs["inputs"])
+
+    # Optionally augment the agent prompt with a preface listing uploaded files
+    user_prompt_for_log = prompt  # keep original for conversation history
+    ev_override = event.get("include_uploads_in_prompt")
+    if ev_override is None:
+        include_uploads = _truthy(os.environ.get("INCLUDE_UPLOADS_IN_PROMPT"))
+    else:
+        include_uploads = _truthy(ev_override)
+
+    final_prompt, inc_count, extra_count = _augment_prompt_with_uploads(
+        user_prompt_for_log, dirs["inputs"], include=include_uploads
+    )
+    if inc_count:
+        logger.info(
+            "Augmented prompt with uploaded files",
+            included=inc_count,
+            extra=extra_count,
+        )
+    else:
+        logger.info("No uploaded files to include in prompt or feature disabled")
 
     # Session continuity: restoration phase (future functionality, gated by resume_session)
     # NOTE: Session artifacts are always SAVED (below), but only RESTORED when resume_session=true.
@@ -428,10 +704,41 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     bin_path = _ensure_claude_cli_available(bucket)
     trace_local = workdir / "trace.jsonl"
     ran_cli = False
+
+    # Prepare app context for event streaming if enabled
+    app_context: Optional[AppContext] = None
+    if stream_events:
+        app_context = {
+            "job_id": job_id,
+            "user_id": user_id,
+            "app_id": app_id,
+            "use_dynamodb": use_dynamodb,
+            "bucket": bucket,
+        }
+        # Emit initial event
+        try:
+            helpers.append_event(
+                message="Starting analysis...",
+                job_id=job_id,
+                user_id=user_id,
+                app_id=app_id,
+                use_dynamodb=use_dynamodb,
+                bucket=bucket,
+            )
+        except Exception:
+            logger.warning("Failed to append initial event")
+
     try:
         _check_cli_or_fail(bin_path)
         new_cc_session_id, _ = _run_claude_stream(
-            bin_path, workdir, cc_session_id, prompt, system_rules, trace_local
+            bin_path,
+            workdir,
+            cc_session_id,
+            final_prompt,
+            system_rules,
+            trace_local,
+            stream_events=stream_events,
+            app_context=app_context,
         )
         cc_session_id = new_cc_session_id or cc_session_id
         ran_cli = True
@@ -516,7 +823,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
     # Conversation log for UI continuity (always maintained)
     results_key = _s3_key(prefix, "outputs", results_filename)
-    _append_conversation(prefix, prompt, results_key)
+    _append_conversation(prefix, user_prompt_for_log, results_key)
     logger.info("Updated conversation history")
 
     # AppOutput payload
@@ -535,5 +842,19 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             }
         ]
     }
+
+    # Emit final completion event if streaming
+    if stream_events and app_context:
+        try:
+            helpers.append_event(
+                message="Analysis complete",
+                job_id=job_id,
+                user_id=user_id,
+                app_id=app_id,
+                use_dynamodb=use_dynamodb,
+                bucket=bucket,
+            )
+        except Exception:
+            logger.warning("Failed to append completion event")
 
     return app_output

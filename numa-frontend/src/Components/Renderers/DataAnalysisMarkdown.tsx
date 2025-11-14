@@ -405,6 +405,11 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
         })}
       </div>
 
+      {/* Main Document Actions */}
+      <div className="mt-4 mb-4">
+        <ResultActions content={content} title="Data Analysis Results" appType="data-analysis" />
+      </div>
+
       {/* Generated Files Summary Section */}
       {fileReferences.length > 0 && (
         <div className="generated-files-section mt-5 pt-4 border-top">

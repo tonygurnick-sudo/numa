@@ -148,7 +148,19 @@ export class DataAnalysis extends BaseNumaApp {
     const attachedLayers = [pandasLayerArn].filter(Boolean) as string[];
     const runner = this.addLambdaFunction(this, 'claude-code-agent-runner', {
       disableOtel: true, // Reduce total unzipped layer size (avoid exceeding 250MB)
-      additionalPolicyStatements: runnerPolicyStatements,
+      additionalPolicyStatements: [
+        ...runnerPolicyStatements,
+        // Add DynamoDB permissions for event streaming
+        ...(this.jobsTable
+          ? [
+              {
+                actions: ['dynamodb:UpdateItem'],
+                effect: 'Allow',
+                resources: [this.jobsTable.arn],
+              },
+            ]
+          : []),
+      ],
       environment: {
         BUCKET: props.outputsBucket.bucket,
         APP_ID: this.appId,
@@ -161,6 +173,8 @@ export class DataAnalysis extends BaseNumaApp {
         MAX_THINKING_TOKENS: '1024',
         ANTHROPIC_MODEL: regionModel.default.model_id,
         ANTHROPIC_SMALL_FAST_MODEL: regionModel.haiku.model_id,
+        // Add DynamoDB table for event streaming (if jobs are enabled)
+        ...(this.jobsTable ? { DYNAMODB_TABLE: this.jobsTable.name } : {}),
       },
       lambdaDirectory: 'python/claude-code-agent',
       timeout: 900,
@@ -192,6 +206,7 @@ export class DataAnalysis extends BaseNumaApp {
             'user_id.$': '$.user_id',
             'prompt.$': '$.prompt',
             'uploaded_files.$': '$.uploaded_files',
+            stream_events: true, // Enable event streaming to show progress in real-time
           },
           'WriteSuccessStatus',
           {

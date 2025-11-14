@@ -92,11 +92,21 @@ export class MeetingAnalyser extends BaseNumaApp {
         actions: ['bedrock:InvokeModel'],
         resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
+      ...(this.jobsTable
+        ? [
+            {
+              actions: ['dynamodb:UpdateItem'],
+              effect: 'Allow' as const,
+              resources: [this.jobsTable.arn],
+            },
+          ]
+        : []),
     ];
     const analyserLambda = this.addLambdaFunction(this, 'analyse', {
       additionalPolicyStatements: analyserLambdaPolicyStatements,
       environment: {
         BUCKET: props.outputsBucket.bucket,
+        ...(this.jobsTable ? { DYNAMODB_TABLE: this.jobsTable.name } : {}),
       },
       lambdaDirectory: 'python/meeting-analyser',
       timeout: 900,
@@ -121,6 +131,7 @@ export class MeetingAnalyser extends BaseNumaApp {
           Parameters: {
             'item.$': '$$.Map.Item.Value',
             'user_id.$': '$.user_id',
+            'job_id.$': '$.job_id',
           },
           ItemProcessor: {
             ProcessorConfig: {
@@ -133,8 +144,12 @@ export class MeetingAnalyser extends BaseNumaApp {
                 {
                   'input_key.$': '$.item.s3_key',
                   'user_id.$': '$.user_id',
+                  'job_id.$': '$.job_id',
+                  app_id: this.appId,
                   input_bucket: props.outputsBucket.bucket,
                   return_content: true, // if content sizes exceed 256 KiB the step function needs to change to do content merging and saving in a separate lambda
+                  stream_events: true,
+                  ...(this.jobsTable ? { table_name: this.jobsTable.name } : {}),
                 },
                 null,
                 {

@@ -18,6 +18,7 @@ Required fields:
 Optional fields:
 - `prompt` (string): custom prompt for the analysis (default: "Perform an initial EDA and create outputs/results.md.")
 - `resume_session` (boolean): enable session continuity (default: `false`, see "Session Continuity" below)
+- `include_uploads_in_prompt` (boolean): override whether to preface the user prompt with a list of uploaded files (see below)
 
 ## Environment Variables
 
@@ -29,6 +30,34 @@ Optional fields:
 - `AWS_REGION`: Bedrock region (e.g., `us-east-1`)
 - `CLAUDE_CODE_MAX_OUTPUT_TOKENS` (default 64000): token cap
 - `MAX_THINKING_TOKENS` (default 1024): thinking token cap
+- `INCLUDE_UPLOADS_IN_PROMPT` (default enabled): when truthy, the agent prompt is prefaced with a list of files found in `./user-inputs/`. Accepts values like `true/false`, `1/0`, `on/off`.
+
+## Prompt Preface: Uploaded Files
+
+To help the agent immediately leverage uploaded inputs, the Lambda can prepend a short summary of files staged under `./user-inputs/` to the user’s prompt.
+
+- Behavior: If enabled and at least one file is present, the prompt sent to the CLI becomes:
+
+  ```
+  User uploaded files (available under ./user-inputs/):
+  - file-a.csv
+  - notes.docx
+  ... and N more
+
+  User prompt:
+  <original user message>
+  ```
+
+- Limits and safeguards:
+  - Lists up to 50 files, sorted A→Z; if more, appends "... and N more"
+  - Skips hidden files (dotfiles) and directories
+  - Truncates very long filenames to 200 characters
+
+- Controls:
+  - Env var `INCLUDE_UPLOADS_IN_PROMPT` (default enabled if unset)
+  - Per-invocation override `include_uploads_in_prompt` in the event payload
+
+The conversation history written to `history/conversation.md` always records the original user prompt (without the preface) for UI clarity.
 
 ## Session Continuity (Future Feature)
 
