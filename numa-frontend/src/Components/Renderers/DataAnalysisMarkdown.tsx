@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Spinner, Button, Dropdown } from 'react-bootstrap';
+import { Spinner, Button, Dropdown, Accordion } from 'react-bootstrap';
 import * as Papa from 'papaparse';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { getFileIconClass } from '../../utils/fileUtils';
-import { downloadFileFromS3 } from '../../utils/s3Utils';
+import { downloadFileFromS3, downloadFolderAsZip, listObjectsInFolder } from '../../utils/s3Utils';
+import { buildFileTree, buildRowsForTree, flattenRows } from '../../utils/fileTreeUtils';
 import { MarkdownContent } from './MarkdownContent';
 import { ResultActions } from '../ResultActions';
 import { TraceViewer } from './ClaudeCodeTraceViewer';
+import { FollowUpModal } from '../FollowUpModal';
+import { FileTreeTable } from '../FileTreeTable';
+import numaLogo from '/numa-logo.svg?url';
 
 interface DataAnalysisMarkdownProps {
   content: string;
@@ -19,51 +23,279 @@ interface DataAnalysisMarkdownProps {
 }
 
 interface FileReference {
+  // Display name shown in UI (basename)
   filename: string;
+  // Full S3 key to fetch
   fullPath: string;
+  // Original relative path under outputs (may include subfolders)
+  relativePath: string;
   extension: string;
+}
+
+interface FolderReference {
+  // Display name (folder basename)
+  name: string;
+  // Full S3 key prefix for the folder
+  fullPath: string;
+  // Original relative path under outputs
+  relativePath: string;
+}
+
+interface FolderContents {
+  s3Keys: string[]; // Store original relative S3 keys for proper tree building
+  loading: boolean;
+  error: string | null;
+}
+
+interface ConversationMessage {
+  id: string;
+  ts: string;
+  role: 'user' | 'assistant';
+  textMd: string;
 }
 
 export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ content, baseS3Key, bucket, region }) => {
   const { getCredentials } = useAuth();
-  const { fetchS3Content } = useNumaApp();
+  const { fetchS3Content, startFollowUp } = useNumaApp();
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [loadingFiles, setLoadingFiles] = useState<Record<string, boolean>>({});
   const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
 
-  // Construct full S3 path for a referenced file
-  const constructFilePath = (filename: string, baseKey: string): string => {
-    const pathParts = baseKey.split('/');
-    pathParts[pathParts.length - 1] = filename;
-    return pathParts.join('/');
+  // Folder state
+  const [folderContents, setFolderContents] = useState<Record<string, FolderContents>>({});
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedTreeFolders, setExpandedTreeFolders] = useState<Record<string, Set<string>>>({});
+
+  // Conversation state
+  const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
+  const [loadingConversation, setLoadingConversation] = useState(true);
+
+  // Follow-up modal state
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [isSubmittingFollowUp, setIsSubmittingFollowUp] = useState(false);
+
+  // Extract job_id from baseS3Key
+  // baseS3Key format: "data-analysis/{userId}/{jobId}/outputs/results-timestamp.md"
+  const jobId = useMemo(() => {
+    const parts = baseS3Key.split('/');
+    return parts[2]; // job_id is the 3rd segment (index 2)
+  }, [baseS3Key]);
+
+  // Derive the S3 outputs/ prefix from the base key
+  // baseS3Key example: data-analysis/{userId}/{jobId}/outputs/<anything>
+  const getOutputsPrefix = (baseKey: string): string => {
+    const parts = baseKey.split('/');
+    // Ensure we always return .../outputs
+    const idx = parts.findIndex((p) => p === 'outputs');
+    if (idx !== -1) {
+      return parts.slice(0, idx + 1).join('/');
+    }
+    // Fallback: assume last two removals lead to app/user/job
+    return parts.slice(0, -1).concat('outputs').join('/');
   };
 
-  // Extract file references from markdown content
-  const fileReferences = useMemo(() => {
+  // Normalize a file path referenced in <file:path> by stripping leading slashes and optional 'outputs/'
+  const normalizeRelativePath = (raw: string): string => {
+    let p = raw.trim();
+    if (p.toLowerCase().startsWith('file:')) p = p.slice(5);
+    p = p.replace(/^\/*/, ''); // drop any leading '/'
+    if (p.startsWith('outputs/')) p = p.slice('outputs/'.length);
+    return p;
+  };
+
+  // Build full S3 key from a relative path (relative to outputs/)
+  const buildS3KeyForRelativePath = (relativePath: string, baseKey: string): string => {
+    const prefix = getOutputsPrefix(baseKey);
+    const cleaned = normalizeRelativePath(relativePath);
+    return `${prefix}/${cleaned}`;
+  };
+
+  // Parse file references present in a single message
+  const parseFileReferencesInMessage = (messageText: string): FileReference[] => {
     const refs: FileReference[] = [];
-    // Match patterns like <filename.ext> or [text](filename.ext)
-    const anglePattern = /<([^>]+\.\w+)>/g;
-    const linkPattern = /\[([^\]]+)\]\(([^)]+\.\w+)\)/g;
 
-    let match;
-    while ((match = anglePattern.exec(content)) !== null) {
-      const filename = match[1];
+    // New format: <file:path>
+    const fileTagPattern = /<file:([^>]+)>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = fileTagPattern.exec(messageText)) !== null) {
+      const rel = normalizeRelativePath(match[1]);
+      const fullPath = buildS3KeyForRelativePath(rel, baseS3Key);
+      const filename = rel.split('/').pop() || rel;
       const extension = filename.split('.').pop()?.toLowerCase() || '';
-      const fullPath = constructFilePath(filename, baseS3Key);
-      refs.push({ filename, fullPath, extension });
+      refs.push({ filename, fullPath, relativePath: rel, extension });
     }
 
-    while ((match = linkPattern.exec(content)) !== null) {
-      const filename = match[2];
+    // Back-compat: old format <filename.ext>
+    const oldAnglePattern = /<([^>]+\.\w+)>/g;
+    while ((match = oldAnglePattern.exec(messageText)) !== null) {
+      const rel = normalizeRelativePath(match[1]);
+      const fullPath = buildS3KeyForRelativePath(rel, baseS3Key);
+      const filename = rel.split('/').pop() || rel;
       const extension = filename.split('.').pop()?.toLowerCase() || '';
-      const fullPath = constructFilePath(filename, baseS3Key);
-      refs.push({ filename, fullPath, extension });
+      refs.push({ filename, fullPath, relativePath: rel, extension });
     }
 
-    // Remove duplicates
-    return refs.filter((ref, index, self) => index === self.findIndex((r) => r.filename === ref.filename));
-  }, [content, baseS3Key]);
+    // Optional: [text](file:path) or [text](filename.ext)
+    const linkPattern = /\[[^\]]*\]\((?:file:)?([^\s)]+)\)/gi;
+    while ((match = linkPattern.exec(messageText)) !== null) {
+      const rel = normalizeRelativePath(match[1]);
+      const fullPath = buildS3KeyForRelativePath(rel, baseS3Key);
+      const filename = rel.split('/').pop() || rel;
+      const extension = filename.split('.').pop()?.toLowerCase() || '';
+      refs.push({ filename, fullPath, relativePath: rel, extension });
+    }
+
+    // De-duplicate by fullPath
+    const seen = new Set<string>();
+    return refs.filter((r) => (seen.has(r.fullPath) ? false : (seen.add(r.fullPath), true)));
+  };
+
+  // Parse folder references present in a single message
+  const parseFolderReferencesInMessage = (messageText: string): FolderReference[] => {
+    const refs: FolderReference[] = [];
+
+    // Format: <folder:path>
+    const folderTagPattern = /<folder:([^>]+)>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = folderTagPattern.exec(messageText)) !== null) {
+      let rel = normalizeRelativePath(match[1]);
+      // Ensure folder path doesn't end with /
+      rel = rel.replace(/\/+$/, '');
+      const fullPath = buildS3KeyForRelativePath(rel, baseS3Key);
+      const name = rel.split('/').pop() || rel;
+      refs.push({ name, fullPath, relativePath: rel });
+    }
+
+    // De-duplicate by fullPath
+    const seen = new Set<string>();
+    return refs.filter((r) => (seen.has(r.fullPath) ? false : (seen.add(r.fullPath), true)));
+  };
+
+  // Extract folder references from all assistant messages in conversation
+  const folderReferences = useMemo(() => {
+    const merged: Record<string, FolderReference> = {};
+    conversationMessages
+      .filter((msg) => msg.role === 'assistant')
+      .forEach((msg) => {
+        parseFolderReferencesInMessage(msg.textMd).forEach((ref) => {
+          if (!merged[ref.fullPath]) merged[ref.fullPath] = ref;
+        });
+      });
+    const allRefs = Object.values(merged);
+
+    // Filter out folders that are children of other referenced folders
+    // This prevents showing nested folders at the top level in Generated Files
+    return allRefs.filter((ref) => {
+      const isChildOfAnother = allRefs.some(
+        (other) => other.fullPath !== ref.fullPath && ref.fullPath.startsWith(other.fullPath + '/'),
+      );
+      return !isChildOfAnother;
+    });
+  }, [conversationMessages, baseS3Key]);
+
+  // Load folder contents from S3
+  const loadFolderContents = async (folderRef: FolderReference) => {
+    const key = folderRef.fullPath;
+    if (folderContents[key]?.s3Keys.length > 0 || folderContents[key]?.loading) return;
+
+    setFolderContents((prev) => ({
+      ...prev,
+      [key]: { s3Keys: [], loading: true, error: null },
+    }));
+
+    try {
+      // List all objects in the folder
+      const objectKeys = await listObjectsInFolder(`${key}/`, bucket, region, getCredentials);
+
+      // Store relative S3 keys (strip folder prefix)
+      const relativeKeys = objectKeys
+        .filter((objKey) => !objKey.endsWith('/')) // Skip folder markers
+        .map((objKey) => objKey.substring(key.length + 1)); // Make relative to folder
+
+      setFolderContents((prev) => ({
+        ...prev,
+        [key]: { s3Keys: relativeKeys, loading: false, error: null },
+      }));
+
+      // Initialize tree expansion state for this folder
+      setExpandedTreeFolders((prev) => ({
+        ...prev,
+        [key]: new Set(),
+      }));
+    } catch (err) {
+      console.error(`Error loading folder ${folderRef.name}:`, err);
+      setFolderContents((prev) => ({
+        ...prev,
+        [key]: {
+          s3Keys: [],
+          loading: false,
+          error: `Failed to load folder contents: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        },
+      }));
+    }
+  };
+
+  // Toggle folder expansion (inline folder reference)
+  const toggleFolderExpansion = (folderRef: FolderReference) => {
+    const key = folderRef.fullPath;
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+        // Load contents if not already loaded
+        loadFolderContents(folderRef);
+      }
+      return next;
+    });
+  };
+
+  // Toggle tree folder expansion within a folder reference
+  const toggleTreeFolder = (folderKey: string, folderId: string) => {
+    setExpandedTreeFolders((prev) => {
+      const current = prev[folderKey] || new Set();
+      const next = new Set(current);
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+      return { ...prev, [folderKey]: next };
+    });
+  };
+
+  // Handle folder download
+  const handleFolderDownload = async (folderRef: FolderReference) => {
+    try {
+      await downloadFolderAsZip(`${folderRef.fullPath}/`, bucket, region, getCredentials);
+    } catch (err) {
+      console.error('Error downloading folder:', err);
+    }
+  };
+
+  // Extract file references from all assistant messages in conversation
+  const fileReferences = useMemo(() => {
+    const merged: Record<string, FileReference> = {};
+    conversationMessages
+      .filter((msg) => msg.role === 'assistant')
+      .forEach((msg) => {
+        parseFileReferencesInMessage(msg.textMd).forEach((ref) => {
+          if (!merged[ref.fullPath]) merged[ref.fullPath] = ref;
+        });
+      });
+    const allFileRefs = Object.values(merged);
+
+    // Filter out files that are inside referenced folders
+    // This prevents showing nested files at the top level in Generated Files
+    return allFileRefs.filter((fileRef) => {
+      const isInsideReferencedFolder = folderReferences.some((folderRef) =>
+        fileRef.fullPath.startsWith(folderRef.fullPath + '/'),
+      );
+      return !isInsideReferencedFolder;
+    });
+  }, [conversationMessages, baseS3Key, folderReferences]);
 
   // Load file content for inline rendering
   const loadFileContent = async (filePath: string, filename: string) => {
@@ -99,6 +331,60 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
       }
     });
   }, [fileReferences]);
+
+  // Load conversation.json to display full conversation history
+  useEffect(() => {
+    const loadConversation = async () => {
+      try {
+        setLoadingConversation(true);
+
+        // Extract userId and jobId from baseS3Key
+        // baseS3Key format: "data-analysis/{userId}/{jobId}/outputs/results-timestamp.md"
+        const parts = baseS3Key.split('/');
+        const userId = parts[1];
+        const jobIdFromPath = parts[2];
+
+        const conversationPath = `data-analysis/${userId}/${jobIdFromPath}/history/conversation.json`;
+
+        const credentials = await getCredentials();
+        if (!credentials) {
+          throw new Error('Failed to get credentials');
+        }
+
+        const conversationContent = await fetchS3Content(bucket, conversationPath, credentials);
+        const conversationData = JSON.parse(conversationContent);
+
+        if (conversationData.messages && Array.isArray(conversationData.messages)) {
+          setConversationMessages(conversationData.messages);
+        } else {
+          // Fallback to single message with content prop
+          setConversationMessages([
+            {
+              id: 'fallback',
+              ts: new Date().toISOString(),
+              role: 'assistant',
+              textMd: content,
+            },
+          ]);
+        }
+      } catch (err) {
+        console.error('Error loading conversation:', err);
+        // Fallback to single message with content prop
+        setConversationMessages([
+          {
+            id: 'fallback',
+            ts: new Date().toISOString(),
+            role: 'assistant',
+            textMd: content,
+          },
+        ]);
+      } finally {
+        setLoadingConversation(false);
+      }
+    };
+
+    loadConversation();
+  }, [baseS3Key, bucket, content, fetchS3Content, getCredentials]);
 
   // Handle file download
   const handleDownload = async (filePath: string, filename: string) => {
@@ -168,6 +454,29 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
     saveAs(docxBlob, `${filename}.docx`);
   };
 
+  // Handle follow-up modal submit
+  const handleFollowUpSubmit = async (prompt: string) => {
+    if (!startFollowUp) {
+      console.error('startFollowUp not available from NumaAppProvider');
+      return;
+    }
+
+    try {
+      setIsSubmittingFollowUp(true);
+      setShowFollowUpModal(false);
+
+      // Call startFollowUp with the same jobId and new prompt
+      await startFollowUp(jobId, prompt);
+
+      // Note: The page will navigate/refresh when the new run starts,
+      // so we don't need to handle state cleanup here
+    } catch (err) {
+      console.error('Error submitting follow-up:', err);
+      setIsSubmittingFollowUp(false);
+      // Could show an error notification here
+    }
+  };
+
   // Render file reference bubble and inline content
   const renderFileReference = (ref: FileReference) => {
     const iconClass = getFileIconClass(ref.filename);
@@ -184,7 +493,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
     return (
       <div
         key={ref.filename}
-        className="file-reference-container mb-4 bg-white border rounded overflow-hidden"
+        className="file-reference-container mb-4 bg-white border rounded"
         style={{
           borderLeft: '4px solid var(--color-primary)',
           boxShadow: '0 1px 3px rgba(142, 80, 167, 0.1)',
@@ -348,73 +657,394 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
     );
   };
 
-  // Split content into sections with file references
-  const contentSections = useMemo(() => {
-    const sections: Array<{ type: 'markdown' | 'file'; content: string; fileRef?: FileReference }> = [];
-    let remainingContent = content;
+  // Render folder reference with expandable tree
+  const renderFolderReference = (ref: FolderReference) => {
+    const key = ref.fullPath;
+    const isExpanded = expandedFolders.has(key);
+    const contents = folderContents[key];
+    const treeExpanded = expandedTreeFolders[key] || new Set();
 
-    // Sort file references by their position in the content
-    const sortedRefs = [...fileReferences].sort((a, b) => {
-      const aPos = content.indexOf(`<${a.filename}>`);
-      const bPos = content.indexOf(`<${b.filename}>`);
-      return aPos - bPos;
-    });
+    // Build tree from S3 keys and flatten based on current expansion state
+    const displayRows = (() => {
+      if (!contents?.s3Keys.length) return [];
+      // Build tree structure from S3 keys - this properly identifies folders
+      const s3Objects = contents.s3Keys.map((relKey) => ({
+        Key: relKey,
+        LastModified: new Date(),
+        Size: 0,
+      }));
+      const tree = buildFileTree(s3Objects);
+      const nestedRows = buildRowsForTree(tree, 0, '');
+      return flattenRows(nestedRows, treeExpanded);
+    })();
 
-    sortedRefs.forEach((ref) => {
-      const pattern = `<${ref.filename}>`;
-      const index = remainingContent.indexOf(pattern);
+    return (
+      <div key={key} className="inline-folder-reference mb-4">
+        <div className="folder-header">
+          <div className="folder-title">
+            <i className="bi bi-folder-fill"></i>
+            <span>{ref.name}</span>
+          </div>
+          <div className="folder-actions">
+            <Button
+              variant="outline-primary"
+              size="sm"
+              onClick={() => toggleFolderExpansion(ref)}
+              title={isExpanded ? 'Collapse folder' : 'Expand folder'}
+            >
+              <i className={`bi bi-chevron-${isExpanded ? 'up' : 'down'} me-1`}></i>
+              {isExpanded ? 'Collapse' : 'Expand'}
+            </Button>
+            <Button
+              variant="outline-success"
+              size="sm"
+              onClick={() => handleFolderDownload(ref)}
+              title="Download as ZIP"
+            >
+              <i className="bi bi-file-zip me-1"></i>
+              Download ZIP
+            </Button>
+          </div>
+        </div>
 
-      if (index !== -1) {
-        // Add markdown content before this file reference, replacing the <filename> with `filename`
-        const beforeContent = remainingContent.substring(0, index);
-        const codeWrappedFilename = `\`${ref.filename}\``;
+        {isExpanded && (
+          <div className="folder-content">
+            {contents?.loading && (
+              <div className="folder-loading">
+                <Spinner animation="border" size="sm" />
+                <span className="ms-2">Loading folder contents...</span>
+              </div>
+            )}
 
-        sections.push({ type: 'markdown', content: beforeContent + codeWrappedFilename });
+            {contents?.error && (
+              <div className="p-3">
+                <div className="alert alert-warning mb-0">{contents.error}</div>
+              </div>
+            )}
 
-        // Add the file reference
+            {!contents?.loading && !contents?.error && displayRows.length === 0 && (
+              <div className="folder-empty">No files found in this folder</div>
+            )}
+
+            {!contents?.loading && !contents?.error && displayRows.length > 0 && (
+              <FileTreeTable
+                rows={displayRows}
+                expandedFolders={treeExpanded}
+                onToggleFolder={(folderId) => toggleTreeFolder(key, folderId)}
+                showDateColumn={false}
+                showSizeColumn={false}
+                enableDownload={true}
+                s3Bucket={bucket}
+                region={region}
+                getCredentials={getCredentials}
+                getFullS3Key={(row) => `${key}/${row.originalKey || row.id}`}
+                compact={true}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Helper function to split message content into sections with file and folder references
+  const createContentSections = (
+    messageText: string,
+  ): Array<{
+    type: 'markdown' | 'file' | 'folder';
+    content: string;
+    fileRef?: FileReference;
+    folderRef?: FolderReference;
+  }> => {
+    const sections: Array<{
+      type: 'markdown' | 'file' | 'folder';
+      content: string;
+      fileRef?: FileReference;
+      folderRef?: FolderReference;
+    }> = [];
+
+    // Match both file and folder tags
+    const splitPattern = /<(?:file:([^>]+)|folder:([^>]+)|([^>]+\.[a-zA-Z0-9]+))>/g;
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = splitPattern.exec(messageText)) !== null) {
+      const matchStart = m.index;
+      const matchEnd = splitPattern.lastIndex;
+
+      // Push markdown before this tag
+      const before = messageText.substring(lastIndex, matchStart);
+      if (before) sections.push({ type: 'markdown', content: before + '' });
+
+      // Check if this is a folder or file reference
+      if (m[2]) {
+        // Folder reference: <folder:path>
+        let rel = normalizeRelativePath(m[2]);
+        rel = rel.replace(/\/+$/, ''); // Remove trailing slashes
+        const fullPath = buildS3KeyForRelativePath(rel, baseS3Key);
+        const name = rel.split('/').pop() || rel;
+        const folderRef: FolderReference = { name, fullPath, relativePath: rel };
+
+        // Replace the tag in text with code-wrapped folder name for readability
+        const codeWrappedName = `\`${name}/\``;
+        sections.push({ type: 'markdown', content: codeWrappedName });
+        sections.push({ type: 'folder', content: '', folderRef });
+      } else {
+        // File reference: <file:path> or <filename.ext>
+        const rawPath = m[1] || m[3] || '';
+        const rel = normalizeRelativePath(rawPath);
+        const fullPath = buildS3KeyForRelativePath(rel, baseS3Key);
+        const filename = rel.split('/').pop() || rel;
+        const extension = filename.split('.').pop()?.toLowerCase() || '';
+        const ref: FileReference = { filename, fullPath, relativePath: rel, extension };
+
+        // Replace the tag in text with code-wrapped filename for readability
+        const codeWrappedFilename = `\`${filename}\``;
+        sections.push({ type: 'markdown', content: codeWrappedFilename });
         sections.push({ type: 'file', content: '', fileRef: ref });
-
-        // Update remaining content
-        remainingContent = remainingContent.substring(index + pattern.length);
       }
-    });
 
-    // Add any remaining markdown content
-    if (remainingContent.trim()) {
-      sections.push({ type: 'markdown', content: remainingContent });
+      lastIndex = matchEnd;
     }
 
-    return sections;
-  }, [content, fileReferences]);
+    // Add any remaining markdown content
+    const tail = messageText.substring(lastIndex);
+    if (tail.trim()) sections.push({ type: 'markdown', content: tail });
+
+    return sections.length ? sections : [{ type: 'markdown', content: messageText }];
+  };
+
+  // Render a single conversation message
+  // Render a user message (always visible, not collapsible)
+  const renderUserMessage = (message: ConversationMessage) => {
+    return (
+      <div key={message.id} className="message user-message mb-3">
+        <div className="d-flex align-items-center mb-2">
+          <span className="fw-semibold me-2">You</span>
+          <span className="text-muted small">{new Date(message.ts).toLocaleString()}</span>
+        </div>
+        <div className="user-message-bubble rounded p-3">
+          <MarkdownContent content={message.textMd} />
+        </div>
+      </div>
+    );
+  };
+
+  // Render an assistant message (collapsible accordion)
+  const renderAssistantMessage = (message: ConversationMessage, index: number, isLastAssistant: boolean) => {
+    const sections = createContentSections(message.textMd);
+    const eventKey = `assistant-${index}`;
+
+    return (
+      <Accordion
+        key={message.id}
+        className="assistant-message-accordion mb-3"
+        defaultActiveKey={isLastAssistant ? eventKey : undefined}
+      >
+        <Accordion.Item eventKey={eventKey}>
+          <Accordion.Header>
+            <div className="d-flex align-items-center w-100">
+              <div className="flex-shrink-0 me-2">
+                <img src={numaLogo} alt="Numa" style={{ width: '24px', height: '24px' }} />
+              </div>
+              <div className="flex-grow-1 me-2">
+                <span className="fw-semibold">Numa</span>
+                <span className="text-muted small ms-2">{new Date(message.ts).toLocaleString()}</span>
+              </div>
+            </div>
+          </Accordion.Header>
+          <Accordion.Body>
+            <div className="assistant-message-content markdown-body">
+              {sections.map((section, sectionIndex) => {
+                if (section.type === 'markdown') {
+                  return (
+                    <ReactMarkdown key={`md-${index}-${sectionIndex}`} remarkPlugins={[remarkGfm]}>
+                      {section.content}
+                    </ReactMarkdown>
+                  );
+                } else if (section.type === 'file' && section.fileRef) {
+                  return <div key={`file-${index}-${sectionIndex}`}>{renderFileReference(section.fileRef)}</div>;
+                } else if (section.type === 'folder' && section.folderRef) {
+                  return <div key={`folder-${index}-${sectionIndex}`}>{renderFolderReference(section.folderRef)}</div>;
+                }
+                return null;
+              })}
+            </div>
+          </Accordion.Body>
+        </Accordion.Item>
+      </Accordion>
+    );
+  };
 
   return (
     <div className="data-analysis-markdown">
-      {/* Main content with inline file references */}
-      <div className="markdown-body">
-        {contentSections.map((section, index) => {
-          if (section.type === 'markdown') {
-            return (
-              <ReactMarkdown key={`md-${index}`} remarkPlugins={[remarkGfm]}>
-                {section.content}
-              </ReactMarkdown>
-            );
-          } else if (section.type === 'file' && section.fileRef) {
-            return <div key={`file-${index}`}>{renderFileReference(section.fileRef)}</div>;
-          }
-          return null;
-        })}
-      </div>
+      {/* Loading state */}
+      {loadingConversation ? (
+        <div className="text-center py-5">
+          <Spinner animation="border" role="status" variant="primary">
+            <span className="visually-hidden">Loading conversation...</span>
+          </Spinner>
+          <p className="text-muted mt-3">Loading conversation history...</p>
+        </div>
+      ) : (
+        <>
+          {/* Render all conversation messages */}
+          <div className="conversation-messages">
+            {(() => {
+              // Find the index of the last assistant message
+              const lastAssistantIndex = conversationMessages.reduce(
+                (lastIdx, msg, idx) => (msg.role === 'assistant' ? idx : lastIdx),
+                -1,
+              );
 
-      {/* Main Document Actions */}
-      <div className="mt-4 mb-4">
-        <ResultActions content={content} title="Data Analysis Results" appType="data-analysis" />
-      </div>
+              return conversationMessages.map((message, index) => {
+                if (message.role === 'user') {
+                  return renderUserMessage(message);
+                } else {
+                  const isLastAssistant = index === lastAssistantIndex;
+                  return renderAssistantMessage(message, index, isLastAssistant);
+                }
+              });
+            })()}
+          </div>
+        </>
+      )}
+
+      {/* Ask Follow-Up Question Section */}
+      {!loadingConversation && conversationMessages.length > 0 && (
+        <div className="follow-up-button-container">
+          <div className="border-top">
+            <div className="text-center">
+              <h5 className="follow-up-header mb-3">
+                <i className="bi bi-chat-dots me-2"></i>
+                Have more questions about this analysis?
+              </h5>
+            </div>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => setShowFollowUpModal(true)}
+              disabled={isSubmittingFollowUp}
+              className="btn-follow-up w-100"
+            >
+              <i className="bi bi-plus-circle me-2"></i>
+              Ask Follow-Up Question
+            </Button>
+
+            {/* Document Actions below */}
+            <div className="d-flex justify-content-center gap-3 mt-4">
+              <ResultActions
+                content={conversationMessages[conversationMessages.length - 1]?.textMd || ''}
+                title="Data Analysis Results"
+                appType="data-analysis"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Follow-Up Modal */}
+      <FollowUpModal
+        show={showFollowUpModal}
+        onHide={() => setShowFollowUpModal(false)}
+        onSubmit={handleFollowUpSubmit}
+        isLoading={isSubmittingFollowUp}
+      />
 
       {/* Generated Files Summary Section */}
-      {fileReferences.length > 0 && (
+      {(fileReferences.length > 0 || folderReferences.length > 0) && (
         <div className="generated-files-section mt-5 pt-4 border-top">
           <h4 className="mb-3">Generated Files</h4>
           <div className="vstack gap-2">
+            {/* Render folders first */}
+            {folderReferences.map((ref) => (
+              <div
+                key={ref.fullPath}
+                className="card"
+                style={{
+                  borderLeft: '3px solid var(--color-warning)',
+                }}
+              >
+                <div className="card-body d-flex align-items-center justify-content-between py-3">
+                  <div className="d-flex align-items-center">
+                    <i
+                      className="bi bi-folder-fill me-3"
+                      style={{ fontSize: '1.5rem', color: 'var(--color-warning)' }}
+                    ></i>
+                    <span className="fw-semibold">{ref.name}/</span>
+                  </div>
+                  <div className="d-flex gap-2">
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={() => toggleFolderExpansion(ref)}
+                      title={expandedFolders.has(ref.fullPath) ? 'Collapse folder' : 'Expand folder'}
+                    >
+                      <i className={`bi bi-chevron-${expandedFolders.has(ref.fullPath) ? 'up' : 'down'} me-1`}></i>
+                      {expandedFolders.has(ref.fullPath) ? 'Collapse' : 'Browse'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleFolderDownload(ref)}
+                      style={{
+                        backgroundColor: 'var(--color-primary)',
+                        borderColor: 'var(--color-primary)',
+                        color: 'white',
+                      }}
+                    >
+                      <i className="bi bi-file-zip me-1"></i>
+                      Download ZIP
+                    </Button>
+                  </div>
+                </div>
+                {/* Expandable folder contents */}
+                {expandedFolders.has(ref.fullPath) && (
+                  <div className="card-footer p-0">
+                    {folderContents[ref.fullPath]?.loading && (
+                      <div className="text-center py-3">
+                        <Spinner animation="border" size="sm" />
+                        <span className="ms-2">Loading folder contents...</span>
+                      </div>
+                    )}
+                    {folderContents[ref.fullPath]?.error && (
+                      <div className="p-3">
+                        <div className="alert alert-warning mb-0">{folderContents[ref.fullPath].error}</div>
+                      </div>
+                    )}
+                    {!folderContents[ref.fullPath]?.loading &&
+                      !folderContents[ref.fullPath]?.error &&
+                      folderContents[ref.fullPath]?.s3Keys.length > 0 && (
+                        <FileTreeTable
+                          rows={flattenRows(
+                            buildRowsForTree(
+                              buildFileTree(
+                                folderContents[ref.fullPath].s3Keys.map((relKey) => ({
+                                  Key: relKey,
+                                  LastModified: new Date(),
+                                  Size: 0,
+                                })),
+                              ),
+                              0,
+                              '',
+                            ),
+                            expandedTreeFolders[ref.fullPath] || new Set(),
+                          )}
+                          expandedFolders={expandedTreeFolders[ref.fullPath] || new Set()}
+                          onToggleFolder={(folderId) => toggleTreeFolder(ref.fullPath, folderId)}
+                          showDateColumn={false}
+                          showSizeColumn={false}
+                          enableDownload={true}
+                          s3Bucket={bucket}
+                          region={region}
+                          getCredentials={getCredentials}
+                          getFullS3Key={(row) => `${ref.fullPath}/${row.originalKey || row.id}`}
+                          compact={true}
+                        />
+                      )}
+                  </div>
+                )}
+              </div>
+            ))}
+            {/* Render files */}
             {fileReferences.map((ref) => (
               <div
                 key={ref.filename}

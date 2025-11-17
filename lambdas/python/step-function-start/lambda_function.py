@@ -44,11 +44,19 @@ def handler(
             payload=payload,
             step_function_arn=step_function_arn,
         )
+
+        # Generate unique execution name to avoid conflicts on follow-up runs
+        # Append millisecond timestamp to ensure uniqueness while keeping job_id for session tracking
+        timestamp_ms = int(
+            datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000
+        )
+        execution_name = f"{job_id}-{timestamp_ms}"
+
         # Ensure user_id is included in the Step Function input
         step_function_input = {
             **payload,
             "app_id": app_id,
-            "job_id": job_id,
+            "job_id": job_id,  # Keep same job_id for session continuity
         }
 
         # Log the input for debugging
@@ -57,11 +65,12 @@ def handler(
             user_id=step_function_input.get("user_id"),
             app_id=app_id,
             job_id=job_id,
+            execution_name=execution_name,
         )
 
         response: StartExecutionResponse = step_functions_client.start_execution(
             stateMachineArn=step_function_arn,
-            name=job_id,
+            name=execution_name,  # Use unique execution name
             input=json.dumps(step_function_input),
         )
         logger.info("Step function started", **response)

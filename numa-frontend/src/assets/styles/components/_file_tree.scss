@@ -1,0 +1,253 @@
+// Shared File Tree Styles
+// Reusable styles for hierarchical file/folder tree displays
+// Used by KnowledgeBaseManagement, DataAnalysisMarkdown, and FileTreeTable component
+
+// Tree structure indentation and styling
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+
+  // Icons should not shrink
+  i,
+  .file-icon-spacer {
+    flex-shrink: 0;
+  }
+
+  // File/folder name should truncate
+  strong,
+  span:not(.badge) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .text-truncate {
+    display: inline-block;
+    max-width: calc(100% - 30px); // Account for icons
+    vertical-align: middle;
+  }
+
+  // Dynamic indentation levels (depth-based)
+  &.depth-0 {
+    padding-left: 0;
+  }
+  &.depth-1 {
+    padding-left: 20px;
+  }
+  &.depth-2 {
+    padding-left: 40px;
+  }
+  &.depth-3 {
+    padding-left: 60px;
+  }
+  &.depth-4 {
+    padding-left: 80px;
+  }
+  &.depth-5 {
+    padding-left: 100px;
+  }
+  &.depth-6 {
+    padding-left: 120px;
+  }
+  &.depth-7 {
+    padding-left: 140px;
+  }
+  &.depth-8 {
+    padding-left: 160px;
+  }
+  &.depth-9 {
+    padding-left: 180px;
+  }
+}
+
+// Folder toggle chevron
+.folder-toggle {
+  cursor: pointer;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--brand-primary, var(--color-primary));
+  }
+}
+
+// Icon spacing
+.file-icon-spacer {
+  width: 16px;
+  display: inline-block;
+}
+
+// File and folder icons
+.folder-icon {
+  color: var(--brand-primary, var(--color-warning, #ffc107));
+}
+
+.file-icon {
+  color: var(--color-text-body, #6c757d);
+}
+
+// FileTreeTable container styles
+.file-tree-table-container {
+  width: 100%;
+
+  .file-tree-table {
+    table-layout: auto;
+    background-color: #fff;
+    margin-bottom: 0;
+
+    thead {
+      th {
+        position: sticky;
+        top: 0;
+        background-color: var(--brand-surface, #f8f9fa);
+        z-index: 10;
+        border-bottom: 2px solid var(--brand-border, #dee2e6);
+        color: var(--brand-primary, var(--color-text-body));
+        font-weight: 600;
+        padding: 0.75rem;
+
+        &.sortable-header {
+          cursor: pointer;
+          user-select: none;
+          transition: background-color 0.2s;
+
+          &:hover {
+            background-color: #e9ecef;
+          }
+
+          i {
+            color: var(--brand-primary, var(--color-primary));
+          }
+        }
+      }
+    }
+
+    tbody {
+      tr {
+        transition: background-color 0.15s ease;
+
+        &:hover {
+          background-color: var(--color-eggplant-100, #f8f9fa);
+        }
+      }
+
+      td {
+        padding: 0.5rem 0.75rem;
+        vertical-align: middle;
+      }
+    }
+  }
+
+  // Compact mode
+  &.compact {
+    .file-tree-table {
+      thead th {
+        padding: 0.5rem;
+        font-size: 0.875rem;
+      }
+
+      tbody td {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+      }
+    }
+  }
+}
+
+// Inline folder reference in markdown content
+.inline-folder-reference {
+  margin: 1rem 0;
+  border: 1px solid var(--brand-border, #dee2e6);
+  border-radius: 0.5rem;
+  overflow: hidden;
+
+  .folder-header {
+    background-color: var(--brand-surface, #f8f9fa);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--brand-border, #dee2e6);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    .folder-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      color: var(--brand-primary, var(--color-text-body));
+
+      i {
+        color: var(--color-warning, #ffc107);
+      }
+    }
+
+    .folder-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+  }
+
+  .folder-content {
+    background-color: #fff;
+    max-height: 400px;
+    overflow-y: auto;
+
+    &.collapsed {
+      display: none;
+    }
+  }
+
+  .folder-empty {
+    padding: 1rem;
+    text-align: center;
+    color: var(--color-text-muted, #6c757d);
+  }
+
+  .folder-loading {
+    padding: 2rem;
+    text-align: center;
+  }
+}
+
+// Checkbox styling for selection
+.file-tree-table-container,
+.inline-folder-reference {
+  input[type='checkbox'] {
+    &:checked {
+      background-color: var(--brand-primary, var(--color-primary)) !important;
+      border-color: var(--brand-primary, var(--color-primary)) !important;
+    }
+
+    &:focus {
+      border-color: var(--brand-primary, var(--color-primary)) !important;
+      box-shadow: 0 0 0 0.25rem rgba(var(--brand-primary-rgb, 142, 80, 167), 0.25) !important;
+    }
+  }
+}
+
+// Folder badge for inline references
+.folder-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  background-color: var(--brand-surface, #f8f9fa);
+  border: 1px solid var(--brand-border, #dee2e6);
+  border-radius: 0.25rem;
+  font-family: var(--bs-font-monospace);
+  font-size: 0.875em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background-color: #e9ecef;
+    border-color: var(--brand-primary, var(--color-primary));
+  }
+
+  i {
+    color: var(--color-warning, #ffc107);
+  }
+}

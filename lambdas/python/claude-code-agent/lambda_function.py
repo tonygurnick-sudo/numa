@@ -5,6 +5,7 @@ import random
 import shutil
 import subprocess
 import tarfile
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,7 +17,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import helpers
 import s3_helpers
 from prompts import SYSTEM_PROMPT
-from settings import SETTINGS_JSON
+from settings import ENV_VARS, SETTINGS_JSON
 
 logger = structlog.get_logger()
 
@@ -232,23 +233,124 @@ def _guess_content_type(p: Path) -> str:
 
 
 def _append_conversation(
-    prefix: str, prompt: Optional[str], results_key: Optional[str]
+    prefix: str, prompt: Optional[str], results_path: Optional[Path]
 ) -> None:
-    conv_key = _s3_key(prefix, "history", "conversation.md")
-    try:
-        existing = s3_helpers.read(conv_key).decode("utf-8")
-    except Exception:
-        existing = ""
+    """
+    Append user prompt and assistant response to conversation.json.
 
-    lines: List[str] = []
-    if existing:
-        lines.append(existing.rstrip() + "\n")
+    Args:
+        prefix: S3 prefix for the job (e.g., "data-analysis/{user_id}/{job_id}")
+        prompt: User's input prompt
+        results_path: Local Path to the results-{timestamp}.md file to read content from
+    """
+    conv_key = _s3_key(prefix, "history", "conversation.json")
+
+    # Try to read existing conversation.json
+    try:
+        existing_bytes = s3_helpers.read(conv_key)
+        conversation_data = json.loads(existing_bytes.decode("utf-8"))
+        if (
+            not isinstance(conversation_data, dict)
+            or "messages" not in conversation_data
+        ):
+            # Invalid format, start fresh
+            conversation_data = {"messages": []}
+    except Exception:
+        # File doesn't exist or can't be parsed, start fresh
+        conversation_data = {"messages": []}
+
+    messages = conversation_data.get("messages", [])
+
+    # Generate timestamp for both messages (same time for the turn)
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    # Append user message if prompt provided
     if prompt:
-        lines += ["User:", prompt.strip(), ""]
-    if results_key:
-        lines += ["Assistant:", f"See outputs/results.md ({results_key})", ""]
+        user_message = {
+            "id": str(uuid.uuid4()),
+            "ts": timestamp,
+            "role": "user",
+            "textMd": prompt.strip(),
+        }
+        messages.append(user_message)
+
+    # Append assistant message if results file provided
+    if results_path and results_path.exists():
+        try:
+            # Read the full contents of the results file
+            results_content = results_path.read_text(encoding="utf-8")
+        except Exception:
+            logger.warning(
+                "Failed to read results file for conversation", path=str(results_path)
+            )
+            results_content = "# Error\n\nFailed to load results content."
+
+        assistant_message = {
+            "id": str(uuid.uuid4()),
+            "ts": timestamp,
+            "role": "assistant",
+            "textMd": results_content,
+        }
+        messages.append(assistant_message)
+
+    # Update conversation data
+    conversation_data["messages"] = messages
+
+    # Write back to S3 as JSON
     s3_helpers.write(
-        conv_key, "\n".join(lines).encode("utf-8"), content_type="text/markdown"
+        conv_key,
+        json.dumps(conversation_data, indent=2).encode("utf-8"),
+        content_type="application/json",
+    )
+
+
+def _append_conversation_from_text(
+    prefix: str, prompt: Optional[str], assistant_text: Optional[str]
+) -> None:
+    """Append user prompt and assistant response (from text) to conversation.json."""
+    conv_key = _s3_key(prefix, "history", "conversation.json")
+
+    # Try to read existing conversation.json
+    try:
+        existing_bytes = s3_helpers.read(conv_key)
+        conversation_data = json.loads(existing_bytes.decode("utf-8"))
+        if (
+            not isinstance(conversation_data, dict)
+            or "messages" not in conversation_data
+        ):
+            conversation_data = {"messages": []}
+    except Exception:
+        conversation_data = {"messages": []}
+
+    messages = conversation_data.get("messages", [])
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    if prompt:
+        messages.append(
+            {
+                "id": str(uuid.uuid4()),
+                "ts": timestamp,
+                "role": "user",
+                "textMd": prompt.strip(),
+            }
+        )
+
+    if assistant_text is not None:
+        messages.append(
+            {
+                "id": str(uuid.uuid4()),
+                "ts": timestamp,
+                "role": "assistant",
+                "textMd": assistant_text,
+            }
+        )
+
+    conversation_data["messages"] = messages
+
+    s3_helpers.write(
+        conv_key,
+        json.dumps(conversation_data, indent=2).encode("utf-8"),
+        content_type="application/json",
     )
 
 
@@ -453,6 +555,7 @@ def _run_claude_stream(
         args += ["--resume", cc_session_id, prompt]
     else:
         args += [prompt]
+    # Note: add --include-partial-messages if we want partials in trace JSON for streaming
     args += [
         "--output-format",
         "stream-json",
@@ -474,6 +577,7 @@ def _run_claude_stream(
             # Ensure child Python sees layer/site-packages
             env={
                 **os.environ,
+                **ENV_VARS,  # Inject settings-defined env vars (e.g., MAX_THINKING_TOKENS)
                 "HOME": os.environ.get("HOME", "/tmp"),
                 "PYTHONPATH": ":".join(
                     filter(
@@ -618,8 +722,8 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     app_id = event["app_id"]
     job_id = event["job_id"]
     user_id = event["user_id"]
-    prompt = (
-        event.get("prompt") or "Perform an initial EDA and create outputs/results.md."
+    prompt = event.get("prompt") or (
+        "Perform an initial EDA. Return your response here and reference any files you create in ./outputs using <file:relative-path>."  # pylint: disable=line-too-long
     )
     uploaded_files = event.get("uploaded_files") or []
     # Future functionality: when true, restore prior session and pass --resume to CLI
@@ -700,7 +804,6 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     system_rules = SYSTEM_PROMPT
 
     # Ensure Claude CLI is available (download from S3 to /tmp if needed), then invoke.
-    results_md = dirs["outputs"] / "results.md"
     bin_path = _ensure_claude_cli_available(bucket)
     trace_local = workdir / "trace.jsonl"
     ran_cli = False
@@ -749,25 +852,11 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         logger.exception("Claude CLI execution error")
         raise
 
-    # Ensure required results.md exists; create fallback if missing
-    if not results_md.exists():
-        logger.warning("results.md was not created by agent; checking trace for result")
-        trace_result = _extract_result_from_trace(trace_local)
-
-        if trace_result:
-            logger.info("Found result in trace; using as fallback results.md")
-            results_md.write_text(trace_result, encoding="utf-8")
-        else:
-            logger.warning("No result found in trace; generating error fallback")
-            fallback_content = "# Error\n\nThe agent did not generate results. Please review the trace for details.\n"
-            results_md.write_text(fallback_content, encoding="utf-8")
-
-    # Rename results.md to results-<timestamp>.md
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
-    results_filename = f"results-{timestamp}.md"
-    results_timestamped = dirs["outputs"] / results_filename
-    results_md.rename(results_timestamped)
-    logger.info("Renamed results file", original="results.md", new=results_filename)
+    # Extract the assistant's final message from the trace; used for conversation and UI.
+    assistant_text = _extract_result_from_trace(trace_local)
+    if not assistant_text:
+        logger.warning("No result found in trace; generating error fallback text")
+        assistant_text = "# Error\n\nThe agent did not produce a final response. Please review the trace for details."
 
     # Upload outputs
     outputs_list: List[str] = []
@@ -822,11 +911,11 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         logger.info("Persisted session metadata", session_id=cc_session_id)
 
     # Conversation log for UI continuity (always maintained)
-    results_key = _s3_key(prefix, "outputs", results_filename)
-    _append_conversation(prefix, user_prompt_for_log, results_key)
+    _append_conversation_from_text(prefix, user_prompt_for_log, assistant_text)
     logger.info("Updated conversation history")
 
     # AppOutput payload
+    inline_base_key = _s3_key(prefix, "outputs", ".assistant.md")
     app_output = {
         "results": [
             {
@@ -835,8 +924,8 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                     {
                         "content_type": "text/markdown",
                         "title": "Analysis Results",
-                        "data": {"bucket": bucket, "key": results_key},
-                        "location": "S3",
+                        "data": {"key": inline_base_key, "content": assistant_text},
+                        "location": "INLINE",
                     }
                 ],
             }

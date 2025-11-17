@@ -67,6 +67,7 @@ export const NumaAppContext = createContext<NumaAppContextValue>({
   setCurrentJobId: (_id: string | null) => {},
   loadingJobId: null,
   setLoadingJobId: (_id: string | null) => {},
+  startFollowUp: async (_jobId: string, _prompt: string) => {},
 
   // UI states
   numaTaskResponses: [],

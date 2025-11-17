@@ -5,6 +5,13 @@ from typing import Any
 # Centralized Claude CLI sandbox/settings for the code runner.
 # These are written to $HOME/.claude/settings.json at runtime.
 
+# Environment variables for Claude CLI runtime behavior
+ENV_VARS: dict[str, str] = {
+    # Extended thinking token budget. When set, every request uses
+    # thinking. Higher values increase depth but also cost/latency.
+    "MAX_THINKING_TOKENS": "10000",
+}
+
 SETTINGS_JSON: dict[str, Any] = {
     "permissions": {
         "defaultMode": "acceptEdits",

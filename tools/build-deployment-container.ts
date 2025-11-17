@@ -34,7 +34,7 @@ function getGitBranch(): string {
 async function generatePresignedUrl(): Promise<string> {
   const bucket = process.env.CLAUDE_ARTIFACT_S3_BUCKET || 'numa-claude-cli-artifacts';
   const prefix = process.env.CLAUDE_ARTIFACT_S3_PREFIX || 'claude-artifacts';
-  const version = process.env.CLAUDE_CLI_VERSION || '1.0.100';
+  const version = process.env.CLAUDE_CLI_VERSION || '2.0.37';
   const region = process.env.CLAUDE_ARTIFACT_S3_REGION || 'us-east-1';
   const key = `${prefix}/${version}/claude-x86_64.zip`;
 
@@ -74,7 +74,7 @@ async function generatePresignedUrl(): Promise<string> {
 function buildContainer(presignedUrl: string): void {
   const gitHash = getGitHash();
   const gitBranch = getGitBranch();
-  const claudeVersion = process.env.CLAUDE_CLI_VERSION || '1.0.100';
+  const claudeVersion = process.env.CLAUDE_CLI_VERSION || '2.0.37';
   const ciProjectPath = process.env.CI_PROJECT_PATH || 'local';
 
   console.log('\n=== Building deployment container ===');

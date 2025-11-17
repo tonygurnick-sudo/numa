@@ -365,7 +365,7 @@ claude-cli-artifact-build:
   rules:
     - if: '$CI_COMMIT_BRANCH'
   variables:
-    CLAUDE_CLI_VERSION: "1.0.100"
+    CLAUDE_CLI_VERSION: "2.0.37"
   before_script:
     - dnf -y install tar gzip zip which jq
   script:
@@ -404,7 +404,7 @@ claude-cli-artifact-publish:
   rules:
     - !reference [.rules, if-main]
   variables:
-    CLAUDE_CLI_VERSION: "1.0.100"
+    CLAUDE_CLI_VERSION: "2.0.37"
     CLAUDE_ARTIFACT_S3_PREFIX: "claude-artifacts"
     AWS_REGION: us-east-1
   before_script:

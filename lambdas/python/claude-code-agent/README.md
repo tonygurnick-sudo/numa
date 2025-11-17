@@ -3,7 +3,7 @@
 Generic runner for Claude Code (CLI) to power the Data Analysis app.
 
 - Uses Amazon Bedrock via environment flags (CLAUDE_CODE_USE_BEDROCK=1)
-- Writes outputs to `outputs/` and always generates timestamped `outputs/results-<timestamp>.md`
+- Writes outputs to `outputs/` and returns the final response inline (no required results.md)
 - Hydrates user-uploaded files into `user-inputs/`
 - Persists session state, conversation history, and artifacts to S3 for potential future resumption
 
@@ -16,7 +16,7 @@ Required fields:
 - `uploaded_files` (array): list of S3 keys for input files
 
 Optional fields:
-- `prompt` (string): custom prompt for the analysis (default: "Perform an initial EDA and create outputs/results.md.")
+- `prompt` (string): custom prompt for the analysis (default: "Perform an initial EDA. Return your response here and reference files with <file:...>.")
 - `resume_session` (boolean): enable session continuity (default: `false`, see "Session Continuity" below)
 - `include_uploads_in_prompt` (boolean): override whether to preface the user prompt with a list of uploaded files (see below)
 
@@ -29,7 +29,7 @@ Optional fields:
 - `CLAUDE_CODE_USE_BEDROCK=1`: force Bedrock transport
 - `AWS_REGION`: Bedrock region (e.g., `us-east-1`)
 - `CLAUDE_CODE_MAX_OUTPUT_TOKENS` (default 64000): token cap
-- `MAX_THINKING_TOKENS` (default 1024): thinking token cap
+- `MAX_THINKING_TOKENS` (configured in `settings.py`, currently 10000): extended thinking token budget. When set, all requests use thinking mode.
 - `INCLUDE_UPLOADS_IN_PROMPT` (default enabled): when truthy, the agent prompt is prefaced with a list of files found in `./user-inputs/`. Accepts values like `true/false`, `1/0`, `on/off`.
 
 ## Prompt Preface: Uploaded Files
@@ -57,7 +57,7 @@ To help the agent immediately leverage uploaded inputs, the Lambda can prepend a
   - Env var `INCLUDE_UPLOADS_IN_PROMPT` (default enabled if unset)
   - Per-invocation override `include_uploads_in_prompt` in the event payload
 
-The conversation history written to `history/conversation.md` always records the original user prompt (without the preface) for UI clarity.
+The conversation history written to `history/conversation.json` always records the original user prompt (without the preface) for UI clarity.
 
 ## Session Continuity (Future Feature)
 
@@ -73,7 +73,7 @@ When enabled, the Lambda will:
 1. Restore the Claude session archive (`~/.claude`) from S3
 2. Hydrate prior outputs so the agent can reference previous work
 3. Load the previous `ccSessionId` and pass `--resume` to the Claude CLI
-4. Continue the conversation from the last turn in `history/conversation.md`
+4. Continue the conversation from the last turn in `history/conversation.json`
 
 **Requirements to Enable:**
 - Pass `resume_session: true` in the event payload
@@ -84,15 +84,14 @@ When enabled, the Lambda will:
 ```
 {app_id}/{user_id}/{job_id}/
   outputs/
-    results-2025-11-10T14-30-15Z.md  # timestamped results
-    (additional generated files)
+    (generated files referenced as <file:...>)
   sessions/
     claude-home.tar.gz               # archived Claude session
   meta/
     manifest.json                    # job metadata + ccSessionId
     session.json                     # ccSessionId for --resume
   history/
-    conversation.md                  # conversation history
+    conversation.json                # conversation history
   trace/
     trace.jsonl                      # CLI execution trace
 ```
@@ -102,7 +101,7 @@ When enabled, the Lambda will:
 Each invocation creates an isolated workspace under `/tmp/cc_ws/<job_id>`:
 
 - `user-inputs/` — hydrated user-uploaded files for this run (read-only from the agent’s perspective)
-- `outputs/` — all user-visible artifacts (results.md, CSVs, HTML, images)
+- `outputs/` — all user-visible artifacts (CSVs, HTML, images, markdown, etc.)
 - `tmp/` — scratch and intermediates not shown to the user
 
 Isolation & concurrency:
@@ -114,4 +113,4 @@ Isolation & concurrency:
 
 - Pandas is provided via AWS SDK for pandas layer (AWSSDKPandas-Python313)
 - Pure-python libs (openpyxl, et-xmlfile) are part of Poetry deps
-- Results files are timestamped (ISO 8601 UTC format) to support multiple runs under the same job ID
+- The final response is captured from the CLI trace and returned inline; referenced files are uploaded under `outputs/`.

@@ -40,7 +40,7 @@ function usage(): void {
       'Defaults:',
       '  --bucket  $CLAUDE_ARTIFACT_S3_BUCKET or numa-claude-cli-artifacts',
       '  --prefix  $CLAUDE_ARTIFACT_S3_PREFIX or claude-artifacts',
-      '  --version $CLAUDE_CLI_VERSION or 1.0.100',
+      '  --version $CLAUDE_CLI_VERSION or 2.0.37',
       '  --region  $AWS_REGION (optional; uses SDK default if unset)',
     ].join('\n'),
   );
@@ -52,7 +52,7 @@ async function main(): Promise<void> {
 
   const bucket = (argv.bucket as string) || process.env.CLAUDE_ARTIFACT_S3_BUCKET || 'numa-claude-cli-artifacts';
   const prefix = (argv.prefix as string) || process.env.CLAUDE_ARTIFACT_S3_PREFIX || 'claude-artifacts';
-  const version = (argv.version as string) || process.env.CLAUDE_CLI_VERSION || '1.0.100';
+  const version = (argv.version as string) || process.env.CLAUDE_CLI_VERSION || '2.0.37';
   const region = (argv.region as string) || process.env.AWS_REGION || undefined;
   const force = Boolean(argv.force);
 

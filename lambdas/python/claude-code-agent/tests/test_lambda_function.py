@@ -1,3 +1,4 @@
+import json
 import sys
 import tempfile
 import unittest
@@ -84,34 +85,106 @@ class TestClaudeCodeAgentHelpers(unittest.TestCase):
     @patch("lambda_function.s3_helpers.read", side_effect=FileNotFoundError())
     @patch("lambda_function.s3_helpers.write")
     def test_append_conversation_creates_new_history(self, write_mock, read_mock):
-        lambda_function._append_conversation(
-            "app/user/job",
-            prompt="New question",
-            results_key="outputs/results.md",
-        )
-        write_mock.assert_called_once()
-        key_arg, payload = write_mock.call_args.args
-        self.assertTrue(key_arg.endswith("history/conversation.md"))
-        self.assertTrue(payload.decode().startswith("User:\nNew question"))
-        self.assertIn("See outputs/results.md (outputs/results.md)", payload.decode())
-        self.assertEqual(
-            write_mock.call_args.kwargs.get("content_type"), "text/markdown"
-        )
-        read_mock.assert_called_once()
+        with tempfile.TemporaryDirectory() as tmp:
+            results_file = Path(tmp) / "results.md"
+            results_file.write_text(
+                "# Analysis Results\n\nSome analysis content", encoding="utf-8"
+            )
 
-    @patch("lambda_function.s3_helpers.read", return_value=b"Existing line\n")
+            lambda_function._append_conversation(
+                "app/user/job",
+                prompt="New question",
+                results_path=results_file,
+            )
+            write_mock.assert_called_once()
+            key_arg, payload = write_mock.call_args.args
+            self.assertTrue(key_arg.endswith("history/conversation.json"))
+
+            # Parse and validate JSON structure
+            conversation_data = json.loads(payload.decode())
+            self.assertIn("messages", conversation_data)
+            self.assertEqual(len(conversation_data["messages"]), 2)
+
+            # Validate user message
+            user_msg = conversation_data["messages"][0]
+            self.assertEqual(user_msg["role"], "user")
+            self.assertEqual(user_msg["textMd"], "New question")
+            self.assertIn("id", user_msg)
+            self.assertIn("ts", user_msg)
+
+            # Validate assistant message
+            assistant_msg = conversation_data["messages"][1]
+            self.assertEqual(assistant_msg["role"], "assistant")
+            self.assertIn("Analysis Results", assistant_msg["textMd"])
+            self.assertIn("Some analysis content", assistant_msg["textMd"])
+            self.assertIn("id", assistant_msg)
+            self.assertIn("ts", assistant_msg)
+
+            self.assertEqual(
+                write_mock.call_args.kwargs.get("content_type"), "application/json"
+            )
+            read_mock.assert_called_once()
+
     @patch("lambda_function.s3_helpers.write")
-    def test_append_conversation_preserves_existing(self, write_mock, read_mock):
-        lambda_function._append_conversation(
-            "app/user/job",
-            prompt="Follow-up",
-            results_key="outputs/results-42.md",
-        )
-        payload = write_mock.call_args[0][1].decode("utf-8")
-        self.assertIn("Existing line", payload)
-        self.assertIn("User:\nFollow-up", payload)
-        self.assertIn("outputs/results.md (outputs/results-42.md)", payload)
-        read_mock.assert_called_once()
+    def test_append_conversation_preserves_existing(self, write_mock):
+
+        # Create existing conversation data
+        existing_conversation = {
+            "messages": [
+                {
+                    "id": "existing-id-1",
+                    "ts": "2025-11-14T00:00:00Z",
+                    "role": "user",
+                    "textMd": "First question",
+                },
+                {
+                    "id": "existing-id-2",
+                    "ts": "2025-11-14T00:00:01Z",
+                    "role": "assistant",
+                    "textMd": "# First Answer\n\nSome content",
+                },
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            results_file = Path(tmp) / "results-42.md"
+            results_file.write_text(
+                "# Follow-up Answer\n\nMore content", encoding="utf-8"
+            )
+
+            with patch(
+                "lambda_function.s3_helpers.read",
+                return_value=json.dumps(existing_conversation).encode("utf-8"),
+            ):
+                lambda_function._append_conversation(
+                    "app/user/job",
+                    prompt="Follow-up",
+                    results_path=results_file,
+                )
+
+            payload = write_mock.call_args[0][1].decode("utf-8")
+            conversation_data = json.loads(payload)
+
+            # Should have 4 messages total (2 existing + 2 new)
+            self.assertEqual(len(conversation_data["messages"]), 4)
+
+            # Verify existing messages are preserved
+            self.assertEqual(
+                conversation_data["messages"][0]["textMd"], "First question"
+            )
+            self.assertEqual(
+                conversation_data["messages"][1]["textMd"],
+                "# First Answer\n\nSome content",
+            )
+
+            # Verify new messages are appended
+            self.assertEqual(conversation_data["messages"][2]["role"], "user")
+            self.assertEqual(conversation_data["messages"][2]["textMd"], "Follow-up")
+            self.assertEqual(conversation_data["messages"][3]["role"], "assistant")
+            self.assertIn(
+                "Follow-up Answer", conversation_data["messages"][3]["textMd"]
+            )
+            self.assertIn("More content", conversation_data["messages"][3]["textMd"])
 
     def test_extract_result_from_trace_returns_none_if_missing(self):
         result = lambda_function._extract_result_from_trace(

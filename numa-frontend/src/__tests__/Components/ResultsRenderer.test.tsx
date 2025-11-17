@@ -190,7 +190,7 @@ describe('ResultsRenderer Component', () => {
             title: 'JSON Output',
             content_type: 'application/json',
             location: 'inline',
-            data: jsonData,
+            data: { content: JSON.stringify(jsonData, null, 2) },
           },
         ],
       },
