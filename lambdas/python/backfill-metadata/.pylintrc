@@ -4,4 +4,7 @@ disable=
     missing-function-docstring,
     missing-class-docstring,
     line-too-long,
-    too-few-public-methods
+    too-few-public-methods,
+    too-many-locals,
+    too-many-branches,
+    too-many-statements

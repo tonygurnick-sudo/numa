@@ -359,6 +359,7 @@ export const NumaAppProvider = ({ children }) => {
     const requestPayload = {
       ...payload,
       jobId: jobId,
+      user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     };
 
     // Initial request should return success status
@@ -1342,6 +1343,7 @@ export const NumaAppProvider = ({ children }) => {
         prompt: prompt,
         uploaded_files: uploaded_files,
         resume_session: true, // Enable session continuity
+        user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
 
       // Start the follow-up run

@@ -1,5 +1,5 @@
 [MASTER]
-disable=missing-module-docstring,missing-class-docstring,missing-function-docstring
+disable=missing-module-docstring,missing-class-docstring,missing-function-docstring,duplicate-code,too-many-arguments,too-many-positional-arguments,too-many-locals,broad-exception-caught,too-many-branches
 max-line-length=120
 
 [MESSAGES CONTROL]

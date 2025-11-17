@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 import boto3
 import structlog
+from botocore.exceptions import ClientError
 
 logger = structlog.get_logger()
 
@@ -30,6 +31,8 @@ def handler(event, context):
     - is_default: True
     """
     try:
+        # Explicitly mark Lambda parameters as unused in this handler
+        del event, context
         client_name = os.environ.get("CLIENT_NAME", "")
         if not client_name:
             raise ValueError("CLIENT_NAME environment variable not set")
@@ -64,7 +67,7 @@ def handler(event, context):
                         }
                     ),
                 }
-        except Exception as e:
+        except ClientError as e:
             logger.warning("Error checking for existing KB", error=str(e))
             # Continue with creation attempt
 
@@ -100,7 +103,7 @@ def handler(event, context):
             ),
         }
 
-    except Exception as e:
+    except (ValueError, ClientError) as e:
         logger.error("Failed to seed default KB", error=str(e), exc_info=True)
         return {
             "statusCode": 500,

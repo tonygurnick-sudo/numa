@@ -9,9 +9,11 @@ This enables existing files to work with the new metadata filtering system.
 import json
 import os
 from datetime import datetime, timezone
+from typing import Any, Mapping, Optional
 
 import boto3
 import structlog
+from botocore.exceptions import ClientError
 
 logger = structlog.get_logger()
 
@@ -27,6 +29,8 @@ def handler(event, context):
     sidecar files for any files that don't have them.
     """
     try:
+        # Explicitly mark Lambda parameters as unused in this handler
+        del event, context
         bucket_name = os.environ.get("BUCKET_NAME", "")
         client_name = os.environ.get("CLIENT_NAME", "")
 
@@ -51,11 +55,23 @@ def handler(event, context):
         metadata_skipped = 0
 
         for page in pages:
-            if "Contents" not in page:
+            contents_any: Any = (
+                page.get("Contents") if isinstance(page, Mapping) else None
+            )
+            if not contents_any:
                 continue
 
-            for obj in page["Contents"]:
-                key = obj["Key"]
+            for obj in contents_any:
+                # Each object is a mapping with optional 'Key'
+                key_val: Optional[str] = None
+                if isinstance(obj, Mapping):
+                    maybe_key = obj.get("Key")
+                    if isinstance(maybe_key, str):
+                        key_val = maybe_key
+                if not key_val:
+                    # Skip entries without a concrete key
+                    continue
+                key = key_val
                 files_processed += 1
 
                 # Skip directories and existing metadata files
@@ -70,8 +86,17 @@ def handler(event, context):
                     metadata_skipped += 1
                     logger.debug("Metadata exists, skipping", file=key)
                     continue
-                except s3.exceptions.ClientError as e:
-                    if e.response["Error"]["Code"] != "404":
+                except ClientError as e:
+                    # Safely extract error code from ClientError response
+                    error_code: Optional[str] = None
+                    resp: Any = getattr(e, "response", None)
+                    if isinstance(resp, dict):
+                        err_info = resp.get("Error")
+                        if isinstance(err_info, dict):
+                            code_val = err_info.get("Code")
+                            if isinstance(code_val, str):
+                                error_code = code_val
+                    if error_code != "404":
                         # Unexpected error, log and continue
                         logger.warning(
                             "Error checking metadata", file=key, error=str(e)
@@ -80,9 +105,11 @@ def handler(event, context):
                     # Metadata doesn't exist, create it
 
                 # Get file last modified date for uploaded_at
-                last_modified = obj.get("LastModified")
-                if last_modified:
-                    uploaded_at = last_modified.isoformat()
+                last_modified_any: Any = (
+                    obj.get("LastModified") if isinstance(obj, Mapping) else None
+                )
+                if isinstance(last_modified_any, datetime):
+                    uploaded_at = last_modified_any.isoformat()
                 else:
                     uploaded_at = datetime.now(timezone.utc).isoformat()
 
@@ -121,7 +148,7 @@ def handler(event, context):
                     )
                     metadata_created += 1
                     logger.info("Created metadata", file=key, metadata_key=metadata_key)
-                except Exception as e:
+                except ClientError as e:
                     logger.error(
                         "Failed to create metadata",
                         file=key,
@@ -148,7 +175,7 @@ def handler(event, context):
             ),
         }
 
-    except Exception as e:
+    except (ValueError, ClientError) as e:
         logger.error("Metadata backfill failed", error=str(e), exc_info=True)
         return {
             "statusCode": 500,
