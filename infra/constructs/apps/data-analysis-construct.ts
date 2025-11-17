@@ -162,7 +162,7 @@ export class DataAnalysis extends BaseNumaApp {
           : []),
       ],
       environment: {
-        BUCKET: props.outputsBucket.bucket,
+        OUTPUTS_BUCKET_NAME: props.outputsBucket.bucket,
         APP_ID: this.appId,
         HOME: '/tmp',
         // Use runtime download to /tmp instead of a Lambda layer
@@ -195,19 +195,23 @@ export class DataAnalysis extends BaseNumaApp {
             'user_id.$': '$$.Execution.Input.user_id',
             'prompt.$': '$$.Execution.Input.prompt',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
+            'user_timezone.$': '$$.Execution.Input.user_timezone',
           },
           Next: 'RunAnalysis',
         },
         RunAnalysis: this.addLambdaTask(
           runner.arn,
           {
+            agent_type: 'data_analysis', // Route to data analysis agent
             app_id: this.appId,
             'job_id.$': '$.job_id',
             'user_id.$': '$.user_id',
             'prompt.$': '$.prompt',
             'uploaded_files.$': '$.uploaded_files',
+            'user_timezone.$': '$.user_timezone',
             resume_session: true, // Enable session continuity for follow-up prompts
             stream_events: true, // Enable event streaming to show progress in real-time
+            use_dynamodb: true, // Write events to DynamoDB jobs table for real-time status
           },
           'WriteSuccessStatus',
           {

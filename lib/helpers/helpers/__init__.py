@@ -296,12 +296,63 @@ def extract_user_id_from_token(event: APIGatewayProxyEvent) -> Optional[str]:
         return "unknown"
 
 
+def format_appoutput(
+    *,
+    result: str,
+    status: str = "success",
+    job_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+    files: Optional[list[dict]] = None,
+) -> dict:
+    """
+    Convenience helper to format a standard AppOutput-like response.
+
+    - Wraps a text result into an inline markdown output under a "results" list
+    - Includes a simple top-level status string for compatibility with callers
+    - Optionally echoes job/user/app IDs and a files list if provided
+
+    The exact schema may be extended by callers; consumers typically read the
+    "results" list and/or the top-level "status" and "files" fields.
+    """
+    outputs: list[dict] = [
+        {
+            "content_type": "text/markdown",
+            "title": "Analysis Results",
+            "data": result,
+            "location": "inline",
+        }
+    ]
+
+    payload: dict = {
+        "status": status,
+        "results": [
+            {
+                "input_reference": None,
+                "outputs": outputs,
+            }
+        ],
+    }
+
+    # Attach optional context and files if provided
+    if job_id is not None:
+        payload["job_id"] = job_id
+    if user_id is not None:
+        payload["user_id"] = user_id
+    if app_id is not None:
+        payload["app_id"] = app_id
+    if files:
+        payload["files"] = files
+
+    return payload
+
+
 def append_event(
     message: str,
     job_id: str,
     user_id: str,
     app_id: str,
-    use_dynamodb: bool = False,
+    use_dynamodb: bool = True,
     bucket: Optional[str] = None,
     table_name: Optional[str] = None,
 ) -> None:

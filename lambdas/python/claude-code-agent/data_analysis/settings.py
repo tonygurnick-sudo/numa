@@ -24,13 +24,16 @@ SETTINGS_JSON: dict[str, Any] = {
             "Glob(./**)",
             "Grep(./**)",
             "Edit",
+            # Allow fetching Arcanum documentation
+            "WebFetch(domain:arcanum.ai)",
+            "WebFetch(domain:www.arcanum.ai)",
         ],
         "deny": [
             # Guard rails
             "Read(~/**)",
             "Read(./.env)",
             "Read(./secrets/**)",
-            # No outbound network by default
+            # No outbound network by default (except allowed domains above)
             "WebFetch(*)",
         ],
     },
@@ -44,6 +47,11 @@ SETTINGS_JSON: dict[str, Any] = {
             "Glob",
             "Grep",
             "Edit",
+            "TodoWrite",
+            "Task",
+            "WebFetch",
+            "BashOutput",
+            "KillShell",
         ],
         # Bash command patterns allowed via the CLI (--allowedTools Bash(...))
         "bash_allow": [
@@ -56,6 +64,11 @@ SETTINGS_JSON: dict[str, Any] = {
             "cat:*",
             "tar:*",
             "unzip:*",
+            "mkdir:*",
+            "mv:*",
+            "cp:*",
+            "wc:*",
+            "file:*",
         ],
     },
     "sandbox": {

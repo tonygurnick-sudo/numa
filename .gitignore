@@ -149,4 +149,5 @@ docs
 # Claude CLI layer artifacts (built locally or in CI)
 infra/assets/layers/claude-cli/bin/
 infra/assets/layers/claude-cli/*.zip
+infra/assets/artifacts/claude-cli/bin/claude
 clientConfigProd.json

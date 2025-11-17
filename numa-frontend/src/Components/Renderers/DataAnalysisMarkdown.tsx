@@ -849,6 +849,10 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
               <div className="flex-grow-1 me-2">
                 <span className="fw-semibold">Numa</span>
                 <span className="text-muted small ms-2">{new Date(message.ts).toLocaleString()}</span>
+                <span className="expand-hint text-muted small ms-3">
+                  <i className="bi bi-chevron-down me-1"></i>
+                  Click to expand and see full response
+                </span>
               </div>
             </div>
           </Accordion.Header>

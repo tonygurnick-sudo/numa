@@ -38,6 +38,25 @@
           background-color: rgba(142, 80, 167, 0.05);
           color: var(--color-primary);
           box-shadow: none;
+
+          // Hide expand hint when accordion is open
+          .expand-hint {
+            display: none;
+          }
+        }
+
+        &.collapsed {
+          // Show expand hint when accordion is collapsed
+          .expand-hint {
+            display: inline;
+            opacity: 0.7;
+            font-style: italic;
+            transition: opacity 0.2s ease;
+          }
+
+          &:hover .expand-hint {
+            opacity: 1;
+          }
         }
 
         &:focus {
