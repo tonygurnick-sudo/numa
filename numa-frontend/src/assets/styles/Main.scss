@@ -15,5 +15,7 @@
 @use 'components/markdown' as *;
 @use 'components/status_dashboard' as *;
 @use 'components/table_styles' as *;
+@use 'components/data_analysis' as *;
+@use 'components/file_tree' as *;
 
 @import '../fonts/Metropolis.css';

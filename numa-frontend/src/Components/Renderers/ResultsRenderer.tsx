@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaApp } from '../../Providers/NumaAppContext';
@@ -661,8 +661,27 @@ export const ResultsRenderer = ({ results }) => {
   const [loadingActions, setLoadingActions] = useState({});
   const [selectedOutputIndex, setSelectedOutputIndex] = useState(0);
 
-  // Check if this is the data-analysis app
-  const isDataAnalysisApp = numaAppData?.id === 'data-analysis';
+  // Check if this is the data-analysis app (multiple sources for robustness)
+  const isDataAnalysisApp = useMemo(() => {
+    // Check numaAppData first
+    if (numaAppData?.id === 'data-analysis') return true;
+
+    // Fallback: Check if S3 key indicates data-analysis
+    // Parse results if needed to check the key
+    let parsedResults = results;
+    if (typeof results === 'string') {
+      try {
+        parsedResults = JSON.parse(results);
+      } catch {
+        return false;
+      }
+    }
+
+    const firstOutput = parsedResults?.[0]?.outputs?.[0];
+    if (firstOutput?.data?.key?.includes('data-analysis/')) return true;
+
+    return false;
+  }, [numaAppData?.id, results]);
 
   useEffect(() => {
     // Parse results if it's a JSON string
@@ -729,7 +748,14 @@ export const ResultsRenderer = ({ results }) => {
 
           // For inline content, set it directly
           if (output.location?.toLowerCase() === 'inline') {
-            setContents((prev) => ({ ...prev, [key]: output.data }));
+            const inlineData: unknown = output.data;
+            const text =
+              typeof inlineData === 'string' ? inlineData : (inlineData as { content?: string } | null)?.content;
+            if (typeof text === 'string') {
+              setContents((prev) => ({ ...prev, [key]: text }));
+            } else {
+              console.warn('Inline output provided without string content.');
+            }
             continue;
           }
 
@@ -870,6 +896,18 @@ export const ResultsRenderer = ({ results }) => {
             setLoadingActions={setLoadingActions}
           />
         </div>
+      ) : // Data Analysis: Always use DataAnalysisMarkdown for data-analysis apps (regardless of content_type)
+      isDataAnalysisApp && selectedOutput.data?.key ? (
+        <div className="mb-3">
+          <div className="markdown-content p-3 bg-white rounded border">
+            <DataAnalysisMarkdown
+              content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
+              baseS3Key={selectedOutput.data.key}
+              bucket={selectedOutput.data.bucket || window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME') || ''}
+              region={window.sessionStorage.getItem('REGION') || ''}
+            />
+          </div>
+        </div>
       ) : // Render content based on type
       isCSVContent(content, selectedOutput.content_type) ? (
         <div className="mb-3">
@@ -885,27 +923,14 @@ export const ResultsRenderer = ({ results }) => {
         </div>
       ) : selectedOutput.content_type === 'text/markdown' || selectedOutput.content_type === 'text/plain' ? (
         <div className="mb-3">
-          {isDataAnalysisApp && selectedOutput.data?.key ? (
-            <div className="markdown-content p-3 bg-white rounded border">
-              <DataAnalysisMarkdown
-                content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
-                baseS3Key={selectedOutput.data.key}
-                bucket={selectedOutput.data.bucket || window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME') || ''}
-                region={window.sessionStorage.getItem('REGION') || ''}
-              />
-            </div>
-          ) : (
-            <>
-              <div className="markdown-content p-3 bg-white rounded border">
-                <MarkdownContent content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)} />
-              </div>
-              {!isLoading && !error && content && (
-                <ResultActions
-                  content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
-                  title={selectedOutput.title || `Result ${selectedOutputIndex + 1}`}
-                />
-              )}
-            </>
+          <div className="markdown-content p-3 bg-white rounded border">
+            <MarkdownContent content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)} />
+          </div>
+          {!isLoading && !error && content && (
+            <ResultActions
+              content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
+              title={selectedOutput.title || `Result ${selectedOutputIndex + 1}`}
+            />
           )}
         </div>
       ) : selectedOutput.content_type === 'application/json' ? (

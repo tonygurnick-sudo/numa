@@ -13,12 +13,12 @@ Where it lives
 
 Local fetch (no Docker)
 - `yarn workspace @arcanumai/q-apps-deployer-tools fetch-claude-cli-artifact`
-  - Defaults: bucket `numa-claude-cli-artifacts`, prefix `claude-artifacts`, version `1.0.100`
+  - Defaults: bucket `numa-claude-cli-artifacts`, prefix `claude-artifacts`, version `2.0.37`
 
 Infra usage
 - During deploy, the local ZIP is uploaded to the client outputs bucket under `artifacts/claude-cli/<version>/claude-x86_64.zip`.
 - Data Analysis runner uses runtime download: the Lambda downloads this ZIP from S3 on cold start, extracts `bin/claude` to `/tmp/claude`, and executes it via `CLAUDE_BIN=/tmp/claude`.
-- Set `CLAUDE_CLI_VERSION` in the deploy environment to control the S3 key/version (default `1.0.100`).
+- Set `CLAUDE_CLI_VERSION` in the deploy environment to control the S3 key/version (default `2.0.37`).
 
 Runtime env vars (runner)
 - `BUCKET`: client outputs bucket name.

@@ -156,6 +156,7 @@ __metadata:
     html-to-docx-lite: "npm:^2.0.1"
     jsdom: "npm:^26.0.0"
     jspdf: "npm:^3.0.1"
+    jszip: "npm:^3.10.1"
     jwt-decode: "npm:^4.0.0"
     micromark: "npm:^4.0.1"
     papaparse: "npm:^5.5.3"

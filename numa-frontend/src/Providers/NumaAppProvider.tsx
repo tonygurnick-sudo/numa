@@ -1311,6 +1311,72 @@ export const NumaAppProvider = ({ children }) => {
     }));
   }
 
+  /**
+   * Start a follow-up prompt with the same job ID to continue an analysis session
+   * Uses session continuity to build on previous work
+   */
+  const startFollowUp = async (jobId: string, prompt: string) => {
+    if (!numaAppData) {
+      throw new Error('App not initialized');
+    }
+
+    // Clear previous results to switch UI to running state
+    setNumaTaskResponses([]);
+    setJob(null);
+    setJobEvents([]);
+    setProcessingStatus('Starting follow-up...');
+    setProcessingProgress(0);
+    setError(null);
+    setAppRunning(true);
+    setLoading(true);
+
+    // Add synthetic event for immediate feedback
+    addSyntheticEvent('Starting follow-up analysis...');
+
+    try {
+      // Get current task input values (uploaded files, etc.)
+      const uploaded_files = taskInputValues['upload-files-to-s3'] || [];
+
+      const requestPayload = {
+        jobId: jobId, // Re-use same job ID for session continuity
+        prompt: prompt,
+        uploaded_files: uploaded_files,
+        resume_session: true, // Enable session continuity
+      };
+
+      // Start the follow-up run
+      const request_endpoint = `/api/${numaAppData.id}/main`;
+      addSyntheticEvent('Sending follow-up request...');
+      const response = await numaPost(request_endpoint, requestPayload);
+
+      if (!response || !response.job_id) {
+        throw new Error('No job ID received from follow-up request');
+      }
+
+      // Set this as the current job
+      setCurrentJobId(response.job_id);
+      addSyntheticEvent('Processing follow-up question...');
+
+      // Poll for results
+      const { result } = await pollJobForCompletion(response.job_id);
+
+      // Load the results
+      await loadJobResults(response.job_id);
+      addSyntheticEvent('Follow-up analysis complete');
+
+      return result;
+    } catch (error) {
+      console.error('Error starting follow-up:', error);
+      setProcessingStatus('Error');
+      setProcessingProgress(0);
+      addSyntheticEvent(`Error: ${error.message || 'An error occurred'}`);
+      throw new Error('Unable to start follow-up. Please try again.');
+    } finally {
+      setLoading(false);
+      setAppRunning(false);
+    }
+  };
+
   const contextValue = {
     loading,
     setLoading,
@@ -1371,6 +1437,7 @@ export const NumaAppProvider = ({ children }) => {
     fetchS3Content,
     loadingJobId,
     setLoadingJobId,
+    startFollowUp,
   };
 
   return <NumaAppContext.Provider value={contextValue}>{children}</NumaAppContext.Provider>;

@@ -4,8 +4,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Accept an explicit version, or default to "stable" which maps via the manifest
-const VERSION = process.env.CLAUDE_CLI_VERSION || 'stable';
+// Accept an explicit version, or default to pinned version
+const VERSION = process.env.CLAUDE_CLI_VERSION || '2.0.37';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
 const ARTIFACT_DIR = path.join(ROOT_DIR, 'infra', 'assets', 'artifacts', 'claude-cli');

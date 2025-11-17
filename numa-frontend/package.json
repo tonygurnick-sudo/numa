@@ -52,6 +52,7 @@
     "file-type": "^20.0.0",
     "html-to-docx-lite": "^2.0.1",
     "jspdf": "^3.0.1",
+    "jszip": "^3.10.1",
     "jwt-decode": "^4.0.0",
     "micromark": "^4.0.1",
     "papaparse": "^5.5.3",

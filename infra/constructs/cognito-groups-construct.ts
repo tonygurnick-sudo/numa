@@ -69,6 +69,19 @@ const createFeatureSets = (props: {
         actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
         resources: [`${props.outputsBucket.bucket.arn}/*/$\${aws:PrincipalTag/username}/**`],
       },
+      // Outputs bucket ListBucket permission with user-scoped prefix
+      {
+        effect: 'Allow',
+        actions: ['s3:ListBucket'],
+        resources: [props.outputsBucket.bucket.arn],
+        condition: [
+          {
+            test: 'StringLike',
+            variable: 's3:prefix',
+            values: ['*/$\${aws:PrincipalTag/username}/*'],
+          },
+        ],
+      },
       // Read public agent icons for all users
       {
         effect: 'Allow',
@@ -146,6 +159,19 @@ const createFeatureSets = (props: {
         effect: 'Allow',
         actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
         resources: [`${props.outputsBucket.bucket.arn}/*/$\${aws:PrincipalTag/username}/**`],
+      },
+      // Outputs bucket ListBucket permission with user-scoped prefix
+      {
+        effect: 'Allow',
+        actions: ['s3:ListBucket'],
+        resources: [props.outputsBucket.bucket.arn],
+        condition: [
+          {
+            test: 'StringLike',
+            variable: 's3:prefix',
+            values: ['*/$\${aws:PrincipalTag/username}/*'],
+          },
+        ],
       },
       // Read public agent icons for all users
       {

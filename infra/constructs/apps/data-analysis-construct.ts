@@ -33,7 +33,7 @@ export class DataAnalysis extends BaseNumaApp {
       category: AppCategory.GENERAL,
       createdDate: new Date().toISOString().slice(0, 10),
       appDescription:
-        'Run data analysis workflows using a Claude Code agent. Upload files and provide a prompt; outputs include a results.md and optional artifacts.',
+        'Run data analysis workflows using a Claude Code agent. Upload files and provide a prompt; the assistant returns a markdown response and may generate additional artifacts.',
       tasks: [
         {
           id: 'upload-files-to-s3',
@@ -112,7 +112,7 @@ export class DataAnalysis extends BaseNumaApp {
       );
     }
     // Resolve version (pin S3 key by version). Defaults align with tooling/docs.
-    const CLAUDE_CLI_VERSION = process.env.CLAUDE_CLI_VERSION ?? '1.0.100';
+    const CLAUDE_CLI_VERSION = process.env.CLAUDE_CLI_VERSION ?? '2.0.37';
     const artifactS3Key = `artifacts/claude-cli/${CLAUDE_CLI_VERSION}/claude-x86_64.zip`;
 
     // Upload the ZIP to the client's outputs bucket so it can be consumed at deploy/runtime
@@ -206,6 +206,7 @@ export class DataAnalysis extends BaseNumaApp {
             'user_id.$': '$.user_id',
             'prompt.$': '$.prompt',
             'uploaded_files.$': '$.uploaded_files',
+            resume_session: true, // Enable session continuity for follow-up prompts
             stream_events: true, // Enable event streaming to show progress in real-time
           },
           'WriteSuccessStatus',

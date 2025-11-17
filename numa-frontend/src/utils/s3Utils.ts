@@ -8,6 +8,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import JSZip from 'jszip';
 
 const SIGNED_URL_CACHE = new Map<string, { url: string; expiresAt: number }>();
 const SIGNED_URL_EXPIRY_SKEW_MS = 5000;
@@ -570,6 +571,235 @@ export const deleteMultipleObjectsFromS3 = async (objectKeys, s3Bucket, region, 
     return { successful, failed };
   } catch (error) {
     console.error('Error in bulk delete operation:', error);
+    throw error;
+  }
+};
+
+/**
+ * Progress callback for folder download operations
+ */
+export interface FolderDownloadProgress {
+  processed: number;
+  total: number;
+  currentFile: string;
+  phase: 'listing' | 'downloading' | 'zipping';
+}
+
+/**
+ * Download an entire folder from S3 as a zip file
+ * @param {string} folderPrefix - The folder prefix to download
+ * @param {string} s3Bucket - The S3 bucket name
+ * @param {string} region - AWS region
+ * @param {Function} getCredentials - Function to get AWS credentials
+ * @param {string} [zipFilename] - Optional custom name for the zip file
+ * @param {Function} [onProgress] - Optional progress callback
+ * @returns {Promise<void>}
+ */
+export const downloadFolderAsZip = async (
+  folderPrefix: string,
+  s3Bucket: string,
+  region: string,
+  getCredentials: () => Promise<unknown>,
+  zipFilename?: string,
+  onProgress?: (progress: FolderDownloadProgress) => void,
+): Promise<void> => {
+  try {
+    // Ensure folderPrefix ends with /
+    const normalizedPrefix = folderPrefix.endsWith('/') ? folderPrefix : `${folderPrefix}/`;
+
+    // Report listing phase
+    if (onProgress) {
+      onProgress({
+        processed: 0,
+        total: 0,
+        currentFile: '',
+        phase: 'listing',
+      });
+    }
+
+    // List all objects in the folder
+    const objectKeys = await listObjectsInFolder(normalizedPrefix, s3Bucket, region, getCredentials);
+
+    if (objectKeys.length === 0) {
+      throw new Error('No files found in the specified folder');
+    }
+
+    const zip = new JSZip();
+    const credentials = await getCredentials();
+
+    if (!credentials?.accessKeyId) {
+      throw new Error('AWS Credentials are missing.');
+    }
+
+    const s3Client = new S3Client({
+      region,
+      credentials,
+    });
+
+    // Download each file and add to zip
+    for (let i = 0; i < objectKeys.length; i++) {
+      const key = objectKeys[i];
+
+      // Skip if it's just the folder marker (empty key ending with /)
+      if (key.endsWith('/')) {
+        continue;
+      }
+
+      // Report downloading progress
+      if (onProgress) {
+        onProgress({
+          processed: i,
+          total: objectKeys.length,
+          currentFile: key,
+          phase: 'downloading',
+        });
+      }
+
+      const command = new GetObjectCommand({
+        Bucket: s3Bucket,
+        Key: key,
+      });
+
+      const response = await s3Client.send(command);
+
+      if (response.Body) {
+        // Convert stream to array buffer
+        const bodyContents = await response.Body.transformToByteArray();
+
+        // Get the relative path within the folder
+        const relativePath = key.substring(normalizedPrefix.length);
+
+        // Add file to zip with its relative path
+        zip.file(relativePath, bodyContents);
+      }
+    }
+
+    // Report zipping phase
+    if (onProgress) {
+      onProgress({
+        processed: objectKeys.length,
+        total: objectKeys.length,
+        currentFile: '',
+        phase: 'zipping',
+      });
+    }
+
+    // Generate the zip file
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+
+    // Determine the zip filename
+    const folderName = normalizedPrefix.slice(0, -1).split('/').pop() || 'folder';
+    const finalZipName = zipFilename || `${folderName}.zip`;
+
+    // Trigger download
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = finalZipName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Clean up
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+
+    console.log(`Successfully downloaded folder ${folderPrefix} as ${finalZipName}`);
+  } catch (error) {
+    console.error('Error downloading folder as zip:', error);
+    throw error;
+  }
+};
+
+/**
+ * Download multiple files from S3 as a zip file
+ * @param {Array<string>} s3Keys - Array of S3 object keys to download
+ * @param {string} s3Bucket - The S3 bucket name
+ * @param {string} region - AWS region
+ * @param {Function} getCredentials - Function to get AWS credentials
+ * @param {string} [zipFilename] - Optional custom name for the zip file (default: 'files.zip')
+ * @param {Function} [onProgress] - Optional progress callback
+ * @returns {Promise<void>}
+ */
+export const downloadMultipleFilesAsZip = async (
+  s3Keys: string[],
+  s3Bucket: string,
+  region: string,
+  getCredentials: () => Promise<unknown>,
+  zipFilename: string = 'files.zip',
+  onProgress?: (progress: FolderDownloadProgress) => void,
+): Promise<void> => {
+  try {
+    if (s3Keys.length === 0) {
+      throw new Error('No files to download');
+    }
+
+    const zip = new JSZip();
+    const credentials = await getCredentials();
+
+    if (!credentials?.accessKeyId) {
+      throw new Error('AWS Credentials are missing.');
+    }
+
+    const s3Client = new S3Client({
+      region,
+      credentials,
+    });
+
+    // Download each file and add to zip
+    for (let i = 0; i < s3Keys.length; i++) {
+      const key = s3Keys[i];
+
+      // Report progress
+      if (onProgress) {
+        onProgress({
+          processed: i,
+          total: s3Keys.length,
+          currentFile: key,
+          phase: 'downloading',
+        });
+      }
+
+      const command = new GetObjectCommand({
+        Bucket: s3Bucket,
+        Key: key,
+      });
+
+      const response = await s3Client.send(command);
+
+      if (response.Body) {
+        const bodyContents = await response.Body.transformToByteArray();
+
+        // Use just the filename (not full path) in the zip
+        const filename = key.split('/').pop() || key;
+        zip.file(filename, bodyContents);
+      }
+    }
+
+    // Report zipping phase
+    if (onProgress) {
+      onProgress({
+        processed: s3Keys.length,
+        total: s3Keys.length,
+        currentFile: '',
+        phase: 'zipping',
+      });
+    }
+
+    // Generate and download the zip
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = zipFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+
+    console.log(`Successfully downloaded ${s3Keys.length} files as ${zipFilename}`);
+  } catch (error) {
+    console.error('Error downloading files as zip:', error);
     throw error;
   }
 };

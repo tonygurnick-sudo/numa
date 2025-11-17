@@ -1,0 +1,151 @@
+// Data Analysis Component Styles
+
+.data-analysis-markdown {
+  // Conversation Messages Container
+  .conversation-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  // User Message Styling
+  .user-message {
+    .user-message-bubble {
+      background-color: #f8f9fa;
+      border: 1px solid var(--bs-border-color);
+    }
+  }
+
+  // Assistant Message Accordion (Individual)
+  .assistant-message-accordion {
+    .accordion-item {
+      border: 1px solid rgba(142, 80, 167, 0.2);
+      transition: all 0.2s ease;
+
+      &:hover {
+        border-color: var(--color-primary);
+        box-shadow: 0 2px 8px rgba(142, 80, 167, 0.1);
+      }
+    }
+
+    .accordion-header {
+      .accordion-button {
+        padding: 0.875rem 1.25rem;
+        background-color: #f8f9fa;
+        font-size: 1rem;
+
+        &:not(.collapsed) {
+          background-color: rgba(142, 80, 167, 0.05);
+          color: var(--color-primary);
+          box-shadow: none;
+        }
+
+        &:focus {
+          border-color: var(--color-primary);
+          box-shadow: 0 0 0 0.25rem rgba(142, 80, 167, 0.15);
+        }
+      }
+    }
+
+    .accordion-body {
+      padding: 1.5rem;
+      background-color: white;
+    }
+  }
+
+  // Assistant Message Content
+  .assistant-message-content {
+    .markdown-body {
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+  }
+
+  // File Reference Container - Fix Overflow Issues
+  .file-reference-container {
+    max-width: 100%;
+
+    .file-preview-content {
+      max-width: 100%;
+      overflow-x: auto;
+
+      // Ensure inline content doesn't overflow
+      iframe,
+      .markdown-preview-content,
+      .csv-preview-container,
+      .html-preview-container {
+        max-width: 100%;
+      }
+
+      // Markdown file previews
+      .markdown-file-preview {
+        max-width: 100%;
+        overflow-x: auto;
+
+        table {
+          max-width: 100%;
+          overflow-x: auto;
+          display: block;
+        }
+      }
+
+      // CSV previews
+      .csv-preview-container {
+        overflow-x: auto;
+
+        table {
+          min-width: 100%;
+        }
+      }
+    }
+  }
+
+  // Follow-Up Button Section
+  .follow-up-button-container {
+    margin-top: 3rem;
+
+    .border-top {
+      border-color: rgba(142, 80, 167, 0.2) !important;
+      border-width: 2px !important;
+      padding-top: 2rem;
+      padding-bottom: 1.5rem;
+    }
+
+    .follow-up-header {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--bs-secondary-color);
+      margin-bottom: 1rem;
+
+      i {
+        color: var(--color-primary);
+      }
+    }
+
+    .btn-follow-up {
+      background-color: var(--color-primary);
+      border-color: var(--color-primary);
+      font-size: 1.1rem;
+      font-weight: 600;
+      padding: 0.75rem 1.5rem;
+      box-shadow: 0 4px 6px rgba(142, 80, 167, 0.15);
+      transition: all 0.2s ease;
+
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(142, 80, 167, 0.25);
+        background-color: var(--color-primary-hover);
+        border-color: var(--color-primary-hover);
+      }
+
+      &:active {
+        transform: translateY(0);
+      }
+
+      &:disabled {
+        transform: none;
+        box-shadow: 0 2px 4px rgba(142, 80, 167, 0.1);
+      }
+    }
+  }
+}

@@ -8,16 +8,17 @@ interface TraceViewerProps {
   traceS3Key: string; // e.g., "data-analysis/{userId}/{jobId}/trace/trace.jsonl"
   bucket: string;
   region: string;
+  defaultExpanded?: boolean;
 }
 
-export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket }) => {
+export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, defaultExpanded = false }) => {
   const { getCredentials } = useAuth();
   const { fetchS3Content } = useNumaApp();
   const [traceContent, setTraceContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [parsedEvents, setParsedEvents] = useState<TraceEventData[]>([]);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   // Fetch trace file from S3 when expanded
   useEffect(() => {
