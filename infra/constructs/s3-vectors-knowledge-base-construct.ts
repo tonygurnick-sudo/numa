@@ -6,7 +6,6 @@ import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
-import { DataAwsS3Bucket } from '@cdktf/provider-aws/lib/data-aws-s3-bucket';
 import { S3BucketPolicy } from '@cdktf/provider-aws/lib/s3-bucket-policy';
 import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
 import { SchedulerSchedule } from '@cdktf/provider-aws/lib/scheduler-schedule';
@@ -49,11 +48,11 @@ export class S3VectorsKnowledgeBase extends Construct {
     const dataBucketName = `numa-${props.clientName}-data`;
     const dimensions = 1024; // Default for Titan embeddings
 
-    // Validate that the data bucket exists
-    const dataBucket = new DataAwsS3Bucket(this, 'data-bucket', {
-      bucket: dataBucketName,
-    });
-    const dataBucketArn = dataBucket.arn;
+    // Dynamically generate the bucket ARN based on client name.
+    // This avoids a circular dependency where the knowledge base construct
+    // would try to read the bucket before it's created by CoreNumaInfra.
+    // The bucket will be created by CoreNumaInfra and the ARN format is predictable.
+    const dataBucketArn = `arn:aws:s3:::${dataBucketName}`;
 
     // IAM Role for custom resource Lambda
     const customResourceRole = new IamRole(this, 'custom-resource-role', {
