@@ -1,0 +1,11 @@
+
+{
+  "startFolderIdString": "3_1",
+  "s3Bucket": "numa-data-prod",
+  "s3Prefix": "integrations/12d-synergy/cuttriss/",
+  "withReferences": false,
+  "forceOverwrite": false,
+  "includeGlobs": ["*.dwg", "*.pdf"],
+  "excludeGlobs": ["*.tmp", "~*"],
+  "pageSize": 200
+}

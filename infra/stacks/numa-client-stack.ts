@@ -43,6 +43,7 @@ import { EnvironmentName } from '@arcanumai/cdktf-util';
 import { z } from 'zod';
 import { KnowledgeBase } from '../constructs/knowledge-base-construct';
 import { S3VectorsKnowledgeBase } from '../constructs/s3-vectors-knowledge-base-construct';
+import { cuttrissDataSyncConfigSchema } from '../constructs/cuttriss-data-sync-construct';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
@@ -176,6 +177,7 @@ export class NumaClientStack extends TerraformStack {
       environmentName: props.environmentName,
       qBusinessProvider: qBusinessProvider,
       knowledgeBase: knowledgeBase,
+      cuttrissDataSync: clientConfig.cuttrissDataSync,
     });
 
     // Frontend + CloudFront
@@ -285,7 +287,6 @@ export class NumaClientStack extends TerraformStack {
         },
       });
     });
-
     const folderPath = path.join(import.meta.dirname, '..', 'build', 'numa-frontend');
     const excludedFiles = ['config.json', 'manifest.json'];
     let objects: S3Object[] = [];
@@ -581,6 +582,11 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         brandingProviderEnabled: z.boolean().optional(),
+
+        /**
+         * Optional configuration for the Cuttriss 12d Synergy data sync Lambda.
+         */
+        cuttrissDataSync: cuttrissDataSyncConfigSchema.optional(),
       })
       .strict(),
   );

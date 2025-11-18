@@ -119,6 +119,9 @@ tools/*.csv
 
 test.pdf
 
+# Local task notes
+tasks/
+
 **/.vite/deps
 
 accounts.html
