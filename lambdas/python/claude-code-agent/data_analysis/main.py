@@ -160,16 +160,33 @@ def _extract_tool_event(tool_name: str, tool_input: dict) -> Optional[str]:
 
     def format_bash_command(inp: dict) -> Optional[str]:
         """Summarize a bash command to a human-friendly message, with fallback."""
+        # First priority: Use Claude's own description if provided
+        description = inp.get("description", "")
+        if description:
+            return f"Numa: {description}"
+
+        # Second priority: Try LLM summary (for cases without description)
         command = inp.get("command", "")
-        if not command:
+        if command:
+            summary = _summarize_tool_command(command)
+            if summary:
+                return f"Numa: {summary}"
+
+        # Final fallback: Show command preview
+        if command:
+            cmd_preview = command[:60] + "..." if len(command) > 60 else command
+            return f"Running: {cmd_preview}"
+
+        return None
+
+    def format_read_event(inp: dict) -> Optional[str]:
+        """Format read event with simplified path."""
+        file_path = inp.get("file_path", "")
+        if not file_path:
             return None
-        # Try LLM summary first
-        summary = _summarize_tool_command(command)
-        if summary:
-            return f"Numa: {summary}"
-        # Fallback to previous behavior
-        cmd_preview = command[:60] + "..." if len(command) > 60 else command
-        return f"Running: {cmd_preview}"
+        # Show just the filename to reduce noise
+        filename = Path(file_path).name
+        return f"Reading file: {filename}"
 
     def format_write_event(inp: dict) -> Optional[str]:
         """Summarize a file write, with LLM summary for code files."""
@@ -187,11 +204,7 @@ def _extract_tool_event(tool_name: str, tool_input: dict) -> Optional[str]:
         return f"Writing file: {file_path}"
 
     tool_events = {
-        "Read": lambda inp: (
-            f"Reading file: {inp.get('file_path', '')}"
-            if inp.get("file_path")
-            else None
-        ),
+        "Read": format_read_event,
         "Write": format_write_event,
         "Edit": lambda inp: (
             f"Editing file: {inp.get('file_path', '')}"

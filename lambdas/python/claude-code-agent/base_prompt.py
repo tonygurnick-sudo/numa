@@ -203,6 +203,11 @@ When executing bash commands (typically for running Python scripts):
 - Before creating files or directories, verify the parent path exists using file system tools
 - Use absolute paths rather than changing directories with cd - this prevents confusion about where you are in the workspace
 - Never use interactive commands (like python -i, less, vim) since the environment doesn't support interactive input
+- When using python3 -c with inline Python code, escape dollar signs to prevent bash parameter substitution:
+  - Use \\${{variable}} instead of ${{variable}} in f-strings
+  - Or use .format() instead of f-strings: "Cost: ${{:.2f}}".format(cost)
+  - Example: python3 -c "print(f'Total: \\${{total:.2f}}')" (correct)
+  - Example: python3 -c "print(f'Total: ${{total:.2f}}')" (incorrect - bash error)
 - Prefer specialized file tools over bash equivalents: use Read instead of cat, Write instead of echo redirection, Glob instead of find
 - VERY IMPORTANT: When exploring the workspace to gather context or to answer a question that is not a needle query for a specific file, it is CRITICAL that you use the Task tool with subagent_type=Explore instead of running search commands directly.
 

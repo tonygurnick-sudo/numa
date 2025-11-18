@@ -962,7 +962,21 @@ export const NumaAppProvider = ({ children }) => {
       const totalWeight = calculateTotalWeight(orderedTasks);
 
       for (const task of orderedTasks) {
-        const taskMessage = `Processing Input: ${cleanTaskTitle(task.title)}...`;
+        // Determine appropriate prefix based on task type
+        let taskPrefix = 'Processing';
+        if (
+          task.type === 'text-input' ||
+          task.type === 's3-upload' ||
+          task.type === 'dropdown' ||
+          task.type === 'dropdown-table'
+        ) {
+          taskPrefix = 'Processing Input';
+        } else if (task.type === 'http-request' || task.type === 'q-app') {
+          taskPrefix = 'Executing';
+        } else if (task.type === 'text-output') {
+          taskPrefix = 'Preparing Output';
+        }
+        const taskMessage = `${taskPrefix}: ${cleanTaskTitle(task.title)}...`;
         setProcessingStatus(taskMessage);
         addSyntheticEvent(taskMessage);
         const taskWeight = calculateTaskWeight(task);
