@@ -21,6 +21,7 @@ import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -571,6 +572,9 @@ export class CustomerSuccessPortalConstruct extends Construct {
 
     // Dynamic configuration file - deployed to S3 at runtime
     // Dynamic configuration file - deployed to S3 at runtime
+    const portalDeployTime = new Date();
+    const portalGitHash = process.env['GIT_HASH'] ?? execSync('git rev-parse --short HEAD').toString().trim();
+    const portalVersion = `${portalGitHash}-${portalDeployTime.getTime()}`;
     const portalConfig: Record<string, unknown> = {
       AWS_REGION: 'us-east-1',
       ECR_REGION: 'ap-southeast-2',
@@ -619,12 +623,14 @@ export class CustomerSuccessPortalConstruct extends Construct {
     if (props.deploymentGroupMaxConcurrency !== undefined) {
       portalConfig['DEPLOYMENT_GROUP_MAX_CONCURRENCY'] = props.deploymentGroupMaxConcurrency;
     }
+    portalConfig['NUMA_VERSION'] = portalVersion;
 
     new S3Object(this, 'portal-config', {
       bucket: this.frontendBucket.bucket,
       key: 'config.json',
       content: JSON.stringify(portalConfig),
       contentType: 'application/json',
+      cacheControl: 'no-store, must-revalidate',
     });
 
     // Outputs

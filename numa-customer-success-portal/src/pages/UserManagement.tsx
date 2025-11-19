@@ -47,7 +47,7 @@ export default function UserManagement() {
       }
 
       try {
-        const config = await fetch('/config.json').then(res => res.json())
+        const config = await fetch('/config.json', { cache: 'no-store' }).then(res => res.json())
         // Avoid recreating the service if already initialized
         const service =
           userManagementService ||

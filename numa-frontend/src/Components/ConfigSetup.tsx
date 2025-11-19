@@ -1,5 +1,7 @@
 const CONFIG_CACHE_DURATION = 7 * 60 * 1000; // 7 minutes (offset from 5-minute token refresh)
 const CONFIG_TIMESTAMP_KEY = 'CONFIG_TIMESTAMP';
+const CONFIG_VERSION_STORAGE_KEY = 'NUMA_BUILD_VERSION';
+const CONFIG_VERSION_QUERY_PARAM = '_numaVersion';
 const CONFIG_REQUIRED_PROPERTIES = [
   'ROLE_ARN',
   'REGION',
@@ -26,6 +28,7 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'BRANDING_API_BASE_URL',
   'BRANDING_ASSETS_BUCKET',
   'BRANDING_ASSETS_PREFIX',
+  'NUMA_VERSION',
 ];
 const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
 
@@ -40,6 +43,7 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
 
   try {
     const response = await fetch('/config.json', {
+      cache: 'no-store',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -50,6 +54,12 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
     }
 
     const configData = await response.json();
+
+    const versionChanged = await handleVersionChange(configData.NUMA_VERSION);
+    if (versionChanged) {
+      return;
+    }
+    cleanupVersionQueryParam();
 
     // Check if configData is empty
     if (!configData || Object.keys(configData).length === 0) {
@@ -158,4 +168,90 @@ export const forceRefreshConfig = () => {
 export const clearConfigCache = () => {
   sessionStorage.removeItem(CONFIG_TIMESTAMP_KEY);
   console.debug('Config cache cleared');
+};
+
+const handleVersionChange = async (incomingVersion?: string) => {
+  if (typeof window === 'undefined' || !incomingVersion) return false;
+
+  let storedVersion: string | null = null;
+  try {
+    storedVersion = window.localStorage?.getItem(CONFIG_VERSION_STORAGE_KEY) ?? null;
+  } catch (error) {
+    console.warn('Unable to read cached NUMA version from storage:', error);
+  }
+
+  if (!storedVersion) {
+    try {
+      window.localStorage?.setItem(CONFIG_VERSION_STORAGE_KEY, incomingVersion);
+    } catch (error) {
+      console.warn('Unable to persist NUMA version in storage:', error);
+    }
+    return false;
+  }
+
+  if (storedVersion === incomingVersion) {
+    return false;
+  }
+
+  await clearVersionState();
+
+  try {
+    window.localStorage?.setItem(CONFIG_VERSION_STORAGE_KEY, incomingVersion);
+  } catch (error) {
+    console.warn('Unable to persist NUMA version after clearing caches:', error);
+  }
+
+  reloadWithVersionQuery(incomingVersion);
+  return true;
+};
+
+const clearVersionState = async () => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage?.clear();
+  } catch (error) {
+    console.warn('Unable to clear session storage during version refresh:', error);
+  }
+
+  if (window.caches?.keys) {
+    try {
+      const cacheNames = await window.caches.keys();
+      await Promise.all(cacheNames.map((cacheName) => window.caches.delete(cacheName)));
+    } catch (error) {
+      console.warn('Unable to clear cache storage during version refresh:', error);
+    }
+  }
+
+  if (window.navigator?.serviceWorker?.getRegistrations) {
+    try {
+      const registrations = await window.navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    } catch (error) {
+      console.warn('Unable to unregister service workers during version refresh:', error);
+    }
+  }
+};
+
+const reloadWithVersionQuery = (version: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set(CONFIG_VERSION_QUERY_PARAM, version);
+    window.location.replace(nextUrl.toString());
+  } catch {
+    window.location.reload();
+  }
+};
+
+const cleanupVersionQueryParam = () => {
+  if (typeof window === 'undefined') return;
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(CONFIG_VERSION_QUERY_PARAM)) return;
+    url.searchParams.delete(CONFIG_VERSION_QUERY_PARAM);
+    const nextPath = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState(null, document.title, nextPath);
+  } catch {
+    // Ignore URL parsing issues
+  }
 };

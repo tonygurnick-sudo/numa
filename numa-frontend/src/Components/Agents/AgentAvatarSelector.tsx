@@ -39,7 +39,7 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const response = await fetch('/config.json');
+        const response = await fetch('/config.json', { cache: 'no-store' });
         if (!response.ok) throw new Error(`Failed to load config.json (${response.status})`);
         const config = await response.json();
         setBucketName(`numa-${config.CLIENT_NAME}-outputs`);

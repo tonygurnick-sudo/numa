@@ -6,6 +6,7 @@ import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import { useBranding } from '../Providers/BrandingContext';
 import DefaultLogo from '../../public/numa-logo.svg';
 import { useBrandingAsset } from '../hooks/useBrandingAsset';
+import { VersionDisplay } from './VersionDisplay';
 
 const Nav = () => {
   const navigate = useNavigate();
@@ -193,7 +194,7 @@ const Nav = () => {
             </div>
           </li>
         </ul>
-        <span className="version">v1.5</span>
+        <VersionDisplay />
       </footer>
     </nav>
   );

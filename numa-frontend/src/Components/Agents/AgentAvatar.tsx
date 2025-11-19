@@ -59,7 +59,7 @@ export const AgentAvatar = ({
     let cancelled = false;
     (async () => {
       try {
-        const resp = await fetch('/config.json');
+        const resp = await fetch('/config.json', { cache: 'no-store' });
         if (resp.ok) {
           const cfg = await resp.json();
           if (!cancelled && cfg?.REGION) setResolvedRegion(cfg.REGION as string);
