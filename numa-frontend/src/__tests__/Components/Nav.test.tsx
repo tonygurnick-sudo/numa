@@ -79,13 +79,6 @@ vi.mock('../../utils/routeConfig.jsx', () => ({
 describe('Nav Component', () => {
   const { mockNavigate } = setupNavigationMocks();
   const { logout: mockLogout } = setupAuthMocks();
-  const mockVersionInfo = {
-    version: 'test-build',
-    gitHash: 'abcdef1234567890',
-    gitBranch: 'main',
-    deployTime: Date.now(),
-    deployTimeHuman: 'Just now',
-  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -97,25 +90,6 @@ describe('Nav Component', () => {
       writable: true,
       value: 1024,
     });
-
-    global.fetch = vi.fn((input: RequestInfo | URL) => {
-      if (typeof input === 'string' && input.includes('version.json')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(mockVersionInfo),
-        } as Response);
-      }
-
-      return Promise.resolve({
-        ok: true,
-        text: () => Promise.resolve('{}'),
-        json: () => Promise.resolve({}),
-      } as Response);
-    });
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   describe('Standard User Navigation', () => {
@@ -137,10 +111,8 @@ describe('Nav Component', () => {
         { timeout: 5000 },
       );
 
-      // Check for version display which should always be present
-      await waitFor(() => {
-        expect(screen.getByTestId('version-display')).toHaveTextContent(mockVersionInfo.gitHash.slice(0, 7));
-      });
+      // Check for version number which should always be present
+      expect(screen.getByText('v1.5')).toBeInTheDocument();
 
       // Check for logout button which should always be present
       const logoutButton = document.querySelector('.nav-link[title="Log out"]');
@@ -210,9 +182,8 @@ describe('Nav Component', () => {
       expect(document.querySelector('.nav-link[title="Company"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Log out"]')).not.toBeNull();
 
-      await waitFor(() => {
-        expect(screen.getByTestId('version-display')).toHaveTextContent(mockVersionInfo.gitHash.slice(0, 7));
-      });
+      // Version number should still be visible as text
+      expect(screen.getByText('v1.5')).toBeInTheDocument();
     });
 
     it('renders navigation items in correct order: Dash, Favs, Chat, Company, Knowledge Base', async () => {
