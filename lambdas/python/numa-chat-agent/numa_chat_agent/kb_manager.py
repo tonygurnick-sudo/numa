@@ -3,12 +3,33 @@
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import boto3
 import structlog
 
 logger = structlog.get_logger()
+
+if TYPE_CHECKING:  # Provide local lightweight type defs so CI doesn't need boto3-stubs
+    from typing import Mapping, Sequence, TypedDict
+
+    class AttributeValueTypeDef(TypedDict, total=False):
+        S: str
+        N: str
+        BOOL: bool
+        B: bytes | bytearray
+        SS: Sequence[str]
+        NS: Sequence[str]
+        BS: Sequence[bytes | bytearray]
+        M: "Mapping[str, AttributeValueTypeDef]"
+        L: "Sequence[AttributeValueTypeDef]"
+        NULL: bool
+
+    # Keep the client untyped for method calls; we only care about item shapes here.
+    DynamoDBClient = Any  # type: ignore[assignment]
+else:  # Runtime fallbacks
+    AttributeValueTypeDef = Dict[str, Any]  # type: ignore[assignment]
+    DynamoDBClient = Any  # type: ignore[assignment]
 
 
 class KnowledgeBaseManager:
@@ -17,7 +38,7 @@ class KnowledgeBaseManager:
     def __init__(self, client_name: Optional[str] = None):
         self.client_name = client_name or os.environ.get("CLIENT_NAME", "")
         self.table_name = f"numa-{self.client_name}-knowledge-bases"
-        self.dynamodb = boto3.client("dynamodb")
+        self.dynamodb: DynamoDBClient = boto3.client("dynamodb")
         self.tenant_pk = f"TENANT#{self.client_name}"
 
     def create_kb(
@@ -67,14 +88,14 @@ class KnowledgeBaseManager:
         )
         normalized_editors = self._normalize_id_list(normalized_editors)
 
-        viewers_attribute = (
+        viewers_attribute: AttributeValueTypeDef = (
             {"SS": normalized_viewers} if normalized_viewers else {"L": []}
         )
-        editors_attribute = (
+        editors_attribute: AttributeValueTypeDef = (
             {"SS": normalized_editors} if normalized_editors else {"L": []}
         )
 
-        kb_item = {
+        kb_item: Dict[str, AttributeValueTypeDef] = {
             "PK": {"S": self.tenant_pk},
             "SK": {"S": f"KB#{kb_id}"},
             "kb_id": {"S": kb_id},
@@ -244,8 +265,8 @@ class KnowledgeBaseManager:
 
             # Build update expression
             update_parts = []
-            expr_attr_values: Dict[str, Dict[str, Any]] = {}
-            expr_attr_names = {}
+            expr_attr_values: Dict[str, AttributeValueTypeDef] = {}
+            expr_attr_names: Dict[str, str] = {}
             creator_id = kb.get("created_by")
 
             new_viewers_list = kb.get("viewers", []) or []
@@ -301,17 +322,27 @@ class KnowledgeBaseManager:
 
                 update_expr = "SET " + ", ".join(update_parts)
 
-                self.dynamodb.update_item(
-                    TableName=self.table_name,
-                    Key={"PK": {"S": self.tenant_pk}, "SK": {"S": f"KB#{kb_id}"}},
-                    UpdateExpression=update_expr,
-                    ExpressionAttributeValues=expr_attr_values,
-                    **(
-                        {"ExpressionAttributeNames": expr_attr_names}
-                        if expr_attr_names
-                        else {}
-                    ),
-                )
+                if expr_attr_names:
+                    self.dynamodb.update_item(
+                        TableName=self.table_name,
+                        Key={
+                            "PK": {"S": self.tenant_pk},
+                            "SK": {"S": f"KB#{kb_id}"},
+                        },
+                        UpdateExpression=update_expr,
+                        ExpressionAttributeValues=expr_attr_values,
+                        ExpressionAttributeNames=expr_attr_names,
+                    )
+                else:
+                    self.dynamodb.update_item(
+                        TableName=self.table_name,
+                        Key={
+                            "PK": {"S": self.tenant_pk},
+                            "SK": {"S": f"KB#{kb_id}"},
+                        },
+                        UpdateExpression=update_expr,
+                        ExpressionAttributeValues=expr_attr_values,
+                    )
 
                 # Update memberships if viewers/editors changed
                 if viewers is not None or editors is not None:
@@ -398,7 +429,7 @@ class KnowledgeBaseManager:
 
         # Write membership records
         for user_id, role in members.items():
-            membership_item = {
+            membership_item: Dict[str, AttributeValueTypeDef] = {
                 "PK": {"S": self.tenant_pk},
                 "SK": {"S": f"KBMEM#{kb_id}#USER#{user_id}"},
                 "GSI1PK": {"S": f"USER#{user_id}"},

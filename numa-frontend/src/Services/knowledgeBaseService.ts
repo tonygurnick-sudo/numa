@@ -10,6 +10,8 @@ export interface KnowledgeBase {
   is_default: boolean;
   viewers: string[];
   editors: string[];
+  editor_emails?: string[];
+  viewer_emails?: string[];
   created_by: string;
   created_at: string;
   status: string;

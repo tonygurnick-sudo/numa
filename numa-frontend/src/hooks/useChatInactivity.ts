@@ -87,7 +87,7 @@ export function useChatInactivity({
     setSuggestionsLoading(true);
     try {
       const items = await fetchRecentConversations();
-      setRecentConversations(items.slice(0, 3));
+      setRecentConversations(items.slice(0, 10));
       if (!forceShow) {
         const shouldShow = items.length > 0;
         setShowContinueSuggestions(shouldShow);

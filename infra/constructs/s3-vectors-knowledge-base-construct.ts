@@ -397,38 +397,8 @@ export class S3VectorsKnowledgeBase extends Construct {
     });
 
     const stateMachineDefinition: StateMachine = {
-      StartAt: 'MigrateFiles',
+      StartAt: 'StartIngestionJob',
       States: {
-        MigrateFiles: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: migrationFunc.arn,
-            Payload: {
-              bucketName: dataBucketName,
-              deleteOriginals: true,
-              dryRun: false,
-            },
-          },
-          ResultPath: '$.MigrationResult',
-          Next: 'StartIngestionJob',
-          Retry: [
-            {
-              ErrorEquals: ['States.TaskFailed'],
-              BackoffRate: 2,
-              IntervalSeconds: 1,
-              MaxAttempts: 3,
-            },
-          ],
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              ResultPath: '$.MigrationError',
-              Next: 'StartIngestionJob',
-              Comment: 'Continue to ingestion even if migration fails (files may already be migrated)',
-            },
-          ],
-        } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         StartIngestionJob: {
           Type: 'Task',
           Parameters: {

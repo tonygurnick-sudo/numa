@@ -51,7 +51,26 @@ export const UnifiedToolCard = ({
   const [expanded, setExpanded] = useState(false);
   const descriptor = resolveToolDescriptor(toolName);
   const visual = resolveToolVisual(toolName);
-  const title = `Calling ${label || descriptor.label || toolName} Tool`;
+  // Derive dynamic title for KB when result contains kb_id
+  let title = `Calling ${label || descriptor.label || toolName} Tool`;
+  if (toolName === 'query_knowledge_base' && result) {
+    try {
+      const resultWithContent = result as { content?: unknown };
+      const blocks = Array.isArray(resultWithContent?.content)
+        ? (resultWithContent.content as Array<{ json?: unknown }>)
+        : [];
+      const firstJson =
+        blocks && blocks[0] && typeof blocks[0].json === 'object' ? (blocks[0].json as Record<string, unknown>) : null;
+      const kbId = firstJson?.kb_id as string | undefined;
+      if (kbId && typeof kbId === 'string') {
+        // Lazy import hook-free map via window session (best effort) – fallback to showing ID
+        // The full friendly name is shown inside the renderer as well.
+        title = `Querying ${kbId}`;
+      }
+    } catch {
+      /* keep default title */
+    }
+  }
 
   const hasResult = !!result;
 

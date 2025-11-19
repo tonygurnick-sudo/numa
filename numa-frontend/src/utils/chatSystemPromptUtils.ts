@@ -66,18 +66,26 @@ export const loadCompanyProfile = async (companyBucket, region, getCredentials) 
  * @param {boolean} webSearchEnabled - Whether web search is enabled
  * @returns {Array} List of enabled tool names
  */
-export const getEnabledTools = (autoToolsEnabled, queryDataSources, webSearchEnabled, createAgentEnabled = false) => {
+export const getEnabledTools = (
+  autoToolsEnabled,
+  queryDataSources,
+  webSearchEnabled,
+  createAgentEnabled = false,
+  enabledKBIds = [],
+) => {
   const enabledTools: string[] = [];
   const agentsFeatureEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
 
   if (autoToolsEnabled) {
     // In all tools mode, enable tools; include agent creation only when feature enabled
-    enabledTools.push('query_knowledge_base', 'web_search');
+    if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('query_knowledge_base');
+    enabledTools.push('web_search');
     if (agentsFeatureEnabled) enabledTools.push('create_agent_tool');
   } else {
     // In manual mode, only enable selected tools
-    if (queryDataSources) enabledTools.push('query_knowledge_base');
+    if (queryDataSources && Array.isArray(enabledKBIds) && enabledKBIds.length > 0)
+      enabledTools.push('query_knowledge_base');
     if (webSearchEnabled) enabledTools.push('web_search');
     if (agentsFeatureEnabled && createAgentEnabled) enabledTools.push('create_agent_tool');
   }
@@ -174,6 +182,7 @@ export const generateSystemPrompt = (
   companyProfile,
   enabledConnections: string[] = [],
   createAgentEnabled = false,
+  enabledKBMeta?: { id: string; name?: string }[],
 ) => {
   const NOW = new Date();
   const TODAY = {
@@ -231,7 +240,18 @@ Today's Date: ${TODAY}`;
     const toolLines: string[] = [];
 
     if (enabledTools.includes('query_knowledge_base')) {
-      toolLines.push("- Use query_knowledge_base to search your organization's knowledge base with semantic search");
+      const kbList = Array.isArray(enabledKBMeta)
+        ? enabledKBMeta
+            .filter((k) => k && typeof k.id === 'string' && k.id.trim())
+            .map((k) => `${k.id}${k.name && k.name !== k.id ? ` (${k.name})` : ''}`)
+        : [];
+      const kbGuidance =
+        kbList.length > 0
+          ? `- Use query_knowledge_base to search internal knowledge bases. Always include kb_id and choose from: ${kbList.join(
+              ', ',
+            )}. If none are enabled, do not call this tool.`
+          : `- Use query_knowledge_base to search internal knowledge bases. Always include kb_id. If none are enabled, do not call this tool.`;
+      toolLines.push(kbGuidance);
     }
 
     if (enabledTools.includes('web_search')) {

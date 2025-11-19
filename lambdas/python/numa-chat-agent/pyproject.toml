@@ -51,7 +51,7 @@ h11 = "^0.14.0"
 mypy = "1.16.1"
 pylint = "3.3.7"
 pyright = "1.1.402"
-boto3-stubs = "^1.38.45"
+boto3-stubs = { version = "^1.37.0", extras = ["dynamodb"] }
 types-requests = "^2.32.0.20241016"
 pytest = "^8.4.2"
 

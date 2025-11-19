@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
-import { Button, Form, Spinner, Modal, Dropdown } from 'react-bootstrap';
-import { Database, Search, Gear, Link, Robot } from 'react-bootstrap-icons';
+import { Button, Form, Spinner, Modal, Dropdown, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Search, Robot } from 'react-bootstrap-icons';
 import { FeatureWrapper } from '../RequiredFeaturesWrapper';
 import {
   getConnectionIcon,
@@ -8,7 +8,7 @@ import {
   getConnectionFallbackColor,
   getConnectionDisplayName,
 } from '../../config/integrationsConfig';
-import { KnowledgeBaseSelector } from '../KnowledgeBaseSelector';
+import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 
 // WebSocket message size limit (AWS API Gateway limit is 32KB)
 const MAX_MESSAGE_LENGTH = 20000; // Conservative limit accounting for JSON overhead
@@ -20,7 +20,7 @@ const ChatInput = ({
   setShowUploadModal,
   buttonStatus,
   queryDataSources,
-  setQueryDataSources,
+  setQueryDataSources: _setQueryDataSources,
   webSearchEnabled,
   setWebSearchEnabled,
   createAgentEnabled,
@@ -38,10 +38,20 @@ const ChatInput = ({
   placeholderOverride = undefined,
   uploadsInProgress = false,
   noToolsActive: _noToolsActive = false,
+  // Multi‑KB selection (controlled by parent)
+  enabledKBIds = [],
+  setEnabledKBIds,
 }) => {
   const internalRef = useRef(null);
   const inputRef = externalInputRef || internalRef;
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
+  const {
+    selectedKB: _selectedKB,
+    availableKBs,
+    isLoadingKBs,
+    selectKBById: _selectKBById,
+    refreshKBs,
+  } = useKnowledgeBase();
   const agentsFeatureEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
 
@@ -162,201 +172,272 @@ const ChatInput = ({
         {/* Row 2: Buttons & Toggles */}
         <div className="input-controls">
           <div className="left-controls">
-            {/* Attachment Button */}
+            {/* Attachment Button & Knowledge Base Selector */}
             <FeatureWrapper requiredFeature="useCompanyData">
-              <Button
-                variant="link"
-                className="attachment-icon"
-                onClick={() => {
-                  console.log('Paperclip button clicked');
-                  setShowUploadModal(true);
-                }}
-                aria-label="Upload Files"
-                disabled={isControlsDisabled}
-              >
-                <i className="bi bi-paperclip"></i>
-              </Button>
+              <>
+                <OverlayTrigger placement="top" overlay={<Tooltip id="tooltip-file-upload">File Upload</Tooltip>}>
+                  <Button
+                    variant="link"
+                    className="attachment-icon"
+                    onClick={() => {
+                      console.log('Paperclip button clicked');
+                      setShowUploadModal(true);
+                    }}
+                    aria-label="Upload Files"
+                    disabled={isControlsDisabled}
+                  >
+                    <i className="bi bi-paperclip"></i>
+                  </Button>
+                </OverlayTrigger>
+
+                <OverlayTrigger
+                  placement="top"
+                  overlay={<Tooltip id="tooltip-knowledge-bases">Knowledge Bases</Tooltip>}
+                >
+                  <Dropdown drop="up" className="kb-selector-compact-dropdown">
+                    <Dropdown.Toggle
+                      variant="link"
+                      className={`kb-selector-compact-toggle ${enabledKBIds.length > 0 ? 'active' : ''}`}
+                      disabled={isControlsDisabled}
+                      aria-label="Knowledge Base"
+                    >
+                      <i className="bi bi-folder2-open"></i>
+                      {enabledKBIds.length > 0 && (
+                        <span
+                          className="kb-active-indicators"
+                          style={{
+                            position: 'absolute',
+                            top: '2px',
+                            right: '2px',
+                            display: 'flex',
+                            gap: '2px',
+                          }}
+                        >
+                          {Array.from({ length: Math.min(enabledKBIds.length, 3) }).map((_, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--brand-primary, var(--color-primary))',
+                              }}
+                            ></span>
+                          ))}
+                        </span>
+                      )}
+                    </Dropdown.Toggle>
+
+                    <Dropdown.Menu className="p-3" style={{ minWidth: '280px', zIndex: 9999 }}>
+                      {/* KB Selection */}
+                      <Dropdown.Header>Available Knowledge Bases</Dropdown.Header>
+                      {isLoadingKBs ? (
+                        <div className="text-center py-2">
+                          <Spinner animation="border" size="sm" />
+                        </div>
+                      ) : availableKBs.length === 0 ? (
+                        <div className="px-3 py-2 text-muted">No KBs available</div>
+                      ) : (
+                        availableKBs.map((kb) => (
+                          <div key={kb.kb_id} className="kb-item">
+                            <Form.Check
+                              type="switch"
+                              id={`kb-switch-${kb.kb_id}`}
+                              label={
+                                <div className="kb-label-container">
+                                  <div className="kb-info">
+                                    <i className="bi bi-folder2-open kb-icon"></i>
+                                    <span className="kb-name">{kb.kb_name}</span>
+                                    {kb.kb_id === 'company' && (
+                                      <Badge bg="info" className="ms-2" style={{ fontSize: '0.65rem' }}>
+                                        Default
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <Badge bg="secondary" className="kb-role-badge" style={{ fontSize: '0.65rem' }}>
+                                    {kb.role}
+                                  </Badge>
+                                </div>
+                              }
+                              checked={enabledKBIds.includes(kb.kb_id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setEnabledKBIds([...enabledKBIds, kb.kb_id]);
+                                } else {
+                                  setEnabledKBIds(enabledKBIds.filter((id) => id !== kb.kb_id));
+                                }
+                              }}
+                            />
+                          </div>
+                        ))
+                      )}
+
+                      <Dropdown.Divider />
+                      <Dropdown.Item onClick={() => refreshKBs()}>
+                        <i className="bi bi-arrow-clockwise me-2"></i>
+                        Refresh
+                      </Dropdown.Item>
+                    </Dropdown.Menu>
+                  </Dropdown>
+                </OverlayTrigger>
+              </>
             </FeatureWrapper>
 
             {/* Tools Settings Dropup */}
             {autoToolsEnabled !== undefined && setAutoToolsEnabled && (
-              <Dropdown drop="up" className="tools-settings-dropdown">
-                <Dropdown.Toggle
-                  variant="link"
-                  className={`tools-settings-toggle ${
-                    autoToolsEnabled ||
-                    queryDataSources ||
-                    webSearchEnabled ||
-                    (agentsFeatureEnabled && createAgentEnabled)
-                      ? 'active'
-                      : ''
-                  }`}
-                  disabled={isControlsDisabled}
-                  aria-label="Tools Settings"
-                >
-                  <Gear size={25} />
-                  {autoToolsEnabled && <span className="bubble-text">All Tools</span>}
-                  {!autoToolsEnabled &&
-                    (queryDataSources || webSearchEnabled || (agentsFeatureEnabled && createAgentEnabled)) && (
-                      <span className="active-tools-indicators">
-                        {queryDataSources && <Database size={16} />}
-                        {webSearchEnabled && <Search size={16} />}
-                        {agentsFeatureEnabled && createAgentEnabled && <Robot size={16} />}
-                      </span>
-                    )}
-                </Dropdown.Toggle>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <OverlayTrigger placement="top" overlay={<Tooltip id="tooltip-tools">Tools</Tooltip>}>
+                  <Dropdown drop="up" className="tools-settings-dropdown">
+                    <Dropdown.Toggle
+                      variant="link"
+                      className={`tools-settings-toggle ${
+                        autoToolsEnabled || webSearchEnabled || (agentsFeatureEnabled && createAgentEnabled)
+                          ? 'active'
+                          : ''
+                      }`}
+                      disabled={isControlsDisabled}
+                      aria-label="Tools Settings"
+                    >
+                      <i className="bi bi-tools"></i>
+                    </Dropdown.Toggle>
 
-                <Dropdown.Menu className="p-3" style={{ minWidth: '250px', zIndex: 9999 }}>
-                  <div className="mb-3">
-                    <Form.Check
-                      type="switch"
-                      id="auto-tools-switch"
-                      label="All Tools"
-                      checked={autoToolsEnabled}
-                      onChange={(e) => setAutoToolsEnabled(e.target.checked)}
-                      className="mb-2"
-                    />
-                    <small className="text-muted d-block mb-3">
-                      When enabled, all tools are automatically available
-                    </small>
-                  </div>
-
-                  <hr className="my-2" />
-                  <div className="mb-2">
-                    <Form.Check
-                      type="switch"
-                      id="data-sources-switch"
-                      label={
-                        <span>
-                          <Database size={16} className="me-1" />
-                          Data Sources
-                        </span>
-                      }
-                      checked={autoToolsEnabled || queryDataSources}
-                      onChange={(e) => !autoToolsEnabled && setQueryDataSources(e.target.checked)}
-                      disabled={autoToolsEnabled}
-                    />
-                    <small className="text-muted ms-4 d-block" style={{ marginTop: '-0.25rem' }}>
-                      Chat against your knowledge base
-                    </small>
-                  </div>
-                  <div className="mb-2">
-                    <Form.Check
-                      type="switch"
-                      id="web-search-switch"
-                      label={
-                        <span>
-                          <Search size={16} className="me-1" />
-                          Web Search
-                        </span>
-                      }
-                      checked={autoToolsEnabled || webSearchEnabled}
-                      onChange={(e) => !autoToolsEnabled && setWebSearchEnabled(e.target.checked)}
-                      disabled={autoToolsEnabled}
-                    />
-                    <small className="text-muted ms-4 d-block" style={{ marginTop: '-0.25rem' }}>
-                      Search the web for current information
-                    </small>
-                  </div>
-                  {agentsFeatureEnabled && (
-                    <div className="mb-2">
-                      <Form.Check
-                        type="switch"
-                        id="agent-creation-switch"
-                        label={
-                          <span>
-                            <Robot size={16} className="me-1" />
-                            Agent Creation
-                          </span>
-                        }
-                        checked={autoToolsEnabled || createAgentEnabled}
-                        onChange={(e) => !autoToolsEnabled && setCreateAgentEnabled(e.target.checked)}
-                        disabled={autoToolsEnabled}
-                      />
-                      <small className="text-muted ms-4 d-block" style={{ marginTop: '-0.25rem' }}>
-                        Allow me to create saved agents when you explicitly ask
-                      </small>
-                    </div>
-                  )}
-
-                  {!autoToolsEnabled &&
-                    !queryDataSources &&
-                    !webSearchEnabled &&
-                    !(agentsFeatureEnabled && createAgentEnabled) && (
-                      <div className="mt-2 p-2 bg-light rounded">
-                        <small className="text-muted">Select specific tools to enable for this conversation</small>
+                    <Dropdown.Menu className="p-3" style={{ minWidth: '250px', zIndex: 9999 }}>
+                      <div className="mb-3">
+                        <Form.Check
+                          type="switch"
+                          id="auto-tools-switch"
+                          label="All Tools"
+                          checked={autoToolsEnabled}
+                          onChange={(e) => setAutoToolsEnabled(e.target.checked)}
+                          className="mb-2"
+                        />
+                        <small className="text-muted d-block mb-3">
+                          When enabled, all tools are automatically available
+                        </small>
                       </div>
-                    )}
-                </Dropdown.Menu>
-              </Dropdown>
+
+                      <hr className="my-2" />
+                      <div className="mb-3">
+                        <Form.Check
+                          type="switch"
+                          id="web-search-switch"
+                          label={
+                            <span className="tool-label">
+                              <Search size={16} className="me-2" />
+                              <span className="tool-name">Web Search</span>
+                              <span className="tool-separator"> - </span>
+                              <span className="tool-description">Search the web for current information</span>
+                            </span>
+                          }
+                          checked={autoToolsEnabled || webSearchEnabled}
+                          onChange={(e) => !autoToolsEnabled && setWebSearchEnabled(e.target.checked)}
+                          disabled={autoToolsEnabled}
+                        />
+                      </div>
+                      {agentsFeatureEnabled && (
+                        <div className="mb-3">
+                          <Form.Check
+                            type="switch"
+                            id="agent-creation-switch"
+                            label={
+                              <span className="tool-label">
+                                <Robot size={16} className="me-2" />
+                                <span className="tool-name">Agent Creation</span>
+                                <span className="tool-separator"> - </span>
+                                <span className="tool-description">
+                                  Allow me to create saved agents when you explicitly ask
+                                </span>
+                              </span>
+                            }
+                            checked={autoToolsEnabled || createAgentEnabled}
+                            onChange={(e) => !autoToolsEnabled && setCreateAgentEnabled(e.target.checked)}
+                            disabled={autoToolsEnabled}
+                          />
+                        </div>
+                      )}
+
+                      {!autoToolsEnabled &&
+                        !queryDataSources &&
+                        !webSearchEnabled &&
+                        !(agentsFeatureEnabled && createAgentEnabled) && (
+                          <div className="mt-2 p-2 bg-light rounded">
+                            <small className="text-muted">Select specific tools to enable for this conversation</small>
+                          </div>
+                        )}
+                    </Dropdown.Menu>
+                  </Dropdown>
+                </OverlayTrigger>
+                {/* Tool indicators positioned next to button */}
+                {(autoToolsEnabled || webSearchEnabled || (agentsFeatureEnabled && createAgentEnabled)) && (
+                  <span className="active-tools-indicators" style={{ display: 'flex', gap: '0.25rem' }}>
+                    {(autoToolsEnabled || webSearchEnabled) && <Search size={12} />}
+                    {(autoToolsEnabled || (agentsFeatureEnabled && createAgentEnabled)) && <Robot size={12} />}
+                  </span>
+                )}
+              </div>
             )}
 
             {/* Integrations Toggle */}
             {hasPipedreamFeature && (
-              <Button
-                variant="link"
-                className={`connections-toggle ${enabledConnections.length > 0 ? 'active' : ''}`}
-                onClick={() => setShowConnectionsModal(true)}
-                aria-label="Toggle Integrations"
-                disabled={isControlsDisabled || connectionsLoading}
-              >
-                {connectionsLoading && (
-                  <>
-                    <Link size={25} />
-                    <Spinner
-                      as="span"
-                      animation="border"
-                      size="sm"
-                      className="connections-loading-spinner"
-                      role="status"
-                      aria-hidden="true"
-                    />
-                  </>
-                )}
-                {!connectionsLoading && (
-                  <>
-                    {/* Show "Integrations" when none enabled */}
-                    {enabledConnections.length === 0 && (
-                      <span className="enable-connection-text">
-                        <Link size={20} style={{ marginRight: '0.5rem', marginTop: '-2px' }} />
-                        Integrations
-                      </span>
-                    )}
-                    {/* Show enabled connection icons */}
-                    {enabledConnections.length > 0 && (
-                      <>
-                        <Link size={25} />
-                        {enabledConnections.map((connectionId) => {
-                          const connection = availableConnections.find((conn) => conn.id === connectionId);
-                          return connection ? (
-                            <div key={connectionId} className="connection-icon">
-                              <img
-                                src={getConnectionIcon(connection.id)}
-                                alt={connection.name}
-                                style={{ width: '20px', height: '20px' }}
-                                onError={(e) => {
-                                  const img = e.currentTarget as HTMLImageElement;
-                                  img.style.display = 'none';
-                                  const fallback = img.nextElementSibling as HTMLElement | null;
-                                  if (fallback) fallback.style.display = 'inline-block';
-                                }}
-                              />
-                              <i
-                                className={`${getConnectionFallbackIcon(connection.id)} text-${getConnectionFallbackColor(connection.id)}`}
-                                style={{ fontSize: '20px', display: 'none' }}
-                              />
-                            </div>
-                          ) : null;
-                        })}
-                      </>
-                    )}
-                  </>
-                )}
-              </Button>
+              <OverlayTrigger placement="top" overlay={<Tooltip id="tooltip-integrations">Integrations</Tooltip>}>
+                <Button
+                  variant="link"
+                  className={`connections-toggle ${enabledConnections.length > 0 ? 'active' : ''}`}
+                  onClick={() => setShowConnectionsModal(true)}
+                  aria-label="Toggle Integrations"
+                  disabled={isControlsDisabled || connectionsLoading}
+                >
+                  {connectionsLoading && (
+                    <>
+                      <i className="bi bi-link-45deg"></i>
+                      <Spinner
+                        as="span"
+                        animation="border"
+                        size="sm"
+                        className="connections-loading-spinner"
+                        role="status"
+                        aria-hidden="true"
+                      />
+                    </>
+                  )}
+                  {!connectionsLoading && (
+                    <>
+                      {/* Show icon always */}
+                      <i className="bi bi-link-45deg"></i>
+                      {/* Show enabled connection icons */}
+                      {enabledConnections.length > 0 && (
+                        <>
+                          {enabledConnections.map((connectionId) => {
+                            const connection = availableConnections.find((conn) => conn.id === connectionId);
+                            return connection ? (
+                              <div key={connectionId} className="connection-icon">
+                                <img
+                                  src={getConnectionIcon(connection.id)}
+                                  alt={connection.name}
+                                  style={{ width: '20px', height: '20px' }}
+                                  onError={(e) => {
+                                    const img = e.currentTarget as HTMLImageElement;
+                                    img.style.display = 'none';
+                                    const fallback = img.nextElementSibling as HTMLElement | null;
+                                    if (fallback) fallback.style.display = 'inline-block';
+                                  }}
+                                />
+                                <i
+                                  className={`${getConnectionFallbackIcon(connection.id)} text-${getConnectionFallbackColor(connection.id)}`}
+                                  style={{ fontSize: '20px', display: 'none' }}
+                                />
+                              </div>
+                            ) : null;
+                          })}
+                        </>
+                      )}
+                    </>
+                  )}
+                </Button>
+              </OverlayTrigger>
             )}
           </div>
           <div className="right-controls">
-            <KnowledgeBaseSelector variant="compact" className="kb-selector-inline" />
             {buttonStatus === 'loading' || buttonStatus === 'streaming' || uploadsInProgress ? (
               <Button
                 variant="primary"

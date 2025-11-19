@@ -54,7 +54,7 @@ export const ROUTE_CONFIG = [
     path: '/knowledgebase-management',
     element: () => <KnowledgeBaseManagement />,
     requiredFeature: 'useCompanyData',
-    nav: { label: 'Knowledge Base', icon: 'bi bi-cloud-upload-fill' },
+    nav: { label: 'Knowledge Base', icon: 'bi bi-folder2-open' },
   },
   // Dedicated Settings page replaces User Management in nav
   {

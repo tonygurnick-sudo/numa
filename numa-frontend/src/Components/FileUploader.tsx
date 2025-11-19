@@ -194,10 +194,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         try {
           console.log('Requesting presigned URL for:', relativePath);
 
-          // Build S3 key with KB prefix
-          const uploaderFolder = userUuid ? `${userUuid}/` : 'anonymous/';
-          const sanitizedRelativePath = relativePath.replace(/^\/+/, '');
-          const s3Key = `${kbPrefix}${uploaderFolder}${sanitizedRelativePath}`;
+          // Build S3 key with KB prefix, no per-user subfolder
+          const sanitizedRelativePath = (relativePath || file.name).replace(/^\/+/, '');
+          const s3Key = `${kbPrefix}${sanitizedRelativePath}`;
 
           const region = window.sessionStorage.getItem('REGION');
 

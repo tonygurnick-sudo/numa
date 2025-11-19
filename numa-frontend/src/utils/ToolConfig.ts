@@ -71,7 +71,7 @@ export function resolveToolVisual(toolName: string | null | undefined): ToolVisu
 
   // Core tools
   if (name === 'web_search') return { kind: 'icon', className: 'bi bi-search' };
-  if (name === 'query_knowledge_base') return { kind: 'icon', className: 'bi bi-database' };
+  if (name === 'query_knowledge_base') return { kind: 'icon', className: 'bi bi-folder2-open' };
   if (name === 'create_agent_tool') return { kind: 'icon', className: 'bi bi-robot' };
 
   // Integrations: prefer branded image; fallback to bootstrap icon class from config

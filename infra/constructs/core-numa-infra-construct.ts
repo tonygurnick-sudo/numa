@@ -435,8 +435,8 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
-    // Create backfill-metadata Lambda for manual invocation
-    new NumaLambda(this, 'backfill-metadata', {
+    // Create backfill-metadata Lambda (idempotent; safe to run once post-deploy)
+    const backfillMetadataLambda = new NumaLambda(this, 'backfill-metadata', {
       clientName: props.clientName,
       lambdaDirectory: 'python/backfill-metadata/',
       logGroup: this.logGroup,
@@ -451,6 +451,23 @@ export class CoreNumaInfra extends Construct {
           actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:HeadObject'],
           resources: [this.dataBucket.bucket.arn, `${this.dataBucket.bucket.arn}/*`],
         },
+      ],
+    });
+
+    // One-time invocation to backfill missing metadata sidecars after deploy.
+    // Re-runs only when the Lambda code hash or bucket name changes.
+    new LambdaInvocation(this, 'backfill-metadata-invocation', {
+      functionName: backfillMetadataLambda.lambda.functionName,
+      input: JSON.stringify({}),
+      triggers: {
+        dataBucketName: this.dataBucket.bucket.bucket,
+        backfillSourceHash: backfillMetadataLambda.lambda.sourceCodeHash,
+      },
+      dependsOn: [
+        this.dataBucket.bucket,
+        backfillMetadataLambda.lambda,
+        ...backfillMetadataLambda.additionalPolicies,
+        ...backfillMetadataLambda.policyAttachments,
       ],
     });
 

@@ -28,7 +28,7 @@ class TestFastApiApp(unittest.IsolatedAsyncioTestCase):
         self.app = app
         self.headers = {"authorization": "Bearer test-token"}
 
-    async def test_root_ok(self):
+    async def test_root_ok(self) -> None:
         from httpx import ASGITransport  # pylint: disable=import-outside-toplevel
 
         async with httpx.AsyncClient(
@@ -38,7 +38,7 @@ class TestFastApiApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(res.status_code, 200)
             self.assertEqual(res.json(), {"status": "ok"})
 
-    async def test_stream_minimal_success(self):
+    async def test_stream_minimal_success(self) -> None:
         # minimal event sequence; data frames are optional for this smoke test
         events = [{"type": "event", "contentBlockDelta": {"delta": {"text": "Hello"}}}]
 
