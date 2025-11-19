@@ -37,7 +37,7 @@ export const AgentFileUpload = ({
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const response = await fetch('/config.json', { cache: 'no-store' });
+        const response = await fetch('/config.json');
         if (!response.ok) {
           throw new Error(`Failed to load config.json (${response.status})`);
         }

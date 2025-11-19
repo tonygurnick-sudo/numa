@@ -156,7 +156,7 @@ describe('PolicyBuilderDetail Component', () => {
 
     // Verify fetch was called for config
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/config.json', expect.objectContaining({ cache: 'no-store' }));
+      expect(global.fetch).toHaveBeenCalledWith('/config.json');
     });
 
     // Verify axios.get was called with the correct URL

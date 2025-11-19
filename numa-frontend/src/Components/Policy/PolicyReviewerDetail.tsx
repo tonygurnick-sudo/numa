@@ -173,7 +173,7 @@ export const PolicyReviewerDetail = () => {
   }, []);
 
   useEffect(() => {
-    fetch('/config.json', { cache: 'no-store' })
+    fetch('/config.json')
       .then((r) => r.json())
       .then((data) => {
         setConfig(data);
