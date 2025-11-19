@@ -1,5 +1,7 @@
 const CONFIG_CACHE_DURATION = 7 * 60 * 1000; // 7 minutes
 const CONFIG_TIMESTAMP_KEY = 'PORTAL_CONFIG_TIMESTAMP';
+const CONFIG_VERSION_STORAGE_KEY = 'NUMA_PORTAL_BUILD_VERSION';
+const CONFIG_VERSION_QUERY_PARAM = '_numaPortalVersion';
 const CONFIG_REQUIRED_PROPERTIES = [
   'AWS_REGION',
   'USER_POOL_ID',
@@ -21,6 +23,7 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'ACTIVITY_TABLE',
   'NEXTGEN_BROKER_LAMBDA',
   'NEXTGEN_BROKER_REGION',
+  'NUMA_VERSION',
 ];
 
 const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
@@ -43,6 +46,7 @@ export interface PortalConfig {
   ACTIVITY_TABLE?: string;
   NEXTGEN_BROKER_LAMBDA?: string;
   NEXTGEN_BROKER_REGION?: string;
+  NUMA_VERSION?: string;
 }
 
 export const fetchConfigAndAddToSession = async (forceRefresh = false): Promise<void> => {
@@ -56,6 +60,7 @@ export const fetchConfigAndAddToSession = async (forceRefresh = false): Promise<
 
   try {
     const response = await fetch('/config.json', {
+      cache: 'no-store',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -66,6 +71,12 @@ export const fetchConfigAndAddToSession = async (forceRefresh = false): Promise<
     }
 
     const configData: PortalConfig = await response.json();
+
+    const versionChanged = await handlePortalVersionChange(configData.NUMA_VERSION);
+    if (versionChanged) {
+      return;
+    }
+    cleanupPortalVersionQuery();
 
     // Check if configData is empty
     if (!configData || Object.keys(configData).length === 0) {
@@ -175,4 +186,90 @@ export const clearConfigCache = (): void => {
   });
   sessionStorage.removeItem(CONFIG_TIMESTAMP_KEY);
   console.debug('Config cache cleared');
+};
+
+const handlePortalVersionChange = async (incomingVersion?: string): Promise<boolean> => {
+  if (typeof window === 'undefined' || !incomingVersion) return false;
+
+  let storedVersion: string | null = null;
+  try {
+    storedVersion = window.localStorage?.getItem(CONFIG_VERSION_STORAGE_KEY) ?? null;
+  } catch (error) {
+    console.warn('Unable to read cached portal version:', error);
+  }
+
+  if (!storedVersion) {
+    try {
+      window.localStorage?.setItem(CONFIG_VERSION_STORAGE_KEY, incomingVersion);
+    } catch (error) {
+      console.warn('Unable to persist portal version in storage:', error);
+    }
+    return false;
+  }
+
+  if (storedVersion === incomingVersion) {
+    return false;
+  }
+
+  await clearPortalVersionState();
+
+  try {
+    window.localStorage?.setItem(CONFIG_VERSION_STORAGE_KEY, incomingVersion);
+  } catch (error) {
+    console.warn('Unable to persist portal version after clearing caches:', error);
+  }
+
+  reloadPortalWithVersionQuery(incomingVersion);
+  return true;
+};
+
+const clearPortalVersionState = async (): Promise<void> => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage?.clear();
+  } catch (error) {
+    console.warn('Unable to clear session storage during portal version refresh:', error);
+  }
+
+  if (window.caches?.keys) {
+    try {
+      const cacheNames = await window.caches.keys();
+      await Promise.all(cacheNames.map((cacheName) => window.caches.delete(cacheName)));
+    } catch (error) {
+      console.warn('Unable to clear cache storage during portal version refresh:', error);
+    }
+  }
+
+  if (window.navigator?.serviceWorker?.getRegistrations) {
+    try {
+      const registrations = await window.navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    } catch (error) {
+      console.warn('Unable to unregister service workers during portal version refresh:', error);
+    }
+  }
+};
+
+const reloadPortalWithVersionQuery = (version: string): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set(CONFIG_VERSION_QUERY_PARAM, version);
+    window.location.replace(nextUrl.toString());
+  } catch {
+    window.location.reload();
+  }
+};
+
+const cleanupPortalVersionQuery = (): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(CONFIG_VERSION_QUERY_PARAM)) return;
+    url.searchParams.delete(CONFIG_VERSION_QUERY_PARAM);
+    const nextPath = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState(null, document.title, nextPath);
+  } catch {
+    // Ignore malformed URLs
+  }
 };

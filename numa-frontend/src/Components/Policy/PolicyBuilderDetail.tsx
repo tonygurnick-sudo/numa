@@ -379,7 +379,7 @@ export const PolicyBuilderDetail = () => {
   }, [config, isAuthenticated, loading]);
 
   useEffect(() => {
-    fetch('/config.json')
+    fetch('/config.json', { cache: 'no-store' })
       .then((response) => response.json())
       .then((data) => setConfig(data))
       .catch((error) => console.error('Error loading config:', error));

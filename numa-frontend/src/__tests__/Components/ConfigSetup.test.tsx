@@ -8,8 +8,12 @@ import {
 
 describe('ConfigSetup', () => {
   let mockSessionStorage = {};
+  let mockLocalStorage = {};
   let mockFetch;
   let mockWindowReload;
+  let mockLocationReplace;
+  let mockCacheKeys: ReturnType<typeof vi.fn>;
+  let mockCacheDelete: ReturnType<typeof vi.fn>;
 
   // Mock configs for testing
   const config1 = {
@@ -32,6 +36,7 @@ describe('ConfigSetup', () => {
       admin: { roleArn: 'arn:aws:iam::123:role/admin', features: ['chat'] },
       standard: { roleArn: 'arn:aws:iam::123:role/standard', features: ['chat'] },
     },
+    NUMA_VERSION: 'version-1',
   };
 
   const config2 = {
@@ -47,6 +52,7 @@ describe('ConfigSetup', () => {
     PROVISION_Q_RESOURCES: false,
     PREFERRED_KNOWLEDGE_BASE: 'kb-2',
     BEDROCK_KNOWLEDGE_BASE_ID: 'bedrock-kb-2',
+    NUMA_VERSION: 'version-1',
   };
 
   const CACHE_DURATION_TIMER = 2 * 60 * 60 * 1000; // 2 hours
@@ -54,6 +60,7 @@ describe('ConfigSetup', () => {
   beforeEach(() => {
     // Reset mock storage
     mockSessionStorage = {};
+    mockLocalStorage = {};
 
     // Mock sessionStorage
     Object.defineProperty(window, 'sessionStorage', {
@@ -75,10 +82,45 @@ describe('ConfigSetup', () => {
     // Override getItem to return actual values from mockSessionStorage
     window.sessionStorage.getItem.mockImplementation((key) => mockSessionStorage[key] || null);
 
+    // Mock localStorage
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: vi.fn((key) => mockLocalStorage[key] || null),
+        setItem: vi.fn((key, value) => {
+          mockLocalStorage[key] = value;
+        }),
+        removeItem: vi.fn((key) => {
+          delete mockLocalStorage[key];
+        }),
+        clear: vi.fn(() => {
+          mockLocalStorage = {};
+        }),
+      },
+      writable: true,
+    });
+    window.localStorage.getItem.mockImplementation((key) => mockLocalStorage[key] || null);
+
+    // Mock CacheStorage + service workers
+    mockCacheKeys = vi.fn().mockResolvedValue([]);
+    mockCacheDelete = vi.fn().mockResolvedValue(true);
+    Object.defineProperty(window, 'caches', {
+      value: {
+        keys: mockCacheKeys,
+        delete: mockCacheDelete,
+      },
+      writable: true,
+    });
+    const mockGetRegistrations = vi.fn().mockResolvedValue([]);
+    Object.defineProperty(window.navigator, 'serviceWorker', {
+      value: { getRegistrations: mockGetRegistrations },
+      configurable: true,
+    });
+
     // Mock window.location.reload
     mockWindowReload = vi.fn();
+    mockLocationReplace = vi.fn();
     Object.defineProperty(window, 'location', {
-      value: { reload: mockWindowReload },
+      value: { reload: mockWindowReload, replace: mockLocationReplace, href: 'https://example.com' },
       writable: true,
     });
 
@@ -105,6 +147,7 @@ describe('ConfigSetup', () => {
       await fetchConfigAddtoSession();
 
       expect(mockFetch).toHaveBeenCalledWith('/config.json', {
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
       });
       expect(mockSessionStorage.Q_APPLICATION_ID).toBe('app-1');
@@ -190,6 +233,30 @@ describe('ConfigSetup', () => {
       });
 
       await expect(fetchConfigAddtoSession()).rejects.toThrow('Config file is empty');
+    });
+
+    it('should trigger reload when only NUMA_VERSION changes', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(config1),
+      });
+
+      await fetchConfigAddtoSession();
+      expect(mockLocationReplace).not.toHaveBeenCalled();
+
+      mockWindowReload.mockClear();
+      mockLocationReplace.mockClear();
+      vi.advanceTimersByTime(CACHE_DURATION_TIMER);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ...config1, NUMA_VERSION: 'version-new' }),
+      });
+
+      await fetchConfigAddtoSession();
+      expect(mockLocationReplace).toHaveBeenCalledTimes(1);
+      expect(mockWindowReload).not.toHaveBeenCalled();
+      expect(mockCacheKeys).toHaveBeenCalledTimes(1);
     });
   });
 

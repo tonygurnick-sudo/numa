@@ -209,8 +209,11 @@ export class NumaFrontendInfra extends Construct {
       },
     });
 
-    const defaultCachePolicy = new CloudfrontCachePolicy(this, 'defaultCachePolicy', {
-      name: `${props.clientName.replaceAll('.', '-')}-default-cache-policy`,
+    const staticAssetsCachePolicy = new CloudfrontCachePolicy(this, 'static-assets-cache-policy', {
+      name: `${props.clientName.replaceAll('.', '-')}-static-assets-cache-policy`,
+      minTtl: 0,
+      defaultTtl: 86400, // 24 hours
+      maxTtl: 31536000, // 1 year
       parametersInCacheKeyAndForwardedToOrigin: {
         cookiesConfig: {
           cookieBehavior: 'none',
@@ -224,6 +227,24 @@ export class NumaFrontendInfra extends Construct {
           queryStrings: {
             items: ['Key-Pair-Id', 'Signature', 'Expires', 'Policy'],
           },
+        },
+      },
+    });
+
+    const noCachePolicy = new CloudfrontCachePolicy(this, 'no-cache-policy', {
+      name: `${props.clientName.replaceAll('.', '-')}-no-cache-policy`,
+      minTtl: 0,
+      defaultTtl: 0,
+      maxTtl: 60,
+      parametersInCacheKeyAndForwardedToOrigin: {
+        cookiesConfig: {
+          cookieBehavior: 'none',
+        },
+        headersConfig: {
+          headerBehavior: 'none',
+        },
+        queryStringsConfig: {
+          queryStringBehavior: 'none',
         },
       },
     });
@@ -307,6 +328,42 @@ export class NumaFrontendInfra extends Construct {
     // Build ordered cache behaviors (more specific routes before generic /api/*)
     const orderedCacheBehavior: CloudfrontDistributionOrderedCacheBehavior[] = [
       {
+        targetOriginId: 'default',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/assets/*',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: staticAssetsCachePolicy.id,
+      },
+      {
+        targetOriginId: 'default',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/index.html',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: noCachePolicy.id,
+      },
+      {
+        targetOriginId: 'default',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/config.json',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: noCachePolicy.id,
+      },
+      {
+        targetOriginId: 'default',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/version.json',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: noCachePolicy.id,
+      },
+      {
         targetOriginId: 'chat-agent-fnurl',
         allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
         cachedMethods: ['GET', 'HEAD'],
@@ -358,7 +415,7 @@ export class NumaFrontendInfra extends Construct {
         cachedMethods: ['GET', 'HEAD'],
         viewerProtocolPolicy: 'redirect-to-https',
         targetOriginId: 'default',
-        cachePolicyId: defaultCachePolicy.id,
+        cachePolicyId: noCachePolicy.id,
       },
       origin: origins,
       defaultRootObject: 'index.html',
