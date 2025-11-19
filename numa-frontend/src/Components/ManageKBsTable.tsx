@@ -31,8 +31,13 @@ function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.J
     if (kb) {
       setKbName(kb.kb_name);
       setIsPublic(kb.viewers.includes('*'));
-      setViewersInput(kb.viewers.includes('*') ? '' : kb.viewers.join(', '));
-      setEditorsInput(kb.editors.join(', '));
+      // Use viewer_emails if available, otherwise fall back to viewers (UUIDs)
+      const viewersToShow =
+        kb.viewer_emails && kb.viewer_emails.length > 0 ? kb.viewer_emails : kb.viewers.filter((v) => v !== '*');
+      setViewersInput(kb.viewers.includes('*') ? '' : viewersToShow.join(', '));
+      // Use editor_emails if available, otherwise fall back to editors (UUIDs)
+      const editorsToShow = kb.editor_emails && kb.editor_emails.length > 0 ? kb.editor_emails : kb.editors;
+      setEditorsInput(editorsToShow.join(', '));
     }
   }, [kb]);
 
@@ -122,7 +127,7 @@ function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.J
 
           {!isPublic && (
             <Form.Group className="mb-3">
-              <Form.Label>Viewers (User IDs)</Form.Label>
+              <Form.Label>Viewers (Emails)</Form.Label>
               <Form.Control
                 type="text"
                 placeholder="e.g., user1@example.com, user2@example.com"
@@ -130,11 +135,12 @@ function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.J
                 onChange={(e) => setViewersInput(e.target.value)}
                 disabled={isSubmitting}
               />
+              <Form.Text className="text-muted">Comma-separated list of email addresses</Form.Text>
             </Form.Group>
           )}
 
           <Form.Group className="mb-3">
-            <Form.Label>Editors (User IDs)</Form.Label>
+            <Form.Label>Editors (Emails)</Form.Label>
             <Form.Control
               type="text"
               placeholder="e.g., admin@example.com"
@@ -142,6 +148,7 @@ function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.J
               onChange={(e) => setEditorsInput(e.target.value)}
               disabled={isSubmitting}
             />
+            <Form.Text className="text-muted">Comma-separated list of email addresses</Form.Text>
           </Form.Group>
         </Modal.Body>
 

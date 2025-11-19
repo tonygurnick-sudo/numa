@@ -322,7 +322,7 @@ class ToolsOnlyIntegrationRouter:
             )
         return self._prompt_cache or ""
 
-    def build_strands_tool(self):
+    def build_strands_tool(self) -> Any:
         if strands_tool is None:  # pragma: no cover
             raise RuntimeError("strands toolkit is not available")
 
@@ -336,7 +336,7 @@ class ToolsOnlyIntegrationRouter:
         # Keep it concise per-action and trim overall size defensively
         action_desc_lines: List[str] = []
         for name in action_names:
-            desc = (self._definitions.get(name).description or "").strip()  # type: ignore[index]
+            desc = (self._definitions[name].description or "").strip()
             desc = _truncate_text(desc, 200) if desc else ""
             if desc:
                 action_desc_lines.append(f"- {name}: {desc}")
@@ -392,7 +392,7 @@ class ToolsOnlyIntegrationRouter:
             tool: str,
             instruction: str,
             full_payload: Optional[bool] = False,
-        ):
+        ) -> Dict[str, Any]:
             return router.execute(tool, instruction, bool(full_payload))
 
         setattr(router_tool, "_router_integration", self.integration_name)
@@ -402,7 +402,10 @@ class ToolsOnlyIntegrationRouter:
             setattr(
                 router_tool,
                 "_router_action_descriptions",
-                {name: (self._definitions.get(name).description or "") for name in action_names},  # type: ignore[index]
+                {
+                    name: (self._definitions[name].description or "")
+                    for name in action_names
+                },
             )
         except Exception:
             # Best-effort metadata; continue without blocking tool creation

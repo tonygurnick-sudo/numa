@@ -1,5 +1,6 @@
 import { ChatReferencesDropdown } from '../Components/Chat/ChatReferencesDropdown';
 import { useAuth } from '../Providers/AuthProvider';
+import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import { getKnowledgeBasePayload } from './helpers';
 import type { KnowledgeBasePayload, ToolResultLike } from './helpers';
@@ -11,11 +12,22 @@ const KnowledgeBaseBody = ({
   payload: KnowledgeBasePayload;
   getCredentials: () => Promise<AwsCredentialIdentity>;
 }) => {
+  const { availableKBs } = useKnowledgeBase();
   if (!payload) return null;
-  const { summarised_content = '', knowledgeText = [], references = [], query = '' } = payload;
+  const { summarised_content = '', knowledgeText = [], references = [], query = '', kb_id } = payload;
+  const kbName = (() => {
+    if (!kb_id) return null;
+    const match = availableKBs.find((k) => k.kb_id === kb_id);
+    return match?.kb_name || kb_id;
+  })();
   const hasSummary = summarised_content && summarised_content.trim();
   return (
     <>
+      {kbName && (
+        <div className="kb-target mb-1">
+          <strong>Querying:</strong> {kbName}
+        </div>
+      )}
       {query && (
         <div className="kb-query mb-2">
           <strong>Query:</strong> <em>{query}</em>

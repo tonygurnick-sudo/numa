@@ -142,6 +142,11 @@ export class NumaChatAgent extends Construct {
         },
         {
           effect: 'Allow',
+          actions: ['s3:ListBucket'],
+          resources: [props.outputsBucketArn, props.dataBucketArn],
+        },
+        {
+          effect: 'Allow',
           actions: ['s3:PutObject'],
           resources: [`${props.outputsBucketArn}/*`],
         },
@@ -253,6 +258,11 @@ export class NumaChatAgent extends Construct {
               },
             ]
           : []),
+        {
+          effect: 'Allow',
+          actions: ['cognito-idp:AdminGetUser'],
+          resources: [`arn:aws:cognito-idp:${props.region}:${callerIdentity.accountId}:userpool/${props.userPoolId}`],
+        },
       ],
     });
 

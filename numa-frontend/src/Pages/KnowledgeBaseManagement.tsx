@@ -691,6 +691,8 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
   const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
   const PREFERRED_KNOWLEDGE_BASE = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'bedrock';
   const BEDROCK_KNOWLEDGE_BASE_ID = window.sessionStorage.getItem('BEDROCK_KNOWLEDGE_BASE_ID');
+  const { user } = useAuth();
+  const canUploadCompany = Boolean(user?.features?.includes('addToCompanyData'));
   const initialFetchDone = useRef(false);
 
   /**
@@ -718,12 +720,13 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
       });
       const resp = await s3Client.send(cmd);
 
-      // Get the files
-      const files = resp.Contents || [];
+      // Get the files and hide KB metadata sidecar files from the UI
+      const files = (resp.Contents || []) as S3Object[];
+      const visibleFiles = files.filter((file) => file.Key && !file.Key.endsWith('.metadata.json'));
 
       // Only process files in batches and only those in scraped-content folder
-      const scrapedFiles = files.filter((file) => file.Key && file.Key.includes('scraped-content/'));
-      const otherFiles = files.filter((file) => file.Key && !file.Key.includes('scraped-content/'));
+      const scrapedFiles = visibleFiles.filter((file) => file.Key && file.Key.includes('scraped-content/'));
+      const otherFiles = visibleFiles.filter((file) => file.Key && !file.Key.includes('scraped-content/'));
 
       // Process scraped files in smaller batches to avoid rate limits
       const batchSize = 5;
@@ -1196,14 +1199,43 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
   }, [availableKBs]);
 
   /**
+   * Helper function to unwrap a single "documents" root folder
+   */
+  const unwrapDocumentsFolder = (rows: TableRow[]): TableRow[] => {
+    // If there's only one root folder and it's called "documents", unwrap it
+    if (rows.length === 1 && rows[0].type === 'folder' && rows[0].name === 'documents') {
+      const documentsRow = rows[0];
+      // Return its children, adjusting depth from 1 to 0
+      return (documentsRow.children || []).map((child) => ({
+        ...child,
+        depth: child.depth - 1,
+        // Recursively adjust depth for all nested children
+        children: child.children ? adjustChildDepth(child.children) : undefined,
+      }));
+    }
+    return rows;
+  };
+
+  /**
+   * Recursively adjust depth for nested children
+   */
+  const adjustChildDepth = (children: TableRow[]): TableRow[] => {
+    return children.map((child) => ({
+      ...child,
+      depth: child.depth - 1,
+      children: child.children ? adjustChildDepth(child.children) : undefined,
+    }));
+  };
+
+  /**
    * Convert each tree to nested row objects, then flatten them
    */
   const pendingRowsNested = useMemo(
-    (): TableRow[] => buildRowsForTree(pendingTree, 0, '', kbNameMap),
+    (): TableRow[] => unwrapDocumentsFolder(buildRowsForTree(pendingTree, 0, '', kbNameMap)),
     [pendingTree, kbNameMap],
   );
   const indexedRowsNested = useMemo(
-    (): TableRow[] => buildRowsForTree(indexedTree, 0, '', kbNameMap),
+    (): TableRow[] => unwrapDocumentsFolder(buildRowsForTree(indexedTree, 0, '', kbNameMap)),
     [indexedTree, kbNameMap],
   );
 
@@ -1948,9 +1980,8 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
                         onChange={(e) => setUploadDestinationKB(e.target.value)}
                         disabled={isLoadingKBsList}
                       >
-                        {availableKBs.filter((kb) => kb.role === 'EDITOR').length === 0 && !isLoadingKBsList && (
-                          <option value="company">Company Knowledge Base</option>
-                        )}
+                        {/* Allow selecting Company KB when user has addToCompanyData feature */}
+                        {canUploadCompany && <option value="company">Company Knowledge Base</option>}
                         {availableKBs
                           .filter((kb) => kb.role === 'EDITOR')
                           .map((kb) => (
@@ -2003,9 +2034,8 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
                         onChange={(e) => setUploadDestinationKB(e.target.value)}
                         disabled={isLoadingKBsList}
                       >
-                        {availableKBs.filter((kb) => kb.role === 'EDITOR').length === 0 && !isLoadingKBsList && (
-                          <option value="company">Company Knowledge Base</option>
-                        )}
+                        {/* Allow selecting Company KB when user has addToCompanyData feature */}
+                        {canUploadCompany && <option value="company">Company Knowledge Base</option>}
                         {availableKBs
                           .filter((kb) => kb.role === 'EDITOR')
                           .map((kb) => (

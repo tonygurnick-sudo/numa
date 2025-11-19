@@ -498,6 +498,8 @@ def _put_user_agent(
 ) -> Dict[str, Any]:
     if dynamodb is None:
         dynamodb = boto3.resource("dynamodb")
+    if not USER_AGENTS_TABLE:
+        raise RuntimeError("USER_AGENTS_TABLE environment variable is not set")
     table = dynamodb.Table(USER_AGENTS_TABLE)
     item = {
         "tenant_id": CLIENT_NAME,
@@ -531,6 +533,8 @@ def _put_workspace_agent(
 ) -> Dict[str, Any]:
     if dynamodb is None:
         dynamodb = boto3.resource("dynamodb")
+    if not WORKSPACE_AGENTS_TABLE:
+        raise RuntimeError("WORKSPACE_AGENTS_TABLE environment variable is not set")
     table = dynamodb.Table(WORKSPACE_AGENTS_TABLE)
     item = {
         "tenant_id": CLIENT_NAME,

@@ -119,7 +119,8 @@ const NumaChatAgents = () => {
 
   const { user, bedrockAgentRuntimeClient, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken } = useAuth();
   const { numaGet } = useNumaRequest();
-  const { selectedKB, selectedKbId } = useKnowledgeBase();
+  const { selectedKB: _selectedKB, selectedKbId: _selectedKbId, availableKBs } = useKnowledgeBase();
+  const [enabledKBIds, setEnabledKBIds] = useState<string[]>([]);
 
   // Extract user info from token
   const idToken = user?.decoded_tokens?.idToken ?? {};
@@ -166,6 +167,28 @@ const NumaChatAgents = () => {
     }
     const loadPersonalAgents = async () => {
       if (!user) return;
+
+      // Cache configuration
+      const CACHE_KEY = `numa_personal_agents_${user.attributes?.sub || 'unknown'}`;
+      const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+      // Check cache first
+      try {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          const age = Date.now() - timestamp;
+          if (age < CACHE_DURATION_MS) {
+            // Use cached data
+            setPersonalAgents(data);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to read agents cache:', err);
+      }
+
+      // Fetch fresh data
       setPersonalAgentsLoading(true);
       try {
         const ownedAgents = await listAgents(numaGet, { scope: 'owned' });
@@ -182,7 +205,21 @@ const NumaChatAgents = () => {
           }
         }
 
-        setPersonalAgents(Array.from(agentMap.values()));
+        const deduplicatedAgents = Array.from(agentMap.values());
+        setPersonalAgents(deduplicatedAgents);
+
+        // Cache the results
+        try {
+          sessionStorage.setItem(
+            CACHE_KEY,
+            JSON.stringify({
+              data: deduplicatedAgents,
+              timestamp: Date.now(),
+            }),
+          );
+        } catch (err) {
+          console.warn('Failed to cache agents:', err);
+        }
       } catch (err) {
         console.error('Failed to load personal agents', err);
       } finally {
@@ -672,16 +709,26 @@ const NumaChatAgents = () => {
       queryDataSources,
       webSearchEnabled,
       agentsFeatureEnabled ? createAgentEnabled : false,
+      enabledKBIds,
     );
 
     // Create the system prompt based on tool availability
     const email = idToken.email || 'Unknown';
+    const kbNameById = new Map<string, string>();
+    try {
+      (availableKBs || []).forEach((kb) => kbNameById.set(kb.kb_id, kb.kb_name));
+    } catch {
+      // Ignore errors when building KB name map - will use IDs as fallback
+    }
+    const enabledKBMeta = (enabledKBIds || []).map((id) => ({ id, name: kbNameById.get(id) || id }));
+
     let systemPrompt = generateSystemPrompt(
       enabledTools,
       email,
       companyProfile,
       enabledConnections,
       agentsFeatureEnabled ? createAgentEnabled : false,
+      enabledKBMeta,
     );
 
     if (currentAgent) {
@@ -1155,7 +1202,7 @@ const NumaChatAgents = () => {
           },
           userAuth, // Pass user authentication context
           enabledConnections, // Pass enabled connections
-          selectedKbId || selectedKB?.kb_id || null, // Pass selected knowledge base ID
+          enabledKBIds, // Multi‑KB enabled IDs for this turn
         );
 
         // Store the abort function for the stop button
@@ -1356,9 +1403,6 @@ const NumaChatAgents = () => {
             <div className="chat-content flex-grow-1 d-flex flex-column">
               {/* Header with chat instructions and buttons on the right */}
               <div className="chat-header d-flex justify-content-between align-items-center mb-3">
-                <div className="d-flex flex-column gap-2">
-                  <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
-                </div>
                 {currentAgent ? (
                   <div className="d-flex align-items-center gap-2">
                     <AgentAvatar agent={currentAgent} size={32} />
@@ -1512,6 +1556,8 @@ const NumaChatAgents = () => {
                             personalAgents={agentsFeatureEnabled ? sortedPersonalAgents : []}
                             onSelectAgent={handleAgentSelect}
                             agentsLoading={agentsFeatureEnabled ? personalAgentsLoading : false}
+                            enabledKBIds={enabledKBIds}
+                            setEnabledKBIds={setEnabledKBIds}
                           />
                         ) : (
                           <ChatMessages
@@ -1555,6 +1601,8 @@ const NumaChatAgents = () => {
                             noToolsActive={noToolsActive}
                             externalInputRef={inputRef}
                             autoFocus={true}
+                            enabledKBIds={enabledKBIds}
+                            setEnabledKBIds={setEnabledKBIds}
                           />
                         </div>
                       )}

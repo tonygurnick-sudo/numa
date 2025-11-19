@@ -57,7 +57,9 @@
     "quota-report": "node --import tsx quota-report.ts",
     "build-claude-cli-artifact": "node --import tsx build-claude-cli-artifact.ts",
     "fetch-claude-cli-artifact": "node --import tsx fetch-claude-cli-artifact.ts",
-    "build-deployment-container": "node --import tsx build-deployment-container.ts"
+    "build-deployment-container": "node --import tsx build-deployment-container.ts",
+    "update-vector-kb-s3-prefix": "node --import tsx update-vector-kb-s3-prefix.ts",
+    "backfill-kb-metadata": "node --import tsx backfill-metadata-sidecars.ts"
   },
   "packageManager": "yarn@4.9.2",
   "devDependencies": {

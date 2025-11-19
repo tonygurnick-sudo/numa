@@ -67,6 +67,9 @@ type NewChatProps = {
   onSelectAgent?: (agent: AgentSummary) => void;
   agentsLoading?: boolean;
   onFilesDropped?: (files: File[]) => void;
+  // Multi‑KB selection (optional; when provided, ChatInput will control selection)
+  enabledKBIds?: string[];
+  setEnabledKBIds?: Dispatch<SetStateAction<string[]>>;
 };
 
 // Avatar for recent conversations
@@ -161,6 +164,8 @@ export const NewChat = ({
   onSelectAgent,
   agentsLoading: _agentsLoading = false,
   onFilesDropped,
+  enabledKBIds,
+  setEnabledKBIds,
 }: NewChatProps) => {
   // ------- Drag & Drop (no visual change to the page itself) -------
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -338,7 +343,7 @@ export const NewChat = ({
         paddingLeft: '1rem',
         paddingRight: '1rem',
         overflow: 'hidden',
-        minHeight: '100vh',
+        minHeight: '100%',
       }}
       onDragEnterCapture={handleDragEnter}
       onDragOverCapture={handleDragOver}
@@ -346,7 +351,7 @@ export const NewChat = ({
       onDropCapture={handleDrop}
       data-dragging={isDragging ? 'true' : 'false'}
     >
-      <div style={{ maxWidth: 680, width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ maxWidth: 1130, width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Greeting */}
         <div
           style={{
@@ -407,177 +412,183 @@ export const NewChat = ({
             externalInputRef={inputRef}
             autoFocus={true}
             placeholderOverride={'How can I help you today?'}
+            // Multi‑KB selection forwarded from parent when provided
+            enabledKBIds={enabledKBIds || []}
+            setEnabledKBIds={setEnabledKBIds}
           />
         </div>
 
-        {/* Personal agents */}
+        {/* Personal Agents Row */}
         {personalAgents.length > 0 && (
-          <div style={{ maxWidth: 680, width: '100%', marginBottom: '1rem', animation: 'fadeIn 0.6s ease-in-out' }}>
-            <div
-              className="d-flex align-items-center"
-              style={{ gap: '0.5rem', overflowX: 'auto', overflowY: 'hidden', paddingBottom: '0.5rem' }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '40px',
-                  height: '40px',
-                  color: 'var(--brand-primary, var(--color-primary))',
-                  flexShrink: 0,
-                }}
-              >
-                <i className="bi bi-robot" style={{ fontSize: '1.5rem' }} />
+          <div
+            className="agents-row-container"
+            style={{
+              width: '100%',
+              marginBottom: '1.5rem',
+              animation: 'fadeIn 0.6s ease-in-out',
+            }}
+          >
+            {_agentsLoading ? (
+              <div className="d-flex justify-content-center align-items-center" style={{ minHeight: 80 }}>
+                <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
+                  <span className="visually-hidden">Loading agents...</span>
+                </Spinner>
               </div>
-              {personalAgents.map((agent) => (
-                <OverlayTrigger
-                  key={agent.agentId}
-                  placement="top"
-                  overlay={<Tooltip id={`agent-${agent.agentId}`}>{agent.title}</Tooltip>}
+            ) : (
+              <div className="agents-horizontal-scroll">
+                <div
+                  className="d-flex align-items-center"
+                  style={{ gap: '1rem', overflowX: 'auto', paddingBottom: '0.5rem' }}
                 >
-                  <Button
-                    variant="secondary"
-                    className="agent-quick-select-btn"
-                    style={{
-                      padding: '0.25rem',
-                      borderRadius: 8,
-                      border: '1px solid rgba(0,0,0,0.1)',
-                      backgroundColor: 'rgba(255,255,255,0.8)',
-                      transition: 'all 0.2s ease-in-out',
-                      flexShrink: 0,
-                    }}
-                    onClick={() => onSelectAgent?.(agent)}
-                    onMouseEnter={(e) => {
-                      const primaryColor =
-                        getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
-                        '75, 0, 125';
-                      const rgb = primaryColor.startsWith('#') ? hexToRgb(primaryColor) : primaryColor;
-                      e.currentTarget.style.backgroundColor = `rgba(${rgb}, 0.05)`;
-                      e.currentTarget.style.borderColor = `rgba(${rgb}, 0.3)`;
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
-                      e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  >
-                    <AgentAvatar agent={agent} size={36} rounded={true} alt={agent.title} style={{ margin: 0 }} />
-                  </Button>
-                </OverlayTrigger>
-              ))}
-            </div>
+                  {personalAgents.map((agent) => (
+                    <OverlayTrigger
+                      key={agent.agentId}
+                      placement="top"
+                      overlay={<Tooltip id={`agent-${agent.agentId}`}>{agent.title}</Tooltip>}
+                    >
+                      <div
+                        className="agent-icon-wrapper"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onSelectAgent?.(agent)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onSelectAgent?.(agent);
+                          }
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease-in-out',
+                          transform: 'scale(1)',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'scale(1.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                      >
+                        <AgentAvatar agent={agent} size={56} rounded={true} alt={agent.title} />
+                      </div>
+                    </OverlayTrigger>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Suggestions */}
-        <div style={{ maxWidth: 680, width: '100%', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-          {suggestionsLoading ? (
-            <div
-              className="d-flex justify-content-center align-items-center"
-              style={{ minHeight: 100, animation: 'fadeIn 0.3s ease-in-out' }}
-            >
-              <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
-                <span className="visually-hidden">Loading recent conversations...</span>
-              </Spinner>
-            </div>
-          ) : recentConversations.length > 0 ? (
-            <div className="conversation-suggestions">
-              <div className="suggestions-header">Continue where you left off</div>
-              <div className="d-flex flex-column" style={{ gap: '0.75rem', paddingBottom: '1rem' }}>
-                {recentConversations.map((convo) => (
-                  <div
-                    key={convo.conversation_id}
-                    className="text-start conversation-suggestion-btn"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleContinueClick(convo.conversation_id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleContinueClick(convo.conversation_id);
-                      }
-                    }}
-                    onMouseEnter={(e) => {
-                      const primaryColor =
-                        getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
-                        '75, 0, 125';
-                      const rgb = primaryColor.startsWith('#') ? hexToRgb(primaryColor) : primaryColor;
-                      e.currentTarget.style.backgroundColor = `rgba(${rgb}, 0.05)`;
-                      e.currentTarget.style.borderColor = `rgba(${rgb}, 0.3)`;
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
-                      e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  >
-                    <ConversationAvatar convo={convo} />
-                    <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {convo.conversationName || 'Untitled Chat'}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
-                        {convo.isAgentConversation && convo.agentTitle
-                          ? `${convo.agentTitle} • ${formatRelativeTime(convo.latestTimestamp)}`
-                          : formatRelativeTime(convo.latestTimestamp)}
-                      </div>
-                    </div>
-                    {(onRenameConversation || onDeleteConversation) && (
-                      <div
-                        className="conversation-actions d-flex flex-column align-items-center"
-                        style={{ gap: '0.25rem' }}
-                      >
-                        {onRenameConversation && (
-                          <OverlayTrigger
-                            placement="left"
-                            overlay={<Tooltip id={`rename-${convo.conversation_id}`}>Rename</Tooltip>}
-                          >
-                            <Button
-                              variant="link"
-                              size="sm"
-                              className="p-0 text-secondary"
-                              aria-label="Rename conversation"
-                              onClick={(e) =>
-                                handleRename(e, convo.conversation_id, convo.conversationName || 'Untitled Chat')
-                              }
-                              style={{ lineHeight: 1 }}
-                            >
-                              <i className="bi bi-pencil" />
-                            </Button>
-                          </OverlayTrigger>
-                        )}
-                        {onDeleteConversation && (
-                          <OverlayTrigger
-                            placement="left"
-                            overlay={<Tooltip id={`delete-${convo.conversation_id}`}>Delete</Tooltip>}
-                          >
-                            <Button
-                              variant="link"
-                              size="sm"
-                              className="p-0 text-danger"
-                              aria-label="Delete conversation"
-                              onClick={(e) => handleDelete(e, convo.conversation_id)}
-                              style={{ lineHeight: 1 }}
-                            >
-                              <i className="bi bi-trash" />
-                            </Button>
-                          </OverlayTrigger>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+        {/* Conversation History */}
+        {suggestionsLoading || recentConversations.length > 0 ? (
+          <div
+            className="history-panel-fullwidth"
+            style={{ width: '100%', position: 'relative', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}
+          >
+            {suggestionsLoading ? (
+              <div
+                className="d-flex justify-content-center align-items-center"
+                style={{ minHeight: 100, animation: 'fadeIn 0.3s ease-in-out' }}
+              >
+                <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
+                  <span className="visually-hidden">Loading recent conversations...</span>
+                </Spinner>
               </div>
-            </div>
-          ) : null}
-        </div>
+            ) : recentConversations.length > 0 ? (
+              <div className="conversation-suggestions">
+                <div className="suggestions-header">Continue where you left off</div>
+                <div className="d-flex flex-column" style={{ gap: '0.75rem', paddingBottom: '120px' }}>
+                  {recentConversations.map((convo) => (
+                    <div
+                      key={convo.conversation_id}
+                      className="text-start conversation-suggestion-btn"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleContinueClick(convo.conversation_id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleContinueClick(convo.conversation_id);
+                        }
+                      }}
+                      onMouseEnter={(e) => {
+                        const primaryColor =
+                          getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
+                          '75, 0, 125';
+                        const rgb = primaryColor.startsWith('#') ? hexToRgb(primaryColor) : primaryColor;
+                        e.currentTarget.style.backgroundColor = `rgba(${rgb}, 0.05)`;
+                        e.currentTarget.style.borderColor = `rgba(${rgb}, 0.3)`;
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
+                        e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <ConversationAvatar convo={convo} />
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {convo.conversationName || 'Untitled Chat'}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
+                          {convo.isAgentConversation && convo.agentTitle
+                            ? `${convo.agentTitle} • ${formatRelativeTime(convo.latestTimestamp)}`
+                            : formatRelativeTime(convo.latestTimestamp)}
+                        </div>
+                      </div>
+                      {(onRenameConversation || onDeleteConversation) && (
+                        <div
+                          className="conversation-actions d-flex flex-column align-items-center"
+                          style={{ gap: '0.25rem' }}
+                        >
+                          {onRenameConversation && (
+                            <OverlayTrigger
+                              placement="left"
+                              overlay={<Tooltip id={`rename-${convo.conversation_id}`}>Rename</Tooltip>}
+                            >
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="p-0 text-secondary"
+                                aria-label="Rename conversation"
+                                onClick={(e) =>
+                                  handleRename(e, convo.conversation_id, convo.conversationName || 'Untitled Chat')
+                                }
+                                style={{ lineHeight: 1 }}
+                              >
+                                <i className="bi bi-pencil" />
+                              </Button>
+                            </OverlayTrigger>
+                          )}
+                          {onDeleteConversation && (
+                            <OverlayTrigger
+                              placement="left"
+                              overlay={<Tooltip id={`delete-${convo.conversation_id}`}>Delete</Tooltip>}
+                            >
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="p-0 text-danger"
+                                aria-label="Delete conversation"
+                                onClick={(e) => handleDelete(e, convo.conversation_id)}
+                                style={{ lineHeight: 1 }}
+                              >
+                                <i className="bi bi-trash" />
+                              </Button>
+                            </OverlayTrigger>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <style>{`

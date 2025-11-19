@@ -124,7 +124,6 @@ def query_bedrock_knowledge_base(
     retrieval_config: Dict[str, Any] = {
         "vectorSearchConfiguration": {"numberOfResults": max_results}
     }
-    filter_applied = False
 
     # Add metadata filter to restrict results to specific KB
     client_name = os.environ.get("CLIENT_NAME", "")
@@ -135,7 +134,6 @@ def query_bedrock_knowledge_base(
                 {"equals": {"key": "kb_id", "value": resolved_kb_id}},
             ]
         }
-        filter_applied = True
         logger.debug(
             "Applied metadata filter",
             tenant_id=client_name,
@@ -158,17 +156,8 @@ def query_bedrock_knowledge_base(
         return retry_retrieve()
 
     resp = execute_with_config(retrieval_config)
-
-    if filter_applied and not resp.get("retrievalResults"):
-        logger.warning(
-            "Bedrock KB returned no results with metadata filter; retrying without filter",
-            tenant_id=client_name,
-            kb_id=resolved_kb_id,
-        )
-        fallback_config = {
-            "vectorSearchConfiguration": {"numberOfResults": max_results}
-        }
-        resp = execute_with_config(fallback_config)
+    # Strict separation: Do not retry without metadata filter.
+    # If no results with the applied filter, return an empty result set to avoid cross‑KB leakage.
 
     items = resp.get("retrievalResults", [])
     logger.info(

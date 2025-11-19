@@ -64,40 +64,80 @@ def query_knowledge_base(
     query: str, user_intent: str, max_results: int = 6, kb_id: Optional[str] = None
 ):
     """
-    Search your organization's semantic knowledge base for relevant documents and information.
+    Search approved internal knowledge bases with semantic retrieval.
 
-    Use this tool to find information from:
-    - Company documents, policies, and procedures
-    - Internal knowledge base content
-    - Previously uploaded files and data sources
-    - User-specific knowledge bases (if kb_id is specified)
+    Always include kb_id and choose one of the KBs enabled for this turn. If none are enabled,
+    do not call this tool. When multiple KBs are enabled and relevant, call the tool multiple
+    times (once per kb_id) and synthesise the final answer.
 
-    Use natural language queries that describe what you're looking for.
-    Example: "employee benefits policy" rather than specific file names.
+    Examples:
+      {"query": "latest PTO policy", "user_intent": "User needs PTO details", "kb_id": "company", "max_results": 5}
 
     Args:
         query (str): Natural language description of what you're searching for
-        user_intent (str): Description of what the user is trying to accomplish
-            (e.g., "User wants to understand employee benefits policy")
+        user_intent (str): What the user is trying to accomplish
         max_results (int): Maximum number of results to return (default: 6, max: 15)
-        kb_id (str | None): Knowledge base ID to search. When omitted, the user's selected KB is used.
+        kb_id (str | None): Knowledge base ID to search (required when multiple KBs are enabled)
 
     Returns:
         ToolResult: Structured JSON content containing knowledge base results
     """
-    resolved_kb_id = kb_id.strip() if isinstance(kb_id, str) and kb_id.strip() else None
-    if not resolved_kb_id:
-        current_auth = get_current_user_auth()
-        selected = (
-            current_auth.get("selected_kb_id")
-            if isinstance(current_auth, dict)
-            else None
-        )
-        if isinstance(selected, str) and selected.strip():
-            resolved_kb_id = selected.strip()
+    # Enforce per‑turn KB allowlist
+    current_auth = get_current_user_auth()
+    enabled_list = []
+    if isinstance(current_auth, dict):
+        val = current_auth.get("enabled_kb_ids")
+        if isinstance(val, list):
+            enabled_list = [
+                str(x).strip() for x in val if isinstance(x, str) and x.strip()
+            ]
 
-    if not resolved_kb_id:
-        resolved_kb_id = "company"
+    allowed_set = set(enabled_list)
+
+    requested = kb_id.strip() if isinstance(kb_id, str) and kb_id.strip() else None
+
+    # Resolve final kb_id according to rules
+    resolved_kb_id: Optional[str] = None
+    if not allowed_set:
+        # No per-turn gating provided; default to historical behavior
+        resolved_kb_id = requested or "company"
+    else:
+        if requested:
+            if requested not in allowed_set:
+                # Access denied for this turn
+                # Return error tool result with guidance
+                return {
+                    "status": "error",
+                    "content": [
+                        {
+                            "text": (
+                                f"Knowledge base '{requested}' is not enabled for this turn. "
+                                + (
+                                    f"Enabled: {', '.join(sorted(allowed_set))}. "
+                                    if allowed_set
+                                    else ""
+                                )
+                                + "Ask the user to enable it if needed."
+                            )
+                        }
+                    ],
+                }
+            resolved_kb_id = requested
+        else:
+            if len(allowed_set) == 1:
+                resolved_kb_id = next(iter(allowed_set))
+            else:
+                return {
+                    "status": "error",
+                    "content": [
+                        {
+                            "text": (
+                                "Multiple knowledge bases are enabled. Please specify kb_id explicitly. "
+                                + f"Enabled: {', '.join(sorted(allowed_set))}."
+                            )
+                        }
+                    ],
+                }
 
     return _get_query_impl()(query, user_intent, max_results, resolved_kb_id)
 

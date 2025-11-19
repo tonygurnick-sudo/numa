@@ -122,7 +122,7 @@ class ChatAgentHttpStream {
     onEvent: OnEvent | null,
     userAuth: Record<string, unknown> | null = null,
     enabledConnections: string[] = [],
-    kb_id: string | null = null,
+    enabledKBIds: string[] = [],
   ): Promise<() => void> {
     this.currentOnEvent = onEvent;
     this.responseCallbacks.set('current', (msg) => {
@@ -163,7 +163,7 @@ class ChatAgentHttpStream {
       enabledConnections,
       systemPrompt,
       modelId,
-      kb_id,
+      enabledKBIds,
       timeInfo,
     };
 
@@ -311,7 +311,7 @@ const chatAgentWS = new ChatAgentHttpStream();
  * @param {function=} onEvent - Optional raw event handler
  * @param {Object=} userAuth - Optional user authentication context
  * @param {Array=} enabledConnections - Optional array of enabled connection names
- * @param {string=} kb_id - Optional knowledge base ID to query
+ * @param {string[]=} enabledKBIds - Enabled knowledge base IDs for this turn
  * @returns {function} Abort function to cancel the stream
  */
 export const callChatAgentStreaming = (
@@ -326,7 +326,7 @@ export const callChatAgentStreaming = (
   onEvent: OnEvent | null = null,
   userAuth: Record<string, unknown> | null = null,
   enabledConnections: string[] = [],
-  kb_id: string | null = null,
+  enabledKBIds: string[] = [],
 ) =>
   chatAgentWS.streamPrompt(
     prompt,
@@ -340,7 +340,7 @@ export const callChatAgentStreaming = (
     onEvent,
     userAuth,
     enabledConnections,
-    kb_id,
+    enabledKBIds,
   );
 
 /**

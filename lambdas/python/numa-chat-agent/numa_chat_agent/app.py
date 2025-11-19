@@ -37,6 +37,7 @@ REGION = os.environ.get("AWS_REGION", "us-east-1")
 USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
 USER_POOL_CLIENT_ID = os.environ.get("COGNITO_USER_POOL_CLIENT_ID")
 CF_SHARED_SECRET = os.environ.get("CLOUDFRONT_SHARED_SECRET")
+CLIENT_NAME = os.environ.get("CLIENT_NAME", "")
 
 _jwks_cache: Dict[str, Any] = {"data": None}
 _COGNITO_CLIENT = None
@@ -133,6 +134,110 @@ def _resolve_user_identifiers(identifiers: List[str]) -> List[str]:
             logger.warning("Unknown identifier format", identifier=identifier)
 
     return resolved
+
+
+def _resolve_sub_to_email(sub_id: str, cognito_client) -> Optional[str]:
+    """
+    Resolve a Cognito sub ID to an email address.
+
+    Args:
+        sub_id: Cognito sub ID (UUID)
+        cognito_client: Boto3 Cognito client
+
+    Returns:
+        Email address if found, None otherwise
+    """
+    try:
+        response = cognito_client.admin_get_user(
+            UserPoolId=USER_POOL_ID, Username=sub_id
+        )
+
+        for attr in response.get("UserAttributes", []):
+            if attr.get("Name") == "email":
+                email = attr.get("Value")
+                if email:
+                    logger.debug("Resolved sub to email", sub=sub_id, email=email)
+                    return email
+
+        logger.warning("User found but no email attribute", sub=sub_id)
+        return None
+    except cognito_client.exceptions.UserNotFoundException:
+        logger.warning("User not found in Cognito", sub=sub_id)
+        return None
+    except Exception as e:
+        logger.error("Error resolving sub to email", sub=sub_id, error=str(e))
+        return None
+
+
+def _resolve_subs_to_emails(sub_ids: List[str]) -> List[str]:
+    """
+    Resolve a list of Cognito sub IDs to email addresses.
+
+    Args:
+        sub_ids: List of Cognito sub IDs
+
+    Returns:
+        List of email addresses (skips any that can't be resolved)
+    """
+    if not sub_ids:
+        return []
+
+    emails = []
+    cognito_client = _get_cognito_client()
+
+    for sub_id in sub_ids:
+        if not sub_id or sub_id == "*":
+            continue
+
+        email = _resolve_sub_to_email(sub_id, cognito_client)
+        if email:
+            emails.append(email)
+
+    return emails
+
+
+def _count_s3_documents(bucket_name: str, prefix: str) -> int:
+    """
+    Count the number of documents in an S3 bucket prefix.
+
+    Args:
+        bucket_name: S3 bucket name
+        prefix: S3 prefix to search (e.g., "documents/kb-123/")
+
+    Returns:
+        Count of objects in the prefix (excluding metadata.json files)
+    """
+    try:
+        s3_client = boto3.client("s3", region_name=REGION)
+        paginator = s3_client.get_paginator("list_objects_v2")
+
+        count = 0
+        for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+            contents = page.get("Contents", [])
+            # Filter out:
+            # - Directories (keys ending with "/")
+            # - metadata.json files
+            for obj in contents:
+                # Pyright: ObjectTypeDef["Key"] is not guaranteed; access safely
+                key_val = obj.get("Key") if isinstance(obj, dict) else None
+                if not isinstance(key_val, str):
+                    continue
+                if not key_val.endswith("/") and not key_val.endswith("metadata.json"):
+                    count += 1
+
+        logger.debug(
+            "Counted S3 documents", bucket=bucket_name, prefix=prefix, count=count
+        )
+        return count
+    except Exception as e:
+        logger.error(
+            "Error counting S3 documents",
+            bucket=bucket_name,
+            prefix=prefix,
+            error=str(e),
+        )
+        # Return 0 on error rather than failing the whole request
+        return 0
 
 
 def _get_jwks() -> Dict[str, Any]:
@@ -364,26 +469,30 @@ async def http_stream(request: Request) -> Response:
         model_id = body.get("modelId")
         user_id = user.get("sub")
 
-        selected_kb_raw = body.get("kb_id")
-        if isinstance(selected_kb_raw, str) and selected_kb_raw.strip():
-            selected_kb_id = selected_kb_raw.strip()
-        else:
-            selected_kb_id = "company"
-
-        if selected_kb_id != "company":
-            kb_manager = KnowledgeBaseManager()
-            if not user_id or not kb_manager.check_permission(
-                selected_kb_id, user_id, "VIEWER"
-            ):
-                logger.warning(
-                    "User attempted to access KB without permission",
-                    user_id=user_id,
-                    kb_id=selected_kb_id,
-                )
-                return JSONResponse(
-                    {"error": "Access denied for knowledge base"},
-                    status_code=403,
-                )
+        # Multi‑KB: compute per‑turn active KBs = request list ∩ allowed list
+        requested_kbs_raw = body.get("enabledKBIds") or []
+        requested_kb_ids: list[str] = []
+        if isinstance(requested_kbs_raw, list):
+            for v in requested_kbs_raw:
+                if isinstance(v, str) and v.strip():
+                    requested_kb_ids.append(v.strip())
+        # Allowed = 'company' and any user-accessible KBs from Dynamo
+        allowed_kb_ids: set[str] = {"company"}
+        try:
+            if isinstance(user_id, str) and user_id:
+                kb_manager = KnowledgeBaseManager()
+                for m in kb_manager.list_user_kbs(user_id) or []:
+                    kid = m.get("kb_id")
+                    if isinstance(kid, str) and kid.strip():
+                        allowed_kb_ids.add(kid.strip())
+        except Exception as e:  # defensive; default to company only
+            logger.warning(
+                "Failed to load user KBs; defaulting allowed set to 'company' only",
+                error=str(e),
+            )
+        active_kb_ids: list[str] = [
+            kid for kid in requested_kb_ids if kid in allowed_kb_ids
+        ]
 
         # Capture optional client-local time info for downstream tools/prompts
         client_time_info = body.get("timeInfo") or {}
@@ -397,7 +506,8 @@ async def http_stream(request: Request) -> Response:
                 }
             ),
             **(body.get("userAuth") or {}),
-            "selected_kb_id": selected_kb_id,
+            # Per‑turn enabled KBs (intersection with allowed set)
+            "enabled_kb_ids": active_kb_ids,
             "conversation_id": conversation_id,
             "conversationId": conversation_id,
         }
@@ -420,6 +530,11 @@ async def http_stream(request: Request) -> Response:
         try:
             # Progressive summarization already handled in LAYER 1 (DynamoDB loading)
             # Agent will use default context management during execution
+            # Remove KB tool if no KBs are active this turn
+            if not active_kb_ids and "query_knowledge_base" in enabled_tools:
+                enabled_tools = [
+                    t for t in enabled_tools if t != "query_knowledge_base"
+                ]
             agent, mcp_clients = create_fresh_agent(
                 enabled_tools,
                 system_prompt,
@@ -504,26 +619,30 @@ async def http_invoke(request: Request) -> Response:
         model_id = body.get("modelId")
         user_id = user.get("sub")
 
-        selected_kb_raw = body.get("kb_id")
-        if isinstance(selected_kb_raw, str) and selected_kb_raw.strip():
-            selected_kb_id = selected_kb_raw.strip()
-        else:
-            selected_kb_id = "company"
-
-        if selected_kb_id != "company":
-            kb_manager = KnowledgeBaseManager()
-            if not user_id or not kb_manager.check_permission(
-                selected_kb_id, user_id, "VIEWER"
-            ):
-                logger.warning(
-                    "User attempted to access KB without permission (invoke)",
-                    user_id=user_id,
-                    kb_id=selected_kb_id,
-                )
-                return JSONResponse(
-                    {"error": "Access denied for knowledge base"},
-                    status_code=403,
-                )
+        # Multi‑KB: compute per‑turn active KBs = request list ∩ allowed list
+        requested_kbs_raw = body.get("enabledKBIds") or []
+        requested_kb_ids: list[str] = []
+        if isinstance(requested_kbs_raw, list):
+            for v in requested_kbs_raw:
+                if isinstance(v, str) and v.strip():
+                    requested_kb_ids.append(v.strip())
+        # Allowed = 'company' and any user-accessible KBs from Dynamo
+        allowed_kb_ids: set[str] = {"company"}
+        try:
+            if isinstance(user_id, str) and user_id:
+                kb_manager = KnowledgeBaseManager()
+                for m in kb_manager.list_user_kbs(user_id) or []:
+                    kid = m.get("kb_id")
+                    if isinstance(kid, str) and kid.strip():
+                        allowed_kb_ids.add(kid.strip())
+        except Exception as e:  # defensive
+            logger.warning(
+                "Failed to load user KBs (invoke); defaulting allowed set to 'company' only",
+                error=str(e),
+            )
+        active_kb_ids: list[str] = [
+            kid for kid in requested_kb_ids if kid in allowed_kb_ids
+        ]
 
         # Capture optional client-local time info for downstream tools/prompts
         client_time_info = body.get("timeInfo") or {}
@@ -537,7 +656,7 @@ async def http_invoke(request: Request) -> Response:
                 }
             ),
             **(body.get("userAuth") or {}),
-            "selected_kb_id": selected_kb_id,
+            "enabled_kb_ids": active_kb_ids,
             "conversation_id": conversation_id,
             "conversationId": conversation_id,
         }
@@ -560,6 +679,11 @@ async def http_invoke(request: Request) -> Response:
         try:
             # Progressive summarization already handled in LAYER 1 (DynamoDB loading)
             # Agent will use default context management during execution
+            # Remove KB tool if no KBs are active this turn
+            if not active_kb_ids and "query_knowledge_base" in enabled_tools:
+                enabled_tools = [
+                    t for t in enabled_tools if t != "query_knowledge_base"
+                ]
             agent, mcp_clients = create_fresh_agent(
                 enabled_tools,
                 system_prompt,
@@ -744,6 +868,29 @@ async def get_kb(request: Request, kb_id: str) -> Response:
         kb = kb_manager.get_kb(kb_id)
         if not kb:
             return JSONResponse({"error": "KB not found"}, status_code=404)
+
+        # Enrich KB data with actual document count from S3
+        if CLIENT_NAME and kb.get("s3_prefix"):
+            data_bucket = f"numa-{CLIENT_NAME}-data"
+            actual_count = _count_s3_documents(data_bucket, kb["s3_prefix"])
+            kb["document_count"] = actual_count
+
+        # Enrich KB data with editor emails
+        editors = kb.get("editors", [])
+        if editors:
+            editor_emails = _resolve_subs_to_emails(editors)
+            kb["editor_emails"] = editor_emails
+        else:
+            kb["editor_emails"] = []
+
+        # Also add viewer emails (excluding wildcard)
+        viewers = kb.get("viewers", [])
+        viewer_subs = [v for v in viewers if v != "*"]
+        if viewer_subs:
+            viewer_emails = _resolve_subs_to_emails(viewer_subs)
+            kb["viewer_emails"] = viewer_emails
+        else:
+            kb["viewer_emails"] = []
 
         return JSONResponse({"status": "success", "kb": kb}, status_code=200)
 
