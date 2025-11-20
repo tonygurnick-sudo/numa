@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ChangeEvent } from 'react';
 import { Form } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
@@ -7,20 +8,29 @@ function DropdownModule({ task, onComplete, onNotComplete, onChange, hasRun }) {
   // Check if the task is required (default to true for backward compatibility)
   const isRequired = task.required !== undefined ? task.required : true;
   const { numaTaskResponses, appRunning, taskInputValues } = useNumaApp();
+  const isMultiple = task.params?.multiple === true;
   const [selectedOption, setSelectedOption] = useState('');
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
 
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
   const options = task.params?.options || [];
 
-  // Set the selected option on the first render based on taskInputValues or first option
+  // Set the selected option(s) on the first render based on taskInputValues or defaults
   useEffect(() => {
-    // Check if the taskInputValue already exists, else fall back to the first option if available
-    const initialValue = taskInputValues[task.id] || (options.length > 0 ? options[0] : '');
-    setSelectedOption(initialValue);
-
-    // Update the global state as well when the component mounts (initial setup)
-    if (initialValue !== taskInputValues[task.id]) {
-      onChange(initialValue);
+    if (isMultiple) {
+      const initialArr = Array.isArray(taskInputValues[task.id]) ? (taskInputValues[task.id] as string[]) : [];
+      setSelectedOptions(initialArr);
+      if (taskInputValues[task.id] === undefined) {
+        onChange(initialArr);
+      }
+    } else {
+      // Check if the taskInputValue already exists, else fall back to the first option if available
+      const initialValue = taskInputValues[task.id] || (options.length > 0 ? options[0] : '');
+      setSelectedOption(initialValue);
+      // Update the global state as well when the component mounts (initial setup)
+      if (initialValue !== taskInputValues[task.id]) {
+        onChange(initialValue);
+      }
     }
   }, [task.id, taskInputValues, options, onChange]);
 
@@ -32,33 +42,58 @@ function DropdownModule({ task, onComplete, onNotComplete, onChange, hasRun }) {
       onComplete();
     } else {
       // For required fields, check if there's a selection
-      const initialValue = taskInputValues[task.id] || (options.length > 0 ? options[0] : '');
-      if (initialValue !== '') {
-        onComplete();
+      if (isMultiple) {
+        const current = Array.isArray(taskInputValues[task.id]) ? taskInputValues[task.id] : [];
+        if (current.length > 0) onComplete();
+        else onNotComplete();
       } else {
-        onNotComplete();
+        const initialValue = taskInputValues[task.id] || (options.length > 0 ? options[0] : '');
+        if (initialValue !== '') {
+          onComplete();
+        } else {
+          onNotComplete();
+        }
       }
     }
   }, []);
 
-  // Update the selected option and check completion status on each change
-  const handleSelectChange = (e) => {
-    const newValue = e.target.value;
-    setSelectedOption(newValue);
-
-    // Update the global state
-    onChange(newValue);
-
-    // If the field is required, check for selection
-    if (isRequired) {
-      // Call the appropriate callback based on whether an option is selected
-      if (newValue !== '') {
-        onComplete();
+  // Update the selected option(s) and check completion status on each change
+  const handleSelectChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    if (isMultiple) {
+      const selected = Array.from(e.currentTarget.selectedOptions).map((opt: HTMLOptionElement) => opt.value);
+      setSelectedOptions(selected);
+      onChange(selected);
+      if (isRequired) {
+        if (selected.length > 0) onComplete();
+        else onNotComplete();
       } else {
-        onNotComplete();
+        onComplete();
       }
     } else {
-      // If the field is not required, always mark it as complete
+      const newValue = e.currentTarget.value;
+      setSelectedOption(newValue);
+      onChange(newValue);
+      if (isRequired) {
+        if (newValue !== '') onComplete();
+        else onNotComplete();
+      } else {
+        onComplete();
+      }
+    }
+  };
+
+  // Toggle a single option for multi-select (checkbox list)
+  const handleCheckboxChange = (e: ChangeEvent<HTMLInputElement>, option: string) => {
+    const checked = e.currentTarget.checked;
+    const next = checked
+      ? Array.from(new Set([...(selectedOptions || []), option]))
+      : (selectedOptions || []).filter((v) => v !== option);
+    setSelectedOptions(next);
+    onChange(next);
+    if (isRequired) {
+      if (next.length > 0) onComplete();
+      else onNotComplete();
+    } else {
       onComplete();
     }
   };
@@ -69,16 +104,33 @@ function DropdownModule({ task, onComplete, onNotComplete, onChange, hasRun }) {
       <Form.Group controlId={`dropdown-${task.id}`}>
         <Form.Label>{task?.title}</Form.Label>
         {appRunning && !taskResponse?.result && <Preloader overlayParent={true} />}
-        <Form.Select value={selectedOption} onChange={handleSelectChange} disabled={appRunning || hasRun}>
-          <option value="" disabled={isRequired}>
-            Select an option...
-          </option>
-          {options.map((option, index) => (
-            <option key={`${task.id}-option-${index}`} value={option}>
-              {option}
+        {isMultiple ? (
+          <div>
+            {options.map((option, index) => (
+              <Form.Check
+                key={`${task.id}-option-${index}`}
+                type="checkbox"
+                id={`${task.id}-checkbox-${index}`}
+                label={option}
+                checked={selectedOptions.includes(option)}
+                onChange={(e) => handleCheckboxChange(e, option)}
+                disabled={appRunning || hasRun}
+                className="mb-2"
+              />
+            ))}
+          </div>
+        ) : (
+          <Form.Select value={selectedOption} onChange={handleSelectChange} disabled={appRunning || hasRun}>
+            <option value="" disabled={isRequired}>
+              Select an option...
             </option>
-          ))}
-        </Form.Select>
+            {options.map((option, index) => (
+              <option key={`${task.id}-option-${index}`} value={option}>
+                {option}
+              </option>
+            ))}
+          </Form.Select>
+        )}
       </Form.Group>
     </>
   );

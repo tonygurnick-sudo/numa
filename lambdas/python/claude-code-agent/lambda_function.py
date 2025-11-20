@@ -33,6 +33,7 @@ logger = structlog.get_logger()
 AVAILABLE_AGENTS = [
     "data_analysis",
     "default",
+    "nolia",
 ]
 
 

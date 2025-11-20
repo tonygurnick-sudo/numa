@@ -4,7 +4,8 @@ import { ReactNode } from 'react'
 
 interface WorkflowAction {
   label: string
-  link: string
+  link?: string
+  onClick?: () => void
   variant?: string
   icon?: ReactNode
 }
@@ -90,19 +91,34 @@ export function WorkflowHub({
           {secondaryActions.length > 0 && (
             <div className="d-flex gap-2">
               {secondaryActions.map((action, index) => (
-                <Button
-                  key={index}
-                  as={Link}
-                  to={action.link}
-                  variant={action.variant || 'outline-secondary'}
-                  size="sm"
-                  className="flex-fill d-flex align-items-center justify-content-center"
-                >
-                  {action.icon && (
-                    <span className="me-1">{action.icon}</span>
-                  )}
-                  {action.label}
-                </Button>
+                action.link ? (
+                  <Button
+                    key={index}
+                    as={Link}
+                    to={action.link}
+                    variant={action.variant || 'outline-secondary'}
+                    size="sm"
+                    className="flex-fill d-flex align-items-center justify-content-center"
+                  >
+                    {action.icon && (
+                      <span className="me-1">{action.icon}</span>
+                    )}
+                    {action.label}
+                  </Button>
+                ) : (
+                  <Button
+                    key={index}
+                    onClick={action.onClick}
+                    variant={action.variant || 'outline-secondary'}
+                    size="sm"
+                    className="flex-fill d-flex align-items-center justify-content-center"
+                  >
+                    {action.icon && (
+                      <span className="me-1">{action.icon}</span>
+                    )}
+                    {action.label}
+                  </Button>
+                )
               ))}
             </div>
           )}

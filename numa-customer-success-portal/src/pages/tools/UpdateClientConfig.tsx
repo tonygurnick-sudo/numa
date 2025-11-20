@@ -14,8 +14,29 @@ const REGION_OPTIONS = [
   { label: 'Asia Pacific (Sydney) ap-southeast-2', value: 'ap-southeast-2' },
 ]
 
-const PROD_APPS = [
-  'beyond-expectations','candidate-screening','company-profile','contract-analysis','costing-calculator','council-resource-consents','document-summariser','financial-analysis','gdsr-assessment','infringement-review','tor-assessment','meeting-analyser','nzsba-policy-builder','policy-drafter','policy-reviewer','procurement-rfp-assessment','rfp-response-comparison','e2e-test-numa-app'
+// All apps from infrastructure appLibrary + devAppLibrary (sorted alphabetically)
+// Matches infra/stacks/numa-client-stack.ts appLibrary and devAppLibrary
+const ALL_APPS = [
+  'beyond-expectations',
+  'candidate-screening',
+  'company-profile',
+  'contract-analysis',
+  'council-recourse-consents',
+  'costing-calculator',
+  'data-analysis',
+  'document-summariser',
+  'e2e-test',
+  'financial-analysis',
+  'gdsr-assessment',
+  'infringement-review',
+  'meeting-analyser',
+  'nolia',
+  'nzsba-policy-builder',
+  'policy-drafter',
+  'policy-reviewer',
+  'procurement-rfp-assessment',
+  'rfp-response-comparison',
+  'tor-assessment',
 ]
 
 export default function UpdateClientConfig() {
@@ -36,9 +57,12 @@ export default function UpdateClientConfig() {
   const [pipedream, setPipedream] = useState<boolean>(false)
   const [agents, setAgents] = useState<boolean>(false)
   const [devInstance, setDevInstance] = useState<boolean>(false)
+  const [customDomain, setCustomDomain] = useState<string>('')
   const [allowQuotaSharing, setAllowQuotaSharing] = useState<boolean>(false)
+  const [bedrockAccount, setBedrockAccount] = useState<string>('')
   const [provisionQResources, setProvisionQResources] = useState<boolean>(false)
   const [preferredKnowledgeBase, setPreferredKnowledgeBase] = useState<'q' | 'bedrock'>(defaults.preferredKnowledgeBase)
+  const [brandingProviderEnabled, setBrandingProviderEnabled] = useState<boolean>(false)
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES))
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES))
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -89,9 +113,12 @@ export default function UpdateClientConfig() {
     const ag = (cfg as unknown as Record<string, unknown>)['agents']
     setAgents(Boolean(ag))
     setDevInstance(Boolean(cfg.devInstance))
+    setCustomDomain(cfg.customDomain || '')
     setAllowQuotaSharing(Boolean(cfg.allowBedrockQuotaSharing))
+    setBedrockAccount(cfg.bedrockAccount || '')
     setProvisionQResources(Boolean((cfg as any).provisionQResources))
     setPreferredKnowledgeBase(((cfg as any).preferredKnowledgeBase as 'q' | 'bedrock') || defaults.preferredKnowledgeBase)
+    setBrandingProviderEnabled(Boolean((cfg as any).brandingProviderEnabled))
     const groups = (cfg as unknown as Record<string, unknown>)['groups'] as { admin?: string[]; standard?: string[] } | undefined
     const adminList = (groups?.admin && groups.admin.length > 0) ? groups.admin : DEFAULT_ADMIN_FEATURES
     const standardList = (groups?.standard && groups.standard.length > 0) ? groups.standard : DEFAULT_STANDARD_FEATURES
@@ -106,9 +133,12 @@ export default function UpdateClientConfig() {
       allApps: (current as any)?.allApps ?? false,
       apps: current?.apps,
       devInstance: current?.devInstance ?? defaults.devInstance,
+      customDomain: current?.customDomain ?? '',
       allowBedrockQuotaSharing: current?.allowBedrockQuotaSharing ?? defaults.allowBedrockQuotaSharing,
+      bedrockAccount: current?.bedrockAccount ?? '',
       pipedreamIntegrations: current?.pipedreamIntegrations ?? false,
       agents: (current as any)?.agents ?? false,
+      brandingProviderEnabled: (current as any)?.brandingProviderEnabled ?? defaults.brandingProviderEnabled,
       provisionQResources: (current as any)?.provisionQResources ?? defaults.provisionQResources,
       preferredKnowledgeBase: ((current as any)?.preferredKnowledgeBase as 'q' | 'bedrock') ?? defaults.preferredKnowledgeBase,
     }
@@ -124,7 +154,7 @@ export default function UpdateClientConfig() {
 
     // Only include apps when explicitly selecting specific apps
     if (!allApps && !allProdApps && selectedApps.length > 0) {
-      updates.apps = Object.fromEntries(selectedApps.map(a => [a, { enabled: true }])) as Record<string, { enabled?: boolean }>
+      updates.apps = Object.fromEntries(selectedApps.map(a => [a, {}]))
     }
 
     // Only include pipedreamIntegrations if changed
@@ -135,7 +165,24 @@ export default function UpdateClientConfig() {
 
     // Only include other flags if changed vs effective current
     if (eff.devInstance !== devInstance) updates.devInstance = devInstance
+    if (eff.customDomain !== customDomain.trim()) {
+      if (customDomain.trim()) {
+        updates.customDomain = customDomain.trim()
+      } else if (current?.customDomain) {
+        // Remove customDomain if it was set but now cleared
+        updates.customDomain = undefined as any
+      }
+    }
     if (eff.allowBedrockQuotaSharing !== allowQuotaSharing) updates.allowBedrockQuotaSharing = allowQuotaSharing
+    if (eff.bedrockAccount !== bedrockAccount.trim()) {
+      if (bedrockAccount.trim()) {
+        updates.bedrockAccount = bedrockAccount.trim()
+      } else if (current?.bedrockAccount) {
+        // Remove bedrockAccount if it was set but now cleared
+        updates.bedrockAccount = undefined as any
+      }
+    }
+    if (eff.brandingProviderEnabled !== brandingProviderEnabled) updates.brandingProviderEnabled = brandingProviderEnabled
 
     // Ensure these new fields are written even if default and currently missing
     if ((current as any)?.provisionQResources === undefined) {
@@ -235,6 +282,20 @@ export default function UpdateClientConfig() {
                   </Col>
                 </Row>
 
+                {/* Custom Domain Row */}
+                <Row className="mb-4">
+                  <Col md={12}>
+                    <ConfigField
+                      label="Custom Domain"
+                      value={customDomain}
+                      defaultValue=""
+                      onChange={setCustomDomain}
+                      type="text"
+                      helpText="Custom domain name (e.g., acme.numa.arcanum.ai). Leave empty for auto-generated domain based on client name."
+                    />
+                  </Col>
+                </Row>
+
                 {/* App Configuration Row */}
                 <Row className="mb-4">
                   <Col md={6}>
@@ -260,7 +321,7 @@ export default function UpdateClientConfig() {
                         <Form.Group className="mt-3">
                           <Form.Label className="small">Select Specific Apps</Form.Label>
                           <div className="d-flex flex-column gap-1">
-                            {PROD_APPS.map(a => (
+                            {ALL_APPS.map(a => (
                               <Form.Check
                                 key={a}
                                 type="checkbox"
@@ -301,12 +362,28 @@ export default function UpdateClientConfig() {
                       helpText="Enable Agents UI and related functionality"
                     />
                     <ConfigField
-                      label="Bedrock Quota Sharing"
+                      label="Allow Bedrock Quota Sharing"
                       value={allowQuotaSharing}
                       defaultValue={defaults.allowBedrockQuotaSharing}
                       onChange={setAllowQuotaSharing}
                       type="switch"
-                      helpText="Allow shared Bedrock quotas across accounts"
+                      helpText="When enabled, OTHER Numa accounts can use THIS account's Bedrock quotas"
+                    />
+                    <ConfigField
+                      label="Bedrock Account"
+                      value={bedrockAccount}
+                      defaultValue=""
+                      onChange={setBedrockAccount}
+                      type="text"
+                      helpText="AWS account ID that THIS account will use for Bedrock quotas (instead of its own). Leave empty to use this account's own quota."
+                    />
+                    <ConfigField
+                      label="Branding Provider"
+                      value={brandingProviderEnabled}
+                      defaultValue={defaults.brandingProviderEnabled}
+                      onChange={setBrandingProviderEnabled}
+                      type="switch"
+                      helpText="Enable custom branding UI and runtime asset loading"
                     />
                     <ConfigField
                       label="Provision Q Resources"
