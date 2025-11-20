@@ -1,10 +1,13 @@
 import { z } from 'zod'
 
-// Base app configuration schema
+// Base app configuration schema (matching userConfigurableBaseNumaAppPropsSchema from infrastructure)
 const baseAppConfigSchema = z.object({
-  enabled: z.boolean().optional(),
-  // Add other app-specific config fields as needed
-})
+  enableJobs: z.boolean().optional(),
+  urlPathPrefix: z.string().optional(),
+  s3KeyPrefix: z.string().optional(),
+  senderEmail: z.string().optional(),
+  receiverEmails: z.array(z.string()).optional(),
+}).strict()
 
 // Data source configuration schemas
 const webCrawlerConfigSchema = z.object({
@@ -77,6 +80,7 @@ export const clientConfigSchema = z.object({
   allowBedrockQuotaSharing: z.boolean().optional(), // default: false
   pipedreamIntegrations: z.boolean().optional(), // default: false
   agents: z.boolean().optional(), // default: false
+  brandingProviderEnabled: z.boolean().optional(), // default: false
 
   // Data source configurations
   webCrawlerConfigs: z.array(webCrawlerConfigSchema).optional(),
@@ -110,7 +114,9 @@ export const getDefaultClientConfigValues = () => ({
   visionModelType: 'haiku' as const,
   numaChatAgents: true,
   allowBedrockQuotaSharing: false,
+  pipedreamIntegrations: false,
   agents: false,
+  brandingProviderEnabled: false,
 })
 
 // Helper to check if a config value differs from default

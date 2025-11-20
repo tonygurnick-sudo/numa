@@ -12,8 +12,29 @@ const REGION_OPTIONS = [
   { label: 'Asia Pacific (Sydney) ap-southeast-2', value: 'ap-southeast-2' },
 ]
 
-const PROD_APPS = [
-  'beyond-expectations','candidate-screening','company-profile','contract-analysis','costing-calculator','council-resource-consents','document-summariser','financial-analysis','gdsr-assessment','infringement-review','tor-assessment','meeting-analyser','nzsba-policy-builder','policy-drafter','policy-reviewer','procurement-rfp-assessment','rfp-response-comparison','e2e-test-numa-app'
+// All apps from infrastructure appLibrary + devAppLibrary (sorted alphabetically)
+// Matches infra/stacks/numa-client-stack.ts appLibrary and devAppLibrary
+const ALL_APPS = [
+  'beyond-expectations',
+  'candidate-screening',
+  'company-profile',
+  'contract-analysis',
+  'council-recourse-consents',
+  'costing-calculator',
+  'data-analysis',
+  'document-summariser',
+  'e2e-test',
+  'financial-analysis',
+  'gdsr-assessment',
+  'infringement-review',
+  'meeting-analyser',
+  'nolia',
+  'nzsba-policy-builder',
+  'policy-drafter',
+  'policy-reviewer',
+  'procurement-rfp-assessment',
+  'rfp-response-comparison',
+  'tor-assessment',
 ]
 
 export default function CreateClientConfig() {
@@ -28,10 +49,13 @@ export default function CreateClientConfig() {
   const [selectedApps, setSelectedApps] = useState<string[]>([])
   const [pipedream, setPipedream] = useState(false) // default: false, not in defaults helper
   const [devInstance, setDevInstance] = useState(defaults.devInstance)
+  const [customDomain, setCustomDomain] = useState('')
   const [allowQuotaSharing, setAllowQuotaSharing] = useState(defaults.allowBedrockQuotaSharing)
+  const [bedrockAccount, setBedrockAccount] = useState('')
   const [provisionQResources, setProvisionQResources] = useState(defaults.provisionQResources)
   const [preferredKnowledgeBase, setPreferredKnowledgeBase] = useState<"q" | "bedrock">(defaults.preferredKnowledgeBase)
   const [agents, setAgents] = useState(defaults.agents)
+  const [brandingProviderEnabled, setBrandingProviderEnabled] = useState(defaults.brandingProviderEnabled)
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES))
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES))
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -70,7 +94,9 @@ export default function CreateClientConfig() {
     }
 
     if (devInstance !== defaults.devInstance) minimal['devInstance'] = devInstance
+    if (customDomain && customDomain.trim()) minimal['customDomain'] = customDomain.trim()
     if (allowQuotaSharing !== defaults.allowBedrockQuotaSharing) minimal['allowBedrockQuotaSharing'] = allowQuotaSharing
+    if (bedrockAccount && bedrockAccount.trim()) minimal['bedrockAccount'] = bedrockAccount.trim()
     if (allApps) {
       minimal['allApps'] = true
     } else if (allProdApps !== defaults.allProdApps) {
@@ -78,10 +104,11 @@ export default function CreateClientConfig() {
     }
 
     if (!allProdApps && selectedApps.length > 0) {
-      minimal['apps'] = Object.fromEntries(selectedApps.map(a => [a, { enabled: true }])) as Record<string, { enabled?: boolean }>
+      minimal['apps'] = Object.fromEntries(selectedApps.map(a => [a, {}]))
     }
     if (pipedream) minimal['pipedreamIntegrations'] = true
     if (agents) minimal['agents'] = true
+    if (brandingProviderEnabled !== defaults.brandingProviderEnabled) minimal['brandingProviderEnabled'] = brandingProviderEnabled
 
     // Always include these two fields so defaults are written explicitly
     minimal['provisionQResources'] = provisionQResources
@@ -176,6 +203,20 @@ export default function CreateClientConfig() {
               </Col>
             </Row>
 
+            {/* Custom Domain Row */}
+            <Row className="mb-4">
+              <Col md={12}>
+                <ConfigField
+                  label="Custom Domain"
+                  value={customDomain}
+                  defaultValue=""
+                  onChange={setCustomDomain}
+                  type="text"
+                  helpText="Custom domain name (e.g., acme.numa.arcanum.ai). Leave empty for auto-generated domain based on client name."
+                />
+              </Col>
+            </Row>
+
             {/* App Configuration Row */}
             <Row className="mb-4">
               <Col md={6}>
@@ -201,7 +242,7 @@ export default function CreateClientConfig() {
                     <Form.Group className="mt-3">
                       <Form.Label className="small">Select Specific Apps</Form.Label>
                       <div className="d-flex flex-column gap-1">
-                        {PROD_APPS.map(a => (
+                        {ALL_APPS.map(a => (
                           <Form.Check
                             key={a}
                             type="checkbox"
@@ -242,12 +283,28 @@ export default function CreateClientConfig() {
                   helpText="Enable Agents UI and related functionality"
                 />
                 <ConfigField
-                  label="Bedrock Quota Sharing"
+                  label="Allow Bedrock Quota Sharing"
                   value={allowQuotaSharing}
                   defaultValue={defaults.allowBedrockQuotaSharing}
                   onChange={setAllowQuotaSharing}
                   type="switch"
-                  helpText="Allow shared Bedrock quotas across accounts"
+                  helpText="When enabled, OTHER Numa accounts can use THIS account's Bedrock quotas"
+                />
+                <ConfigField
+                  label="Bedrock Account"
+                  value={bedrockAccount}
+                  defaultValue=""
+                  onChange={setBedrockAccount}
+                  type="text"
+                  helpText="AWS account ID that THIS account will use for Bedrock quotas (instead of its own). Leave empty to use this account's own quota."
+                />
+                <ConfigField
+                  label="Branding Provider"
+                  value={brandingProviderEnabled}
+                  defaultValue={defaults.brandingProviderEnabled}
+                  onChange={setBrandingProviderEnabled}
+                  type="switch"
+                  helpText="Enable custom branding UI and runtime asset loading"
                 />
                 <ConfigField
                   label="Provision Q Resources"

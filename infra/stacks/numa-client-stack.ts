@@ -23,6 +23,7 @@ import { CouncilResourceConsents } from '../constructs/apps/council-resource-con
 import { DataAnalysis } from '../constructs/apps/data-analysis-construct';
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
 import { FinancialAnalysis } from '../constructs/apps/financial-analysis-construct';
+import { Nolia } from '../constructs/apps/nolia-construct';
 import { GdsrAssessment } from '../constructs/apps/gdsr-assessment-construct';
 import { InfringementReview } from '../constructs/apps/infringement-review-construct';
 import { TorAssessment } from '../constructs/apps/tor-assessment-construct';
@@ -620,6 +621,7 @@ export const appLibrary: Record<string, AppDefinition> = {
   'infringement-review': { app: InfringementReview, isProdApp: false },
   'tor-assessment': { app: TorAssessment, isProdApp: false },
   'meeting-analyser': { app: MeetingAnalyser, isProdApp: true },
+  nolia: { app: Nolia, isProdApp: false },
   'nzsba-policy-builder': { app: NZSBAPolicyBuilder, isProdApp: false },
   'policy-drafter': { app: PolicyDrafter, isProdApp: true },
   'policy-reviewer': { app: PolicyReviewer, isProdApp: true },

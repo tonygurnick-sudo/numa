@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Col, Row } from 'react-bootstrap'
+import { Button, Col, Modal, Row } from 'react-bootstrap'
 import {
   BoxSeam,
   FileEarmarkText,
@@ -8,12 +8,14 @@ import {
   BarChart,
   Globe,
   Plus,
-  FileText
+  FileText,
+  Download
 } from 'react-bootstrap-icons'
-import { Client } from '@/types'
+import { Client, getDefaultClientConfigValues } from '@/types'
 import { clientService } from '@/services/clientService'
 import { listAllRecentDeployments, type DeploymentRecord } from '@/services/deploymentService'
 import { getConfigValue } from '@/services/configService'
+import { FileExportService } from '@/utils/fileExport'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
 import { WorkflowHub } from '@/components/dashboard/WorkflowHub'
@@ -27,6 +29,8 @@ export default function Dashboard() {
   const [deployments, setDeployments] = useState<DeploymentRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv')
   const deploymentsTable = getConfigValue('DEPLOYMENTS_TABLE')
 
   useEffect(() => {
@@ -83,6 +87,137 @@ export default function Dashboard() {
   const successfulDeployments = lastWeekDeployments.filter(d => d.status === 'success').length
   const totalLastWeekDeployments = lastWeekDeployments.length
   const successRate = totalLastWeekDeployments > 0 ? Math.round((successfulDeployments / totalLastWeekDeployments) * 100) : 0
+
+  // Helper function to merge config with defaults
+  const mergeConfigWithDefaults = (config: any): any => {
+    const defaults = getDefaultClientConfigValues()
+    return {
+      ...defaults,
+      ...Object.fromEntries(
+        Object.entries(config).filter(([_, v]) => v !== undefined && v !== null && v !== '')
+      )
+    }
+  }
+
+  // Unified export function
+  const performExport = async (format: 'csv' | 'json', withDefaults: boolean) => {
+    try {
+      // Group deployments by client (deployments already loaded in state)
+      const deploymentsByClient = new Map()
+      deployments.forEach(deploy => {
+        if (!deploy.clientName) return
+        const list = deploymentsByClient.get(deploy.clientName) || []
+        list.push(deploy)
+        deploymentsByClient.set(deploy.clientName, list)
+      })
+
+      // Enrich clients with deployment data and optionally merge with defaults
+      const enrichedClients = clients.map(client => {
+        const clientDeployments = deploymentsByClient.get(client.name) || []
+        const lastDeploy = clientDeployments[0] // Already sorted by most recent
+
+        const config = withDefaults ? mergeConfigWithDefaults(client.config) : client.config
+
+        return {
+          ...client,
+          config,
+          lastDeployment: lastDeploy ? {
+            timestamp: lastDeploy.startedAt || lastDeploy.startTime || '',
+            imageTag: lastDeploy.imageTag || '',
+            status: (lastDeploy.status === 'success' || lastDeploy.status === 'failed' || lastDeploy.status === 'running')
+              ? lastDeploy.status
+              : 'running',
+            deploymentId: lastDeploy.deploymentId
+          } : client.lastDeployment,
+          deploymentCount: clientDeployments.length
+        }
+      })
+
+      if (format === 'csv') {
+        // Prepare CSV data
+        const exportData = enrichedClients.map(client => ({
+      name: client.name,
+      status: client.status,
+      deploymentCount: client.deploymentCount,
+      clientAccountId: client.config.clientAccountId,
+      region: client.config.region,
+      devInstance: client.config.devInstance,
+      customDomain: client.config.customDomain,
+      qBusinessRegion: client.config.qBusinessRegion,
+      provisionQResources: client.config.provisionQResources,
+      allApps: client.config.allApps,
+      allProdApps: client.config.allProdApps,
+      apps: JSON.stringify(client.config.apps || {}),
+      preferredKnowledgeBase: client.config.preferredKnowledgeBase,
+      embeddingModel: client.config.embeddingModel,
+      bedrockParserModel: client.config.bedrockParserModel,
+      visionModelType: client.config.visionModelType,
+      senderEmail: client.config.senderEmail,
+      receiverEmails: JSON.stringify(client.config.receiverEmails || []),
+      bedrockAccount: client.config.bedrockAccount,
+      numaChatAgents: client.config.numaChatAgents,
+      allowBedrockQuotaSharing: client.config.allowBedrockQuotaSharing,
+      pipedreamIntegrations: client.config.pipedreamIntegrations,
+      agents: client.config.agents,
+      brandingProviderEnabled: client.config.brandingProviderEnabled,
+      webCrawlerConfigs: JSON.stringify(client.config.webCrawlerConfigs || []),
+      sharePointConfigs: JSON.stringify(client.config.sharePointConfigs || []),
+      boxConfigs: JSON.stringify(client.config.boxConfigs || []),
+      teamsConfigs: JSON.stringify(client.config.teamsConfigs || []),
+      s3Configs: JSON.stringify(client.config.s3Configs || []),
+      budget: JSON.stringify(client.config.budget || null),
+    }))
+
+        const columns = exportData.length > 0 ? Object.keys(exportData[0]) as (keyof typeof exportData[0])[] : []
+        const csv = FileExportService.arrayToCSV(exportData, columns)
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+        const suffix = withDefaults ? '-with-defaults' : '-raw'
+        const filename = `client-configs${suffix}-${timestamp}.csv`
+
+        FileExportService.downloadFile({
+          name: filename,
+          content: csv,
+          mimeType: 'text/csv',
+          size: new Blob([csv]).size,
+        })
+      } else {
+        // JSON export
+        const exportData = enrichedClients.map(client => ({
+          name: client.name,
+          status: client.status,
+          deploymentCount: client.deploymentCount,
+          config: client.config,
+          lastDeployment: client.lastDeployment,
+        }))
+
+        const json = JSON.stringify(exportData, null, 2)
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+        const suffix = withDefaults ? '-with-defaults' : '-raw'
+        const filename = `client-configs${suffix}-${timestamp}.json`
+
+        FileExportService.downloadFile({
+          name: filename,
+          content: json,
+          mimeType: 'application/json',
+          size: new Blob([json]).size,
+        })
+      }
+    } catch (error) {
+      console.error('Export failed:', error)
+      alert('Export failed. Please try again.')
+    }
+  }
+
+  // Modal trigger handlers
+  const handleExportCSV = () => {
+    setExportFormat('csv')
+    setShowExportModal(true)
+  }
+
+  const handleExportJSON = () => {
+    setExportFormat('json')
+    setShowExportModal(true)
+  }
 
   if (loading) {
     return (
@@ -186,6 +321,18 @@ export default function Dashboard() {
                     link: '/tools/create-client-config',
                     icon: <Plus />,
                     variant: 'primary'
+                  },
+                  {
+                    label: 'CSV',
+                    onClick: handleExportCSV,
+                    icon: <Download />,
+                    variant: 'outline-success'
+                  },
+                  {
+                    label: 'JSON',
+                    onClick: handleExportJSON,
+                    icon: <Download />,
+                    variant: 'outline-info'
                   }
                 ]}
                 stats={[
@@ -234,6 +381,42 @@ export default function Dashboard() {
           <strong>Error:</strong> {error}
         </div>
       )}
+
+      {/* Export Options Modal */}
+      <Modal show={showExportModal} onHide={() => setShowExportModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Export Options</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-3">
+            Choose how you want to export the client configurations:
+          </p>
+          <div className="d-grid gap-2">
+            <Button
+              variant="outline-primary"
+              size="lg"
+              onClick={() => {
+                setShowExportModal(false)
+                performExport(exportFormat, false)
+              }}
+            >
+              <div className="fw-bold">Raw Data</div>
+              <div className="small text-muted">Export as-is with actual values only</div>
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => {
+                setShowExportModal(false)
+                performExport(exportFormat, true)
+              }}
+            >
+              <div className="fw-bold">With Default Values</div>
+              <div className="small">Populate missing fields with default values</div>
+            </Button>
+          </div>
+        </Modal.Body>
+      </Modal>
     </div>
   )
 }
