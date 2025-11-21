@@ -24,8 +24,6 @@ import {
   shouldShowLargeDataFileWarning,
   formatFileSize,
 } from '../utils/fileUtils';
-import { Breadcrumbs } from '../Components/Breadcrumbs';
-import { Nav as TopNav } from '../Components/Nav';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { FileUploader } from '../Components/FileUploader';
 import { FeatureWrapper } from '../Components/RequiredFeaturesWrapper';
@@ -1567,685 +1565,671 @@ export function KnowledgeBaseManagement(): React.JSX.Element {
    * Render the entire S3 Uploader page.
    */
   return (
-    <>
-      <TopNav />
-      <div className="dashboard knowledge-base-management">
-        {/* Header */}
-        <header className="mb-4">
-          <Container fluid>
-            <Row>
-              <Col className="px-3 px-lg-5">
-                <Breadcrumbs label="Knowledge Base" clearStack={true} />
-                <h1>Knowledge Base Management</h1>
-                <p className="small mt-2">
-                  This page allows you to manage all your knowledge sources for Numa Chat. You can view and manage web
-                  crawlers, document repositories, and database connections. Use the tabs below to filter by source type
-                  or status.
-                </p>
-              </Col>
-            </Row>
-          </Container>
-        </header>
+    <div className="dashboard knowledge-base-management">
+      {/* Header */}
+      <header className="page-header">
+        <Container fluid>
+          <Row>
+            <Col>
+              <h1 className="page-title">Knowledge Base Management</h1>
+              <p className="page-subtitle">
+                Manage all your knowledge sources for Numa Chat. Upload files, organize content, and configure access.
+              </p>
+            </Col>
+          </Row>
+        </Container>
+      </header>
 
-        <LayoutDashboard>
-          <Row className="g-4 mb-4">
-            <Col xs={12}>
-              <Card>
-                <Card.Header>
-                  <Card.Title className="mb-0">Knowledge Base Status</Card.Title>
-                </Card.Header>
-                <Card.Body className="position-relative">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleRefreshStatus}
-                    className="ms-2"
-                    style={{ float: 'right' }}
-                    disabled={kbStateLoading}
-                    data-testid="kb-status-refresh"
-                  >
-                    {kbStateLoading && <span className="spinner-border spinner-border-sm me-1" />}
-                    <div>Refresh</div>
-                  </Button>
+      <LayoutDashboard>
+        <Row className="g-4 mb-4">
+          <Col xs={12}>
+            <Card>
+              <Card.Header>
+                <Card.Title className="mb-0">Knowledge Base Status</Card.Title>
+              </Card.Header>
+              <Card.Body className="position-relative">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleRefreshStatus}
+                  className="ms-2"
+                  style={{ float: 'right' }}
+                  disabled={kbStateLoading}
+                  data-testid="kb-status-refresh"
+                >
+                  {kbStateLoading && <span className="spinner-border spinner-border-sm me-1" />}
+                  <div>Refresh</div>
+                </Button>
 
-                  {kbStateError && (
-                    <Alert variant="warning" className="mb-3">
-                      <strong>Knowledge Base Status Error:</strong> {kbStateError}
-                      <br />
-                      <small>Try refreshing or check the console for more details.</small>
-                    </Alert>
-                  )}
+                {kbStateError && (
+                  <Alert variant="warning" className="mb-3">
+                    <strong>Knowledge Base Status Error:</strong> {kbStateError}
+                    <br />
+                    <small>Try refreshing or check the console for more details.</small>
+                  </Alert>
+                )}
 
-                  <Row>
-                    <Col xs={12} md={6}>
-                      <div className="mb-2">
-                        <strong>Status:</strong>{' '}
-                        {syncStatus === 'ACTIVE' || syncStatus === 'AVAILABLE' ? (
-                          <span className="badge bg-success ms-1">
-                            {syncStatus === 'ACTIVE' ? 'ACTIVE' : 'AVAILABLE'}
-                          </span>
-                        ) : (
-                          <span className="ms-1">{syncStatus || 'Unknown'}</span>
-                        )}
-                      </div>
-
-                      {lastSuccessfulSync ? (
-                        <p className="text-muted small mb-2">
-                          <strong>Last synced at:</strong> {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
-                        </p>
+                <Row>
+                  <Col xs={12} md={6}>
+                    <div className="mb-2">
+                      <strong>Status:</strong>{' '}
+                      {syncStatus === 'ACTIVE' || syncStatus === 'AVAILABLE' ? (
+                        <span className="badge bg-success ms-1">
+                          {syncStatus === 'ACTIVE' ? 'ACTIVE' : 'AVAILABLE'}
+                        </span>
                       ) : (
-                        <p className="text-muted small mb-2">No successful sync yet.</p>
+                        <span className="ms-1">{syncStatus || 'Unknown'}</span>
                       )}
+                    </div>
 
+                    {lastSuccessfulSync ? (
                       <p className="text-muted small mb-2">
-                        <strong>Next scheduled index:</strong> {getNextSyncTime().toLocaleTimeString()}
+                        <strong>Last synced at:</strong> {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
                       </p>
+                    ) : (
+                      <p className="text-muted small mb-2">No successful sync yet.</p>
+                    )}
 
-                      {syncJobStatus === 'SYNCING' && (
-                        <Alert variant="warning" className="d-flex align-items-center">
-                          <span className="spinner-border spinner-border-sm me-2" />
-                          <strong>Indexing in progress…</strong>
-                        </Alert>
-                      )}
-                    </Col>
-                    <Col xs={12} md={6}>
-                      {syncMetrics && (
-                        <div className="text-muted small">
-                          <strong>Latest Sync Metrics:</strong>
-                          <ul className="list-unstyled">
-                            <li>
-                              Documents Added:{' '}
-                              {syncMetrics.documentsAdded || syncMetrics.numberOfNewDocumentsIndexed || 0}
-                            </li>
-                            <li>
-                              Documents Deleted:{' '}
-                              {syncMetrics.documentsDeleted || syncMetrics.numberOfDocumentsDeleted || 0}
-                            </li>
-                            <li>
-                              Documents Failed:{' '}
-                              {syncMetrics.documentsFailed || syncMetrics.numberOfDocumentsFailed || 0}
-                            </li>
-                            <li>
-                              Documents Modified:{' '}
-                              {syncMetrics.documentsModified || syncMetrics.numberOfModifiedDocumentsIndexed || 0}
-                            </li>
-                            <li>
-                              Documents Scanned:{' '}
-                              {syncMetrics.documentsScanned || syncMetrics.numberOfDocumentsScanned || 0}
-                            </li>
-                          </ul>
-                        </div>
-                      )}
-                    </Col>
-                  </Row>
-                </Card.Body>
-              </Card>
-            </Col>
-          </Row>
+                    <p className="text-muted small mb-2">
+                      <strong>Next scheduled index:</strong> {getNextSyncTime().toLocaleTimeString()}
+                    </p>
 
-          {/* User Knowledge Bases Section */}
-          <Row className="g-4 mb-4">
-            <Col xs={12}>
-              <Card>
-                <Card.Header className="d-flex justify-content-between align-items-center">
-                  <Card.Title className="mb-0">Your Knowledge Bases</Card.Title>
-                  <Button variant="primary" size="sm" onClick={() => setShowCreateKBModal(true)}>
-                    <i className="bi bi-plus-circle me-2"></i>
-                    Create New KB
-                  </Button>
-                </Card.Header>
-                <Card.Body>
-                  <p className="small text-muted mb-3">
-                    Manage your personal knowledge bases. Create separate KBs for different projects or teams, and
-                    control who can view and edit them.
-                  </p>
-                  <ManageKBsTable refreshKey={kbManagementRefreshKey} />
-                </Card.Body>
-              </Card>
-            </Col>
-          </Row>
-
-          {/* Data Sources Section */}
-          <Row className="g-4 mb-4">
-            <Col xs={12}>
-              <Card>
-                <Card.Header>
-                  <Card.Title className="mb-0">Data Sources</Card.Title>
-                </Card.Header>
-                <Card.Body>
-                  {kbStateLoading ? (
-                    <div className="text-center p-4">
-                      <div className="spinner-border text-primary">
-                        <span className="visually-hidden">Loading…</span>
+                    {syncJobStatus === 'SYNCING' && (
+                      <Alert variant="warning" className="d-flex align-items-center">
+                        <span className="spinner-border spinner-border-sm me-2" />
+                        <strong>Indexing in progress…</strong>
+                      </Alert>
+                    )}
+                  </Col>
+                  <Col xs={12} md={6}>
+                    {syncMetrics && (
+                      <div className="text-muted small">
+                        <strong>Latest Sync Metrics:</strong>
+                        <ul className="list-unstyled">
+                          <li>
+                            Documents Added:{' '}
+                            {syncMetrics.documentsAdded || syncMetrics.numberOfNewDocumentsIndexed || 0}
+                          </li>
+                          <li>
+                            Documents Deleted:{' '}
+                            {syncMetrics.documentsDeleted || syncMetrics.numberOfDocumentsDeleted || 0}
+                          </li>
+                          <li>
+                            Documents Failed: {syncMetrics.documentsFailed || syncMetrics.numberOfDocumentsFailed || 0}
+                          </li>
+                          <li>
+                            Documents Modified:{' '}
+                            {syncMetrics.documentsModified || syncMetrics.numberOfModifiedDocumentsIndexed || 0}
+                          </li>
+                          <li>
+                            Documents Scanned:{' '}
+                            {syncMetrics.documentsScanned || syncMetrics.numberOfDocumentsScanned || 0}
+                          </li>
+                        </ul>
                       </div>
-                      <p className="mt-3 text-muted small mb-0">Loading data sources...</p>
+                    )}
+                  </Col>
+                </Row>
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+
+        {/* User Knowledge Bases Section */}
+        <Row className="g-4 mb-4">
+          <Col xs={12}>
+            <Card>
+              <Card.Header className="d-flex justify-content-between align-items-center">
+                <Card.Title className="mb-0">Your Knowledge Bases</Card.Title>
+                <Button variant="primary" size="sm" onClick={() => setShowCreateKBModal(true)}>
+                  <i className="bi bi-plus-circle me-2"></i>
+                  Create New KB
+                </Button>
+              </Card.Header>
+              <Card.Body>
+                <p className="small text-muted mb-3">
+                  Manage your personal knowledge bases. Create separate KBs for different projects or teams, and control
+                  who can view and edit them.
+                </p>
+                <ManageKBsTable refreshKey={kbManagementRefreshKey} />
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+
+        {/* Data Sources Section */}
+        <Row className="g-4 mb-4">
+          <Col xs={12}>
+            <Card>
+              <Card.Header>
+                <Card.Title className="mb-0">Data Sources</Card.Title>
+              </Card.Header>
+              <Card.Body>
+                {kbStateLoading ? (
+                  <div className="text-center p-4">
+                    <div className="spinner-border text-primary">
+                      <span className="visually-hidden">Loading…</span>
                     </div>
-                  ) : dataSources.length === 0 ? (
-                    <div className="text-center bg-light rounded p-4">
-                      <p className="mb-0 text-muted">No data sources found</p>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Search and Filter Controls */}
-                      <div className="mb-3">
-                        <Row>
-                          <Col md={12} lg={12}>
-                            <Tabs
-                              activeKey={activeCategory}
-                              onSelect={(k) => setActiveCategory(k)}
-                              className="mb-0 nav-tabs-sm"
-                            >
-                              <Tab eventKey="all" title="All" />
-                              {dataSourcesByType.web.length > 0 && (
-                                <Tab
-                                  eventKey="web"
-                                  title={
-                                    <>
-                                      <i className="bi bi-globe2 me-1"></i>
-                                      Web <Badge bg="secondary">{dataSourcesByType.web.length}</Badge>
-                                    </>
-                                  }
-                                />
-                              )}
-                              {dataSourcesByType.document.length > 0 && (
-                                <Tab
-                                  eventKey="document"
-                                  title={
-                                    <>
-                                      <i className="bi bi-file-earmark me-1"></i>
-                                      Documents <Badge bg="secondary">{dataSourcesByType.document.length}</Badge>
-                                    </>
-                                  }
-                                />
-                              )}
-                              {dataSourcesByType.database.length > 0 && (
-                                <Tab
-                                  eventKey="database"
-                                  title={
-                                    <>
-                                      <i className="bi bi-database me-1"></i>
-                                      Database <Badge bg="secondary">{dataSourcesByType.database.length}</Badge>
-                                    </>
-                                  }
-                                />
-                              )}
+                    <p className="mt-3 text-muted small mb-0">Loading data sources...</p>
+                  </div>
+                ) : dataSources.length === 0 ? (
+                  <div className="text-center bg-light rounded p-4">
+                    <p className="mb-0 text-muted">No data sources found</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Search and Filter Controls */}
+                    <div className="mb-3">
+                      <Row>
+                        <Col md={12} lg={12}>
+                          <Tabs
+                            activeKey={activeCategory}
+                            onSelect={(k) => setActiveCategory(k)}
+                            className="mb-0 nav-tabs-sm"
+                          >
+                            <Tab eventKey="all" title="All" />
+                            {dataSourcesByType.web.length > 0 && (
                               <Tab
-                                eventKey="active"
+                                eventKey="web"
                                 title={
                                   <>
-                                    <i className="bi bi-check-circle me-1"></i>
-                                    Active
+                                    <i className="bi bi-globe2 me-1"></i>
+                                    Web <Badge bg="secondary">{dataSourcesByType.web.length}</Badge>
                                   </>
                                 }
                               />
-                            </Tabs>
-                          </Col>
-                        </Row>
-                      </div>
+                            )}
+                            {dataSourcesByType.document.length > 0 && (
+                              <Tab
+                                eventKey="document"
+                                title={
+                                  <>
+                                    <i className="bi bi-file-earmark me-1"></i>
+                                    Documents <Badge bg="secondary">{dataSourcesByType.document.length}</Badge>
+                                  </>
+                                }
+                              />
+                            )}
+                            {dataSourcesByType.database.length > 0 && (
+                              <Tab
+                                eventKey="database"
+                                title={
+                                  <>
+                                    <i className="bi bi-database me-1"></i>
+                                    Database <Badge bg="secondary">{dataSourcesByType.database.length}</Badge>
+                                  </>
+                                }
+                              />
+                            )}
+                            <Tab
+                              eventKey="active"
+                              title={
+                                <>
+                                  <i className="bi bi-check-circle me-1"></i>
+                                  Active
+                                </>
+                              }
+                            />
+                          </Tabs>
+                        </Col>
+                      </Row>
+                    </div>
 
-                      <div className="file-table-container scrollable">
+                    <div className="file-table-container scrollable">
+                      <Table hover className="mb-0 file-table auto-layout">
+                        <thead className="sticky-table-header numa-table-header">
+                          <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Details</th>
+                          </tr>
+                        </thead>
+                      </Table>
+                      <div className="table-body-container">
                         <Table hover className="mb-0 file-table auto-layout">
-                          <thead className="sticky-table-header numa-table-header">
-                            <tr>
-                              <th>Name</th>
-                              <th>Type</th>
-                              <th>Status</th>
-                              <th>Details</th>
-                            </tr>
-                          </thead>
-                        </Table>
-                        <div className="table-body-container">
-                          <Table hover className="mb-0 file-table auto-layout">
-                            <tbody>
-                              {filteredDataSources.length === 0 ? (
-                                <tr>
-                                  <td colSpan={4} className="text-center py-3">
-                                    No matching data sources found
-                                  </td>
-                                </tr>
-                              ) : (
-                                filteredDataSources.flatMap((dataSource, index) => {
-                                  const id = dataSource.dataSourceId || index.toString();
-                                  const isExpanded = expandedItems.includes(id);
-                                  const lastUpdated = dataSource.lastSynced || dataSource.lastUpdated;
+                          <tbody>
+                            {filteredDataSources.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="text-center py-3">
+                                  No matching data sources found
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredDataSources.flatMap((dataSource, index) => {
+                                const id = dataSource.dataSourceId || index.toString();
+                                const isExpanded = expandedItems.includes(id);
+                                const lastUpdated = dataSource.lastSynced || dataSource.lastUpdated;
 
-                                  const rows = [];
+                                const rows = [];
 
-                                  // Main data source row
+                                // Main data source row
+                                rows.push(
+                                  <tr key={id}>
+                                    <td>
+                                      <div className="d-flex align-items-center">
+                                        <i className={`${getSourceIcon(dataSource)} me-2 text-primary`}></i>
+                                        {formatDataSourceName(dataSource.displayName || dataSource.name, CLIENT_NAME)}
+                                      </div>
+                                    </td>
+                                    <td>{formatDataSourceType(dataSource.type, dataSource.source)}</td>
+                                    <td>
+                                      <span className={`badge bg-${getDataSourceStatusVariant(dataSource.status)}`}>
+                                        {dataSource.status || 'Unknown'}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <Button variant="link" size="sm" className="p-0" onClick={() => toggleExpand(id)}>
+                                        {isExpanded ? (
+                                          <i className="bi bi-chevron-up"></i>
+                                        ) : (
+                                          <i className="bi bi-chevron-down"></i>
+                                        )}
+                                      </Button>
+                                    </td>
+                                  </tr>,
+                                );
+
+                                // If expanded, add the details row immediately after
+                                if (isExpanded) {
                                   rows.push(
-                                    <tr key={id}>
-                                      <td>
-                                        <div className="d-flex align-items-center">
-                                          <i className={`${getSourceIcon(dataSource)} me-2 text-primary`}></i>
-                                          {formatDataSourceName(dataSource.displayName || dataSource.name, CLIENT_NAME)}
-                                        </div>
-                                      </td>
-                                      <td>{formatDataSourceType(dataSource.type, dataSource.source)}</td>
-                                      <td>
-                                        <span className={`badge bg-${getDataSourceStatusVariant(dataSource.status)}`}>
-                                          {dataSource.status || 'Unknown'}
-                                        </span>
-                                      </td>
-                                      <td>
-                                        <Button
-                                          variant="link"
-                                          size="sm"
-                                          className="p-0"
-                                          onClick={() => toggleExpand(id)}
-                                        >
-                                          {isExpanded ? (
-                                            <i className="bi bi-chevron-up"></i>
-                                          ) : (
-                                            <i className="bi bi-chevron-down"></i>
+                                    <tr key={`details-${id}`} className="table-light">
+                                      <td colSpan={4} className="p-3">
+                                        <div className="row">
+                                          <div className="col-md-6 mb-2">
+                                            <strong>ID:</strong> {dataSource.dataSourceId || 'N/A'}
+                                          </div>
+                                          {dataSource.pageCount && (
+                                            <div className="col-md-6 mb-2">
+                                              <strong>Pages:</strong> {dataSource.pageCount}
+                                            </div>
                                           )}
-                                        </Button>
+                                          {dataSource.isWebCrawler && (
+                                            <div className="col-md-6 mb-2">
+                                              <strong>URL:</strong>{' '}
+                                              {dataSource.url ||
+                                                (dataSource.dataSourceId &&
+                                                dataSource.dataSourceId.startsWith('web-crawler-')
+                                                  ? `${dataSource.dataSourceId.replace('web-crawler-', '')}`
+                                                  : 'N/A')}
+                                            </div>
+                                          )}
+                                          {dataSource.isWebCrawler && dataSource.lastCrawled && (
+                                            <div className="col-md-6 mb-2">
+                                              <strong>Last Crawled:</strong>{' '}
+                                              {new Date(dataSource.lastCrawled).toLocaleString('en-NZ')}
+                                            </div>
+                                          )}
+                                          {!dataSource.isWebCrawler && lastUpdated && (
+                                            <div className="col-md-6 mb-2">
+                                              <strong>Last Synced:</strong>{' '}
+                                              {new Date(lastUpdated).toLocaleString('en-NZ')}
+                                            </div>
+                                          )}
+                                          {dataSource.description && (
+                                            <div className="col-12 mb-2">
+                                              <strong>Description:</strong> {dataSource.description}
+                                            </div>
+                                          )}
+                                        </div>
                                       </td>
                                     </tr>,
                                   );
+                                }
 
-                                  // If expanded, add the details row immediately after
-                                  if (isExpanded) {
-                                    rows.push(
-                                      <tr key={`details-${id}`} className="table-light">
-                                        <td colSpan={4} className="p-3">
-                                          <div className="row">
-                                            <div className="col-md-6 mb-2">
-                                              <strong>ID:</strong> {dataSource.dataSourceId || 'N/A'}
-                                            </div>
-                                            {dataSource.pageCount && (
-                                              <div className="col-md-6 mb-2">
-                                                <strong>Pages:</strong> {dataSource.pageCount}
-                                              </div>
-                                            )}
-                                            {dataSource.isWebCrawler && (
-                                              <div className="col-md-6 mb-2">
-                                                <strong>URL:</strong>{' '}
-                                                {dataSource.url ||
-                                                  (dataSource.dataSourceId &&
-                                                  dataSource.dataSourceId.startsWith('web-crawler-')
-                                                    ? `${dataSource.dataSourceId.replace('web-crawler-', '')}`
-                                                    : 'N/A')}
-                                              </div>
-                                            )}
-                                            {dataSource.isWebCrawler && dataSource.lastCrawled && (
-                                              <div className="col-md-6 mb-2">
-                                                <strong>Last Crawled:</strong>{' '}
-                                                {new Date(dataSource.lastCrawled).toLocaleString('en-NZ')}
-                                              </div>
-                                            )}
-                                            {!dataSource.isWebCrawler && lastUpdated && (
-                                              <div className="col-md-6 mb-2">
-                                                <strong>Last Synced:</strong>{' '}
-                                                {new Date(lastUpdated).toLocaleString('en-NZ')}
-                                              </div>
-                                            )}
-                                            {dataSource.description && (
-                                              <div className="col-12 mb-2">
-                                                <strong>Description:</strong> {dataSource.description}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </td>
-                                      </tr>,
-                                    );
-                                  }
-
-                                  return rows;
-                                })
-                              )}
-                            </tbody>
-                          </Table>
-                        </div>
+                                return rows;
+                              })
+                            )}
+                          </tbody>
+                        </Table>
                       </div>
+                    </div>
 
-                      {/* Accordion for Mobile View */}
-                      <div className="d-md-none mt-3">
-                        <Accordion>
-                          {filteredDataSources.map((dataSource, index) => {
-                            const lastUpdated = dataSource.lastSynced || dataSource.lastUpdated;
-                            return (
-                              <Accordion.Item key={dataSource.dataSourceId || index} eventKey={index.toString()}>
-                                <Accordion.Header>
-                                  <div className="d-flex align-items-center">
-                                    <i className={`${getSourceIcon(dataSource)} me-2 text-primary`}></i>
-                                    <span className="me-2">
-                                      {formatDataSourceName(dataSource.displayName || dataSource.name, CLIENT_NAME)}
-                                    </span>
-                                    <span
-                                      className={`badge bg-${getDataSourceStatusVariant(dataSource.status)} ms-auto`}
-                                    >
-                                      {dataSource.status || 'Unknown'}
-                                    </span>
-                                  </div>
-                                </Accordion.Header>
-                                <Accordion.Body>
+                    {/* Accordion for Mobile View */}
+                    <div className="d-md-none mt-3">
+                      <Accordion>
+                        {filteredDataSources.map((dataSource, index) => {
+                          const lastUpdated = dataSource.lastSynced || dataSource.lastUpdated;
+                          return (
+                            <Accordion.Item key={dataSource.dataSourceId || index} eventKey={index.toString()}>
+                              <Accordion.Header>
+                                <div className="d-flex align-items-center">
+                                  <i className={`${getSourceIcon(dataSource)} me-2 text-primary`}></i>
+                                  <span className="me-2">
+                                    {formatDataSourceName(dataSource.displayName || dataSource.name, CLIENT_NAME)}
+                                  </span>
+                                  <span className={`badge bg-${getDataSourceStatusVariant(dataSource.status)} ms-auto`}>
+                                    {dataSource.status || 'Unknown'}
+                                  </span>
+                                </div>
+                              </Accordion.Header>
+                              <Accordion.Body>
+                                <div className="mb-2">
+                                  <strong>Type:</strong> {dataSource.type || 'Unknown'}
+                                </div>
+                                {dataSource.dataSourceId && (
                                   <div className="mb-2">
-                                    <strong>Type:</strong> {dataSource.type || 'Unknown'}
+                                    <strong>ID:</strong> {dataSource.dataSourceId}
                                   </div>
-                                  {dataSource.dataSourceId && (
-                                    <div className="mb-2">
-                                      <strong>ID:</strong> {dataSource.dataSourceId}
-                                    </div>
-                                  )}
-                                  {dataSource.pageCount && (
-                                    <div className="mb-2">
-                                      <strong>Pages:</strong> {dataSource.pageCount}
-                                    </div>
-                                  )}
-                                  {dataSource.isWebCrawler && dataSource.lastCrawled && (
-                                    <div className="mb-2">
-                                      <strong>Crawl Date:</strong>{' '}
-                                      {new Date(dataSource.lastCrawled).toLocaleString('en-NZ')}
-                                    </div>
-                                  )}
-                                  {!dataSource.isWebCrawler && lastUpdated && (
-                                    <div className="mb-0">
-                                      <strong>Last Synced:</strong> {new Date(lastUpdated).toLocaleString('en-NZ')}
-                                    </div>
-                                  )}
-                                </Accordion.Body>
-                              </Accordion.Item>
-                            );
-                          })}
-                        </Accordion>
-                      </div>
-                    </>
+                                )}
+                                {dataSource.pageCount && (
+                                  <div className="mb-2">
+                                    <strong>Pages:</strong> {dataSource.pageCount}
+                                  </div>
+                                )}
+                                {dataSource.isWebCrawler && dataSource.lastCrawled && (
+                                  <div className="mb-2">
+                                    <strong>Crawl Date:</strong>{' '}
+                                    {new Date(dataSource.lastCrawled).toLocaleString('en-NZ')}
+                                  </div>
+                                )}
+                                {!dataSource.isWebCrawler && lastUpdated && (
+                                  <div className="mb-0">
+                                    <strong>Last Synced:</strong> {new Date(lastUpdated).toLocaleString('en-NZ')}
+                                  </div>
+                                )}
+                              </Accordion.Body>
+                            </Accordion.Item>
+                          );
+                        })}
+                      </Accordion>
+                    </div>
+                  </>
+                )}
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+
+        {/* File Uploader */}
+        <FeatureWrapper requiredFeature="addToCompanyData">
+          <Row className="g-4 mb-4">
+            <Col xs={12}>
+              <Card>
+                <Card.Header>
+                  <Card.Title className="mb-0">Upload New Files or Folders</Card.Title>
+                </Card.Header>
+                <Card.Body>
+                  <p className="small mt-2">
+                    Once uploaded, files are automatically indexed every 30 minutes where they will be available for
+                    querying in Numa Chat.
+                  </p>
+
+                  {/* KB Selector */}
+                  <Form.Group className="mb-3">
+                    <Form.Label>
+                      <strong>Destination Knowledge Base</strong>
+                    </Form.Label>
+                    <Form.Select
+                      value={uploadDestinationKB}
+                      onChange={(e) => setUploadDestinationKB(e.target.value)}
+                      disabled={isLoadingKBsList}
+                    >
+                      {/* Allow selecting Company KB when user has addToCompanyData feature */}
+                      {canUploadCompany && <option value="company">Company Knowledge Base</option>}
+                      {availableKBs
+                        .filter((kb) => kb.role === 'EDITOR')
+                        .map((kb) => (
+                          <option key={kb.kb_id} value={kb.kb_id}>
+                            {kb.kb_name} (Editor)
+                          </option>
+                        ))}
+                    </Form.Select>
+                    <Form.Text className="text-muted">
+                      Select which knowledge base to upload files to. Only knowledge bases where you have editor
+                      permissions are available.
+                    </Form.Text>
+                  </Form.Group>
+
+                  {fileValidationError && (
+                    <Alert variant="danger" className="mb-3">
+                      <strong>File Validation Error:</strong>
+                      <p className="mb-0 mt-1">{fileValidationError}</p>
+                    </Alert>
                   )}
+                  <FileUploader
+                    onUploadSuccess={handleUploadSuccess}
+                    onFileSelect={handleFileSelect}
+                    validateFile={isFileTypeValidForBedrockKB}
+                    clearFiles={clearFileUploader}
+                    kb_id={uploadDestinationKB}
+                  />
                 </Card.Body>
               </Card>
             </Col>
           </Row>
+        </FeatureWrapper>
 
-          {/* File Uploader */}
-          <FeatureWrapper requiredFeature="addToCompanyData">
-            <Row className="g-4 mb-4">
-              <Col xs={12}>
-                <Card>
-                  <Card.Header>
-                    <Card.Title className="mb-0">Upload New Files or Folders</Card.Title>
-                  </Card.Header>
-                  <Card.Body>
-                    <p className="small mt-2">
-                      Once uploaded, files are automatically indexed every 30 minutes where they will be available for
-                      querying in Numa Chat.
-                    </p>
-
-                    {/* KB Selector */}
-                    <Form.Group className="mb-3">
-                      <Form.Label>
-                        <strong>Destination Knowledge Base</strong>
-                      </Form.Label>
-                      <Form.Select
-                        value={uploadDestinationKB}
-                        onChange={(e) => setUploadDestinationKB(e.target.value)}
-                        disabled={isLoadingKBsList}
-                      >
-                        {/* Allow selecting Company KB when user has addToCompanyData feature */}
-                        {canUploadCompany && <option value="company">Company Knowledge Base</option>}
-                        {availableKBs
-                          .filter((kb) => kb.role === 'EDITOR')
-                          .map((kb) => (
-                            <option key={kb.kb_id} value={kb.kb_id}>
-                              {kb.kb_name} (Editor)
-                            </option>
-                          ))}
-                      </Form.Select>
-                      <Form.Text className="text-muted">
-                        Select which knowledge base to upload files to. Only knowledge bases where you have editor
-                        permissions are available.
-                      </Form.Text>
-                    </Form.Group>
-
-                    {fileValidationError && (
-                      <Alert variant="danger" className="mb-3">
-                        <strong>File Validation Error:</strong>
-                        <p className="mb-0 mt-1">{fileValidationError}</p>
-                      </Alert>
-                    )}
-                    <FileUploader
-                      onUploadSuccess={handleUploadSuccess}
-                      onFileSelect={handleFileSelect}
-                      validateFile={isFileTypeValidForBedrockKB}
-                      clearFiles={clearFileUploader}
-                      kb_id={uploadDestinationKB}
-                    />
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
-          </FeatureWrapper>
-
-          {/* Web Crawler */}
-          <FeatureWrapper requiredFeature="addToCompanyData">
-            <Row className="g-4 mb-4">
-              <Col xs={12}>
-                <Card>
-                  <Card.Header>
-                    <Card.Title className="mb-0">Web Crawler</Card.Title>
-                  </Card.Header>
-                  <Card.Body>
-                    {/* KB Selector */}
-                    <Form.Group className="mb-3">
-                      <Form.Label>
-                        <strong>Destination Knowledge Base</strong>
-                      </Form.Label>
-                      <Form.Select
-                        value={uploadDestinationKB}
-                        onChange={(e) => setUploadDestinationKB(e.target.value)}
-                        disabled={isLoadingKBsList}
-                      >
-                        {/* Allow selecting Company KB when user has addToCompanyData feature */}
-                        {canUploadCompany && <option value="company">Company Knowledge Base</option>}
-                        {availableKBs
-                          .filter((kb) => kb.role === 'EDITOR')
-                          .map((kb) => (
-                            <option key={kb.kb_id} value={kb.kb_id}>
-                              {kb.kb_name} (Editor)
-                            </option>
-                          ))}
-                      </Form.Select>
-                      <Form.Text className="text-muted">
-                        Select which knowledge base to crawl websites into. Only knowledge bases where you have editor
-                        permissions are available.
-                      </Form.Text>
-                    </Form.Group>
-
-                    <WebCrawler onCrawlerStarted={fetchFiles} kb_id={uploadDestinationKB} />
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
-          </FeatureWrapper>
-
-          {/* Pending Files */}
-          <Row>
+        {/* Web Crawler */}
+        <FeatureWrapper requiredFeature="addToCompanyData">
+          <Row className="g-4 mb-4">
             <Col xs={12}>
-              {renderTreeTableSection({
-                title: `Pending Files (${pendingFiles.length})`,
-                rows: pendingRows,
-                isLoading: isLoadingFiles || kbStateLoading,
-                searchValue: '', // no search for pending files
-                setSearchValue: () => {},
-                expandedSet: expandedFoldersPending,
-                toggleFolderFn: toggleFolderPending,
-                isPending: true,
-              })}
+              <Card>
+                <Card.Header>
+                  <Card.Title className="mb-0">Web Crawler</Card.Title>
+                </Card.Header>
+                <Card.Body>
+                  {/* KB Selector */}
+                  <Form.Group className="mb-3">
+                    <Form.Label>
+                      <strong>Destination Knowledge Base</strong>
+                    </Form.Label>
+                    <Form.Select
+                      value={uploadDestinationKB}
+                      onChange={(e) => setUploadDestinationKB(e.target.value)}
+                      disabled={isLoadingKBsList}
+                    >
+                      {/* Allow selecting Company KB when user has addToCompanyData feature */}
+                      {canUploadCompany && <option value="company">Company Knowledge Base</option>}
+                      {availableKBs
+                        .filter((kb) => kb.role === 'EDITOR')
+                        .map((kb) => (
+                          <option key={kb.kb_id} value={kb.kb_id}>
+                            {kb.kb_name} (Editor)
+                          </option>
+                        ))}
+                    </Form.Select>
+                    <Form.Text className="text-muted">
+                      Select which knowledge base to crawl websites into. Only knowledge bases where you have editor
+                      permissions are available.
+                    </Form.Text>
+                  </Form.Group>
+
+                  <WebCrawler onCrawlerStarted={fetchFiles} kb_id={uploadDestinationKB} />
+                </Card.Body>
+              </Card>
             </Col>
           </Row>
+        </FeatureWrapper>
 
-          {/* Knowledge Base Files */}
+        {/* Pending Files */}
+        <Row>
+          <Col xs={12}>
+            {renderTreeTableSection({
+              title: `Pending Files (${pendingFiles.length})`,
+              rows: pendingRows,
+              isLoading: isLoadingFiles || kbStateLoading,
+              searchValue: '', // no search for pending files
+              setSearchValue: () => {},
+              expandedSet: expandedFoldersPending,
+              toggleFolderFn: toggleFolderPending,
+              isPending: true,
+            })}
+          </Col>
+        </Row>
+
+        {/* Knowledge Base Files */}
+        <Row>
+          <Col xs={12}>
+            {renderTreeTableSection({
+              title: `Your Knowledge Base Files (${indexedFiles.length})`,
+              rows: indexedRows,
+              isLoading: isLoadingFiles || kbStateLoading,
+              searchValue: indexedSearch,
+              setSearchValue: setIndexedSearch,
+              expandedSet: expandedFoldersIndexed,
+              toggleFolderFn: toggleFolderIndexed,
+              isPending: false,
+              showErrorColumn: true,
+            })}
+          </Col>
+        </Row>
+
+        {/* Failed Documents Table */}
+        {failedDocuments.length > 0 && (
           <Row>
             <Col xs={12}>
-              {renderTreeTableSection({
-                title: `Your Knowledge Base Files (${indexedFiles.length})`,
-                rows: indexedRows,
-                isLoading: isLoadingFiles || kbStateLoading,
-                searchValue: indexedSearch,
-                setSearchValue: setIndexedSearch,
-                expandedSet: expandedFoldersIndexed,
-                toggleFolderFn: toggleFolderIndexed,
-                isPending: false,
-                showErrorColumn: true,
-              })}
+              <Card className="mt-4">
+                <Card.Header>
+                  <Card.Title className="mb-0">Failed Documents</Card.Title>
+                </Card.Header>
+                <Card.Body>
+                  <div className="failed-documents-container">
+                    <Table hover size="sm" className="mb-0 failed-documents-table">
+                      <thead className="numa-table-header">
+                        <tr>
+                          <th className="col-failed-name">Name</th>
+                          <th className="col-failed-error">Error Reason</th>
+                          <th className="col-failed-date">Last Updated</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {failedDocuments.map((doc) => {
+                          const fileName = safeDecodeURIComponent(documentIdToKey(doc.documentId).split('/').pop());
+                          // File name is already properly decoded
+                          return (
+                            <tr key={doc.documentId}>
+                              <td className="failed-document-name">
+                                <span title={fileName}>{fileName}</span>
+                              </td>
+                              <td>
+                                <div className="failed-error-message">
+                                  {(doc.error?.errorMessage ?? doc.statusReason) || 'Unknown failure.'}
+                                </div>
+                              </td>
+                              <td>{new Date(doc.updatedAt).toLocaleString('en-NZ')}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </Table>
+                  </div>
+                </Card.Body>
+              </Card>
             </Col>
           </Row>
-
-          {/* Failed Documents Table */}
-          {failedDocuments.length > 0 && (
-            <Row>
-              <Col xs={12}>
-                <Card className="mt-4">
-                  <Card.Header>
-                    <Card.Title className="mb-0">Failed Documents</Card.Title>
-                  </Card.Header>
-                  <Card.Body>
-                    <div className="failed-documents-container">
-                      <Table hover size="sm" className="mb-0 failed-documents-table">
-                        <thead className="numa-table-header">
-                          <tr>
-                            <th className="col-failed-name">Name</th>
-                            <th className="col-failed-error">Error Reason</th>
-                            <th className="col-failed-date">Last Updated</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {failedDocuments.map((doc) => {
-                            const fileName = safeDecodeURIComponent(documentIdToKey(doc.documentId).split('/').pop());
-                            // File name is already properly decoded
-                            return (
-                              <tr key={doc.documentId}>
-                                <td className="failed-document-name">
-                                  <span title={fileName}>{fileName}</span>
-                                </td>
-                                <td>
-                                  <div className="failed-error-message">
-                                    {(doc.error?.errorMessage ?? doc.statusReason) || 'Unknown failure.'}
-                                  </div>
-                                </td>
-                                <td>{new Date(doc.updatedAt).toLocaleString('en-NZ')}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </Table>
-                    </div>
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
-          )}
-        </LayoutDashboard>
-
-        {/* Bulk Delete Confirmation Modal */}
-        <Modal show={showBulkDeleteConfirmation} onHide={handleCloseBulkDeleteModal}>
-          <Modal.Header closeButton>
-            <Modal.Title>Confirm Deletion</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            {deleteError && (
-              <Alert variant="danger" className="mb-3">
-                {deleteError}
-              </Alert>
-            )}
-            <p>Are you sure you want to delete the selected items?</p>
-            {bulkDeleteItemCount > 0 && (
-              <Alert variant="warning" className="mb-3">
-                <i className="bi bi-exclamation-triangle me-2"></i>
-                This will permanently delete <strong>{bulkDeleteItemCount}</strong> file
-                {bulkDeleteItemCount !== 1 ? 's' : ''} from the selected items.
-              </Alert>
-            )}
-            {bulkDeleteProgress && (
-              <div className="mb-3">
-                <div className="d-flex justify-content-between small text-muted mb-1">
-                  <span>
-                    Progress: {bulkDeleteProgress.processed} / {bulkDeleteProgress.total}
-                  </span>
-                  <span>{Math.round((bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100)}%</span>
-                </div>
-                <div className="progress">
-                  <div
-                    className="progress-bar"
-                    style={{ width: `${(bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100}%` }}
-                  ></div>
-                </div>
-                {bulkDeleteProgress.failed > 0 && (
-                  <small className="text-danger">
-                    {bulkDeleteProgress.failed} failed, {bulkDeleteProgress.successful} successful
-                  </small>
-                )}
-              </div>
-            )}
-            <p className="text-muted small">
-              Note: All files will be removed from S3 immediately. It may take some time (up to 30 minutes) for the
-              changes to be reflected in the Knowledge Base index.
-            </p>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={handleCloseBulkDeleteModal} disabled={isDeletingBulk}>
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={handleBulkDelete} disabled={isDeletingBulk || bulkDeleteItemCount === 0}>
-              {isDeletingBulk ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-2" />
-                  Deleting...
-                </>
-              ) : (
-                `Delete Selected${bulkDeleteItemCount > 0 ? ` (${bulkDeleteItemCount} files)` : ''}`
-              )}
-            </Button>
-          </Modal.Footer>
-        </Modal>
-
-        {/* Large Data File Warning Modal */}
-        {showNotificationModal && (
-          <NotificationModal
-            type="warning"
-            title="Large Raw Data File Detected"
-            message={
-              <div>
-                <p>You are about to upload large raw data files that may not be optimal for knowledge base indexing:</p>
-                <ul className="mb-3">
-                  {pendingLargeFiles.map((file, index) => (
-                    <li key={index}>
-                      <strong>{file.name}</strong> ({formatFileSize(file.size)})
-                    </li>
-                  ))}
-                </ul>
-                <p className="mb-0">
-                  This can incur higher than expected cost, or may fail to index successfully into the knowledge base.
-                </p>
-                <div className="alert alert-info mb-3">
-                  <i className="bi bi-info-circle me-2"></i>
-                  <strong>Recommendation:</strong> For better knowledge base performance, consider:
-                  <ul className="mb-0 mt-2">
-                    <li>Breaking large raw data files into smaller bite sized chunks</li>
-                  </ul>
-                </div>
-                <p className="mb-0">Do you want to proceed with uploading these files anyway?</p>
-              </div>
-            }
-            show={showNotificationModal}
-            onHide={handleCancelUpload}
-            onConfirm={handleProceedWithUpload}
-            confirmText="Proceed Anyway"
-            cancelText="Cancel Upload"
-            showCancelButton={true}
-            size="lg"
-          />
         )}
+      </LayoutDashboard>
 
-        {/* Create KB Modal */}
-        <CreateKBModal
-          show={showCreateKBModal}
-          onHide={() => setShowCreateKBModal(false)}
-          onSuccess={() => {
-            refreshKBs();
-            setKbManagementRefreshKey((prev) => prev + 1);
-          }}
+      {/* Bulk Delete Confirmation Modal */}
+      <Modal show={showBulkDeleteConfirmation} onHide={handleCloseBulkDeleteModal}>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Deletion</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {deleteError && (
+            <Alert variant="danger" className="mb-3">
+              {deleteError}
+            </Alert>
+          )}
+          <p>Are you sure you want to delete the selected items?</p>
+          {bulkDeleteItemCount > 0 && (
+            <Alert variant="warning" className="mb-3">
+              <i className="bi bi-exclamation-triangle me-2"></i>
+              This will permanently delete <strong>{bulkDeleteItemCount}</strong> file
+              {bulkDeleteItemCount !== 1 ? 's' : ''} from the selected items.
+            </Alert>
+          )}
+          {bulkDeleteProgress && (
+            <div className="mb-3">
+              <div className="d-flex justify-content-between small text-muted mb-1">
+                <span>
+                  Progress: {bulkDeleteProgress.processed} / {bulkDeleteProgress.total}
+                </span>
+                <span>{Math.round((bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100)}%</span>
+              </div>
+              <div className="progress">
+                <div
+                  className="progress-bar"
+                  style={{ width: `${(bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100}%` }}
+                ></div>
+              </div>
+              {bulkDeleteProgress.failed > 0 && (
+                <small className="text-danger">
+                  {bulkDeleteProgress.failed} failed, {bulkDeleteProgress.successful} successful
+                </small>
+              )}
+            </div>
+          )}
+          <p className="text-muted small">
+            Note: All files will be removed from S3 immediately. It may take some time (up to 30 minutes) for the
+            changes to be reflected in the Knowledge Base index.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCloseBulkDeleteModal} disabled={isDeletingBulk}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleBulkDelete} disabled={isDeletingBulk || bulkDeleteItemCount === 0}>
+            {isDeletingBulk ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" />
+                Deleting...
+              </>
+            ) : (
+              `Delete Selected${bulkDeleteItemCount > 0 ? ` (${bulkDeleteItemCount} files)` : ''}`
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Large Data File Warning Modal */}
+      {showNotificationModal && (
+        <NotificationModal
+          type="warning"
+          title="Large Raw Data File Detected"
+          message={
+            <div>
+              <p>You are about to upload large raw data files that may not be optimal for knowledge base indexing:</p>
+              <ul className="mb-3">
+                {pendingLargeFiles.map((file, index) => (
+                  <li key={index}>
+                    <strong>{file.name}</strong> ({formatFileSize(file.size)})
+                  </li>
+                ))}
+              </ul>
+              <p className="mb-0">
+                This can incur higher than expected cost, or may fail to index successfully into the knowledge base.
+              </p>
+              <div className="alert alert-info mb-3">
+                <i className="bi bi-info-circle me-2"></i>
+                <strong>Recommendation:</strong> For better knowledge base performance, consider:
+                <ul className="mb-0 mt-2">
+                  <li>Breaking large raw data files into smaller bite sized chunks</li>
+                </ul>
+              </div>
+              <p className="mb-0">Do you want to proceed with uploading these files anyway?</p>
+            </div>
+          }
+          show={showNotificationModal}
+          onHide={handleCancelUpload}
+          onConfirm={handleProceedWithUpload}
+          confirmText="Proceed Anyway"
+          cancelText="Cancel Upload"
+          showCancelButton={true}
+          size="lg"
         />
-      </div>
-    </>
+      )}
+
+      {/* Create KB Modal */}
+      <CreateKBModal
+        show={showCreateKBModal}
+        onHide={() => setShowCreateKBModal(false)}
+        onSuccess={() => {
+          refreshKBs();
+          setKbManagementRefreshKey((prev) => prev + 1);
+        }}
+      />
+    </div>
   );
 }

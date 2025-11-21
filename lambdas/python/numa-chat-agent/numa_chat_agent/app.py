@@ -930,8 +930,8 @@ async def update_kb(request: Request, kb_id: str) -> Response:
         # Initialize KB manager
         kb_manager = KnowledgeBaseManager()
 
-        # Check edit permission
-        if not kb_manager.check_permission(kb_id, user_id, "EDITOR"):
+        # Only the owner can update KB settings
+        if not kb_manager.check_owner(kb_id, user_id):
             return JSONResponse({"error": "Access denied"}, status_code=403)
 
         body = await request.json()
@@ -989,8 +989,8 @@ async def delete_kb(request: Request, kb_id: str) -> Response:
         # Initialize KB manager
         kb_manager = KnowledgeBaseManager()
 
-        # Check edit permission
-        if not kb_manager.check_permission(kb_id, user_id, "EDITOR"):
+        # Only the owner can delete KBs
+        if not kb_manager.check_owner(kb_id, user_id):
             return JSONResponse({"error": "Access denied"}, status_code=403)
 
         # Delete KB

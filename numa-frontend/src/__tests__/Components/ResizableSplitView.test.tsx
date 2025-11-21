@@ -26,8 +26,6 @@ describe('ResizableSplitView Component', () => {
     expect(screen.getByText('Left Panel')).toBeInTheDocument();
     // Right panel should be rendered
     expect(screen.getByText('Right Panel')).toBeInTheDocument();
-    // The divider contains a collapse button so there should be a button rendered
-    expect(screen.getByRole('button')).toBeInTheDocument();
   });
 
   it('does not render right panel or divider when showRight is false', () => {
@@ -46,45 +44,8 @@ describe('ResizableSplitView Component', () => {
     expect(screen.getByText('Left Panel')).toBeInTheDocument();
     // Right panel should not be rendered
     expect(screen.queryByText('Right Panel')).toBeNull();
-    // Divider (and thus collapse button) should not be rendered when showRight is false.
-    expect(container.querySelector('button')).toBeNull();
-  });
-
-  it('collapse button toggles collapse state correctly', () => {
-    const onLeftFractionChange = vi.fn();
-    const { rerender } = render(
-      <ResizableSplitView
-        left={leftContent}
-        right={rightContent}
-        showRight={true}
-        leftFraction={0.5}
-        onLeftFractionChange={onLeftFractionChange}
-      />,
-    );
-    // When not collapsed, button should display '❯'
-    let collapseButton = screen.getByRole('button');
-    expect(collapseButton).toHaveTextContent('❯');
-
-    // Clicking should collapse right panel (set leftFraction to 0.99)
-    fireEvent.click(collapseButton);
-    expect(onLeftFractionChange).toHaveBeenCalledWith(0.99);
-
-    // Now simulate the collapsed state (leftFraction > 0.95) so button displays '❮'
-    onLeftFractionChange.mockClear();
-    rerender(
-      <ResizableSplitView
-        left={leftContent}
-        right={rightContent}
-        showRight={true}
-        leftFraction={0.96}
-        onLeftFractionChange={onLeftFractionChange}
-      />,
-    );
-    collapseButton = screen.getByRole('button');
-    expect(collapseButton).toHaveTextContent('❮');
-    // Clicking should restore (set leftFraction to 0.45)
-    fireEvent.click(collapseButton);
-    expect(onLeftFractionChange).toHaveBeenCalledWith(0.45);
+    // Divider should not be rendered when showRight is false
+    expect(container.querySelector('div[style*="width: 5px"]')).toBeNull();
   });
 
   it('dragging adjusts leftFraction', () => {

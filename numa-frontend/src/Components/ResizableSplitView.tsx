@@ -13,19 +13,6 @@ const ResizableSplitView = ({
   const [dragging, setDragging] = useState(false);
   const [handleHovered, setHandleHovered] = useState(false);
 
-  // Consider the right panel collapsed when leftFraction is above 0.95
-  const isCollapsed = leftFraction > 0.95;
-
-  const handleCollapse = () => {
-    if (!isCollapsed) {
-      // Collapse right panel: left takes up nearly all width.
-      onLeftFractionChange(0.99);
-    } else {
-      // Restore to default (e.g., 0.45 leaves room for the doc panel)
-      onLeftFractionChange(0.45);
-    }
-  };
-
   const handleMouseDown = () => {
     setDragging(true);
   };
@@ -76,9 +63,10 @@ const ResizableSplitView = ({
       {/* Left Panel */}
       <div
         style={{
-          flex: `0 0 ${leftFraction * 99.5}%`,
+          flex: showRight ? `0 0 ${leftFraction * 99.5}%` : '1 1 100%',
           height: '100%',
           overflowY: 'auto',
+          transition: dragging ? 'none' : 'flex 0.15s ease-out',
         }}
       >
         {left}
@@ -95,32 +83,6 @@ const ResizableSplitView = ({
           }}
           onMouseDown={handleMouseDown}
         >
-          {/* Collapse Button at the Top */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleCollapse();
-            }}
-            style={{
-              position: 'absolute',
-              top: '8px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              border: '1px solid #ccc',
-              background: '#fff',
-              borderRadius: '4px',
-              fontSize: '12px',
-              width: '24px',
-              height: '24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-            }}
-          >
-            {isCollapsed ? '❮' : '❯'}
-          </button>
-
           {/* Three-Dot Handle */}
           <div
             style={{
@@ -153,7 +115,8 @@ const ResizableSplitView = ({
             flex: `0 0 ${(1 - leftFraction) * 99.5}%`,
             height: '100%',
             overflowY: 'auto',
-            paddingBottom: '0.5rem',
+            padding: '1rem',
+            transition: dragging ? 'none' : 'flex 0.15s ease-out',
           }}
         >
           {right}

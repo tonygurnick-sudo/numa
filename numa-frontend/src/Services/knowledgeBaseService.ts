@@ -8,6 +8,7 @@ export interface KnowledgeBase {
   kb_name: string;
   s3_prefix: string;
   is_default: boolean;
+  is_shared: boolean; // Whether KB is shared with other users
   viewers: string[];
   editors: string[];
   editor_emails?: string[];
@@ -21,17 +22,20 @@ export interface KnowledgeBase {
 export interface UserKB {
   kb_id: string;
   kb_name: string;
-  role: 'VIEWER' | 'EDITOR';
+  role: 'VIEWER' | 'EDITOR' | 'OWNER';
+  is_shared?: boolean; // Whether KB is shared with other users
 }
 
 export interface CreateKBRequest {
   name: string;
-  viewers: string[];
-  editors: string[];
+  is_shared: boolean; // True for shared KB, false for personal
+  viewers: string[]; // Only used when is_shared=true
+  editors: string[]; // Only used when is_shared=true
 }
 
 export interface UpdateKBRequest {
   name?: string;
+  is_shared?: boolean;
   viewers?: string[];
   editors?: string[];
 }

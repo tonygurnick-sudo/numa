@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Alert, Container, Row, Col, Form } from 'react-bootstrap';
+import { Alert, Container, Row, Col, Form, Button } from 'react-bootstrap';
 import { useParams } from 'react-router-dom';
 import { StarFill, Star } from 'react-bootstrap-icons';
 
-import { Breadcrumbs } from '../Components/Breadcrumbs';
-import { Nav } from '../Components/Nav';
 import { JobHistorySidebar } from '../Components/JobHistorySidebar';
 import { JobIdSidebar } from '../Components/Status/JobIdSidebar';
 
@@ -15,6 +13,7 @@ import { formatCategory } from '../utils/textUtils';
 import { PolicyBuilderDetail } from '../Components/Policy/PolicyBuilderDetail';
 import { PolicyReviewerDetail } from '../Components/Policy/PolicyReviewerDetail';
 import { manifestService } from '../Services/manifestService';
+import { PageHeader } from '../Components/PageHeader';
 
 const AppDetail = () => {
   const { appId } = useParams(); // Get appId from URL
@@ -27,6 +26,7 @@ const AppDetail = () => {
     setCurrentJobId,
     isJobNamingEnabled,
     setIsJobNamingEnabled,
+    setJobHistorySidebarOpen,
   } = useNumaApp();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(appId);
@@ -67,107 +67,93 @@ const AppDetail = () => {
   };
 
   return (
-    <>
-      <Nav nav1on="on" nav2on="" nav3on="" />
-      <div className="dashboard">
-        {error && (
-          <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1001 }}>
-            <Alert variant="danger" dismissible className="mb-0 shadow" onClose={() => setError(null)}>
-              {typeof error === 'string' ? error : 'An error occurred while loading the app'}
-            </Alert>
+    <div className="dashboard">
+      {error && (
+        <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1001 }}>
+          <Alert variant="danger" dismissible className="mb-0 shadow" onClose={() => setError(null)}>
+            {typeof error === 'string' ? error : 'An error occurred while loading the app'}
+          </Alert>
+        </div>
+      )}
+      {/* Job History Sidebar - hide for policy custom pages */}
+      {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && (
+        <JobHistorySidebar hideToggle />
+      )}
+      <JobIdSidebar />
+      <PageHeader
+        title={
+          <div className="d-flex align-items-center">
+            {numaAppData?.appName || 'Loading...'}
+            <button onClick={handleFavoriteClick} className="btn btn-link text-warning p-0 ms-2">
+              {favorite ? <StarFill size={20} /> : <Star size={20} />}
+            </button>
           </div>
-        )}
-        {/* Hide JobHistorySidebar for policy custom pages */}
-        {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && <JobHistorySidebar />}
-        <JobIdSidebar />
-        <header className="mb-1">
-          <Container fluid>
-            <Breadcrumbs label={numaAppData?.appName} />
-            <Row>
-              <Col lg={8} className="pe-5">
-                <div className="d-flex align-items-center mb-3">
-                  <h1 className="h3 mb-0">{numaAppData?.appName}</h1>
+        }
+        subtitle={numaAppData?.appDescription}
+        actions={
+          numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' ? (
+            <Button variant="secondary" onClick={() => setJobHistorySidebarOpen(true)}>
+              <i className="bi bi-clock-history me-1"></i>
+              Job History
+            </Button>
+          ) : null
+        }
+      />
 
-                  <button onClick={handleFavoriteClick} className="btn btn-link text-warning p-0 ms-2">
-                    {favorite ? <StarFill size={20} /> : <Star size={20} />}
-                  </button>
-                </div>
-                {numaAppData?.appDescription && (
-                  <p
-                    className="text-muted mb-3"
-                    style={{
-                      fontSize: '0.95rem',
-                      lineHeight: '1.5',
-                      maxWidth: '80ch',
-                      marginTop: '0.5rem',
-                    }}
-                  >
-                    {numaAppData.appDescription}
-                  </p>
-                )}
-                {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && (
-                  <div className="app-job-naming-toggle">
-                    <Form.Check
-                      type="switch"
-                      id="layout-job-naming-toggle"
-                      label="Turn on job naming for all apps"
-                      checked={isJobNamingEnabled}
-                      onChange={(event) => setIsJobNamingEnabled(event.target.checked)}
-                    />
-                  </div>
-                )}
-              </Col>
-              <Col lg={4} className="">
-                {numaAppData?.category && (
-                  <div className="ms-auto text-end">
-                    <span
-                      className={`text-uppercase category-soft ${numaAppData.category.toLowerCase()}`}
-                      style={{
-                        fontSize: '0.75rem',
-                        letterSpacing: '0.5px',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '2px',
-                        display: 'inline-block',
-                        fontWeight: 500,
-                      }}
-                    >
-                      {formatCategory(numaAppData.category)}
-                    </span>
-                  </div>
-                )}
-                <div className="mt-2 d-flex align-items-center justify-content-end">
-                  {numaAppData?.tags?.length > 0 && (
-                    <div className="app-tags text-end">
-                      {numaAppData.tags.map((tag, index) => (
-                        <span key={index} className={`tag-pill tag-${['green', 'purple', 'blue'][index % 3]}`}>
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </Col>
-            </Row>
-          </Container>
-        </header>
+      <Container fluid>
+        <Row className="mb-3">
+          <Col lg={8}>
+            {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && (
+              <div className="app-job-naming-toggle">
+                <Form.Check
+                  type="switch"
+                  id="layout-job-naming-toggle"
+                  label="Turn on job naming for all apps"
+                  checked={isJobNamingEnabled}
+                  onChange={(event) => setIsJobNamingEnabled(event.target.checked)}
+                />
+              </div>
+            )}
+          </Col>
+          <Col lg={4} className="text-end">
+            {numaAppData?.category && (
+              <span
+                className={`text-uppercase category-soft ${numaAppData.category.toLowerCase()}`}
+                style={{
+                  fontSize: '0.75rem',
+                  letterSpacing: '0.5px',
+                  padding: '0.25rem 0.5rem',
+                  borderRadius: '2px',
+                  display: 'inline-block',
+                  fontWeight: 500,
+                }}
+              >
+                {formatCategory(numaAppData.category)}
+              </span>
+            )}
+            {numaAppData?.tags?.length > 0 && (
+              <div className="app-tags text-end mt-2">
+                {numaAppData.tags.map((tag, index) => (
+                  <span key={index} className={`tag-pill tag-${['green', 'purple', 'blue'][index % 3]}`}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </Col>
+        </Row>
+      </Container>
 
-        <Container fluid className="mt-4">
-          <Row>
-            <Col>
-              {loading ? (
-                <div>Loading...</div>
-              ) : numaAppData?.type === 'policy-builder' ? (
-                <PolicyBuilderDetail id={numaAppData.id} />
-              ) : numaAppData?.id === 'policy-reviewer' ? (
-                <PolicyReviewerDetail />
-              ) : numaAppData ? (
-                <AppWizard manifest={numaAppData} />
-              ) : null}
-            </Col>
-          </Row>
-        </Container>
-      </div>
-    </>
+      {loading ? (
+        <div>Loading...</div>
+      ) : numaAppData?.type === 'policy-builder' ? (
+        <PolicyBuilderDetail id={numaAppData.id} />
+      ) : numaAppData?.id === 'policy-reviewer' ? (
+        <PolicyReviewerDetail />
+      ) : numaAppData ? (
+        <AppWizard manifest={numaAppData} />
+      ) : null}
+    </div>
   );
 };
 

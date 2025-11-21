@@ -51,6 +51,32 @@ $border-radius-pill: 1rem;
   }
 }
 
+// NOTE: Chat page header styles removed - now uses shared PageHeader component with .page-header class
+// Deprecated styles: .chat-page-header, .chat-page-title, .chat-page-subtitle, .chat-page-header-buttons
+
+// White container with gaps on sides
+.chat-white-container {
+  background: white;
+  border-radius: 16px 16px 0 0;
+  height: calc(100% - 0.5rem);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1; // Expand to fill available width in flex parent
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+
+  @media (max-width: 768px) {
+    margin: 0.25rem 0 0 0;
+    border-radius: 12px 12px 0 0;
+    height: calc(100% - 0.25rem);
+  }
+
+  @media (max-width: 480px) {
+    margin: 0.25rem 0 0 0;
+    border-radius: 8px 8px 0 0;
+  }
+}
+
 // Mixin for bubble text styling
 @mixin bubble-text {
   font-size: 0.75rem;
@@ -138,6 +164,7 @@ $border-radius-pill: 1rem;
     max-width: 100%;
     width: 100%;
     position: relative;
+    padding-bottom: 1rem;
   }
 
   .chat-container {
@@ -156,6 +183,13 @@ $border-radius-pill: 1rem;
       flex-direction: column;
       max-height: calc(100vh - 180px);
 
+      // Hide scrollbars
+      &::-webkit-scrollbar {
+        display: none; // Chrome, Safari, Edge
+      }
+      scrollbar-width: none; // Firefox
+      -ms-overflow-style: none; // IE
+
       .message {
         @include message-background;
       }
@@ -165,15 +199,14 @@ $border-radius-pill: 1rem;
       position: relative;
       display: flex;
       flex-direction: column;
-      padding: 0.5rem;
+      padding: 0.25rem 1.5rem;
       border: 1px solid #dee2e6;
-      background: white;
+      background: var(--brand-inputBackground, #F7F9FB);
       border-radius: 25px;
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
       margin: 0 auto;
-      max-width: 1130px;
       max-height: 500px;
-      width: 100%;
+      width: 98%;
       overflow-y: auto;
       transition: max-height 0.2s ease-in-out;
 
@@ -183,12 +216,13 @@ $border-radius-pill: 1rem;
         outline: none;
         box-shadow: none;
         resize: vertical;
-        min-height: 56px;
+        min-height: 46px;
         max-height: None;
         overflow-y: auto;
         padding: 10px 16px;
         font-size: 1rem;
         border-radius: 25px; /* Makes sure input field is rounded */
+        background: var(--brand-inputBackground, #F7F9FB);
       }
       .chat-textarea:focus {
         outline: none !important;
@@ -199,7 +233,7 @@ $border-radius-pill: 1rem;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.5rem 1rem;
+        padding: 0.25rem 0.25rem;
       }
       .left-controls {
         display: flex;
@@ -552,6 +586,11 @@ $border-radius-pill: 1rem;
       box-shadow: none !important;
       border: none !important;
     }
+
+    .chat-input-wrapper {
+      padding: 0 1.5rem;
+      margin-bottom: 0;
+    }
   }
 
   // Conversation suggestions
@@ -606,6 +645,8 @@ $border-radius-pill: 1rem;
 
   // Full-width history panel with fade gradient
   .history-panel-fullwidth {
+    position: relative;
+
     // Hide scrollbars
     &::-webkit-scrollbar {
       display: none; // Chrome, Safari, Edge
@@ -617,20 +658,20 @@ $border-radius-pill: 1rem;
     .conversation-suggestions .suggestions-header {
       position: sticky;
       top: 0;
-      background: var(--brand-background, var(--color-bg-lightest));
       z-index: 10;
+      background-color: white;
       padding-top: 0.5rem;
       padding-bottom: 0.5rem;
       margin-bottom: 1rem;
     }
 
-    // Fade-out gradient at bottom - must be on a fixed position element
+    // Fade-out gradient at bottom
     &::after {
       content: '';
-      position: fixed;
+      position: sticky;
       bottom: 0;
       left: 0;
-      right: 0;
+      width: 100%;
       height: 100px;
       background: linear-gradient(
         to bottom,
@@ -640,6 +681,7 @@ $border-radius-pill: 1rem;
       );
       pointer-events: none;
       z-index: 5;
+      margin-top: -100px;
     }
   }
 
@@ -677,6 +719,12 @@ $border-radius-pill: 1rem;
     margin-bottom: 0.5rem;
     margin-top: 0.5rem;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+    // Remove border/shadow for assistant messages (white on white)
+    &.assistant {
+      box-shadow: none;
+      border: none;
+    }
 
     &.agent-welcome-message {
       background: linear-gradient(
@@ -856,17 +904,17 @@ $border-radius-pill: 1rem;
   .document-panel-container {
     display: flex;
     flex-direction: column;
-    border: 1px solid #ddd;
+    border: 1px solid #d0d0d0;
     border-radius: 8px;
     overflow-y: auto;
     height: 100%;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.07);
     background-color: #fff;
+    animation: panelFadeIn 0.3s ease-in-out;
 
     @keyframes panelFadeIn {
       from {
         opacity: 0;
-        transform: translateY(8px);
+        transform: translateY(4px);
       }
       to {
         opacity: 1;
@@ -878,7 +926,7 @@ $border-radius-pill: 1rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0.75rem 1rem;
+      padding: 1rem 1.5rem;
       border-bottom: 1px solid #eaeaea;
     }
 
@@ -896,10 +944,10 @@ $border-radius-pill: 1rem;
     .document-panel-body {
       flex: 1 1 auto;
       overflow-y: auto;
-      padding: 1rem;
-      font-size: 0.9rem;
+      padding: 1.5rem;
+      font-size: 0.95rem;
       color: #444;
-      line-height: 1.2;
+      line-height: 1.5;
     }
   }
 
@@ -966,7 +1014,7 @@ $border-radius-pill: 1rem;
 .chat-layout {
     position: relative;
     display: flex;
-    height: calc(100vh - 94px);
+    height: 100%;
     overflow: hidden;
     width: 100%;
     max-width: 100%;

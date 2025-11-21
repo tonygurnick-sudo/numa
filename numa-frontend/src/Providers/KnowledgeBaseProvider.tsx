@@ -43,7 +43,7 @@ function sanitizeUserKB(kb: UserKB | null | undefined): UserKB | null {
   return {
     kb_id: kbId,
     kb_name: typeof kb.kb_name === 'string' && kb.kb_name.trim().length > 0 ? kb.kb_name : kbId,
-    role: kb.role === 'EDITOR' ? 'EDITOR' : 'VIEWER',
+    role: kb.role === 'EDITOR' || kb.role === 'OWNER' ? kb.role : 'VIEWER',
   };
 }
 

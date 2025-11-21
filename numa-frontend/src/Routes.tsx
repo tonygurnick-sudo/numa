@@ -1,14 +1,24 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, ReactNode } from 'react';
 import { useAuth } from './Providers/AuthProvider';
 import AppProviders from './Providers/AppProviders';
 import { ProtectedRoute } from './Components/RequiredFeaturesWrapper';
 import { ROUTE_CONFIG } from './utils/routeConfig';
+import AppLayout from './Layouts/AppLayout';
 
 // Lazy load non-critical pages
 const ResetPassword = lazy(() => import('./Pages/ResetPassword').then((m) => ({ default: m.ResetPassword })));
 const NumaLogin = lazy(() => import('./Pages/Login').then((m) => ({ default: m.NumaLogin })));
 const Ian = lazy(() => import('./Pages/Ian').then((m) => ({ default: m.Ian })));
+
+// Component to wrap authenticated routes with AppLayout
+const AuthenticatedLayout = ({ children, requiredFeature }: { children: ReactNode; requiredFeature?: string }) => {
+  return (
+    <AppLayout>
+      <ProtectedRoute requiredFeature={requiredFeature}>{children}</ProtectedRoute>
+    </AppLayout>
+  );
+};
 
 const NumaRoutes = () => {
   return (
@@ -41,7 +51,9 @@ const AppRoutes = () => {
           <Route
             key={r.path}
             path={r.path}
-            element={<ProtectedRoute requiredFeature={r.requiredFeature}>{r.element(navigate)}</ProtectedRoute>}
+            element={
+              <AuthenticatedLayout requiredFeature={r.requiredFeature}>{r.element(navigate)}</AuthenticatedLayout>
+            }
           />
         ))}
       </Routes>

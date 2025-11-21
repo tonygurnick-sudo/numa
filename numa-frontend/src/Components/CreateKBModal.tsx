@@ -26,16 +26,13 @@ type NonEmptyString = string & { readonly __brand: 'NonEmptyString' };
 type EmailString = string & { readonly __brand: 'EmailString' };
 type UserIdString = string & { readonly __brand: 'UserIdString' };
 type UserIdentifier = EmailString | UserIdString;
-type PublicWildcard = '*' & { readonly __brand: 'PublicWildcard' };
-
-/** Make the public case exactly one wildcard. */
-type PublicViewers = Readonly<[PublicWildcard]>;
 type PrivateViewers = ReadonlyArray<UserIdentifier>;
 
 interface CreateKBRequest {
   readonly name: NonEmptyString;
-  readonly viewers: PrivateViewers | PublicViewers;
-  readonly editors: ReadonlyArray<UserIdentifier>; // subset of viewers when private
+  readonly is_shared: boolean; // True for shared KB, false for personal
+  readonly viewers: PrivateViewers; // Only used when is_shared=true
+  readonly editors: ReadonlyArray<UserIdentifier>; // Only used when is_shared=true, subset of viewers
 }
 
 interface CreateKBResponse {
@@ -87,10 +84,6 @@ function parseUserList(input: string): ReadonlyArray<UserIdentifier> {
   return out;
 }
 
-function publicWildcardList(): PublicViewers {
-  return ['*' as PublicWildcard] as const;
-}
-
 function enforceEditorsSubset(
   viewers: ReadonlyArray<UserIdentifier>,
   editors: ReadonlyArray<UserIdentifier>,
@@ -131,7 +124,7 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
   const [kbName, setKbName] = useState<string>('');
   const [viewersInput, setViewersInput] = useState<string>('');
   const [editorsInput, setEditorsInput] = useState<string>('');
-  const [isPublic, setIsPublic] = useState<boolean>(false);
+  const [isShared, setIsShared] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -140,7 +133,7 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
     setKbName('');
     setViewersInput('');
     setEditorsInput('');
-    setIsPublic(false);
+    setIsShared(false);
     setError(null);
     onHide();
   };
@@ -149,9 +142,10 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
   const parsed = useMemo(() => {
     const editors = parseUserList(editorsInput);
 
-    if (isPublic) {
+    // Personal KBs don't need viewers/editors input (backend will set to creator only)
+    if (!isShared) {
       return {
-        viewers: publicWildcardList(),
+        viewers: [] as ReadonlyArray<UserIdentifier>,
         editors: [] as ReadonlyArray<UserIdentifier>,
         invalidEditors: [] as ReadonlyArray<string>,
         invalidViewers: [] as ReadonlyArray<string>,
@@ -172,7 +166,7 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
       invalidEditors: findInvalidEmailLikes(editorsSubset),
       invalidViewers: findInvalidEmailLikes(viewers),
     };
-  }, [viewersInput, editorsInput, isPublic]);
+  }, [viewersInput, editorsInput, isShared]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -189,16 +183,17 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
     try {
       const request: CreateKBRequest = {
         name: kbName.trim() as NonEmptyString,
-        viewers: isPublic ? publicWildcardList() : (parsed.viewers as PrivateViewers),
-        editors: isPublic ? ([] as const) : parsed.editors,
+        is_shared: isShared,
+        viewers: parsed.viewers as PrivateViewers,
+        editors: parsed.editors,
       };
 
-      // Defensive invariant (private only): editors ⊆ viewers
-      if (!isPublic) {
+      // Defensive invariant (shared only): editors ⊆ viewers
+      if (isShared) {
         const viewersSet = new Set<UserIdentifier>(request.viewers as PrivateViewers);
         const allEditorsInViewers = request.editors.every((e) => viewersSet.has(e));
         if (!allEditorsInViewers) {
-          setError('Editors must also be viewers for private knowledge bases.');
+          setError('Editors must also be viewers for shared knowledge bases.');
           setIsSubmitting(false);
           return;
         }
@@ -246,23 +241,34 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
             <Form.Text className="text-muted">Choose a descriptive name for your knowledge base.</Form.Text>
           </Form.Group>
 
-          <Form.Group className="mb-3" controlId="kbPublic">
-            <Form.Check
-              type="checkbox"
-              label="Make this KB accessible to all users"
-              checked={isPublic}
-              onChange={(ev: React.ChangeEvent<HTMLInputElement>): void => setIsPublic(ev.target.checked)}
-              disabled={isSubmitting}
-            />
-            {isPublic && (
-              <Alert variant="info" className="mt-2 mb-0">
-                <i className="bi bi-info-circle me-2" />
-                All users will be able to view and query this knowledge base.
-              </Alert>
-            )}
+          <Form.Group className="mb-3" controlId="kbType">
+            <Form.Label>Knowledge Base Type</Form.Label>
+            <div className="d-flex gap-3">
+              <Form.Check
+                type="radio"
+                id="kb-type-personal"
+                label="Personal"
+                checked={!isShared}
+                onChange={(): void => setIsShared(false)}
+                disabled={isSubmitting}
+              />
+              <Form.Check
+                type="radio"
+                id="kb-type-shared"
+                label="Shared"
+                checked={isShared}
+                onChange={(): void => setIsShared(true)}
+                disabled={isSubmitting}
+              />
+            </div>
+            <Form.Text className="text-muted">
+              {isShared
+                ? 'Share this KB with specific users who can view or edit.'
+                : 'Only you will have access to this KB.'}
+            </Form.Text>
           </Form.Group>
 
-          {!isPublic && (
+          {isShared && (
             <Form.Group className="mb-3" controlId="kbViewers">
               <Form.Label>Viewers (user IDs or emails)</Form.Label>
               <Form.Control
@@ -285,7 +291,7 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
             </Form.Group>
           )}
 
-          {!isPublic && (
+          {isShared && (
             <Form.Group className="mb-3" controlId="kbEditors">
               <Form.Label>Editors (user IDs or emails)</Form.Label>
               <Form.Control
@@ -311,13 +317,15 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
           <Alert variant="light" className="mb-0">
             <strong>Note:</strong>
             <ul className="mb-0 mt-2">
-              <li>Editors automatically have viewer permissions.</li>
               <li>You will be set as the creator and automatically added as an editor.</li>
-              <li>Files uploaded to this KB are isolated from other KBs.</li>
               <li>
-                Public KBs use a wildcard viewer (<code>*</code>); prefer private unless you intentionally want
-                organisation-wide visibility.
+                <strong>Personal KBs:</strong> Only you have access. No need to specify viewers/editors.
               </li>
+              <li>
+                <strong>Shared KBs:</strong> Specify viewers (can query) and editors (can upload/modify). Editors
+                automatically have viewer permissions.
+              </li>
+              <li>Files uploaded to this KB are isolated from other KBs.</li>
             </ul>
           </Alert>
         </Modal.Body>

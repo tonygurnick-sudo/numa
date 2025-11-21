@@ -4,6 +4,7 @@
 @use 'base/base' as *;
 @use 'layouts/layout' as *;
 @use 'layouts/app' as *;
+@use 'layouts/AppLayout' as *;
 
 @use 'components/components' as *;
 @use 'components/upload_module' as *;
@@ -17,5 +18,6 @@
 @use 'components/table_styles' as *;
 @use 'components/data_analysis' as *;
 @use 'components/file_tree' as *;
+@use 'components/kb_v2' as *;
 
 @import '../fonts/Metropolis.css';

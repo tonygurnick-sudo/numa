@@ -4,7 +4,6 @@ import { Preloader } from '../Components/Preloader';
 import { useAuth } from '../Providers/AuthProvider';
 import { UserManagementUtils } from '../utils/userManagementUtils';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
-import { Nav } from '../Components/Nav';
 
 const UserManagement = () => {
   const [email, setEmail] = useState('');
@@ -400,7 +399,6 @@ const UserManagement = () => {
 
   return (
     <>
-      <Nav />
       <LayoutDashboard>
         <Container className="py-4">
           <div className="d-flex justify-content-between align-items-center mb-4">

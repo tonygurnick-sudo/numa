@@ -338,7 +338,7 @@ export const NewChat = ({
       ref={wrapperRef}
       className="d-flex flex-column align-items-center h-100"
       style={{
-        paddingTop: 'max(8vh, 2rem)',
+        paddingTop: 'max(13vh, 4rem)',
         paddingBottom: '0rem',
         paddingLeft: '1rem',
         paddingRight: '1rem',
@@ -351,11 +351,11 @@ export const NewChat = ({
       onDropCapture={handleDrop}
       data-dragging={isDragging ? 'true' : 'false'}
     >
-      <div style={{ maxWidth: 1130, width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Greeting */}
         <div
           style={{
-            marginBottom: '2rem',
+            marginBottom: '2.5rem',
             textAlign: 'center',
             display: 'flex',
             alignItems: 'center',
@@ -375,9 +375,10 @@ export const NewChat = ({
           />
           <span
             style={{
-              fontSize: '1.75rem',
+              fontSize: '33px',
               fontWeight: 600,
-              color: branding.colors.primaryText,
+              color: '#343C6A',
+              lineHeight: '100%',
             }}
           >
             {greeting}
@@ -386,7 +387,14 @@ export const NewChat = ({
 
         <div
           className="chat-input-wrapper"
-          style={{ width: '100%', marginBottom: '0.75rem', animation: 'fadeIn 0.8s ease-in-out' }}
+          style={{
+            width: '100%',
+            maxWidth: '1200px',
+            marginLeft: 'auto',
+            marginRight: 'auto',
+            marginBottom: '1.5rem',
+            animation: 'fadeIn 0.8s ease-in-out',
+          }}
         >
           <ChatInput
             inputMessage={inputMessage}
@@ -424,7 +432,10 @@ export const NewChat = ({
             className="agents-row-container"
             style={{
               width: '100%',
-              marginBottom: '1.5rem',
+              maxWidth: '1200px',
+              marginLeft: 'auto',
+              marginRight: 'auto',
+              marginBottom: '1rem',
               animation: 'fadeIn 0.6s ease-in-out',
             }}
           >
@@ -469,7 +480,7 @@ export const NewChat = ({
                           e.currentTarget.style.transform = 'scale(1)';
                         }}
                       >
-                        <AgentAvatar agent={agent} size={56} rounded={true} alt={agent.title} />
+                        <AgentAvatar agent={agent} size={48} rounded={true} alt={agent.title} />
                       </div>
                     </OverlayTrigger>
                   ))}
@@ -496,94 +507,96 @@ export const NewChat = ({
               </div>
             ) : recentConversations.length > 0 ? (
               <div className="conversation-suggestions">
-                <div className="suggestions-header">Continue where you left off</div>
-                <div className="d-flex flex-column" style={{ gap: '0.75rem', paddingBottom: '120px' }}>
-                  {recentConversations.map((convo) => (
-                    <div
-                      key={convo.conversation_id}
-                      className="text-start conversation-suggestion-btn"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleContinueClick(convo.conversation_id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleContinueClick(convo.conversation_id);
-                        }
-                      }}
-                      onMouseEnter={(e) => {
-                        const primaryColor =
-                          getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
-                          '75, 0, 125';
-                        const rgb = primaryColor.startsWith('#') ? hexToRgb(primaryColor) : primaryColor;
-                        e.currentTarget.style.backgroundColor = `rgba(${rgb}, 0.05)`;
-                        e.currentTarget.style.borderColor = `rgba(${rgb}, 0.3)`;
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
-                        e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                    >
-                      <ConversationAvatar convo={convo} />
-                      <div style={{ flex: 1, overflow: 'hidden' }}>
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {convo.conversationName || 'Untitled Chat'}
+                <div style={{ maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
+                  <div className="suggestions-header">Continue where you left off</div>
+                  <div className="d-flex flex-column" style={{ gap: '0.75rem', paddingBottom: '1.5rem' }}>
+                    {recentConversations.map((convo) => (
+                      <div
+                        key={convo.conversation_id}
+                        className="text-start conversation-suggestion-btn"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleContinueClick(convo.conversation_id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleContinueClick(convo.conversation_id);
+                          }
+                        }}
+                        onMouseEnter={(e) => {
+                          const primaryColor =
+                            getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
+                            '75, 0, 125';
+                          const rgb = primaryColor.startsWith('#') ? hexToRgb(primaryColor) : primaryColor;
+                          e.currentTarget.style.backgroundColor = `rgba(${rgb}, 0.05)`;
+                          e.currentTarget.style.borderColor = `rgba(${rgb}, 0.3)`;
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
+                          e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      >
+                        <ConversationAvatar convo={convo} />
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {convo.conversationName || 'Untitled Chat'}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
+                            {convo.isAgentConversation && convo.agentTitle
+                              ? `${convo.agentTitle} • ${formatRelativeTime(convo.latestTimestamp)}`
+                              : formatRelativeTime(convo.latestTimestamp)}
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
-                          {convo.isAgentConversation && convo.agentTitle
-                            ? `${convo.agentTitle} • ${formatRelativeTime(convo.latestTimestamp)}`
-                            : formatRelativeTime(convo.latestTimestamp)}
-                        </div>
+                        {(onRenameConversation || onDeleteConversation) && (
+                          <div
+                            className="conversation-actions d-flex flex-column align-items-center"
+                            style={{ gap: '0.25rem' }}
+                          >
+                            {onRenameConversation && (
+                              <OverlayTrigger
+                                placement="left"
+                                overlay={<Tooltip id={`rename-${convo.conversation_id}`}>Rename</Tooltip>}
+                              >
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="p-0 text-secondary"
+                                  aria-label="Rename conversation"
+                                  onClick={(e) =>
+                                    handleRename(e, convo.conversation_id, convo.conversationName || 'Untitled Chat')
+                                  }
+                                  style={{ lineHeight: 1 }}
+                                >
+                                  <i className="bi bi-pencil" />
+                                </Button>
+                              </OverlayTrigger>
+                            )}
+                            {onDeleteConversation && (
+                              <OverlayTrigger
+                                placement="left"
+                                overlay={<Tooltip id={`delete-${convo.conversation_id}`}>Delete</Tooltip>}
+                              >
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="p-0 text-danger"
+                                  aria-label="Delete conversation"
+                                  onClick={(e) => handleDelete(e, convo.conversation_id)}
+                                  style={{ lineHeight: 1 }}
+                                >
+                                  <i className="bi bi-trash" />
+                                </Button>
+                              </OverlayTrigger>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      {(onRenameConversation || onDeleteConversation) && (
-                        <div
-                          className="conversation-actions d-flex flex-column align-items-center"
-                          style={{ gap: '0.25rem' }}
-                        >
-                          {onRenameConversation && (
-                            <OverlayTrigger
-                              placement="left"
-                              overlay={<Tooltip id={`rename-${convo.conversation_id}`}>Rename</Tooltip>}
-                            >
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-0 text-secondary"
-                                aria-label="Rename conversation"
-                                onClick={(e) =>
-                                  handleRename(e, convo.conversation_id, convo.conversationName || 'Untitled Chat')
-                                }
-                                style={{ lineHeight: 1 }}
-                              >
-                                <i className="bi bi-pencil" />
-                              </Button>
-                            </OverlayTrigger>
-                          )}
-                          {onDeleteConversation && (
-                            <OverlayTrigger
-                              placement="left"
-                              overlay={<Tooltip id={`delete-${convo.conversation_id}`}>Delete</Tooltip>}
-                            >
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-0 text-danger"
-                                aria-label="Delete conversation"
-                                onClick={(e) => handleDelete(e, convo.conversation_id)}
-                                style={{ lineHeight: 1 }}
-                              >
-                                <i className="bi bi-trash" />
-                              </Button>
-                            </OverlayTrigger>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : null}

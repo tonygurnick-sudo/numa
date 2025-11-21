@@ -10,6 +10,13 @@ const NumaChatAgents = lazy(() => import('../Pages/NumaChatAgents').then((m) => 
 const KnowledgeBaseManagement = lazy(() =>
   import('../Pages/KnowledgeBaseManagement').then((m) => ({ default: m.KnowledgeBaseManagement })),
 );
+const CompanyKnowledgeBase = lazy(() =>
+  import('../Pages/CompanyKnowledgeBase').then((m) => ({ default: m.CompanyKnowledgeBase })),
+);
+const UserKnowledgeBases = lazy(() =>
+  import('../Pages/UserKnowledgeBases').then((m) => ({ default: m.UserKnowledgeBases })),
+);
+const UserKBDetailPage = lazy(() => import('../Pages/UserKBDetailPage').then((m) => ({ default: m.UserKBDetailPage })));
 const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m) => ({ default: m.AgentsManagement })));
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
 const NumaIntegrations = lazy(() => import('../Pages/NumaIntegrations').then((m) => ({ default: m.NumaIntegrations })));
@@ -29,7 +36,7 @@ export const ROUTE_CONFIG = [
   {
     path: '/job-history',
     element: () => <JobHistoryManager />,
-    nav: { label: 'Job History', icon: 'bi bi-clock-history' },
+    // nav property removed - Job History accessible via page-level buttons only
   },
   {
     path: '/chat',
@@ -54,7 +61,25 @@ export const ROUTE_CONFIG = [
     path: '/knowledgebase-management',
     element: () => <KnowledgeBaseManagement />,
     requiredFeature: 'useCompanyData',
-    nav: { label: 'Knowledge Base', icon: 'bi bi-folder2-open' },
+    // Legacy route - no nav, keep for backwards compatibility
+  },
+  {
+    path: '/company-knowledge-base',
+    element: () => <CompanyKnowledgeBase />,
+    requiredFeature: 'useCompanyData',
+    nav: { label: 'Company Knowledge Base', icon: 'bi bi-file-earmark-text' },
+  },
+  {
+    path: '/user-knowledge-bases',
+    element: () => <UserKnowledgeBases />,
+    requiredFeature: 'useCompanyData',
+    nav: { label: 'User Knowledge Base', icon: 'bi bi-person-lines-fill' },
+  },
+  {
+    path: '/user-knowledge-bases/:kbId',
+    element: () => <UserKBDetailPage />,
+    requiredFeature: 'useCompanyData',
+    // No nav - accessed via clicking on a KB card
   },
   // Dedicated Settings page replaces User Management in nav
   {
