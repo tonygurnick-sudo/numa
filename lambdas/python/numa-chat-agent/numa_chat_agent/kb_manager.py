@@ -73,9 +73,6 @@ class KnowledgeBaseManager:
         normalized_viewers = self._normalize_id_list(viewers, allow_wildcard=True)
         normalized_editors = self._normalize_id_list(editors)
 
-        if not normalized_viewers:
-            normalized_viewers = ["*"]
-
         if created_by:
             if "*" not in normalized_viewers and created_by not in normalized_viewers:
                 normalized_viewers.append(created_by)
@@ -115,6 +112,27 @@ class KnowledgeBaseManager:
 
         # Create user-KB membership records for GSI
         self._create_memberships(kb_id, name, normalized_viewers, normalized_editors)
+
+        # Ensure the creator is recorded as OWNER in memberships for quick lookup
+        try:
+            if created_by:
+                owner_membership: Dict[str, AttributeValueTypeDef] = {
+                    "PK": {"S": self.tenant_pk},
+                    "SK": {"S": f"KBMEM#{kb_id}#USER#{created_by}"},
+                    "GSI1PK": {"S": f"USER#{created_by}"},
+                    "GSI1SK": {"S": f"KB#{kb_id}"},
+                    "kb_id": {"S": kb_id},
+                    "kb_name": {"S": name},
+                    "role": {"S": "OWNER"},
+                }
+                self.dynamodb.put_item(TableName=self.table_name, Item=owner_membership)
+        except Exception as e:
+            logger.error(
+                "Error creating owner membership",
+                kb_id=kb_id,
+                user_id=created_by,
+                error=str(e),
+            )
 
         logger.info("Created KB", kb_id=kb_id, kb_name=name)
         return self._parse_kb_item(kb_item)
@@ -180,7 +198,7 @@ class KnowledgeBaseManager:
 
         for kb in tenant_kbs:
             kb_id = kb.get("kb_id")
-            if not kb_id or kb_id in memberships:
+            if not kb_id:
                 continue
 
             if kb.get("status") != "ACTIVE":
@@ -190,17 +208,25 @@ class KnowledgeBaseManager:
             viewers = kb.get("viewers", [])
 
             role: Optional[str] = None
-            if user_id in editors:
+            # Owner takes precedence over editor/viewer
+            if kb.get("created_by") == user_id:
+                role = "OWNER"
+            elif user_id in editors:
                 role = "EDITOR"
             elif "*" in viewers or user_id in viewers:
                 role = "VIEWER"
 
             if role:
-                memberships[kb_id] = {
-                    "kb_id": kb_id,
-                    "kb_name": kb.get("kb_name", kb_id),
-                    "role": role,
-                }
+                # If a membership exists but this user is the owner, override to OWNER
+                if kb_id in memberships:
+                    if role == "OWNER":
+                        memberships[kb_id]["role"] = "OWNER"
+                else:
+                    memberships[kb_id] = {
+                        "kb_id": kb_id,
+                        "kb_name": kb.get("kb_name", kb_id),
+                        "role": role,
+                    }
 
         return sorted(
             memberships.values(),
@@ -237,6 +263,24 @@ class KnowledgeBaseManager:
             return True
 
         return False
+
+    def check_owner(self, kb_id: str, user_id: str) -> bool:
+        """Return True if the user is the owner (creator) of the KB.
+
+        Backward-compatibility fallback: if created_by is missing/empty on legacy items,
+        allow EDITORs to act as owner for protected actions (update/delete).
+        """
+        kb = self.get_kb(kb_id)
+        if not kb:
+            return False
+
+        created_by = kb.get("created_by")
+        if isinstance(created_by, str) and created_by:
+            return created_by == user_id
+
+        # Legacy fallback: no created_by recorded
+        editors = kb.get("editors", [])
+        return user_id in editors
 
     def update_kb(
         self,
@@ -284,8 +328,6 @@ class KnowledgeBaseManager:
                 normalized_viewers = self._normalize_id_list(
                     viewers, allow_wildcard=True
                 )
-                if not normalized_viewers:
-                    normalized_viewers = ["*"]
                 if (
                     creator_id
                     and "*" not in normalized_viewers

@@ -3,8 +3,6 @@ import { useContext, useState, useEffect, useMemo } from 'react';
 import { Alert, Container, Row, Col } from 'react-bootstrap';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 
-import { Breadcrumbs } from '../Components/Breadcrumbs';
-import { Nav } from '../Components/Nav';
 import { AppSearch } from '../Components/Apps/AppSearch';
 import { AppItem } from '../Components/Apps/AppItem';
 import { Pagination } from '../Components/Pagination';
@@ -17,6 +15,7 @@ import { useFavorites } from '../hooks/useFavorites';
 import { NicetyContext } from '../Providers/NicetyContext';
 import { manifestService } from '../Services/manifestService';
 import type { DashProps } from '../types/dash';
+import { PageHeader } from '../Components/PageHeader';
 
 export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   const niceties = useContext(NicetyContext);
@@ -144,81 +143,71 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   const currentItems = filteredApps.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
-    <>
-      <Nav />
-      <div className="dashboard" data-testid="dashboard" {...rest}>
-        <header>
-          <Container fluid>
+    <div className="dashboard" data-testid="dashboard" {...rest}>
+      <PageHeader
+        title={
+          <>
+            {showFavorites && <StarFill className="text-warning me-2" />}
+            {showFavorites ? 'Favourite Apps' : 'Numa Apps'}
+          </>
+        }
+        subtitle={
+          showFavorites ? 'Your favorite apps at a glance' : 'Get started uncovering insights from your data with Numa.'
+        }
+      />
+      <LayoutDashboard>
+        <Container fluid className="px-0">
+          {niceties.isEnabled('job-status-dashboard') && <StatusDashboard />}
+          <AppSearch
+            onSearch={handleSearch}
+            onCategoryFilter={handleCategoryFilter}
+            onSort={handleSort}
+            categories={categories}
+            initialCategories={activeCategories}
+            initialSortOrder={sortOrder}
+          />
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+
+          {error && (
             <Row>
-              <Col lg={9} className="pe-5">
-                <Breadcrumbs label={showFavorites ? 'Favourite Apps' : 'Dashboard'} />
-                <h1>
-                  {showFavorites && <StarFill className="text-warning title-star" />}
-                  {showFavorites ? 'Favourite Apps' : 'Numa Apps'}
-                </h1>
-                <p>
-                  {showFavorites
-                    ? 'Your favorite apps at a glance'
-                    : 'Get started uncovering insights from your data with Numa.'}
-                </p>
+              <Col xs={12}>
+                <Alert variant="danger" data-testid="error-message">
+                  {error}
+                </Alert>
               </Col>
             </Row>
-          </Container>
-        </header>
-        <LayoutDashboard>
-          <Container fluid className="px-0">
-            {niceties.isEnabled('job-status-dashboard') && <StatusDashboard />}
-            <AppSearch
-              onSearch={handleSearch}
-              onCategoryFilter={handleCategoryFilter}
-              onSort={handleSort}
-              categories={categories}
-              initialCategories={activeCategories}
-              initialSortOrder={sortOrder}
-            />
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+          )}
 
-            {error && (
-              <Row>
-                <Col xs={12}>
-                  <Alert variant="danger" data-testid="error-message">
-                    {error}
-                  </Alert>
-                </Col>
-              </Row>
-            )}
-
-            {loading ? (
-              <Preloader />
-            ) : (
-              <Row className={`g-4 w-100 mx-0${isAnimating ? ' fade-swipe-animating' : ''}`}>
-                {!error &&
-                  Array.isArray(currentItems) &&
-                  currentItems?.map((app) => (
-                    <Col
-                      key={`${app.id}-${app.appName.replace(/\s+/g, '-').toLowerCase()}`}
-                      lg={4}
-                      md={6}
-                      sm={12}
-                      className="d-flex"
-                    >
-                      <AppItem
-                        app={app}
-                        onCategoryClick={(category) => {
-                          // If the category is already active, do nothing
-                          // If not, set it as the only active category
-                          const newCategories = activeCategories.includes(category) ? activeCategories : [category];
-                          handleCategoryFilter(newCategories);
-                        }}
-                      />
-                    </Col>
-                  ))}
-              </Row>
-            )}
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
-          </Container>
-        </LayoutDashboard>
-      </div>
-    </>
+          {loading ? (
+            <Preloader />
+          ) : (
+            <Row className={`g-4 w-100 mx-0${isAnimating ? ' fade-swipe-animating' : ''}`}>
+              {!error &&
+                Array.isArray(currentItems) &&
+                currentItems?.map((app) => (
+                  <Col
+                    key={`${app.id}-${app.appName.replace(/\s+/g, '-').toLowerCase()}`}
+                    lg={4}
+                    md={6}
+                    sm={12}
+                    className="d-flex"
+                  >
+                    <AppItem
+                      app={app}
+                      onCategoryClick={(category) => {
+                        // If the category is already active, do nothing
+                        // If not, set it as the only active category
+                        const newCategories = activeCategories.includes(category) ? activeCategories : [category];
+                        handleCategoryFilter(newCategories);
+                      }}
+                    />
+                  </Col>
+                ))}
+            </Row>
+          )}
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+        </Container>
+      </LayoutDashboard>
+    </div>
   );
 };

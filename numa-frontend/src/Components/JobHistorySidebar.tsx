@@ -7,7 +7,11 @@ import { CheckCircleFill, ArrowClockwise, ExclamationCircleFill, FileEarmarkArro
 
 const SIDEBAR_NAME_LIMIT = 60;
 
-const JobHistorySidebar = () => {
+interface JobHistorySidebarProps {
+  hideToggle?: boolean;
+}
+
+const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
   const {
     getAppJobs,
     loadAppJobs,
@@ -185,16 +189,18 @@ const JobHistorySidebar = () => {
 
   return (
     <>
-      <Button
-        onClick={handleShow}
-        className="job-history-toggle"
-        variant="primary"
-        size="sm"
-        aria-label="Show Job History"
-      >
-        <i className="bi bi-clock-history me-1"></i>
-        Job History
-      </Button>
+      {!hideToggle && (
+        <Button
+          onClick={handleShow}
+          className="job-history-toggle"
+          variant="primary"
+          size="sm"
+          aria-label="Show Job History"
+        >
+          <i className="bi bi-clock-history me-1"></i>
+          Job History
+        </Button>
+      )}
 
       <Offcanvas
         show={jobHistorySidebarOpen}

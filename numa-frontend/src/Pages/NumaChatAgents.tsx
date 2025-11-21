@@ -1,15 +1,14 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Button, Container, Row, Col, Alert, Modal } from 'react-bootstrap';
+import { Button, Alert, Modal } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
 import { preWarmAuroraDatabase } from '../utils/knowledgeBaseUtils';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
-import { Breadcrumbs } from '../Components/Breadcrumbs';
-import { Nav } from '../Components/Nav';
 import { ChatHistorySidebar } from '../Components/Chat/ChatHistorySidebar';
 import { ChatFileUpload } from '../Components/Chat/ChatFileUpload';
 import { AgentsSidebar, AgentsSidebarHandle } from '../Components/Agents/AgentsSidebar';
+import { PageHeader } from '../Components/PageHeader';
 import AgentAvatar from '../Components/Agents/AgentAvatar';
 import { callChatAgentStreaming } from '../Services/chatAgentService';
 import { ChatInput } from '../Components/Chat/ChatInput';
@@ -1374,17 +1373,29 @@ const NumaChatAgents = () => {
 
   return (
     <div className="dashboard">
-      <Nav />
-      <header className="mb-1">
-        <Container fluid>
-          <Row>
-            <Col lg={12}>
-              <Breadcrumbs label={'Chat'} clearStack={true} />
-              <h1 className="mb-0 fs-3">Numa Chat</h1>
-            </Col>
-          </Row>
-        </Container>
-      </header>
+      {/* Page header with title and action buttons */}
+      <PageHeader
+        title="Numa Chat"
+        actions={
+          <>
+            {agentsFeatureEnabled && agentsMode !== 'off' && (
+              <AgentsSidebar
+                ref={agentsSidebarRef}
+                onSelectAgent={handleAgentSelect}
+                currentAgentId={currentAgent?.agentId ?? null}
+                recentConversations={recentConversations}
+              />
+            )}
+            <Button variant="secondary" onClick={toggleChatHistory} title="Chat History">
+              <i className="bi bi-clock-history me-1"></i>
+              History
+            </Button>
+            <Button variant="primary" onClick={handleNewChatClick}>
+              New Chat
+            </Button>
+          </>
+        }
+      />
 
       {/* Main content */}
       <LayoutDashboard>
@@ -1400,11 +1411,12 @@ const NumaChatAgents = () => {
 
           {/* Main chat content */}
           <div className="flex-grow-1 d-flex contain-width">
-            <div className="chat-content flex-grow-1 d-flex flex-column">
-              {/* Header with chat instructions and buttons on the right */}
-              <div className="chat-header d-flex justify-content-between align-items-center mb-3">
-                {currentAgent ? (
-                  <div className="d-flex align-items-center gap-2">
+            {/* White container wrapper */}
+            <div className="chat-white-container">
+              <div className="chat-content flex-grow-1 d-flex flex-column">
+                {/* Agent info section (if agent is selected) */}
+                {currentAgent && (
+                  <div className="chat-agent-info d-flex align-items-center gap-2 p-3 border-bottom">
                     <AgentAvatar agent={currentAgent} size={32} />
                     <div>
                       <div
@@ -1416,211 +1428,193 @@ const NumaChatAgents = () => {
                       <div className="small text-muted">AI Agent Assistant</div>
                     </div>
                   </div>
-                ) : (
-                  <p className="mb-0 small text-muted">Chat with your documents using Numa.</p>
                 )}
-                <div className="chat-header-buttons d-flex align-items-center gap-2">
-                  {agentsFeatureEnabled && agentsMode !== 'off' && (
-                    <AgentsSidebar
-                      ref={agentsSidebarRef}
-                      onSelectAgent={handleAgentSelect}
-                      currentAgentId={currentAgent?.agentId ?? null}
-                      recentConversations={recentConversations}
-                    />
-                  )}
-                  <Button variant="secondary" onClick={toggleChatHistory} title="Chat History">
-                    <i className="bi bi-clock-history me-1"></i>
-                    History
-                  </Button>
-                  <Button variant="primary" onClick={handleNewChatClick} style={{ marginRight: '15px' }}>
-                    New Chat
-                  </Button>
-                </div>
-              </div>
 
-              {/* Missing integrations confirmation modal */}
-              <Modal show={!!missingConfirm} onHide={() => setMissingConfirm(null)} centered>
-                <Modal.Header closeButton>
-                  <Modal.Title>Missing integrations</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                  <p className="mb-3">
-                    This agent requests access to the following integrations which are not connected for your account:
-                  </p>
-                  <div className="d-flex flex-column gap-2 mb-3">
-                    {missingConfirm?.missing.map((id) => {
-                      const config = getConnectionConfig(id);
-                      return (
-                        <div
-                          key={id}
-                          className="d-flex align-items-center gap-3 p-3 border rounded-2 bg-light"
-                          style={{ transition: 'all 0.2s ease' }}
-                        >
-                          {config?.img_src ? (
-                            <img
-                              src={config.img_src}
-                              alt={config.name}
-                              style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
+                {/* Missing integrations confirmation modal */}
+                <Modal show={!!missingConfirm} onHide={() => setMissingConfirm(null)} centered>
+                  <Modal.Header closeButton>
+                    <Modal.Title>Missing integrations</Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <p className="mb-3">
+                      This agent requests access to the following integrations which are not connected for your account:
+                    </p>
+                    <div className="d-flex flex-column gap-2 mb-3">
+                      {missingConfirm?.missing.map((id) => {
+                        const config = getConnectionConfig(id);
+                        return (
+                          <div
+                            key={id}
+                            className="d-flex align-items-center gap-3 p-3 border rounded-2 bg-light"
+                            style={{ transition: 'all 0.2s ease' }}
+                          >
+                            {config?.img_src ? (
+                              <img
+                                src={config.img_src}
+                                alt={config.name}
+                                style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
+                              />
+                            ) : (
+                              <div
+                                className="rounded-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
+                                style={{ width: 32, height: 32, flexShrink: 0 }}
+                              >
+                                <i className="bi bi-link text-secondary"></i>
+                              </div>
+                            )}
+                            <span className="fw-medium">{config?.name || id}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="mb-0 text-muted small">
+                      Continuing may result in limited or unintended behavior. You can connect integrations now from the
+                      Integrations page and try again.
+                    </p>
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button variant="outline-secondary" onClick={() => setMissingConfirm(null)} className="me-auto">
+                      <i className="bi bi-arrow-left me-2"></i>
+                      Back
+                    </Button>
+                    <a className="btn btn-outline-primary" href="/integrations">
+                      <i className="bi bi-link-45deg me-2"></i>
+                      Go to Integrations
+                    </a>
+                    <Button
+                      variant="primary"
+                      onClick={async () => {
+                        const info = missingConfirm;
+                        setMissingConfirm(null);
+                        if (info) await doStartAgentSession(info.agent, info.missing);
+                      }}
+                    >
+                      Continue without
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {agentError && (
+                  <Alert variant="warning" className="py-2" onClose={() => setAgentError(null)} dismissible>
+                    {agentError}
+                  </Alert>
+                )}
+
+                <div className="chat-container position-relative" style={{ flex: '1 1 auto' }}>
+                  <ResizableSplitView
+                    left={
+                      /* LEFT PANE: chat messages + input */
+                      <div className="chat-left-pane d-flex flex-column h-100">
+                        <div className="chat-messages flex-grow-1 overflow-auto">
+                          {isConversationLoading ? (
+                            <div className="d-flex justify-content-center align-items-center h-100">
+                              <div className="text-center">
+                                <div className="spinner-border text-primary" role="status">
+                                  <span className="visually-hidden">Loading...</span>
+                                </div>
+                                <p className="mt-2 text-muted">Loading conversation...</p>
+                              </div>
+                            </div>
+                          ) : shouldShowNewChatView ? (
+                            <NewChat
+                              inputMessage={inputMessage}
+                              setInputMessage={setInputMessage}
+                              handleSubmit={handleSubmit}
+                              setShowUploadModal={setShowUploadModal}
+                              buttonStatus={buttonStatus}
+                              queryDataSources={queryDataSources}
+                              setQueryDataSources={setQueryDataSources}
+                              webSearchEnabled={webSearchEnabled}
+                              setWebSearchEnabled={setWebSearchEnabled}
+                              createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
+                              setCreateAgentEnabled={setCreateAgentEnabled}
+                              autoToolsEnabled={autoToolsEnabled}
+                              setAutoToolsEnabled={setAutoToolsEnabled}
+                              availableConnections={availableConnections}
+                              enabledConnections={enabledConnections}
+                              setEnabledConnections={setEnabledConnections}
+                              connectionsLoading={connectionsLoading}
+                              hasPipedreamFeature={hasPipedreamFeature}
+                              uploadsInProgress={isFileProcessing}
+                              noToolsActive={noToolsActive}
+                              inputRef={inputRef}
+                              recentConversations={recentConversations}
+                              hideSuggestions={hideSuggestions}
+                              onContinueConversation={handleLoadConversation}
+                              suggestionsLoading={suggestionsLoading}
+                              userName={userName}
+                              onRenameConversation={handleRenameConversation}
+                              onDeleteConversation={handleDeleteConversation}
+                              personalAgents={agentsFeatureEnabled ? sortedPersonalAgents : []}
+                              onSelectAgent={handleAgentSelect}
+                              agentsLoading={agentsFeatureEnabled ? personalAgentsLoading : false}
+                              enabledKBIds={enabledKBIds}
+                              setEnabledKBIds={setEnabledKBIds}
                             />
                           ) : (
-                            <div
-                              className="rounded-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
-                              style={{ width: 32, height: 32, flexShrink: 0 }}
-                            >
-                              <i className="bi bi-link text-secondary"></i>
-                            </div>
+                            <ChatMessages
+                              messages={messages}
+                              messageEndRef={messageEndRef}
+                              loadingIndicatorStyle={{}}
+                              onOpenDocument={openDocument}
+                              isConversationLoading={false}
+                              currentAgent={currentAgent}
+                              conversationId={conversationId}
+                              sub={sub}
+                              numaChatDynamoUtils={numaChatDynamoUtils}
+                              setMessages={setMessages}
+                            />
                           )}
-                          <span className="fw-medium">{config?.name || id}</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                  <p className="mb-0 text-muted small">
-                    Continuing may result in limited or unintended behavior. You can connect integrations now from the
-                    Integrations page and try again.
-                  </p>
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button variant="outline-secondary" onClick={() => setMissingConfirm(null)} className="me-auto">
-                    <i className="bi bi-arrow-left me-2"></i>
-                    Back
-                  </Button>
-                  <a className="btn btn-outline-primary" href="/integrations">
-                    <i className="bi bi-link-45deg me-2"></i>
-                    Go to Integrations
-                  </a>
-                  <Button
-                    variant="primary"
-                    onClick={async () => {
-                      const info = missingConfirm;
-                      setMissingConfirm(null);
-                      if (info) await doStartAgentSession(info.agent, info.missing);
-                    }}
-                  >
-                    Continue without
-                  </Button>
-                </Modal.Footer>
-              </Modal>
 
-              {agentError && (
-                <Alert variant="warning" className="py-2" onClose={() => setAgentError(null)} dismissible>
-                  {agentError}
-                </Alert>
-              )}
-
-              <div className="chat-container position-relative" style={{ flex: '1 1 auto' }}>
-                <ResizableSplitView
-                  left={
-                    /* LEFT PANE: chat messages + input */
-                    <div className="chat-left-pane d-flex flex-column h-100">
-                      <div className="chat-messages flex-grow-1 overflow-auto">
-                        {isConversationLoading ? (
-                          <div className="d-flex justify-content-center align-items-center h-100">
-                            <div className="text-center">
-                              <div className="spinner-border text-primary" role="status">
-                                <span className="visually-hidden">Loading...</span>
-                              </div>
-                              <p className="mt-2 text-muted">Loading conversation...</p>
-                            </div>
+                        {/* pinned input at bottom (hide during initial new chat flow) */}
+                        {!shouldShowNewChatView && (
+                          <div className="chat-input-wrapper">
+                            <ChatInput
+                              inputMessage={inputMessage}
+                              setInputMessage={setInputMessage}
+                              handleSubmit={handleSubmit}
+                              setShowUploadModal={setShowUploadModal}
+                              buttonStatus={buttonStatus}
+                              queryDataSources={queryDataSources}
+                              setQueryDataSources={setQueryDataSources}
+                              webSearchEnabled={webSearchEnabled}
+                              setWebSearchEnabled={setWebSearchEnabled}
+                              createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
+                              setCreateAgentEnabled={setCreateAgentEnabled}
+                              autoToolsEnabled={autoToolsEnabled}
+                              setAutoToolsEnabled={setAutoToolsEnabled}
+                              availableConnections={availableConnections}
+                              enabledConnections={enabledConnections}
+                              setEnabledConnections={setEnabledConnections}
+                              connectionsLoading={connectionsLoading}
+                              hasPipedreamFeature={hasPipedreamFeature}
+                              uploadsInProgress={isFileProcessing}
+                              noToolsActive={noToolsActive}
+                              externalInputRef={inputRef}
+                              autoFocus={true}
+                              enabledKBIds={enabledKBIds}
+                              setEnabledKBIds={setEnabledKBIds}
+                            />
                           </div>
-                        ) : shouldShowNewChatView ? (
-                          <NewChat
-                            inputMessage={inputMessage}
-                            setInputMessage={setInputMessage}
-                            handleSubmit={handleSubmit}
-                            setShowUploadModal={setShowUploadModal}
-                            buttonStatus={buttonStatus}
-                            queryDataSources={queryDataSources}
-                            setQueryDataSources={setQueryDataSources}
-                            webSearchEnabled={webSearchEnabled}
-                            setWebSearchEnabled={setWebSearchEnabled}
-                            createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
-                            setCreateAgentEnabled={setCreateAgentEnabled}
-                            autoToolsEnabled={autoToolsEnabled}
-                            setAutoToolsEnabled={setAutoToolsEnabled}
-                            availableConnections={availableConnections}
-                            enabledConnections={enabledConnections}
-                            setEnabledConnections={setEnabledConnections}
-                            connectionsLoading={connectionsLoading}
-                            hasPipedreamFeature={hasPipedreamFeature}
-                            uploadsInProgress={isFileProcessing}
-                            noToolsActive={noToolsActive}
-                            inputRef={inputRef}
-                            recentConversations={recentConversations}
-                            hideSuggestions={hideSuggestions}
-                            onContinueConversation={handleLoadConversation}
-                            suggestionsLoading={suggestionsLoading}
-                            userName={userName}
-                            onRenameConversation={handleRenameConversation}
-                            onDeleteConversation={handleDeleteConversation}
-                            personalAgents={agentsFeatureEnabled ? sortedPersonalAgents : []}
-                            onSelectAgent={handleAgentSelect}
-                            agentsLoading={agentsFeatureEnabled ? personalAgentsLoading : false}
-                            enabledKBIds={enabledKBIds}
-                            setEnabledKBIds={setEnabledKBIds}
-                          />
-                        ) : (
-                          <ChatMessages
-                            messages={messages}
-                            messageEndRef={messageEndRef}
-                            loadingIndicatorStyle={{}}
-                            onOpenDocument={openDocument}
-                            isConversationLoading={false}
-                            currentAgent={currentAgent}
-                            conversationId={conversationId}
-                            sub={sub}
-                            numaChatDynamoUtils={numaChatDynamoUtils}
-                            setMessages={setMessages}
-                          />
                         )}
                       </div>
-
-                      {/* pinned input at bottom (hide during initial new chat flow) */}
-                      {!shouldShowNewChatView && (
-                        <div className="chat-input-wrapper" style={{ marginBottom: '1rem' }}>
-                          <ChatInput
-                            inputMessage={inputMessage}
-                            setInputMessage={setInputMessage}
-                            handleSubmit={handleSubmit}
-                            setShowUploadModal={setShowUploadModal}
-                            buttonStatus={buttonStatus}
-                            queryDataSources={queryDataSources}
-                            setQueryDataSources={setQueryDataSources}
-                            webSearchEnabled={webSearchEnabled}
-                            setWebSearchEnabled={setWebSearchEnabled}
-                            createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
-                            setCreateAgentEnabled={setCreateAgentEnabled}
-                            autoToolsEnabled={autoToolsEnabled}
-                            setAutoToolsEnabled={setAutoToolsEnabled}
-                            availableConnections={availableConnections}
-                            enabledConnections={enabledConnections}
-                            setEnabledConnections={setEnabledConnections}
-                            connectionsLoading={connectionsLoading}
-                            hasPipedreamFeature={hasPipedreamFeature}
-                            uploadsInProgress={isFileProcessing}
-                            noToolsActive={noToolsActive}
-                            externalInputRef={inputRef}
-                            autoFocus={true}
-                            enabledKBIds={enabledKBIds}
-                            setEnabledKBIds={setEnabledKBIds}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  }
-                  right={
-                    /* RIGHT PANE: document panel */
-                    showSplitView && inlineDocument ? (
-                      <DocumentPanel documentContent={inlineDocument} onClose={closeDocument} />
-                    ) : null
-                  }
-                  showRight={inlineDocument && showSplitView}
-                  leftFraction={leftFraction}
-                  onLeftFractionChange={setLeftFraction}
-                  minLeft={200}
-                  minRight={200}
-                />
+                    }
+                    right={
+                      /* RIGHT PANE: document panel */
+                      showSplitView && inlineDocument ? (
+                        <DocumentPanel documentContent={inlineDocument} onClose={closeDocument} />
+                      ) : null
+                    }
+                    showRight={inlineDocument && showSplitView}
+                    leftFraction={leftFraction}
+                    onLeftFractionChange={setLeftFraction}
+                    minLeft={200}
+                    minRight={200}
+                  />
+                </div>
               </div>
+              {/* End white container */}
             </div>
           </div>
         </div>

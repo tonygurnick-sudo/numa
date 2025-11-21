@@ -1,17 +1,11 @@
-import { Container, Row, Col } from 'react-bootstrap';
+import { ReactNode } from 'react';
 
-const LayoutDashboard = ({ children }) => {
-  return (
-    <div className="app-content">
-      <Container fluid>
-        <Row>
-          <Col xs={12}>
-            <div className="wrapper">{children}</div>
-          </Col>
-        </Row>
-      </Container>
-    </div>
-  );
+interface LayoutDashboardProps {
+  children: ReactNode;
+}
+
+const LayoutDashboard = ({ children }: LayoutDashboardProps) => {
+  return <div className="app-content">{children}</div>;
 };
 
 export { LayoutDashboard };

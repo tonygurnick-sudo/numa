@@ -8,14 +8,13 @@ import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsServ
 import type { AgentSummary } from '../types/agents';
 import { AgentCard } from '../Components/Agents/AgentCard';
 import { AgentCreateModal } from '../Components/Agents/AgentCreateModal';
-import { Breadcrumbs } from '../Components/Breadcrumbs';
-import { Nav } from '../Components/Nav';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
+import { PageHeader } from '../Components/PageHeader';
 
 type FilterOption = 'all' | 'personal' | 'public';
 
@@ -294,410 +293,384 @@ export const AgentsManagement = () => {
   const publicCount = workspaceAgents.length;
 
   return (
-    <>
-      <Nav />
-      <div className="dashboard">
-        <header className="mb-1">
-          <Container fluid>
-            <Row>
-              <Col lg={12}>
-                <Breadcrumbs label="Agents" />
-                <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3 mb-4">
-                  <div className="d-flex align-items-center gap-3">
-                    <div
-                      className="rounded-3 d-flex align-items-center justify-content-center"
-                      style={{
-                        width: 56,
-                        height: 56,
-                        backgroundColor: brandPrimaryColor,
-                        flexShrink: 0,
-                      }}
-                    >
-                      <i className="bi bi-robot" style={{ fontSize: '28px', color: brandPrimaryContrast }}></i>
-                    </div>
-                    <div>
-                      <h1 className="mb-1 fs-2">AI Agents</h1>
-                      <p className="text-muted mb-0 fs-6">Design, deploy, and manage your intelligent AI assistants</p>
+    <div className="dashboard">
+      <PageHeader
+        title="AI Agents"
+        subtitle="Design, deploy, and manage your intelligent AI assistants"
+        actions={
+          <>
+            <Button variant="secondary" onClick={loadAgents} disabled={loading}>
+              <i className="bi bi-arrow-clockwise me-1"></i> Refresh
+            </Button>
+            {agentsFeatureEnabled && agentsMode !== 'off' && (
+              <Button variant="primary" onClick={handleCreate}>
+                <i className="bi bi-plus-circle me-1"></i> Create Agent
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      {/* Stats Cards - moved outside header */}
+      {agentsFeatureEnabled && (
+        <Container fluid>
+          <Row className="g-3 mb-4">
+            <Col xs={6} md={4}>
+              <div
+                className="p-3 rounded-3 border bg-white"
+                role="button"
+                onClick={() => setFilter('all')}
+                style={{
+                  boxShadow: filter === 'all' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  borderColor: filter === 'all' ? brandPrimaryBorderColor : undefined,
+                  borderWidth: filter === 'all' ? '2px' : '1px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = brandSelectedShadow;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow =
+                    filter === 'all' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
+                }}
+              >
+                <div className="d-flex align-items-center justify-content-between">
+                  <div>
+                    <div className="text-muted small mb-1">Total Agents</div>
+                    <div className="fs-4 fw-bold">{totalAgents}</div>
+                  </div>
+                  <div
+                    className="rounded-circle d-flex align-items-center justify-content-center"
+                    style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
+                  >
+                    <i className="bi bi-robot fs-5" style={{ color: brandPrimaryColor }}></i>
+                  </div>
+                </div>
+              </div>
+            </Col>
+            <Col xs={6} md={4}>
+              <div
+                className="p-3 rounded-3 border bg-white"
+                role="button"
+                onClick={() => setFilter('personal')}
+                style={{
+                  boxShadow: filter === 'personal' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  borderColor: filter === 'personal' ? brandPrimaryBorderColor : undefined,
+                  borderWidth: filter === 'personal' ? '2px' : '1px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = brandSelectedShadow;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow =
+                    filter === 'personal' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
+                }}
+              >
+                <div className="d-flex align-items-center justify-content-between">
+                  <div>
+                    <div className="text-muted small mb-1">Personal</div>
+                    <div className="fs-4 fw-bold">{personalCount}</div>
+                  </div>
+                  <div
+                    className="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
+                    style={{ width: 48, height: 48 }}
+                  >
+                    <i className="bi bi-person-fill" style={{ color: brandPrimaryColor }}></i>
+                  </div>
+                </div>
+              </div>
+            </Col>
+            <Col xs={6} md={4}>
+              <div
+                className="p-3 rounded-3 border bg-white"
+                role="button"
+                onClick={() => setFilter('public')}
+                style={{
+                  boxShadow: filter === 'public' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  borderColor: filter === 'public' ? brandPrimaryBorderColor : undefined,
+                  borderWidth: filter === 'public' ? '2px' : '1px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = brandSelectedShadow;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow =
+                    filter === 'public' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
+                }}
+              >
+                <div className="d-flex align-items-center justify-content-between">
+                  <div>
+                    <div className="text-muted small mb-1">Company</div>
+                    <div className="fs-4 fw-bold">{publicCount}</div>
+                  </div>
+                  <div
+                    className="rounded-circle d-flex align-items-center justify-content-center"
+                    style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
+                  >
+                    <i className="bi bi-shop fs-5" style={{ color: brandPrimaryColor }}></i>
+                  </div>
+                </div>
+              </div>
+            </Col>
+          </Row>
+        </Container>
+      )}
+
+      <LayoutDashboard>
+        <Container className="py-4">
+          {!agentsFeatureEnabled && (
+            <>
+              <Alert variant="info" className="mb-3">
+                <div className="d-flex align-items-start">
+                  <i className="bi bi-robot me-2 mt-1"></i>
+                  <div>
+                    <div className="fw-semibold">Agents are not enabled for your company</div>
+                    <div className="small text-muted">
+                      Create agents to automate tasks, standardize workflows, and reuse expert setups across your team.
+                      Contact your account administrator to request access.
                     </div>
                   </div>
-                  <div className="d-flex gap-2">
-                    <Button variant="secondary" onClick={loadAgents} disabled={loading}>
-                      <i className="bi bi-arrow-clockwise me-1"></i> Refresh
-                    </Button>
-                    {agentsFeatureEnabled && agentsMode !== 'off' && (
-                      <Button onClick={handleCreate} size="lg">
-                        <i className="bi bi-plus-circle me-2"></i> Create Agent
+                </div>
+              </Alert>
+              <div className="text-center py-5">
+                <div className="mb-4">
+                  <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
+                </div>
+                <h3 className="h5 mb-2">Agents are disabled</h3>
+                <p className="text-muted mb-0" style={{ maxWidth: 640, margin: '0 auto' }}>
+                  Agents let you define reusable AI assistants with custom instructions, reference files, and tool
+                  access. When enabled, you can create personal agents or share company agents for common tasks.
+                </p>
+              </div>
+            </>
+          )}
+
+          {agentsFeatureEnabled && error && (
+            <Alert variant="danger" onClose={() => setError(null)} dismissible>
+              {error}
+            </Alert>
+          )}
+
+          {agentsFeatureEnabled &&
+            (loading ? (
+              <div className="d-flex justify-content-center align-items-center py-5">
+                <Spinner animation="border" />
+              </div>
+            ) : (
+              <>
+                {filter !== 'public' && filteredMyAgents.length > 0 && (
+                  <section className="mb-5">
+                    <div className="mb-4">
+                      <div className="d-flex align-items-center gap-3">
+                        <div
+                          className="rounded-3 d-flex align-items-center justify-content-center"
+                          style={{
+                            width: 56,
+                            height: 56,
+                            backgroundColor: brandPrimaryColor,
+                            flexShrink: 0,
+                          }}
+                        >
+                          <i
+                            className="bi bi-person-circle"
+                            style={{ fontSize: '28px', color: brandPrimaryContrast }}
+                          ></i>
+                        </div>
+                        <div className="flex-grow-1">
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <h2 className="h4 mb-0 fw-bold">My Agents</h2>
+                            <span
+                              className="badge rounded-pill px-3 py-2"
+                              style={{
+                                backgroundColor: brandPrimaryColor,
+                                color: brandPrimaryContrast,
+                                fontSize: '0.9rem',
+                              }}
+                            >
+                              {filteredMyAgents.length}
+                            </span>
+                          </div>
+                          <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+                            Your personal AI assistants
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {renderAgentsGrid(
+                      filteredMyAgents,
+                      filter === 'personal'
+                        ? 'You have not created any personal agents yet. Click "Create Agent" to get started.'
+                        : 'No agents found.',
+                      true,
+                    )}
+                  </section>
+                )}
+
+                {agentsMode !== 'personal_only' && filter !== 'personal' && filteredWorkspaceAgents.length > 0 && (
+                  <section>
+                    <div className="mb-4">
+                      <div className="d-flex align-items-center gap-3">
+                        <div
+                          className="rounded-3 d-flex align-items-center justify-content-center"
+                          style={{
+                            width: 56,
+                            height: 56,
+                            backgroundColor: brandPrimaryColor,
+                            flexShrink: 0,
+                          }}
+                        >
+                          <i className="bi bi-shop" style={{ fontSize: '28px', color: brandPrimaryContrast }}></i>
+                        </div>
+                        <div className="flex-grow-1">
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <h2 className="h4 mb-0 fw-bold">Company Agent Marketplace</h2>
+                            <span
+                              className="badge rounded-pill px-3 py-2"
+                              style={{
+                                backgroundColor: brandPrimaryColor,
+                                color: brandPrimaryContrast,
+                                fontSize: '0.9rem',
+                              }}
+                            >
+                              {filteredWorkspaceAgents.length}
+                            </span>
+                          </div>
+                          <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+                            Discover and copy agents shared by other users in your organization
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {renderAgentsGrid(
+                      filteredWorkspaceAgents,
+                      'No company agents are available in your workspace yet.',
+                    )}
+                  </section>
+                )}
+
+                {filteredMyAgents.length === 0 && filteredWorkspaceAgents.length === 0 && (
+                  <div className="text-center py-5">
+                    <div className="mb-4">
+                      <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
+                    </div>
+                    <h3 className="h5 mb-2">No agents found</h3>
+                    <p className="text-muted mb-4">
+                      {agentsMode === 'off'
+                        ? 'Agents are disabled. Contact your admin to enable Agents.'
+                        : filter === 'all'
+                          ? 'Get started by creating your first AI agent'
+                          : filter === 'personal'
+                            ? 'You have not created any personal agents yet'
+                            : 'No company agents are available in your workspace'}
+                    </p>
+                    {agentsMode !== 'off' && (
+                      <Button variant="primary" onClick={handleCreate}>
+                        <i className="bi bi-plus-circle me-2"></i>
+                        Create Your First Agent
                       </Button>
                     )}
                   </div>
-                </div>
-
-                {/* Separator Line */}
-                <div style={{ borderBottom: '1px solid #e0e0e0', marginBottom: '1.5rem' }}></div>
-
-                {/* Stats Cards */}
-                {agentsFeatureEnabled && (
-                  <Row className="g-3 mb-4">
-                    <Col xs={6} md={4}>
-                      <div
-                        className="p-3 rounded-3 border bg-white"
-                        role="button"
-                        onClick={() => setFilter('all')}
-                        style={{
-                          boxShadow: filter === 'all' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          borderColor: filter === 'all' ? brandPrimaryBorderColor : undefined,
-                          borderWidth: filter === 'all' ? '2px' : '1px',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = brandSelectedShadow;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow =
-                            filter === 'all' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
-                        }}
-                      >
-                        <div className="d-flex align-items-center justify-content-between">
-                          <div>
-                            <div className="text-muted small mb-1">Total Agents</div>
-                            <div className="fs-4 fw-bold">{totalAgents}</div>
-                          </div>
-                          <div
-                            className="rounded-circle d-flex align-items-center justify-content-center"
-                            style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
-                          >
-                            <i className="bi bi-robot fs-5" style={{ color: brandPrimaryColor }}></i>
-                          </div>
-                        </div>
-                      </div>
-                    </Col>
-                    <Col xs={6} md={4}>
-                      <div
-                        className="p-3 rounded-3 border bg-white"
-                        role="button"
-                        onClick={() => setFilter('personal')}
-                        style={{
-                          boxShadow: filter === 'personal' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          borderColor: filter === 'personal' ? brandPrimaryBorderColor : undefined,
-                          borderWidth: filter === 'personal' ? '2px' : '1px',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = brandSelectedShadow;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow =
-                            filter === 'personal' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
-                        }}
-                      >
-                        <div className="d-flex align-items-center justify-content-between">
-                          <div>
-                            <div className="text-muted small mb-1">Personal</div>
-                            <div className="fs-4 fw-bold">{personalCount}</div>
-                          </div>
-                          <div
-                            className="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
-                            style={{ width: 48, height: 48 }}
-                          >
-                            <i className="bi bi-person-fill" style={{ color: brandPrimaryColor }}></i>
-                          </div>
-                        </div>
-                      </div>
-                    </Col>
-                    <Col xs={6} md={4}>
-                      <div
-                        className="p-3 rounded-3 border bg-white"
-                        role="button"
-                        onClick={() => setFilter('public')}
-                        style={{
-                          boxShadow: filter === 'public' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          borderColor: filter === 'public' ? brandPrimaryBorderColor : undefined,
-                          borderWidth: filter === 'public' ? '2px' : '1px',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = brandSelectedShadow;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow =
-                            filter === 'public' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
-                        }}
-                      >
-                        <div className="d-flex align-items-center justify-content-between">
-                          <div>
-                            <div className="text-muted small mb-1">Company</div>
-                            <div className="fs-4 fw-bold">{publicCount}</div>
-                          </div>
-                          <div
-                            className="rounded-circle d-flex align-items-center justify-content-center"
-                            style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
-                          >
-                            <i className="bi bi-shop fs-5" style={{ color: brandPrimaryColor }}></i>
-                          </div>
-                        </div>
-                      </div>
-                    </Col>
-                  </Row>
                 )}
-              </Col>
-            </Row>
-          </Container>
-        </header>
-
-        <LayoutDashboard>
-          <Container className="py-4">
-            {!agentsFeatureEnabled && (
-              <>
-                <Alert variant="info" className="mb-3">
-                  <div className="d-flex align-items-start">
-                    <i className="bi bi-robot me-2 mt-1"></i>
-                    <div>
-                      <div className="fw-semibold">Agents are not enabled for your company</div>
-                      <div className="small text-muted">
-                        Create agents to automate tasks, standardize workflows, and reuse expert setups across your
-                        team. Contact your account administrator to request access.
-                      </div>
-                    </div>
-                  </div>
-                </Alert>
-                <div className="text-center py-5">
-                  <div className="mb-4">
-                    <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
-                  </div>
-                  <h3 className="h5 mb-2">Agents are disabled</h3>
-                  <p className="text-muted mb-0" style={{ maxWidth: 640, margin: '0 auto' }}>
-                    Agents let you define reusable AI assistants with custom instructions, reference files, and tool
-                    access. When enabled, you can create personal agents or share company agents for common tasks.
-                  </p>
-                </div>
               </>
-            )}
+            ))}
 
-            {agentsFeatureEnabled && error && (
-              <Alert variant="danger" onClose={() => setError(null)} dismissible>
-                {error}
-              </Alert>
-            )}
-
-            {agentsFeatureEnabled &&
-              (loading ? (
-                <div className="d-flex justify-content-center align-items-center py-5">
-                  <Spinner animation="border" />
+          <AgentCreateModal
+            show={isModalOpen}
+            onHide={() => setIsModalOpen(false)}
+            editingAgent={editingAgent}
+            onAgentSaved={handleModalSaved}
+          />
+          {/* Missing integrations confirmation modal (pre-chat) */}
+          <Modal show={missingModal.show} onHide={() => setMissingModal((m) => ({ ...m, show: false }))} centered>
+            <Modal.Header closeButton>
+              <Modal.Title>Missing integrations</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {missingModal.loading ? (
+                <div className="d-flex align-items-center">
+                  <Spinner animation="border" size="sm" className="me-2" /> Checking your integrations…
                 </div>
               ) : (
                 <>
-                  {filter !== 'public' && filteredMyAgents.length > 0 && (
-                    <section className="mb-5">
-                      <div className="mb-4">
-                        <div className="d-flex align-items-center gap-3">
-                          <div
-                            className="rounded-3 d-flex align-items-center justify-content-center"
-                            style={{
-                              width: 56,
-                              height: 56,
-                              backgroundColor: brandPrimaryColor,
-                              flexShrink: 0,
-                            }}
-                          >
-                            <i
-                              className="bi bi-person-circle"
-                              style={{ fontSize: '28px', color: brandPrimaryContrast }}
-                            ></i>
-                          </div>
-                          <div className="flex-grow-1">
-                            <div className="d-flex justify-content-between align-items-center mb-1">
-                              <h2 className="h4 mb-0 fw-bold">My Agents</h2>
-                              <span
-                                className="badge rounded-pill px-3 py-2"
-                                style={{
-                                  backgroundColor: brandPrimaryColor,
-                                  color: brandPrimaryContrast,
-                                  fontSize: '0.9rem',
-                                }}
-                              >
-                                {filteredMyAgents.length}
-                              </span>
+                  <p className="mb-3">
+                    This agent requests access to the following integrations which are not connected for your account:
+                  </p>
+                  <div className="d-flex flex-column gap-2 mb-3">
+                    {missingModal.missing.map((id) => {
+                      const config = getConnectionConfig(id);
+                      return (
+                        <div
+                          key={id}
+                          className="d-flex align-items-center gap-3 p-3 border rounded-2 bg-light"
+                          style={{ transition: 'all 0.2s ease' }}
+                        >
+                          {config?.img_src ? (
+                            <img
+                              src={config.img_src}
+                              alt={config.name}
+                              style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
+                            />
+                          ) : (
+                            <div
+                              className="rounded-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
+                              style={{ width: 32, height: 32, flexShrink: 0 }}
+                            >
+                              <i className="bi bi-link text-secondary"></i>
                             </div>
-                            <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-                              Your personal AI assistants
-                            </p>
-                          </div>
+                          )}
+                          <span className="fw-medium">{config?.name || id}</span>
                         </div>
-                      </div>
-                      {renderAgentsGrid(
-                        filteredMyAgents,
-                        filter === 'personal'
-                          ? 'You have not created any personal agents yet. Click "Create Agent" to get started.'
-                          : 'No agents found.',
-                        true,
-                      )}
-                    </section>
-                  )}
-
-                  {agentsMode !== 'personal_only' && filter !== 'personal' && filteredWorkspaceAgents.length > 0 && (
-                    <section>
-                      <div className="mb-4">
-                        <div className="d-flex align-items-center gap-3">
-                          <div
-                            className="rounded-3 d-flex align-items-center justify-content-center"
-                            style={{
-                              width: 56,
-                              height: 56,
-                              backgroundColor: brandPrimaryColor,
-                              flexShrink: 0,
-                            }}
-                          >
-                            <i className="bi bi-shop" style={{ fontSize: '28px', color: brandPrimaryContrast }}></i>
-                          </div>
-                          <div className="flex-grow-1">
-                            <div className="d-flex justify-content-between align-items-center mb-1">
-                              <h2 className="h4 mb-0 fw-bold">Company Agent Marketplace</h2>
-                              <span
-                                className="badge rounded-pill px-3 py-2"
-                                style={{
-                                  backgroundColor: brandPrimaryColor,
-                                  color: brandPrimaryContrast,
-                                  fontSize: '0.9rem',
-                                }}
-                              >
-                                {filteredWorkspaceAgents.length}
-                              </span>
-                            </div>
-                            <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-                              Discover and copy agents shared by other users in your organization
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      {renderAgentsGrid(
-                        filteredWorkspaceAgents,
-                        'No company agents are available in your workspace yet.',
-                      )}
-                    </section>
-                  )}
-
-                  {filteredMyAgents.length === 0 && filteredWorkspaceAgents.length === 0 && (
-                    <div className="text-center py-5">
-                      <div className="mb-4">
-                        <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
-                      </div>
-                      <h3 className="h5 mb-2">No agents found</h3>
-                      <p className="text-muted mb-4">
-                        {agentsMode === 'off'
-                          ? 'Agents are disabled. Contact your admin to enable Agents.'
-                          : filter === 'all'
-                            ? 'Get started by creating your first AI agent'
-                            : filter === 'personal'
-                              ? 'You have not created any personal agents yet'
-                              : 'No company agents are available in your workspace'}
-                      </p>
-                      {agentsMode !== 'off' && (
-                        <Button variant="primary" onClick={handleCreate}>
-                          <i className="bi bi-plus-circle me-2"></i>
-                          Create Your First Agent
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </>
-              ))}
-
-            <AgentCreateModal
-              show={isModalOpen}
-              onHide={() => setIsModalOpen(false)}
-              editingAgent={editingAgent}
-              onAgentSaved={handleModalSaved}
-            />
-            {/* Missing integrations confirmation modal (pre-chat) */}
-            <Modal show={missingModal.show} onHide={() => setMissingModal((m) => ({ ...m, show: false }))} centered>
-              <Modal.Header closeButton>
-                <Modal.Title>Missing integrations</Modal.Title>
-              </Modal.Header>
-              <Modal.Body>
-                {missingModal.loading ? (
-                  <div className="d-flex align-items-center">
-                    <Spinner animation="border" size="sm" className="me-2" /> Checking your integrations…
+                      );
+                    })}
                   </div>
-                ) : (
-                  <>
-                    <p className="mb-3">
-                      This agent requests access to the following integrations which are not connected for your account:
-                    </p>
-                    <div className="d-flex flex-column gap-2 mb-3">
-                      {missingModal.missing.map((id) => {
-                        const config = getConnectionConfig(id);
-                        return (
-                          <div
-                            key={id}
-                            className="d-flex align-items-center gap-3 p-3 border rounded-2 bg-light"
-                            style={{ transition: 'all 0.2s ease' }}
-                          >
-                            {config?.img_src ? (
-                              <img
-                                src={config.img_src}
-                                alt={config.name}
-                                style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
-                              />
-                            ) : (
-                              <div
-                                className="rounded-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
-                                style={{ width: 32, height: 32, flexShrink: 0 }}
-                              >
-                                <i className="bi bi-link text-secondary"></i>
-                              </div>
-                            )}
-                            <span className="fw-medium">{config?.name || id}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="mb-0 text-muted small">
-                      Continuing may result in limited or unintended behavior. You can connect integrations now from the
-                      Integrations page and try again.
-                    </p>
-                  </>
-                )}
-              </Modal.Body>
-              {!missingModal.loading && (
-                <Modal.Footer>
-                  <Button
-                    variant="outline-secondary"
-                    onClick={() => setMissingModal((m) => ({ ...m, show: false }))}
-                    className="me-auto"
-                  >
-                    <i className="bi bi-arrow-left me-2"></i>
-                    Back
-                  </Button>
-                  <a className="btn btn-outline-primary" href="/integrations">
-                    <i className="bi bi-link-45deg me-2"></i>
-                    Go to Integrations
-                  </a>
-                  <Button
-                    variant="primary"
-                    onClick={() => {
-                      const a = missingModal.agent;
-                      setMissingModal({ show: false, loading: false, agent: null, missing: [] });
-                      if (a) proceedToChat(a);
-                    }}
-                  >
-                    Continue without
-                  </Button>
-                </Modal.Footer>
+                  <p className="mb-0 text-muted small">
+                    Continuing may result in limited or unintended behavior. You can connect integrations now from the
+                    Integrations page and try again.
+                  </p>
+                </>
               )}
-            </Modal>
-          </Container>
-        </LayoutDashboard>
-      </div>
-    </>
+            </Modal.Body>
+            {!missingModal.loading && (
+              <Modal.Footer>
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => setMissingModal((m) => ({ ...m, show: false }))}
+                  className="me-auto"
+                >
+                  <i className="bi bi-arrow-left me-2"></i>
+                  Back
+                </Button>
+                <a className="btn btn-outline-primary" href="/integrations">
+                  <i className="bi bi-link-45deg me-2"></i>
+                  Go to Integrations
+                </a>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    const a = missingModal.agent;
+                    setMissingModal({ show: false, loading: false, agent: null, missing: [] });
+                    if (a) proceedToChat(a);
+                  }}
+                >
+                  Continue without
+                </Button>
+              </Modal.Footer>
+            )}
+          </Modal>
+        </Container>
+      </LayoutDashboard>
+    </div>
   );
 };
 

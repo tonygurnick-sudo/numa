@@ -382,19 +382,19 @@ label {
   @include flex-center-column;
   height: 100vh;
   border-right: 1px solid var(--color-mid-gray);
-  width: 60px;
   background-color: white;
-  transition: width 0.3s ease;
-  position: fixed;
-  left: 0;
-  top: 0;
   overflow-x: hidden;
-  z-index: 1030;
+  overflow-y: auto;
+  position: relative;
+
+  // Collapsed state (default for new layout)
+  &.collapsed {
+    width: 60px;
+  }
 
   // Expanded state
   &.expanded {
-    width: 300px;
-    box-shadow: 1px 1px 12px #cccccc;
+    width: 280px;
   }
 
   .divider {
@@ -404,6 +404,46 @@ label {
     margin: 1rem 0;
     margin-top: 0;
     opacity: 1;
+  }
+
+  // Toggle button styling - conditional positioning based on expanded/collapsed state
+  .nav-toggle-btn {
+    background: none;
+    border: 1px solid var(--color-mid-gray);
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--brand-primary, var(--color-primary));
+    transition: var(--transition-default);
+    margin: 12px auto;
+
+    &:hover {
+      background-color: var(--color-bg-light);
+      border-color: var(--brand-primary, var(--color-primary));
+    }
+
+    i {
+      font-size: 1rem;
+    }
+  }
+
+  // When expanded: position at top-right corner
+  &.expanded .nav-toggle-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    margin: 0;
+    z-index: 10;
+  }
+
+  // When collapsed: keep centered below logo (default margin: 12px auto)
+  &.collapsed .nav-toggle-btn {
+    position: relative;
+    margin: 12px auto;
   }
 
   .nav-links {
@@ -512,6 +552,14 @@ label {
     margin-top: auto;
     padding: 1rem 0;
 
+    .footer-divider {
+      width: 80%;
+      height: 1px;
+      background-color: var(--color-mid-gray);
+      margin: 0.5rem 0;
+      opacity: 0.3;
+    }
+
     .nav-links {
       width: 100%;
       padding: 0;
@@ -540,6 +588,56 @@ label {
         }
       }
     }
+
+    .user-profile-divider {
+      width: 80%;
+      height: 1px;
+      background-color: var(--color-mid-gray);
+      margin: 0.75rem 0;
+      opacity: 0.3;
+    }
+
+    .user-profile-section {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      width: 100%;
+      padding: 0.5rem;
+      justify-content: center;
+
+      .user-avatar {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        border-radius: 50%;
+        background: var(--brand-primary, var(--color-primary));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 1rem;
+
+        .user-initial {
+          user-select: none;
+        }
+      }
+
+      .user-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+
+        .user-email {
+          font-size: 0.85rem;
+          color: var(--brand-primary, var(--color-primary));
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      }
+    }
   }
 
   &.expanded .footer {
@@ -550,6 +648,11 @@ label {
 
     .btn-logout {
       justify-content: flex-start; /* Left align when expanded */
+      padding-left: 10px;
+    }
+
+    .user-profile-section {
+      justify-content: flex-start;
       padding-left: 10px;
     }
   }

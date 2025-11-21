@@ -160,7 +160,7 @@ const ChatInput = ({
               right: '8px',
               fontSize: '0.75rem',
               pointerEvents: 'none',
-              backgroundColor: 'var(--bs-body-bg)',
+              backgroundColor: 'var(--brand-inputBackground, #F7F9FB)',
               padding: '2px 4px',
               borderRadius: '2px',
             }}
@@ -249,12 +249,16 @@ const ChatInput = ({
                                     <i className="bi bi-folder2-open kb-icon"></i>
                                     <span className="kb-name">{kb.kb_name}</span>
                                     {kb.kb_id === 'company' && (
-                                      <Badge bg="info" className="ms-2" style={{ fontSize: '0.65rem' }}>
+                                      <Badge bg="" className="badge-outline ms-2" style={{ fontSize: '0.65rem' }}>
                                         Default
                                       </Badge>
                                     )}
                                   </div>
-                                  <Badge bg="secondary" className="kb-role-badge" style={{ fontSize: '0.65rem' }}>
+                                  <Badge
+                                    bg=""
+                                    className={`kb-role-badge ${kb.role === 'OWNER' ? 'badge-outline-primary' : 'badge-outline'}`}
+                                    style={{ fontSize: '0.65rem' }}
+                                  >
                                     {kb.role}
                                   </Badge>
                                 </div>

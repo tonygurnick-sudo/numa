@@ -1,0 +1,55 @@
+// AppLayout - 2-Panel Layout System
+// Provides a fixed sidebar on the left and full-width content area on the right
+
+.app-layout {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--brand-background, var(--color-bg-lightest));
+
+  &-sidebar {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1030;
+  }
+
+  &-content {
+    flex: 1;
+    min-width: 0; // Allows flex item to shrink below content size
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: var(--brand-background, var(--color-bg-lightest));
+  }
+
+  // Sidebar expanded state
+  &.sidebar-expanded {
+    .app-layout-sidebar {
+      width: 280px;
+    }
+  }
+
+  // Sidebar collapsed state
+  &.sidebar-collapsed {
+    .app-layout-sidebar {
+      width: 60px;
+    }
+  }
+}
+
+// Mobile layout (≤768px)
+.app-layout-mobile {
+  width: 100%;
+  min-height: 100vh;
+  background: var(--brand-background, var(--color-bg-lightest));
+
+  &-content {
+    margin-top: 60px; // Account for horizontal top nav
+    width: 100%;
+  }
+}
+
+// Smooth transitions for sidebar width changes
+.app-layout-sidebar {
+  transition: width 0.3s ease;
+}

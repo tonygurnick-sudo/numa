@@ -27,6 +27,9 @@
 .benefits_trial {
   background-color: transparent;
 }
+// DEPRECATED: No longer in use as of header standardization update
+// All pages now use .page-header with the shared PageHeader component
+// This class can be removed in a future cleanup
 .app-header {
   background: white;
   border-bottom: 1px solid var(--color-border-light);
@@ -49,20 +52,94 @@
   }
 }
 
+// Standard page header - use this for all new and updated pages
+.page-header {
+  padding-top: 45px;
+  padding-bottom: 1.5rem;
+  margin-bottom: 0rem;
+
+  .page-title {
+    font-size: 33px;
+    font-weight: 600;
+    color: #343C6A;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    line-height: 100%;
+  }
+
+  .page-subtitle {
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--brand-textMuted, var(--color-text-muted));
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+    max-width: 780px; // Prevent subtitle from pushing too close to action buttons
+
+    @media (max-width: 992px) {
+      max-width: 520px;
+    }
+
+    @media (max-width: 768px) {
+      max-width: 100%;
+    }
+  }
+
+  .page-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  // Header button styling to match Figma design
+  .btn {
+    background: #FFFFFF;
+    border: 1px solid #E8E8E8;
+    border-radius: 200px;
+    padding: 8px 20px;
+    gap: 12px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    font-weight: 500;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: #F7F9FB;
+      border-color: #D0D5DD;
+    }
+
+    &.btn-primary {
+      background: var(--brand-primary, #8e50a7);
+      border-color: var(--brand-primary, #8e50a7);
+      color: white;
+
+      &:hover {
+        background: var(--brand-hover, #744188);
+        border-color: var(--brand-hover, #744188);
+      }
+    }
+
+    i {
+      font-size: 1rem;
+    }
+  }
+}
+
 nav {
-  width: 72px;
-  height: 100vh;
-  position: fixed;
-  top: 0;
-  left: 0;
   color: var(--brand-textMuted, var(--color-eggplant-200));
-  z-index: 1000;
 
   @media (max-width: 768px) {
-    width: auto;
+    width: 100%;
     height: 60px;
+    position: fixed;
     top: 0;
     left: 0;
+    z-index: 1030;
 
     ul {
       display: flex;
@@ -140,14 +217,9 @@ nav {
 }
 
 #root {
-  background: var(--brand-background, var(--color-bg-lightest));
+  background: var(--brand-background);
   min-height: 100vh;
   width: 100%;
-
-  @media (min-width: 769px) {
-    display: flex;
-    justify-content: center;
-  }
 
   @media (max-width: 768px) {
     display: block;
@@ -156,31 +228,33 @@ nav {
 }
 
 .dashboard {
-  width: 1200px;
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0 1rem;
-
-  @media (max-width: 1200px) {
-    width: 100%;
-    padding-left: 8%;
-    padding-right: 8%;
-  }
+  width: 100%;
+  padding: 0 2rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 
   @media (max-width: 768px) {
+    padding: 0 1rem;
   }
 }
 
 .dashboard.d-flex.flex-column.vh-100 {
-  margin-left: 59px;
   width: 100%;
-  max-width: 1250px;
-  padding: 0 15px;
-  background: var(--brand-background, var(--color-bg-lightest));
+  padding: 0 2rem;
+  background: var(--brand-background, #333333);
 
   @media (max-width: 768px) {
-    margin-left: 0;
+    padding: 0 1rem;
   }
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 header {

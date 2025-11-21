@@ -7,17 +7,25 @@ import { useBranding } from '../Providers/BrandingContext';
 import DefaultLogo from '../../public/numa-logo.svg';
 import { useBrandingAsset } from '../hooks/useBrandingAsset';
 
-const Nav = () => {
+interface NavProps {
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+}
+
+const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
   const navigate = useNavigate();
-  const { logout: authLogout } = useAuth();
+  const { logout: authLogout, user } = useAuth();
   const { branding } = useBranding();
   const rawNavLogo = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || DefaultLogo;
   const navLogo = useBrandingAsset(rawNavLogo, DefaultLogo);
   const navName = branding.name || 'Numa';
 
+  // Get user email from decoded token
+  const userEmail = user?.decoded_tokens?.idToken?.email || 'user@example.com';
+  const userInitial = userEmail?.[0]?.toUpperCase() || 'U';
+
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [navItems, setNavItems] = useState([]);
-  const [isExpanded, setIsExpanded] = useState(false);
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
@@ -102,14 +110,13 @@ const Nav = () => {
     );
   };
 
+  // For desktop, isExpanded is the inverse of isCollapsed
+  const isExpanded = !isCollapsed;
+
   return isMobile ? (
     <MobileNav />
   ) : (
-    <nav
-      className={`nav-component ${isExpanded ? 'expanded' : ''}`}
-      onMouseEnter={() => setIsExpanded(true)}
-      onMouseLeave={() => setIsExpanded(false)}
-    >
+    <nav className={`nav-component ${isExpanded ? 'expanded' : 'collapsed'}`}>
       <div
         className="btn-home-logo"
         onClick={(e) => {
@@ -127,6 +134,19 @@ const Nav = () => {
         />
         {isExpanded && <span className="logo-text">{navName}</span>}
       </div>
+
+      {/* Toggle collapse button - below logo */}
+      {onToggleCollapse && (
+        <button
+          className="nav-toggle-btn"
+          onClick={onToggleCollapse}
+          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <i className={`bi ${isCollapsed ? 'bi-chevron-right' : 'bi-chevron-left'}`}></i>
+        </button>
+      )}
+
       <div className="divider"></div>
 
       <ul className="nav-links">
@@ -158,6 +178,7 @@ const Nav = () => {
       </ul>
 
       <footer className="footer">
+        <div className="footer-divider"></div>
         <ul className="nav-links">
           {navItems
             .filter((item) => item.footerOnly)
@@ -193,6 +214,17 @@ const Nav = () => {
             </div>
           </li>
         </ul>
+        <div className="user-profile-divider"></div>
+        <div className="user-profile-section">
+          <div className="user-avatar">
+            <span className="user-initial">{userInitial}</span>
+          </div>
+          {isExpanded && (
+            <div className="user-info">
+              <div className="user-email">{userEmail}</div>
+            </div>
+          )}
+        </div>
         <span className="version">v1.5</span>
       </footer>
     </nav>

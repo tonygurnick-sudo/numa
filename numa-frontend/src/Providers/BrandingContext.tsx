@@ -11,6 +11,7 @@ export type BrandingColors = {
   text?: string;
   textPrimary?: string;
   background?: string;
+  inputBackground?: string;
   buttonPrimary?: string;
   buttonPrimaryText?: string;
   buttonPrimaryHover?: string;
@@ -91,6 +92,7 @@ export const DEFAULT_BRANDING_THEME: BrandingTheme = {
     text: '#111827',
     textMuted: '#6b7280',
     background: '#faf8fb',
+    inputBackground: '#F7F9FB',
     buttonPrimary: '#8e50a7',
     buttonSecondary: '#ffffff',
     buttonSecondaryText: '#6b3c85',

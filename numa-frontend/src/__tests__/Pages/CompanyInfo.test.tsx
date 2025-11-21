@@ -136,8 +136,8 @@ describe('CompanyInfo Component', () => {
     expect(
       screen.getByText('Enter your company information below. This will be used in chat interactions.'),
     ).toBeInTheDocument();
-    expect(screen.getByTestId('nav')).toBeInTheDocument();
-    expect(screen.getByTestId('breadcrumbs')).toBeInTheDocument();
+    expect(screen.getByText('Company Info')).toBeInTheDocument();
+    expect(screen.getByText('Manage your company information and settings')).toBeInTheDocument();
     expect(screen.getByTestId('layout-dashboard')).toBeInTheDocument();
   });
 

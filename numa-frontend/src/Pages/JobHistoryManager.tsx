@@ -3,11 +3,11 @@ import { Container, Row, Col, Card, Table, Button, Form, Pagination, Spinner, Ba
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { useJobsApi } from '../Services/jobsApi';
 import { manifestService } from '../Services/manifestService';
-import { Nav } from '../Components/Nav';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import { Search, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 import { JobStatusContext } from '../Providers/JobStatusContext';
+import { PageHeader } from '../Components/PageHeader';
 
 import { getDisplayStatusUpper } from '../utils/jobStatus';
 
@@ -612,189 +612,183 @@ const JobHistoryManager = () => {
   };
 
   return (
-    <>
-      <Nav />
-      <div className="dashboard" data-testid="layout-dashboard">
-        <header className="mb-1">
-          <Container fluid>
-            <Row>
-              <Col lg={12}>
-                <h1>Job History</h1>
-                <p>View and manage job history across all Numa apps.</p>
-                <div className="d-flex align-items-center mb-3">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={onRefreshClick}
-                    disabled={jobStatusLoading}
-                    className="d-flex align-items-center me-3"
-                  >
-                    {jobStatusLoading ? (
-                      <div className="d-flex align-items-center">
-                        <Spinner animation="border" size="sm" />
-                        <span className="ms-2">Loading...</span>
-                      </div>
-                    ) : (
-                      <span className="ms-1">Refresh</span>
-                    )}
-                  </Button>
-                  {nextRefreshIn && (
-                    <small className="text-muted">
-                      Auto-refresh in {Math.floor(nextRefreshIn / 60)}:
-                      {(nextRefreshIn % 60).toString().padStart(2, '0')}
-                    </small>
-                  )}
-                </div>
-              </Col>
-            </Row>
-          </Container>
-        </header>
-
-        <Container fluid>
-          <Card className="mb-4">
-            <Card.Body>
-              <Row className="mb-3">
-                <Col md={4}>
-                  <Form.Group>
-                    <Form.Label>Filter by App</Form.Label>
-                    {/* Form.Select is disabled during loading to prevent users from changing the app selection while data is being fetched */}
-                    <Form.Select
-                      value={selectedApp}
-                      onChange={handleAppChange}
-                      disabled={isLoading}
-                      aria-label="Filter by application"
-                    >
-                      <option value="all">All Apps</option>
-                      {manifestApps
-                        .filter((app) => app.id !== 'policy-builder-app' && app.id !== 'policy-reviewer-app')
-                        .map((app) => (
-                          <option key={app.id} value={app.id}>
-                            {app.appName || app.id}
-                          </option>
-                        ))}
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-                <Col md={3}>
-                  <Form.Group>
-                    <Form.Label>Filter by Status</Form.Label>
-                    <Form.Select value={filterStatus} onChange={handleStatusFilterChange}>
-                      <option value="all">All Statuses</option>
-                      <option value="completed">Completed</option>
-                      <option value="running">Running</option>
-                      <option value="failed">Failed</option>
-                      <option value="files-uploaded">Files Uploaded</option>
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-                <Col md={5}>
-                  <Form.Group>
-                    <Form.Label>Search</Form.Label>
-                    <div className="position-relative">
-                      <Form.Control
-                        type="text"
-                        placeholder="Search by run name or app name..."
-                        value={searchTerm}
-                        onChange={handleSearch}
-                      />
-                      <Search className="position-absolute" style={{ right: '10px', top: '10px', color: '#6c757d' }} />
-                    </div>
-                  </Form.Group>
-                </Col>
-              </Row>
-            </Card.Body>
-          </Card>
-
-          <Card>
-            <Card.Body className="p-0">
-              {isLoading ? (
-                <div className="text-center p-4">
-                  <div className="spinner-border text-primary">
-                    <span className="visually-hidden">Loading…</span>
-                  </div>
-                  <p className="mt-3 text-muted small mb-0">Loading job history...</p>
-                </div>
-              ) : filteredJobs.length === 0 ? (
-                <div className="text-center bg-light rounded p-4">
-                  <p className="mb-0 text-muted">No job history available matching your filters</p>
-                </div>
+    <div className="dashboard" data-testid="layout-dashboard">
+      <PageHeader
+        title="Job History"
+        subtitle="View and manage job history across all Numa apps"
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              onClick={onRefreshClick}
+              disabled={jobStatusLoading}
+              className="d-flex align-items-center"
+            >
+              {jobStatusLoading ? (
+                <>
+                  <Spinner animation="border" size="sm" />
+                  <span className="ms-2">Loading...</span>
+                </>
               ) : (
                 <>
-                  <div className="table-responsive file-table-container scrollable">
-                    <Table hover className="mb-0 file-table auto-layout">
-                      <thead className="sticky-table-header numa-table-header">
-                        <tr>
-                          <th onClick={() => handleSort('startedAt')} className="sortable-header">
-                            Started{' '}
-                            {sortField === 'startedAt' && (
-                              <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                            )}
-                          </th>
-                          <th onClick={() => handleSort('name')} className="sortable-header">
-                            Run{' '}
-                            {sortField === 'name' && (
-                              <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                            )}
-                          </th>
-                          <th onClick={() => handleSort('status')} className="sortable-header">
-                            Status{' '}
-                            {sortField === 'status' && (
-                              <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                            )}
-                          </th>
-                          <th className="sortable-header">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {currentJobs.map((job) => {
-                          const startedLabel = formatDate(job.startedAt || job.dateTime);
-                          const displayName = formatJobDisplayName(job);
-
-                          return (
-                            <tr key={`${job.appId}-${job.jobId}`}>
-                              <td>
-                                <div className="text-muted small">{startedLabel}</div>
-                              </td>
-                              <td>
-                                <div className="fw-medium text-break">{displayName}</div>
-                              </td>
-                              <td>{renderStatusBadge(job)}</td>
-                              <td className="text-end align-middle">{renderActionButton(job)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </Table>
-                  </div>
-
-                  {/* Pagination Controls */}
-                  {totalPages > 1 && (
-                    <div className="d-flex justify-content-center py-3">
-                      <Pagination>
-                        <Pagination.Prev onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} />
-                        {[...Array(totalPages)].map((_, index) => (
-                          <Pagination.Item
-                            key={index + 1}
-                            active={index + 1 === currentPage}
-                            onClick={() => paginate(index + 1)}
-                          >
-                            {index + 1}
-                          </Pagination.Item>
-                        ))}
-                        <Pagination.Next
-                          onClick={() => paginate(currentPage + 1)}
-                          disabled={currentPage === totalPages}
-                        />
-                      </Pagination>
-                    </div>
-                  )}
+                  <i className="bi bi-arrow-clockwise me-1"></i>
+                  Refresh
                 </>
               )}
-            </Card.Body>
-          </Card>
-        </Container>
-      </div>
-    </>
+            </Button>
+            {nextRefreshIn && (
+              <small className="text-muted">
+                Auto-refresh in {Math.floor(nextRefreshIn / 60)}:{(nextRefreshIn % 60).toString().padStart(2, '0')}
+              </small>
+            )}
+          </>
+        }
+      />
+
+      <Container fluid>
+        <Card className="mb-4">
+          <Card.Body>
+            <Row className="mb-3">
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Filter by App</Form.Label>
+                  {/* Form.Select is disabled during loading to prevent users from changing the app selection while data is being fetched */}
+                  <Form.Select
+                    value={selectedApp}
+                    onChange={handleAppChange}
+                    disabled={isLoading}
+                    aria-label="Filter by application"
+                  >
+                    <option value="all">All Apps</option>
+                    {manifestApps
+                      .filter((app) => app.id !== 'policy-builder-app' && app.id !== 'policy-reviewer-app')
+                      .map((app) => (
+                        <option key={app.id} value={app.id}>
+                          {app.appName || app.id}
+                        </option>
+                      ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col md={3}>
+                <Form.Group>
+                  <Form.Label>Filter by Status</Form.Label>
+                  <Form.Select value={filterStatus} onChange={handleStatusFilterChange}>
+                    <option value="all">All Statuses</option>
+                    <option value="completed">Completed</option>
+                    <option value="running">Running</option>
+                    <option value="failed">Failed</option>
+                    <option value="files-uploaded">Files Uploaded</option>
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col md={5}>
+                <Form.Group>
+                  <Form.Label>Search</Form.Label>
+                  <div className="position-relative">
+                    <Form.Control
+                      type="text"
+                      placeholder="Search by run name or app name..."
+                      value={searchTerm}
+                      onChange={handleSearch}
+                    />
+                    <Search className="position-absolute" style={{ right: '10px', top: '10px', color: '#6c757d' }} />
+                  </div>
+                </Form.Group>
+              </Col>
+            </Row>
+          </Card.Body>
+        </Card>
+
+        <Card>
+          <Card.Body className="p-0">
+            {isLoading ? (
+              <div className="text-center p-4">
+                <div className="spinner-border text-primary">
+                  <span className="visually-hidden">Loading…</span>
+                </div>
+                <p className="mt-3 text-muted small mb-0">Loading job history...</p>
+              </div>
+            ) : filteredJobs.length === 0 ? (
+              <div className="text-center bg-light rounded p-4">
+                <p className="mb-0 text-muted">No job history available matching your filters</p>
+              </div>
+            ) : (
+              <>
+                <div className="table-responsive file-table-container scrollable">
+                  <Table hover className="mb-0 file-table auto-layout">
+                    <thead className="sticky-table-header numa-table-header">
+                      <tr>
+                        <th onClick={() => handleSort('startedAt')} className="sortable-header">
+                          Started{' '}
+                          {sortField === 'startedAt' && (
+                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                          )}
+                        </th>
+                        <th onClick={() => handleSort('name')} className="sortable-header">
+                          Run{' '}
+                          {sortField === 'name' && (
+                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                          )}
+                        </th>
+                        <th onClick={() => handleSort('status')} className="sortable-header">
+                          Status{' '}
+                          {sortField === 'status' && (
+                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                          )}
+                        </th>
+                        <th className="sortable-header">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentJobs.map((job) => {
+                        const startedLabel = formatDate(job.startedAt || job.dateTime);
+                        const displayName = formatJobDisplayName(job);
+
+                        return (
+                          <tr key={`${job.appId}-${job.jobId}`}>
+                            <td>
+                              <div className="text-muted small">{startedLabel}</div>
+                            </td>
+                            <td>
+                              <div className="fw-medium text-break">{displayName}</div>
+                            </td>
+                            <td>{renderStatusBadge(job)}</td>
+                            <td className="text-end align-middle">{renderActionButton(job)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="d-flex justify-content-center py-3">
+                    <Pagination>
+                      <Pagination.Prev onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} />
+                      {[...Array(totalPages)].map((_, index) => (
+                        <Pagination.Item
+                          key={index + 1}
+                          active={index + 1 === currentPage}
+                          onClick={() => paginate(index + 1)}
+                        >
+                          {index + 1}
+                        </Pagination.Item>
+                      ))}
+                      <Pagination.Next
+                        onClick={() => paginate(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                      />
+                    </Pagination>
+                  </div>
+                )}
+              </>
+            )}
+          </Card.Body>
+        </Card>
+      </Container>
+    </div>
   );
 };
 

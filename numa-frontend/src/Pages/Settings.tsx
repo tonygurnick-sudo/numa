@@ -14,8 +14,6 @@ import {
   Tooltip,
   Form,
 } from 'react-bootstrap';
-import { Nav } from '../Components/Nav';
-import { Breadcrumbs } from '../Components/Breadcrumbs';
 import UserManagement from './UserManagement';
 import { useAuth } from '../Providers/AuthProvider';
 import { AdminIntegrationsService, type GlobalIntegrationSettingsMap } from '../Services/AdminIntegrationsService';
@@ -356,16 +354,18 @@ export default function SettingsPage() {
 
   return (
     <div className="dashboard">
-      <Nav />
-      <main>
-        <Container>
-          <Row className="mb-3">
+      <header className="page-header">
+        <Container fluid>
+          <Row>
             <Col>
-              <Breadcrumbs label={'Settings'} clearStack={true} />
-              <h1 className="mb-0 fs-3">Settings</h1>
+              <h1 className="page-title">Settings</h1>
             </Col>
           </Row>
+        </Container>
+      </header>
 
+      <main>
+        <Container>
           {/* Note: company-wide banner and preview notice moved into Integrations tab */}
 
           {error && (
