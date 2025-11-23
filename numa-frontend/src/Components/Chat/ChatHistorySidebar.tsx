@@ -93,10 +93,12 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
       },
     }));
 
-    // Fetch conversations on mount and when dynamic client is available
+    // Fetch conversations on mount and when dynamic client is available or tokens refresh
     useEffect(() => {
-      fetchConversations();
-    }, [numaChatDynamoUtils]);
+      if (numaChatDynamoUtils) {
+        fetchConversations();
+      }
+    }, [numaChatDynamoUtils, idToken.jti]);
 
     // Hide sidebar if user clicks outside (but not on the history button)
     useEffect(() => {
