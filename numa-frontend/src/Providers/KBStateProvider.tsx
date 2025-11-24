@@ -7,6 +7,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { useAuth } from './AuthProvider';
 import { getKnowledgeBaseState } from '../utils/knowledgeBaseUtils';
+import { useNumaRequest } from './NumaRequestContext';
 
 // Cache TTL: 30 minutes (aligns with AWS sync schedule)
 const CACHE_TTL = 30 * 60 * 1000;
@@ -54,6 +55,7 @@ interface KBStateCache {
   timestamp: number;
   isLoading: boolean;
   error: string | null;
+  kbId: string | null;
 }
 
 interface KBStateContextType {
@@ -68,6 +70,7 @@ const KBStateContext = createContext<KBStateContextType | undefined>(undefined);
 
 interface KBStateProviderProps {
   kbId: string;
+  kbType: 'user' | 'company';
   children: ReactNode;
 }
 
@@ -75,18 +78,20 @@ interface KBStateProviderProps {
  * KBStateProvider
  * Provides cached KB state to child components
  */
-export function KBStateProvider({ kbId, children }: KBStateProviderProps): React.JSX.Element {
+export function KBStateProvider({ kbId, kbType, children }: KBStateProviderProps): React.JSX.Element {
   const [cache, setCache] = useState<KBStateCache>({
     data: null,
     timestamp: 0,
     isLoading: false,
     error: null,
+    kbId: kbId,
   });
 
   // Track in-flight requests to prevent duplicate calls
   const inflightRequestRef = useRef<Promise<void> | null>(null);
 
   const { qBusinessClient, bedrockAgentClient, getCredentials, region: authRegion } = useAuth();
+  const { numaGet } = useNumaRequest();
   const region = authRegion || window.sessionStorage.getItem('REGION') || 'ap-southeast-2';
   const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
   const PREFERRED_KNOWLEDGE_BASE = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'bedrock';
@@ -94,11 +99,15 @@ export function KBStateProvider({ kbId, children }: KBStateProviderProps): React
   const Q_INDEX_ID = window.sessionStorage.getItem('Q_INDEX_ID');
   const BEDROCK_KNOWLEDGE_BASE_ID = window.sessionStorage.getItem('BEDROCK_KNOWLEDGE_BASE_ID');
 
+  // Calculate S3 prefix filter based on KB type (matching actual S3 bucket structure)
+  const s3PrefixFilter = kbType === 'user' ? `documents/kb-${kbId}/` : 'documents/company/';
+
   /**
    * Check if cache is valid
    */
   function isCacheValid(): boolean {
     if (!cache.data || !cache.timestamp) return false;
+    if (cache.kbId !== kbId) return false;
     const now = Date.now();
     const age = now - cache.timestamp;
     return age < CACHE_TTL;
@@ -138,6 +147,13 @@ export function KBStateProvider({ kbId, children }: KBStateProviderProps): React
           clientDisplayName: `numa-${CLIENT_NAME}`,
           getCredentials,
           region,
+          s3PrefixFilter,
+          kbType,
+          kbId,
+          fetchCrawlerStats: async (targetKbId?: string) => {
+            const target = targetKbId || kbId;
+            return numaGet('/api/web-crawler-stats', { kb_id: target, limit: 2000 });
+          },
         });
 
         if (state?.error) {
@@ -149,6 +165,7 @@ export function KBStateProvider({ kbId, children }: KBStateProviderProps): React
           timestamp: Date.now(),
           isLoading: false,
           error: null,
+          kbId,
         });
       } catch (err: unknown) {
         console.error('KB State fetch error:', err);
@@ -184,6 +201,21 @@ export function KBStateProvider({ kbId, children }: KBStateProviderProps): React
   async function refreshKBState(options?: { force?: boolean }): Promise<void> {
     await fetchKBState(options);
   }
+
+  /**
+   * Initial fetch on mount or when dependencies change
+   */
+  useEffect(() => {
+    // Reset cache when kbId changes to avoid showing stale state
+    setCache({
+      data: null,
+      timestamp: 0,
+      isLoading: false,
+      error: null,
+      kbId,
+    });
+    inflightRequestRef.current = null;
+  }, [kbId]);
 
   /**
    * Initial fetch on mount or when dependencies change

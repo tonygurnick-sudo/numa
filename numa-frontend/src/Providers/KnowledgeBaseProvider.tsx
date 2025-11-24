@@ -40,10 +40,12 @@ function sanitizeUserKB(kb: UserKB | null | undefined): UserKB | null {
   if (!kbId) {
     return null;
   }
+  const isShared = typeof kb.is_shared === 'boolean' ? kb.is_shared : kb.role === 'VIEWER';
   return {
     kb_id: kbId,
     kb_name: typeof kb.kb_name === 'string' && kb.kb_name.trim().length > 0 ? kb.kb_name : kbId,
     role: kb.role === 'EDITOR' || kb.role === 'OWNER' ? kb.role : 'VIEWER',
+    is_shared: isShared,
   };
 }
 

@@ -90,7 +90,7 @@ def _resolve_email_to_sub(email: str, cognito_client) -> Optional[str]:
         return None
 
 
-def _resolve_user_identifiers(identifiers: List[str]) -> List[str]:
+def _resolve_user_identifiers(identifiers: List[str]) -> tuple[List[str], List[str]]:
     """
     Resolve a mix of emails and Cognito sub IDs to Cognito sub IDs.
 
@@ -98,12 +98,13 @@ def _resolve_user_identifiers(identifiers: List[str]) -> List[str]:
         identifiers: List of email addresses or Cognito sub IDs
 
     Returns:
-        List of Cognito sub IDs (UUIDs)
+        Tuple of (resolved Cognito sub IDs, unresolved inputs)
     """
     if not identifiers:
-        return []
+        return [], []
 
     resolved = []
+    unresolved = []
     cognito_client = _get_cognito_client()
 
     for identifier in identifiers:
@@ -129,11 +130,13 @@ def _resolve_user_identifiers(identifiers: List[str]) -> List[str]:
             sub_id = _resolve_email_to_sub(identifier, cognito_client)
             if sub_id:
                 resolved.append(sub_id)
+            else:
+                unresolved.append(identifier)
         else:
-            # Unknown format, skip it
-            logger.warning("Unknown identifier format", identifier=identifier)
+            # Unknown format, mark unresolved
+            unresolved.append(identifier)
 
-    return resolved
+    return resolved, unresolved
 
 
 def _resolve_sub_to_email(sub_id: str, cognito_client) -> Optional[str]:
@@ -774,8 +777,18 @@ async def create_kb(request: Request) -> Response:
         editors = body.get("editors", [])
 
         # Resolve emails to Cognito sub IDs
-        resolved_viewers = _resolve_user_identifiers(viewers)
-        resolved_editors = _resolve_user_identifiers(editors)
+        resolved_viewers, unresolved_viewers = _resolve_user_identifiers(viewers)
+        resolved_editors, unresolved_editors = _resolve_user_identifiers(editors)
+
+        unresolved_inputs = list(set(unresolved_viewers + unresolved_editors))
+        if unresolved_inputs:
+            return JSONResponse(
+                {
+                    "error": "Some users could not be resolved by email or ID",
+                    "unresolved": unresolved_inputs,
+                },
+                status_code=400,
+            )
 
         # Get user sub (required for KB creation)
         user_sub = user.get("sub")
@@ -940,12 +953,30 @@ async def update_kb(request: Request, kb_id: str) -> Response:
         editors = body.get("editors")
 
         # Resolve emails to Cognito sub IDs if provided
-        resolved_viewers = (
-            _resolve_user_identifiers(viewers) if viewers is not None else None
-        )
-        resolved_editors = (
-            _resolve_user_identifiers(editors) if editors is not None else None
-        )
+        resolved_viewers = None
+        resolved_editors = None
+
+        if viewers is not None:
+            resolved_viewers, unresolved_viewers = _resolve_user_identifiers(viewers)
+            if unresolved_viewers:
+                return JSONResponse(
+                    {
+                        "error": "Some viewers could not be resolved by email or ID",
+                        "unresolved": unresolved_viewers,
+                    },
+                    status_code=400,
+                )
+
+        if editors is not None:
+            resolved_editors, unresolved_editors = _resolve_user_identifiers(editors)
+            if unresolved_editors:
+                return JSONResponse(
+                    {
+                        "error": "Some editors could not be resolved by email or ID",
+                        "unresolved": unresolved_editors,
+                    },
+                    status_code=400,
+                )
 
         # Update KB
         success = kb_manager.update_kb(

@@ -9,15 +9,20 @@ import { Button, Alert, Spinner } from 'react-bootstrap';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
 import { KBTabLayout } from '../Components/KnowledgeBase/KBTabLayout';
+import type { KBFileExplorerHandle } from '../Components/KnowledgeBase/KBFileExplorer';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import { FileUploader } from '../Components/FileUploader';
 import { NotificationModal } from '../Components/NotificationModal';
 import { isFileTypeValidForBedrockKB, shouldShowLargeDataFileWarning, formatFileSize } from '../utils/fileUtils';
+import { listFoldersInKB } from '../utils/s3Utils';
+import FolderSelector from '../Components/KnowledgeBase/FolderSelector';
+import { useAuth } from '../Providers/AuthProvider';
 
 export function UserKBDetailPage(): React.JSX.Element {
   const { kbId } = useParams<{ kbId: string }>();
   const navigate = useNavigate();
   const { availableKBs } = useKnowledgeBase();
+  const { getCredentials, region: authRegion } = useAuth();
 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [fileValidationError, setFileValidationError] = useState<string | null>(null);
@@ -25,6 +30,10 @@ export function UserKBDetailPage(): React.JSX.Element {
   const [pendingLargeFiles, setPendingLargeFiles] = useState<File[]>([]);
   const [clearFileUploader, setClearFileUploader] = useState<boolean>(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const fileExplorerRef = React.useRef<KBFileExplorerHandle>(null);
+  const [selectedFolder, setSelectedFolder] = useState<string>('');
+  const [folderOptions, setFolderOptions] = useState<string[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState<boolean>(false);
 
   // Find the current KB
   const currentKB = availableKBs.find((kb) => kb.kb_id === kbId);
@@ -46,6 +55,31 @@ export function UserKBDetailPage(): React.JSX.Element {
       return () => clearTimeout(timer);
     }
   }, [clearFileUploader]);
+
+  // Fetch folder options when upload modal is opened
+  useEffect(() => {
+    if (showUploadModal && kbId) {
+      const fetchFolders = async () => {
+        try {
+          setLoadingFolders(true);
+          const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
+          const region = authRegion || window.sessionStorage.getItem('REGION') || 'ap-southeast-2';
+          const bucket = `numa-${CLIENT_NAME}-data`;
+
+          const folders = await listFoldersInKB(kbId, bucket, region, getCredentials);
+          setFolderOptions(folders);
+        } catch (error) {
+          console.error('Error fetching folders:', error);
+          setFolderOptions([]);
+        } finally {
+          setLoadingFolders(false);
+        }
+      };
+
+      fetchFolders();
+      setSelectedFolder(''); // Reset to root when opening modal
+    }
+  }, [showUploadModal, kbId, getCredentials, authRegion]);
 
   /**
    * Validates files before upload
@@ -141,10 +175,16 @@ export function UserKBDetailPage(): React.JSX.Element {
         subtitle={isShared ? 'Shared with you' : 'Personal Knowledge Base'}
         actions={
           canEdit ? (
-            <Button variant="primary" onClick={() => setShowUploadModal(true)}>
-              <i className="bi bi-upload me-2"></i>
-              Upload Files
-            </Button>
+            <div className="d-flex gap-2">
+              <Button variant="secondary" onClick={() => fileExplorerRef.current?.openCreateFolder()}>
+                <i className="bi bi-folder-plus me-2"></i>
+                New Folder
+              </Button>
+              <Button variant="primary" onClick={() => setShowUploadModal(true)}>
+                <i className="bi bi-upload me-2"></i>
+                Upload Files
+              </Button>
+            </div>
           ) : null
         }
       />
@@ -157,13 +197,22 @@ export function UserKBDetailPage(): React.JSX.Element {
           </Alert>
         )}
 
-        <KBTabLayout kbId={kbId!} kbType="user" role={currentKB.role} onUploadSuccess={handleUploadSuccess} />
+        <KBTabLayout
+          kbId={kbId!}
+          kbType="user"
+          role={currentKB.role}
+          onUploadSuccess={handleUploadSuccess}
+          fileExplorerRef={fileExplorerRef}
+        />
       </LayoutDashboard>
 
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="modal show d-block kb-upload-modal-backdrop" onClick={() => setShowUploadModal(false)}>
-          <div className="modal-dialog modal-dialog-centered kb-upload-modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-dialog modal-dialog-centered modal-lg kb-upload-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">
@@ -180,7 +229,17 @@ export function UserKBDetailPage(): React.JSX.Element {
               <div className="modal-body">
                 <p className="text-muted small mb-3">
                   Files will be automatically indexed every 30 minutes and made available for querying in Numa Chat.
+                  <br />
+                  <strong>Note:</strong> Maximum file size is 50MB per file.
                 </p>
+
+                <FolderSelector
+                  selectedFolder={selectedFolder}
+                  onFolderChange={setSelectedFolder}
+                  folderOptions={folderOptions}
+                  disabled={loadingFolders}
+                  label="Upload to folder"
+                />
 
                 {fileValidationError && (
                   <Alert variant="danger" className="mb-3">
@@ -195,6 +254,7 @@ export function UserKBDetailPage(): React.JSX.Element {
                   validateFile={isFileTypeValidForBedrockKB}
                   clearFiles={clearFileUploader}
                   kb_id={kbId!}
+                  selectedFolder={selectedFolder}
                 />
               </div>
             </div>

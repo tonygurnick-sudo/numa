@@ -62,6 +62,10 @@ export class WebCrawlerConstruct extends Construct {
           name: 'crawlSessionId',
           type: 'S',
         },
+        {
+          name: 'kbId',
+          type: 'S',
+        },
       ],
       globalSecondaryIndex: [
         {
@@ -78,6 +82,12 @@ export class WebCrawlerConstruct extends Construct {
         {
           name: 'crawlSessionId-status-index',
           hashKey: 'crawlSessionId',
+          rangeKey: 'status',
+          projectionType: 'ALL',
+        },
+        {
+          name: 'kbId-status-index',
+          hashKey: 'kbId',
           rangeKey: 'status',
           projectionType: 'ALL',
         },
@@ -332,6 +342,7 @@ export class WebCrawlerConstruct extends Construct {
             'crawlDepth.$': '$.next.Items[0].crawlDepth.N',
             'userId.$': '$.next.Items[0].userId.S',
             'crawlSessionId.$': '$.next.Items[0].crawlSessionId.S',
+            'kbId.$': '$.next.Items[0].kbId.S',
             'counter.$': '$.counter',
             'eventCounter.$': '$.eventCounter',
           },
@@ -387,6 +398,7 @@ export class WebCrawlerConstruct extends Construct {
             'crawlDepth.$': '$.crawlDepth',
             'userId.$': '$.userId',
             'crawlSessionId.$': '$.crawlSessionId',
+            'kbId.$': '$.kbId',
             'counter.$': '$.counter',
             'eventCounter.$': '$.eventCounter',
             status: 'failed',
@@ -420,6 +432,7 @@ export class WebCrawlerConstruct extends Construct {
             'crawlDepth.$': '$.crawlDepth',
             'userId.$': '$.userId',
             'crawlSessionId.$': '$.crawlSessionId',
+            'kbId.$': '$.kbId',
             'counter.$': '$.counter',
             // Increment the event counter (approx. 7 events per URL processed)
             'eventCounter.$': 'States.MathAdd($.eventCounter, 7)',

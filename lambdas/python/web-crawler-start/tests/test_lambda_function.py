@@ -12,7 +12,8 @@ class TestWebCrawlerStart(TestCase):
         self.env_patcher = mock.patch.dict(
             os.environ,
             {
-                "WEB_CRAWLER_STATE_MACHINE_ARN": "arn:aws:states:us-east-1:123456789012:stateMachine:TestStateMachine"
+                "WEB_CRAWLER_STATE_MACHINE_ARN": "arn:aws:states:us-east-1:123456789012:stateMachine:TestStateMachine",
+                "CRAWL_URLS_TABLE_NAME": "numa-test-crawl-urls",
             },
         )
         self.env_patcher.start()
@@ -205,3 +206,49 @@ class TestWebCrawlerStart(TestCase):
         self.assertEqual(
             json.loads(response["body"])["error"], "Failed to start web crawler"
         )
+
+    @mock.patch("lambda_function.dynamodb")
+    def test_handler_stats_success(self, mock_dynamodb):
+        mock_table = mock.Mock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "url": "https://example.com/page1",
+                    "status": "completed",
+                    "updatedAt": "2024-01-01T00:00:00Z",
+                },
+                {
+                    "url": "https://example.com/page2",
+                    "status": "completed",
+                    "updatedAt": "2024-01-02T00:00:00Z",
+                },
+                {
+                    "url": "https://example.org/page1",
+                    "status": "completed",
+                    "createdAt": "2024-01-03T00:00:00Z",
+                },
+            ],
+            "Count": 3,
+        }
+
+        event = APIGatewayProxyEvent(
+            {
+                "requestContext": {"http": {"method": "GET"}},
+                "queryStringParameters": {"kb_id": "company", "limit": "10"},
+            }
+        )
+
+        response = lambda_function.handler(event, None)
+        body = json.loads(response["body"])
+
+        self.assertEqual(response["statusCode"], 200)
+        self.assertTrue(body["success"])
+        self.assertEqual(body["count"], 3)
+
+        domains = {d["domain"]: d for d in body["domains"]}
+        self.assertIn("example.com", domains)
+        self.assertIn("example.org", domains)
+        self.assertEqual(domains["example.com"]["pageCount"], 2)
+        self.assertEqual(domains["example.com"]["lastCrawled"], "2024-01-02T00:00:00Z")
+        self.assertEqual(domains["example.org"]["pageCount"], 1)

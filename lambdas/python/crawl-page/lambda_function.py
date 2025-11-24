@@ -31,6 +31,7 @@ class CrawlPageEvent(TypedDict, total=False):
     userId: str
     title: str
     crawlSessionId: str
+    kbId: str
 
 
 # User agents for retry logic
@@ -254,6 +255,7 @@ def enqueue_links(
     current_depth: int,
     table_name: str,
     crawl_session_id: str,
+    kb_id: str = "company",
 ) -> int:
     """Push *links* into DynamoDB with decremented depth; returns count enqueued."""
     if current_depth <= 1:
@@ -273,6 +275,7 @@ def enqueue_links(
                     "title": link,
                     "crawlDepth": new_depth,
                     "crawlSessionId": crawl_session_id,
+                    "kbId": kb_id,
                     "status": "pending",
                     "createdAt": now,
                     "updatedAt": now,
@@ -489,6 +492,7 @@ async def process_url(
     crawl_depth: int,
     prefix: str,
     crawl_session_id: str,
+    kb_id: str = "company",
 ) -> Dict[str, Any]:
     """Fetch, store, and enqueue a single URL."""
     start = datetime.utcnow()
@@ -541,7 +545,12 @@ async def process_url(
 
     links_enqueued = (
         enqueue_links(
-            scraped.get("links", []), user_id, crawl_depth, table_name, crawl_session_id
+            scraped.get("links", []),
+            user_id,
+            crawl_depth,
+            table_name,
+            crawl_session_id,
+            kb_id,
         )
         if crawl_depth > 1
         else 0
@@ -593,8 +602,13 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
     crawl_depth = int(event.get("crawlDepth", 1))
     user_id = event.get("userId", "anonymous")
     crawl_session_id = event.get("crawlSessionId", "unknown")
-    # Use a consistent prefix for all web crawler content
-    prefix = "web-crawler/"
+    kb_id = event.get("kbId", "company")
+
+    # Use KB-aware prefix for web crawler content
+    if kb_id == "company":
+        prefix = "documents/company/web-crawler/"
+    else:
+        prefix = f"documents/kb-{kb_id}/web-crawler/"
 
     try:
         result = asyncio.run(
@@ -606,6 +620,7 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
                 crawl_depth=crawl_depth,
                 prefix=prefix,
                 crawl_session_id=crawl_session_id,
+                kb_id=kb_id,
             )
         )
         return {

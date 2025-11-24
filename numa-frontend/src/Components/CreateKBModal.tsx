@@ -10,6 +10,7 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, Button, Form, Alert } from 'react-bootstrap';
 import { knowledgeBaseService } from '../Services/knowledgeBaseService';
+import { ChipsInput } from './Inputs/ChipsInput';
 
 /** ─────────────────────────────────────────────────────────────────────────────
  *  Types & Brands
@@ -57,40 +58,21 @@ function isNonEmptyString(s: string): s is NonEmptyString {
 
 const EMAILish = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 
-function asEmailOrId(raw: string): UserIdentifier | null {
-  const s = raw.trim();
-  if (s.length === 0) return null;
-  return EMAILish.test(s) ? (s as EmailString) : (s as UserIdString);
-}
-
-function parseUserList(input: string): ReadonlyArray<UserIdentifier> {
-  if (input.trim().length === 0) return [] as const;
-  const tokens = input
-    .split(/[,;\n]/g)
-    .map((x) => x.trim())
-    .filter(Boolean)
-    .map((x) => x.toLowerCase());
-
-  const seen = new Set<string>();
+function normalizeIdentifiers(list: ReadonlyArray<string>): ReadonlyArray<UserIdentifier> {
   const out: UserIdentifier[] = [];
-  for (const t of tokens) {
-    if (seen.has(t)) continue;
-    const branded = asEmailOrId(t);
-    if (branded !== null) {
-      seen.add(t);
-      out.push(branded);
-    }
-  }
-  return out;
-}
+  const seen = new Set<string>();
 
-function enforceEditorsSubset(
-  viewers: ReadonlyArray<UserIdentifier>,
-  editors: ReadonlyArray<UserIdentifier>,
-): ReadonlyArray<UserIdentifier> {
-  if (editors.length === 0) return editors;
-  const viewerSet = new Set<UserIdentifier>(viewers);
-  return editors.filter((e) => viewerSet.has(e));
+  for (const raw of list) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    const branded = EMAILish.test(trimmed) ? (trimmed as EmailString) : (trimmed as UserIdString);
+    out.push(branded);
+  }
+
+  return out;
 }
 
 function findInvalidEmailLikes(list: ReadonlyArray<UserIdentifier>): ReadonlyArray<string> {
@@ -122,8 +104,8 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
   const { show, onHide, onSuccess } = props;
 
   const [kbName, setKbName] = useState<string>('');
-  const [viewersInput, setViewersInput] = useState<string>('');
-  const [editorsInput, setEditorsInput] = useState<string>('');
+  const [viewerChips, setViewerChips] = useState<string[]>([]);
+  const [editorChips, setEditorChips] = useState<string[]>([]);
   const [isShared, setIsShared] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,42 +113,24 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
   const handleClose = (): void => {
     if (isSubmitting) return;
     setKbName('');
-    setViewersInput('');
-    setEditorsInput('');
+    setViewerChips([]);
+    setEditorChips([]);
     setIsShared(false);
     setError(null);
     onHide();
   };
 
-  /** Parsed & enforced lists (memoised). */
-  const parsed = useMemo(() => {
-    const editors = parseUserList(editorsInput);
+  const normalizedViewers = useMemo(
+    () => (isShared ? normalizeIdentifiers([...viewerChips, ...editorChips]) : ([] as ReadonlyArray<UserIdentifier>)),
+    [isShared, viewerChips, editorChips],
+  );
+  const normalizedEditors = useMemo(
+    () => (isShared ? normalizeIdentifiers(editorChips) : ([] as ReadonlyArray<UserIdentifier>)),
+    [isShared, editorChips],
+  );
 
-    // Personal KBs don't need viewers/editors input (backend will set to creator only)
-    if (!isShared) {
-      return {
-        viewers: [] as ReadonlyArray<UserIdentifier>,
-        editors: [] as ReadonlyArray<UserIdentifier>,
-        invalidEditors: [] as ReadonlyArray<string>,
-        invalidViewers: [] as ReadonlyArray<string>,
-      };
-    }
-
-    const viewersRaw = parseUserList(viewersInput);
-    const editorsSubset = enforceEditorsSubset(viewersRaw, editors);
-
-    // Ensure editors are included in viewers (keeping brands)
-    const viewersSet = new Set<UserIdentifier>(viewersRaw);
-    for (const e of editorsSubset) viewersSet.add(e);
-    const viewers = Array.from(viewersSet) as ReadonlyArray<UserIdentifier>;
-
-    return {
-      viewers,
-      editors: editorsSubset,
-      invalidEditors: findInvalidEmailLikes(editorsSubset),
-      invalidViewers: findInvalidEmailLikes(viewers),
-    };
-  }, [viewersInput, editorsInput, isShared]);
+  const invalidViewers = useMemo(() => findInvalidEmailLikes(normalizedViewers), [normalizedViewers]);
+  const invalidEditors = useMemo(() => findInvalidEmailLikes(normalizedEditors), [normalizedEditors]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -181,17 +145,20 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
 
     setIsSubmitting(true);
     try {
+      const viewers = normalizedViewers as PrivateViewers;
+      const editors = normalizedEditors;
+
       const request: CreateKBRequest = {
         name: kbName.trim() as NonEmptyString,
         is_shared: isShared,
-        viewers: parsed.viewers as PrivateViewers,
-        editors: parsed.editors,
+        viewers,
+        editors,
       };
 
       // Defensive invariant (shared only): editors ⊆ viewers
       if (isShared) {
-        const viewersSet = new Set<UserIdentifier>(request.viewers as PrivateViewers);
-        const allEditorsInViewers = request.editors.every((e) => viewersSet.has(e));
+        const viewerSet = new Set<UserIdentifier>(request.viewers as PrivateViewers);
+        const allEditorsInViewers = request.editors.every((ed) => viewerSet.has(ed));
         if (!allEditorsInViewers) {
           setError('Editors must also be viewers for shared knowledge bases.');
           setIsSubmitting(false);
@@ -269,49 +236,40 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
           </Form.Group>
 
           {isShared && (
-            <Form.Group className="mb-3" controlId="kbViewers">
-              <Form.Label>Viewers (user IDs or emails)</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={2}
-                placeholder="e.g., user1@example.com, user2@example.com"
-                value={viewersInput}
-                onChange={(ev: React.ChangeEvent<HTMLTextAreaElement>): void => setViewersInput(ev.target.value)}
-                disabled={isSubmitting}
-              />
-              <Form.Text className="text-muted">
-                Use commas, semicolons, or new lines. Editors are automatically included as viewers.
-              </Form.Text>
-              {parsed.invalidViewers.length > 0 && (
-                <div className="mt-2 small text-warning" aria-live="polite">
-                  <i className="bi bi-exclamation-circle me-1" />
-                  These look unusual as emails: {parsed.invalidViewers.join(', ')}
-                </div>
-              )}
-            </Form.Group>
+            <ChipsInput
+              id="kbViewers"
+              label="Viewers (user IDs or emails)"
+              chips={viewerChips}
+              onChange={setViewerChips}
+              placeholder="Type an email or ID and press Add/Enter"
+              helperText="Editors are automatically included as viewers."
+              disabled={isSubmitting}
+            />
           )}
 
           {isShared && (
-            <Form.Group className="mb-3" controlId="kbEditors">
-              <Form.Label>Editors (user IDs or emails)</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={2}
-                placeholder="e.g., admin@example.com"
-                value={editorsInput}
-                onChange={(ev: React.ChangeEvent<HTMLTextAreaElement>): void => setEditorsInput(ev.target.value)}
-                disabled={isSubmitting}
-              />
-              <Form.Text className="text-muted">
-                Editors can upload files and modify this KB; they automatically gain viewer access.
-              </Form.Text>
-              {parsed.invalidEditors.length > 0 && (
-                <div className="mt-2 small text-warning" aria-live="polite">
-                  <i className="bi bi-exclamation-circle me-1" />
-                  These look unusual as emails: {parsed.invalidEditors.join(', ')}
-                </div>
-              )}
-            </Form.Group>
+            <ChipsInput
+              id="kbEditors"
+              label="Editors (user IDs or emails)"
+              chips={editorChips}
+              onChange={setEditorChips}
+              placeholder="Type an email or ID and press Add/Enter"
+              helperText="Editors can upload files and modify this KB; they automatically gain viewer access."
+              disabled={isSubmitting}
+            />
+          )}
+
+          {isShared && invalidViewers.length > 0 && (
+            <div className="mt-2 small text-warning" aria-live="polite">
+              <i className="bi bi-exclamation-circle me-1" />
+              These look unusual as emails: {invalidViewers.join(', ')}
+            </div>
+          )}
+          {isShared && invalidEditors.length > 0 && (
+            <div className="mt-2 small text-warning" aria-live="polite">
+              <i className="bi bi-exclamation-circle me-1" />
+              These look unusual as emails: {invalidEditors.join(', ')}
+            </div>
           )}
 
           <Alert variant="light" className="mb-0">

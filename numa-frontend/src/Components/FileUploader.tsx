@@ -25,6 +25,7 @@ interface FileUploaderProps {
   validateFile?: (file: File) => boolean;
   clearFiles?: boolean;
   kb_id?: string;
+  selectedFolder?: string;
 }
 
 const FileUploader: React.FC<FileUploaderProps> = ({
@@ -33,6 +34,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   validateFile,
   clearFiles,
   kb_id,
+  selectedFolder,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [files, setFiles] = useState<ExtendedFile[]>([]);
@@ -194,9 +196,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         try {
           console.log('Requesting presigned URL for:', relativePath);
 
-          // Build S3 key with KB prefix, no per-user subfolder
+          // Build S3 key with KB prefix and optional folder prefix
           const sanitizedRelativePath = (relativePath || file.name).replace(/^\/+/, '');
-          const s3Key = `${kbPrefix}${sanitizedRelativePath}`;
+          const folderPrefix = selectedFolder ? `${selectedFolder}/` : '';
+          const s3Key = `${kbPrefix}${folderPrefix}${sanitizedRelativePath}`;
 
           const region = window.sessionStorage.getItem('REGION');
 

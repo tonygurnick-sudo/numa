@@ -7,9 +7,6 @@ const AppDetail = lazy(() => import('../Pages/AppDetail'));
 const UserManagement = lazy(() => import('../Pages/UserManagement'));
 const SettingsPage = lazy(() => import('../Pages/Settings'));
 const NumaChatAgents = lazy(() => import('../Pages/NumaChatAgents').then((m) => ({ default: m.NumaChatAgents })));
-const KnowledgeBaseManagement = lazy(() =>
-  import('../Pages/KnowledgeBaseManagement').then((m) => ({ default: m.KnowledgeBaseManagement })),
-);
 const CompanyKnowledgeBase = lazy(() =>
   import('../Pages/CompanyKnowledgeBase').then((m) => ({ default: m.CompanyKnowledgeBase })),
 );
@@ -36,7 +33,7 @@ export const ROUTE_CONFIG = [
   {
     path: '/job-history',
     element: () => <JobHistoryManager />,
-    // nav property removed - Job History accessible via page-level buttons only
+    nav: { label: 'Job History', icon: 'bi bi-clock-history' },
   },
   {
     path: '/chat',
@@ -56,12 +53,6 @@ export const ROUTE_CONFIG = [
     element: () => <CompanyInfo />,
     requiredFeature: 'useCompanyData',
     nav: { label: 'Company', icon: 'bi bi-building-fill' },
-  },
-  {
-    path: '/knowledgebase-management',
-    element: () => <KnowledgeBaseManagement />,
-    requiredFeature: 'useCompanyData',
-    // Legacy route - no nav, keep for backwards compatibility
   },
   {
     path: '/company-knowledge-base',

@@ -251,6 +251,8 @@ export class NumaClientStack extends TerraformStack {
       userPoolClientId: core.userPoolClient.id,
       userPoolClientSecret: core.userPoolClient.clientSecret,
       webCrawlerStateMachineArn: core.webCrawler.stateMachine.arn,
+      webCrawlerTableArn: core.webCrawler.crawlUrlsTable.arn,
+      webCrawlerTableName: core.webCrawler.crawlUrlsTable.name,
       visionModelType: clientConfig.visionModelType ?? defaults.visionModelType,
       // Branding API (disabled until lambda and finalized table wiring are added)
       brandingProviderEnabled: true,

@@ -25,6 +25,7 @@ class EnqueueUrlEvent(TypedDict):
     title: NotRequired[str]
     crawlDepth: NotRequired[int]
     crawlSessionId: NotRequired[str]
+    kbId: NotRequired[str]
 
 
 logger = structlog.get_logger()
@@ -40,6 +41,7 @@ class CrawlUrlRequest(TypedDict):
     crawlDepth: int
     userId: str
     crawlSessionId: str
+    kbId: str
 
 
 def _get_table():
@@ -90,6 +92,7 @@ def _validate_request(
         "crawlDepth": depth,
         "userId": str(event["userId"]),
         "crawlSessionId": str(event.get("crawlSessionId", "unknown")),
+        "kbId": str(event.get("kbId", "company")),
     }
 
 
@@ -105,6 +108,7 @@ def add_url_to_dynamodb(request: CrawlUrlRequest) -> Dict[str, Any]:
             "title": request["title"],
             "crawlDepth": request["crawlDepth"],
             "crawlSessionId": request["crawlSessionId"],
+            "kbId": request["kbId"],
             "status": "pending",
             "createdAt": now,
             "updatedAt": now,

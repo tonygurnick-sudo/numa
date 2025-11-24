@@ -12,7 +12,21 @@ import {
   ListKnowledgeBaseDocumentsCommand as BedrockListDocumentsCommand,
 } from '@aws-sdk/client-bedrock-agent';
 
-import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
+const sanitizeFailedS3Uri = (uri: string) => {
+  if (!uri) {
+    return null;
+  }
+
+  const trimmed = uri.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const withoutDiagnosticSuffix = trimmed.replace(/\s+\([^)]*\)$/, '');
+  const cleaned = withoutDiagnosticSuffix.replace(/[;.,]+$/, '');
+
+  return cleaned.startsWith('s3://') ? cleaned : null;
+};
 
 /*───────────────────────────────────────────────────────────*/
 /* Retry helper                                              */
@@ -67,7 +81,7 @@ export const preWarmAuroraDatabase = async (bedrockAgentClient, knowledgeBaseId)
 /**
  * Build `knowledgeText` and `references` from provider-specific results.
  * @param {Array<any>}    items      Raw result objects
- * @param {(item,idx)=>string} makeLine  -> “[1] text\nSource: …”
+ * @param {(item,idx)=>string} makeLine  -> "[1] text\nSource: …"
  * @param {(item)=>string} extractRef    -> URI for reference list
  */
 const buildKnowledgeResponse = (items, makeLine, extractRef) => {
@@ -81,6 +95,39 @@ const buildKnowledgeResponse = (items, makeLine, extractRef) => {
   const references = items.map(extractRef).filter((u) => u && u !== 'N/A' && u !== 'Unknown location type');
 
   return { knowledgeText, references };
+};
+
+/*───────────────────────────────────────────────────────────*/
+/* Document filtering by S3 prefix                           */
+/*───────────────────────────────────────────────────────────*/
+/**
+ * Filter documents based on KB type and S3 prefix
+ * @param {Array<any>} documents - Array of document objects
+ * @param {string} s3PrefixFilter - S3 prefix to filter by (e.g., 'documents/user-kb/kb_123/')
+ * @param {'user'|'company'} kbType - Type of KB (user or company)
+ * @returns {Array<any>} Filtered documents
+ */
+const filterDocumentsByPrefix = (documents, s3PrefixFilter, kbType) => {
+  if (!documents?.length) return [];
+  if (!s3PrefixFilter || !kbType) return documents;
+
+  return documents.filter((doc) => {
+    // Extract S3 URI from documentId (which is the S3 URI for both Q Business and Bedrock)
+    const s3Uri = doc.documentId || '';
+
+    if (kbType === 'user') {
+      // For user KBs: only include documents in the specific user KB prefix (documents/kb-{kbId}/)
+      return s3Uri.includes(s3PrefixFilter);
+    } else if (kbType === 'company') {
+      // For company KB: only include documents in 'documents/company/' prefix
+      // Exclude user KB documents (documents/kb-*) and web crawler (handled separately)
+      return (
+        s3Uri.includes(s3PrefixFilter) || (s3Uri.includes('documents/company/') && !s3Uri.includes('documents/kb-'))
+      );
+    }
+
+    return true;
+  });
 };
 
 /*───────────────────────────────────────────────────────────*/
@@ -272,102 +319,22 @@ export const formatKnowledgeBaseResults = (result) => {
 };
 
 /**
- * Fetch web crawler data sources from S3 bucket structure
- * @param {Function} getCredentials - Function to get AWS credentials
- * @param {string} clientName - The client name (e.g., CLIENT_NAME from session storage)
- * @param {string} region - AWS region
+ * Fetch web crawler data sources from the crawler stats API
+ * @param {Function} fetchCrawlerStats - Function to fetch crawler stats via API
+ * @param {string} kbId - Knowledge base identifier (company or kb-*)
  * @returns {Promise<Array>} Array of web crawler data source objects
  */
-export const fetchWebCrawlerDataSources = async (getCredentials, clientName, region) => {
-  if (!clientName) {
-    return [];
-  }
-
+export const fetchWebCrawlerDataSources = async (fetchCrawlerStats, kbId) => {
+  if (!fetchCrawlerStats || !kbId) return [];
   try {
-    const credentials = await getCredentials();
-    const s3Client = new S3Client({
-      region: region,
-      credentials,
-    });
-
-    // List all objects - we'll filter for web-crawler/ in the keys
-    const cmd = new ListObjectsV2Command({
-      Bucket: `numa-${clientName}-data`,
-    });
-
-    const resp = await s3Client.send(cmd);
-    const allObjects = resp.Contents || [];
-
-    // Find all unique web-crawler domains from object keys
-    // Keys can be: web-crawler/{domain}/{file} or documents/company/web-crawler/{domain}/{file}
-    const domainMap = new Map();
-
-    for (const obj of allObjects) {
-      const key = obj.Key;
-      // Match pattern: .../web-crawler/{domain}/{file}
-      const match = key.match(/web-crawler\/([^/]+)\//);
-      if (match) {
-        const domain = match[1];
-        if (!domainMap.has(domain)) {
-          domainMap.set(domain, []);
-        }
-        domainMap.get(domain).push(obj);
-      }
+    const response = await fetchCrawlerStats(kbId);
+    if (response?.success && Array.isArray(response.domains)) {
+      return response.domains;
     }
-
-    const webCrawlerDataSources = [];
-
-    // Process each domain
-    for (const [domain, files] of domainMap.entries()) {
-      if (!domain || files.length === 0) continue;
-
-      // Get the most recent file to determine the latest crawl date
-      const latestFile = files.reduce((latest, file) => {
-        return new Date(file.LastModified) > new Date(latest.LastModified) ? file : latest;
-      });
-
-      // Extract the domain URL from the first file (decode the URL)
-      let domainUrl = domain;
-      if (files.length > 0) {
-        try {
-          // Files are stored as web-crawler/{domain}/{encoded_url}
-          // Try to extract base URL from the encoded URLs
-          const firstFile = files[0];
-          const encodedUrl = firstFile.Key.split('/').pop();
-          const decodedUrl = decodeURIComponent(encodedUrl);
-          if (decodedUrl.startsWith('http')) {
-            const url = new URL(decodedUrl);
-            domainUrl = `${url.protocol}//${url.hostname}`;
-          }
-        } catch (error) {
-          // If URL parsing fails, use the domain as is
-          domainUrl = `https://${domain}`;
-          console.warn(`Failed to decode URL for domain ${domain}:`, error.message);
-        }
-      }
-
-      // Note: This is a V1 method using naive calculations and needs a user story for proper data source crawl metrics
-      webCrawlerDataSources.push({
-        dataSourceId: `web-crawler-${domain}`,
-        name: domainUrl,
-        displayName: domainUrl,
-        type: 'Numa Web Crawler',
-        status: 'ACTIVE',
-        createdAt: files[0]?.LastModified,
-        updatedAt: latestFile?.LastModified,
-        pageCount: files.length,
-        lastCrawled: latestFile?.LastModified,
-        // Custom fields to identify this as a web crawler source
-        isWebCrawler: true,
-        domain: domain,
-        sourceUrl: domainUrl,
-      });
-    }
-
-    return webCrawlerDataSources;
+    throw new Error(response?.error || 'Failed to fetch web crawler data sources');
   } catch (error) {
     console.error('Error fetching web crawler data sources:', error);
-    return [];
+    throw error;
   }
 };
 
@@ -384,8 +351,11 @@ export const fetchWebCrawlerDataSources = async (getCredentials, clientName, reg
  *   @prop {import('@aws-sdk/client-bedrock-agent').BedrockAgentClient} [bedrockAgentClient]
  *   @prop {string} [bedrockKnowledgeBaseId]
  *   @prop {string} clientDisplayName  e.g. `numa-${CLIENT_NAME}`
- *   @prop {Function} [getCredentials] - Function to get AWS credentials for web crawler data sources
  *   @prop {string} [region] - AWS region for web crawler data sources
+ *   @prop {string} [s3PrefixFilter] - S3 prefix to filter documents (e.g., 'documents/user-kb/kb_123/' for user KBs)
+ *   @prop {'user'|'company'} [kbType] - Type of KB to determine filtering behavior
+ *   @prop {string} [kbId] - Knowledge base identifier (company or kb-*)
+ *   @prop {(kbId?: string) => Promise<any>} [fetchCrawlerStats] - Function to fetch crawler stats via API
  * @returns {Promise<Object>} Shape:
  *   {
  *     dataSourceId,
@@ -407,8 +377,10 @@ export const getKnowledgeBaseState = async (config) => {
     bedrockAgentClient,
     bedrockKnowledgeBaseId,
     clientDisplayName,
-    getCredentials,
-    region,
+    s3PrefixFilter,
+    kbType,
+    kbId,
+    fetchCrawlerStats,
   } = config;
 
   try {
@@ -428,13 +400,11 @@ export const getKnowledgeBaseState = async (config) => {
 
       const allDataSources = dsResp.dataSources || [];
 
-      // Fetch web crawler data sources if credentials and region are provided
+      // Fetch web crawler data sources via crawler stats API
       let webCrawlerDataSources = [];
-      if (getCredentials && region) {
+      if (fetchCrawlerStats) {
         try {
-          // Extract client name from clientDisplayName (e.g., "numa-client-name" -> "client-name")
-          const clientName = clientDisplayName.replace(/^numa-/, '');
-          webCrawlerDataSources = await fetchWebCrawlerDataSources(getCredentials, clientName, region);
+          webCrawlerDataSources = await fetchWebCrawlerDataSources(fetchCrawlerStats, kbId);
         } catch (error) {
           console.warn('Failed to fetch web crawler data sources:', error);
         }
@@ -482,6 +452,9 @@ export const getKnowledgeBaseState = async (config) => {
         next = docResp.nextToken;
       } while (next);
 
+      // Filter documents by S3 prefix based on KB type
+      const filteredDocs = filterDocumentsByPrefix(docs, s3PrefixFilter, kbType);
+
       return {
         dataSourceId: ds.dataSourceId,
         syncStatus: ds.status,
@@ -489,7 +462,7 @@ export const getKnowledgeBaseState = async (config) => {
         lastSuccessfulSync: lastSuccess?.endTime,
         lastUpdated: latestJob?.endTime || latestJob?.startTime, // Use sync job time as "last updated"
         syncMetrics: latestJob?.metrics,
-        documents: docs,
+        documents: filteredDocs,
         dataSources: combinedDataSources,
         failedDocuments: [], // Q Business doesn't use this feature yet
         source: 'q-business',
@@ -511,13 +484,11 @@ export const getKnowledgeBaseState = async (config) => {
       const summaries = dsResp.dataSourceSummaries || dsResp.dataSources || [];
       const allDataSources = summaries;
 
-      // Fetch web crawler data sources if credentials and region are provided
+      // Fetch web crawler data sources via crawler stats API
       let webCrawlerDataSources = [];
-      if (getCredentials && region) {
+      if (fetchCrawlerStats) {
         try {
-          // Extract client name from clientDisplayName (e.g., "numa-client-name" -> "client-name")
-          const clientName = clientDisplayName.replace(/^numa-/, '');
-          webCrawlerDataSources = await fetchWebCrawlerDataSources(getCredentials, clientName, region);
+          webCrawlerDataSources = await fetchWebCrawlerDataSources(fetchCrawlerStats, kbId);
         } catch (error) {
           console.warn('Failed to fetch web crawler data sources:', error);
         }
@@ -562,18 +533,14 @@ export const getKnowledgeBaseState = async (config) => {
       const latestJob = ingestionJobs[0];
       const lastSuccess = ingestionJobs.find((j) => j.status === 'COMPLETE');
 
-      // Get failed documents from last 48 hours of ingestion jobs
+      // Get failed documents from latest 3 ingestion jobs (to avoid rate limiting)
       const failedDocumentsMap = new Map(); // Use map to deduplicate by URI
-      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
-      const recentJobs = ingestionJobs.filter((job) => {
-        const jobDate = new Date(job.updatedAt || job.startedAt);
-        return jobDate >= fortyEightHoursAgo;
-      });
+      const recentJobs = ingestionJobs.slice(0, 3);
 
       if (recentJobs.length > 0) {
         try {
           const { GetIngestionJobCommand } = await import('@aws-sdk/client-bedrock-agent');
-          const s3UriPattern = /s3:\/\/[^\s,\]]+/g;
+          const s3UriPattern = /s3:\/\/[^,;\]]+/g;
 
           // Process each job to extract failures
           for (const job of recentJobs) {
@@ -594,22 +561,24 @@ export const getKnowledgeBaseState = async (config) => {
                 const matches = reason.match(s3UriPattern);
                 if (matches) {
                   matches.forEach((uri) => {
-                    // Only add if not already present (keep most recent failure)
-                    if (!failedDocumentsMap.has(uri)) {
-                      // Extract filename from URI
-                      const keyMatch = uri.match(/[^/]+$/);
-                      const filename = keyMatch ? decodeURIComponent(keyMatch[0]) : uri;
-
-                      failedDocumentsMap.set(uri, {
-                        documentId: uri,
-                        status: 'FAILED',
-                        updatedAt: job.updatedAt || new Date().toISOString(),
-                        error: {
-                          errorMessage: 'File format not supported or processing failed during ingestion',
-                        },
-                        fileName: filename,
-                      });
+                    const sanitizedUri = sanitizeFailedS3Uri(uri);
+                    if (!sanitizedUri || failedDocumentsMap.has(sanitizedUri)) {
+                      return;
                     }
+
+                    // Extract filename from URI
+                    const keyMatch = sanitizedUri.match(/[^/]+$/);
+                    const filename = keyMatch ? decodeURIComponent(keyMatch[0]) : sanitizedUri;
+
+                    failedDocumentsMap.set(sanitizedUri, {
+                      documentId: sanitizedUri,
+                      status: 'FAILED',
+                      updatedAt: job.updatedAt || new Date().toISOString(),
+                      error: {
+                        errorMessage: 'File format not supported or processing failed during ingestion',
+                      },
+                      fileName: filename,
+                    });
                   });
                 }
               }
@@ -666,6 +635,10 @@ export const getKnowledgeBaseState = async (config) => {
         return doc;
       });
 
+      // Filter documents and failed documents by S3 prefix based on KB type
+      const filteredDocs = filterDocumentsByPrefix(normalizedDocs, s3PrefixFilter, kbType);
+      const filteredFailedDocs = filterDocumentsByPrefix(failedDocuments, s3PrefixFilter, kbType);
+
       return {
         dataSourceId: dataSourceId,
         syncStatus: ds.status,
@@ -674,9 +647,9 @@ export const getKnowledgeBaseState = async (config) => {
         lastUpdated: latestJob?.updatedAt || latestJob?.startedAt, // Use sync job time as "last updated"
         lastSyncStartTime: latestJob?.startedAt, // Sync start time for better failed file detection
         syncMetrics: latestJob?.statistics, // Bedrock uses statistics instead of metrics
-        documents: normalizedDocs,
+        documents: filteredDocs,
         dataSources: combinedDataSources,
-        failedDocuments: failedDocuments, // Failed files from ingestion job failure reasons
+        failedDocuments: filteredFailedDocs, // Failed files from ingestion job failure reasons (filtered)
         source: 'bedrock',
       };
     }

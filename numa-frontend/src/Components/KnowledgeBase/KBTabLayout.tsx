@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Tabs, Tab, Card } from 'react-bootstrap';
 import { KBFileExplorer } from './KBFileExplorer';
+import type { KBFileExplorerHandle } from './KBFileExplorer';
 import { KBWebCrawlerTab } from './KBWebCrawlerTab';
 import { KBSettingsTab } from './KBSettingsTab';
 import { KBStateProvider, useKBState } from '../../Providers/KBStateProvider';
@@ -10,12 +11,19 @@ interface KBTabLayoutProps {
   kbType: 'user' | 'company';
   role?: 'VIEWER' | 'EDITOR' | 'OWNER';
   onUploadSuccess?: () => void;
+  fileExplorerRef?: React.Ref<KBFileExplorerHandle>;
 }
 
 /**
  * Inner component that uses the KB state context
  */
-function KBTabLayoutInner({ kbId, kbType, role, onUploadSuccess }: KBTabLayoutProps): React.JSX.Element {
+function KBTabLayoutInner({
+  kbId,
+  kbType,
+  role,
+  onUploadSuccess,
+  fileExplorerRef,
+}: KBTabLayoutProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<string>('knowledge-base');
   const { invalidateCache } = useKBState();
 
@@ -44,7 +52,7 @@ function KBTabLayoutInner({ kbId, kbType, role, onUploadSuccess }: KBTabLayoutPr
             }
           >
             <div className="p-4">
-              <KBFileExplorer kbId={kbId} role={role} />
+              <KBFileExplorer kbId={kbId} role={role} ref={fileExplorerRef} />
             </div>
           </Tab>
 
@@ -89,7 +97,7 @@ function KBTabLayoutInner({ kbId, kbType, role, onUploadSuccess }: KBTabLayoutPr
  */
 export function KBTabLayout(props: KBTabLayoutProps): React.JSX.Element {
   return (
-    <KBStateProvider kbId={props.kbId}>
+    <KBStateProvider kbId={props.kbId} kbType={props.kbType}>
       <KBTabLayoutInner {...props} />
     </KBStateProvider>
   );

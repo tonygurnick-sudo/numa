@@ -1,26 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Row, Col, Alert, Button, Badge, Table, Tabs, Tab, Form, Modal } from 'react-bootstrap';
+import React, { useState, useEffect } from 'react';
+import { Card, Row, Col, Alert, Button, Badge, Form, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { useAuth } from '../../Providers/AuthProvider';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
 import { useKBState } from '../../Providers/KBStateProvider';
-
-interface DataSource {
-  dataSourceId: string;
-  name: string;
-  displayName?: string;
-  type: string;
-  status: string;
-  source: string;
-  isWebCrawler?: boolean;
-  url?: string;
-  pageCount?: number;
-  lastCrawled?: string;
-  lastSynced?: string;
-  lastUpdated?: string;
-  description?: string;
-}
+import { ChipsInput } from '../Inputs/ChipsInput';
 
 interface KBDetails {
   kb_id: string;
@@ -54,61 +39,6 @@ function getNextSyncTime(): Date {
 }
 
 /**
- * Format data source name
- */
-function formatDataSourceName(name: string | undefined, clientName: string | undefined): string {
-  if (!name && !clientName) return 'Unnamed Data Source';
-
-  if (clientName) {
-    const formattedClientName = clientName
-      .replace(/[-_]/g, ' ')
-      .split(' ')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
-    return `${formattedClientName} Numa Data Source`;
-  }
-
-  return (name || '')
-    .replace(/[-_]/g, ' ')
-    .split(' ')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-}
-
-/**
- * Format data source type
- */
-function formatDataSourceType(type: string | undefined, source: string): string {
-  if (source === 'bedrock') {
-    if (type === 'S3_VECTORS' || type === 'S3' || !type) {
-      return 'Numa Bedrock Knowledge Base';
-    }
-    return type;
-  }
-  return type === 'S3' ? 'Numa Q Business Knowledge Base' : type || 'Unknown';
-}
-
-/**
- * Get data source status variant
- */
-function getDataSourceStatusVariant(status: string | undefined): string {
-  switch (status?.toUpperCase()) {
-    case 'ACTIVE':
-    case 'AVAILABLE':
-      return 'success';
-    case 'CREATING':
-    case 'UPDATING':
-    case 'PENDING_CREATION':
-      return 'warning';
-    case 'FAILED':
-    case 'DELETING':
-      return 'danger';
-    default:
-      return 'secondary';
-  }
-}
-
-/**
  * KBSettingsTab Component
  * Shows KB status, data sources, and permissions
  */
@@ -119,12 +49,11 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
   const navigate = useNavigate();
 
   const [kbDetails, setKbDetails] = useState<KBDetails | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string>('all');
   // Permissions edit state (user KBs only)
   const [editingPerms, setEditingPerms] = useState<boolean>(false);
   const [visibility, setVisibility] = useState<'personal' | 'shared' | 'public'>('shared');
-  const [viewersInput, setViewersInput] = useState<string>('');
-  const [editorsInput, setEditorsInput] = useState<string>('');
+  const [viewerChips, setViewerChips] = useState<string[]>([]);
+  const [editorChips, setEditorChips] = useState<string[]>([]);
   const [permError, setPermError] = useState<string | null>(null);
   const [permSaving, setPermSaving] = useState<boolean>(false);
   const [permSuccess, setPermSuccess] = useState<boolean>(false);
@@ -135,14 +64,11 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { user } = useAuth();
-  const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
 
   // Extract state from context
   const syncStatus = kbState?.syncStatus || null;
   const syncJobStatus = kbState?.syncJobStatus || null;
   const lastSuccessfulSync = kbState?.lastSuccessfulSync || null;
-  const syncMetrics = kbState?.syncMetrics || null;
-  const dataSources = kbState?.dataSources || [];
   const canEditPermissions = kbType === 'user' && _role === 'OWNER';
 
   /**
@@ -162,79 +88,31 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
     fetchKBDetails();
   }, [kbId, kbType]);
 
-  /**
-   * Group data sources by type
-   */
-  const dataSourcesByType = useMemo(() => {
-    const groups: {
-      web: DataSource[];
-      document: DataSource[];
-      database: DataSource[];
-      other: DataSource[];
-    } = {
-      web: [],
-      document: [],
-      database: [],
-      other: [],
-    };
-
-    dataSources.forEach((source) => {
-      if (source.isWebCrawler) {
-        groups.web.push(source);
-      } else if (source.type?.toLowerCase().includes('s3')) {
-        groups.document.push(source);
-      } else if (source.type?.toLowerCase().includes('database')) {
-        groups.database.push(source);
-      } else {
-        groups.other.push(source);
-      }
-    });
-
-    return groups;
-  }, [dataSources]);
-
-  /**
-   * Filter data sources
-   */
-  const filteredDataSources = useMemo((): DataSource[] => {
-    let filtered = [...dataSources];
-
-    if (activeCategory !== 'all') {
-      filtered = filtered.filter((source) => {
-        switch (activeCategory) {
-          case 'web':
-            return source.isWebCrawler;
-          case 'document':
-            return source.type?.toLowerCase().includes('s3');
-          case 'database':
-            return source.type?.toLowerCase().includes('database');
-          case 'active':
-            return source.status === 'ACTIVE';
-          default:
-            return true;
-        }
-      });
-    }
-
-    return filtered;
-  }, [dataSources, activeCategory]);
-
   // Helpers for permissions editing
-  function parseIdentifiers(input: string): string[] {
-    const tokens = input
-      .split(/[,;\n]/g)
-      .map((t) => t.trim())
-      .filter(Boolean);
+  function normalizeIdentifiers(items: string[]): string[] {
     const out: string[] = [];
     const seen = new Set<string>();
-    for (const t of tokens) {
-      const key = t.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        out.push(t);
-      }
+    for (const raw of items) {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      const lower = trimmed.toLowerCase();
+      if (seen.has(lower)) continue;
+      seen.add(lower);
+      out.push(trimmed);
     }
     return out;
+  }
+
+  const EMAILish = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+
+  function findInvalidEmailLikes(list: string[]): string[] {
+    const suspects: string[] = [];
+    for (const v of list) {
+      if (v.includes('@') && !EMAILish.test(v)) {
+        suspects.push(v);
+      }
+    }
+    return suspects;
   }
 
   function startEditPermissions(): void {
@@ -251,8 +129,8 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
     const currentEditors: string[] =
       kbDetails.editor_emails && kbDetails.editor_emails.length > 0 ? kbDetails.editor_emails : kbDetails.editors || [];
 
-    setViewersInput(vis === 'public' ? '' : currentViewers.join(', '));
-    setEditorsInput(currentEditors.join(', '));
+    setViewerChips(vis === 'public' ? [] : currentViewers);
+    setEditorChips(currentEditors);
     setPermError(null);
     setEditingPerms(true);
   }
@@ -267,13 +145,13 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
 
       if (visibility === 'public') {
         viewers = ['*'];
-        editors = parseIdentifiers(editorsInput);
+        editors = normalizeIdentifiers(editorChips);
       } else if (visibility === 'personal') {
         viewers = [];
         editors = [];
       } else {
-        const v = parseIdentifiers(viewersInput);
-        const e = parseIdentifiers(editorsInput);
+        const v = normalizeIdentifiers(viewerChips);
+        const e = normalizeIdentifiers(editorChips);
         const lowerV = new Set(v.map((s) => s.toLowerCase()));
         for (const ed of e) {
           const k = ed.toLowerCase();
@@ -289,6 +167,8 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
       await knowledgeBaseService.updateKB(kbId, { viewers, editors });
       const fresh = await knowledgeBaseService.getKB(kbId);
       setKbDetails(fresh);
+      // Refresh KB list so visibility/roles update elsewhere
+      await refreshKBs();
       setEditingPerms(false);
       setPermSuccess(true);
       setTimeout(() => setPermSuccess(false), 3000);
@@ -366,137 +246,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                   </Alert>
                 )}
               </Col>
-              <Col xs={12} md={6}>
-                {syncMetrics && (
-                  <div className="text-muted small">
-                    <strong>Latest Sync Metrics:</strong>
-                    <ul className="list-unstyled mt-2">
-                      <li>
-                        Documents Added: {syncMetrics.documentsAdded || syncMetrics.numberOfNewDocumentsIndexed || 0}
-                      </li>
-                      <li>
-                        Documents Deleted: {syncMetrics.documentsDeleted || syncMetrics.numberOfDocumentsDeleted || 0}
-                      </li>
-                      <li>
-                        Documents Failed: {syncMetrics.documentsFailed || syncMetrics.numberOfDocumentsFailed || 0}
-                      </li>
-                      <li>
-                        Documents Modified:{' '}
-                        {syncMetrics.documentsModified || syncMetrics.numberOfModifiedDocumentsIndexed || 0}
-                      </li>
-                      <li>
-                        Documents Scanned: {syncMetrics.documentsScanned || syncMetrics.numberOfDocumentsScanned || 0}
-                      </li>
-                    </ul>
-                  </div>
-                )}
-              </Col>
             </Row>
-          )}
-        </Card.Body>
-      </Card>
-
-      {/* Data Sources Section */}
-      <Card className="mb-4">
-        <Card.Header>
-          <Card.Title className="mb-0">
-            <i className="bi bi-database me-2"></i>
-            Data Sources
-          </Card.Title>
-        </Card.Header>
-        <Card.Body>
-          {dataSources.length === 0 && !isLoading ? (
-            <div className="text-center p-4 bg-light rounded">
-              <i className="bi bi-inbox display-4 text-muted"></i>
-              <p className="mt-3 text-muted mb-0">No data sources found</p>
-            </div>
-          ) : (
-            <>
-              <Tabs activeKey={activeCategory} onSelect={(k) => setActiveCategory(k || 'all')} className="mb-3">
-                <Tab eventKey="all" title="All" />
-                {dataSourcesByType.web.length > 0 && (
-                  <Tab
-                    eventKey="web"
-                    title={
-                      <>
-                        <i className="bi bi-globe2 me-1"></i>
-                        Web <Badge bg="secondary">{dataSourcesByType.web.length}</Badge>
-                      </>
-                    }
-                  />
-                )}
-                {dataSourcesByType.document.length > 0 && (
-                  <Tab
-                    eventKey="document"
-                    title={
-                      <>
-                        <i className="bi bi-file-earmark me-1"></i>
-                        Documents <Badge bg="secondary">{dataSourcesByType.document.length}</Badge>
-                      </>
-                    }
-                  />
-                )}
-                {dataSourcesByType.database.length > 0 && (
-                  <Tab
-                    eventKey="database"
-                    title={
-                      <>
-                        <i className="bi bi-database me-1"></i>
-                        Database <Badge bg="secondary">{dataSourcesByType.database.length}</Badge>
-                      </>
-                    }
-                  />
-                )}
-                <Tab
-                  eventKey="active"
-                  title={
-                    <>
-                      <i className="bi bi-check-circle me-1"></i>
-                      Active
-                    </>
-                  }
-                />
-              </Tabs>
-
-              <Table hover responsive>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                    <th>Last Updated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredDataSources.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="text-center py-3 text-muted">
-                        No matching data sources found
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredDataSources.map((source, index) => {
-                      const lastUpdated = source.lastSynced || source.lastUpdated;
-                      return (
-                        <tr key={source.dataSourceId || index}>
-                          <td>
-                            <i
-                              className={`${source.isWebCrawler ? 'bi-globe2' : 'bi-file-earmark'} bi me-2 text-primary`}
-                            ></i>
-                            {formatDataSourceName(source.displayName || source.name, CLIENT_NAME)}
-                          </td>
-                          <td>{formatDataSourceType(source.type, source.source)}</td>
-                          <td>
-                            <Badge bg={getDataSourceStatusVariant(source.status)}>{source.status || 'Unknown'}</Badge>
-                          </td>
-                          <td>{lastUpdated ? new Date(lastUpdated).toLocaleString('en-NZ') : 'Unknown'}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </Table>
-            </>
           )}
         </Card.Body>
       </Card>
@@ -603,36 +353,39 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                         </Form.Group>
 
                         {visibility === 'shared' && (
-                          <Form.Group className="mb-3" controlId="kbViewersEdit">
-                            <Form.Label>Viewers (user IDs or emails)</Form.Label>
-                            <Form.Control
-                              as="textarea"
-                              rows={2}
-                              value={viewersInput}
-                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setViewersInput(e.target.value)}
-                              disabled={permSaving}
-                              placeholder="e.g., user1@example.com, user2@example.com"
-                            />
-                            <Form.Text className="text-muted">
-                              Use commas, semicolons, or new lines. Editors automatically gain viewer access.
-                            </Form.Text>
-                          </Form.Group>
+                          <ChipsInput
+                            id="kbViewersEdit"
+                            label="Viewers (user IDs or emails)"
+                            chips={viewerChips}
+                            onChange={setViewerChips}
+                            placeholder="Type an email or ID then press Add/Enter"
+                            helperText="Editors automatically gain viewer access."
+                            disabled={permSaving}
+                          />
                         )}
 
-                        <Form.Group className="mb-3" controlId="kbEditorsEdit">
-                          <Form.Label>Editors (user IDs or emails)</Form.Label>
-                          <Form.Control
-                            as="textarea"
-                            rows={2}
-                            value={editorsInput}
-                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditorsInput(e.target.value)}
-                            disabled={permSaving}
-                            placeholder="e.g., admin@example.com"
-                          />
-                          <Form.Text className="text-muted">
-                            Editors can upload files and modify this KB; they automatically gain viewer permissions.
-                          </Form.Text>
-                        </Form.Group>
+                        <ChipsInput
+                          id="kbEditorsEdit"
+                          label="Editors (user IDs or emails)"
+                          chips={editorChips}
+                          onChange={setEditorChips}
+                          placeholder="Type an email or ID then press Add/Enter"
+                          helperText="Editors can upload files and modify this KB; they automatically gain viewer permissions."
+                          disabled={permSaving}
+                        />
+
+                        {visibility === 'shared' && findInvalidEmailLikes(viewerChips).length > 0 && (
+                          <div className="mt-2 small text-warning" aria-live="polite">
+                            <i className="bi bi-exclamation-circle me-1" />
+                            These viewers look unusual as emails: {findInvalidEmailLikes(viewerChips).join(', ')}
+                          </div>
+                        )}
+                        {findInvalidEmailLikes(editorChips).length > 0 && (
+                          <div className="mt-2 small text-warning" aria-live="polite">
+                            <i className="bi bi-exclamation-circle me-1" />
+                            These editors look unusual as emails: {findInvalidEmailLikes(editorChips).join(', ')}
+                          </div>
+                        )}
 
                         <div className="d-flex gap-2">
                           <Button variant="secondary" onClick={cancelEditPermissions} disabled={permSaving}>
