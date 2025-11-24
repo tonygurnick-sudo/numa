@@ -99,15 +99,23 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       addAuthorizer: true,
       lambdaDirectory: 'python/web-crawler-start',
       handler: 'lambda_function.handler',
-      route: {
-        verb: 'POST',
-        path: 'start-web-crawler',
-      },
+      route: [
+        {
+          verb: 'POST',
+          path: 'start-web-crawler',
+        },
+        {
+          verb: 'GET',
+          path: 'web-crawler-stats',
+        },
+      ],
       environment: {
         LOG_LEVEL: 'INFO',
         ALLOWED_ORIGIN: '*',
         CLIENT_NAME: props.clientName,
         WEB_CRAWLER_STATE_MACHINE_ARN: props.webCrawlerStateMachineArn,
+        CRAWL_URLS_TABLE_NAME: props.webCrawlerTableName,
+        KB_STATUS_INDEX_NAME: 'kbId-status-index',
       },
       timeout: 30,
       additionalPolicyStatements: [
@@ -115,6 +123,11 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           effect: 'Allow',
           actions: ['states:StartExecution'],
           resources: [props.webCrawlerStateMachineArn],
+        },
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query'],
+          resources: [props.webCrawlerTableArn, `${props.webCrawlerTableArn}/index/*`],
         },
       ],
     });
@@ -388,6 +401,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   apiGatewayId: string;
   apiGatewayAuthorizerId: string;
   webCrawlerStateMachineArn: string;
+  webCrawlerTableArn: string;
+  webCrawlerTableName: string;
   visionModelType: string;
   // Branding API settings
   brandingProviderEnabled?: boolean;

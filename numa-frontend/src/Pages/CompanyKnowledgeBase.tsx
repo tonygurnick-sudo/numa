@@ -8,19 +8,26 @@ import { Button, Alert } from 'react-bootstrap';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
 import { KBTabLayout } from '../Components/KnowledgeBase/KBTabLayout';
+import type { KBFileExplorerHandle } from '../Components/KnowledgeBase/KBFileExplorer';
 import { useAuth } from '../Providers/AuthProvider';
 import { FileUploader } from '../Components/FileUploader';
 import { NotificationModal } from '../Components/NotificationModal';
 import { isFileTypeValidForBedrockKB, shouldShowLargeDataFileWarning, formatFileSize } from '../utils/fileUtils';
+import { listFoldersInKB } from '../utils/s3Utils';
+import FolderSelector from '../Components/KnowledgeBase/FolderSelector';
 
 export function CompanyKnowledgeBase(): React.JSX.Element {
-  const { user } = useAuth();
+  const { user, getCredentials, region: authRegion } = useAuth();
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [fileValidationError, setFileValidationError] = useState<string | null>(null);
   const [showNotificationModal, setShowNotificationModal] = useState<boolean>(false);
   const [pendingLargeFiles, setPendingLargeFiles] = useState<File[]>([]);
   const [clearFileUploader, setClearFileUploader] = useState<boolean>(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const fileExplorerRef = React.useRef<KBFileExplorerHandle>(null);
+  const [selectedFolder, setSelectedFolder] = useState<string>('');
+  const [folderOptions, setFolderOptions] = useState<string[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState<boolean>(false);
 
   const canView = Boolean(user?.features?.includes('useCompanyData'));
   const canAdd = Boolean(user?.features?.includes('addToCompanyData'));
@@ -39,6 +46,31 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
       return () => clearTimeout(timer);
     }
   }, [clearFileUploader]);
+
+  // Fetch folder options when upload modal is opened
+  useEffect(() => {
+    if (showUploadModal) {
+      const fetchFolders = async () => {
+        try {
+          setLoadingFolders(true);
+          const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
+          const region = authRegion || window.sessionStorage.getItem('REGION') || 'ap-southeast-2';
+          const bucket = `numa-${CLIENT_NAME}-data`;
+
+          const folders = await listFoldersInKB('company', bucket, region, getCredentials);
+          setFolderOptions(folders);
+        } catch (error) {
+          console.error('Error fetching folders:', error);
+          setFolderOptions([]);
+        } finally {
+          setLoadingFolders(false);
+        }
+      };
+
+      fetchFolders();
+      setSelectedFolder(''); // Reset to root when opening modal
+    }
+  }, [showUploadModal, getCredentials, authRegion]);
 
   /**
    * Validates files before upload
@@ -110,10 +142,16 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
         subtitle="Shared knowledge across your organization"
         actions={
           canAdd ? (
-            <Button variant="primary" onClick={() => setShowUploadModal(true)}>
-              <i className="bi bi-upload me-2"></i>
-              Upload Files
-            </Button>
+            <div className="d-flex gap-2">
+              <Button variant="secondary" onClick={() => fileExplorerRef.current?.openCreateFolder()}>
+                <i className="bi bi-folder-plus me-2"></i>
+                New Folder
+              </Button>
+              <Button variant="primary" onClick={() => setShowUploadModal(true)}>
+                <i className="bi bi-upload me-2"></i>
+                Upload Files
+              </Button>
+            </div>
           ) : null
         }
       />
@@ -133,13 +171,24 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
           </Alert>
         )}
 
-        {canView && <KBTabLayout kbId="company" kbType="company" role={role} onUploadSuccess={handleUploadSuccess} />}
+        {canView && (
+          <KBTabLayout
+            kbId="company"
+            kbType="company"
+            role={role}
+            onUploadSuccess={handleUploadSuccess}
+            fileExplorerRef={fileExplorerRef}
+          />
+        )}
       </LayoutDashboard>
 
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="modal show d-block kb-upload-modal-backdrop" onClick={() => setShowUploadModal(false)}>
-          <div className="modal-dialog modal-dialog-centered kb-upload-modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-dialog modal-dialog-centered modal-lg kb-upload-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">
@@ -156,7 +205,17 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
               <div className="modal-body">
                 <p className="text-muted small mb-3">
                   Files will be automatically indexed every 30 minutes and made available for querying in Numa Chat.
+                  <br />
+                  <strong>Note:</strong> Maximum file size is 50MB per file.
                 </p>
+
+                <FolderSelector
+                  selectedFolder={selectedFolder}
+                  onFolderChange={setSelectedFolder}
+                  folderOptions={folderOptions}
+                  disabled={loadingFolders}
+                  label="Upload to folder"
+                />
 
                 {fileValidationError && (
                   <Alert variant="danger" className="mb-3">
@@ -171,6 +230,7 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
                   validateFile={isFileTypeValidForBedrockKB}
                   clearFiles={clearFileUploader}
                   kb_id="company"
+                  selectedFolder={selectedFolder}
                 />
               </div>
             </div>

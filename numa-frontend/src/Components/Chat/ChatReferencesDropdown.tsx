@@ -126,7 +126,7 @@ const ChatReferencesDropdown = ({
 
   // Function to extract the original URL from a web crawler key
   const extractCrawlerUrl = (key) => {
-    const match = key.match(/^web-crawler\/[^/]+\/(.+)$/);
+    const match = key.match(/^(?:documents\/(?:company|kb-[^/]+)\/)?web-crawler\/[^/]+\/(.+)$/);
     if (!match) return null;
 
     try {
@@ -148,12 +148,10 @@ const ChatReferencesDropdown = ({
     try {
       setDownloadingIndex(index);
 
-      if (ref.key.startsWith('web-crawler/')) {
-        const crawlerUrl = extractCrawlerUrl(ref.key);
-        if (crawlerUrl) {
-          window.open(crawlerUrl, '_blank');
-          return;
-        }
+      const crawlerUrl = extractCrawlerUrl(ref.key);
+      if (crawlerUrl) {
+        window.open(crawlerUrl, '_blank');
+        return;
       }
 
       // If not a web crawler URL or extraction failed, try to get URL from tags

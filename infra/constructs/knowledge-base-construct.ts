@@ -544,46 +544,48 @@ export class KnowledgeBase extends Construct {
             {
               Variable: '$.IngestionJob.Status',
               StringEquals: 'FAILED',
-              Next: 'CleanupFailedFiles',
+              Next: 'CheckJobStatus', // Disabled cleanup - preserve failed files for investigation
             },
             {
               Variable: '$.IngestionJob.Status',
               StringEquals: 'COMPLETE',
-              Next: 'CleanupFailedFiles',
+              Next: 'CheckJobStatus', // Disabled cleanup - preserve failed files for investigation
             },
           ],
           Default: 'Wait X Seconds',
         },
-        CleanupFailedFiles: {
-          Type: 'Task',
-          Resource: 'arn:aws:states:::lambda:invoke',
-          Parameters: {
-            FunctionName: cleanupFunc.arn,
-            Payload: {
-              knowledgeBaseId: knowledgeBase.id,
-              dataSourceId: dataSource.dataSourceId,
-              bucketName: `numa-${props.clientName}-data`,
-            },
-          },
-          ResultPath: '$.CleanupResult',
-          Next: 'CheckJobStatus',
-          Retry: [
-            {
-              ErrorEquals: ['States.TaskFailed'],
-              BackoffRate: 2,
-              IntervalSeconds: 1,
-              MaxAttempts: 3,
-            },
-          ],
-          Catch: [
-            {
-              ErrorEquals: ['States.ALL'],
-              ResultPath: '$.CleanupError',
-              Next: 'CheckJobStatus',
-              Comment: 'Continue to check job status even if cleanup fails',
-            },
-          ],
-        } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+        // DISABLED: CleanupFailedFiles step - preserving failed documents for investigation
+        // To re-enable, uncomment this block and update the Next states above
+        // CleanupFailedFiles: {
+        //   Type: 'Task',
+        //   Resource: 'arn:aws:states:::lambda:invoke',
+        //   Parameters: {
+        //     FunctionName: cleanupFunc.arn,
+        //     Payload: {
+        //       knowledgeBaseId: knowledgeBase.id,
+        //       dataSourceId: dataSource.dataSourceId,
+        //       bucketName: `numa-${props.clientName}-data`,
+        //     },
+        //   },
+        //   ResultPath: '$.CleanupResult',
+        //   Next: 'CheckJobStatus',
+        //   Retry: [
+        //     {
+        //       ErrorEquals: ['States.TaskFailed'],
+        //       BackoffRate: 2,
+        //       IntervalSeconds: 1,
+        //       MaxAttempts: 3,
+        //     },
+        //   ],
+        //   Catch: [
+        //     {
+        //       ErrorEquals: ['States.ALL'],
+        //       ResultPath: '$.CleanupError',
+        //       Next: 'CheckJobStatus',
+        //       Comment: 'Continue to check job status even if cleanup fails',
+        //     },
+        //   ],
+        // } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         CheckJobStatus: {
           Type: 'Choice',
           Choices: [

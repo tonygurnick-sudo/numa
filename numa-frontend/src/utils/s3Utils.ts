@@ -803,3 +803,92 @@ export const downloadMultipleFilesAsZip = async (
     throw error;
   }
 };
+
+/**
+ * List all folders in a knowledge base
+ * @param {string} kbId - The knowledge base ID (e.g., 'company' or a UUID)
+ * @param {string} s3Bucket - The S3 bucket name
+ * @param {string} region - AWS region
+ * @param {Function} getCredentials - Function to get AWS credentials
+ * @returns {Promise<string[]>} - Sorted array of folder paths (e.g., ['folder1', 'folder1/subfolder', 'folder2'])
+ */
+export const listFoldersInKB = async (
+  kbId: string,
+  s3Bucket: string,
+  region: string,
+  getCredentials: () => Promise<unknown>,
+): Promise<string[]> => {
+  try {
+    const credentials = await getCredentials();
+
+    if (!credentials?.accessKeyId) {
+      throw new Error('AWS Credentials are missing.');
+    }
+
+    const s3Client = new S3Client({
+      region,
+      credentials,
+    });
+
+    // Determine the KB prefix
+    const kbPrefix = kbId === 'company' ? 'documents/company/' : `documents/kb-${kbId}/`;
+
+    const allKeys: string[] = [];
+    let continuationToken = null;
+
+    // List all objects in the KB prefix
+    do {
+      const command = new ListObjectsV2Command({
+        Bucket: s3Bucket,
+        Prefix: kbPrefix,
+        ContinuationToken: continuationToken,
+      });
+
+      const response = await s3Client.send(command);
+
+      if (response.Contents) {
+        allKeys.push(...response.Contents.map((obj) => obj.Key || '').filter((key) => key !== ''));
+      }
+
+      continuationToken = response.NextContinuationToken;
+    } while (continuationToken);
+
+    // Extract unique folder paths
+    const folderSet = new Set<string>();
+
+    for (const key of allKeys) {
+      // Remove the KB prefix to get the relative path
+      const relativePath = key.startsWith(kbPrefix) ? key.substring(kbPrefix.length) : key;
+
+      // Split by '/' to get all path segments
+      const segments = relativePath.split('/');
+
+      // Build all parent folder paths
+      // For example, 'folder1/folder2/file.txt' would add 'folder1' and 'folder1/folder2'
+      for (let i = 1; i < segments.length; i++) {
+        const folderPath = segments.slice(0, i).join('/');
+        if (folderPath) {
+          folderSet.add(folderPath);
+        }
+      }
+    }
+
+    // Convert to array and sort
+    const folders = Array.from(folderSet).sort((a, b) => {
+      // Sort alphabetically, with shallower folders first
+      const aDepth = a.split('/').length;
+      const bDepth = b.split('/').length;
+
+      if (aDepth !== bDepth) {
+        return aDepth - bDepth;
+      }
+
+      return a.localeCompare(b);
+    });
+
+    return folders;
+  } catch (error) {
+    console.error('Error listing folders in KB:', error);
+    throw error;
+  }
+};

@@ -41,6 +41,21 @@ class KnowledgeBaseManager:
         self.dynamodb: DynamoDBClient = boto3.client("dynamodb")
         self.tenant_pk = f"TENANT#{self.client_name}"
 
+    @staticmethod
+    def _compute_visibility(
+        viewers: List[str], editors: List[str], created_by: Optional[str]
+    ) -> Dict[str, bool]:
+        """Return visibility flags derived from memberships."""
+        is_public = "*" in viewers
+
+        # Personal if only the creator is present (after wildcard excluded)
+        members = set([v for v in viewers if v != "*"] + editors)
+        if created_by:
+            members.discard(created_by)
+        is_shared = is_public or len(members) > 0
+
+        return {"is_shared": is_shared, "is_public": is_public}
+
     def create_kb(
         self,
         name: str,
@@ -206,6 +221,9 @@ class KnowledgeBaseManager:
 
             editors = kb.get("editors", [])
             viewers = kb.get("viewers", [])
+            visibility = self._compute_visibility(
+                viewers, editors, kb.get("created_by")
+            )
 
             role: Optional[str] = None
             # Owner takes precedence over editor/viewer
@@ -221,11 +239,16 @@ class KnowledgeBaseManager:
                 if kb_id in memberships:
                     if role == "OWNER":
                         memberships[kb_id]["role"] = "OWNER"
+                    memberships[kb_id]["is_shared"] = visibility["is_shared"]
+                    memberships[kb_id]["is_public"] = visibility["is_public"]
+                    memberships[kb_id]["kb_name"] = kb.get("kb_name", kb_id)
                 else:
                     memberships[kb_id] = {
                         "kb_id": kb_id,
                         "kb_name": kb.get("kb_name", kb_id),
                         "role": role,
+                        "is_shared": visibility["is_shared"],
+                        "is_public": visibility["is_public"],
                     }
 
         return sorted(
@@ -563,6 +586,9 @@ class KnowledgeBaseManager:
         else:
             editors = []
 
+        created_by = item.get("created_by", {}).get("S")
+        visibility = self._compute_visibility(viewers, editors, created_by)
+
         return {
             "kb_id": item["kb_id"]["S"],
             "kb_name": item["kb_name"]["S"],
@@ -570,10 +596,12 @@ class KnowledgeBaseManager:
             "is_default": item.get("is_default", {}).get("BOOL", False),
             "viewers": viewers,
             "editors": editors,
-            "created_by": item.get("created_by", {}).get("S"),
+            "created_by": created_by,
             "created_at": item.get("created_at", {}).get("S"),
             "status": item["status"]["S"],
             "document_count": int(item.get("document_count", {}).get("N", 0)),
+            "is_shared": visibility["is_shared"],
+            "is_public": visibility["is_public"],
         }
 
     def _parse_membership_item(self, item: Dict) -> Dict[str, Any]:

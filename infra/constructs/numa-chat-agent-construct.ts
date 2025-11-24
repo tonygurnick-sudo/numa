@@ -159,6 +159,11 @@ export class NumaChatAgent extends Construct {
         },
         {
           effect: 'Allow',
+          actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminGetUser'],
+          resources: [`arn:aws:cognito-idp:${props.region}:${callerIdentity.accountId}:userpool/${props.userPoolId}`],
+        },
+        {
+          effect: 'Allow',
           actions: ['dynamodb:Query', 'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
           resources: [
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-chat-history`,

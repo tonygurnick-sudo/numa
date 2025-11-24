@@ -64,13 +64,18 @@ export async function handler(event: Event): Promise<CleanupResult> {
 
     // Parse failure reasons to extract S3 URIs
     // Format: "[\"Encountered error: Ignored N files... [Files: s3://bucket/key1, s3://bucket/key2]. ...\"]"
-    const s3UriPattern = /s3:\/\/[^\s,\]]+/g;
+    const s3UriPattern = /s3:\/\/[^,;\]]+/g;
     const failedUris = new Set<string>();
 
     for (const reason of failureReasons) {
       const matches = reason.match(s3UriPattern);
       if (matches) {
-        matches.forEach((uri) => failedUris.add(uri));
+        matches.forEach((uri) => {
+          const sanitized = sanitizeS3Uri(uri);
+          if (sanitized) {
+            failedUris.add(sanitized);
+          }
+        });
       }
     }
 
@@ -201,4 +206,20 @@ interface CleanupResult {
     uri?: string;
     status?: string;
   }>;
+}
+
+/**
+ * Removes diagnostic suffixes (e.g. "(Unsupported file format ...)") and trailing punctuation
+ * from Bedrock ingestion failure messages while preserving the actual S3 key.
+ */
+function sanitizeS3Uri(uri: string): string | null {
+  const trimmed = uri.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const withoutDiagnosticSuffix = trimmed.replace(/\s+\([^)]*\)$/, '');
+  const cleaned = withoutDiagnosticSuffix.replace(/[;.,]+$/, '');
+
+  return cleaned.startsWith('s3://') ? cleaned : null;
 }

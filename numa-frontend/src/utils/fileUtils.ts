@@ -11,9 +11,12 @@ const BEDROCK_KB_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-powerpoint', // Microsoft PowerPoint
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-excel', // Microsoft Excel
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // Excel (xlsx)
   'text/csv', // CSV
   'text/html', // HTML
   'text/markdown', // Markdown
+  'application/json', // JSON
   'application/jsonl', // JSON Lines
 ];
 
@@ -39,16 +42,59 @@ const EXTENSION_TO_MIME = {
   xls: 'application/vnd.ms-excel',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 
-  // Image formats
+  // Code/development files (allowed - map to text/plain)
+  py: 'text/plain',
+  sh: 'text/plain',
+  js: 'text/plain',
+  jsx: 'text/plain',
+  ts: 'text/plain',
+  tsx: 'text/plain',
+  java: 'text/plain',
+  cpp: 'text/plain',
+  c: 'text/plain',
+  h: 'text/plain',
+  hpp: 'text/plain',
+  go: 'text/plain',
+  rb: 'text/plain',
+  php: 'text/plain',
+  yaml: 'text/plain',
+  yml: 'text/plain',
+  drawio: 'text/plain',
+
+  // Image formats (jpg/jpeg/png/gif/svg/webp allowed, others blocked)
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   png: 'image/png',
   gif: 'image/gif',
   svg: 'image/svg+xml',
   webp: 'image/webp',
+  bmp: 'image/bmp',
+  tiff: 'image/tiff',
+  tif: 'image/tiff',
+  ico: 'image/x-icon',
+  heic: 'image/heic',
 
-  // Other formats
+  // Archives (zip allowed in some contexts, others blocked)
   zip: 'application/zip',
+  rar: 'application/x-rar-compressed',
+  '7z': 'application/x-7z-compressed',
+  tar: 'application/x-tar',
+  gz: 'application/gzip',
+  bz2: 'application/x-bzip2',
+
+  // Audio formats (blocked)
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  flac: 'audio/flac',
+  ogg: 'audio/ogg',
+
+  // Video formats (blocked)
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  avi: 'video/x-msvideo',
+  webm: 'video/webm',
+  mkv: 'video/x-matroska',
 };
 
 /**
