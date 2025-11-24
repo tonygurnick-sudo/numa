@@ -39,6 +39,18 @@ const ALL_APPS = [
   'tor-assessment',
 ]
 
+// Production apps only (isProdApp: true in infra/stacks/numa-client-stack.ts)
+const PROD_APPS = [
+  'candidate-screening',
+  'company-profile',
+  'contract-analysis',
+  'document-summariser',
+  'financial-analysis',
+  'meeting-analyser',
+  'policy-drafter',
+  'policy-reviewer',
+]
+
 export default function UpdateClientConfig() {
   const [searchParams] = useSearchParams()
   const defaults = getDefaultClientConfigValues()
@@ -152,9 +164,22 @@ export default function UpdateClientConfig() {
     if (eff.allApps !== allApps) updates.allApps = allApps
     if (!allApps && eff.allProdApps !== allProdApps) updates.allProdApps = allProdApps
 
-    // Only include apps when explicitly selecting specific apps
-    if (!allApps && !allProdApps && selectedApps.length > 0) {
-      updates.apps = Object.fromEntries(selectedApps.map(a => [a, {}]))
+    // Handle apps array: when allApps is true, don't include apps (all apps deployed automatically)
+    // When allProdApps is true, only include selected dev apps
+    // When both false, include all selected apps
+    if (!allApps) {
+      const appsToInclude = allProdApps
+        ? selectedApps.filter(a => !PROD_APPS.includes(a))  // Only dev apps when allProdApps is true
+        : selectedApps;  // All selected apps when allProdApps is false
+
+      const currentApps = Object.keys(eff.apps || {});
+      const hasChanged = !sameMembers(currentApps, appsToInclude);
+
+      if (hasChanged) {
+        updates.apps = appsToInclude.length > 0
+          ? Object.fromEntries(appsToInclude.map(a => [a, {}]))
+          : {};
+      }
     }
 
     // Only include pipedreamIntegrations if changed
@@ -317,17 +342,33 @@ export default function UpdateClientConfig() {
                       type="switch"
                       helpText="Enable all production applications"
                     >
-                      {!allApps && !allProdApps && (
-                        <Form.Group className="mt-3">
-                          <Form.Label className="small">Select Specific Apps</Form.Label>
-                          <div className="d-flex flex-column gap-1">
-                            {ALL_APPS.map(a => (
+                      <Form.Group className="mt-3">
+                        <Form.Label className="small">
+                          {allProdApps || allApps ? 'Included Apps' : 'Select Specific Apps'}
+                        </Form.Label>
+                        {allApps && (
+                          <Alert variant="info" className="py-2 px-3 mb-2 small">
+                            All apps are automatically enabled when 'All Apps (Dev)' is selected
+                          </Alert>
+                        )}
+                        {allProdApps && !allApps && (
+                          <Alert variant="info" className="py-2 px-3 mb-2 small">
+                            All production apps are automatically enabled when 'All Production Apps' is selected
+                          </Alert>
+                        )}
+                        <div className="d-flex flex-column gap-1">
+                          {ALL_APPS.map(a => {
+                            const isProdApp = PROD_APPS.includes(a)
+                            const isChecked = allApps || (allProdApps && isProdApp) || selectedApps.includes(a)
+                            const isDisabled = allApps || (allProdApps && isProdApp)
+                            return (
                               <Form.Check
                                 key={a}
                                 type="checkbox"
                                 id={`app-${a}`}
                                 label={a}
-                                checked={selectedApps.includes(a)}
+                                checked={isChecked}
+                                disabled={isDisabled}
                                 onChange={e => {
                                   const checked = e.currentTarget.checked
                                   setSelectedApps(prev =>
@@ -337,11 +378,17 @@ export default function UpdateClientConfig() {
                                   )
                                 }}
                               />
-                            ))}
-                          </div>
-                          <Form.Text className="text-muted">Tick one or more applications</Form.Text>
-                        </Form.Group>
-                      )}
+                            )
+                          })}
+                        </div>
+                        <Form.Text className="text-muted">
+                          {allApps
+                            ? 'All applications are included'
+                            : allProdApps
+                            ? 'All production apps are included (dev apps can be selected individually)'
+                            : 'Tick one or more applications'}
+                        </Form.Text>
+                      </Form.Group>
                     </ConfigField>
                   </Col>
                   <Col md={6}>
