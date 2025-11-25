@@ -6,6 +6,7 @@ import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import { useBranding } from '../Providers/BrandingContext';
 import DefaultLogo from '../../public/numa-logo.svg';
 import { useBrandingAsset } from '../hooks/useBrandingAsset';
+import { VersionDisplay } from './VersionDisplay';
 
 interface NavProps {
   isCollapsed?: boolean;
@@ -26,6 +27,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
 
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [navItems, setNavItems] = useState([]);
+  const isExpanded = !isCollapsed;
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
@@ -110,9 +112,6 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
     );
   };
 
-  // For desktop, isExpanded is the inverse of isCollapsed
-  const isExpanded = !isCollapsed;
-
   return isMobile ? (
     <MobileNav />
   ) : (
@@ -146,7 +145,6 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
           <i className={`bi ${isCollapsed ? 'bi-chevron-right' : 'bi-chevron-left'}`}></i>
         </button>
       )}
-
       <div className="divider"></div>
 
       <ul className="nav-links">
@@ -225,7 +223,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
             </div>
           )}
         </div>
-        <span className="version">v1.5</span>
+        <VersionDisplay />
       </footer>
     </nav>
   );

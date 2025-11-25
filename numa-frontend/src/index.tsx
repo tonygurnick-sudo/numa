@@ -6,6 +6,7 @@ import installOpenTelemetry from './otel-config.jsx';
 import { fetchConfigAddtoSession } from './Components/ConfigSetup';
 import { NicetyProvider } from './Providers/NicetyProvider';
 import { ToastProvider } from './Providers/ToastProvider';
+import { startVersionChecker } from './utils/versionChecker';
 
 // Initialize config with caching
 fetchConfigAddtoSession().catch((error) => {
@@ -26,3 +27,26 @@ createRoot(document.getElementById('root')).render(
     </ToastProvider>
   </StrictMode>,
 );
+
+// Start background version checking to prompt or reload when a new deploy appears.
+// This helps clients with stale index.html or long-lived tabs pick up new releases.
+// We use a simple confirm dialog here which is easy and low-risk. Teams may
+// replace this with a nicer banner/modal if desired.
+try {
+  startVersionChecker(
+    () => {
+      try {
+        // Non-blocking, minimal UX: ask user to reload. For chat-heavy pages, change to show a banner.
+        if (confirm('A new version of Numa is available. Reload to update?')) {
+          window.location.reload();
+        }
+      } catch {
+        // fallback to hard reload if confirm fails for any reason
+        window.location.reload();
+      }
+    },
+    5 * 60 * 1000,
+  );
+} catch {
+  // ignore errors from version polling
+}
