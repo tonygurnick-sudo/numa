@@ -5,7 +5,6 @@ Contains retry logic, shared helpers, and common functionality.
 """
 
 import json
-import time
 from typing import Any, Dict, List
 
 import structlog
@@ -13,59 +12,6 @@ import structlog
 import s3_helpers
 
 logger = structlog.get_logger()
-
-
-def retry_aurora_operation(operation, max_retries=20, retry_delay=2.0):
-    """
-    Retry wrapper for Aurora database operations that may fail due to auto-pause.
-    Similar to the frontend retryAuroraOperation but adapted for Python.
-
-    Args:
-        operation: Function to execute with retry logic
-        max_retries: Maximum number of retry attempts (default: 20)
-        retry_delay: Delay between retries in seconds (default: 2.0)
-
-    Returns:
-        Wrapper function that executes the operation with retry logic
-    """
-
-    def wrapper(*args, **kwargs):
-        attempts = max_retries
-
-        while attempts > 0:
-            try:
-                return operation(*args, **kwargs)
-            except Exception as error:
-                attempts -= 1
-
-                # Check if this is an Aurora resuming error
-                error_message = str(error).lower()
-                is_resuming = (
-                    "databaseresumingexception" in error_message
-                    or "is resuming after being auto-paused" in error_message
-                    or (
-                        "aurora db instance" in error_message
-                        and "resuming" in error_message
-                    )
-                )
-
-                if is_resuming and attempts > 0:
-                    logger.info(
-                        "Aurora DB resuming - retrying operation",
-                        retry_delay=retry_delay,
-                        attempts_left=attempts,
-                        error_message=str(error),
-                    )
-                    time.sleep(retry_delay)
-                    continue
-
-                # If not a resuming error or no attempts left, re-raise
-                raise error
-
-        # This should never be reached, but just in case
-        raise RuntimeError("Retry operation failed without capturing an exception")
-
-    return wrapper
 
 
 def safe_json_convert(obj):

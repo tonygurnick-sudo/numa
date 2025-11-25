@@ -3,7 +3,6 @@ import { Button, Alert, Modal } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
-import { preWarmAuroraDatabase } from '../utils/knowledgeBaseUtils';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { ChatHistorySidebar } from '../Components/Chat/ChatHistorySidebar';
 import { ChatFileUpload } from '../Components/Chat/ChatFileUpload';
@@ -115,7 +114,7 @@ const NumaChatAgents = () => {
   } = documentProcessor;
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
-  const { user, bedrockAgentRuntimeClient, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken } = useAuth();
+  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken } = useAuth();
   const { numaGet } = useNumaRequest();
   const { selectedKB: _selectedKB, selectedKbId: _selectedKbId, availableKBs } = useKnowledgeBase();
   const [enabledKBIds, setEnabledKBIds] = useState<string[]>([]);
@@ -497,10 +496,6 @@ const NumaChatAgents = () => {
     if (lambdaClient) loadConnectionStatus();
   }, [lambdaClient]);
 
-  // Constants
-  const PREFERRED_KNOWLEDGE_BASE = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'bedrock';
-  const BEDROCK_KNOWLEDGE_BASE_ID = window.sessionStorage.getItem('BEDROCK_KNOWLEDGE_BASE_ID');
-
   // Ref for input textarea
   const inputRef = useRef(null);
   const isProcessingRef = useRef(false);
@@ -509,27 +504,6 @@ const NumaChatAgents = () => {
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  // Pre-warm Aurora database when component mounts (only for Bedrock knowledge base)
-  useEffect(() => {
-    const initializeServices = async () => {
-      const warmUpDatabase = async () => {
-        if (PREFERRED_KNOWLEDGE_BASE === 'bedrock' && bedrockAgentRuntimeClient && BEDROCK_KNOWLEDGE_BASE_ID) {
-          console.log('Pre-warming Aurora database on page load...');
-          await preWarmAuroraDatabase(bedrockAgentRuntimeClient, BEDROCK_KNOWLEDGE_BASE_ID);
-        }
-      };
-
-      // Run any initializations that are still applicable
-      Promise.resolve()
-        .then(() => warmUpDatabase())
-        .catch((error) => {
-          console.warn('Service initialization error:', error);
-        });
-    };
-
-    initializeServices();
-  }, [PREFERRED_KNOWLEDGE_BASE, bedrockAgentRuntimeClient, BEDROCK_KNOWLEDGE_BASE_ID]);
 
   // Inactivity: when expired, start a new chat and show suggestions (hook will fetch suggestions)
   async function handleNewChatOnExpired() {
