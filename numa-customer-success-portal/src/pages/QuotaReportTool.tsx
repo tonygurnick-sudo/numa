@@ -17,11 +17,32 @@ import { ProgressTracker } from '@/components/tools/ProgressTracker'
 import { clientService } from '@/services/clientService'
 import { FileExportService } from '@/utils/fileExport'
 import { QuotaReportService } from '@/services/quotaReportService'
-import type { QuotaReportParameters, ToolResult, ToolResultFile, QuotaDescriptor, QuotaReportRow } from '@/types/tools'
+import type {
+  QuotaReportParameters,
+  ToolResult,
+  ToolResultFile,
+  QuotaDescriptor,
+  QuotaReportRow,
+  ModelFamily,
+  QuotaMetric,
+  QuotaType,
+} from '@/types/tools'
 
-const DEFAULT_REGIONS = ['us-east-1', 'ap-southeast-2']
-const DEFAULT_TYPES: ('On-demand' | 'Cross-region')[] = ['On-demand', 'Cross-region']
-const DEFAULT_FAMILIES: ('claude' | 'nova')[] = ['claude', 'nova']
+const DEFAULT_TYPES: QuotaType[] = ['On-demand', 'Cross-region']
+const DEFAULT_FAMILIES: ModelFamily[] = ['sonnet', 'opus', 'haiku', 'nova']
+const DEFAULT_METRICS: QuotaMetric[] = ['requests-per-minute', 'tokens-per-minute']
+
+const FAMILY_LABELS: Record<ModelFamily, string> = {
+  sonnet: 'Sonnet',
+  opus: 'Opus',
+  haiku: 'Haiku',
+  nova: 'Nova',
+}
+
+const METRIC_LABELS: Record<QuotaMetric, string> = {
+  'requests-per-minute': 'Requests/min',
+  'tokens-per-minute': 'Tokens/min',
+}
 
 export default function QuotaReportTool() {
   const navigate = useNavigate()
@@ -34,8 +55,9 @@ export default function QuotaReportTool() {
   const [parameters, setParameters] = useState<QuotaReportParameters>({
     clientScope: 'all',
     clients: [],
-    regions: DEFAULT_REGIONS,
+    regionMode: 'client-region',
     modelFamilies: DEFAULT_FAMILIES,
+    quotaMetrics: DEFAULT_METRICS,
     advancedFilter: '',
     types: DEFAULT_TYPES,
     output: 'table+csv',
@@ -94,8 +116,9 @@ export default function QuotaReportTool() {
     setParameters({
       clientScope: 'all',
       clients: [],
-      regions: DEFAULT_REGIONS,
+      regionMode: 'client-region',
       modelFamilies: DEFAULT_FAMILIES,
+      quotaMetrics: DEFAULT_METRICS,
       advancedFilter: '',
       types: DEFAULT_TYPES,
       output: 'table+csv',
@@ -105,14 +128,17 @@ export default function QuotaReportTool() {
   const isFormValid = () => {
     if (!parameters.clientScope) return false
     if (parameters.clientScope === 'selected' && (!parameters.clients || parameters.clients.length === 0)) return false
-    if (!parameters.regions || parameters.regions.length === 0) return false
     if (!parameters.modelFamilies || parameters.modelFamilies.length === 0) return false
+    if (!parameters.quotaMetrics || parameters.quotaMetrics.length === 0) return false
     if (!parameters.types || parameters.types.length === 0) return false
     if (!parameters.output) return false
     return true
   }
 
-  const quotaColumns = useMemo(() => resultQuotas.map(q => `${q.Model}-${q.Type}`), [resultQuotas])
+  const quotaColumns = useMemo(() => resultQuotas.map(q => {
+    const metricSuffix = q.Metric === 'tokens-per-minute' ? ' (TPM)' : ' (RPM)'
+    return `${q.Model}-${q.Type}${metricSuffix}`
+  }), [resultQuotas])
 
   return (
     <Container fluid>
@@ -133,7 +159,7 @@ export default function QuotaReportTool() {
             <h2 className="mb-0">Quota Report</h2>
           </div>
           <p className="text-muted mb-0">
-            Fetch Bedrock RPM quotas across client accounts and regions. Download CSV and view a full-width table below.
+            Fetch Bedrock quotas (RPM & TPM) across client accounts. Dev accounts are consolidated and always check both regions.
           </p>
         </div>
       </div>
@@ -152,13 +178,18 @@ export default function QuotaReportTool() {
                     <Form.Label>Client Scope <span className="text-danger">*</span></Form.Label>
                     <Form.Select
                       value={parameters.clientScope}
-                      onChange={(e) => handleParamChange({ clientScope: e.target.value as 'all' | 'selected' })}
+                      onChange={(e) => handleParamChange({ clientScope: e.target.value as 'all' | 'selected' | 'arcanum-internal' })}
                       disabled={isRunning}
                     >
                       <option value="all">All clients</option>
                       <option value="selected">Selected clients</option>
+                      <option value="arcanum-internal">Arcanum Internal Accounts</option>
                     </Form.Select>
-                    <Form.Text className="text-muted">Choose whether to run across all or selected clients</Form.Text>
+                    <Form.Text className="text-muted">
+                      {parameters.clientScope === 'arcanum-internal'
+                        ? 'Query all Arcanum dev/prod AWS accounts directly (both regions)'
+                        : 'Choose whether to run across all or selected clients'}
+                    </Form.Text>
                   </Form.Group>
 
                   {parameters.clientScope === 'selected' && (
@@ -183,48 +214,58 @@ export default function QuotaReportTool() {
                   )}
 
                   <Form.Group className="mb-3">
-                    <Form.Label>Regions <span className="text-danger">*</span></Form.Label>
+                    <Form.Label>Region Mode</Form.Label>
                     <Form.Select
-                      multiple
-                      value={parameters.regions}
-                      onChange={(e) => {
-                        const opts = Array.from(e.target.selectedOptions).map(o => o.value)
-                        handleParamChange({ regions: opts })
-                      }}
+                      value={parameters.regionMode}
+                      onChange={(e) => handleParamChange({ regionMode: e.target.value as 'client-region' | 'all-regions' })}
                       disabled={isRunning}
-                      style={{ minHeight: 110 }}
                     >
-                      {DEFAULT_REGIONS.map(r => (<option key={r} value={r}>{r}</option>))}
+                      <option value="client-region">Client&apos;s configured region</option>
+                      <option value="all-regions">All regions (us-east-1 + ap-southeast-2)</option>
                     </Form.Select>
+                    <Form.Text className="text-muted">Dev accounts always check both regions regardless</Form.Text>
                   </Form.Group>
 
                   <Form.Group className="mb-3">
                     <Form.Label>Model Families <span className="text-danger">*</span></Form.Label>
-                    <div className="d-flex gap-3">
-                      <Form.Check
-                        type="checkbox"
-                        label="Claude"
-                        checked={parameters.modelFamilies.includes('claude')}
-                        onChange={(e) => {
-                          const next = new Set(parameters.modelFamilies)
-                          if (e.target.checked) next.add('claude'); else next.delete('claude')
-                          handleParamChange({ modelFamilies: Array.from(next) as ModelFamily[] })
-                        }}
-                        disabled={isRunning}
-                      />
-                      <Form.Check
-                        type="checkbox"
-                        label="Nova"
-                        checked={parameters.modelFamilies.includes('nova')}
-                        onChange={(e) => {
-                          const next = new Set(parameters.modelFamilies)
-                          if (e.target.checked) next.add('nova'); else next.delete('nova')
-                          handleParamChange({ modelFamilies: Array.from(next) as ModelFamily[] })
-                        }}
-                        disabled={isRunning}
-                      />
+                    <div className="d-flex flex-wrap gap-3">
+                      {(Object.keys(FAMILY_LABELS) as ModelFamily[]).map(family => (
+                        <Form.Check
+                          key={family}
+                          type="checkbox"
+                          label={FAMILY_LABELS[family]}
+                          checked={parameters.modelFamilies.includes(family)}
+                          onChange={(e) => {
+                            const next = new Set(parameters.modelFamilies)
+                            if (e.target.checked) next.add(family); else next.delete(family)
+                            handleParamChange({ modelFamilies: Array.from(next) })
+                          }}
+                          disabled={isRunning}
+                        />
+                      ))}
                     </div>
-                    <Form.Text className="text-muted">Include one or both families (Claude, Nova)</Form.Text>
+                    <Form.Text className="text-muted">Select model families to include</Form.Text>
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Quota Metrics <span className="text-danger">*</span></Form.Label>
+                    <div className="d-flex gap-3">
+                      {(Object.keys(METRIC_LABELS) as QuotaMetric[]).map(metric => (
+                        <Form.Check
+                          key={metric}
+                          type="checkbox"
+                          label={METRIC_LABELS[metric]}
+                          checked={parameters.quotaMetrics.includes(metric)}
+                          onChange={(e) => {
+                            const next = new Set(parameters.quotaMetrics)
+                            if (e.target.checked) next.add(metric); else next.delete(metric)
+                            handleParamChange({ quotaMetrics: Array.from(next) })
+                          }}
+                          disabled={isRunning}
+                        />
+                      ))}
+                    </div>
+                    <Form.Text className="text-muted">Requests per minute and/or tokens per minute</Form.Text>
                   </Form.Group>
 
                   <Form.Group className="mb-3">
@@ -290,12 +331,16 @@ export default function QuotaReportTool() {
               {execution && (
                 <div>
                   <h6 className="mb-3">Current Parameters</h6>
-                  <div className="mb-2"><strong>Scope:</strong> {parameters.clientScope}</div>
+                  <div className="mb-2"><strong>Scope:</strong> {
+                    parameters.clientScope === 'arcanum-internal' ? 'Arcanum Internal Accounts' :
+                    parameters.clientScope === 'all' ? 'All clients' : 'Selected clients'
+                  }</div>
                   {parameters.clientScope === 'selected' && (
                     <div className="mb-2"><strong>Clients:</strong> {parameters.clients?.join(', ') || '—'}</div>
                   )}
-                  <div className="mb-2"><strong>Regions:</strong> {parameters.regions.join(', ')}</div>
-                  <div className="mb-2"><strong>Families:</strong> {parameters.modelFamilies.join(', ')}</div>
+                  <div className="mb-2"><strong>Region Mode:</strong> {parameters.regionMode === 'client-region' ? "Client's region" : 'All regions'}</div>
+                  <div className="mb-2"><strong>Families:</strong> {parameters.modelFamilies.map(f => FAMILY_LABELS[f]).join(', ')}</div>
+                  <div className="mb-2"><strong>Metrics:</strong> {parameters.quotaMetrics.map(m => METRIC_LABELS[m]).join(', ')}</div>
                   {parameters.advancedFilter && (
                     <div className="mb-2"><strong>Advanced Filter:</strong> {parameters.advancedFilter}</div>
                   )}
@@ -404,19 +449,25 @@ export default function QuotaReportTool() {
                 <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr>
                     <th>Account Name</th>
+                    <th>Stack Names</th>
                     <th>Account ID</th>
                     <th>Region</th>
+                    <th>Dev?</th>
+                    <th>Quota Sharing</th>
                     {quotaColumns.map((name, i) => (
-                      <th key={i}>{name}</th>
+                      <th key={i} style={{ whiteSpace: 'nowrap' }}>{name}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {resultRows.map((row, i) => (
-                    <tr key={i}>
+                    <tr key={i} className={row.isDev ? 'table-info' : ''}>
                       <td>{row.accountName}</td>
-                      <td>{row.accountId}</td>
+                      <td>{row.stackNames?.join(', ') || '—'}</td>
+                      <td><code className="small">{row.accountId}</code></td>
                       <td>{row.region}</td>
+                      <td>{row.isDev ? <Badge bg="info">Dev</Badge> : '—'}</td>
+                      <td>{row.bedrockAccount ? <Badge bg="success" title={row.bedrockAccount}>Enabled</Badge> : '—'}</td>
                       {resultQuotas.map((q, j) => (
                         <td key={j}>{row.values[q.QuotaCode] ?? ''}</td>
                       ))}

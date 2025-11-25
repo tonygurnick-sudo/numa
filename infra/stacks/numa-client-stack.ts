@@ -219,6 +219,8 @@ export class NumaClientStack extends TerraformStack {
       globalIntegrationSettingsTableName: `${props.clientName}-global-integration-settings`,
       // Enforce CloudFront secret
       cloudfrontSharedSecret: cfSecretParam.value,
+      // Cross-account Bedrock quota sharing
+      bedrockAccount: clientConfig.bedrockAccount,
     });
 
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {

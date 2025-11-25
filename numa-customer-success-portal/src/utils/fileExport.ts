@@ -1,6 +1,16 @@
-import type { AppRunRecord, ChatMessageRecord, UsageSummary, ToolResultFile } from '@/types/tools'
+import type { AppRunRecord, ChatMessageRecord, UsageSummary, ToolResultFile, QuotaReportRow, QuotaDescriptor, QuotaMetric } from '@/types/tools'
 
 export class FileExportService {
+  /**
+   * Escape a CSV field value - wraps in quotes if it contains comma, quote, or newline
+   */
+  private static escapeCSVField(value: string): string {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`
+    }
+    return value
+  }
+
   /**
    * Convert data to CSV format
    */
@@ -37,27 +47,55 @@ export class FileExportService {
    * Generate CSV file for quota report
    */
   static generateQuotaReportCSV(
-    rows: { accountName: string; accountId: string; region: string; values: Record<string, number | null> }[],
-    quotas: { QuotaCode: string; Model: string; Type: string }[],
-    context: { regions: string[]; families: string[]; types: string[]; advancedFilter?: string }
+    rows: QuotaReportRow[],
+    quotas: QuotaDescriptor[],
+    context: { families: string[]; metrics: QuotaMetric[]; types: string[]; advancedFilter?: string }
   ): ToolResultFile | null {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)
     if (rows.length === 0 || quotas.length === 0) return null
 
-    const headers = ['accountName', 'accountId', 'region', ...quotas.map(q => `${q.Model}-${q.Type}`)]
+    // Build headers with new columns and metric suffix for quota columns
+    // Include inference profile (US/Global/APAC) when present to distinguish regional quotas
+    const metricSuffix = (m: QuotaMetric) => m === 'requests-per-minute' ? 'RPM' : 'TPM'
+    const buildQuotaHeader = (q: QuotaDescriptor): string => {
+      const parts = [q.Model, q.Type]
+      if (q.InferenceProfile) {
+        parts.push(q.InferenceProfile)
+      }
+      parts.push(metricSuffix(q.Metric))
+      return parts.join('-')
+    }
+    const headers = [
+      'accountName',
+      'stackNames',
+      'accountId',
+      'region',
+      'isDev',
+      'bedrockAccount',
+      ...quotas.map(buildQuotaHeader)
+    ]
+
     const data = rows.map(r => {
-      const cols = quotas.map(q => {
+      const quotaCols = quotas.map(q => {
         const v = r.values[q.QuotaCode]
         return v === null || v === undefined ? '' : String(v)
       })
-      return [r.accountName, r.accountId, r.region, ...cols]
+      return [
+        this.escapeCSVField(r.accountName),
+        this.escapeCSVField(r.stackNames?.join('; ') || ''),
+        r.accountId,
+        r.region,
+        r.isDev ? 'Yes' : 'No',
+        r.bedrockAccount || '',
+        ...quotaCols
+      ]
     })
 
     const csv = [headers.join(','), ...data.map(line => line.join(','))].join('\n')
 
     const fam = context.families.join('+') || 'all'
     const filt = context.advancedFilter ? `-${context.advancedFilter.replace(/\s+/g,'_')}` : ''
-    const filename = `quota-report-${fam}${filt}-${context.regions.join('+')}-${timestamp}.csv`
+    const filename = `quota-report-${fam}${filt}-${timestamp}.csv`
     return {
       name: filename,
       content: csv,

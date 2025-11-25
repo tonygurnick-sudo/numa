@@ -85,6 +85,16 @@ export class DataAnalysis extends BaseNumaApp {
         actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
         resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
+      // Cross-account Bedrock quota sharing - allow assuming role in shared account
+      ...(props.bedrockAccount
+        ? [
+            {
+              actions: ['sts:AssumeRole'],
+              effect: 'Allow',
+              resources: [`arn:aws:iam::${props.bedrockAccount}:role/bedrock-quota-sharing`],
+            },
+          ]
+        : []),
     ];
     // Attach AWS SDK for pandas (aka awswrangler) layer for Python 3.13 (x86_64)
     const pandasLayerByRegion: Record<string, string> = {
@@ -175,6 +185,8 @@ export class DataAnalysis extends BaseNumaApp {
         ANTHROPIC_SMALL_FAST_MODEL: regionModel.haiku.model_id,
         // Add DynamoDB table for event streaming (if jobs are enabled)
         ...(this.jobsTable ? { DYNAMODB_TABLE: this.jobsTable.name } : {}),
+        // Cross-account Bedrock quota sharing
+        ...(props.bedrockAccount ? { BEDROCK_ACCOUNT: props.bedrockAccount } : {}),
       },
       lambdaDirectory: 'python/claude-code-agent',
       timeout: 900,

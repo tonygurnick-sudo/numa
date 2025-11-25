@@ -34,6 +34,8 @@ export interface ChatAgentHttpProps {
   globalIntegrationSettingsTableName?: string;
   /** Shared secret value CloudFront sends in x-arcanum-cloudfront-secret */
   cloudfrontSharedSecret: string;
+  /** Optional AWS account ID to use for cross-account Bedrock quota sharing */
+  bedrockAccount?: string;
 }
 
 export class NumaChatAgent extends Construct {
@@ -113,6 +115,7 @@ export class NumaChatAgent extends Construct {
         AWS_LAMBDA_EXEC_WRAPPER: '/opt/bootstrap',
         AWS_LWA_INVOKE_MODE: 'response_stream',
         ...(props.mcpPolicyTableName && { MCP_POLICY_TABLE_NAME: props.mcpPolicyTableName }),
+        ...(props.bedrockAccount && { BEDROCK_ACCOUNT: props.bedrockAccount }),
       },
       logGroup: agentLogGroup,
       resourceNameSuffix: '_chat_agent',
@@ -268,6 +271,16 @@ export class NumaChatAgent extends Construct {
           actions: ['cognito-idp:AdminGetUser'],
           resources: [`arn:aws:cognito-idp:${props.region}:${callerIdentity.accountId}:userpool/${props.userPoolId}`],
         },
+        // Cross-account Bedrock quota sharing - allow assuming role in shared account
+        ...(props.bedrockAccount
+          ? [
+              {
+                effect: 'Allow',
+                actions: ['sts:AssumeRole'],
+                resources: [`arn:aws:iam::${props.bedrockAccount}:role/bedrock-quota-sharing`],
+              },
+            ]
+          : []),
       ],
     });
 
