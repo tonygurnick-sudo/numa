@@ -53,6 +53,7 @@ export interface S3UploadModuleProps {
   onComplete?: (results?: StandardizedFile[] | []) => void;
   onNotComplete?: (results?: StandardizedFile[] | []) => void;
   onChange?: (value: StandardizedFile[] | null | string) => void;
+  onSelectFiles?: (files: File[]) => void;
   value?: StandardizedFile | StandardizedFile[] | string;
   disabled?: boolean;
   kb_id?: string | null;
@@ -122,7 +123,16 @@ const resolveKbIdForMetadata = (kbId?: string | null): string => {
 };
 
 const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModuleProps> = (
-  { task, onComplete = noop, onNotComplete = noop, onChange = noop, value, disabled = false, kb_id = null },
+  {
+    task,
+    onComplete = noop,
+    onNotComplete = noop,
+    onChange = noop,
+    onSelectFiles = noop,
+    value,
+    disabled = false,
+    kb_id = null,
+  },
   ref,
 ) => {
   const {
@@ -334,6 +344,9 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
 
     const newFiles = fileList instanceof FileList ? Array.from(fileList) : fileList;
     const totalFileCount = selectedFiles.length + newFiles.length;
+
+    // Surface raw selection to consumers (e.g., to show warnings) without blocking uploads
+    onSelectFiles(newFiles.filter((f): f is File => f instanceof File));
 
     if (maxFiles && totalFileCount > maxFiles) {
       setError(`Maximum of ${maxFiles} file${maxFiles > 1 ? 's' : ''} allowed`);
@@ -851,6 +864,7 @@ S3UploadModule.propTypes = {
   onComplete: PropTypes.func,
   onNotComplete: PropTypes.func,
   onChange: PropTypes.func,
+  onSelectFiles: PropTypes.func,
   value: PropTypes.oneOfType([PropTypes.string, PropTypes.array, PropTypes.object]),
   disabled: PropTypes.bool,
 };
