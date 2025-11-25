@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { S3UploadModule } from '../../Modules/S3UploadModule';
 import { UploadStatusRow } from '../Status/UploadStatusRow';
@@ -91,6 +91,10 @@ export const ChatFileUpload = ({
   const { numaChatDynamoUtils, user, getCredentials } = useAuth();
   const { numaPost } = useNumaRequest();
   const { selectedKB, selectedKbId } = useKnowledgeBase();
+  const [showCsvWarning, setShowCsvWarning] = useState(false);
+  const [csvNoticeShown, setCsvNoticeShown] = useState(false);
+  const csvWarningText =
+    'CSV files have limited support, however we are actively improving CSV handling. If you have issues reach out to our support team.';
 
   // Imperative access into S3UploadModule
   const uploadRef = useRef<UploaderRef>(null);
@@ -125,6 +129,14 @@ export const ChatFileUpload = ({
     return () => {
       if (window.__ingestAndStart === bridge) delete window.__ingestAndStart;
     };
+  }, [show]);
+
+  // Reset warning state when modal closes
+  useEffect(() => {
+    if (!show) {
+      setShowCsvWarning(false);
+      setCsvNoticeShown(false);
+    }
   }, [show]);
 
   const handleUploadComplete = async (fileArray: FileResult[]) => {
@@ -272,6 +284,11 @@ export const ChatFileUpload = ({
         <Modal.Title>Upload Files</Modal.Title>
       </Modal.Header>
       <Modal.Body data-testid="upload-modal-body">
+        {showCsvWarning && (
+          <div className="alert alert-warning" role="alert" data-testid="csv-warning">
+            {csvWarningText}
+          </div>
+        )}
         <S3UploadModule
           ref={uploadRef}
           task={{
@@ -319,7 +336,37 @@ export const ChatFileUpload = ({
           // @ts-expect-error uploader passes raw results (with filePath/fileName) to onComplete
           onComplete={handleUploadComplete}
           onNotComplete={() => {}}
-          onChange={() => {}}
+          onChange={(files) => {
+            // Preserve existing behavior after upload completes; do not clear the warning here
+            if (!files || typeof files === 'string') return;
+            if (Array.isArray(files)) {
+              const hasCsv = files.some((f) => {
+                const type = (f as { fileType?: string }).fileType?.toLowerCase() || '';
+                const name = (f as { fileName?: string }).fileName || (f as { name?: string }).name || '';
+                return type === 'text/csv' || name.toLowerCase().endsWith('.csv');
+              });
+              setShowCsvWarning(hasCsv);
+            }
+          }}
+          onSelectFiles={(files) => {
+            if (!files?.length) {
+              setShowCsvWarning(false);
+              return;
+            }
+            const hasCsv = files.some((f) => {
+              const type = f.type?.toLowerCase() || '';
+              const name = f.name?.toLowerCase() || '';
+              return type === 'text/csv' || name.endsWith('.csv');
+            });
+            setShowCsvWarning(hasCsv);
+            if (hasCsv && !csvNoticeShown) {
+              setMessages((prev: ChatMessage[]) => [
+                ...prev,
+                { role: 'system', content: csvWarningText, status: 'info' },
+              ]);
+              setCsvNoticeShown(true);
+            }
+          }}
           kb_id={selectedKbId || selectedKB?.kb_id || null}
         />
 
