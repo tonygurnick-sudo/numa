@@ -212,6 +212,28 @@ export class NumaFrontendInfra extends Construct {
     const cachingDisabledPolicyId = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
     const cachingOptimizedPolicyId = '658327ea-f89d-4fab-a63d-7e88639e58f6';
 
+    // Legacy custom cache policy - kept to prevent deletion errors during migration.
+    // Existing CloudFront distributions may still reference this policy.
+    // Once all distributions are updated to use AWS managed policies, this can be removed.
+    new CloudfrontCachePolicy(this, 'defaultCachePolicy', {
+      name: `${props.clientName.replaceAll('.', '-')}-default-cache-policy`,
+      parametersInCacheKeyAndForwardedToOrigin: {
+        cookiesConfig: {
+          cookieBehavior: 'none',
+        },
+        headersConfig: {
+          headerBehavior: 'none',
+        },
+        queryStringsConfig: {
+          queryStringBehavior: 'whitelist',
+          queryStrings: {
+            items: ['Key-Pair-Id', 'Signature', 'Expires', 'Policy'],
+          },
+        },
+      },
+      lifecycle: { preventDestroy: true },
+    });
+
     const apiCachePolicy = new CloudfrontCachePolicy(this, 'apiCachePolicy', {
       name: `${props.clientName.replaceAll('.', '-')}-api-cache-policy`,
       parametersInCacheKeyAndForwardedToOrigin: {
