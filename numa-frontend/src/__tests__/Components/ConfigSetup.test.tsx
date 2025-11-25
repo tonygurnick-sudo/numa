@@ -105,6 +105,7 @@ describe('ConfigSetup', () => {
       await fetchConfigAddtoSession();
 
       expect(mockFetch).toHaveBeenCalledWith('/config.json', {
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
       });
       expect(mockSessionStorage.Q_APPLICATION_ID).toBe('app-1');

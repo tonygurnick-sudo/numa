@@ -310,17 +310,26 @@ export class NumaClientStack extends TerraformStack {
             txt: 'text/plain',
             default: undefined,
           }[source.split('.')?.pop() ?? 'default'];
+          const key = path.relative(folderPath, source);
+          const shouldBypassCache = key === 'index.html';
           return new S3Object(this, `website-file-${source}`, {
             bucket: fe.frontendBucket.bucket,
             contentType,
-            key: path.relative(folderPath, source),
+            key,
             source,
             sourceHash: Fn.filemd5(source),
+            cacheControl: shouldBypassCache ? 'no-cache, no-store, must-revalidate' : undefined,
           });
         });
     } catch {
       console.warn('No frontend code found at: ' + folderPath);
     }
+
+    const gitHash = process.env['GIT_HASH'] ?? execSync('git rev-parse --short HEAD').toString().trim();
+    const gitBranch = process.env['GIT_BRANCH'] ?? execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
+    const versionLabel = process.env['VERSION_LABEL'] ?? process.env['NUMA_VERSION_LABEL'];
+    const deployTime = new Date();
+    const siteVersion = `${gitHash}-${deployTime.getTime()}`;
 
     const configObject = new S3Object(this, 'config-item', {
       bucket: fe.frontendBucket.bucket,
@@ -349,8 +358,10 @@ export class NumaClientStack extends TerraformStack {
         PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
         PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
         AGENTS: clientConfig.agents ?? false,
+        NUMA_VERSION: siteVersion,
       }),
       contentType: 'application/json',
+      cacheControl: 'no-cache, no-store, must-revalidate',
     });
 
     const manifest = new S3Object(this, 'manifest-item', {
@@ -361,24 +372,23 @@ export class NumaClientStack extends TerraformStack {
     });
 
     // When building in a container, we don't have access to the git repo, so need to pass through the values as environment variables.
-    const gitHash = process.env['GIT_HASH'] ?? execSync('git rev-parse --short HEAD').toString().trim();
-    const gitBranch = process.env['GIT_BRANCH'] ?? execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
-    const deployTime = new Date();
     const version = new S3Object(this, 'version-file', {
       bucket: fe.frontendBucket.bucket,
       key: 'version.json',
       content: JSON.stringify(
         {
-          version: '0.0.0', // TODO: Make this more meaningful.
+          version: siteVersion,
           gitHash,
           gitBranch,
           deployTime: deployTime.getTime(),
           deployTimeHuman: deployTime.toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland' }),
+          displayVersion: versionLabel ?? undefined,
         },
         undefined,
         2,
       ),
       contentType: 'application/json',
+      cacheControl: 'no-cache, no-store, must-revalidate',
     });
 
     new InvalidateCloudfront(this, 'invalidate', {

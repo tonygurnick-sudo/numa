@@ -209,24 +209,8 @@ export class NumaFrontendInfra extends Construct {
       },
     });
 
-    const defaultCachePolicy = new CloudfrontCachePolicy(this, 'defaultCachePolicy', {
-      name: `${props.clientName.replaceAll('.', '-')}-default-cache-policy`,
-      parametersInCacheKeyAndForwardedToOrigin: {
-        cookiesConfig: {
-          cookieBehavior: 'none',
-        },
-        headersConfig: {
-          headerBehavior: 'none',
-        },
-        queryStringsConfig: {
-          queryStringBehavior: 'whitelist',
-          // Allows the values on the Presigned URLs to be passed through to the origin.
-          queryStrings: {
-            items: ['Key-Pair-Id', 'Signature', 'Expires', 'Policy'],
-          },
-        },
-      },
-    });
+    const cachingDisabledPolicyId = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
+    const cachingOptimizedPolicyId = '658327ea-f89d-4fab-a63d-7e88639e58f6';
 
     const apiCachePolicy = new CloudfrontCachePolicy(this, 'apiCachePolicy', {
       name: `${props.clientName.replaceAll('.', '-')}-api-cache-policy`,
@@ -247,6 +231,9 @@ export class NumaFrontendInfra extends Construct {
       minTtl: 0,
       defaultTtl: 0,
       maxTtl: 3600,
+      // Prevent accidental destroy during infra updates where distributions still
+      // reference this policy. Removal should be done intentionally in a follow-up.
+      lifecycle: { preventDestroy: true },
     });
 
     // // Dedicated cache policy for chat streaming: forward auth + CF secret
@@ -307,6 +294,60 @@ export class NumaFrontendInfra extends Construct {
     // Build ordered cache behaviors (more specific routes before generic /api/*)
     const orderedCacheBehavior: CloudfrontDistributionOrderedCacheBehavior[] = [
       {
+        targetOriginId: 'default',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/assets/*',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: cachingOptimizedPolicyId,
+      },
+      {
+        targetOriginId: 'default',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/index.html',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: cachingDisabledPolicyId,
+      },
+      {
+        targetOriginId: 'default',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/numa-logo.svg',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: cachingOptimizedPolicyId,
+      },
+      {
+        targetOriginId: 'default',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/robots.txt',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: cachingOptimizedPolicyId,
+      },
+      {
+        targetOriginId: 'default',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/config.json',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: cachingDisabledPolicyId,
+      },
+      {
+        targetOriginId: 'default',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/version.json',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: true,
+        cachePolicyId: cachingDisabledPolicyId,
+      },
+      {
         targetOriginId: 'chat-agent-fnurl',
         allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
         cachedMethods: ['GET', 'HEAD'],
@@ -314,7 +355,7 @@ export class NumaFrontendInfra extends Construct {
         viewerProtocolPolicy: 'redirect-to-https',
         compress: true,
         // Use AWS managed policies to avoid custom policy deletion blockers
-        cachePolicyId: '4135ea2d-6df8-44a3-9df3-4b5a84be39ad',
+        cachePolicyId: cachingDisabledPolicyId,
         originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac',
       },
       {
@@ -325,7 +366,7 @@ export class NumaFrontendInfra extends Construct {
         viewerProtocolPolicy: 'redirect-to-https',
         compress: true,
         // Use AWS managed policies to avoid custom policy deletion blockers
-        cachePolicyId: '4135ea2d-6df8-44a3-9df3-4b5a84be39ad',
+        cachePolicyId: cachingDisabledPolicyId,
         originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac',
       },
       {
@@ -336,7 +377,7 @@ export class NumaFrontendInfra extends Construct {
         viewerProtocolPolicy: 'redirect-to-https',
         compress: true,
         // Use AWS managed policies to avoid custom policy deletion blockers
-        cachePolicyId: '4135ea2d-6df8-44a3-9df3-4b5a84be39ad',
+        cachePolicyId: cachingDisabledPolicyId,
         originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac',
       },
       {
@@ -358,7 +399,7 @@ export class NumaFrontendInfra extends Construct {
         cachedMethods: ['GET', 'HEAD'],
         viewerProtocolPolicy: 'redirect-to-https',
         targetOriginId: 'default',
-        cachePolicyId: defaultCachePolicy.id,
+        cachePolicyId: cachingDisabledPolicyId,
       },
       origin: origins,
       defaultRootObject: 'index.html',

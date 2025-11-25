@@ -49,6 +49,17 @@ class KnowledgeBaseService {
   }
 
   /**
+   * Build an absolute URL for environments (tests/SSR) that don't allow relative fetch URLs.
+   */
+  private buildUrl(path: string): string {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    const base = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'http://localhost';
+    return new URL(path, base).toString();
+  }
+
+  /**
    * Parse JSON responses and surface readable errors when the payload is HTML or plain text.
    */
   private extractErrorMessage(payload: unknown): string | undefined {
@@ -63,8 +74,15 @@ class KnowledgeBaseService {
   }
 
   private async parseJsonResponse<T>(response: Response, fallbackError: string): Promise<T> {
-    const rawBody = await response.text();
+    const res = response as unknown as { text?: () => Promise<string>; json?: () => Promise<unknown> };
+    let rawBody = '';
     let parsed: unknown = {};
+
+    if (typeof res.text === 'function') {
+      rawBody = await res.text();
+    } else if (typeof res.json === 'function') {
+      parsed = await res.json();
+    }
 
     if (rawBody) {
       try {
@@ -132,7 +150,7 @@ class KnowledgeBaseService {
    */
   async listUserKBs(): Promise<UserKB[]> {
     try {
-      const response = await fetch(this.baseUrl, {
+      const response = await fetch(this.buildUrl(this.baseUrl), {
         method: 'GET',
         headers: this.getHeaders(),
       });
@@ -150,7 +168,7 @@ class KnowledgeBaseService {
    */
   async getKB(kbId: string): Promise<KnowledgeBase> {
     try {
-      const response = await fetch(`${this.baseUrl}/${kbId}`, {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}`), {
         method: 'GET',
         headers: this.getHeaders(),
       });
@@ -171,7 +189,7 @@ class KnowledgeBaseService {
    */
   async createKB(request: CreateKBRequest): Promise<KnowledgeBase> {
     try {
-      const response = await fetch(this.baseUrl, {
+      const response = await fetch(this.buildUrl(this.baseUrl), {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(request),
@@ -190,7 +208,7 @@ class KnowledgeBaseService {
    */
   async updateKB(kbId: string, request: UpdateKBRequest): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/${kbId}`, {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}`), {
         method: 'PATCH',
         headers: this.getHeaders(),
         body: JSON.stringify(request),
@@ -208,7 +226,7 @@ class KnowledgeBaseService {
    */
   async deleteKB(kbId: string): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/${kbId}`, {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}`), {
         method: 'DELETE',
         headers: this.getHeaders(),
       });
