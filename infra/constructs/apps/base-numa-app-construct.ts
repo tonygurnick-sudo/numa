@@ -733,6 +733,8 @@ export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiG
   visionModelType?: string;
   /** ARN of the shared extract-content Lambda (optional, for consolidation). */
   sharedExtractContentLambdaArn?: string;
+  /** Optional AWS account ID for cross-account Bedrock quota sharing. */
+  bedrockAccount?: string;
 }
 
 export interface AppSpecificBaseNumaAppProps extends BaseNumaAppProps {

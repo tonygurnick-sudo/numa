@@ -84,6 +84,9 @@ QB_RETRIEVER_ID = os.getenv("Q_RETRIEVER_ID")
 BEDROCK_KNOWLEDGE_BASE_ID = os.getenv("BEDROCK_KNOWLEDGE_BASE_ID")
 PREFERRED_KNOWLEDGE_BASE = os.getenv("PREFERRED_KNOWLEDGE_BASE", "q").lower()
 
+# Cross-account Bedrock Quota Sharing
+BEDROCK_ACCOUNT = os.getenv("BEDROCK_ACCOUNT")
+
 # Pipedream Integration Configuration
 PIPEDREAM_PROXY_LAMBDA_ARN = os.getenv("PIPEDREAM_PROXY_LAMBDA_ARN")
 GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME = os.getenv(
@@ -139,6 +142,46 @@ def get_lambda_client(region_name: str | None = None):
     return boto3.client("lambda", region_name=region_name or "us-east-1")
 
 
+def _get_cross_account_bedrock_session() -> boto3.Session | None:
+    """Get boto3 session for cross-account Bedrock access if configured.
+
+    When BEDROCK_ACCOUNT is set, assumes the bedrock-quota-sharing role
+    in the target account and returns a session with temporary credentials.
+    This enables using Bedrock quotas from a shared account.
+
+    Returns:
+        boto3.Session with cross-account credentials, or None to use default credentials.
+    """
+    if not BEDROCK_ACCOUNT:
+        return None
+
+    try:
+        sts = boto3.client("sts", region_name=REGION)
+        credentials = sts.assume_role(
+            RoleArn=f"arn:aws:iam::{BEDROCK_ACCOUNT}:role/bedrock-quota-sharing",
+            RoleSessionName="numa-chat-agent",
+        )["Credentials"]
+
+        logger.info(
+            "Assumed cross-account role for Bedrock",
+            bedrock_account=BEDROCK_ACCOUNT,
+        )
+
+        return boto3.Session(
+            aws_access_key_id=credentials["AccessKeyId"],
+            aws_secret_access_key=credentials["SecretAccessKey"],
+            aws_session_token=credentials["SessionToken"],
+            region_name=REGION,
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to assume cross-account role for Bedrock, falling back to local credentials",
+            bedrock_account=BEDROCK_ACCOUNT,
+            error=str(e),
+        )
+        return None
+
+
 @lru_cache(maxsize=1)
 def get_pipedream_routing_overrides() -> dict[str, str]:  # backward compat no-op
     """Deprecated. Environment-based routing overrides have been removed.
@@ -178,11 +221,18 @@ def get_bedrock_model(
     streaming: bool = True,
     temperature: float = 1,
 ):
-    """Create BedrockModel instance with specified or default model configuration."""
+    """Create BedrockModel instance with specified or default model configuration.
+
+    If BEDROCK_ACCOUNT is configured, uses cross-account credentials from the
+    shared Bedrock account for quota sharing.
+    """
     effective_model_id = model_id or MODEL_ID
 
     # Use model-specific max_tokens
     max_tokens = get_regional_model_max_tokens("default")
+
+    # Get cross-account session if configured
+    boto_session = _get_cross_account_bedrock_session()
 
     logger.debug(
         "Creating BedrockModel",
@@ -190,6 +240,7 @@ def get_bedrock_model(
         streaming=streaming,
         temperature=temperature,
         max_tokens=max_tokens,
+        cross_account=boto_session is not None,
     )
 
     return BedrockModel(
@@ -197,6 +248,7 @@ def get_bedrock_model(
         streaming=streaming,
         temperature=temperature,
         max_tokens=max_tokens,
+        boto_session=boto_session,
         additional_request_fields={
             "thinking": {"type": "enabled", "budget_tokens": 4096}  # Minimum of 1,024
         },
@@ -204,10 +256,16 @@ def get_bedrock_model(
 
 
 def get_fallback_model(streaming: bool = True, temperature: float = 0.15):
-    """Create BedrockModel instance with fallback model configuration."""
+    """Create BedrockModel instance with fallback model configuration.
 
+    If BEDROCK_ACCOUNT is configured, uses cross-account credentials from the
+    shared Bedrock account for quota sharing.
+    """
     # Use model-specific max_tokens
     max_tokens = get_regional_model_max_tokens("fallback")
+
+    # Get cross-account session if configured
+    boto_session = _get_cross_account_bedrock_session()
 
     logger.debug(
         "Creating fallback BedrockModel",
@@ -215,6 +273,7 @@ def get_fallback_model(streaming: bool = True, temperature: float = 0.15):
         streaming=streaming,
         temperature=temperature,
         max_tokens=max_tokens,
+        cross_account=boto_session is not None,
     )
 
     return BedrockModel(
@@ -222,6 +281,7 @@ def get_fallback_model(streaming: bool = True, temperature: float = 0.15):
         streaming=streaming,
         temperature=temperature,
         max_tokens=max_tokens,
+        boto_session=boto_session,
     )
 
 
@@ -293,4 +353,6 @@ logger.info(
     preferred_kb=PREFERRED_KNOWLEDGE_BASE,
     qb_configured=bool(QB_APPLICATION_ID and QB_RETRIEVER_ID),
     bedrock_configured=bool(BEDROCK_KNOWLEDGE_BASE_ID),
+    bedrock_quota_sharing=bool(BEDROCK_ACCOUNT),
+    bedrock_account=BEDROCK_ACCOUNT or "local",
 )

@@ -97,6 +97,16 @@ export class Nolia extends BaseNumaApp {
         actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
         resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
       },
+      // Cross-account Bedrock quota sharing - allow assuming role in shared account
+      ...(props.bedrockAccount
+        ? [
+            {
+              actions: ['sts:AssumeRole'],
+              effect: 'Allow',
+              resources: [`arn:aws:iam::${props.bedrockAccount}:role/bedrock-quota-sharing`],
+            },
+          ]
+        : []),
     ];
 
     // Attach AWS SDK for pandas layer for Python 3.13
@@ -186,6 +196,8 @@ export class Nolia extends BaseNumaApp {
         ANTHROPIC_MODEL: regionModel.default.model_id,
         ANTHROPIC_SMALL_FAST_MODEL: regionModel.haiku.model_id,
         ...(this.jobsTable ? { DYNAMODB_TABLE: this.jobsTable.name } : {}),
+        // Cross-account Bedrock quota sharing
+        ...(props.bedrockAccount ? { BEDROCK_ACCOUNT: props.bedrockAccount } : {}),
       },
       lambdaDirectory: 'python/claude-code-agent',
       timeout: 900,

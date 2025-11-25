@@ -2,6 +2,7 @@ import { ServiceQuotas, ListServiceQuotasCommand, GetServiceQuotaCommand } from 
 import { awsCredentialsService } from '@/services/awsCredentialsService'
 import { clientService } from '@/services/clientService'
 import { FileExportService } from '@/utils/fileExport'
+import type { Client } from '@/types'
 import type {
   QuotaReportParameters,
   QuotaReportResult,
@@ -10,10 +11,45 @@ import type {
   ToolResultFile,
   ToolProgress,
   QuotaType,
+  QuotaMetric,
   ModelFamily,
 } from '@/types/tools'
 
 const SERVICE_CODE = 'bedrock'
+const ALL_REGIONS = ['us-east-1', 'ap-southeast-2']
+
+// Arcanum internal AWS accounts for direct quota querying
+const ARCANUM_INTERNAL_ACCOUNTS = [
+  // { name: 'arcanum-dev', accountId: '458119850496' },
+  // { name: 'arcanum-dev-images', accountId: '975186400848' },
+  { name: 'arcanum-dev-numa-pipedream-proxy', accountId: '063563181233' },
+  { name: 'arcanum-dev-q-client', accountId: '872515258482' },
+  { name: 'arcanum-dev-q-deployer', accountId: '324037291751' },
+  { name: 'arcanum-prod', accountId: '262893720581' },
+  { name: 'arcanum-prod-images', accountId: '826326270637' },
+  { name: 'arcanum-prod-numa-demo', accountId: '619071323471' },
+  { name: 'arcanum-prod-numa-pipedream-proxy', accountId: '965745962688' },
+  { name: 'arcanum-prod-q-deployer', accountId: '207567759910' },
+  { name: 'arcanum-staging', accountId: '978450690680' },
+  { name: 'Q Demo Account', accountId: '905418183804' },
+]
+
+interface ClassifiedQuota {
+  family: ModelFamily
+  label: string
+  type: QuotaType
+  metric: QuotaMetric
+  raw: string
+  inferenceProfile?: string  // e.g., 'US', 'Global', 'APAC'
+}
+
+interface AccountGroup {
+  accountId: string
+  clients: Client[]
+  isDev: boolean
+  regions: string[]
+  bedrockAccount?: string
+}
 
 export class QuotaReportService {
   // Session-scoped cache for discovered quota descriptors by filter signature
@@ -23,83 +59,104 @@ export class QuotaReportService {
     params: QuotaReportParameters,
     onProgress?: (progress: ToolProgress) => void,
   ): Promise<{ result: QuotaReportResult; files: ToolResultFile[] }> {
-    const { clientScope, clients, regions, modelFamilies, advancedFilter, types } = params
+    const { clientScope, clients, regionMode, modelFamilies, quotaMetrics, advancedFilter, types } = params
 
     onProgress?.({ current: 0, total: 100, message: 'Loading client configuration...' })
 
-    const allClients = await clientService.getAllClients()
-    const selectedClients = clientScope === 'all'
-      ? allClients
-      : allClients.filter(c => (clients || []).includes(c.name))
+    let accountGroups: Record<string, AccountGroup>
 
-    if (selectedClients.length === 0) {
-      const empty: QuotaReportResult = {
-        metadata: {
-          runAt: new Date().toISOString(),
-          totalClients: allClients.length,
-          processedClients: 0,
-          regions,
-          modelFamilies,
-          advancedFilter,
-          types,
-        },
-        quotas: [],
-        rows: [],
-        message: 'No clients selected',
+    if (clientScope === 'arcanum-internal') {
+      // Build account groups directly from Arcanum internal accounts
+      accountGroups = {}
+      for (const account of ARCANUM_INTERNAL_ACCOUNTS) {
+        accountGroups[account.accountId] = {
+          accountId: account.accountId,
+          clients: [], // No associated clients for internal accounts
+          isDev: account.name.includes('-dev') || account.name.includes('staging') || account.name.includes('Demo'),
+          regions: ALL_REGIONS, // Always check both regions for internal accounts
+        }
+        // Store account name in a way we can retrieve it later
+        ;(accountGroups[account.accountId] as AccountGroup & { accountName?: string }).accountName = account.name
       }
-      return { result: empty, files: [] }
+    } else {
+      const allClients = await clientService.getAllClients()
+      const selectedClients = clientScope === 'all'
+        ? allClients
+        : allClients.filter(c => (clients || []).includes(c.name))
+
+      if (selectedClients.length === 0) {
+        const empty: QuotaReportResult = {
+          metadata: {
+            runAt: new Date().toISOString(),
+            totalClients: 0,
+            processedAccounts: 0,
+            modelFamilies,
+            quotaMetrics,
+            advancedFilter,
+            types,
+          },
+          quotas: [],
+          rows: [],
+          message: 'No clients selected',
+        }
+        return { result: empty, files: [] }
+      }
+
+      // Group clients by AWS account ID for dev consolidation
+      accountGroups = this.groupByAccountId(selectedClients, regionMode)
     }
 
-    onProgress?.({ current: 10, total: 100, message: 'Discovering Bedrock quota definitions (client account)...' })
+    onProgress?.({ current: 10, total: 100, message: 'Discovering Bedrock quota definitions...' })
 
-    // Discover quota descriptors using the first selected client and region (assumed role)
-    const discoveryAccountId = selectedClients[0].config.clientAccountId
-    const discoveryRegion = regions[0]
+    // Use the first account/region to discover quota definitions
+    const firstGroup = Object.values(accountGroups)[0]
+    const discoveryRegion = firstGroup.regions[0]
     const quotas = await this.discoverQuotasInClient({
       families: modelFamilies,
       types,
-      accountId: discoveryAccountId,
+      metrics: quotaMetrics,
+      accountId: firstGroup.accountId,
       region: discoveryRegion,
       advancedFilter,
     })
+
     if (quotas.length === 0) {
       const empty: QuotaReportResult = {
         metadata: {
           runAt: new Date().toISOString(),
           totalClients: allClients.length,
-          processedClients: 0,
-          regions,
+          processedAccounts: 0,
           modelFamilies,
+          quotaMetrics,
           advancedFilter,
           types,
         },
         quotas: [],
         rows: [],
-        message: `No quota definitions found for families ${modelFamilies.join('+')}${advancedFilter ? ` (filter: "${advancedFilter}")` : ''} and types ${types.join(', ')}`,
+        message: `No quota definitions found for families ${modelFamilies.join('+')}${advancedFilter ? ` (filter: "${advancedFilter}")` : ''}, metrics ${quotaMetrics.join(', ')}, types ${types.join(', ')}`,
       }
       return { result: empty, files: [] }
     }
 
-    // Prepare fetching quotas per account/region
     onProgress?.({ current: 20, total: 100, message: 'Fetching quotas across accounts and regions...' })
 
     const rows: QuotaReportRow[] = []
-    const totalUnits = selectedClients.length * regions.length
+    const groupEntries = Object.values(accountGroups)
+    const totalUnits = groupEntries.reduce((sum, g) => sum + g.regions.length, 0)
     let completedUnits = 0
 
     // Limit concurrency to avoid throttling
     const concurrency = 8
     const queue: Array<() => Promise<void>> = []
 
-    for (const client of selectedClients) {
-      const accountId = client.config.clientAccountId
-      const clientName = client.name
-      for (const region of regions) {
+    for (const group of groupEntries) {
+      for (const region of group.regions) {
         queue.push(async () => {
           const values: Record<string, number | null> = {}
           try {
-            const awsConfig = await awsCredentialsService.getClientConfig(accountId, region)
+            const awsConfig = await awsCredentialsService.getClientConfig(group.accountId, region)
             const sq = new ServiceQuotas(awsConfig)
+
             // Fetch each quota code
             for (const q of quotas) {
               try {
@@ -111,14 +168,33 @@ export class QuotaReportService {
               }
             }
           } finally {
+            // Determine display name for this row
+            // For Arcanum internal accounts, use stored accountName; for clients, derive from client list
+            const groupWithName = group as AccountGroup & { accountName?: string }
+            let accountName: string
+            if (groupWithName.accountName) {
+              // Arcanum internal account
+              accountName = groupWithName.accountName
+            } else if (group.clients.length > 0) {
+              // Client-based account
+              accountName = group.isDev
+                ? group.clients.map(c => c.name).join(', ')
+                : group.clients[0].name
+            } else {
+              accountName = group.accountId
+            }
+
             rows.push({
-              accountName: clientName,
-              accountId,
+              accountName,
+              stackNames: group.clients.length > 0 && group.isDev ? group.clients.map(c => c.name) : undefined,
+              accountId: group.accountId,
               region,
+              isDev: group.isDev,
+              bedrockAccount: group.bedrockAccount,
               values,
             })
             completedUnits += 1
-            const pct = 20 + Math.floor((completedUnits / Math.max(totalUnits, 1)) * 70) // 20..90
+            const pct = 20 + Math.floor((completedUnits / Math.max(totalUnits, 1)) * 70)
             onProgress?.({ current: pct, total: 100, message: `Processed ${completedUnits}/${totalUnits}` })
           }
         })
@@ -127,12 +203,19 @@ export class QuotaReportService {
 
     await this.runWithConcurrency(queue, concurrency)
 
+    // Sort rows: dev accounts first, then by accountName, then by region
+    rows.sort((a, b) => {
+      if (a.isDev !== b.isDev) return a.isDev ? -1 : 1
+      if (a.accountName !== b.accountName) return a.accountName.localeCompare(b.accountName)
+      return a.region.localeCompare(b.region)
+    })
+
     onProgress?.({ current: 95, total: 100, message: 'Preparing export files...' })
 
-    // Generate CSV file (always, even if output=table+csv)
+    // Generate CSV file
     const csvFile = FileExportService.generateQuotaReportCSV(rows, quotas, {
-      regions,
       families: modelFamilies,
+      metrics: quotaMetrics,
       types,
       advancedFilter,
     })
@@ -141,10 +224,10 @@ export class QuotaReportService {
     const result: QuotaReportResult = {
       metadata: {
         runAt: new Date().toISOString(),
-        totalClients: allClients.length,
-        processedClients: selectedClients.length,
-        regions,
+        totalClients: clientScope === 'arcanum-internal' ? ARCANUM_INTERNAL_ACCOUNTS.length : groupEntries.length,
+        processedAccounts: groupEntries.length,
         modelFamilies,
+        quotaMetrics,
         advancedFilter,
         types,
       },
@@ -156,15 +239,72 @@ export class QuotaReportService {
     return { result, files }
   }
 
+  /**
+   * Group clients by AWS account ID for dev consolidation.
+   * Dev accounts (multiple stacks on same account) get both regions.
+   * Prod accounts use their configured region (or all regions if regionMode is 'all-regions').
+   */
+  private static groupByAccountId(
+    clients: Client[],
+    regionMode: 'client-region' | 'all-regions'
+  ): Record<string, AccountGroup> {
+    const groups: Record<string, AccountGroup> = {}
+
+    for (const client of clients) {
+      const accountId = client.config.clientAccountId
+      const isDev = client.config.devInstance === true
+
+      if (!groups[accountId]) {
+        groups[accountId] = {
+          accountId,
+          clients: [],
+          isDev,
+          regions: [],
+          bedrockAccount: client.config.bedrockAccount,
+        }
+      }
+
+      groups[accountId].clients.push(client)
+
+      // If any client in the group is dev, mark the group as dev
+      if (isDev) {
+        groups[accountId].isDev = true
+      }
+
+      // Collect bedrockAccount from any client that has it
+      if (client.config.bedrockAccount && !groups[accountId].bedrockAccount) {
+        groups[accountId].bedrockAccount = client.config.bedrockAccount
+      }
+    }
+
+    // Determine regions for each group
+    for (const group of Object.values(groups)) {
+      if (group.isDev) {
+        // Dev accounts always check both regions
+        group.regions = ALL_REGIONS
+      } else if (regionMode === 'all-regions') {
+        // User requested all regions
+        group.regions = ALL_REGIONS
+      } else {
+        // Use client's configured region
+        const clientRegion = group.clients[0].config.region || 'us-east-1'
+        group.regions = [clientRegion]
+      }
+    }
+
+    return groups
+  }
+
   private static async discoverQuotasInClient(args: {
     families: ModelFamily[]
     types: QuotaType[]
+    metrics: QuotaMetric[]
     accountId: string
     region: string
     advancedFilter?: string
   }): Promise<QuotaDescriptor[]> {
-    const { families, types, accountId, region, advancedFilter } = args
-    const signature = `${accountId}|${region}|${families.sort().join('+')}|${types.sort().join(',')}|${(advancedFilter||'').toLowerCase()}`
+    const { families, types, metrics, accountId, region, advancedFilter } = args
+    const signature = `${accountId}|${region}|${families.sort().join('+')}|${types.sort().join(',')}|${metrics.sort().join(',')}|${(advancedFilter || '').toLowerCase()}`
     const cached = this.quotaCache.get(signature)
     if (cached) return cached
 
@@ -178,71 +318,169 @@ export class QuotaReportService {
     do {
       const res = await sq.send(new ListServiceQuotasCommand({ ServiceCode: SERVICE_CODE, MaxResults: 100, NextToken }))
       NextToken = res.NextToken
-      const items = (res.Quotas || [])
-        .filter(q => q.QuotaName && /requests per minute/i.test(q.QuotaName))
-        .map(q => this.classifyQuota(q.QuotaName!))
-        .filter(meta => meta !== null && families.includes(meta.family))
-        .filter(meta => types.includes(meta!.type))
-        .filter(meta => !advancedFilter || (meta!.label.toLowerCase().includes(advancedFilter.toLowerCase()) || meta!.raw.toLowerCase().includes(advancedFilter.toLowerCase())))
 
-      for (const meta of items as Array<{ family: ModelFamily; label: string; type: QuotaType; raw: string; code?: string }>) {
-        // Get back the original quota entry to extract code
-        const match = (res.Quotas || []).find(q => q.QuotaName === meta.raw)
-        if (match?.QuotaCode) {
+      const items = (res.Quotas || [])
+        .filter(q => q.QuotaName && (
+          /requests per minute/i.test(q.QuotaName) ||
+          /tokens per minute/i.test(q.QuotaName)
+        ))
+        .map(q => ({ quota: q, classified: this.classifyQuota(q.QuotaName!) }))
+        .filter(({ classified }) => classified !== null)
+        .filter(({ classified }) => families.includes(classified!.family))
+        .filter(({ classified }) => types.includes(classified!.type))
+        .filter(({ classified }) => metrics.includes(classified!.metric))
+        .filter(({ classified }) => !advancedFilter || (
+          classified!.label.toLowerCase().includes(advancedFilter.toLowerCase()) ||
+          classified!.raw.toLowerCase().includes(advancedFilter.toLowerCase())
+        ))
+
+      for (const { quota, classified } of items) {
+        if (quota.QuotaCode && classified) {
           found.push({
-            QuotaCode: match.QuotaCode,
-            QuotaName: meta.raw,
-            Model: meta.label,
-            Type: meta.type,
+            QuotaCode: quota.QuotaCode,
+            QuotaName: classified.raw,
+            Model: classified.label,
+            Type: classified.type,
+            Metric: classified.metric,
+            InferenceProfile: classified.inferenceProfile,
           })
         }
       }
     } while (NextToken)
 
-    // Stable order: by family (Claude first), then Model, then Type (On-demand first)
-    const familyRank = (model: string) => (/^Claude/i.test(model) ? 0 : 1)
-    const typeRank = (t: QuotaType) => (t === 'On-demand' ? 0 : 1)
+    // Stable order: by family (Sonnet first), then Model, then Metric (RPM first), then Type (On-demand first)
+    const familyRank = (model: string): number => {
+      if (/Sonnet/i.test(model)) return 0
+      if (/Opus/i.test(model)) return 1
+      if (/Haiku/i.test(model)) return 2
+      return 3 // Nova and others
+    }
+    const metricRank = (m: QuotaMetric): number => (m === 'requests-per-minute' ? 0 : 1)
+    const typeRank = (t: QuotaType): number => (t === 'On-demand' ? 0 : 1)
+
     found.sort((a, b) => {
       const fa = familyRank(a.Model)
       const fb = familyRank(b.Model)
       if (fa !== fb) return fa - fb
       if (a.Model !== b.Model) return a.Model.localeCompare(b.Model)
+      const ma = metricRank(a.Metric)
+      const mb = metricRank(b.Metric)
+      if (ma !== mb) return ma - mb
       return typeRank(a.Type) - typeRank(b.Type)
     })
+
     this.quotaCache.set(signature, found)
     return found
   }
 
-  private static classifyQuota(name: string): { family: ModelFamily; label: string; type: QuotaType; raw: string } | null {
+  /**
+   * Classify a quota name into family, label, type, metric, and inference profile.
+   */
+  private static classifyQuota(name: string): ClassifiedQuota | null {
     const raw = name
     const type: QuotaType = /^On-demand/i.test(name) ? 'On-demand' : 'Cross-region'
-    // Claude detection (Anthropic Claude ...)
-    if (/Anthropic/i.test(name) || /Claude/i.test(name)) {
-      // Extract from the first occurrence of 'Claude' to before 'requests per minute'
-      const start = name.search(/Claude/i)
-      if (start >= 0) {
-        const tail = name.slice(start)
-        const label = tail.split(/requests per minute/i)[0].trim().replace(/[-–—]\s*$/,'').trim()
-        if (label) return { family: 'claude', label, type, raw }
-      }
-      // Fallback: after 'Anthropic '
-      const anth = name.split(/Anthropic\s+/i)[1]
-      if (anth) {
-        const label = anth.split(/requests per minute/i)[0].trim()
-        if (label) return { family: 'claude', label, type, raw }
-      }
+    const metric: QuotaMetric = /tokens per minute/i.test(name) ? 'tokens-per-minute' : 'requests-per-minute'
+    const inferenceProfile = this.extractInferenceProfile(name)
+
+    // Sonnet detection
+    if (/Sonnet/i.test(name)) {
+      const label = this.extractModelLabel(name, 'Sonnet')
+      return { family: 'sonnet', label, type, metric, raw, inferenceProfile }
     }
-    // Nova detection (Amazon Nova ... or Nova ...)
+
+    // Opus detection
+    if (/Opus/i.test(name)) {
+      const label = this.extractModelLabel(name, 'Opus')
+      return { family: 'opus', label, type, metric, raw, inferenceProfile }
+    }
+
+    // Haiku detection
+    if (/Haiku/i.test(name)) {
+      const label = this.extractModelLabel(name, 'Haiku')
+      return { family: 'haiku', label, type, metric, raw, inferenceProfile }
+    }
+
+    // Nova detection
     if (/Nova/i.test(name)) {
-      const start = name.search(/Nova/i)
-      if (start >= 0) {
-        const tail = name.slice(start)
-        // Capture e.g., 'Nova Pro', 'Nova Lite', 'Nova Micro', 'Nova Premier', optionally with version tokens
-        const label = tail.split(/requests per minute/i)[0].trim().replace(/[-–—]\s*$/,'').trim()
-        if (label) return { family: 'nova', label, type, raw }
+      const label = this.extractModelLabel(name, 'Nova')
+      return { family: 'nova', label, type, metric, raw, inferenceProfile }
+    }
+
+    return null
+  }
+
+  /**
+   * Extract inference profile region from quota name (e.g., 'US', 'Global', 'APAC').
+   */
+  private static extractInferenceProfile(name: string): string | undefined {
+    // Match patterns like "in US", "in Global", "in APAC", "in EU"
+    const profileMatch = name.match(/\bin\s+(US|Global|APAC|EU)\b/i)
+    if (profileMatch) {
+      return profileMatch[1].toUpperCase()
+    }
+    return undefined
+  }
+
+  /**
+   * Extract a clean model label from a quota name.
+   * Makes model versions explicit (e.g., bare "Sonnet" → "Sonnet 3.5").
+   */
+  private static extractModelLabel(name: string, modelKeyword: string): string {
+    const start = name.search(new RegExp(modelKeyword, 'i'))
+    if (start >= 0) {
+      const tail = name.slice(start)
+      // Extract up to "requests per minute" or "tokens per minute", excluding inference profile info
+      let label = tail
+        .split(/(?:requests|tokens) per minute/i)[0]
+        .replace(/\s+in\s+(?:US|Global|APAC|EU)\s*$/i, '')  // Remove trailing inference profile
+        .trim()
+        .replace(/[-–—]\s*$/, '')
+        .trim()
+
+      if (label) {
+        // Make bare model names more explicit
+        label = this.normalizeModelLabel(label, modelKeyword)
+        return label
       }
     }
-    return null
+
+    // Fallback: after 'Claude ' or 'Amazon '
+    const fallbackMatch = name.match(/(?:Claude|Amazon)\s+(.+?)(?:requests|tokens) per minute/i)
+    if (fallbackMatch) {
+      let label = fallbackMatch[1]
+        .replace(/\s+in\s+(?:US|Global|APAC|EU)\s*$/i, '')
+        .trim()
+        .replace(/[-–—]\s*$/, '')
+        .trim()
+      label = this.normalizeModelLabel(label, modelKeyword)
+      return label
+    }
+
+    return this.normalizeModelLabel(modelKeyword, modelKeyword)
+  }
+
+  /**
+   * Normalize model labels to be more explicit about versions.
+   * - Bare "Sonnet" → "Sonnet 3.5" (the original Claude 3.5 Sonnet)
+   * - Bare "Haiku" → "Haiku 3" (the original Claude 3 Haiku)
+   * - Bare "Opus" → "Opus 3" (Claude 3 Opus)
+   */
+  private static normalizeModelLabel(label: string, modelKeyword: string): string {
+    // If the label is just the bare model name without version, add default version
+    const barePattern = new RegExp(`^${modelKeyword}$`, 'i')
+    if (barePattern.test(label.trim())) {
+      switch (modelKeyword.toLowerCase()) {
+        case 'sonnet':
+          return 'Sonnet 3.5'
+        case 'haiku':
+          return 'Haiku 3'
+        case 'opus':
+          return 'Opus 3'
+        default:
+          return label
+      }
+    }
+    return label
   }
 
   private static async runWithConcurrency(tasks: Array<() => Promise<void>>, limit: number): Promise<void> {

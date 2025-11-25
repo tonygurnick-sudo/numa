@@ -14,7 +14,7 @@ import random
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from zoneinfo import ZoneInfo
 
 import structlog
@@ -26,6 +26,7 @@ import s3_helpers
 from utils import (
     appoutput,
     cli_runner,
+    get_cross_account_bedrock_credentials,
     s3_operations,
     session,
     trace_parser,
@@ -755,8 +756,11 @@ def _run_claude_with_streaming(
         system_prompt,
     ]
 
+    # Get cross-account credentials if BEDROCK_ACCOUNT is configured
+    bedrock_creds = get_cross_account_bedrock_credentials()
+
     # Prepare environment
-    env = {
+    env: dict[str, str] = {
         **os.environ,
         **ENV_VARS,
         "HOME": os.environ.get("HOME", "/tmp"),
@@ -771,6 +775,9 @@ def _run_claude_with_streaming(
             )
         ),
     }
+    # Inject cross-account creds if available
+    if bedrock_creds:
+        env.update(cast(dict[str, str], bedrock_creds))
 
     # Execute CLI and stream output
     with trace_path.open("w", encoding="utf-8") as trace_file:

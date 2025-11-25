@@ -55,29 +55,36 @@ export interface ToolResultFile {
 
 // Quota Report specific interfaces
 export type QuotaType = 'On-demand' | 'Cross-region'
-export type ModelFamily = 'claude' | 'nova'
+export type ModelFamily = 'sonnet' | 'opus' | 'haiku' | 'nova'
+export type QuotaMetric = 'requests-per-minute' | 'tokens-per-minute'
 
 export interface QuotaDescriptor {
   QuotaCode: string
   QuotaName: string
   Model: string
   Type: QuotaType
+  Metric: QuotaMetric
+  InferenceProfile?: string  // e.g., 'US', 'Global', 'APAC' - to distinguish regional quotas
 }
 
 export interface QuotaReportRow {
   accountName: string
+  stackNames?: string[]  // For dev accounts sharing AWS account, list stack names
   accountId: string
   region: string
+  isDev: boolean
+  bedrockAccount?: string  // Cross-account quota sharing target
   values: Record<string /* QuotaCode */, number | null>
 }
 
 export interface QuotaReportParameters {
-  clientScope: 'all' | 'selected'
+  clientScope: 'all' | 'selected' | 'arcanum-internal'
   clients?: string[]
-  regions: string[]
-  modelFamilies: ModelFamily[] // e.g., ['claude','nova']
-  advancedFilter?: string // optional text filter for narrowing
-  types: QuotaType[] // default both
+  regionMode: 'client-region' | 'all-regions'  // Use client's region or query all
+  modelFamilies: ModelFamily[]
+  quotaMetrics: QuotaMetric[]
+  advancedFilter?: string
+  types: QuotaType[]
   output: 'table+csv' | 'csv'
 }
 
@@ -85,9 +92,9 @@ export interface QuotaReportResult {
   metadata: {
     runAt: string
     totalClients: number
-    processedClients: number
-    regions: string[]
+    processedAccounts: number
     modelFamilies: ModelFamily[]
+    quotaMetrics: QuotaMetric[]
     advancedFilter?: string
     types: QuotaType[]
   }
