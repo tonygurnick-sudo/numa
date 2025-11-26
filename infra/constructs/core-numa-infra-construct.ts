@@ -19,7 +19,7 @@ import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-sec
 import { SecretsmanagerSecretVersion } from '@cdktf/provider-aws/lib/secretsmanager-secret-version';
 import { password } from '@cdktf/provider-random';
 import { RandomProvider } from '@cdktf/provider-random/lib/provider';
-import { Fn, TerraformOutput } from 'cdktf';
+import { Fn, TerraformOutput, ITerraformDependable } from 'cdktf';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import { AdjustToken } from './adjust-token-construct';
@@ -1143,7 +1143,9 @@ export class CoreNumaInfra extends Construct {
     ];
 
     // Provision each model only in the source region
+    // Invocations are serialized (each depends on previous) to avoid AWS rate limits
     const modelAccessInvocations: LambdaInvocation[] = [];
+    let previousInvocation: LambdaInvocation | undefined;
 
     for (const modelId of models) {
       const input = JSON.stringify({
@@ -1151,6 +1153,17 @@ export class CoreNumaInfra extends Construct {
         region: props.region,
         trigger: '1',
       });
+
+      const dependsOnList: ITerraformDependable[] = [
+        bedrockModelManager.lambda,
+        ...bedrockModelManager.additionalPolicies,
+        ...bedrockModelManager.policyAttachments,
+      ];
+
+      // Chain to previous invocation to serialize execution and avoid rate limits
+      if (previousInvocation) {
+        dependsOnList.push(previousInvocation);
+      }
 
       const invocation = new LambdaInvocation(
         this,
@@ -1162,14 +1175,11 @@ export class CoreNumaInfra extends Construct {
             bedrockModelManagerSourceHash: bedrockModelManager.lambda.sourceCodeHash,
             input,
           },
-          dependsOn: [
-            bedrockModelManager.lambda,
-            ...bedrockModelManager.additionalPolicies,
-            ...bedrockModelManager.policyAttachments,
-          ],
+          dependsOn: dependsOnList,
         },
       );
       modelAccessInvocations.push(invocation);
+      previousInvocation = invocation;
     }
 
     // Output model access results for pipeline visibility

@@ -89,6 +89,7 @@ variables:
         - lambdas/python/financial-analysis-analysis
         - lambdas/python/financial-analysis-data-extraction
         - lambdas/python/gdsr-assessment
+        - lambdas/python/iam-quota-sharing-manager
         - lambdas/python/infringement-review
         - lambdas/python/mark-url-status
         - lambdas/python/meeting-analyser

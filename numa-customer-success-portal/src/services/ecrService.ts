@@ -63,24 +63,36 @@ export class ECRService {
         credentials: this.getCredentialsProvider(),
       })
       const registryId = getConfigValue('ECR_REGISTRY_ID') || undefined
-      // Add an abortable timeout so the UI doesn't feel frozen on navigation
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
-      let response
-      try {
-        response = await ecrClient.send(
-          new DescribeImagesCommand({
-            repositoryName: this.repositoryName,
-            registryId,
-            maxResults: 100,
-          }),
-          { abortSignal: controller.signal }
-        )
-      } finally {
-        clearTimeout(timeoutId)
-      }
 
-      if (!response.imageDetails) {
+      // Fetch all pages of images (pagination required when > 100 images)
+      const allImageDetails: ImageDetail[] = []
+      let nextToken: string | undefined
+
+      do {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000)
+
+        try {
+          const response = await ecrClient.send(
+            new DescribeImagesCommand({
+              repositoryName: this.repositoryName,
+              registryId,
+              maxResults: 100,
+              nextToken,
+            }),
+            { abortSignal: controller.signal }
+          )
+
+          if (response.imageDetails) {
+            allImageDetails.push(...response.imageDetails)
+          }
+          nextToken = response.nextToken
+        } finally {
+          clearTimeout(timeoutId)
+        }
+      } while (nextToken)
+
+      if (allImageDetails.length === 0) {
         return []
       }
 
@@ -91,7 +103,7 @@ export class ECRService {
         metadataMap.set(`${meta.imageTag}:${meta.digest}`, meta)
       })
 
-      this.cachedImages = this.mapImageDetailsToECRImages(response.imageDetails, metadataMap)
+      this.cachedImages = this.mapImageDetailsToECRImages(allImageDetails, metadataMap)
       this.lastFetchTime = now
 
       return this.cachedImages

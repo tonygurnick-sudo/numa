@@ -1,6 +1,6 @@
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
-import { Fn, S3Backend, TerraformStack } from 'cdktf';
+import { Fn, S3Backend, TerraformOutput, TerraformStack } from 'cdktf';
 import { Construct } from 'constructs';
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -45,11 +45,9 @@ import { z } from 'zod';
 import { KnowledgeBase } from '../constructs/knowledge-base-construct';
 import { S3VectorsKnowledgeBase } from '../constructs/s3-vectors-knowledge-base-construct';
 import { cuttrissDataSyncConfigSchema } from '../constructs/cuttriss-data-sync-construct';
-import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
-import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
-import { IamRolePolicyAttachmentsExclusive } from '@cdktf/provider-aws/lib/iam-role-policy-attachments-exclusive';
-import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { DataAwsSsmParameter } from '@cdktf/provider-aws/lib/data-aws-ssm-parameter';
+import { NumaLambda } from '../constructs/numa-lambda';
 
 const arcanumOrgId = 'o-g8veu85jva';
 const nextGenOrgId = 'o-apdsu3c1a7';
@@ -409,58 +407,98 @@ export class NumaClientStack extends TerraformStack {
     }
 
     if (clientConfig.allowBedrockQuotaSharing) {
-      const quotaSharingRole = new IamRole(this, 'quota-sharing-role', {
-        name: 'bedrock-quota-sharing',
-        assumeRolePolicy: new DataAwsIamPolicyDocument(this, 'quota-sharing-assume-role-policy-statement', {
-          statement: [
-            {
-              actions: ['sts:AssumeRole'],
-              principals: [
-                {
-                  type: 'AWS',
-                  identifiers: ['*'],
-                },
-              ],
-              effect: 'Allow',
-              condition: [
-                {
-                  test: 'StringLike',
-                  values: [arcanumOrgId, nextGenOrgId],
-                  variable: 'aws:PrincipalOrgId',
-                },
-              ],
-            },
+      // Use a Lambda to idempotently create/retrieve the quota-sharing IAM resources
+      // This handles the case where multiple stacks in the same account enable quota sharing
+      const iamManagerPolicyStatements = [
+        {
+          actions: [
+            'iam:GetRole',
+            'iam:CreateRole',
+            'iam:GetPolicy',
+            'iam:CreatePolicy',
+            'iam:ListAttachedRolePolicies',
+            'iam:AttachRolePolicy',
           ],
-        }).json,
+          effect: 'Allow',
+          resources: ['arn:aws:iam::*:role/bedrock-quota-sharing', 'arn:aws:iam::*:policy/bedrock-quota-sharing'],
+        },
+        {
+          actions: ['sts:GetCallerIdentity'],
+          effect: 'Allow',
+          resources: ['*'],
+        },
+      ];
+
+      const iamQuotaSharingManager = new NumaLambda(this, 'iam-quota-sharing-manager', {
+        additionalPolicyStatements: iamManagerPolicyStatements,
+        clientName: clientConfig.clientName,
+        lambdaDirectory: 'python/iam-quota-sharing-manager/',
+        logGroup: core.logGroup,
+        resourceNameSuffix: '_iam-quota-sharing-manager',
+        timeout: 60,
       });
-      const quotaSharingPolicy = new IamPolicy(this, 'quoting-sharing-policy', {
-        name: 'bedrock-quota-sharing',
-        policy: new DataAwsIamPolicyDocument(this, 'quota-sharing-policy-statement', {
-          statement: [
-            {
-              actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-              resources: [
-                'arn:aws:bedrock:*::foundation-model/anthropic.claude-*',
-                'arn:aws:bedrock:*::foundation-model/us.anthropic.claude-*',
-                'arn:aws:bedrock:*::foundation-model/apac.anthropic.claude-*',
-                'arn:aws:bedrock:*::foundation-model/amazon.nova-*',
-                'arn:aws:bedrock:*::foundation-model/us.amazon.nova-*',
-                'arn:aws:bedrock:*::foundation-model/apac.amazon.nova-*',
-                'arn:aws:bedrock:*:*:inference-profile/anthropic.claude-*',
-                'arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-*',
-                'arn:aws:bedrock:*:*:inference-profile/apac.anthropic.claude-*',
-                'arn:aws:bedrock:*:*:inference-profile/amazon.nova-*',
-                'arn:aws:bedrock:*:*:inference-profile/us.amazon.nova-*',
-                'arn:aws:bedrock:*:*:inference-profile/apac.amazon.nova-*',
-              ],
-              effect: 'Allow',
+
+      // Prepare the input for the Lambda
+      const assumeRolePolicy = {
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Principal: { AWS: '*' },
+            Action: 'sts:AssumeRole',
+            Condition: {
+              StringLike: {
+                'aws:PrincipalOrgId': [arcanumOrgId, nextGenOrgId],
+              },
             },
-          ],
-        }).json,
+          },
+        ],
+      };
+
+      const policyDocument = {
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Action: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+            Resource: [
+              'arn:aws:bedrock:*::foundation-model/anthropic.claude-*',
+              'arn:aws:bedrock:*::foundation-model/us.anthropic.claude-*',
+              'arn:aws:bedrock:*::foundation-model/apac.anthropic.claude-*',
+              'arn:aws:bedrock:*::foundation-model/amazon.nova-*',
+              'arn:aws:bedrock:*::foundation-model/us.amazon.nova-*',
+              'arn:aws:bedrock:*::foundation-model/apac.amazon.nova-*',
+              'arn:aws:bedrock:*:*:inference-profile/anthropic.claude-*',
+              'arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-*',
+              'arn:aws:bedrock:*:*:inference-profile/apac.anthropic.claude-*',
+              'arn:aws:bedrock:*:*:inference-profile/amazon.nova-*',
+              'arn:aws:bedrock:*:*:inference-profile/us.amazon.nova-*',
+              'arn:aws:bedrock:*:*:inference-profile/apac.amazon.nova-*',
+            ],
+          },
+        ],
+      };
+
+      const iamManagerInvocation = new LambdaInvocation(this, 'iam-quota-sharing-manager-invocation', {
+        functionName: iamQuotaSharingManager.lambda.functionName,
+        input: JSON.stringify({
+          assume_role_policy: assumeRolePolicy,
+          policy_document: policyDocument,
+        }),
+        triggers: {
+          sourceHash: iamQuotaSharingManager.lambda.sourceCodeHash,
+          policyHash: JSON.stringify(policyDocument),
+        },
+        dependsOn: [
+          iamQuotaSharingManager.lambda,
+          ...iamQuotaSharingManager.additionalPolicies,
+          ...iamQuotaSharingManager.policyAttachments,
+        ],
       });
-      new IamRolePolicyAttachmentsExclusive(this, 'quota-sharing-attachment', {
-        roleName: quotaSharingRole.name,
-        policyArns: [quotaSharingPolicy.arn],
+
+      new TerraformOutput(this, 'quota-sharing-result', {
+        value: iamManagerInvocation.result,
+        description: 'IAM quota sharing manager result',
       });
     }
   }
