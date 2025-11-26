@@ -250,7 +250,7 @@ def get_bedrock_model(
         max_tokens=max_tokens,
         boto_session=boto_session,
         additional_request_fields={
-            "thinking": {"type": "enabled", "budget_tokens": 4096}  # Minimum of 1,024
+            "thinking": {"type": "enabled", "budget_tokens": 8000}  # Minimum of 1,024
         },
     )
 

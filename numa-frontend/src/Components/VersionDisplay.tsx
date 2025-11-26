@@ -39,6 +39,14 @@ export const VersionDisplay = () => {
   }, []);
 
   if (error) {
+    // If we have a manual version label, show it even if version.json fails
+    if (MANUAL_VERSION_LABEL) {
+      return (
+        <span className="version" title={`Version info unavailable: ${error}`}>
+          {MANUAL_VERSION_LABEL}
+        </span>
+      );
+    }
     return (
       <span className="version" title={`Failed to load version: ${error}`}>
         version unavailable

@@ -97,12 +97,13 @@
   .file-table-container {
     border-radius: 8px;
     border: 1px solid var(--color-border-light);
-    overflow: hidden;
+    overflow-x: auto; // Allow horizontal scrolling when needed
     background: white;
   }
 
   .file-table {
     margin-bottom: 0;
+    min-width: 600px; // Ensures table doesn't collapse below usable width
 
     thead {
       background: linear-gradient(to bottom, var(--color-bg-light), var(--color-bg-muted));
