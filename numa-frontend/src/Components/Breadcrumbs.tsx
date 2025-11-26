@@ -20,7 +20,7 @@ function Breadcrumbs({ label, clearStack }) {
       // Add the current page to the navigation stack
       stack.push({
         path: location.pathname,
-        label: label || 'No label',
+        label: label || 'Apps',
       });
       sessionStorage.setItem('navigation_stack', JSON.stringify(stack));
     }
@@ -34,7 +34,7 @@ function Breadcrumbs({ label, clearStack }) {
       // Only show Home breadcrumb as a link when clearing stack
       sessionStorage.removeItem('navigation_stack');
       updatedBreadcrumbs[0] = {
-        label: 'Dashboard',
+        label: 'Apps',
         path: '/dash',
       };
       if (location.pathname !== '/dash') {
@@ -47,7 +47,7 @@ function Breadcrumbs({ label, clearStack }) {
     } else {
       stack.forEach((entry) => {
         const path = entry.path;
-        const label = entry.label || 'No label'; // Provide fallback for empty labels
+        const label = entry.label || 'Apps'; // Provide fallback for empty labels
         updatedBreadcrumbs.push({
           label: label,
           path: path,

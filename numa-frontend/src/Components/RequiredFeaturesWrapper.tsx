@@ -30,7 +30,7 @@ const AccessDeniedFallback = ({ onRedirectToDash }) => (
             <Card.Text className="text-muted">Please contact your administrator to request access.</Card.Text>
             <Button variant="primary" onClick={onRedirectToDash} className="me-2">
               <i className="bi bi-house-door me-1"></i>
-              Go to Dashboard
+              Go to Apps
             </Button>
           </Card.Body>
         </Card>

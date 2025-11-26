@@ -15,8 +15,8 @@ import { Nav } from '../../Components/Nav';
 import { MANUAL_VERSION_LABEL } from '../../utils/versionLabel';
 
 // Mock individual components to return null for testing
-vi.mock('../../Pages/Dash', () => ({
-  Dash: () => null,
+vi.mock('../../Pages/Apps', () => ({
+  Apps: () => null,
 }));
 
 vi.mock('../../Pages/NumaChat', () => ({
@@ -48,7 +48,7 @@ vi.mock('../../utils/routeConfig.jsx', () => ({
   ROUTE_CONFIG: [
     {
       path: '/dash',
-      nav: { label: 'Dash', icon: 'bi bi-grid-1x2-fill' },
+      nav: { label: 'Apps', icon: 'bi bi-grid-1x2-fill' },
     },
     {
       path: '/favourite-apps',
@@ -132,7 +132,7 @@ describe('Nav Component', () => {
       await waitFor(
         () => {
           const navLinks = document.querySelectorAll('.nav-link');
-          // Standard user should have at least 3 nav links (Dash, Favs, Chat)
+          // Standard user should have at least 3 nav links (Apps, Favs, Chat)
           expect(navLinks.length).toBeGreaterThan(2);
         },
         { timeout: 5000 },
@@ -167,7 +167,7 @@ describe('Nav Component', () => {
       );
 
       // Test dashboard navigation using title attribute
-      const dashLink = document.querySelector('.nav-link[title="Dash"]');
+      const dashLink = document.querySelector('.nav-link[title="Apps"]');
       expect(dashLink).not.toBeNull();
       fireEvent.click(dashLink);
       expect(mockNavigate).toHaveBeenCalledWith('/dash');
@@ -204,7 +204,7 @@ describe('Nav Component', () => {
       );
 
       // Check for navigation items by title attribute
-      expect(document.querySelector('.nav-link[title="Dash"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Apps"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Favs"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Chat"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Knowledge Base"]')).not.toBeNull();
@@ -217,7 +217,7 @@ describe('Nav Component', () => {
       });
     });
 
-    it('renders navigation items in correct order: Dash, Favs, Chat, Company, Knowledge Base', async () => {
+    it('renders navigation items in correct order: Apps, Favs, Chat, Company, Knowledge Base', async () => {
       renderWithProviders(<Nav />);
 
       // Wait for nav links to load
@@ -235,19 +235,19 @@ describe('Nav Component', () => {
       // Filter to only include main navigation items (excluding logout)
       const mainNavLinks = navLinks.filter((link) => {
         const title = link.getAttribute('title');
-        return ['Dash', 'Favs', 'Chat', 'Company', 'Knowledge Base'].includes(title);
+        return ['Apps', 'Favs', 'Chat', 'Company', 'Knowledge Base'].includes(title);
       });
 
       // Extract the title attributes to verify order
       const navItemTitles = mainNavLinks.map((item) => item.getAttribute('title'));
 
       // Filter out any missing items but verify the order of existing ones
-      const expectedOrder = ['Dash', 'Favs', 'Chat', 'Company', 'Knowledge Base'];
+      const expectedOrder = ['Apps', 'Favs', 'Chat', 'Company', 'Knowledge Base'];
       const expectedOrderFiltered = expectedOrder.filter((item) => navItemTitles.includes(item));
       expect(navItemTitles).toEqual(expectedOrderFiltered);
 
       // Verify specific items are present
-      expect(navItemTitles).toContain('Dash');
+      expect(navItemTitles).toContain('Apps');
       expect(navItemTitles).toContain('Favs');
       expect(navItemTitles).toContain('Chat');
       expect(navItemTitles).toContain('Company');
@@ -277,7 +277,7 @@ describe('Nav Component', () => {
 
       // Find navigation items by their title attributes instead of text
       // Test dashboard navigation
-      const dashLink = document.querySelector('.nav-link[title="Dash"]');
+      const dashLink = document.querySelector('.nav-link[title="Apps"]');
       expect(dashLink).not.toBeNull();
       fireEvent.click(dashLink);
       expect(mockNavigate).toHaveBeenCalledWith('/dash');
@@ -340,11 +340,11 @@ describe('Nav Component', () => {
 
       // Wait for dropdown items to be visible
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /Dash/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Apps/i })).toBeInTheDocument();
       });
 
       // Check for menu items
-      expect(screen.getByRole('button', { name: /Dash/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Apps/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Favs/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Chat/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Knowledge Base/i })).toBeInTheDocument();
@@ -365,11 +365,11 @@ describe('Nav Component', () => {
 
       // Wait for dropdown items to be visible
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /Dash/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Apps/i })).toBeInTheDocument();
       });
 
       // Test dashboard navigation
-      fireEvent.click(screen.getByRole('button', { name: /Dash/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Apps/i }));
       expect(mockNavigate).toHaveBeenCalledWith('/dash');
 
       // Reopen menu for next test
@@ -476,7 +476,7 @@ describe('Nav Component', () => {
       await waitFor(() => {
         expect(screen.getByTestId('mobile-menu-button')).toBeInTheDocument();
       });
-      expect(screen.queryByText('Dash')).not.toBeInTheDocument();
+      expect(screen.queryByText('Apps')).not.toBeInTheDocument();
     });
 
     it('should handle window resize from mobile to desktop', async () => {

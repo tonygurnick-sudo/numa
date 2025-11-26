@@ -41,8 +41,16 @@ const AppRoutes = () => {
   return (
     <Suspense fallback={<div className="d-flex justify-content-center align-items-center vh-100">Loading...</div>}>
       <Routes>
-        <Route path="/" element={<Navigate to={user ? '/dash' : '/login'} replace />} />
-        <Route path="/login" element={user ? <Navigate to="/dash" replace /> : <NumaLogin />} />
+        <Route
+          path="/"
+          element={<Navigate to={user ? (user?.features?.includes('chat') ? '/chat' : '/dash') : '/login'} replace />}
+        />
+        <Route
+          path="/login"
+          element={
+            user ? <Navigate to={user?.features?.includes('chat') ? '/chat' : '/dash'} replace /> : <NumaLogin />
+          }
+        />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/create-password" element={<ResetPassword />} />
         <Route path="/ian" element={<Ian />} />
