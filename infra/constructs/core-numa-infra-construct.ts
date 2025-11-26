@@ -1122,28 +1122,29 @@ export class CoreNumaInfra extends Construct {
     });
 
     // Cross-region inference profiles handle routing automatically - only provision in source region
+    // If a model isn't available in a region, the lambda will log a warning and continue (soft failure)
     const models = [
+      // Claude 3.x models
+      'anthropic.claude-3-haiku-20240307-v1:0',
+      'anthropic.claude-3-5-haiku-20241022-v1:0',
       'anthropic.claude-3-5-sonnet-20240620-v1:0',
       'anthropic.claude-3-5-sonnet-20241022-v2:0',
-      'anthropic.claude-3-haiku-20240307-v1:0',
-      'anthropic.claude-sonnet-4-20250514-v1:0',
       'anthropic.claude-3-7-sonnet-20250219-v1:0',
+      // Claude 4.x models
+      'anthropic.claude-sonnet-4-20250514-v1:0',
+      'anthropic.claude-haiku-4-5-20251001-v1:0',
+      'anthropic.claude-sonnet-4-5-20250929-v1:0',
+      'anthropic.claude-opus-4-5-20251101-v1:0',
+      // Amazon models
       'amazon.titan-embed-text-v2:0',
+      'amazon.nova-lite-v1:0',
+      'amazon.nova-pro-v1:0',
+      'amazon.nova-premier-v1:0',
     ];
 
-    // Add region-specific models
-    if (props.region === 'us-east-1') {
-      models.push('amazon.nova-lite-v1:0');
-      models.push('amazon.nova-pro-v1:0');
-      models.push('amazon.nova-premier-v1:0');
-    }
-    if (props.region === 'ap-southeast-2') {
-      // Nova Premier is not available in ap-southeast-2
-      models.push('amazon.nova-lite-v1:0');
-      models.push('amazon.nova-pro-v1:0');
-    }
-
     // Provision each model only in the source region
+    const modelAccessInvocations: LambdaInvocation[] = [];
+
     for (const modelId of models) {
       const input = JSON.stringify({
         model_id: modelId,
@@ -1151,20 +1152,45 @@ export class CoreNumaInfra extends Construct {
         trigger: '1',
       });
 
-      new LambdaInvocation(this, `bedrock-model-manager-invocation_${modelId.replace(/[.:]/g, '-')}_${props.region}`, {
-        functionName: bedrockModelManager.lambda.functionName,
-        input,
-        triggers: {
-          bedrockModelManagerSourceHash: bedrockModelManager.lambda.sourceCodeHash,
+      const invocation = new LambdaInvocation(
+        this,
+        `bedrock-model-manager-invocation_${modelId.replace(/[.:]/g, '-')}_${props.region}`,
+        {
+          functionName: bedrockModelManager.lambda.functionName,
           input,
+          triggers: {
+            bedrockModelManagerSourceHash: bedrockModelManager.lambda.sourceCodeHash,
+            input,
+          },
+          dependsOn: [
+            bedrockModelManager.lambda,
+            ...bedrockModelManager.additionalPolicies,
+            ...bedrockModelManager.policyAttachments,
+          ],
         },
-        dependsOn: [
-          bedrockModelManager.lambda,
-          ...bedrockModelManager.additionalPolicies,
-          ...bedrockModelManager.policyAttachments,
-        ],
-      });
+      );
+      modelAccessInvocations.push(invocation);
     }
+
+    // Output model access results for pipeline visibility
+    // Shows status and warnings inline for partial results
+    const modelResults = modelAccessInvocations.map((inv) => {
+      const result = Fn.jsondecode(inv.result);
+      const modelId = Fn.lookup(result, 'model_id', 'unknown');
+      const status = Fn.lookup(result, 'status', 'unknown');
+      const warnings = Fn.lookup(result, 'warnings', []);
+
+      // Fn.can returns bool - true if expression succeeds (has warnings), false if empty list errors
+      const hasWarnings = Fn.can(Fn.element(warnings, 0));
+      const warningText = Fn.conditional(hasWarnings, Fn.format('\n      ⚠ %s', [Fn.element(warnings, 0)]), '');
+
+      return Fn.format('  %s: %s%s', [modelId, status, warningText]);
+    });
+
+    new TerraformOutput(this, 'bedrock-model-access-results', {
+      value: Fn.format('\n%s', [Fn.join('\n', modelResults)]),
+      description: 'Results from Bedrock model access requests',
+    });
   }
 }
 

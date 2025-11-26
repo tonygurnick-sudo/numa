@@ -141,27 +141,27 @@ describe('chatSystemPromptUtils', () => {
 
   describe('getEnabledTools', () => {
     it('enables core tools in auto mode', () => {
-      const tools = getEnabledTools(true, false, false, false, ['kb-test-123']);
+      const tools = getEnabledTools(true, false, false, ['kb-test-123']);
       expect(tools).toEqual(['query_knowledge_base', 'web_search', 'create_agent_tool']);
     });
 
     it('includes create_agent_tool in auto mode when explicitly enabled', () => {
-      const tools = getEnabledTools(true, false, false, true, ['kb-test-123']);
+      const tools = getEnabledTools(true, false, true, ['kb-test-123']);
       expect(tools).toEqual(['query_knowledge_base', 'web_search', 'create_agent_tool']);
     });
 
-    it('enables only query_knowledge_base when selected in manual mode', () => {
-      const tools = getEnabledTools(false, true, false, false, ['kb-test-123']);
+    it('enables only query_knowledge_base when KBs are selected in manual mode', () => {
+      const tools = getEnabledTools(false, false, false, ['kb-test-123']);
       expect(tools).toEqual(['query_knowledge_base']);
     });
 
     it('enables only web_search when selected in manual mode', () => {
-      const tools = getEnabledTools(false, false, true);
+      const tools = getEnabledTools(false, true, false);
       expect(tools).toEqual(['web_search']);
     });
 
     it('enables both when both selected in manual mode', () => {
-      const tools = getEnabledTools(false, true, true, false, ['kb-test-123']);
+      const tools = getEnabledTools(false, true, false, ['kb-test-123']);
       expect(tools).toEqual(['query_knowledge_base', 'web_search']);
     });
 
@@ -171,7 +171,7 @@ describe('chatSystemPromptUtils', () => {
     });
 
     it('enables only create_agent_tool when toggled in manual mode', () => {
-      const tools = getEnabledTools(false, false, false, true);
+      const tools = getEnabledTools(false, false, true);
       expect(tools).toEqual(['create_agent_tool']);
     });
   });

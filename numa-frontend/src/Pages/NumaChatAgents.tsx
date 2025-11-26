@@ -59,7 +59,6 @@ const NumaChatAgents = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [queryDataSources, setQueryDataSources] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [createAgentEnabled, setCreateAgentEnabled] = useState(false);
   const [availableConnections, setAvailableConnections] = useState<
@@ -244,7 +243,6 @@ const NumaChatAgents = () => {
   const applyAgentConfiguration = (agent: AgentSummary | null) => {
     if (!agent) {
       setAutoToolsEnabled(true);
-      setQueryDataSources(false);
       setWebSearchEnabled(false);
       setCreateAgentEnabled(false);
       setEnabledConnections([]);
@@ -253,7 +251,6 @@ const NumaChatAgents = () => {
 
     const config = agent.toolsConfig ?? {};
     setAutoToolsEnabled(config.autoToolsEnabled ?? true);
-    setQueryDataSources(config.queryDataSources ?? false);
     setWebSearchEnabled(config.webSearchEnabled ?? false);
     setCreateAgentEnabled(config.createAgentEnabled ?? false);
     setEnabledConnections(config.enabledConnections ?? []);
@@ -688,7 +685,6 @@ const NumaChatAgents = () => {
   // Configure model, tools, and system prompt for agent call
   const configureAgentCall = (
     autoToolsEnabled,
-    queryDataSources,
     webSearchEnabled,
     createAgentEnabled,
     idToken,
@@ -705,7 +701,6 @@ const NumaChatAgents = () => {
     // Determine which tools to enable based on auto mode or manual selection
     const enabledTools = getEnabledTools(
       autoToolsEnabled,
-      queryDataSources,
       webSearchEnabled,
       agentsFeatureEnabled ? createAgentEnabled : false,
       enabledKBIds,
@@ -1055,7 +1050,6 @@ const NumaChatAgents = () => {
 
       const { modelId, enabledTools, systemPrompt, userAuth, clientName } = configureAgentCall(
         autoToolsEnabled,
-        queryDataSources,
         webSearchEnabled,
         createAgentEnabled,
         idToken,
@@ -1298,7 +1292,7 @@ const NumaChatAgents = () => {
 
   // Derived flag to show warning when no tools active in manual mode
   const noToolsActive =
-    !currentAgent && !autoToolsEnabled && !queryDataSources && !webSearchEnabled && !createAgentEnabled;
+    !currentAgent && !autoToolsEnabled && enabledKBIds.length === 0 && !webSearchEnabled && !createAgentEnabled;
 
   // Helper: push buffered text as its own segment then clear buffer, and save to DynamoDB
   const flushPendingText = (currentConversationId = null, preserveContent = false) => {
@@ -1522,8 +1516,6 @@ const NumaChatAgents = () => {
                               handleSubmit={handleSubmit}
                               setShowUploadModal={setShowUploadModal}
                               buttonStatus={buttonStatus}
-                              queryDataSources={queryDataSources}
-                              setQueryDataSources={setQueryDataSources}
                               webSearchEnabled={webSearchEnabled}
                               setWebSearchEnabled={setWebSearchEnabled}
                               createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
@@ -1576,8 +1568,6 @@ const NumaChatAgents = () => {
                               handleSubmit={handleSubmit}
                               setShowUploadModal={setShowUploadModal}
                               buttonStatus={buttonStatus}
-                              queryDataSources={queryDataSources}
-                              setQueryDataSources={setQueryDataSources}
                               webSearchEnabled={webSearchEnabled}
                               setWebSearchEnabled={setWebSearchEnabled}
                               createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}

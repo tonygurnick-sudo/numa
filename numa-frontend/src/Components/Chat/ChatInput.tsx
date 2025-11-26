@@ -19,8 +19,6 @@ const ChatInput = ({
   handleSubmit,
   setShowUploadModal,
   buttonStatus,
-  queryDataSources,
-  setQueryDataSources: _setQueryDataSources,
   webSearchEnabled,
   setWebSearchEnabled,
   createAgentEnabled,
@@ -361,7 +359,7 @@ const ChatInput = ({
                       )}
 
                       {!autoToolsEnabled &&
-                        !queryDataSources &&
+                        enabledKBIds.length === 0 &&
                         !webSearchEnabled &&
                         !(agentsFeatureEnabled && createAgentEnabled) && (
                           <div className="mt-2 p-2 bg-light rounded">

@@ -40,8 +40,6 @@ type NewChatProps = {
   handleSubmit: (event: FormEvent<unknown> | MouseEvent<HTMLElement>) => void;
   setShowUploadModal: Dispatch<SetStateAction<boolean>>;
   buttonStatus: string;
-  queryDataSources: boolean;
-  setQueryDataSources: Dispatch<SetStateAction<boolean>>;
   webSearchEnabled: boolean;
   setWebSearchEnabled: Dispatch<SetStateAction<boolean>>;
   createAgentEnabled: boolean;
@@ -137,8 +135,6 @@ export const NewChat = ({
   handleSubmit,
   setShowUploadModal,
   buttonStatus,
-  queryDataSources,
-  setQueryDataSources,
   webSearchEnabled,
   setWebSearchEnabled,
   createAgentEnabled,
@@ -402,8 +398,6 @@ export const NewChat = ({
             handleSubmit={handleSubmit}
             setShowUploadModal={setShowUploadModal}
             buttonStatus={buttonStatus}
-            queryDataSources={queryDataSources}
-            setQueryDataSources={setQueryDataSources}
             webSearchEnabled={webSearchEnabled}
             setWebSearchEnabled={setWebSearchEnabled}
             createAgentEnabled={createAgentEnabled}

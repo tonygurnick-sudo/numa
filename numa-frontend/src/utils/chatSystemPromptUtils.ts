@@ -62,16 +62,16 @@ export const loadCompanyProfile = async (companyBucket, region, getCredentials) 
 /**
  * Determine which tools to enable based on user preferences
  * @param {boolean} autoToolsEnabled - Whether auto tool selection is enabled
- * @param {boolean} queryDataSources - Whether data source querying is enabled
  * @param {boolean} webSearchEnabled - Whether web search is enabled
+ * @param {boolean} createAgentEnabled - Whether agent creation is enabled
+ * @param {string[]} enabledKBIds - List of enabled knowledge base IDs
  * @returns {Array} List of enabled tool names
  */
 export const getEnabledTools = (
-  autoToolsEnabled,
-  queryDataSources,
-  webSearchEnabled,
+  autoToolsEnabled: boolean,
+  webSearchEnabled: boolean,
   createAgentEnabled = false,
-  enabledKBIds = [],
+  enabledKBIds: string[] = [],
 ) => {
   const enabledTools: string[] = [];
   const agentsFeatureEnabled =
@@ -83,9 +83,8 @@ export const getEnabledTools = (
     enabledTools.push('web_search');
     if (agentsFeatureEnabled) enabledTools.push('create_agent_tool');
   } else {
-    // In manual mode, only enable selected tools
-    if (queryDataSources && Array.isArray(enabledKBIds) && enabledKBIds.length > 0)
-      enabledTools.push('query_knowledge_base');
+    // In manual mode, only enable selected tools based on what's selected
+    if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('query_knowledge_base');
     if (webSearchEnabled) enabledTools.push('web_search');
     if (agentsFeatureEnabled && createAgentEnabled) enabledTools.push('create_agent_tool');
   }

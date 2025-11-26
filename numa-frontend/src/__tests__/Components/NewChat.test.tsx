@@ -41,8 +41,6 @@ const createBaseProps = () => {
     handleSubmit: vi.fn(),
     setShowUploadModal: vi.fn(),
     buttonStatus: 'idle',
-    queryDataSources: false,
-    setQueryDataSources: vi.fn(),
     webSearchEnabled: false,
     setWebSearchEnabled: vi.fn(),
     createAgentEnabled: false,
