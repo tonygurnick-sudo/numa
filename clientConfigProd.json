@@ -1,13 +1,18 @@
 {
-  "dev-hams": {
-    "allApps": true,
-    "clientAccountId": "905418183804",
+  "quota-sharing-account-1": {
+    "allApps": false,
+    "clientAccountId": "978450690680",
     "createServiceLinkedRole": false,
     "devInstance": true,
     "region": "us-east-1",
-    "brandingProviderEnabled": true,
     "provisionQResources": false,
-    "preferredKnowledgeBase": "bedrock"
+    "preferredKnowledgeBase": "bedrock",
+    "allowBedrockQuotaSharing": true,
+    "bedrockAccount": "905418183804",
+    "apps": {
+      "data-analysis": {},
+      "meeting-analyser": {}
+    }
   },
   "arcanum-demo-sydney": {
     "clientAccountId": "905418183804",
@@ -17,7 +22,7 @@
     "region": "ap-southeast-2",
     "allApps": true,
     "preferredKnowledgeBase": "bedrock",
-    "allowBedrockQuotaSharing": false,
+    "allowBedrockQuotaSharing": true,
     "pipedreamIntegrations": true,
     "vectorStorageType": "s3vectors",
     "budget": {
