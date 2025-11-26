@@ -23,7 +23,7 @@ export const ROUTE_CONFIG = [
   {
     path: '/dash',
     element: () => <Dash />,
-    nav: { label: 'Dash', icon: 'bi bi-grid-1x2-fill' },
+    nav: { label: 'Apps', icon: 'bi bi-grid-1x2-fill' },
   },
   {
     path: '/favourite-apps',
