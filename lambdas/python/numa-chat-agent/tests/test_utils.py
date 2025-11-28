@@ -1,7 +1,6 @@
 import sys
 import types
 import unittest
-from unittest.mock import patch
 
 # Some utils may import modules that indirectly import 'strands'; stub it defensively
 if "strands" not in sys.modules:
@@ -21,7 +20,6 @@ if "strands" not in sys.modules:
 
 from numa_chat_agent.utils import (  # pylint: disable=wrong-import-position
     extract_preview,
-    retry_aurora_operation,
     safe_json_convert,
     truncate_text,
 )
@@ -29,92 +27,6 @@ from numa_chat_agent.utils import (  # pylint: disable=wrong-import-position
 
 class TestUtils(unittest.TestCase):
     """Tests for utility functions"""
-
-    def test_retry_aurora_operation_success_first_try(self):
-        """Test retry wrapper with operation succeeding on first try"""
-
-        def successful_operation():
-            return "success"
-
-        wrapped_operation = retry_aurora_operation(successful_operation)
-        result = wrapped_operation()
-
-        self.assertEqual(result, "success")
-
-    def test_retry_aurora_operation_success_after_retry(self):
-        """Test retry wrapper with operation succeeding after Aurora retry"""
-        call_count = 0
-
-        def aurora_then_success():
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise Exception(
-                    "Aurora DB instance is resuming after being auto-paused"
-                )
-            return "success"
-
-        with patch("numa_chat_agent.utils.time.sleep") as mock_sleep:
-            wrapped_operation = retry_aurora_operation(
-                aurora_then_success, max_retries=3, retry_delay=1.0
-            )
-            result = wrapped_operation()
-
-            self.assertEqual(result, "success")
-            self.assertEqual(call_count, 2)
-            mock_sleep.assert_called_once_with(1.0)
-
-    def test_retry_aurora_operation_non_aurora_error(self):
-        """Test retry wrapper with non-Aurora error (should not retry)"""
-
-        def failing_operation():
-            raise ValueError("This is not an Aurora error")
-
-        wrapped_operation = retry_aurora_operation(failing_operation)
-
-        with self.assertRaises(ValueError):
-            wrapped_operation()
-
-    def test_retry_aurora_operation_max_retries_exceeded(self):
-        """Test retry wrapper when max retries are exceeded"""
-
-        def always_aurora_error():
-            raise Exception("Aurora DB instance is resuming after being auto-paused")
-
-        with patch("numa_chat_agent.utils.time.sleep"):
-            wrapped_operation = retry_aurora_operation(
-                always_aurora_error, max_retries=2
-            )
-
-            with self.assertRaises(Exception):
-                wrapped_operation()
-
-    def test_retry_aurora_operation_different_aurora_errors(self):
-        """Test retry wrapper recognizes different Aurora error messages"""
-        aurora_errors = [
-            "DatabaseResumingException",
-            "is resuming after being auto-paused",
-            "Aurora DB instance is resuming",
-        ]
-
-        for error_msg in aurora_errors:
-            call_count = 0
-
-            def aurora_error(
-                msg=error_msg,
-            ):  # Capture error_msg value as default parameter
-                nonlocal call_count
-                call_count += 1
-                if call_count == 1:
-                    raise Exception(msg)
-                return "success"
-
-            with patch("numa_chat_agent.utils.time.sleep"):
-                wrapped_operation = retry_aurora_operation(aurora_error, max_retries=2)
-                result = wrapped_operation()
-
-                self.assertEqual(result, "success")
-                self.assertEqual(call_count, 2)
 
     def test_safe_json_convert_serializable_object(self):
         """Test JSON conversion of already serializable objects"""

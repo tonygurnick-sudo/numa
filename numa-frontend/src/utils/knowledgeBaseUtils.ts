@@ -29,53 +29,6 @@ const sanitizeFailedS3Uri = (uri: string) => {
 };
 
 /*───────────────────────────────────────────────────────────*/
-/* Retry helper                                              */
-/*───────────────────────────────────────────────────────────*/
-const retryAuroraOperation = (operation, maxRetries = 20, retryDelay = 2000) => {
-  return async (...args) => {
-    let attempts = maxRetries;
-    let lastError;
-    while (attempts > 0) {
-      try {
-        return await operation(...args);
-      } catch (error) {
-        lastError = error;
-        attempts--;
-        const isResuming =
-          error.message?.includes('DatabaseResumingException') ||
-          error.message?.includes('is resuming after being auto-paused') ||
-          (error.message?.includes('Aurora DB instance') && error.message?.includes('resuming'));
-        if (isResuming && attempts > 0) {
-          console.log(`Aurora resuming – retrying in ${retryDelay} ms (${attempts} left)`);
-          await new Promise((r) => setTimeout(r, retryDelay));
-          continue;
-        }
-        throw lastError;
-      }
-    }
-    throw lastError;
-  };
-};
-
-/*───────────────────────────────────────────────────────────*/
-/* Warm-up                                                   */
-/*───────────────────────────────────────────────────────────*/
-export const preWarmAuroraDatabase = async (bedrockAgentClient, knowledgeBaseId) => {
-  try {
-    const warmupInput = {
-      knowledgeBaseId,
-      retrievalQuery: { text: 'warmup' },
-      retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 1 } },
-    };
-    const warm = retryAuroraOperation((i) => bedrockAgentClient.send(new RetrieveCommand(i)));
-    await warm(warmupInput);
-    console.log('Aurora DB pre-warmed ✅');
-  } catch (e) {
-    console.warn('Aurora warm-up failed (non-critical):', e.message);
-  }
-};
-
-/*───────────────────────────────────────────────────────────*/
 /* Shared formatter                                          */
 /*───────────────────────────────────────────────────────────*/
 /**
@@ -216,8 +169,7 @@ export const queryBedrockKnowledgeBase = async (bedrockAgentClient, knowledgeBas
       retrievalQuery: { text: query },
       retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: maxResults } },
     };
-    const retrieve = retryAuroraOperation((i) => bedrockAgentClient.send(new RetrieveCommand(i)));
-    const response = await retrieve(input);
+    const response = await bedrockAgentClient.send(new RetrieveCommand(input));
 
     if (response.retrievalResults?.length) {
       const { knowledgeText, references } = buildKnowledgeResponse(

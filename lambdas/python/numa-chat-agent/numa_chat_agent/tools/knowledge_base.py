@@ -18,7 +18,6 @@ from ..config import (
     get_bedrock_agent_runtime_client,
 )
 from ..summarization import summarize_combined_content
-from ..utils import retry_aurora_operation
 
 logger = structlog.get_logger()
 
@@ -100,7 +99,7 @@ def query_bedrock_knowledge_base(
     query: str, max_results: int = 6, kb_id: str = "company"
 ):
     """
-    Query Bedrock knowledge base with Aurora retry logic and metadata filtering.
+    Query Bedrock knowledge base with metadata filtering.
 
     Args:
         query: Search query
@@ -140,22 +139,12 @@ def query_bedrock_knowledge_base(
             kb_id=resolved_kb_id,
         )
 
-    # Create a retry-wrapped retrieve operation for Aurora auto-pause handling
-    def bedrock_retrieve_operation(config):
-        return kb_client.retrieve(
-            knowledgeBaseId=BEDROCK_KNOWLEDGE_BASE_ID,
-            retrievalQuery={"text": query},
-            retrievalConfiguration=config,
-        )
-
-    # Apply retry wrapper and execute with current configuration
-    def execute_with_config(config):
-        retry_retrieve = retry_aurora_operation(
-            lambda: bedrock_retrieve_operation(config)
-        )
-        return retry_retrieve()
-
-    resp = execute_with_config(retrieval_config)
+    # Query Bedrock knowledge base directly (no Aurora retry needed for S3 stores)
+    resp = kb_client.retrieve(
+        knowledgeBaseId=BEDROCK_KNOWLEDGE_BASE_ID,
+        retrievalQuery={"text": query},
+        retrievalConfiguration=retrieval_config,
+    )
     # Strict separation: Do not retry without metadata filter.
     # If no results with the applied filter, return an empty result set to avoid cross‑KB leakage.
 
