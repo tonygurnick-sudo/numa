@@ -280,6 +280,7 @@ export class NumaClientStack extends TerraformStack {
         apiGatewayId: fe.apiGateway.id,
         bedrockAccount: clientConfig.bedrockAccount,
         clientName: props.clientName,
+        dataBucket: core.dataBucket.bucket,
         outputsBucket: core.outputsBucket.bucket,
         region: clientConfig.region,
         sharedExtractContentLambdaArn: coreApis.extractContentLambda.arn,

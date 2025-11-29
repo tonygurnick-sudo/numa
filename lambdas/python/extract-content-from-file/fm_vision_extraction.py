@@ -9,6 +9,7 @@ import random
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Semaphore
 from typing import Any, Dict, List, Sequence, Union
 from urllib.parse import urlparse
 
@@ -43,15 +44,22 @@ class Document:
 @dataclasses.dataclass
 class ModelConfig:
     max_tokens: int = 4096
-    max_images_per_call: int = 5
+    max_images_per_call: int = 1
     anthropic_version: Union[str, None] = "bedrock-2023-05-31"
 
 
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 
-# Vision model type mapping - maps config values to actual model IDs
+# Rate limiting constants (balanced for 800 RPM cross-region inference)
+MAX_CONCURRENT_WORKERS = 25  # Thread pool size
+MAX_BEDROCK_CONCURRENT = 10  # Concurrent Bedrock API calls (semaphore)
+CONNECTION_POOL_SIZE = 100  # boto3 connection pool
+MAX_RETRIES = 5  # Retry attempts for transient failures
+
+_CROSS_REGION_PREFIX = "apac" if AWS_REGION == "ap-southeast-2" else "us"
+
 VISION_MODEL_MAP = {
-    "haiku": "anthropic.claude-3-haiku-20240307-v1:0",
+    "haiku": f"{_CROSS_REGION_PREFIX}.anthropic.claude-3-haiku-20240307-v1:0",
     "nova-pro": "amazon.nova-pro-v1:0",
 }
 
@@ -78,36 +86,42 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 MAX_IMAGE_SIZE = 3.75 * 1024 * 1024  # 3.75MB
 MAX_IMAGE_DIMENSION = 8000  # 8000px
 
-# Vision extraction prompt - works for both single and multiple images
-VISION_EXTRACTION_PROMPT = (
-    "Extract all visible text from the provided document image(s). Also describe any diagrams, figures, tables, "
-    "or other visual elements in detail, so that a reader can reconstruct the original layout and content purely "
-    "from the text. Use accurate descriptions and preserve any embedded text. "
-    "If multiple images are provided, return the content in logical page order with clear page markers like "
-    "`[Page 1]`, `[Page 2]`, and so on. "
-    "Do not skip any content. Do not summarise or paraphrase. Your goal is to faithfully reconstruct the full "
-    "document in text form, including all written and visual elements, in their correct order."
+VISION_EXTRACTION_PROMPT_TEMPLATE = (
+    "Extract all visible text from the provided document image and format as clean Markdown.\n\n"
+    "Formatting requirements:\n"
+    "- Use # ## ### for headings matching the document hierarchy\n"
+    "- Format tables using Markdown syntax: | col1 | col2 | with |---| separator row\n"
+    "- Use **bold** and *italic* for emphasis as shown in the original\n"
+    "- Use bullet points (-) and numbered lists (1.) as appropriate\n"
+    "- Use > for blockquotes\n"
+    "- Use ``` for code blocks\n"
+    "- Describe images/diagrams/figures as: [Image: detailed description]\n\n"
+    "Do not skip any content. Do not summarize or paraphrase. "
+    "Faithfully reconstruct the full document in Markdown, preserving all text, structure, and visual elements."
 )
 
-# Adaptive scaling: (max_pages, target_workers, pages_per_batch_range)
-# Note: API limit varies by model, so max batch size is model-dependent
-SCALING_CONFIG = [
-    (2, 1, (2, 2)),
-    (5, 2, (2, 3)),
-    (7, 3, (2, 3)),
-    (10, 4, (2, 3)),
-    (20, 8, (3, 4)),
-    (50, 15, (3, 4)),
-    (100, 20, (4, 5)),
-    (200, 40, (4, 5)),
-    (float("inf"), 60, (4, 5)),
-]
+# Legacy prompt for single images without page context
+VISION_EXTRACTION_PROMPT_SINGLE = (
+    "Extract all visible text from the provided image and format as clean Markdown.\n\n"
+    "Formatting requirements:\n"
+    "- Use # ## ### for headings matching the document hierarchy\n"
+    "- Format tables using Markdown syntax: | col1 | col2 | with |---| separator row\n"
+    "- Use **bold** and *italic* for emphasis as shown in the original\n"
+    "- Use bullet points (-) and numbered lists (1.) as appropriate\n"
+    "- Describe images/diagrams/figures as: [Image: detailed description]\n\n"
+    "Do not skip any content. Do not summarize. Faithfully reconstruct in Markdown."
+)
 
 logger = structlog.get_logger(__name__)
-s3_client = boto3.client("s3", config=Config(max_pool_connections=50))
+s3_client = boto3.client("s3", config=Config(max_pool_connections=CONNECTION_POOL_SIZE))
 bedrock_client = boto3.client(
-    "bedrock-runtime", region_name=AWS_REGION, config=Config(max_pool_connections=50)
+    "bedrock-runtime",
+    region_name=AWS_REGION,
+    config=Config(max_pool_connections=CONNECTION_POOL_SIZE),
 )
+
+# Semaphore to limit concurrent Bedrock API calls across all threads
+_bedrock_semaphore = Semaphore(MAX_BEDROCK_CONCURRENT)
 
 
 def _parse_s3_uri(s3_uri: str) -> tuple[str, str]:
@@ -146,7 +160,9 @@ def _process_image(
     file_content: bytes, file_extension: str, model_id: str = VISION_MODEL_ID
 ) -> str:
     """Process single image with foundation model"""
-    return _process_image_batch([file_content], [file_extension], model_id)
+    return _process_image_batch(
+        [file_content], [file_extension], model_id, start_page=None, end_page=None
+    )
 
 
 @tracer.start_as_current_span("_process_image_batch")
@@ -154,9 +170,21 @@ def _process_image_batch(
     file_contents: List[bytes],
     file_extensions: List[str],
     model_id: str,
+    start_page: int | None = None,
+    end_page: int | None = None,
 ) -> str:
-    """Process multiple images with foundation model in a single API call"""
+    """Process multiple images with foundation model in a single API call.
 
+    Args:
+        file_contents: List of image file contents as bytes
+        file_extensions: List of file extensions for each image
+        model_id: Bedrock model ID to use
+        start_page: Starting page number for this batch (1-indexed), None for single images
+        end_page: Ending page number for this batch (1-indexed), None for single images
+
+    Returns:
+        Extracted text in Markdown format with page markers
+    """
     current_model_id = model_id
 
     # Get model config for the current model
@@ -170,8 +198,13 @@ def _process_image_batch(
             f"Cannot process more than {max_images_per_call} images per API call"
         )
 
-    # Use unified prompt for all cases
-    text_prompt = VISION_EXTRACTION_PROMPT
+    # Use page-aware prompt for batches, single prompt otherwise
+    if start_page is not None and end_page is not None:
+        text_prompt = VISION_EXTRACTION_PROMPT_TEMPLATE.format(
+            start_page=start_page, end_page=end_page
+        )
+    else:
+        text_prompt = VISION_EXTRACTION_PROMPT_SINGLE
 
     # Build content based on model type
     content: List[Dict[str, Any]] = []
@@ -261,65 +294,61 @@ def _process_image_batch(
     return response_text
 
 
-def _distribute_pages_evenly(total_pages: int, num_workers: int) -> List[int]:
-    base_size = total_pages // num_workers
-    extra_pages = total_pages % num_workers
-    batch_sizes = [base_size] * num_workers
-    for i in range(extra_pages):
-        batch_sizes[i] += 1
-    return batch_sizes
-
-
-def _calculate_optimal_scaling(total_pages: int) -> tuple[int, List[int]]:
-    """Calculate optimal workers and batch sizes for given page count"""
-    for max_pages, target_workers, (min_batch, _) in SCALING_CONFIG:
-        if total_pages <= max_pages:
-            if target_workers is None:
-                workers = min(25, max(1, total_pages // min_batch))
-            else:
-                workers = min(target_workers, total_pages)
-            batch_sizes = _distribute_pages_evenly(total_pages, workers)
-            return workers, batch_sizes
-    return 1, [total_pages]
-
-
 @tracer.start_as_current_span("_process_pdf")
 def _process_pdf(
     file_content: bytes, input_key: str, input_bucket: str, file_name: str | None
 ) -> Document:
-    """Process PDF with concurrent page processing"""
+    """Process PDF with concurrent page processing.
 
+    Returns a Document with per-page content extracted as Markdown with page markers.
+    Each page is returned as a separate DocumentPage with correct page_number.
+    """
     batch_id = str(uuid.uuid4())
     temp_prefix = f"temp-pdf/{batch_id}"
 
     try:
-        image_uris = _pdf_to_images(file_content, input_bucket, temp_prefix)
-        complete_text = _process_pages_concurrent(image_uris)
-        total_words = len(complete_text.split())
-        document_page = DocumentPage(
-            page_number=1, text=complete_text, num_words=total_words
-        )
+        image_uris = pdf_to_images(file_content, input_bucket, temp_prefix)
+        num_pdf_pages = len(image_uris)
+
+        # Process pages concurrently - returns DocumentPage objects with page numbers
+        # assigned from PDF position (not parsed from text)
+        pages = process_pages_concurrent(image_uris)
+
+        total_words = sum(p.num_words for p in pages)
 
         return Document(
             name=file_name or os.path.basename(input_key),
-            num_pages=len(image_uris),
-            pages=[document_page],
+            num_pages=num_pdf_pages,
+            pages=pages,
             total_num_words=total_words,
         )
 
     finally:
-        _cleanup_s3_files(input_bucket, temp_prefix)
+        cleanup_s3_files(input_bucket, temp_prefix)
 
 
-@tracer.start_as_current_span("_process_pages_concurrent")
-def _process_pages_concurrent(image_uris: List[str]) -> str:
-    """Process PDF pages concurrently with adaptive batching and worker scaling"""
+@tracer.start_as_current_span("process_pages_concurrent")
+def process_pages_concurrent(
+    image_uris: List[str], page_offset: int = 0
+) -> List[DocumentPage]:
+    """Process PDF pages concurrently with adaptive batching and worker scaling.
+
+    Args:
+        image_uris: List of S3 URIs for page images
+        page_offset: Offset to add to page numbers (0-indexed). For chunk processing,
+                     pass start_page - 1 so page numbers are calculated correctly.
+                     E.g., for pages 101-200, pass page_offset=100.
+
+    Returns:
+        List of DocumentPage objects with page_number assigned from PDF position.
+    """
 
     total_pages = len(image_uris)
-    max_workers, batch_sizes = _calculate_optimal_scaling(total_pages)
+    max_workers = min(MAX_CONCURRENT_WORKERS, total_pages)
 
     logger.info(
-        f"Processing {total_pages} pages with {max_workers} workers, batch sizes: {batch_sizes}"
+        f"Processing {total_pages} pages with {max_workers} workers, "
+        f"{MAX_BEDROCK_CONCURRENT} max concurrent Bedrock calls"
     )
 
     def _is_retryable_error(error: Exception) -> bool:
@@ -341,25 +370,38 @@ def _process_pages_concurrent(image_uris: List[str]) -> str:
         return "timeout" in error_str or "connection" in error_str
 
     def _is_throttling_error(error: Exception) -> bool:
-        """Determine if an error is related to throttling/quota limits"""
+        """Determine if an error is related to throttling/quota limits.
+
+        Note: Bedrock uses 503 ServiceUnavailableException for throttling,
+        not just 429. See: https://docs.aws.amazon.com/bedrock/latest/userguide/troubleshooting-api-error-codes
+        """
         if isinstance(error, ClientError):
             http_status = error.response.get("ResponseMetadata", {}).get(
                 "HTTPStatusCode"
             )
-            if http_status == 429:
+            # Bedrock uses both 429 and 503 for throttling
+            if http_status in (429, 503):
                 return True
             error_code = error.response.get("Error", {}).get("Code", "")
             throttling_codes = {
                 "ThrottlingException",
                 "RequestLimitExceeded",
                 "QuotaExceeded",
+                "ServiceUnavailableException",
             }
             return error_code in throttling_codes
 
         error_str = str(error).lower()
-        return "throttl" in error_str or "quota" in error_str or "limit" in error_str
+        return (
+            "throttl" in error_str
+            or "quota" in error_str
+            or "limit" in error_str
+            or "unavailable" in error_str
+        )
 
-    def _retry_with_backoff(func, *args, max_retries=3, use_fallback_models=False):
+    def _retry_with_backoff(
+        func, *args, max_retries=MAX_RETRIES, use_fallback_models=False, **kwargs
+    ):
         """Execute function with exponential backoff retry and optional model fallback"""
         last_error = None
         current_model_index = 0
@@ -370,9 +412,9 @@ def _process_pages_concurrent(image_uris: List[str]) -> str:
                     model_id = FALLBACK_MODELS[
                         current_model_index % len(FALLBACK_MODELS)
                     ]
-                    return func(*args, model_id=model_id)
+                    return func(*args, model_id=model_id, **kwargs)
                 else:
-                    return func(*args)
+                    return func(*args, **kwargs)
             except Exception as e:
                 last_error = e
 
@@ -404,85 +446,83 @@ def _process_pages_concurrent(image_uris: List[str]) -> str:
         return s3_client.get_object(Bucket=bucket, Key=key)
 
     def _process_image_batch_with_retry(
-        contents: List[bytes], extensions: List[str], model_id: str
+        contents: List[bytes],
+        extensions: List[str],
+        model_id: str,
+        start_page: int,
+        end_page: int,
     ):
         """Process image batch with retry logic"""
-        return _process_image_batch(contents, extensions, model_id)
+        return _process_image_batch(
+            contents, extensions, model_id, start_page=start_page, end_page=end_page
+        )
 
     @tracer.start_as_current_span("process_page_batch")
     def process_page_batch(batch_data):
-        """Process a batch of 5 pages in a single API call"""
+        """Process a single page and return (page_number, text)"""
         start_idx, batch_uris = batch_data
+        page_number = start_idx + 1 + page_offset
 
         try:
-            contents = []
-            extensions = []
+            uri = batch_uris[0]
+            bucket, key = _parse_s3_uri(uri)
 
-            for uri in batch_uris:
-                bucket, key = _parse_s3_uri(uri)
+            obj = _retry_with_backoff(_get_s3_object_with_retry, bucket, key)
+            content = obj["Body"].read()
 
-                obj = _retry_with_backoff(_get_s3_object_with_retry, bucket, key)
-                content = obj["Body"].read()
-                contents.append(content)
-                extensions.append(".jpg")
-
-            batch_text = _retry_with_backoff(
-                _process_image_batch_with_retry,
-                contents,
-                extensions,
-                use_fallback_models=True,
-            )
-            return (start_idx, batch_text)
+            # Use semaphore to limit concurrent Bedrock API calls
+            with _bedrock_semaphore:
+                page_text = _retry_with_backoff(
+                    _process_image_batch_with_retry,
+                    [content],
+                    [".jpg"],
+                    use_fallback_models=True,
+                    start_page=page_number,
+                    end_page=page_number,
+                )
+            return (page_number, page_text)
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
-            logger.error(
-                f"Batch starting at page {start_idx + 1} AWS error [{error_code}]: {e}"
-            )
-            return (
-                start_idx,
-                f"[AWS Error in batch starting at page {start_idx + 1}: {error_code}]",
-            )
+            logger.error(f"Page {page_number} AWS error [{error_code}]: {e}")
+            return (page_number, f"[AWS Error on page {page_number}: {error_code}]")
 
         except Exception as e:
-            logger.error(f"Batch starting at page {start_idx + 1} failed: {e}")
-            return (start_idx, f"[Error in batch starting at page {start_idx + 1}]")
+            logger.error(f"Page {page_number} failed: {e}")
+            return (page_number, f"[Error on page {page_number}]")
 
-    batches = []
-    start_idx = 0
-    for batch_size in batch_sizes:
-        batch_uris = image_uris[start_idx : start_idx + batch_size]
-        batches.append((start_idx, batch_uris))
-        start_idx += batch_size
+    # Create 1-page batches since max_images_per_call = 1
+    # Each batch is (page_index, [uri]) so process_page_batch processes every page
+    batches = [(i, [uri]) for i, uri in enumerate(image_uris)]
 
-    batch_texts = {}
+    page_results = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(process_page_batch, batch): batch[0] for batch in batches
         }
 
         for future in as_completed(futures):
-            start_idx, batch_text = future.result()
-            batch_texts[start_idx] = batch_text
-            time.sleep(0.1)
+            page_number, page_text = future.result()
+            page_results[page_number] = page_text
 
-    ordered_text_parts = []
-    start_idx = 0
-    for batch_size in batch_sizes:
-        if start_idx in batch_texts:
-            ordered_text_parts.append(batch_texts[start_idx])
-        start_idx += batch_size
+    pages = []
+    for page_number in sorted(page_results.keys()):
+        text = page_results[page_number]
+        pages.append(
+            DocumentPage(
+                page_number=page_number,
+                text=text,
+                num_words=len(text.split()),
+            )
+        )
 
-    combined_text = "\n\n".join(ordered_text_parts).strip()
-    logger.info(
-        f"Combined all batches into document with {len(combined_text)} total characters"
-    )
+    logger.info(f"Extracted {len(pages)} pages")
 
-    return combined_text
+    return pages
 
 
-@tracer.start_as_current_span("_pdf_to_images")
-def _pdf_to_images(file_content: bytes, bucket: str, temp_prefix: str) -> List[str]:
+@tracer.start_as_current_span("pdf_to_images")
+def pdf_to_images(file_content: bytes, bucket: str, temp_prefix: str) -> List[str]:
     """Convert PDF pages to optimized images in S3"""
 
     pdf = fitz.open(stream=file_content, filetype="pdf")
@@ -533,18 +573,38 @@ def _compress_image(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
-@tracer.start_as_current_span("_cleanup_s3_files")
-def _cleanup_s3_files(bucket: str, prefix: str):
-    """Clean up temporary S3 files"""
+@tracer.start_as_current_span("cleanup_s3_files")
+def cleanup_s3_files(bucket: str, prefix: str):
+    """Clean up temporary S3 files with pagination support for >1000 objects"""
 
     try:
-        response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
+        total_deleted = 0
+        continuation_token: str | None = None
 
-        if "Contents" in response:
-            objects = [{"Key": obj["Key"]} for obj in response["Contents"]]
-            if objects:
-                s3_client.delete_objects(Bucket=bucket, Delete={"Objects": objects})
-                logger.info(f"Cleaned up {len(objects)} temp files")
+        while True:
+            if continuation_token:
+                response = s3_client.list_objects_v2(
+                    Bucket=bucket, Prefix=prefix, ContinuationToken=continuation_token
+                )
+            else:
+                response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
+
+            if "Contents" in response:
+                objects = [
+                    {"Key": obj["Key"]} for obj in response["Contents"] if "Key" in obj
+                ]
+                if objects:
+                    s3_client.delete_objects(
+                        Bucket=bucket, Delete={"Objects": objects}  # type: ignore[typeddict-item]
+                    )
+                    total_deleted += len(objects)
+
+            if not response.get("IsTruncated"):
+                break
+            continuation_token = response.get("NextContinuationToken")
+
+        if total_deleted > 0:
+            logger.info(f"Cleaned up {total_deleted} temp files")
     except Exception as e:
         logger.warning(f"Cleanup failed: {e}")
 

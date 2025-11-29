@@ -51,10 +51,10 @@ class TestHaikuExtractor(unittest.TestCase):
         self.assertTrue(callable(fm_vision_extraction.extract_content))
         self.assertTrue(callable(fm_vision_extraction._process_image))
         self.assertTrue(callable(fm_vision_extraction._process_pdf))
-        self.assertTrue(callable(fm_vision_extraction._process_pages_concurrent))
-        self.assertTrue(callable(fm_vision_extraction._pdf_to_images))
+        self.assertTrue(callable(fm_vision_extraction.process_pages_concurrent))
+        self.assertTrue(callable(fm_vision_extraction.pdf_to_images))
         self.assertTrue(callable(fm_vision_extraction._compress_image))
-        self.assertTrue(callable(fm_vision_extraction._cleanup_s3_files))
+        self.assertTrue(callable(fm_vision_extraction.cleanup_s3_files))
         self.assertTrue(callable(fm_vision_extraction._create_document))
 
 

@@ -4,10 +4,12 @@ import argparse
 import dataclasses
 import io
 import json
+import math
 import os
 import pathlib
 import time
-from typing import Iterator, List, Sequence, TypeVar
+import uuid
+from typing import Any, Dict, Iterator, List, Sequence, TypeVar
 
 import boto3
 import docx
@@ -189,6 +191,16 @@ def handler(event: dict, context) -> dict:
     else:
         payload = event
 
+    # Dispatch based on action for chunked processing
+    action = payload.get("action")
+    if action == "prepare_chunks":
+        return _handle_prepare_chunks(payload, context)
+    elif action == "extract_chunk":
+        return _handle_extract_chunk(payload, context)
+    elif action == "merge_chunks":
+        return _handle_merge_chunks(payload, context)
+
+    # Default: standard extraction flow
     input_bucket = payload.get("input_bucket")
     input_key = payload.get("input_key")
 
@@ -708,6 +720,340 @@ def _excel_structure_to_document(
         total_num_words=total_num_words,
         pages=pages,
     )
+
+
+# =============================================================================
+# CHUNK PROCESSING HANDLERS (for parallel large PDF extraction)
+# =============================================================================
+
+DEFAULT_CHUNK_SIZE = 100  # Pages per chunk for parallel processing
+
+
+@tracer.start_as_current_span("_handle_prepare_chunks")
+def _handle_prepare_chunks(payload: Dict[str, Any], _context) -> Dict[str, Any]:
+    """
+    Split a PDF into chunks for parallel processing.
+
+    Downloads the PDF, converts all pages to images in S3, and returns
+    chunk definitions that can be processed in parallel.
+
+    Args:
+        payload: Must contain:
+            - input_bucket: S3 bucket containing the PDF
+            - input_key: S3 key of the PDF file
+            - chunk_size: (optional) Pages per chunk, default 150
+            - output_bucket: (optional) Bucket for temp files, defaults to input_bucket
+
+    Returns:
+        {
+            "batch_id": "uuid",
+            "total_pages": 1500,
+            "temp_prefix": "temp-pdf/uuid",
+            "chunks": [
+                {"chunk_id": 0, "start_page": 1, "end_page": 150},
+                {"chunk_id": 1, "start_page": 151, "end_page": 300},
+                ...
+            ]
+        }
+    """
+    import fitz  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
+
+    input_bucket = payload["input_bucket"]
+    input_key = payload["input_key"]
+    chunk_size = payload.get("chunk_size", DEFAULT_CHUNK_SIZE)
+    output_bucket = payload.get("output_bucket", input_bucket)
+
+    # Event streaming params
+    stream_events = payload.get("stream_events", False)
+    job_id = payload.get("job_id")
+    user_id = payload.get("user_id")
+    app_id = payload.get("app_id")
+    table_name = os.environ.get("DYNAMODB_TABLE")
+
+    # Generate unique batch ID for this extraction job
+    batch_id = str(uuid.uuid4())
+    temp_prefix = f"temp-pdf/{batch_id}"
+
+    logger.info(
+        "Preparing PDF chunks",
+        input_key=input_key,
+        chunk_size=chunk_size,
+        batch_id=batch_id,
+    )
+
+    _try_append_event(
+        "Reading document...",
+        stream_events=stream_events,
+        job_id=job_id,
+        user_id=user_id,
+        app_id=app_id,
+        table_name=table_name,
+        bucket=input_bucket,
+    )
+
+    # Download PDF and get page count
+    s3_response = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+    file_content = s3_response["Body"].read()
+
+    # Convert all pages to images and upload to S3
+    pdf = fitz.open(stream=file_content, filetype="pdf")
+    total_pages = pdf.page_count
+
+    _try_append_event(
+        f"Preparing document for analysis ({total_pages} pages)...",
+        stream_events=stream_events,
+        job_id=job_id,
+        user_id=user_id,
+        app_id=app_id,
+        table_name=table_name,
+        bucket=input_bucket,
+    )
+
+    try:
+        # Use the existing image conversion from fm_vision_extraction
+        image_uris = fm_vision_extraction.pdf_to_images(
+            file_content, output_bucket, temp_prefix
+        )
+        logger.info(f"Created {len(image_uris)} page images for batch {batch_id}")
+    finally:
+        pdf.close()
+
+    # Calculate chunk definitions
+    num_chunks = math.ceil(total_pages / chunk_size)
+    chunks = []
+
+    for i in range(num_chunks):
+        start_page = i * chunk_size + 1  # 1-indexed
+        end_page = min((i + 1) * chunk_size, total_pages)
+        chunks.append(
+            {
+                "chunk_id": i,
+                "start_page": start_page,
+                "end_page": end_page,
+                "temp_prefix": temp_prefix,
+                "input_bucket": output_bucket,
+            }
+        )
+
+    logger.info(
+        f"Prepared {num_chunks} chunks for {total_pages} pages",
+        batch_id=batch_id,
+        chunks=len(chunks),
+    )
+
+    return {
+        "batch_id": batch_id,
+        "total_pages": total_pages,
+        "temp_prefix": temp_prefix,
+        "input_bucket": output_bucket,
+        "chunks": chunks,
+    }
+
+
+@tracer.start_as_current_span("_handle_extract_chunk")
+def _handle_extract_chunk(payload: Dict[str, Any], _context) -> Dict[str, Any]:
+    """
+    Extract content from a specific page range using pre-uploaded images.
+
+    Args:
+        payload: Must contain:
+            - chunk_id: Identifier for this chunk
+            - start_page: First page number (1-indexed)
+            - end_page: Last page number (1-indexed)
+            - temp_prefix: S3 prefix where page images are stored
+            - input_bucket: S3 bucket containing temp images
+
+    Returns:
+        {
+            "chunk_id": 0,
+            "pages": [
+                {"page_number": 1, "text": "## Page 1\n...", "num_words": 300},
+                {"page_number": 2, "text": "## Page 2\n...", "num_words": 285},
+                ...
+            ]
+        }
+    """
+    chunk_id = payload["chunk_id"]
+    start_page = payload["start_page"]
+    end_page = payload["end_page"]
+    temp_prefix = payload["temp_prefix"]
+    input_bucket = payload["input_bucket"]
+
+    logger.info(
+        f"Extracting chunk {chunk_id}: pages {start_page}-{end_page}",
+        chunk_id=chunk_id,
+        start_page=start_page,
+        end_page=end_page,
+    )
+
+    # Build list of image URIs for this chunk's pages
+    # Page images are named page_0000.jpg, page_0001.jpg, etc. (0-indexed)
+    image_uris = []
+    for page_num in range(start_page, end_page + 1):
+        page_idx = page_num - 1  # Convert to 0-indexed
+        key = f"{temp_prefix}/page_{page_idx:04d}.jpg"
+        image_uris.append(f"s3://{input_bucket}/{key}")
+
+    # Process this chunk's pages - returns DocumentPage objects with correct page numbers
+    page_offset = start_page - 1
+    pages = fm_vision_extraction.process_pages_concurrent(
+        image_uris, page_offset=page_offset
+    )
+
+    # Convert DocumentPage objects to dicts for JSON serialization
+    pages_data = [dataclasses.asdict(page) for page in pages]
+
+    logger.info(
+        f"Extracted {len(pages_data)} pages for chunk {chunk_id}",
+        chunk_id=chunk_id,
+        pages_extracted=len(pages_data),
+    )
+
+    # Write chunk results to S3 to avoid Step Functions payload size limits
+    chunk_output_key = f"{temp_prefix}/chunk_{chunk_id:04d}.json"
+    s3_client.put_object(
+        Body=json.dumps(pages_data).encode("utf-8"),
+        Bucket=input_bucket,
+        Key=chunk_output_key,
+        ContentType="application/json",
+    )
+
+    logger.info(
+        f"Wrote chunk {chunk_id} results to S3",
+        chunk_id=chunk_id,
+        output_key=chunk_output_key,
+    )
+
+    return {
+        "chunk_id": chunk_id,
+        "pages_key": chunk_output_key,
+        "pages_bucket": input_bucket,
+    }
+
+
+@tracer.start_as_current_span("_handle_merge_chunks")
+def _handle_merge_chunks(payload: Dict[str, Any], _context) -> Dict[str, Any]:
+    """
+    Merge extracted chunks into a final Document and write to S3.
+
+    Args:
+        payload: Must contain:
+            - chunks: List of chunk results from extract_chunk calls
+            - output_bucket: S3 bucket for final output
+            - output_key: S3 key for final JSON output
+            - file_name: (optional) Original file name
+            - temp_prefix: S3 prefix to clean up
+            - input_bucket: Bucket containing temp files
+
+    Returns:
+        {
+            "output_bucket": "bucket",
+            "output_key": "path/to/output.json"
+        }
+    """
+    chunks = payload["chunks"]
+    output_bucket = payload["output_bucket"]
+    output_key = payload["output_key"]
+    file_name = payload.get("file_name", "document.pdf")
+    temp_prefix = payload.get("temp_prefix")
+    input_bucket = payload.get("input_bucket")
+
+    # Event streaming params
+    stream_events = payload.get("stream_events", False)
+    job_id = payload.get("job_id")
+    user_id = payload.get("user_id")
+    app_id = payload.get("app_id")
+    table_name = os.environ.get("DYNAMODB_TABLE")
+
+    logger.info(
+        f"Merging {len(chunks)} chunks",
+        output_key=output_key,
+        chunks=len(chunks),
+    )
+
+    _try_append_event(
+        "Finalizing document extraction...",
+        stream_events=stream_events,
+        job_id=job_id,
+        user_id=user_id,
+        app_id=app_id,
+        table_name=table_name,
+        bucket=input_bucket,
+    )
+
+    # Collect all pages from all chunks (read from S3)
+    all_pages: List[DocumentPage] = []
+
+    for chunk in chunks:
+        # Read chunk data from S3
+        chunk_key = chunk.get("pages_key")
+        chunk_bucket = chunk.get("pages_bucket")
+
+        if chunk_key and chunk_bucket:
+            # New format: read from S3
+            response = s3_client.get_object(Bucket=chunk_bucket, Key=chunk_key)
+            chunk_pages = json.loads(response["Body"].read().decode("utf-8"))
+        else:
+            # Fallback for backward compatibility (inline pages)
+            chunk_pages = chunk.get("pages", [])
+
+        for page_data in chunk_pages:
+            all_pages.append(
+                DocumentPage(
+                    page_number=page_data["page_number"],
+                    text=page_data["text"],
+                    num_words=page_data["num_words"],
+                )
+            )
+
+    # Sort pages by page number
+    all_pages.sort(key=lambda p: p.page_number)
+
+    # Create final Document
+    document = Document(
+        name=file_name,
+        num_pages=len(all_pages),
+        pages=all_pages,
+        total_num_words=sum(p.num_words for p in all_pages),
+    )
+
+    # Write to S3
+    content = json.dumps(dataclasses.asdict(document), indent=2).encode("utf-8")
+    s3_client.put_object(
+        Body=content,
+        Bucket=output_bucket,
+        Key=output_key,
+        ContentType="application/json",
+    )
+
+    logger.info(
+        f"Merged document written to {output_bucket}/{output_key}",
+        total_pages=len(all_pages),
+        total_words=document.total_num_words,
+    )
+
+    _try_append_event(
+        "Document ready for analysis",
+        stream_events=stream_events,
+        job_id=job_id,
+        user_id=user_id,
+        app_id=app_id,
+        table_name=table_name,
+        bucket=input_bucket,
+    )
+
+    # Clean up temp files if prefix provided
+    if temp_prefix and input_bucket:
+        try:
+            fm_vision_extraction.cleanup_s3_files(input_bucket, temp_prefix)
+            logger.info(f"Cleaned up temp files at {temp_prefix}")
+        except Exception as e:
+            logger.warning(f"Failed to clean up temp files: {e}")
+
+    return {
+        "output_bucket": output_bucket,
+        "output_key": output_key,
+    }
 
 
 def main():

@@ -1,23 +1,21 @@
 {
-  "clientAccountId": "118760726413",
+  "clientAccountId": "838207858000",
   "provisionQResources": false,
-  "pipedreamIntegrations": false,
-  "agents": false,
-  "region": "ap-southeast-2",
-  "allProdApps": true,
+  "pipedreamIntegrations": true,
+  "agents": true,
+  "region": "us-east-1",
+  "apps": {
+    "meeting-analyser": {},
+    "data-analysis": {},
+    "contract-analysis": {},
+    "policy-drafter": {},
+    "policy-reviewer": {},
+    "candidate-screening": {},
+    "document-summariser": {}
+  },
   "preferredKnowledgeBase": "bedrock",
   "vectorStorageType": "s3vectors",
+  "bedrockAccount": "905418183804",
   "allowBedrockQuotaSharing": false,
-  "cuttrissDataSync": {
-    "baseUrl": "https://synergy.cuttriss.co.nz",
-    "patSecretArn": "arn:aws:secretsmanager:us-east-1:905418183804:secret:cuttriss/synergy-pat",
-    "scheduleExpression": "rate(1 hour)",
-    "probeRangeStart": 1,
-    "probeRangeEnd": 70000,
-    "probeChunkSize": 250,
-    "probeStateKey": "cuttriss",
-    "serverId": 1,
-    "s3Prefix": "documents/company/synergy12d-documents/",
-    "enableDeletion": true
-  }
+  "brandingProviderEnabled": true
 }
