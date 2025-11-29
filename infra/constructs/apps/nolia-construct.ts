@@ -47,15 +47,24 @@ export class Nolia extends BaseNumaApp {
           },
         },
         {
-          id: 'kb-selection',
-          title: 'Select Knowledge Base(s)',
+          id: 'global-kb-selection',
+          title: 'Select Global Knowledge Base',
           type: DROPDOWN_TASK,
           required: true,
           params: {
-            options: ['global', 'procurement-activity'],
-            multiple: true,
+            options: ['global-test1', 'global-regulations-2025'],
           },
           order: 2,
+        },
+        {
+          id: 'project-kb-selection',
+          title: 'Select Project Knowledge Base',
+          type: DROPDOWN_TASK,
+          required: true,
+          params: {
+            options: ['project-test1', 'ventilators-procurement'],
+          },
+          order: 3,
         },
         {
           id: 'call-step-function',
@@ -65,10 +74,11 @@ export class Nolia extends BaseNumaApp {
           params: {
             payload: {
               uploaded_file: '@upload-file-to-s3',
-              kb_selection: '@kb-selection',
+              global_kb: '@global-kb-selection',
+              project_kb: '@project-kb-selection',
             },
           },
-          order: 3,
+          order: 4,
         },
       ],
       typicalDurationMinutes: 5,
@@ -87,12 +97,22 @@ export class Nolia extends BaseNumaApp {
         effect: 'Allow',
         resources: [`${props.outputsBucket.arn}/artifacts/claude-cli/*`],
       },
-      // Allow download of knowledge base files from S3
+      // Allow download of knowledge base files from outputs bucket (legacy)
       {
         actions: ['s3:GetObject', 's3:ListBucket'],
         effect: 'Allow',
         resources: [props.outputsBucket.arn, `${props.outputsBucket.arn}/${this.appId}/knowledge-bases/*`],
       },
+      // Allow download of knowledge base files from data bucket
+      ...(props.dataBucket
+        ? [
+            {
+              actions: ['s3:GetObject', 's3:ListBucket'],
+              effect: 'Allow',
+              resources: [props.dataBucket.arn, `${props.dataBucket.arn}/documents/*`],
+            },
+          ]
+        : []),
       {
         actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
         resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
@@ -186,6 +206,7 @@ export class Nolia extends BaseNumaApp {
       ],
       environment: {
         OUTPUTS_BUCKET_NAME: props.outputsBucket.bucket,
+        DATA_BUCKET_NAME: props.dataBucket?.bucket ?? props.outputsBucket.bucket,
         APP_ID: this.appId,
         HOME: '/tmp',
         CLAUDE_BIN: '/tmp/claude',
@@ -193,7 +214,14 @@ export class Nolia extends BaseNumaApp {
         CLAUDE_CODE_USE_BEDROCK: '1',
         CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(regionModel.default.max_tokens),
         MAX_THINKING_TOKENS: '1024',
+        // Main model configuration
         ANTHROPIC_MODEL: regionModel.default.model_id,
+        // Model alias configuration for regional Bedrock models
+        ANTHROPIC_DEFAULT_SONNET_MODEL: regionModel.default.model_id,
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: regionModel.haiku.model_id,
+        // Sub-agent model configuration (must use regional model)
+        CLAUDE_CODE_SUBAGENT_MODEL: regionModel.default.model_id,
+        // Deprecated but kept for compatibility
         ANTHROPIC_SMALL_FAST_MODEL: regionModel.haiku.model_id,
         ...(this.jobsTable ? { DYNAMODB_TABLE: this.jobsTable.name } : {}),
         // Cross-account Bedrock quota sharing
@@ -207,6 +235,11 @@ export class Nolia extends BaseNumaApp {
       ...(attachedLayers.length ? { additionalLayers: attachedLayers } : {}),
     });
 
+    // Output key for extracted content - uses {} placeholders for States.Format
+    // Format: nolia/{user_id}/{job_id}/{filename}.extracted.json
+    // Use appId (no leading slash) to match IAM policy resources
+    const extractedOutputKey = `${this.appId}/{}/{}/{}.extracted.json`;
+
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
       States: {
@@ -217,31 +250,303 @@ export class Nolia extends BaseNumaApp {
             'job_id.$': '$$.Execution.Input.job_id',
             'user_id.$': '$$.Execution.Input.user_id',
             'uploaded_file.$': '$$.Execution.Input.uploaded_file',
-            'kb_selection.$': '$$.Execution.Input.kb_selection',
+            'input_key.$': '$$.Execution.Input.uploaded_file[0].s3_key',
+            'file_name.$': '$$.Execution.Input.uploaded_file[0].name',
+            'global_kb.$': '$$.Execution.Input.global_kb',
+            'project_kb.$': '$$.Execution.Input.project_kb',
             'user_timezone.$': '$$.Execution.Input.user_timezone',
           },
-          Next: 'ExtractContent',
+          Next: 'CheckFileType',
         },
-        // Temporarily skip extract-content by using a Pass state.
-        // Keep the wiring intact but provide an empty extracted.output_key.
-        ExtractContent: {
+        // Check if input is already JSON (skip extraction) or PDF (needs extraction)
+        CheckFileType: {
+          Type: 'Choice',
+          Choices: [
+            {
+              Variable: '$.file_name',
+              StringMatches: '*.json',
+              Next: 'UseJsonDirectly',
+            },
+          ],
+          Default: 'PrepareChunks',
+        },
+        // If already JSON, use it directly as extracted content
+        UseJsonDirectly: {
           Type: 'Pass',
-          Result: {
-            output_key: '',
+          Parameters: {
+            'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
+            'uploaded_file.$': '$.uploaded_file',
+            'input_key.$': '$.input_key',
+            'file_name.$': '$.file_name',
+            'global_kb.$': '$.global_kb',
+            'project_kb.$': '$.project_kb',
+            'user_timezone.$': '$.user_timezone',
+            extracted: {
+              'output_key.$': '$.input_key',
+            },
+          },
+          Next: 'RunPhase1EDA',
+        },
+        // Step 1: Prepare chunks - splits PDF into page images and returns chunk definitions
+        PrepareChunks: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::lambda:invoke',
+          Parameters: {
+            FunctionName: props.sharedExtractContentLambdaArn!,
+            Payload: {
+              action: 'prepare_chunks',
+              input_bucket: props.outputsBucket.bucket,
+              'input_key.$': '$.input_key',
+              output_bucket: props.outputsBucket.bucket,
+              chunk_size: 100, // Pages per chunk for parallel processing
+              // Event streaming params
+              stream_events: true,
+              'job_id.$': '$.job_id',
+              'user_id.$': '$.user_id',
+              app_id: this.appId,
+            },
+          },
+          ResultPath: '$.prepare_result',
+          ResultSelector: {
+            'batch_id.$': '$.Payload.batch_id',
+            'total_pages.$': '$.Payload.total_pages',
+            'temp_prefix.$': '$.Payload.temp_prefix',
+            'input_bucket.$': '$.Payload.input_bucket',
+            'chunks.$': '$.Payload.chunks',
+          },
+          Next: 'ExtractChunksMap',
+          Retry: [
+            {
+              ErrorEquals: ['Lambda.ServiceException', 'Lambda.TooManyRequestsException'],
+              IntervalSeconds: 2,
+              MaxAttempts: 3,
+              BackoffRate: 2,
+            },
+          ],
+          Catch: [
+            {
+              ErrorEquals: ['States.ALL'],
+              ResultPath: '$.CatcherOutput',
+              Next: 'WriteFailureStatus',
+            },
+          ],
+        },
+        // Step 2: Process chunks in parallel using Map state
+        ExtractChunksMap: {
+          Type: 'Map',
+          ItemsPath: '$.prepare_result.chunks',
+          MaxConcurrency: 10,
+          ItemProcessor: {
+            ProcessorConfig: {
+              Mode: 'INLINE',
+            },
+            StartAt: 'ExtractChunk',
+            States: {
+              ExtractChunk: {
+                Type: 'Task',
+                Resource: 'arn:aws:states:::lambda:invoke',
+                Parameters: {
+                  FunctionName: props.sharedExtractContentLambdaArn!,
+                  Payload: {
+                    action: 'extract_chunk',
+                    'chunk_id.$': '$.chunk_id',
+                    'start_page.$': '$.start_page',
+                    'end_page.$': '$.end_page',
+                    'temp_prefix.$': '$.temp_prefix',
+                    'input_bucket.$': '$.input_bucket',
+                  },
+                },
+                ResultSelector: {
+                  'chunk_id.$': '$.Payload.chunk_id',
+                  'pages_key.$': '$.Payload.pages_key',
+                  'pages_bucket.$': '$.Payload.pages_bucket',
+                },
+                Retry: [
+                  {
+                    ErrorEquals: ['Lambda.ServiceException', 'Lambda.TooManyRequestsException', 'ThrottlingException'],
+                    IntervalSeconds: 5,
+                    MaxAttempts: 3,
+                    BackoffRate: 2,
+                  },
+                ],
+                End: true,
+              },
+            },
+          },
+          ResultPath: '$.extracted_chunks',
+          Next: 'MergeChunks',
+          Catch: [
+            {
+              ErrorEquals: ['States.ALL'],
+              ResultPath: '$.CatcherOutput',
+              Next: 'WriteFailureStatus',
+            },
+          ],
+        },
+        // Step 3: Merge all chunks into final document
+        MergeChunks: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::lambda:invoke',
+          Parameters: {
+            FunctionName: props.sharedExtractContentLambdaArn!,
+            Payload: {
+              action: 'merge_chunks',
+              'chunks.$': '$.extracted_chunks',
+              output_bucket: props.outputsBucket.bucket,
+              'output_key.$': `States.Format('${extractedOutputKey}', $.user_id, $.job_id, $.file_name)`,
+              'file_name.$': '$.file_name',
+              'temp_prefix.$': '$.prepare_result.temp_prefix',
+              'input_bucket.$': '$.prepare_result.input_bucket',
+              // Event streaming params
+              stream_events: true,
+              'job_id.$': '$.job_id',
+              'user_id.$': '$.user_id',
+              app_id: this.appId,
+            },
           },
           ResultPath: '$.extracted',
-          Next: 'RunNolia',
+          ResultSelector: {
+            'output_bucket.$': '$.Payload.output_bucket',
+            'output_key.$': '$.Payload.output_key',
+          },
+          Next: 'RunPhase1EDA',
+          Retry: [
+            {
+              ErrorEquals: ['Lambda.ServiceException', 'Lambda.TooManyRequestsException'],
+              IntervalSeconds: 2,
+              MaxAttempts: 3,
+              BackoffRate: 2,
+            },
+          ],
+          Catch: [
+            {
+              ErrorEquals: ['States.ALL'],
+              ResultPath: '$.CatcherOutput',
+              Next: 'WriteFailureStatus',
+            },
+          ],
         },
-        RunNolia: this.addLambdaTask(
+        // Phase 1: EDA - Document Understanding & Mapping
+        RunPhase1EDA: this.addLambdaTask(
           runner.arn,
           {
-            agent_type: 'nolia',
+            agent_type: 'nolia_eda',
             app_id: this.appId,
             'job_id.$': '$.job_id',
             'user_id.$': '$.user_id',
             'extracted_content_key.$': '$.extracted.output_key',
-            'kb_selection.$': '$.kb_selection',
+            'global_kb.$': '$.global_kb',
+            'project_kb.$': '$.project_kb',
             'user_timezone.$': '$.user_timezone',
+            phase: 1,
+            resume_session: false,
+            stream_events: true,
+            use_dynamodb: true,
+          },
+          'RunPhases2And3Parallel',
+          {
+            ResultPath: '$.phase1_result',
+          },
+        ),
+        // Phases 2 & 3 in Parallel
+        // Note: Tasks inside Parallel branches cannot reference states outside the branch.
+        // We override the default Catch to let errors bubble up to the Parallel state level.
+        RunPhases2And3Parallel: {
+          Type: 'Parallel',
+          Branches: [
+            {
+              StartAt: 'RunPhase2Global',
+              States: {
+                RunPhase2Global: {
+                  ...this.addLambdaTask(
+                    runner.arn,
+                    {
+                      agent_type: 'nolia_global',
+                      app_id: this.appId,
+                      'job_id.$': '$.job_id',
+                      'user_id.$': '$.user_id',
+                      'extracted_content_key.$': '$.extracted.output_key',
+                      'global_kb.$': '$.global_kb',
+                      'project_kb.$': '$.project_kb',
+                      'user_timezone.$': '$.user_timezone',
+                      phase: 2,
+                      resume_session: true,
+                      stream_events: true,
+                      use_dynamodb: true,
+                    },
+                    null, // End in branch, let Parallel handle Next
+                  ),
+                  // Override Catch to use End instead of WriteFailureStatus (which doesn't exist in branch)
+                  Catch: [
+                    {
+                      ErrorEquals: ['States.ALL'],
+                      ResultPath: '$.CatcherOutput',
+                      Next: 'Phase2Failed',
+                    },
+                  ],
+                },
+                Phase2Failed: { Type: 'Fail', Error: 'Phase2Failed', Cause: 'Phase 2 global rules check failed' },
+              },
+            },
+            {
+              StartAt: 'RunPhase3Project',
+              States: {
+                RunPhase3Project: {
+                  ...this.addLambdaTask(
+                    runner.arn,
+                    {
+                      agent_type: 'nolia_project',
+                      app_id: this.appId,
+                      'job_id.$': '$.job_id',
+                      'user_id.$': '$.user_id',
+                      'extracted_content_key.$': '$.extracted.output_key',
+                      'global_kb.$': '$.global_kb',
+                      'project_kb.$': '$.project_kb',
+                      'user_timezone.$': '$.user_timezone',
+                      phase: 3,
+                      resume_session: true,
+                      stream_events: true,
+                      use_dynamodb: true,
+                    },
+                    null, // End in branch, let Parallel handle Next
+                  ),
+                  // Override Catch to use End instead of WriteFailureStatus (which doesn't exist in branch)
+                  Catch: [
+                    {
+                      ErrorEquals: ['States.ALL'],
+                      ResultPath: '$.CatcherOutput',
+                      Next: 'Phase3Failed',
+                    },
+                  ],
+                },
+                Phase3Failed: { Type: 'Fail', Error: 'Phase3Failed', Cause: 'Phase 3 project rules check failed' },
+              },
+            },
+          ],
+          ResultPath: '$.parallel_results',
+          Next: 'RunPhase4Report',
+          Catch: [
+            {
+              ErrorEquals: ['States.ALL'],
+              ResultPath: '$.CatcherOutput',
+              Next: 'WriteFailureStatus',
+            },
+          ],
+        },
+        // Phase 4: Final Report Generation
+        RunPhase4Report: this.addLambdaTask(
+          runner.arn,
+          {
+            agent_type: 'nolia_report',
+            app_id: this.appId,
+            'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
+            'extracted_content_key.$': '$.extracted.output_key',
+            'global_kb.$': '$.global_kb',
+            'project_kb.$': '$.project_kb',
+            'user_timezone.$': '$.user_timezone',
+            phase: 4,
             resume_session: true,
             stream_events: true,
             use_dynamodb: true,

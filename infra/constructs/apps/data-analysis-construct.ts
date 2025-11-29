@@ -181,7 +181,14 @@ export class DataAnalysis extends BaseNumaApp {
         CLAUDE_CODE_USE_BEDROCK: '1',
         CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(regionModel.default.max_tokens),
         MAX_THINKING_TOKENS: '1024',
+        // Main model configuration
         ANTHROPIC_MODEL: regionModel.default.model_id,
+        // Model alias configuration for regional Bedrock models (required for sub-agents)
+        ANTHROPIC_DEFAULT_SONNET_MODEL: regionModel.default.model_id,
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: regionModel.haiku.model_id,
+        // Sub-agent model configuration (must use regional model)
+        CLAUDE_CODE_SUBAGENT_MODEL: regionModel.default.model_id,
+        // Deprecated but kept for compatibility
         ANTHROPIC_SMALL_FAST_MODEL: regionModel.haiku.model_id,
         // Add DynamoDB table for event streaming (if jobs are enabled)
         ...(this.jobsTable ? { DYNAMODB_TABLE: this.jobsTable.name } : {}),

@@ -57,6 +57,57 @@ def format_error_result(error_message: str) -> Dict[str, Any]:
     return format_inline_result("Error", error_message)
 
 
+def format_s3_result(
+    title: str,
+    s3_key: str,
+    summary: Optional[str] = None,
+    content_type: str = "text/markdown",
+) -> Dict[str, Any]:
+    """
+    Format a result that references an S3 file (for large outputs).
+
+    Args:
+        title: Title for the result
+        s3_key: S3 key where the full content is stored
+        summary: Optional brief summary to show inline
+        content_type: MIME type of the S3 file
+
+    Returns:
+        AppOutput dictionary with S3 reference
+    """
+    outputs = []
+
+    # Add inline summary if provided
+    if summary:
+        outputs.append(
+            {
+                "content_type": "text/markdown",
+                "title": f"{title} (Summary)",
+                "data": summary,
+                "location": "INLINE",
+            }
+        )
+
+    # Add S3 reference for full content
+    outputs.append(
+        {
+            "content_type": content_type,
+            "title": title,
+            "data": s3_key,
+            "location": "S3",
+        }
+    )
+
+    return {
+        "results": [
+            {
+                "input_reference": None,
+                "outputs": outputs,
+            }
+        ]
+    }
+
+
 def format_success_with_files(
     result_text: str, output_files: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:

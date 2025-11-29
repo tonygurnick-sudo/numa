@@ -12,6 +12,11 @@ Each agent type has its own directory with:
 Available agent types:
 - data_analysis: Specialized for data analysis, visualization, and document processing
 - default: Basic Claude CLI functionality without specialization
+- nolia: Legacy single-phase Nolia agent for World Bank procurement evaluation
+- nolia_eda: Phase 1 - Document Understanding & Mapping
+- nolia_global: Phase 2 - Global Rules Compliance Check
+- nolia_project: Phase 3 - Project-Specific Rules Compliance Check
+- nolia_report: Phase 4 - Final Report Generation
 
 To add a new agent type:
 1. Create a new directory with the agent name
@@ -33,7 +38,11 @@ logger = structlog.get_logger()
 AVAILABLE_AGENTS = [
     "data_analysis",
     "default",
-    "nolia",
+    "nolia",  # Legacy single-phase Nolia agent
+    "nolia_eda",  # Phase 1: Document Understanding & Mapping
+    "nolia_global",  # Phase 2: Global Rules Compliance Check
+    "nolia_project",  # Phase 3: Project-Specific Rules Compliance Check
+    "nolia_report",  # Phase 4: Final Report Generation
 ]
 
 

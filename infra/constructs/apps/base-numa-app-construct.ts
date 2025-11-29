@@ -729,6 +729,8 @@ export type UserConfigurableBaseNumaAppProps = z.infer<typeof userConfigurableBa
 export interface BaseNumaAppProps extends UserConfigurableBaseNumaAppProps, ApiGatewayLambdaCollectionProps {
   clientName: string;
   outputsBucket: S3Bucket;
+  /** Optional data bucket for knowledge base files and other data. Falls back to outputsBucket if not provided. */
+  dataBucket?: S3Bucket;
   region: string;
   visionModelType?: string;
   /** ARN of the shared extract-content Lambda (optional, for consolidation). */

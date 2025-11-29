@@ -472,14 +472,18 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     # Hydrate uploaded files
     workspace.hydrate_inputs(bucket, event.get("uploaded_files", []), dirs["inputs"])
 
-    # Setup home and settings BEFORE restoring session
+    # Setup home directory
     home = Path(os.environ.get("HOME", "/tmp"))
-    session.ensure_settings(SETTINGS_JSON, home)
 
     # Restore session if resuming (loads ccSessionId, hydrates prior outputs)
+    # Note: This restores the entire .claude directory from S3, including old settings.json
     cc_session_id = _restore_session_if_resuming(
         event, bucket, prefix, dirs["outputs"], home
     )
+
+    # Write fresh settings AFTER session restore to ensure current config takes precedence
+    # (session archive may contain outdated settings.json)
+    session.ensure_settings(SETTINGS_JSON, home)
 
     # Augment prompt with uploaded file list
     augment_uploads = _truthy(event.get("augment_uploads", True))
