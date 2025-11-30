@@ -1,6 +1,8 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const TABLE_NAME = process.env.BRANDING_TABLE_NAME as string | undefined;
 const ddbDoc = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -8,6 +10,8 @@ const ddbDoc = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const CLIENT_NAME = process.env.CLIENT_NAME as string | undefined;
 const BRANDING_PROVIDER_ENABLED = (process.env.BRANDING_PROVIDER_ENABLED ?? 'false') === 'true';
 const BRANDING_PUBLIC_MODE = (process.env.BRANDING_PUBLIC_MODE ?? 'false') === 'true';
+const BRANDING_ASSETS_BUCKET = process.env.BRANDING_ASSETS_BUCKET as string | undefined;
+const AWS_REGION = process.env.AWS_REGION || 'ap-southeast-2';
 
 const CURRENT_CONFIG_ID = 'branding#current';
 const VERSION_PREFIX = 'branding#version#';
@@ -79,6 +83,67 @@ async function fetchHistory(clientId: string): Promise<BrandingVersionSummary[]>
   });
 }
 
+/**
+ * Pre-sign an S3 URI (s3://bucket/key) to a signed HTTPS URL.
+ * Returns the original value if it's not an S3 URI or if signing fails.
+ */
+async function presignS3Uri(s3Uri: string | null | undefined, expiresIn = 14400): Promise<string | null> {
+  if (!s3Uri || !s3Uri.startsWith('s3://') || !BRANDING_ASSETS_BUCKET) {
+    return s3Uri ?? null;
+  }
+
+  const withoutScheme = s3Uri.slice(5); // Remove 's3://'
+  const slashIndex = withoutScheme.indexOf('/');
+  if (slashIndex === -1) return s3Uri;
+
+  const bucket = withoutScheme.slice(0, slashIndex);
+  const key = withoutScheme.slice(slashIndex + 1);
+
+  // Only sign if it's from our branding bucket
+  if (bucket !== BRANDING_ASSETS_BUCKET) {
+    return s3Uri;
+  }
+
+  try {
+    const s3Client = new S3Client({ region: AWS_REGION });
+    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK type compatibility workaround
+    return await getSignedUrl(s3Client as any, command, { expiresIn });
+  } catch (error) {
+    console.error('Failed to pre-sign S3 URL:', error);
+    return s3Uri; // Return original URI on failure
+  }
+}
+
+/**
+ * Process a branding config and pre-sign all S3 asset URLs.
+ */
+async function presignBrandingAssets(config: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const branding = config.branding as Record<string, unknown> | undefined;
+  if (!branding) return config;
+
+  const assets = branding.assets as Record<string, string | null | undefined> | undefined;
+  if (!assets) return config;
+
+  const presignedAssets: Record<string, string | null> = {};
+
+  // Pre-sign each asset URL in parallel
+  const assetKeys = ['logoNav', 'logoLoginRight', 'favicon'] as const;
+  await Promise.all(
+    assetKeys.map(async (key) => {
+      presignedAssets[key] = await presignS3Uri(assets[key]);
+    }),
+  );
+
+  return {
+    ...config,
+    branding: {
+      ...branding,
+      assets: presignedAssets,
+    },
+  };
+}
+
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const method = event.requestContext.http.method;
   const rawPath = event.requestContext.http.path || '';
@@ -142,9 +207,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         return { statusCode: 404, headers, body: JSON.stringify({ error: 'not_found' }) };
       }
       const itemRecord = getRes.Item as Record<string, unknown>;
-      // Return the stored blob as-is for the FE
+      // Return the stored blob with pre-signed asset URLs
       const blob = (itemRecord.config as Record<string, unknown> | undefined) ?? itemRecord;
-      return { statusCode: 200, headers, body: JSON.stringify(blob) };
+      const presignedBlob = await presignBrandingAssets(blob);
+      return { statusCode: 200, headers, body: JSON.stringify(presignedBlob) };
     }
 
     if (method === 'PUT') {

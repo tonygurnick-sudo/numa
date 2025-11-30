@@ -28,6 +28,8 @@ export type SplashScreen = {
   showText: boolean;
   title?: string;
   description?: string;
+  textColor?: string;
+  showPanel?: boolean;
 };
 
 export type LoginPage = {

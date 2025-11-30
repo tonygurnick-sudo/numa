@@ -101,12 +101,12 @@ const NumaLogin = () => {
     }
   };
 
-  const loginTitle = branding.loginPage?.title || 'Login';
+  const loginTitle = branding.loginPage?.title || '';
   const welcomeMessage = branding.loginPage?.welcomeMessage;
 
   const loginContent = (
     <>
-      <h2>{loginTitle}</h2>
+      {loginTitle && <h2>{loginTitle}</h2>}
       {welcomeMessage && <p className="text-muted mb-3">{welcomeMessage}</p>}
 
       {error && <Alert variant="danger">{error}</Alert>}

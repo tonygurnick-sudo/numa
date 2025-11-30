@@ -27,6 +27,32 @@
 .benefits_trial {
   background-color: transparent;
 }
+
+// Splash text panel for login page - semi-transparent background for readability
+.splash-text-panel {
+  background: rgba(255, 255, 255, 0.85);
+  background: rgba(var(--brand-surface-rgb, 255, 255, 255), 0.85);
+  border-radius: 12px;
+  padding: 32px 48px;
+  backdrop-filter: blur(4px);
+  margin: 0 auto;
+  width: 100%;
+
+  // Override text color to be dark (contrasts with light panel background)
+  h1,
+  p {
+    color: var(--brand-surfaceContrast, var(--brand-text, #111827));
+    text-shadow: none;
+  }
+}
+
+// Login page title styling
+.numalogin-left h2 {
+  font-size: 1.5rem;
+  font-weight: 500;
+  font-family: inherit;
+  margin-bottom: 0.5rem;
+}
 // DEPRECATED: No longer in use as of header standardization update
 // All pages now use .page-header with the shared PageHeader component
 // This class can be removed in a future cleanup

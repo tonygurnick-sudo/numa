@@ -310,7 +310,7 @@ export const NewChat = ({
 
   const { branding } = useBranding();
   const logoSrc = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || numaIcon;
-  const logoAlt = branding.name || 'Numa';
+  const logoAlt = branding.name || 'Logo';
   const handleContinueClick = (conversationId: string) => {
     hideSuggestions();
     onContinueConversation(conversationId);

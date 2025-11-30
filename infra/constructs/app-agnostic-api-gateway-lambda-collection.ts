@@ -187,6 +187,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         BRANDING_TABLE_NAME: props.brandingTableName,
         BRANDING_PROVIDER_ENABLED: String(props.brandingProviderEnabled ?? false),
         ...(props.brandingAssetsPrefix ? { BRANDING_ASSETS_PREFIX: props.brandingAssetsPrefix } : {}),
+        ...(props.brandingAssetsBucketName ? { BRANDING_ASSETS_BUCKET: props.brandingAssetsBucketName } : {}),
       } as Record<string, string>;
 
       const brandingReadPolicy = [
@@ -195,6 +196,16 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
           resources: [`arn:aws:dynamodb:*:*:table/${props.brandingTableName}`],
         },
+        // S3 GetObject permission for pre-signing asset URLs
+        ...(props.brandingAssetsBucketArn
+          ? [
+              {
+                effect: 'Allow',
+                actions: ['s3:GetObject'],
+                resources: [`${props.brandingAssetsBucketArn}/*`],
+              },
+            ]
+          : []),
       ];
       const brandingWritePolicy = [
         {
@@ -408,6 +419,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   brandingProviderEnabled?: boolean;
   brandingTableName?: string;
   brandingAssetsPrefix?: string;
+  brandingAssetsBucketName?: string;
+  brandingAssetsBucketArn?: string;
   /** Exact outputs bucket ARN for this environment (handles -dev/-staging suffix). */
   outputsBucketArn: string;
   /** Outputs bucket name for constructing S3 keys. */
