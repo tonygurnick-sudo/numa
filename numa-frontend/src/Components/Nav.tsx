@@ -19,7 +19,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
   const { branding } = useBranding();
   const rawNavLogo = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || DefaultLogo;
   const navLogo = useBrandingAsset(rawNavLogo, DefaultLogo);
-  const navName = branding.name || 'Numa';
+  const navName = branding.name || '';
 
   // Get user email from decoded token
   const userEmail = user?.decoded_tokens?.idToken?.email || 'user@example.com';

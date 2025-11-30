@@ -631,6 +631,10 @@ class BrandingService {
       if (typeof value !== 'string') {
         return value ?? undefined;
       }
+      // Only replace "Numa" if we have a non-empty brand name to replace it with
+      if (!clientDisplayName) {
+        return value;
+      }
       return value.replace(/Numa/g, clientDisplayName);
     };
 

@@ -456,6 +456,20 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       }));
     };
 
+  const handleSplashUpdate =
+    (field: 'title' | 'description' | 'textColor' | 'showPanel') =>
+    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const value = field === 'showPanel' ? (event.target as HTMLInputElement).checked : event.target.value;
+      markDirty();
+      setBranding((prev) => ({
+        ...prev,
+        splashScreen: {
+          ...prev.splashScreen,
+          [field]: value,
+        },
+      }));
+    };
+
   const parseS3Uri = (uri: string) => {
     if (!uri?.startsWith('s3://')) {
       return null;
@@ -848,6 +862,50 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                           rows={2}
                           value={branding.loginPage?.welcomeMessage || ''}
                           onChange={handleLoginUpdate('welcomeMessage')}
+                        />
+                      </Form.Group>
+                    </div>
+                  </div>
+                  <div className="mt-4 border-top pt-3">
+                    <Card.Title className="fs-6 mb-3">Splash Screen</Card.Title>
+                    <div className="d-flex flex-column gap-3">
+                      <Form.Group controlId="branding-splash-title">
+                        <Form.Label>Splash Title</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={branding.splashScreen?.title || ''}
+                          onChange={handleSplashUpdate('title')}
+                          placeholder="Main heading on login splash panel"
+                        />
+                      </Form.Group>
+                      <Form.Group controlId="branding-splash-description">
+                        <Form.Label>Splash Description</Form.Label>
+                        <Form.Control
+                          as="textarea"
+                          rows={2}
+                          value={branding.splashScreen?.description || ''}
+                          onChange={handleSplashUpdate('description')}
+                          placeholder="Description text below the title"
+                        />
+                      </Form.Group>
+                      <Form.Group controlId="branding-splash-text-color">
+                        <Form.Label>Splash Text Color</Form.Label>
+                        <div className="d-flex align-items-center gap-2">
+                          <Form.Control
+                            type="color"
+                            value={branding.splashScreen?.textColor || '#ffffff'}
+                            onChange={handleSplashUpdate('textColor')}
+                            style={{ width: '50px', height: '32px', padding: '2px' }}
+                          />
+                          <Form.Text className="text-muted mb-0">Default: white</Form.Text>
+                        </div>
+                      </Form.Group>
+                      <Form.Group controlId="branding-splash-show-panel">
+                        <Form.Check
+                          type="checkbox"
+                          label="Show semi-transparent background panel"
+                          checked={branding.splashScreen?.showPanel || false}
+                          onChange={handleSplashUpdate('showPanel')}
                         />
                       </Form.Group>
                     </div>

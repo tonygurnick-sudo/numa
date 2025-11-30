@@ -15,7 +15,7 @@ const LayoutForm = ({ FormName, Content }: LayoutFormProps) => {
 
   const rawLogo = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || LogoBk;
   const logoSrc = useBrandingAsset(rawLogo, LogoBk);
-  const logoAlt = branding.name || 'Numa';
+  const logoAlt = branding.name || 'Logo';
   const showNameWithLogo = branding.showNameWithLogo ?? true;
 
   const splash = branding.splashScreen;
@@ -23,10 +23,10 @@ const LayoutForm = ({ FormName, Content }: LayoutFormProps) => {
   const splashImageResolved = useBrandingAsset(rawSplashImage, LoginIllustration);
   const splashImage = rawSplashImage ? splashImageResolved : null;
   const shouldShowSplashText = splash?.showText ?? true;
-  const splashTitle = splash?.title || 'Supercharge your workforce with AI and scale your business';
-  const splashDescription =
-    splash?.description ||
-    'Numa is a generative AI-powered platform that will empower your employees to be more creative, data-driven, efficient and productive.';
+  const splashTitle = splash?.title || '';
+  const splashDescription = splash?.description || '';
+  const splashTextColor = splash?.textColor || '#ffffff';
+  const showSplashPanel = splash?.showPanel ?? false;
 
   return (
     <Container fluid>
@@ -51,7 +51,7 @@ const LayoutForm = ({ FormName, Content }: LayoutFormProps) => {
               {Content}
             </Col>
             <footer className="public-footer">
-              &copy; {branding.name || 'ARCANUM'} {new Date().getFullYear()}
+              &copy; {branding.name || 'Arcanum'} {new Date().getFullYear()}
             </footer>
           </Row>
         </Col>
@@ -61,6 +61,7 @@ const LayoutForm = ({ FormName, Content }: LayoutFormProps) => {
           className={`${FormName}-right`}
           style={{
             backgroundImage: splashImage ? `url(${splashImage})` : undefined,
+            backgroundColor: splashImage ? '#ffffff' : undefined,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
@@ -68,11 +69,18 @@ const LayoutForm = ({ FormName, Content }: LayoutFormProps) => {
         >
           <Row className="container d-flex h-100 justify-content-center align-items-center benefits_trial">
             <Col lg={12} className="text-center text-lg-start">
-              {shouldShowSplashText && (
-                <>
-                  <h1>{splashTitle}</h1>
-                  <p>{splashDescription}</p>
-                </>
+              {shouldShowSplashText && (splashTitle || splashDescription) && (
+                <div
+                  className={showSplashPanel ? 'splash-text-panel' : undefined}
+                  style={splashTextColor ? { color: splashTextColor } : undefined}
+                >
+                  {splashTitle && (
+                    <h1 style={splashTextColor ? { color: splashTextColor } : undefined}>{splashTitle}</h1>
+                  )}
+                  {splashDescription && (
+                    <p style={splashTextColor ? { color: splashTextColor } : undefined}>{splashDescription}</p>
+                  )}
+                </div>
               )}
             </Col>
           </Row>

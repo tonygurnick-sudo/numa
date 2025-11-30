@@ -258,6 +258,8 @@ export class NumaClientStack extends TerraformStack {
       brandingProviderEnabled: true,
       brandingTableName: core.brandingTable.name,
       brandingAssetsPrefix: core.brandingAssetsPrefix,
+      brandingAssetsBucketName: core.brandingAssetsBucketName,
+      brandingAssetsBucketArn: core.brandingAssetsBucketArn,
       outputsBucketArn: core.outputsBucket.bucket.arn,
       outputsBucketName: core.outputsBucket.bucket.bucket,
       workspaceAgentsTableName: core.workspaceAgentsTable.name,

@@ -1,1 +1,50 @@
-{}
+{
+  "USER_POOL_ID": "ap-southeast-2_3aRDn8R53",
+  "CLIENT_ID": "5c1h16uapld6a1vrmj8fo4216m",
+  "GROUPS": {
+    "standard": {
+      "roleArn": "arn:aws:iam::905418183804:role/numa-arcanum-demo-sydney-standard-role",
+      "features": [
+        "chat",
+        "useCompanyData",
+        "useApps",
+        "addToCompanyData",
+        "selfService",
+        "pipedreamIntegration",
+        "brandingRead"
+      ]
+    },
+    "admin": {
+      "roleArn": "arn:aws:iam::905418183804:role/numa-arcanum-demo-sydney-admin-role",
+      "features": [
+        "chat",
+        "useApps",
+        "useCompanyData",
+        "deleteFromCompanyData",
+        "addToCompanyData",
+        "editCompanyProfile",
+        "selfService",
+        "brandingRead",
+        "manageBranding",
+        "manageUsers",
+        "pipedreamIntegration"
+      ]
+    }
+  },
+  "REGION": "ap-southeast-2",
+  "ROLE_ARN": "arn:aws:iam::905418183804:role/numa-arcanum-demo-sydney-identity-pool-role",
+  "API_ENDPOINT": "/api",
+  "BRANDING_PROVIDER_ENABLED": true,
+  "BRANDING_ASSETS_BUCKET": "numa-arcanum-demo-sydney-branding",
+  "BRANDING_ASSETS_PREFIX": "",
+  "CLIENT_NAME": "arcanum-demo-sydney",
+  "OUTPUTS_BUCKET_NAME": "numa-arcanum-demo-sydney-outputs",
+  "HONEYCOMB_KEY": "hcaik_01jz21qrb2pqx6j6bcz2gg9akdbq221nnm6y6a2pegb70vj8jtr6tsp629",
+  "DATA_BUCKET": "numa-arcanum-demo-sydney-data",
+  "PROVISION_Q_RESOURCES": false,
+  "PREFERRED_KNOWLEDGE_BASE": "bedrock",
+  "BEDROCK_KNOWLEDGE_BASE_ID": "U8EGH5WSBX",
+  "PIPEDREAM_RELAY_LAMBDA_ARN": "arn:aws:lambda:ap-southeast-2:905418183804:function:arcanum-demo-sydney_pipedream-relay",
+  "PIPEDREAM_INTEGRATIONS": true,
+  "AGENTS": true
+}

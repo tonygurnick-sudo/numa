@@ -156,7 +156,7 @@ const ChatMessages = ({
                         }}
                       />
                     ) : null}
-                    {branding.name ?? 'Numa'}:
+                    {branding.name || 'Assistant'}:
                   </>
                 )}
               </strong>
@@ -198,7 +198,7 @@ const ChatMessages = ({
                         }}
                       />
                     ) : null}
-                    {branding.name ?? 'Numa'}:
+                    {branding.name || 'Assistant'}:
                   </>
                 )
               ) : message.role === 'user' ? (
