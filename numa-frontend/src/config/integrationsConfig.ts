@@ -22,6 +22,12 @@ import googleDriveIcon from '../assets/icons/google_drive.svg';
 import googleAnalyticsIcon from '../assets/icons/google_analytics.svg';
 import sharepointIcon from '../assets/icons/sharepoint.svg';
 import salesforceIcon from '../assets/icons/salesforce.png';
+import asanaIcon from '../assets/icons/asana.svg';
+import onenoteIcon from '../assets/icons/onenote.svg';
+import trelloIcon from '../assets/icons/trello.svg';
+import whatsappIcon from '../assets/icons/whatsapp.svg';
+import mailchimpIcon from '../assets/icons/mailchimp.svg';
+import freshdeskIcon from '../assets/icons/freshdesk.svg';
 
 export type BootstrapColor =
   | 'primary'
@@ -208,6 +214,66 @@ export const CONNECTIONS_CONFIG: Record<string, ConnectionConfigEntry> = {
     fallback_icon: 'bi bi-cloud-check',
     fallback_color: 'info',
     example_query: 'Show me all open opportunities over $10,000 and create a new lead from this contact information',
+  },
+  asana: {
+    id: 'asana',
+    name: 'Asana',
+    description: 'Manage projects and tasks. Create, update, and track work across teams.',
+    auth_type: 'oauth',
+    img_src: asanaIcon,
+    fallback_icon: 'bi bi-kanban',
+    fallback_color: 'warning',
+    example_query: 'List my tasks due this week and create a new task for the marketing project.',
+  },
+  microsoft_onenote: {
+    id: 'microsoft_onenote',
+    name: 'Microsoft OneNote',
+    description: 'Create and organize notebooks, sections, and pages in OneNote.',
+    auth_type: 'oauth',
+    img_src: onenoteIcon,
+    fallback_icon: 'bi bi-journal-richtext',
+    fallback_color: 'primary',
+    example_query: 'Create a new page in my project notebook summarizing today’s meeting.',
+  },
+  trello: {
+    id: 'trello',
+    name: 'Trello',
+    description: 'Manage boards, lists, and cards to keep work organized.',
+    auth_type: 'oauth',
+    img_src: trelloIcon,
+    fallback_icon: 'bi bi-columns-gap',
+    fallback_color: 'info',
+    example_query: 'Add a card to the Sprint board with a checklist for release tasks.',
+  },
+  whatsapp_business: {
+    id: 'whatsapp_business',
+    name: 'WhatsApp Business',
+    description: 'Send and receive WhatsApp Business messages and manage templates.',
+    auth_type: 'oauth',
+    img_src: whatsappIcon,
+    fallback_icon: 'bi bi-chat-dots',
+    fallback_color: 'success',
+    example_query: 'Send a WhatsApp message to this customer about their order status.',
+  },
+  mailchimp: {
+    id: 'mailchimp',
+    name: 'Mailchimp',
+    description: 'Manage audiences, campaigns, and email marketing automations.',
+    auth_type: 'oauth',
+    img_src: mailchimpIcon,
+    fallback_icon: 'bi bi-envelope-paper',
+    fallback_color: 'warning',
+    example_query: 'Create and schedule a campaign to the newsletter audience for Friday.',
+  },
+  freshdesk: {
+    id: 'freshdesk',
+    name: 'Freshdesk',
+    description: 'Handle tickets, contacts, and support automation.',
+    auth_type: 'oauth',
+    img_src: freshdeskIcon,
+    fallback_icon: 'bi bi-headset',
+    fallback_color: 'success',
+    example_query: 'Create a ticket for this customer issue and assign it to support.',
   },
 };
 

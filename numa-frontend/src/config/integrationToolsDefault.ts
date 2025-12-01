@@ -87,6 +87,24 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
 
   // Salesforce
   salesforce: [],
+
+  // Asana
+  asana: [],
+
+  // Microsoft OneNote
+  microsoft_onenote: [],
+
+  // Trello
+  trello: [],
+
+  // WhatsApp Business
+  whatsapp_business: [],
+
+  // Mailchimp
+  mailchimp: [],
+
+  // Freshdesk
+  freshdesk: [],
 };
 
 export const getDefaultDenyTools = (appName: string): string[] => {
