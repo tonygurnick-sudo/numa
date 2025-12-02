@@ -235,6 +235,7 @@ export class CoreNumaInfra extends Construct {
       clientAccountId: props.clientAccountId,
       allowedMethods: ['GET', 'PUT', 'POST', 'DELETE'],
       allowLocalhostOrigin: props.devInstance,
+      additionalOrigins: props.additionalOrigins,
       region: props.region,
     });
     this.dataBucket.bucket.moveFromId('aws_s3_bucket.data-source-bucket_1F269801');
@@ -257,6 +258,7 @@ export class CoreNumaInfra extends Construct {
       clientAccountId: props.clientAccountId,
       allowedMethods: ['GET', 'PUT', 'POST', 'DELETE'],
       allowLocalhostOrigin: props.devInstance,
+      additionalOrigins: props.additionalOrigins,
       region: props.region,
     });
 
@@ -269,6 +271,7 @@ export class CoreNumaInfra extends Construct {
       bucketName: 'outputs',
       allowedMethods: ['GET', 'HEAD', 'PUT'],
       allowLocalhostOrigin: props.devInstance,
+      additionalOrigins: props.additionalOrigins,
       region: props.region,
     });
     this.outputsBucket.bucket.moveFromId('aws_s3_bucket.outputs-bucket_1F269801');
@@ -285,8 +288,13 @@ export class CoreNumaInfra extends Construct {
     });
 
     const brandingAllowedOrigins = [`https://${props.domainName}`];
+    // TODO: Remove once Nolia whitelabel moves to HTTPS and uses additionalOrigins config
+    brandingAllowedOrigins.push('http://worldbank.getnolia.io');
     if (props.devInstance ?? props.environmentName !== 'prod') {
       brandingAllowedOrigins.push('http://localhost:5173');
+    }
+    if (props.additionalOrigins) {
+      brandingAllowedOrigins.push(...props.additionalOrigins);
     }
 
     new S3BucketCorsConfiguration(this, 'branding-assets-cors', {
@@ -1258,6 +1266,12 @@ const _coreNumaInfraPropsSchema = z
      * Optional configuration for the Cuttriss 12d Synergy sync Lambda.
      */
     cuttrissDataSync: cuttrissDataSyncConfigSchema.optional(),
+    /**
+     * Additional origins to allow in the S3 bucket CORS policies.
+     * Useful for whitelabel frontends that need to access the same S3 buckets.
+     * Each origin should be a full URL with protocol (e.g., "https://worldbank.getnolia.io").
+     */
+    additionalOrigins: z.array(z.string()).optional(),
   })
   .strict();
 

@@ -13,11 +13,18 @@ export interface NumaCorsEnabledBucketProps extends S3BucketConfig {
   addTestObject?: boolean;
   allowedMethods?: string[];
   /**
-   * Add "http://localhost:5173" to the list of allowedOrigins in the CORS policy.
+   * Add localhost origins to the CORS policy for local development.
+   * Adds both "http://localhost:5173" (Vite dev server) and "http://localhost" (nginx/whitelabel).
    *
    * @default false
    */
   allowLocalhostOrigin?: boolean;
+  /**
+   * Additional origins to allow in the CORS policy.
+   * Useful for whitelabel frontends that need to access the same S3 buckets.
+   * Each origin should be a full URL with protocol (e.g., "https://worldbank.getnolia.io").
+   */
+  additionalOrigins?: string[];
   region?: string;
 }
 
@@ -27,8 +34,14 @@ export class NumaCorsEnabledBucket extends PrivateBucket {
     const envSuffix = environmentName != 'prod' ? `-${environmentName}` : '';
 
     const allowedOrigins = [`https://${props.origin}`];
+    // TODO: Remove once Nolia whitelabel moves to HTTPS and uses additionalOrigins config
+    // allowedOrigins.push('http://worldbank.getnolia.io');
     if (props.allowLocalhostOrigin ?? false) {
-      allowedOrigins.push('http://localhost:5173');
+      allowedOrigins.push('http://localhost:5173'); // Vite dev server
+      allowedOrigins.push('http://localhost'); // nginx/whitelabel
+    }
+    if (props.additionalOrigins) {
+      allowedOrigins.push(...props.additionalOrigins);
     }
 
     super(scope, name, {

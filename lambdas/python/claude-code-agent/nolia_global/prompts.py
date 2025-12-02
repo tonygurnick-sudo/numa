@@ -106,7 +106,7 @@ As your final response, summarize your key findings and the files you generated.
 ## Notes
 - Be systematic: go rule by rule
 - Use manifest and page_index to find pages efficiently
-- Do NOT apply project-specific rules in this phase
+- Do NOT apply procurement-specific rules in this phase
 """
 
 SYSTEM_PROMPT = NOLIA_BASE_SYSTEM_PROMPT + "\n\n" + NOLIA_GLOBAL_PROMPT

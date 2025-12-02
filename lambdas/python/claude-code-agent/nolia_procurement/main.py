@@ -1,8 +1,8 @@
 """
-Main implementation for the Nolia Project Rules (Phase 3) Agent.
+Main implementation for the Nolia Procurement Rules (Phase 3) Agent.
 
-This agent checks the Terms of Reference document against project-specific
-rules, with analysis on project requirements and compliance criteria.
+This agent checks the evaluation report against procurement-specific
+rules, with deep-dive analysis on technical evaluation and qualification criteria.
 """
 
 import json
@@ -38,11 +38,11 @@ logger = structlog.get_logger()
 
 def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     """
-    Main entry point for the Nolia Project Rules (Phase 3) agent.
+    Main entry point for the Nolia Procurement Rules (Phase 3) agent.
 
     This phase:
     1. Downloads tmp/ from Phase 1
-    2. Runs Claude CLI to check project rules compliance
+    2. Runs Claude CLI to check procurement rules compliance
     3. Uploads updated tmp/ to S3
 
     Args:
@@ -59,10 +59,12 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     user_id = event["user_id"]
     extracted_content_key = event.get("extracted_content_key", "")
     global_kb = event.get("global_kb", "")
-    project_kb = event.get("project_kb", "")
+    procurement_kb = event.get("procurement_kb", "")
     phase = event.get("phase", 3)
 
-    logger.info("Starting Nolia Project Rules (Phase 3)", job_id=job_id, phase=phase)
+    logger.info(
+        "Starting Nolia Procurement Rules (Phase 3)", job_id=job_id, phase=phase
+    )
 
     # Setup workspace
     workdir = Path(f"/tmp/cc_ws/{job_id}")
@@ -73,9 +75,9 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
     # Setup event streaming
     app_context = event_streaming.setup_event_context(event, bucket)
-    event_streaming.try_append_event("PHASE:PROJECT:START", app_context)
+    event_streaming.try_append_event("PHASE:PROCUREMENT:START", app_context)
     event_streaming.try_append_event(
-        "Checking project-specific requirements...", app_context
+        "Checking procurement-specific requirements...", app_context
     )
 
     # Hydrate tmp/ from Phase 1
@@ -85,10 +87,8 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     if extracted_content_key:
         _download_extracted_content(extracted_content_key, bucket, dirs["inputs"])
 
-    # Download knowledge base files (global + project)
-    nolia_utils.download_kb_files(
-        data_bucket, global_kb, "", workdir, project_kb=project_kb
-    )
+    # Download knowledge base files
+    nolia_utils.download_kb_files(data_bucket, global_kb, procurement_kb, workdir)
 
     # Setup home directory and settings
     home = Path(os.environ.get("HOME", "/tmp"))
@@ -108,7 +108,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     # Run Claude CLI
     trace_path = workdir / "trace.jsonl"
     event_streaming.try_append_event(
-        "Assessing compliance with project criteria...", app_context
+        "Assessing compliance with procurement criteria...", app_context
     )
     _, _ = _run_claude_cli(
         bin_path=bin_path,
@@ -122,9 +122,9 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     # Extract final response from trace and save as phase notes
     result = trace_parser.extract_result_from_trace(trace_path)
     if result:
-        phase_notes_path = dirs["tmp"] / "project-phase-notes.md"
+        phase_notes_path = dirs["tmp"] / "procurement-phase-notes.md"
         phase_notes_path.write_text(result, encoding="utf-8")
-        logger.info("Saved project phase notes from trace")
+        logger.info("Saved procurement phase notes from trace")
 
     # Upload tmp/ directory to S3 for Phase 4
     nolia_utils.upload_tmp_to_s3(dirs["tmp"], bucket, prefix)
@@ -135,11 +135,11 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     # Get result text
     result_text = _get_phase_result(dirs["tmp"])
 
-    logger.info("Nolia Project Rules (Phase 3) complete", job_id=job_id)
-    event_streaming.try_append_event("PHASE:PROJECT:COMPLETE", app_context)
+    logger.info("Nolia Procurement Rules (Phase 3) complete", job_id=job_id)
+    event_streaming.try_append_event("PHASE:PROCUREMENT:COMPLETE", app_context)
 
     return appoutput.format_inline_result(
-        title="Phase 3: Project Rules Compliance Complete",
+        title="Phase 3: Procurement Rules Compliance Complete",
         content=result_text,
         s3_key=s3_operations.safe_s3_key(prefix, "outputs", ".phase3.md"),
     )
@@ -159,23 +159,23 @@ def _download_extracted_content(key: str, bucket: str, inputs_dir: Path) -> None
 
 
 def _build_user_prompt() -> str:
-    """Build the user prompt for Phase 3 (Project Rules)."""
-    return """Check the Terms of Reference document against all project-specific rules.
+    """Build the user prompt for Phase 3."""
+    return """Check the evaluation report against all procurement-specific rules.
 
 Read the document manifest first (tmp/document_manifest.json) to understand the document structure.
-Then systematically check each rule in ./project-rules.md.
+Then systematically check each rule in ./procurement-rules.md.
 
-Perform analysis on:
-- Project scope and requirements completeness
-- Deliverables and timeline specifications
-- Compliance with project-specific criteria
+Perform deep-dive analysis on:
+- Technical evaluation (Form 12/13/14) - scoring analysis
+- Qualification evaluation (Form 11) - pass/fail analysis
+- Recurring issues detection
 
 Create the required output files:
-- tmp/project_rules_compliance.csv
-- tmp/project_rules_summary.md
-- tmp/project_analysis.json
+- tmp/procurement_rules_compliance.csv
+- tmp/procurement_rules_summary.md
+- tmp/technical_scoring_analysis.json
 - tmp/recurring_issues.csv
-- tmp/gaps_analysis.md (if significant gaps found)
+- tmp/failed_lots_analysis.md (if any lots have zero responsive bidders)
 
 End with a summary of your key findings and the files you generated."""
 
@@ -299,7 +299,7 @@ def _upload_trace(trace_path: Path, bucket: str, prefix: str) -> None:
 
 def _get_phase_result(tmp_dir: Path) -> str:
     """Get the result text from phase outputs."""
-    summary_path = tmp_dir / "project_rules_summary.md"
+    summary_path = tmp_dir / "procurement_rules_summary.md"
     if summary_path.exists():
         return summary_path.read_text(encoding="utf-8")
-    return "# Phase 3 Complete\n\nProject rules compliance check completed."
+    return "# Phase 3 Complete\n\nProcurement rules compliance check completed."

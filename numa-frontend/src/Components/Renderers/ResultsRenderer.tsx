@@ -725,7 +725,14 @@ export const ResultsRenderer = ({ results }) => {
     }
 
     // Reset selected output index when results change
-    setSelectedOutputIndex(0);
+    // Prefer S3 output (full report) over INLINE (summary)
+    const firstResult = actualResults[0];
+    if (firstResult?.outputs && Array.isArray(firstResult.outputs)) {
+      const s3OutputIndex = firstResult.outputs.findIndex((o) => o.location?.toLowerCase() === 's3');
+      setSelectedOutputIndex(s3OutputIndex !== -1 ? s3OutputIndex : 0);
+    } else {
+      setSelectedOutputIndex(0);
+    }
 
     const fetchContents = async () => {
       for (const result of actualResults) {

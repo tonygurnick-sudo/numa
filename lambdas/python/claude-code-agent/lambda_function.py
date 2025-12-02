@@ -15,7 +15,8 @@ Available agent types:
 - nolia: Legacy single-phase Nolia agent for World Bank procurement evaluation
 - nolia_eda: Phase 1 - Document Understanding & Mapping
 - nolia_global: Phase 2 - Global Rules Compliance Check
-- nolia_project: Phase 3 - Project-Specific Rules Compliance Check
+- nolia_procurement: Phase 3 - Procurement-Specific Rules Compliance Check (evaluation-report)
+- nolia_project: Phase 3 - Project-Specific Rules Compliance Check (terms-of-reference)
 - nolia_report: Phase 4 - Final Report Generation
 
 To add a new agent type:
@@ -41,7 +42,8 @@ AVAILABLE_AGENTS = [
     "nolia",  # Legacy single-phase Nolia agent
     "nolia_eda",  # Phase 1: Document Understanding & Mapping
     "nolia_global",  # Phase 2: Global Rules Compliance Check
-    "nolia_project",  # Phase 3: Project-Specific Rules Compliance Check
+    "nolia_procurement",  # Phase 3: Procurement-Specific Rules (evaluation-report)
+    "nolia_project",  # Phase 3: Project-Specific Rules (terms-of-reference)
     "nolia_report",  # Phase 4: Final Report Generation
 ]
 
