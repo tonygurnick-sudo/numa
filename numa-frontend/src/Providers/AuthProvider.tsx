@@ -24,7 +24,8 @@ const AuthContext = createContext(null);
 
 const MINUTE = 1000 * 60;
 
-const REFRESH_PERIOD = 5 * MINUTE;
+// Refresh tokens/groups less frequently to reduce churn (was 5 minutes)
+const REFRESH_PERIOD = 15 * MINUTE;
 
 export const AuthProvider = ({ children, initialTokens }) => {
   const [user, setUser] = useState(null);
