@@ -92,7 +92,7 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
   asana: [],
 
   // Microsoft OneNote
-  microsoft_onenote: [],
+  onenote: [],
 
   // Trello
   trello: [],

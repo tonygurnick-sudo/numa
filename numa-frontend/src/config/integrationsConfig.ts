@@ -225,8 +225,8 @@ export const CONNECTIONS_CONFIG: Record<string, ConnectionConfigEntry> = {
     fallback_color: 'warning',
     example_query: 'List my tasks due this week and create a new task for the marketing project.',
   },
-  microsoft_onenote: {
-    id: 'microsoft_onenote',
+  onenote: {
+    id: 'onenote',
     name: 'Microsoft OneNote',
     description: 'Create and organize notebooks, sections, and pages in OneNote.',
     auth_type: 'oauth',
