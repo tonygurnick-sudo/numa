@@ -142,7 +142,7 @@ def _download_kb_folder(
         bucket: S3 bucket name
         s3_prefix: S3 prefix for the KB folder
         local_dir: Local directory to download to
-        kb_type: Type of KB for logging (e.g., "global", "project")
+        kb_type: Type of KB for logging (e.g., "global", "procurement")
 
     Returns:
         Count of files downloaded
@@ -180,7 +180,7 @@ def _download_rules_file(
         bucket: S3 bucket name
         rules_key: S3 key for the rules file
         dest_path: Local path to save the rules file
-        rules_type: Type of rules for logging (e.g., "global", "project")
+        rules_type: Type of rules for logging (e.g., "global", "procurement")
 
     Returns:
         True if downloaded successfully, False otherwise
@@ -198,22 +198,24 @@ def _download_rules_file(
 def download_kb_files(
     data_bucket: str,
     global_kb: str,
-    project_kb: str,
+    procurement_kb: str,
     workdir: Path,
+    project_kb: str = "",
 ) -> Dict[str, int]:
     """
     Download knowledge base files from the data bucket to the workspace.
 
     KB files are stored in the data bucket at:
         documents/{kb_name}/
-        ├── global-knowledge-base/ or project-knowledge-base/
-        └── global-rules.md or project-rules.md
+        ├── global-knowledge-base/ or procurement-knowledge-base/ or project-knowledge-base/
+        └── global-rules.md or procurement-rules.md or project-rules.md
 
     Args:
         data_bucket: S3 bucket containing KB files
         global_kb: Name of the global KB (e.g., "global-test1")
-        project_kb: Name of the project KB (e.g., "project-test1")
+        procurement_kb: Name of the procurement KB (e.g., "procurement-test1")
         workdir: Root workspace directory
+        project_kb: Name of the project KB (e.g., "project-test1") for terms-of-reference
 
     Returns:
         Dictionary with counts of downloaded files per KB type
@@ -221,6 +223,8 @@ def download_kb_files(
     counts = {
         "global_kb_files": 0,
         "global_rules": 0,
+        "procurement_kb_files": 0,
+        "procurement_rules": 0,
         "project_kb_files": 0,
         "project_rules": 0,
     }
@@ -243,7 +247,24 @@ def download_kb_files(
         ):
             counts["global_rules"] = 1
 
-    # Download project KB
+    # Download procurement KB
+    if procurement_kb:
+        procurement_prefix = f"documents/{procurement_kb}/"
+        counts["procurement_kb_files"] = _download_kb_folder(
+            data_bucket,
+            f"{procurement_prefix}procurement-knowledge-base/",
+            kb_dir / "procurement-knowledge-base",
+            "procurement",
+        )
+        if _download_rules_file(
+            data_bucket,
+            f"{procurement_prefix}procurement-rules.md",
+            workdir / "procurement-rules.md",
+            "procurement",
+        ):
+            counts["procurement_rules"] = 1
+
+    # Download project KB (for terms-of-reference assessment type)
     if project_kb:
         project_prefix = f"documents/{project_kb}/"
         counts["project_kb_files"] = _download_kb_folder(
@@ -264,9 +285,12 @@ def download_kb_files(
     logger.info(
         "KB download complete",
         global_kb=global_kb,
+        procurement_kb=procurement_kb,
         project_kb=project_kb,
         global_kb_files_downloaded=counts["global_kb_files"],
         global_rules_downloaded=counts["global_rules"] == 1,
+        procurement_kb_files_downloaded=counts["procurement_kb_files"],
+        procurement_rules_downloaded=counts["procurement_rules"] == 1,
         project_kb_files_downloaded=counts["project_kb_files"],
         project_rules_downloaded=counts["project_rules"] == 1,
     )
@@ -276,6 +300,12 @@ def download_kb_files(
         logger.warning(
             "Global rules file not found",
             expected_key=f"documents/{global_kb}/global-rules.md",
+            bucket=data_bucket,
+        )
+    if procurement_kb and counts["procurement_rules"] == 0:
+        logger.warning(
+            "Procurement rules file not found",
+            expected_key=f"documents/{procurement_kb}/procurement-rules.md",
             bucket=data_bucket,
         )
     if project_kb and counts["project_rules"] == 0:

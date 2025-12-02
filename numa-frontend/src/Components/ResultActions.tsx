@@ -5,8 +5,10 @@ import { jsPDF } from 'jspdf';
 import ReactDOMServer from 'react-dom/server';
 import { MarkdownContent } from './Renderers/MarkdownContent';
 import { useAuth } from '../Providers/AuthProvider';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { uploadFileToS3 } from '../utils/s3Utils';
 import { createDocxBlob } from '../Services/fileConverter';
+import { downloadDocx, downloadPdf } from '../Services/documentConverterService';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import { getExportOptionsForApp } from '../config/exportConfig';
 
@@ -56,6 +58,7 @@ interface ResultActionsProps {
 
 const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result', appType = null }) => {
   const { getCredentials } = useAuth();
+  const { numaPost } = useNumaRequest();
 
   const exportOptions = getExportOptionsForApp(appType);
 
@@ -64,6 +67,9 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
   const [modalStep, setModalStep] = useState('confirm');
   const [docName, setDocName] = useState(title);
   const [successMessage, setSuccessMessage] = useState('');
+
+  // Download loading state
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // ─────────────────────────────────────────────────────────────
   // PDF Creation Constants
@@ -460,12 +466,33 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
 
   // ─────────────────────────────────────────────────────────────
   // DOWNLOAD Handlers (PDF, CSV, JSON, DOCX)
+
+  // Client-side fallback for PDF generation
+  const createPdfClientSide = async (): Promise<void> => {
+    const pdfBlob = await createStyledPdfBlob(content, title);
+    saveAs(pdfBlob, `${title}.pdf`);
+  };
+
+  // Client-side fallback for DOCX generation
+  const createDocxClientSide = async (): Promise<void> => {
+    const docxBlob = await createDocxBlob(content, title);
+    saveAs(docxBlob, `${title}.docx`);
+  };
+
   const handleDownloadPDF = async () => {
+    setIsDownloading(true);
     try {
-      const pdfBlob = await createStyledPdfBlob(content, title);
-      saveAs(pdfBlob, `${title}.pdf`);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
+      // Try server-side conversion first
+      await downloadPdf(numaPost, content, title);
+    } catch (serverError) {
+      console.warn('Server-side PDF conversion failed, falling back to client-side:', serverError);
+      try {
+        await createPdfClientSide();
+      } catch (clientError) {
+        console.error('Error generating PDF:', clientError);
+      }
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -486,11 +513,19 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
   };
 
   const handleDownloadDocx = async () => {
+    setIsDownloading(true);
     try {
-      const docxBlob = await createDocxBlob(content, title);
-      saveAs(docxBlob, `${title}.docx`);
-    } catch (err) {
-      console.error('Error generating DOCX:', err);
+      // Try server-side conversion first
+      await downloadDocx(numaPost, content, title);
+    } catch (serverError) {
+      console.warn('Server-side DOCX conversion failed, falling back to client-side:', serverError);
+      try {
+        await createDocxClientSide();
+      } catch (clientError) {
+        console.error('Error generating DOCX:', clientError);
+      }
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -653,9 +688,18 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
   return (
     <div className="result-actions d-flex gap-2 mt-3">
       <Dropdown>
-        <Dropdown.Toggle variant="btn btn-primary" id="download-dropdown">
-          <i className="bi bi-download me-2"></i>
-          Download
+        <Dropdown.Toggle variant="btn btn-primary" id="download-dropdown" disabled={isDownloading}>
+          {isDownloading ? (
+            <>
+              <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+              Converting...
+            </>
+          ) : (
+            <>
+              <i className="bi bi-download me-2"></i>
+              Download
+            </>
+          )}
         </Dropdown.Toggle>
         <Dropdown.Menu>
           {exportOptions.pdf && (

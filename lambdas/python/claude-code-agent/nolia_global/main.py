@@ -59,7 +59,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     user_id = event["user_id"]
     extracted_content_key = event.get("extracted_content_key", "")
     global_kb = event.get("global_kb", "")
-    project_kb = event.get("project_kb", "")
+    procurement_kb = event.get("procurement_kb", "")
     phase = event.get("phase", 2)
 
     logger.info("Starting Nolia Global Rules (Phase 2)", job_id=job_id, phase=phase)
@@ -73,6 +73,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
     # Setup event streaming
     app_context = event_streaming.setup_event_context(event, bucket)
+    event_streaming.try_append_event("PHASE:GLOBAL:START", app_context)
     event_streaming.try_append_event(
         "Checking global procurement rules...", app_context
     )
@@ -85,7 +86,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         _download_extracted_content(extracted_content_key, bucket, dirs["inputs"])
 
     # Download knowledge base files
-    nolia_utils.download_kb_files(data_bucket, global_kb, project_kb, workdir)
+    nolia_utils.download_kb_files(data_bucket, global_kb, procurement_kb, workdir)
 
     # Setup home directory and settings
     home = Path(os.environ.get("HOME", "/tmp"))
@@ -133,6 +134,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     result_text = _get_phase_result(dirs["tmp"])
 
     logger.info("Nolia Global Rules (Phase 2) complete", job_id=job_id)
+    event_streaming.try_append_event("PHASE:GLOBAL:COMPLETE", app_context)
 
     return appoutput.format_inline_result(
         title="Phase 2: Global Rules Compliance Complete",

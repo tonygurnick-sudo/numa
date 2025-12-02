@@ -1,21 +1,19 @@
 {
-  "clientAccountId": "838207858000",
+  "clientAccountId": "006043185629",
   "provisionQResources": false,
   "pipedreamIntegrations": true,
-  "agents": true,
+  "agents": false,
   "region": "us-east-1",
+  "allProdApps": false,
   "apps": {
-    "meeting-analyser": {},
-    "data-analysis": {},
-    "contract-analysis": {},
-    "policy-drafter": {},
-    "policy-reviewer": {},
-    "candidate-screening": {},
-    "document-summariser": {}
+    "tor-assessment": {},
+    "nolia": {},
+    "gdsr-assessment": {},
+    "rfp-response-comparison": {},
+    "procurement-rfp-assessment": {}
   },
   "preferredKnowledgeBase": "bedrock",
   "vectorStorageType": "s3vectors",
-  "bedrockAccount": "905418183804",
   "allowBedrockQuotaSharing": false,
-  "brandingProviderEnabled": true
+  "additionalOrigins": ["http://worldbank.getnolia.io", "https://worldbank.getnolia.io"]
 }

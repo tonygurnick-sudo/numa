@@ -1,4 +1,5 @@
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
+import { ServerlessapplicationrepositoryCloudformationStack } from '@cdktf/provider-aws/lib/serverlessapplicationrepository-cloudformation-stack';
 import { Construct } from 'constructs';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
 import { NumaLogGroup } from './numa-log-group';
@@ -397,6 +398,62 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         { verb: 'ANY', path: 'agents/{proxy+}' },
       ],
     });
+
+    // Document Converter API - converts markdown to DOCX/PDF
+    // Uses Pandoc layer for MD->DOCX, LibreOffice layer for DOCX->PDF
+
+    // Deploy Pandoc layer from SAR (Serverless Application Repository)
+    // SAR app ID is always in us-east-1, but deploys to the current region
+    const pandocSarStack = new ServerlessapplicationrepositoryCloudformationStack(this, 'pandoc-layer', {
+      name: `${props.clientName}-pandoc-layer`,
+      applicationId: 'arn:aws:serverlessrepo:us-east-1:145266761615:applications/pandoc-lambda-layer',
+      capabilities: ['CAPABILITY_IAM'],
+      lifecycle: {
+        ignoreChanges: ['parameters', 'tags'],
+      },
+    });
+    const pandocLayerArn = pandocSarStack.outputs.lookup('LayerVersion');
+
+    const libreOfficeLayerArn = this.getLibreOfficeLayerArn(props.region);
+    this.addLambdaFunction(this, 'document-converter', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/document-converter',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      route: {
+        verb: 'POST',
+        path: 'document-converter',
+      },
+      environment: {
+        OUTPUTS_BUCKET: props.outputsBucketName,
+        LOG_LEVEL: 'INFO',
+        PATH: '/opt/bin:/usr/local/bin:/usr/bin:/bin',
+        HOME: '/tmp', // Required for LibreOffice to work
+      },
+      timeout: 120,
+      memorySize: 2048,
+      ephemeralStorageMb: 512,
+      additionalLayers: [pandocLayerArn, libreOfficeLayerArn],
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['s3:PutObject', 's3:GetObject'],
+          resources: [`${props.outputsBucketArn}/*`],
+        },
+      ],
+    });
+  }
+
+  /**
+   * Get the LibreOffice Lambda layer ARN for the given region.
+   * Layer from: https://github.com/shelfio/libreoffice-lambda-layer
+   */
+  private getLibreOfficeLayerArn(region: string): string {
+    const layerArns: Record<string, string> = {
+      'us-east-1': 'arn:aws:lambda:us-east-1:764866452798:layer:libreoffice-brotli:1',
+      'ap-southeast-2': 'arn:aws:lambda:ap-southeast-2:764866452798:layer:libreoffice-brotli:1',
+    };
+    return layerArns[region] || layerArns['us-east-1'];
   }
 }
 

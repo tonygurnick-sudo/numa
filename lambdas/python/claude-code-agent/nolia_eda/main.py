@@ -61,7 +61,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     user_id = event["user_id"]
     extracted_content_key = event.get("extracted_content_key", "")
     global_kb = event.get("global_kb", "")
-    project_kb = event.get("project_kb", "")
+    procurement_kb = event.get("procurement_kb", "")
     phase = event.get("phase", 1)
 
     logger.info(
@@ -69,7 +69,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         job_id=job_id,
         phase=phase,
         global_kb=global_kb,
-        project_kb=project_kb,
+        procurement_kb=procurement_kb,
     )
 
     # Setup workspace
@@ -81,6 +81,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
     # Setup event streaming
     app_context = event_streaming.setup_event_context(event, bucket)
+    event_streaming.try_append_event("PHASE:EDA:START", app_context)
     event_streaming.try_append_event("Exploring document structure...", app_context)
 
     # Download extracted content
@@ -88,7 +89,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         _download_extracted_content(extracted_content_key, bucket, dirs["inputs"])
 
     # Download knowledge base files
-    nolia_utils.download_kb_files(data_bucket, global_kb, project_kb, workdir)
+    nolia_utils.download_kb_files(data_bucket, global_kb, procurement_kb, workdir)
 
     # Copy output template to workspace
     nolia_utils.copy_output_template_to_workspace(workdir)
@@ -137,6 +138,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     result_text = _get_phase_result(dirs["tmp"])
 
     logger.info("Nolia EDA (Phase 1) complete", job_id=job_id)
+    event_streaming.try_append_event("PHASE:EDA:COMPLETE", app_context)
 
     return appoutput.format_inline_result(
         title="Phase 1: Document Analysis Complete",
@@ -334,6 +336,6 @@ def _get_phase_result(tmp_dir: Path) -> str:
     # Fallback
     manifest_path = tmp_dir / "document_manifest.json"
     if manifest_path.exists():
-        return f"# Phase 1 Complete\n\nDocument manifest created. See `tmp/document_manifest.json` for details."
+        return "# Phase 1 Complete\n\nDocument manifest created. See `tmp/document_manifest.json` for details."
 
     return "# Phase 1 Complete\n\nDocument analysis completed."

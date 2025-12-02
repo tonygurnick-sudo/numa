@@ -52,19 +52,39 @@ export class Nolia extends BaseNumaApp {
           type: DROPDOWN_TASK,
           required: true,
           params: {
-            options: ['global-test1', 'global-regulations-2025'],
+            options: ['global-test1'],
           },
           order: 2,
+        },
+        {
+          id: 'procurement-kb-selection',
+          title: 'Select Procurement Knowledge Base',
+          type: DROPDOWN_TASK,
+          required: false,
+          params: {
+            options: ['procurement-test-1'],
+          },
+          order: 3,
         },
         {
           id: 'project-kb-selection',
           title: 'Select Project Knowledge Base',
           type: DROPDOWN_TASK,
+          required: false,
+          params: {
+            options: ['project-test-1'],
+          },
+          order: 4,
+        },
+        {
+          id: 'assessment-type-selection',
+          title: 'Select Assessment Type',
+          type: DROPDOWN_TASK,
           required: true,
           params: {
-            options: ['project-test1', 'ventilators-procurement'],
+            options: ['evaluation-report', 'terms-of-reference'],
           },
-          order: 3,
+          order: 5,
         },
         {
           id: 'call-step-function',
@@ -75,10 +95,12 @@ export class Nolia extends BaseNumaApp {
             payload: {
               uploaded_file: '@upload-file-to-s3',
               global_kb: '@global-kb-selection',
+              procurement_kb: '@procurement-kb-selection',
               project_kb: '@project-kb-selection',
+              assessment_type: '@assessment-type-selection',
             },
           },
-          order: 4,
+          order: 6,
         },
       ],
       typicalDurationMinutes: 5,
@@ -243,18 +265,32 @@ export class Nolia extends BaseNumaApp {
     const stepFunctionDefinition = {
       StartAt: 'WriteProcessingStatus',
       States: {
-        WriteProcessingStatus: this.writeProcessingStatus(),
+        WriteProcessingStatus: {
+          ...this.writeProcessingStatus(),
+          Next: 'ApplyDefaults', // Override to go through defaults before Initialize
+        },
+        // Apply defaults for optional fields (project_kb, assessment_type) before Initialize
+        ApplyDefaults: {
+          Type: 'Pass',
+          Parameters: {
+            'merged.$':
+              'States.JsonMerge(States.StringToJson(\'{"project_kb":"","assessment_type":"evaluation-report"}\'), $$.Execution.Input, false)',
+          },
+          Next: 'Initialize',
+        },
         Initialize: {
           Type: 'Pass',
           Parameters: {
-            'job_id.$': '$$.Execution.Input.job_id',
-            'user_id.$': '$$.Execution.Input.user_id',
-            'uploaded_file.$': '$$.Execution.Input.uploaded_file',
-            'input_key.$': '$$.Execution.Input.uploaded_file[0].s3_key',
-            'file_name.$': '$$.Execution.Input.uploaded_file[0].name',
-            'global_kb.$': '$$.Execution.Input.global_kb',
-            'project_kb.$': '$$.Execution.Input.project_kb',
-            'user_timezone.$': '$$.Execution.Input.user_timezone',
+            'job_id.$': '$.merged.job_id',
+            'user_id.$': '$.merged.user_id',
+            'uploaded_file.$': '$.merged.uploaded_file',
+            'input_key.$': '$.merged.uploaded_file[0].s3_key',
+            'file_name.$': '$.merged.uploaded_file[0].name',
+            'global_kb.$': '$.merged.global_kb',
+            'procurement_kb.$': '$.merged.procurement_kb',
+            'project_kb.$': '$.merged.project_kb',
+            'user_timezone.$': '$.merged.user_timezone',
+            'assessment_type.$': '$.merged.assessment_type',
           },
           Next: 'CheckFileType',
         },
@@ -280,8 +316,10 @@ export class Nolia extends BaseNumaApp {
             'input_key.$': '$.input_key',
             'file_name.$': '$.file_name',
             'global_kb.$': '$.global_kb',
+            'procurement_kb.$': '$.procurement_kb',
             'project_kb.$': '$.project_kb',
             'user_timezone.$': '$.user_timezone',
+            'assessment_type.$': '$.assessment_type',
             extracted: {
               'output_key.$': '$.input_key',
             },
@@ -437,8 +475,10 @@ export class Nolia extends BaseNumaApp {
             'user_id.$': '$.user_id',
             'extracted_content_key.$': '$.extracted.output_key',
             'global_kb.$': '$.global_kb',
+            'procurement_kb.$': '$.procurement_kb',
             'project_kb.$': '$.project_kb',
             'user_timezone.$': '$.user_timezone',
+            'assessment_type.$': '$.assessment_type',
             phase: 1,
             resume_session: false,
             stream_events: true,
@@ -455,6 +495,7 @@ export class Nolia extends BaseNumaApp {
         RunPhases2And3Parallel: {
           Type: 'Parallel',
           Branches: [
+            // Branch 1: Global Rules (Phase 2) - always runs
             {
               StartAt: 'RunPhase2Global',
               States: {
@@ -468,8 +509,10 @@ export class Nolia extends BaseNumaApp {
                       'user_id.$': '$.user_id',
                       'extracted_content_key.$': '$.extracted.output_key',
                       'global_kb.$': '$.global_kb',
+                      'procurement_kb.$': '$.procurement_kb',
                       'project_kb.$': '$.project_kb',
                       'user_timezone.$': '$.user_timezone',
+                      'assessment_type.$': '$.assessment_type',
                       phase: 2,
                       resume_session: true,
                       stream_events: true,
@@ -489,21 +532,36 @@ export class Nolia extends BaseNumaApp {
                 Phase2Failed: { Type: 'Fail', Error: 'Phase2Failed', Cause: 'Phase 2 global rules check failed' },
               },
             },
+            // Branch 2: Domain-Specific Rules (Phase 3) - conditional based on assessment_type
+            // evaluation-report -> Procurement rules
+            // terms-of-reference -> Project rules
             {
-              StartAt: 'RunPhase3Project',
+              StartAt: 'CheckAssessmentType',
               States: {
-                RunPhase3Project: {
+                CheckAssessmentType: {
+                  Type: 'Choice',
+                  Choices: [
+                    {
+                      Variable: '$.assessment_type',
+                      StringEquals: 'terms-of-reference',
+                      Next: 'RunPhase3Project',
+                    },
+                  ],
+                  Default: 'RunPhase3Procurement',
+                },
+                RunPhase3Procurement: {
                   ...this.addLambdaTask(
                     runner.arn,
                     {
-                      agent_type: 'nolia_project',
+                      agent_type: 'nolia_procurement',
                       app_id: this.appId,
                       'job_id.$': '$.job_id',
                       'user_id.$': '$.user_id',
                       'extracted_content_key.$': '$.extracted.output_key',
                       'global_kb.$': '$.global_kb',
-                      'project_kb.$': '$.project_kb',
+                      'procurement_kb.$': '$.procurement_kb',
                       'user_timezone.$': '$.user_timezone',
+                      'assessment_type.$': '$.assessment_type',
                       phase: 3,
                       resume_session: true,
                       stream_events: true,
@@ -520,7 +578,36 @@ export class Nolia extends BaseNumaApp {
                     },
                   ],
                 },
-                Phase3Failed: { Type: 'Fail', Error: 'Phase3Failed', Cause: 'Phase 3 project rules check failed' },
+                RunPhase3Project: {
+                  ...this.addLambdaTask(
+                    runner.arn,
+                    {
+                      agent_type: 'nolia_project',
+                      app_id: this.appId,
+                      'job_id.$': '$.job_id',
+                      'user_id.$': '$.user_id',
+                      'extracted_content_key.$': '$.extracted.output_key',
+                      'global_kb.$': '$.global_kb',
+                      'project_kb.$': '$.project_kb',
+                      'user_timezone.$': '$.user_timezone',
+                      'assessment_type.$': '$.assessment_type',
+                      phase: 3,
+                      resume_session: true,
+                      stream_events: true,
+                      use_dynamodb: true,
+                    },
+                    null, // End in branch, let Parallel handle Next
+                  ),
+                  // Override Catch to use End instead of WriteFailureStatus (which doesn't exist in branch)
+                  Catch: [
+                    {
+                      ErrorEquals: ['States.ALL'],
+                      ResultPath: '$.CatcherOutput',
+                      Next: 'Phase3Failed',
+                    },
+                  ],
+                },
+                Phase3Failed: { Type: 'Fail', Error: 'Phase3Failed', Cause: 'Phase 3 rules check failed' },
               },
             },
           ],
@@ -544,8 +631,10 @@ export class Nolia extends BaseNumaApp {
             'user_id.$': '$.user_id',
             'extracted_content_key.$': '$.extracted.output_key',
             'global_kb.$': '$.global_kb',
+            'procurement_kb.$': '$.procurement_kb',
             'project_kb.$': '$.project_kb',
             'user_timezone.$': '$.user_timezone',
+            'assessment_type.$': '$.assessment_type',
             phase: 4,
             resume_session: true,
             stream_events: true,

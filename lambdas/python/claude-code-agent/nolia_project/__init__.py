@@ -1,6 +1,6 @@
 """
-Nolia Project Rules Agent - Phase 3.
+Nolia Project Rules Agent - Phase 3 (Terms of Reference).
 
-This agent checks the evaluation report against project-specific procurement
-rules, with deep-dive analysis on technical evaluation and qualification criteria.
+This agent checks the Terms of Reference document against project-specific
+rules, with analysis on project requirements and compliance criteria.
 """

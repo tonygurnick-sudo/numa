@@ -29,7 +29,12 @@ from utils import (
     session,
 )
 
-from .prompts import SYSTEM_PROMPT
+from .prompts import (
+    SYSTEM_PROMPT_EVALUATION,
+    SYSTEM_PROMPT_REVIEW_EVALUATION,
+    SYSTEM_PROMPT_REVIEW_TOR,
+    SYSTEM_PROMPT_TOR,
+)
 from .settings import ENV_VARS, SETTINGS_JSON
 
 logger = structlog.get_logger()
@@ -44,6 +49,10 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     2. Runs Claude CLI to generate the final report
     3. Uploads the final report to S3
 
+    Supports two assessment types:
+    - evaluation-report: Procurement evaluation reports (default)
+    - terms-of-reference: Terms of Reference / Project documents
+
     Args:
         event: Lambda event with job parameters
         context: Lambda context
@@ -57,10 +66,17 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     job_id = event["job_id"]
     user_id = event["user_id"]
     global_kb = event.get("global_kb", "")
+    procurement_kb = event.get("procurement_kb", "")
     project_kb = event.get("project_kb", "")
+    assessment_type = event.get("assessment_type", "evaluation-report")
     phase = event.get("phase", 4)
 
-    logger.info("Starting Nolia Report (Phase 4)", job_id=job_id, phase=phase)
+    logger.info(
+        "Starting Nolia Report (Phase 4)",
+        job_id=job_id,
+        phase=phase,
+        assessment_type=assessment_type,
+    )
 
     # Setup workspace
     workdir = Path(f"/tmp/cc_ws/{job_id}")
@@ -71,6 +87,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
     # Setup event streaming
     app_context = event_streaming.setup_event_context(event, bucket)
+    event_streaming.try_append_event("PHASE:REPORT:START", app_context)
     event_streaming.try_append_event(
         "Preparing final evaluation report...", app_context
     )
@@ -79,7 +96,9 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     nolia_utils.hydrate_tmp_from_s3(dirs["tmp"], bucket, prefix)
 
     # Download knowledge base files (for reference documents)
-    nolia_utils.download_kb_files(data_bucket, global_kb, project_kb, workdir)
+    nolia_utils.download_kb_files(
+        data_bucket, global_kb, procurement_kb, workdir, project_kb=project_kb
+    )
 
     # Copy output template to workspace
     nolia_utils.copy_output_template_to_workspace(workdir)
@@ -88,18 +107,18 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     home = Path(os.environ.get("HOME", "/tmp"))
     session.ensure_settings(SETTINGS_JSON, home)
 
-    # Build the prompt
-    user_prompt = _build_user_prompt()
+    # Build the prompt based on assessment type
+    user_prompt = _build_user_prompt(assessment_type)
 
     # Ensure Claude CLI is available
     bin_path = cli_runner.ensure_claude_cli(bucket)
 
-    # Build system prompt
+    # Build system prompt based on assessment type
     system_prompt = _build_runtime_system_prompt(
-        workdir, event.get("user_timezone", "UTC")
+        workdir, event.get("user_timezone", "UTC"), assessment_type
     )
 
-    # Run Claude CLI
+    # Run Claude CLI - First pass: Generate report
     trace_path = workdir / "trace.jsonl"
     event_streaming.try_append_event("Writing final evaluation report...", app_context)
     new_session_id, _ = _run_claude_cli(
@@ -111,11 +130,30 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         app_context=app_context,
     )
 
+    # Run Claude CLI - Second pass: Review and refine report
+    event_streaming.try_append_event("Reviewing and refining report...", app_context)
+    review_prompt = _build_review_prompt(assessment_type)
+    review_system_prompt = _build_review_system_prompt(
+        workdir, event.get("user_timezone", "UTC"), assessment_type
+    )
+    review_trace_path = workdir / "review_trace.jsonl"
+    _run_claude_cli(
+        bin_path=bin_path,
+        workdir=workdir,
+        prompt=review_prompt,
+        system_prompt=review_system_prompt,
+        trace_path=review_trace_path,
+        app_context=app_context,
+    )
+
     # Upload outputs directory to S3
     _upload_outputs(dirs["outputs"], bucket, prefix)
 
-    # Upload trace
-    _upload_trace(trace_path, bucket, prefix)
+    # Upload traces
+    _upload_trace(trace_path, bucket, prefix, trace_name="phase4_trace.jsonl")
+    _upload_trace(
+        review_trace_path, bucket, prefix, trace_name="phase4_review_trace.jsonl"
+    )
 
     # Finalize job artifacts
     _finalize_job(dirs, bucket, prefix, job_id, new_session_id)
@@ -124,29 +162,31 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     result_text, report_s3_key = _get_final_report(dirs["outputs"], bucket, prefix)
 
     logger.info("Nolia Report (Phase 4) complete", job_id=job_id)
+    event_streaming.try_append_event("PHASE:REPORT:COMPLETE", app_context)
 
     # For large reports, return summary inline with full report in S3
     # Step Functions have 256KB payload limit
-    MAX_INLINE_SIZE = 50000  # ~50KB to be safe
+    max_inline_size = 50000  # ~50KB to be safe
 
-    if len(result_text) > MAX_INLINE_SIZE:
+    if len(result_text) > max_inline_size:
         summary = _extract_summary(result_text)
         return appoutput.format_s3_result(
             title="Final Evaluation Report",
             s3_key=report_s3_key,
             summary=summary,
         )
-    else:
-        return appoutput.format_inline_result(
-            title="Final Evaluation Report",
-            content=result_text,
-            s3_key=report_s3_key,
-        )
+
+    return appoutput.format_inline_result(
+        title="Final Evaluation Report",
+        content=result_text,
+        s3_key=report_s3_key,
+    )
 
 
-def _build_user_prompt() -> str:
-    """Build the user prompt for Phase 4."""
-    return """Generate the final World Bank peer review evaluation report.
+def _build_user_prompt(assessment_type: str = "evaluation-report") -> str:
+    """Build the user prompt for Phase 4 based on assessment type."""
+    if assessment_type == "terms-of-reference":
+        return """Generate the final World Bank Terms of Reference assessment report.
 
 Read the phase notes FIRST to understand key findings from prior phases:
 - tmp/global-phase-notes.md - Key findings from Phase 2 (Global Rules)
@@ -158,6 +198,31 @@ Then read the required input files:
 - tmp/global_rules_summary.md
 - tmp/project_rules_compliance.csv
 - tmp/project_rules_summary.md
+- tmp/recurring_issues.csv (if exists)
+- tmp/gaps_analysis.md (if exists)
+
+Create the final report in outputs/Final_ToR_Assessment_{PROJECT_NAME}.md
+
+Include:
+- All findings from Phase 2 and 3 CSVs
+- Professional World Bank peer review tone
+- Path forward recommendations
+- Compliant Areas section with positive observations
+- Complete Annexes"""
+
+    # Default: evaluation-report
+    return """Generate the final World Bank peer review evaluation report.
+
+Read the phase notes FIRST to understand key findings from prior phases:
+- tmp/global-phase-notes.md - Key findings from Phase 2 (Global Rules)
+- tmp/procurement-phase-notes.md - Key findings from Phase 3 (Procurement Rules)
+
+Then read the required input files:
+- tmp/document_manifest.json
+- tmp/global_rules_compliance.csv
+- tmp/global_rules_summary.md
+- tmp/procurement_rules_compliance.csv
+- tmp/procurement_rules_summary.md
 - tmp/recurring_issues.csv (if exists)
 - tmp/failed_lots_analysis.md (if exists)
 
@@ -173,8 +238,10 @@ Include:
 - Complete Annexes"""
 
 
-def _build_runtime_system_prompt(workdir: Path, user_tz: str) -> str:
-    """Build system prompt with runtime context."""
+def _build_runtime_system_prompt(
+    workdir: Path, user_tz: str, assessment_type: str = "evaluation-report"
+) -> str:
+    """Build system prompt with runtime context based on assessment type."""
     tz: Union[ZoneInfo, timezone]
     try:
         tz = ZoneInfo(user_tz)
@@ -184,7 +251,75 @@ def _build_runtime_system_prompt(workdir: Path, user_tz: str) -> str:
     today_date = datetime.now(tz).strftime("%A, %B %d, %Y")
     platform_info = f"{platform.system()} {platform.release()}"
 
-    return SYSTEM_PROMPT.format(
+    # Select base prompt based on assessment type
+    if assessment_type == "terms-of-reference":
+        base_prompt = SYSTEM_PROMPT_TOR
+    else:
+        base_prompt = SYSTEM_PROMPT_EVALUATION
+
+    return base_prompt.format(
+        working_directory=str(workdir),
+        platform=platform_info,
+        today_date=today_date,
+    )
+
+
+def _build_review_prompt(assessment_type: str = "evaluation-report") -> str:
+    """Build the user prompt for the review pass."""
+    if assessment_type == "terms-of-reference":
+        return """Review and refine the generated Terms of Reference assessment report.
+
+Read the generated report in outputs/ and review it against:
+1. The compliance CSVs in tmp/ - use the `source_reference` column to replace any internal rule IDs with actual policy citations
+2. The phase notes and summaries for completeness
+3. The expected structure and tone
+
+Focus on:
+- Replacing internal rule references (G-001, P-003, etc.) with actual policy document citations from the CSVs
+- Ensuring all sections are present and properly structured
+- Making annexes detailed with specific data
+- Verifying all Phase 2/3 findings are included
+- Maintaining World Bank professional tone throughout
+
+Edit the report file in-place."""
+
+    return """Review and refine the generated evaluation report.
+
+Read the generated report in outputs/ and review it against:
+1. The compliance CSVs in tmp/ - use the `source_reference` column to replace any internal rule IDs with actual policy citations
+2. The phase notes and summaries for completeness
+3. The Output_Template_Evaluation_Report.md for expected structure
+
+Focus on:
+- Replacing internal rule references (G-001, P-003, etc.) with actual policy document citations from the CSVs
+- Ensuring all 19 sections are present and properly structured
+- Making annexes detailed with specific data (bidder names, lot numbers, page references)
+- Verifying all Phase 2/3 findings are included
+- Maintaining World Bank professional peer-review tone throughout
+
+Edit the report file in-place."""
+
+
+def _build_review_system_prompt(
+    workdir: Path, user_tz: str, assessment_type: str = "evaluation-report"
+) -> str:
+    """Build system prompt for review pass with runtime context."""
+    tz: Union[ZoneInfo, timezone]
+    try:
+        tz = ZoneInfo(user_tz)
+    except Exception:
+        tz = timezone.utc
+
+    today_date = datetime.now(tz).strftime("%A, %B %d, %Y")
+    platform_info = f"{platform.system()} {platform.release()}"
+
+    # Select review prompt based on assessment type
+    if assessment_type == "terms-of-reference":
+        base_prompt = SYSTEM_PROMPT_REVIEW_TOR
+    else:
+        base_prompt = SYSTEM_PROMPT_REVIEW_EVALUATION
+
+    return base_prompt.format(
         working_directory=str(workdir),
         platform=platform_info,
         today_date=today_date,
@@ -303,10 +438,12 @@ def _upload_outputs(outputs_dir: Path, bucket: str, prefix: str) -> None:
                 )
 
 
-def _upload_trace(trace_path: Path, bucket: str, prefix: str) -> None:
+def _upload_trace(
+    trace_path: Path, bucket: str, prefix: str, trace_name: str = "phase4_trace.jsonl"
+) -> None:
     """Upload trace file to S3."""
     if trace_path.exists():
-        trace_key = s3_operations.safe_s3_key(prefix, "trace", "phase4_trace.jsonl")
+        trace_key = s3_operations.safe_s3_key(prefix, "trace", trace_name)
         s3_helpers.write(
             trace_key,
             trace_path.read_bytes(),
