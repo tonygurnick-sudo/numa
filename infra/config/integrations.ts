@@ -18,6 +18,12 @@ export const SUPPORTED_INTEGRATIONS = [
   'google_analytics',
   'sharepoint',
   'salesforce_rest_api',
+  'asana',
+  'microsoft_onenote',
+  'trello',
+  'whatsapp_business',
+  'mailchimp',
+  'freshdesk',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];
