@@ -50,16 +50,29 @@ class AgentToolsConfig:
     web_search_enabled: bool = False
     create_agent_enabled: bool = False
     enabled_connections: Optional[List[str]] = None
+    # Multi-KB support: None = all KBs, [] = no KB access, list = specific KBs
+    allowed_knowledge_bases: Optional[List[str]] = None
 
     @classmethod
     def from_payload(cls, payload: Dict[str, Any]) -> "AgentToolsConfig":
         payload = payload or {}
+        # Handle allowedKnowledgeBases: preserve null vs undefined vs array
+        allowed_kbs_raw = payload.get("allowedKnowledgeBases")
+        allowed_kbs: Optional[List[str]] = None
+        if allowed_kbs_raw is None and "allowedKnowledgeBases" in payload:
+            # Explicitly set to null in payload
+            allowed_kbs = None
+        elif isinstance(allowed_kbs_raw, list):
+            allowed_kbs = list(allowed_kbs_raw)
+        # else: undefined, leave as None (backwards compat - means all KBs)
+
         return cls(
             auto_tools_enabled=bool(payload.get("autoToolsEnabled", True)),
             query_data_sources=bool(payload.get("queryDataSources", False)),
             web_search_enabled=bool(payload.get("webSearchEnabled", False)),
             create_agent_enabled=bool(payload.get("createAgentEnabled", False)),
             enabled_connections=list(payload.get("enabledConnections") or []),
+            allowed_knowledge_bases=allowed_kbs,
         )
 
     def to_item(self) -> Dict[str, Any]:
@@ -72,6 +85,9 @@ class AgentToolsConfig:
             item["enabledConnections"] = self.enabled_connections
         if self.create_agent_enabled:
             item["createAgentEnabled"] = True
+        # Always include allowedKnowledgeBases if set (including empty array)
+        if self.allowed_knowledge_bases is not None:
+            item["allowedKnowledgeBases"] = self.allowed_knowledge_bases
         return item
 
 

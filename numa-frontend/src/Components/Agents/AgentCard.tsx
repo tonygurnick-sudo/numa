@@ -1,9 +1,10 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { Card, Button, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
-import { Database, Search, Robot } from 'react-bootstrap-icons';
+import { Search, Robot } from 'react-bootstrap-icons';
 import type { AgentSummary } from '../../types/agents';
 import { getConnectionConfig } from '../../config/integrationsConfig';
+import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import AgentAvatar from './AgentAvatar';
 import { downloadAgentExport, serializeAgentSummaryToExport } from '../../utils/agentExport';
 
@@ -91,12 +92,38 @@ export const AgentCard = ({
   // Collapse if explicitly in "My Agents" section
   const [isExpanded, setIsExpanded] = useState(!isInMyAgentsSection);
 
+  // Get available KBs for name lookup
+  const { availableKBs } = useKnowledgeBase();
+
+  // Helper to get KB display name
+  const getKBDisplayName = (kbId: string): string => {
+    if (kbId === 'company') return 'Company KB';
+    const kb = availableKBs.find((k) => k.kb_id === kbId);
+    return kb?.kb_name || kbId;
+  };
+
   const autoMode = agent.toolsConfig?.autoToolsEnabled;
-  const hasKB = autoMode || agent.toolsConfig?.queryDataSources;
   const hasWeb = autoMode || agent.toolsConfig?.webSearchEnabled;
   // In auto mode, the agent creation tool is also available
   const hasAgentCreation = autoMode || agent.toolsConfig?.createAgentEnabled;
   const canFavorite = Boolean(onToggleFavorite);
+
+  // Compute allowed KBs for display
+  const getAllowedKBs = (): string[] | 'all' | 'none' => {
+    const config = agent.toolsConfig;
+    const allowed = config?.allowedKnowledgeBases;
+
+    if (allowed === null || allowed === undefined) {
+      // Backwards compat: check queryDataSources
+      if (config?.queryDataSources === false) return 'none';
+      return 'all';
+    }
+    if (allowed.length === 0) return 'none';
+    return allowed;
+  };
+
+  const allowedKBs = getAllowedKBs();
+  const hasKB = allowedKBs !== 'none';
 
   const formatTimeSaved = (mins?: number) => {
     if (!mins || mins <= 0) return null;
@@ -218,13 +245,49 @@ export const AgentCard = ({
                     </div>
                   )}
 
+                  {/* KB Icons */}
+                  {hasKB && (
+                    <div className="d-flex align-items-center gap-1" style={{ flexShrink: 0 }}>
+                      {allowedKBs === 'all' ? (
+                        <OverlayTrigger
+                          placement="top"
+                          overlay={<Tooltip id="kb-all-collapsed">All Knowledge Bases</Tooltip>}
+                        >
+                          <i
+                            className="bi bi-folder-fill"
+                            style={{ fontSize: '14px', color: 'var(--brand-primary, var(--color-primary))' }}
+                          />
+                        </OverlayTrigger>
+                      ) : (
+                        <>
+                          {(allowedKBs as string[]).slice(0, 3).map((kbId) => (
+                            <OverlayTrigger
+                              key={kbId}
+                              placement="top"
+                              overlay={<Tooltip id={`kb-${kbId}-collapsed`}>{getKBDisplayName(kbId)}</Tooltip>}
+                            >
+                              <i
+                                className={kbId === 'company' ? 'bi bi-folder-fill' : 'bi bi-folder'}
+                                style={{ fontSize: '14px', color: 'var(--brand-primary, var(--color-primary))' }}
+                              />
+                            </OverlayTrigger>
+                          ))}
+                          {(allowedKBs as string[]).length > 3 && (
+                            <span className="text-muted" style={{ fontSize: '0.7rem' }}>
+                              +{(allowedKBs as string[]).length - 3}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {/* Tools Icons */}
-                  {(hasKB || hasWeb || hasAgentCreation) && (
+                  {(hasWeb || hasAgentCreation) && (
                     <div className="d-flex align-items-center gap-1" style={{ flexShrink: 0 }}>
                       {hasAgentCreation && (
                         <Robot size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                       )}
-                      {hasKB && <Database size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />}
                       {hasWeb && <Search size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />}
                     </div>
                   )}
@@ -334,8 +397,8 @@ export const AgentCard = ({
         {/* Metadata section */}
         <div className="border-top pt-3 mb-3">
           <div className="d-flex flex-column gap-2">
-            {/* Tools */}
-            {(hasKB || hasWeb || hasAgentCreation) && (
+            {/* Tools - only web search and agent creation */}
+            {(hasWeb || hasAgentCreation) && (
               <div className="d-flex align-items-start gap-2">
                 <span
                   className="text-muted small fw-semibold"
@@ -344,16 +407,6 @@ export const AgentCard = ({
                   TOOLS
                 </span>
                 <div className="d-flex align-items-center gap-2 flex-wrap">
-                  {hasKB && (
-                    <OverlayTrigger
-                      placement="top"
-                      overlay={<Tooltip id={`agent-${agent.agentId}-kb`}>Knowledge Base</Tooltip>}
-                    >
-                      <div>
-                        <Database size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
-                      </div>
-                    </OverlayTrigger>
-                  )}
                   {hasWeb && (
                     <OverlayTrigger
                       placement="top"
@@ -373,6 +426,43 @@ export const AgentCard = ({
                         <Robot size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                       </div>
                     </OverlayTrigger>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Knowledge Bases - separate row */}
+            {hasKB && (
+              <div className="d-flex align-items-start gap-2">
+                <span
+                  className="text-muted small fw-semibold"
+                  style={{ fontSize: '0.75rem', minWidth: 90, flexShrink: 0 }}
+                >
+                  KNOWLEDGE BASES
+                </span>
+                <div className="d-flex align-items-center gap-2 flex-wrap">
+                  {allowedKBs === 'all' ? (
+                    <OverlayTrigger
+                      placement="top"
+                      overlay={<Tooltip id={`agent-${agent.agentId}-kb-all`}>All Knowledge Bases</Tooltip>}
+                    >
+                      <i
+                        className="bi bi-folder-fill"
+                        style={{ fontSize: '18px', color: 'var(--brand-primary, var(--color-primary))' }}
+                      />
+                    </OverlayTrigger>
+                  ) : (
+                    (allowedKBs as string[]).map((kbId) => (
+                      <OverlayTrigger
+                        key={kbId}
+                        placement="top"
+                        overlay={<Tooltip id={`agent-${agent.agentId}-kb-${kbId}`}>{getKBDisplayName(kbId)}</Tooltip>}
+                      >
+                        <i
+                          className={kbId === 'company' ? 'bi bi-folder-fill' : 'bi bi-folder'}
+                          style={{ fontSize: '18px', color: 'var(--brand-primary, var(--color-primary))' }}
+                        />
+                      </OverlayTrigger>
+                    ))
                   )}
                 </div>
               </div>

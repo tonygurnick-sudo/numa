@@ -9,6 +9,11 @@ export type AgentToolsConfig = {
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
   enabledConnections?: string[];
+  // Multi-KB support: which knowledge bases the agent can access
+  // null/undefined = all KBs (backwards compat with queryDataSources: true)
+  // [] = no KB access
+  // ['company', 'kb-123'] = specific KBs only
+  allowedKnowledgeBases?: string[] | null;
 };
 
 export type AgentReferenceFile = {

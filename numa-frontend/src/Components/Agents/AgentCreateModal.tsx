@@ -6,6 +6,7 @@ import { Database, Search, Robot } from 'react-bootstrap-icons';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useBranding } from '../../Providers/BrandingContext';
+import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { AgentFileUpload } from './AgentFileUpload';
 import { AgentAvatarSelector } from './AgentAvatarSelector';
 import AgentAvatar from './AgentAvatar';
@@ -47,16 +48,21 @@ const DEFAULT_PAYLOAD: AgentPayload = {
     webSearchEnabled: false,
     createAgentEnabled: false,
     enabledConnections: [],
+    allowedKnowledgeBases: null, // null = all KBs
   },
   referenceFiles: [],
   requiredIntegrations: [],
   createdByName: '',
 };
 
+// KB access mode type for the UI
+type KBAccessMode = 'none' | 'all' | 'selected';
+
 export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSaved }: AgentCreateModalProps) => {
   const { user } = useAuth();
   const { numaGet, numaPost, numaPut } = useNumaRequest();
   const { branding } = useBranding();
+  const { availableKBs } = useKnowledgeBase();
 
   const deriveWelcomeMessage = (agent?: AgentSummary | null): string => agent?.userWelcomeMessage?.trim() ?? '';
 
@@ -359,6 +365,56 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
         [field]: value,
       },
     }));
+  };
+
+  // Derive KB access mode from form state
+  const getKBAccessMode = (): KBAccessMode => {
+    const allowed = formState.toolsConfig?.allowedKnowledgeBases;
+    if (allowed === null || allowed === undefined) {
+      // Backwards compat: check queryDataSources for existing agents
+      if (
+        formState.toolsConfig?.queryDataSources === false &&
+        editingAgent &&
+        !editingAgent.toolsConfig?.allowedKnowledgeBases
+      ) {
+        return 'none';
+      }
+      return 'all';
+    }
+    if (allowed.length === 0) return 'none';
+    return 'selected';
+  };
+
+  const kbAccessMode = getKBAccessMode();
+
+  // Handle KB access mode change
+  const handleKBAccessModeChange = (mode: KBAccessMode) => {
+    let newAllowedKBs: string[] | null;
+    switch (mode) {
+      case 'none':
+        newAllowedKBs = [];
+        break;
+      case 'all':
+        newAllowedKBs = null;
+        break;
+      case 'selected':
+        // Default to company KB when switching to selected mode
+        newAllowedKBs = ['company'];
+        break;
+    }
+    handleToolsChange('allowedKnowledgeBases', newAllowedKBs);
+  };
+
+  // Handle individual KB toggle in selected mode
+  const handleKBToggle = (kbId: string, checked: boolean) => {
+    const current = formState.toolsConfig?.allowedKnowledgeBases ?? [];
+    let newAllowed: string[];
+    if (checked) {
+      newAllowed = [...current, kbId];
+    } else {
+      newAllowed = current.filter((id) => id !== kbId);
+    }
+    handleToolsChange('allowedKnowledgeBases', newAllowed);
   };
 
   const handleIntegrationToggle = (integrationId: string) => {
@@ -924,37 +980,82 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                           className="fs-5"
                         />
                       </div>
-                      <div>
-                        <div
-                          className="d-flex align-items-center justify-content-between p-3 bg-white border rounded-2"
-                          style={{
-                            opacity: formState.toolsConfig?.autoToolsEnabled ? 0.6 : 1,
-                          }}
-                        >
-                          <div className="d-flex align-items-center gap-3">
-                            <div
-                              className="rounded-2 d-flex align-items-center justify-content-center"
-                              style={{ width: 40, height: 40, backgroundColor: '#6c757d' }}
-                            >
-                              <Database size={20} color="white" />
-                            </div>
-                            <div>
-                              <div className="fw-semibold">Knowledge base queries</div>
-                              <small className="text-muted">Allow the agent to search your knowledge base</small>
-                            </div>
+                      {/* Knowledge Base Access */}
+                      <div className="p-3 bg-white border rounded-2">
+                        <div className="d-flex align-items-center gap-3 mb-3">
+                          <div
+                            className="rounded-2 d-flex align-items-center justify-content-center"
+                            style={{ width: 40, height: 40, backgroundColor: '#6c757d' }}
+                          >
+                            <Database size={20} color="white" />
                           </div>
+                          <div>
+                            <div className="fw-semibold">Knowledge Base Access</div>
+                            <small className="text-muted">Configure which knowledge bases the agent can query</small>
+                          </div>
+                        </div>
+                        <div className="d-flex flex-column gap-2 ms-5">
                           <Form.Check
-                            type="switch"
-                            id="query-data-sources"
-                            checked={
-                              formState.toolsConfig?.autoToolsEnabled ||
-                              formState.toolsConfig?.queryDataSources ||
-                              false
-                            }
-                            disabled={saving || formState.toolsConfig?.autoToolsEnabled}
-                            onChange={(e) => handleToolsChange('queryDataSources', e.target.checked)}
-                            className="fs-5"
+                            type="radio"
+                            id="kb-access-none"
+                            name="kb-access-mode"
+                            label="No KB access"
+                            checked={kbAccessMode === 'none'}
+                            disabled={saving}
+                            onChange={() => handleKBAccessModeChange('none')}
                           />
+                          <Form.Check
+                            type="radio"
+                            id="kb-access-all"
+                            name="kb-access-mode"
+                            label="All available KBs"
+                            checked={kbAccessMode === 'all'}
+                            disabled={saving}
+                            onChange={() => handleKBAccessModeChange('all')}
+                          />
+                          <Form.Check
+                            type="radio"
+                            id="kb-access-selected"
+                            name="kb-access-mode"
+                            label="Select specific KBs"
+                            checked={kbAccessMode === 'selected'}
+                            disabled={saving}
+                            onChange={() => handleKBAccessModeChange('selected')}
+                          />
+                          {kbAccessMode === 'selected' && (
+                            <div className="ms-4 mt-2 p-3 bg-light border rounded-2">
+                              {availableKBs.length === 0 ? (
+                                <small className="text-muted">No knowledge bases available</small>
+                              ) : (
+                                availableKBs.map((kb) => (
+                                  <Form.Check
+                                    key={kb.kb_id}
+                                    type="checkbox"
+                                    id={`kb-select-${kb.kb_id}`}
+                                    label={
+                                      <span>
+                                        {kb.kb_name}
+                                        {kb.kb_id === 'company' && (
+                                          <span className="badge bg-secondary ms-2" style={{ fontSize: '0.7rem' }}>
+                                            Default
+                                          </span>
+                                        )}
+                                        {kb.is_shared && kb.kb_id !== 'company' && (
+                                          <span className="badge bg-info ms-2" style={{ fontSize: '0.7rem' }}>
+                                            Shared
+                                          </span>
+                                        )}
+                                      </span>
+                                    }
+                                    checked={(formState.toolsConfig?.allowedKnowledgeBases ?? []).includes(kb.kb_id)}
+                                    disabled={saving}
+                                    onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
+                                    className="mb-2"
+                                  />
+                                ))
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="mt-2 ms-5">
                           <Button

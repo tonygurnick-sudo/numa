@@ -232,7 +232,7 @@ def web_search(query: str, user_intent: str, max_results: int = 2):
                     },
                     "queryDataSources": {
                         "type": "boolean",
-                        "description": "Enable knowledge base queries.",
+                        "description": "Enable knowledge base queries (deprecated, use allowedKnowledgeBases).",
                     },
                     "webSearchEnabled": {
                         "type": "boolean",
@@ -257,6 +257,15 @@ def web_search(query: str, user_intent: str, max_results: int = 2):
                                 else ""
                             )
                         ).strip(),
+                    },
+                    "allowedKnowledgeBases": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                        "description": (
+                            "Which knowledge bases the agent can access. "
+                            "null = all KBs (default), [] = no KB access, "
+                            "['company', 'kb-id'] = specific KBs only."
+                        ),
                     },
                 },
                 "additionalProperties": False,
