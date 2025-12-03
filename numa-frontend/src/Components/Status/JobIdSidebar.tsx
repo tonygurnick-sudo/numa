@@ -30,6 +30,7 @@ const JobIdSidebar = () => {
         onHide={handleClose}
         placement="end"
         animation={false}
+        className="job-id-offcanvas"
         style={{ width: '350px', boxShadow: '0 0 15px rgba(0,0,0,0.2)' }}
       >
         <Offcanvas.Header closeButton className="border-bottom bg-light py-3">
