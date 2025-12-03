@@ -19,7 +19,7 @@ export const SUPPORTED_INTEGRATIONS = [
   'sharepoint',
   'salesforce_rest_api',
   'asana',
-  'microsoft_onenote',
+  'onenote',
   'trello',
   'whatsapp_business',
   'mailchimp',
