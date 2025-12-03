@@ -99,4 +99,102 @@ describe('autoChatTitle - prompt-only title generation', () => {
       'auto',
     );
   });
+
+  it('skips auto-naming when nameSource is manual', async () => {
+    const conversationId = 'convo-manual';
+    const userId = 'user-1';
+
+    // Mock Dynamo utils with nameSource='manual' (user renamed the chat)
+    const items = [
+      {
+        message_type: 'meta',
+        conversationName: 'User Named This Chat',
+        nameSource: 'manual',
+        timestamp: 1,
+      },
+      {
+        message_type: 'text',
+        role: 'user',
+        content: 'Hello there!',
+        timestamp: 2,
+      },
+      {
+        message_type: 'text',
+        role: 'assistant',
+        content: 'Hi! How can I help?',
+        timestamp: 3,
+      },
+    ];
+
+    const numaChatDynamoUtils = {
+      queryConversations: vi.fn().mockResolvedValue(items),
+      updateConversationName: vi.fn().mockResolvedValue(undefined),
+    } as unknown as import('../../utils/DynamoDBUtils').NumaChatDynamoUtils;
+
+    // Bedrock client should not be called
+    const bedrockRuntimeClient = {
+      send: vi.fn(),
+    } as unknown as BedrockRuntimeClient;
+
+    const renamed = await autoNameConversation({
+      conversationId,
+      userId,
+      bedrockRuntimeClient,
+      numaChatDynamoUtils,
+      region: null,
+    });
+
+    expect(renamed).toBe(false);
+    expect(numaChatDynamoUtils.updateConversationName).not.toHaveBeenCalled();
+    expect(bedrockRuntimeClient.send).not.toHaveBeenCalled();
+  });
+
+  it('skips auto-naming when nameSource is auto (already auto-named)', async () => {
+    const conversationId = 'convo-auto';
+    const userId = 'user-1';
+
+    // Mock Dynamo utils with nameSource='auto' (already auto-named)
+    const items = [
+      {
+        message_type: 'meta',
+        conversationName: 'Previously Auto-Named Chat',
+        nameSource: 'auto',
+        timestamp: 1,
+      },
+      {
+        message_type: 'text',
+        role: 'user',
+        content: 'Another question',
+        timestamp: 2,
+      },
+      {
+        message_type: 'text',
+        role: 'assistant',
+        content: 'Here is my answer',
+        timestamp: 3,
+      },
+    ];
+
+    const numaChatDynamoUtils = {
+      queryConversations: vi.fn().mockResolvedValue(items),
+      updateConversationName: vi.fn().mockResolvedValue(undefined),
+    } as unknown as import('../../utils/DynamoDBUtils').NumaChatDynamoUtils;
+
+    // Bedrock client should not be called
+    const bedrockRuntimeClient = {
+      send: vi.fn(),
+    } as unknown as BedrockRuntimeClient;
+
+    const renamed = await autoNameConversation({
+      conversationId,
+      userId,
+      bedrockRuntimeClient,
+      numaChatDynamoUtils,
+      region: null,
+    });
+
+    expect(renamed).toBe(false);
+    expect(numaChatDynamoUtils.updateConversationName).not.toHaveBeenCalled();
+    expect(bedrockRuntimeClient.send).not.toHaveBeenCalled();
+  });
 });

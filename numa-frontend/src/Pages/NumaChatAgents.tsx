@@ -84,6 +84,7 @@ const NumaChatAgents = () => {
   const preselectHandledRef = useRef(false);
   const preselectActivatedRef = useRef(false);
   const preselectTimerRef = useRef<number | null>(null);
+  const autoNamingAttemptedRef = useRef<Set<string>>(new Set());
 
   // Custom hooks
   const conversationManager = useConversationManager();
@@ -545,6 +546,9 @@ const NumaChatAgents = () => {
     // Clear manual loading state to prevent conflicts
     setIsManuallyLoading(false);
 
+    // Clear auto-naming tracking for new conversation
+    autoNamingAttemptedRef.current.clear();
+
     // Use the hook's new chat handler
     await handleNewChat();
   }
@@ -668,6 +672,9 @@ const NumaChatAgents = () => {
 
     // Clear manual loading state to prevent conflicts
     setIsManuallyLoading(false);
+
+    // Clear auto-naming tracking for new conversation
+    autoNamingAttemptedRef.current.clear();
 
     // Surface the enhanced new chat view immediately (with or without history)
     forceShowNewChatView();
@@ -896,19 +903,25 @@ const NumaChatAgents = () => {
           .catch((err) => console.error('Error updating meta item:', err));
       }
 
-      // Attempt auto-naming after first assistant response/meta update
+      // Attempt auto-naming after first assistant response (only once per conversation per session)
       try {
         if (bedrockRuntimeClient && numaChatDynamoUtils && sub && cid) {
-          const renamed = await autoNameConversation({
-            conversationId: cid,
-            userId: sub,
-            bedrockRuntimeClient,
-            numaChatDynamoUtils,
-            region: REGION,
-          });
-          if (renamed) {
-            // Refresh sidebar to reflect new title
-            refreshSidebar();
+          // Prevent duplicate auto-naming for same conversation
+          if (autoNamingAttemptedRef.current.has(cid)) {
+            console.log('[NumaChat] Auto-naming already attempted for this conversation, skipping');
+          } else {
+            autoNamingAttemptedRef.current.add(cid);
+            const renamed = await autoNameConversation({
+              conversationId: cid,
+              userId: sub,
+              bedrockRuntimeClient,
+              numaChatDynamoUtils,
+              region: REGION,
+            });
+            if (renamed) {
+              // Refresh sidebar to reflect new title
+              refreshSidebar();
+            }
           }
         }
       } catch (e) {
@@ -1253,6 +1266,10 @@ const NumaChatAgents = () => {
       setMessages(chatMessages);
       setConversationId(selectedConversationId);
       localStorage.setItem('currentConversationId', selectedConversationId);
+
+      // Mark this conversation as already having been through auto-naming consideration
+      // This prevents re-triggering auto-naming when resuming an existing conversation
+      autoNamingAttemptedRef.current.add(selectedConversationId);
 
       if (agentMeta?.agentId) {
         try {
