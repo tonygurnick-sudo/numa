@@ -329,12 +329,12 @@ def get_output_template_path() -> Optional[Path]:
     """
     # Check common locations for bundled templates
     possible_paths = [
-        Path("/var/task/nolia_report/templates/Output_Template_Evaluation_Report.md"),
-        Path("/var/task/templates/Output_Template_Evaluation_Report.md"),
+        Path("/var/task/nolia_report/templates/output-template.md"),
+        Path("/var/task/templates/output-template.md"),
         Path(__file__).parent.parent
         / "nolia_report"
         / "templates"
-        / "Output_Template_Evaluation_Report.md",
+        / "output-template.md",
     ]
 
     for path in possible_paths:
@@ -345,24 +345,104 @@ def get_output_template_path() -> Optional[Path]:
     return None
 
 
-def copy_output_template_to_workspace(workdir: Path) -> bool:
+def _download_output_template_override(
+    data_bucket: str,
+    assessment_type: str,
+    procurement_kb: str,
+    project_kb: str,
+) -> Optional[bytes]:
     """
-    Copy the bundled output template to the workspace.
+    Try to download custom output template from S3.
+
+    Checks the relevant KB based on assessment type:
+    - evaluation-report: documents/{procurement_kb}/output-template.md
+    - terms-of-reference: documents/{project_kb}/output-template.md
+
+    Args:
+        data_bucket: S3 bucket containing KB files
+        assessment_type: Assessment type (evaluation-report or terms-of-reference)
+        procurement_kb: Name of the procurement KB
+        project_kb: Name of the project KB
+
+    Returns:
+        Template content if found, None otherwise
+    """
+    # Determine which KB to check based on assessment type
+    if assessment_type == "terms-of-reference":
+        kb_name = project_kb
+    else:
+        kb_name = procurement_kb
+
+    if not kb_name:
+        logger.debug(
+            "No KB specified for template override", assessment_type=assessment_type
+        )
+        return None
+
+    s3_key = f"documents/{kb_name}/output-template.md"
+    try:
+        template_data = s3_helpers.read(s3_key, bucket=data_bucket)
+        logger.info(
+            "Downloaded custom output template from S3",
+            s3_key=s3_key,
+            assessment_type=assessment_type,
+        )
+        return template_data
+    except Exception:
+        logger.debug(
+            "No custom output template found in S3",
+            s3_key=s3_key,
+            assessment_type=assessment_type,
+        )
+        return None
+
+
+def copy_output_template_to_workspace(
+    workdir: Path,
+    data_bucket: str = "",
+    assessment_type: str = "evaluation-report",
+    procurement_kb: str = "",
+    project_kb: str = "",
+) -> bool:
+    """
+    Copy the output template to the workspace.
+
+    First checks for a custom template in S3 (in the relevant KB based on
+    assessment type). If not found, falls back to the bundled default template.
 
     Args:
         workdir: Root workspace directory
+        data_bucket: S3 bucket containing KB files (for custom template override)
+        assessment_type: Assessment type (evaluation-report or terms-of-reference)
+        procurement_kb: Name of the procurement KB
+        project_kb: Name of the project KB
 
     Returns:
         True if template was copied, False otherwise
     """
+    dest = workdir / "output-template.md"
+
+    # Try to download custom template from S3 first
+    if data_bucket:
+        custom_template = _download_output_template_override(
+            data_bucket, assessment_type, procurement_kb, project_kb
+        )
+        if custom_template:
+            try:
+                dest.write_bytes(custom_template)
+                logger.info("Using custom output template from S3")
+                return True
+            except Exception as e:
+                logger.warning("Failed to write custom template", error=str(e))
+
+    # Fall back to bundled default template
     template_path = get_output_template_path()
     if not template_path:
         return False
 
-    dest = workdir / "Output_Template_Evaluation_Report.md"
     try:
         dest.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
-        logger.info("Copied output template to workspace")
+        logger.info("Using bundled default output template")
         return True
     except Exception as e:
         logger.warning("Failed to copy output template", error=str(e))
