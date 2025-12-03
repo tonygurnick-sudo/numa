@@ -8,7 +8,6 @@ import { ChatHistorySidebar } from '../Components/Chat/ChatHistorySidebar';
 import { ChatFileUpload } from '../Components/Chat/ChatFileUpload';
 import { AgentsSidebar, AgentsSidebarHandle } from '../Components/Agents/AgentsSidebar';
 import { PageHeader } from '../Components/PageHeader';
-import AgentAvatar from '../Components/Agents/AgentAvatar';
 import { callChatAgentStreaming } from '../Services/chatAgentService';
 import { ChatInput } from '../Components/Chat/ChatInput';
 import { DocumentPanel } from '../Components/DocumentPanel';
@@ -38,7 +37,6 @@ import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import type { AgentSummary } from '../types/agents';
 import { getAgent, listAgents } from '../Services/AgentsService';
 import { getConnectionConfig } from '../config/integrationsConfig';
-import { formatAgentDisplayName } from '../utils/agentUtils';
 import { sortAgentsByPriority } from '../utils/agentSortingUtils';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 
@@ -245,6 +243,8 @@ const NumaChatAgents = () => {
       setWebSearchEnabled(false);
       setCreateAgentEnabled(false);
       setEnabledConnections([]);
+      // Reset KB selection to all available when no agent
+      setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
       return;
     }
 
@@ -253,6 +253,26 @@ const NumaChatAgents = () => {
     setWebSearchEnabled(config.webSearchEnabled ?? false);
     setCreateAgentEnabled(config.createAgentEnabled ?? false);
     setEnabledConnections(config.enabledConnections ?? []);
+
+    // Apply KB constraints from agent
+    const allowedKBs = config.allowedKnowledgeBases;
+    if (allowedKBs === null || allowedKBs === undefined) {
+      // Backwards compat: check queryDataSources for existing agents
+      if (config.queryDataSources === false) {
+        // No KB access
+        setEnabledKBIds([]);
+      } else {
+        // All KBs allowed - enable all available
+        setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
+      }
+    } else if (allowedKBs.length === 0) {
+      // Explicit no KB access
+      setEnabledKBIds([]);
+    } else {
+      // Specific KBs allowed - enable only those that are both allowed and available
+      const allowedSet = new Set(allowedKBs);
+      setEnabledKBIds(availableKBs.filter((kb) => allowedSet.has(kb.kb_id)).map((kb) => kb.kb_id));
+    }
   };
 
   const resetAgentState = () => {
@@ -1382,22 +1402,6 @@ const NumaChatAgents = () => {
             {/* White container wrapper */}
             <div className="chat-white-container">
               <div className="chat-content flex-grow-1 d-flex flex-column">
-                {/* Agent info section (if agent is selected) */}
-                {currentAgent && (
-                  <div className="chat-agent-info d-flex align-items-center gap-2 p-3 border-bottom">
-                    <AgentAvatar agent={currentAgent} size={32} />
-                    <div>
-                      <div
-                        className="fw-semibold"
-                        style={{ fontSize: '1.1rem', color: 'var(--brand-primary, var(--color-primary))' }}
-                      >
-                        {formatAgentDisplayName(currentAgent.title)}
-                      </div>
-                      <div className="small text-muted">AI Agent Assistant</div>
-                    </div>
-                  </div>
-                )}
-
                 {/* Missing integrations confirmation modal */}
                 <Modal show={!!missingConfirm} onHide={() => setMissingConfirm(null)} centered>
                   <Modal.Header closeButton>
