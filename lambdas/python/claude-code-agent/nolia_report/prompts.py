@@ -24,7 +24,7 @@ You are a **World Bank Senior Procurement Specialist** conducting a **peer revie
 Your workspace path is provided above.
 - `./tmp/` - Contains all outputs from Phases 1-3
 - `./outputs/` - Save the final report here
-- `./Output_Template_Evaluation_Report.md` - The report template to follow
+- `./output-template.md` - The report template to follow
 
 ## Prerequisites
 Read the phase notes FIRST to understand key findings from prior phases:
@@ -50,26 +50,8 @@ Read the phase notes FIRST to understand key findings from prior phases:
 ## Your Task
 Generate a comprehensive World Bank peer review evaluation report following the template structure exactly.
 
-### Report Structure (Required Sections in Order):
-1. Cover Page
-2. Executive Summary
-3. CRITICAL DISQUALIFICATION RULES
-4. QUALIFICATION CRITERIA
-5. ELIGIBILITY REQUIREMENTS
-6. BID SUBMISSION REQUIREMENTS
-7. TECHNICAL EVALUATION CRITERIA
-8. FINANCIAL EVALUATION CRITERIA
-9. COMBINED TECHNICAL-FINANCIAL EVALUATION
-10. DELIVERY AND PERFORMANCE REQUIREMENTS
-11. REGULATORY AND DOCUMENTATION REQUIREMENTS
-12. PAYMENT STRUCTURE
-13. PERFORMANCE SECURITY AND GUARANTEES
-14. CONTRACT TERMS
-15. PROCEDURAL AND ADMINISTRATIVE RULES
-16. FOR INFORMATION REQUIREMENTS
-17. Compliant Areas
-18. Summary and Recommendation
-19. Annexes
+### Report Structure
+Read and follow the `output-template.md` file exactly. The template defines the expected sections, their order, and the format for issues.
 
 ### Issue Format
 Every issue MUST include:
@@ -141,21 +123,8 @@ Read the phase notes FIRST to understand key findings from prior phases:
 ## Your Task
 Generate a comprehensive World Bank Terms of Reference assessment report.
 
-### Report Structure (Required Sections):
-1. Cover Page
-2. Executive Summary
-3. SCOPE AND OBJECTIVES
-4. DELIVERABLES AND OUTPUTS
-5. TIMELINE AND MILESTONES
-6. RESOURCE REQUIREMENTS
-7. QUALIFICATIONS AND EXPERTISE
-8. REPORTING AND OVERSIGHT
-9. COMPLIANCE AND STANDARDS
-10. RISK ASSESSMENT
-11. RECOMMENDATIONS
-12. Compliant Areas
-13. Summary and Recommendation
-14. Annexes
+### Report Structure
+Read and follow the `output-template.md` file exactly. The template defines the expected sections, their order, and the format for issues.
 
 ### Issue Format
 Every issue MUST include:
@@ -211,7 +180,7 @@ You are a World Bank Senior Procurement Specialist conducting a final quality re
 Your workspace path is provided above.
 - `./tmp/` - Contains all outputs from Phases 1-3
 - `./outputs/` - Contains the generated report to review
-- `./Output_Template_Evaluation_Report.md` - The report template for reference
+- `./output-template.md` - The report template for reference
 
 ## Available Reference Files
 
@@ -237,7 +206,7 @@ Your workspace path is provided above.
 - `tmp/failed_lots_analysis.md` - Failed lots analysis (if any)
 
 **Template:**
-- `./Output_Template_Evaluation_Report.md` - Expected report structure
+- `./output-template.md` - Expected report structure
 
 ## CSV Structure
 Both compliance CSVs have columns:
@@ -254,7 +223,7 @@ Review the generated evaluation report and refine it in-place, focusing on:
 - Example: Instead of "Rule G-001 requires...", write "ITB Section 28.1 of the Bidding Document requires..."
 
 ### 2. Structure Verification
-- Compare against `Output_Template_Evaluation_Report.md` for expected structure
+- Compare against `output-template.md` for expected structure
 - Verify all required sections are present in the correct order
 - Ensure section numbering is consistent
 - Check that Executive Summary accurately reflects the full report findings

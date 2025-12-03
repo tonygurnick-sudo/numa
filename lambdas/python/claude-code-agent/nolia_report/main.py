@@ -100,8 +100,14 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         data_bucket, global_kb, procurement_kb, workdir, project_kb=project_kb
     )
 
-    # Copy output template to workspace
-    nolia_utils.copy_output_template_to_workspace(workdir)
+    # Copy output template to workspace (checks S3 for custom override first)
+    nolia_utils.copy_output_template_to_workspace(
+        workdir,
+        data_bucket=data_bucket,
+        assessment_type=assessment_type,
+        procurement_kb=procurement_kb,
+        project_kb=project_kb,
+    )
 
     # Setup home directory and settings
     home = Path(os.environ.get("HOME", "/tmp"))
@@ -226,7 +232,7 @@ Then read the required input files:
 - tmp/recurring_issues.csv (if exists)
 - tmp/failed_lots_analysis.md (if exists)
 
-Follow the Output_Template_Evaluation_Report.md structure exactly.
+Follow the output-template.md structure exactly.
 
 Create the final report in outputs/Final_Evaluation_Report_{PROCUREMENT_NAME}.md
 
@@ -288,7 +294,7 @@ Edit the report file in-place."""
 Read the generated report in outputs/ and review it against:
 1. The compliance CSVs in tmp/ - use the `source_reference` column to replace any internal rule IDs with actual policy citations
 2. The phase notes and summaries for completeness
-3. The Output_Template_Evaluation_Report.md for expected structure
+3. The output-template.md for expected structure
 
 Focus on:
 - Replacing internal rule references (G-001, P-003, etc.) with actual policy document citations from the CSVs
