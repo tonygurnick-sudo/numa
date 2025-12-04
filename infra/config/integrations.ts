@@ -24,6 +24,12 @@ export const SUPPORTED_INTEGRATIONS = [
   'whatsapp_business',
   'mailchimp',
   'freshdesk',
+  'rentman',
+  'podio',
+  'google_sheets',
+  'google_forms',
+  'google_docs',
+  'telegram_bot_api',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];

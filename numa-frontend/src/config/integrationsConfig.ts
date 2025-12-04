@@ -28,6 +28,12 @@ import trelloIcon from '../assets/icons/trello.svg';
 import whatsappIcon from '../assets/icons/whatsapp.svg';
 import mailchimpIcon from '../assets/icons/mailchimp.svg';
 import freshdeskIcon from '../assets/icons/freshdesk.svg';
+import rentmanIcon from '../assets/icons/rentman.svg';
+import podioIcon from '../assets/icons/podio.svg';
+import googleSheetsIcon from '../assets/icons/google_sheets.svg';
+import googleFormsIcon from '../assets/icons/google_forms.svg';
+import googleDocsIcon from '../assets/icons/google_docs.svg';
+import telegramIcon from '../assets/icons/telegram_bot_api.svg';
 
 export type BootstrapColor =
   | 'primary'
@@ -274,6 +280,66 @@ export const CONNECTIONS_CONFIG: Record<string, ConnectionConfigEntry> = {
     fallback_icon: 'bi bi-headset',
     fallback_color: 'success',
     example_query: 'Create a ticket for this customer issue and assign it to support.',
+  },
+  rentman: {
+    id: 'rentman',
+    name: 'Rentman',
+    description: 'Manage projects, equipment, and planning in Rentman.',
+    auth_type: 'oauth',
+    img_src: rentmanIcon,
+    fallback_icon: 'bi bi-box-seam',
+    fallback_color: 'primary',
+    example_query: 'List current rentals and create a new project booking for next week.',
+  },
+  podio: {
+    id: 'podio',
+    name: 'Podio',
+    description: 'Manage projects, tasks, and collaboration in Podio workspaces.',
+    auth_type: 'oauth',
+    img_src: podioIcon,
+    fallback_icon: 'bi bi-kanban',
+    fallback_color: 'info',
+    example_query: 'Create a new task in the NZS Group workspace for this request.',
+  },
+  google_sheets: {
+    id: 'google_sheets',
+    name: 'Google Sheets',
+    description: 'Read, update, and manage spreadsheets to automate reporting and workflows.',
+    auth_type: 'oauth',
+    img_src: googleSheetsIcon,
+    fallback_icon: 'bi bi-table',
+    fallback_color: 'success',
+    example_query: 'Append a new row to the quarterly report sheet with these values.',
+  },
+  google_forms: {
+    id: 'google_forms',
+    name: 'Google Forms',
+    description: 'Create and manage forms, questions, and responses programmatically.',
+    auth_type: 'oauth',
+    img_src: googleFormsIcon,
+    fallback_icon: 'bi bi-ui-checks-grid',
+    fallback_color: 'primary',
+    example_query: 'Create a survey form with three questions and share the link.',
+  },
+  google_docs: {
+    id: 'google_docs',
+    name: 'Google Docs',
+    description: 'Create, read, and update documents in Google Docs.',
+    auth_type: 'oauth',
+    img_src: googleDocsIcon,
+    fallback_icon: 'bi bi-file-earmark-text',
+    fallback_color: 'primary',
+    example_query: 'Draft a status update document in my project folder.',
+  },
+  telegram_bot_api: {
+    id: 'telegram_bot_api',
+    name: 'Telegram Bot API',
+    description: 'Send messages and manage chats via Telegram bots.',
+    auth_type: 'oauth',
+    img_src: telegramIcon,
+    fallback_icon: 'bi bi-send-fill',
+    fallback_color: 'info',
+    example_query: 'Send a Telegram message to the support channel about this issue.',
   },
 };
 

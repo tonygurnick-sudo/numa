@@ -105,6 +105,24 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
 
   // Freshdesk
   freshdesk: [],
+
+  // Rentman
+  rentman: [],
+
+  // Podio
+  podio: [],
+
+  // Google Sheets
+  google_sheets: [],
+
+  // Google Forms
+  google_forms: [],
+
+  // Google Docs
+  google_docs: [],
+
+  // Telegram Bot API
+  telegram_bot_api: [],
 };
 
 export const getDefaultDenyTools = (appName: string): string[] => {
