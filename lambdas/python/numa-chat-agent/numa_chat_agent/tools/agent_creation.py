@@ -19,12 +19,12 @@ import structlog
 from botocore.exceptions import ClientError
 from strands import tool
 
-from bedrock import BedrockClaude3Model  # type: ignore
-
 from ..auth import get_current_user_auth
-
-# No direct runtime client calls; we use BedrockClaude3Model wrapper
-from ..dynamodb_utils import NumaChatDynamoUtils
+from ..intent_verification import (
+    get_agent_creation_config,
+    get_recent_conversation_snippets,
+    verify_user_intent_with_context,
+)
 
 logger = structlog.get_logger()
 
@@ -179,133 +179,6 @@ def _clean_string_list(value: Any) -> Optional[List[str]]:
 
 def _generate_agent_id() -> str:
     return f"agt_{uuid.uuid4().hex}"
-
-
-def _build_guardrail_prompt(context_snippets: str, latest_user_message: str) -> str:
-    return f"""You are an expert at determining if the user explicitly asked to create an agent, or if Numa (the assistant) has created out of turn. You will be given the last few messages between the user and the AI assistant and it's your job to determine if the user was asking for the agent to be created or not. This is necessary to avoid the AI assistant from creating agent unnecessarily.
-
-        Return ONLY the word YES or NO. Respond YES only if the user clearly directs the assistant to create, set up, or has confirmed the creation of an agent the the assistant drafted. Otherwise, response NO. If the user says things like "Yes" after being drafted an agent, response YES. Or if you can see in the conversation them saying clearly to the assistant to create an agent based on what the assistant has drafted, return yes.
-
-        Conversation excerpts:\n{context_snippets}
-
-        Latest user message:\n{latest_user_message.strip()}
-
-        Decision (YES or NO):"""
-
-
-def _call_haiku_classifier(prompt: str) -> str:
-    """
-    Classify intent via BedrockClaude3Model with a forced tool output schema
-    that returns an enum YES/NO for stronger output guarantees.
-    """
-    tool_name = "confirm_intent"
-    tools_schema = [
-        {
-            "name": tool_name,
-            "description": "Confirm if the user explicitly asked to create an agent",
-            "input_schema": {
-                "type": "object",
-                "properties": {"answer": {"type": "string", "enum": ["YES", "NO"]}},
-                "required": ["answer"],
-            },
-        }
-    ]
-
-    model = BedrockClaude3Model(
-        enable_fallback=True,
-        claude_only=True,
-        model_args={
-            "max_tokens": 100,
-            "temperature": 0,
-            "tools": tools_schema,
-            "tool_choice": {"type": "tool", "name": tool_name},
-        },
-    )
-    messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
-    try:
-        result = model.run_with_messages(
-            messages, name_for_logging="agent_creation_intent"
-        )
-        for item in result.response:
-            if (
-                isinstance(item, dict)
-                and item.get("type") == "tool_use"
-                and item.get("name") == tool_name
-            ):
-                data = item.get("input") or {}
-                ans = str(data.get("answer", "")).strip().upper()
-                if ans in ("YES", "NO"):
-                    return ans
-
-        for item in result.response:
-            if isinstance(item, dict) and item.get("type") == "text":
-                text = str(item.get("text") or "").strip().upper()
-                if text.startswith("YES"):
-                    return "YES"
-                if text.startswith("NO"):
-                    return "NO"
-
-    except Exception as e:  # defensive fallback
-        logger.warning("Classifier call failed, falling back to NO", error=str(e))
-
-    return "NO"
-
-
-def _get_recent_conversation_snippets(
-    conversation_id: str, user_id: str, max_items: int = 12
-) -> Tuple[str, str, List[Dict[str, Any]]]:
-    dynamo_utils = NumaChatDynamoUtils()
-    items = dynamo_utils.query_conversations(
-        conversation_id, limit=max(50, max_items), user_id=user_id
-    )
-
-    if not items:
-        return "", "", []
-
-    # Build a lightweight transcript that excludes tool plumbing
-    # and focuses on natural user/assistant text turns.
-    allow_message_types = {"text", "file", "image_description", "meta"}
-
-    latest_user_text = ""
-    filtered_snippets: List[Tuple[str, str]] = []
-
-    for item in items[-max_items:]:
-        message_type = item.get("message_type") or "text"
-        role = item.get("role") or "system"
-
-        # Skip tool plumbing to avoid confusing the classifier
-        if message_type not in allow_message_types:
-            continue
-
-        # Normalise content
-        content = (item.get("content") or "").strip()
-        if message_type == "file" and item.get("fileInfo"):
-            content = f"[Uploaded file: {item['fileInfo'].get('fileName', 'unknown')}]"
-        if not content:
-            continue
-
-        # Keep only user/assistant roles for context
-        if role not in ("user", "assistant"):
-            continue
-
-        filtered_snippets.append((role, content))
-        if role == "user" and message_type == "text":
-            latest_user_text = content
-
-    # If we didn't find a user text message in the last window, search older ones
-    if not latest_user_text:
-        for item in reversed(items):
-            if (
-                (item.get("role") == "user")
-                and (item.get("message_type") == "text")
-                and str(item.get("content") or "").strip()
-            ):
-                latest_user_text = str(item.get("content") or "").strip()
-                break
-
-    # Keep the last ~8 conversational snippets for the guardrail prompt
-    transcript = "\n".join(f"{role}: {text}" for role, text in filtered_snippets[-8:])
-    return transcript, latest_user_text, items
 
 
 def _check_policy_allows_visibility(visibility: str) -> Tuple[str, Optional[str]]:
@@ -663,32 +536,21 @@ def create_agent_tool(**kwargs):
 
     if conversation_id:
         transcript, latest_user_message, history_items = (
-            _get_recent_conversation_snippets(conversation_id, user_id, max_items=24)
+            get_recent_conversation_snippets(conversation_id, user_id, max_items=24)
         )
     else:
         transcript, latest_user_message, history_items = "", "", []
 
     # Explicit confirmation guard: require clear user intent to create an agent
-    try:
-        guard_prompt = _build_guardrail_prompt(transcript, latest_user_message)
-        decision = _call_haiku_classifier(guard_prompt)
-        logger.info(
-            "Agent creation intent classification",
-            decision=decision,
-            has_latest_user_message=bool(latest_user_message),
-            prompt=guard_prompt,
-        )
-    except Exception as e:  # defensive fallback
-        logger.warning("Intent guard failed; defaulting to NO", error=str(e))
-        decision = "NO"
+    verification_config = get_agent_creation_config()
+    verification_result = verify_user_intent_with_context(
+        verification_config, transcript, latest_user_message
+    )
 
-    if decision != "YES":
+    if not verification_result.verified:
         return {
             "status": "denied",
-            "message": (
-                "I won't create the agent without your explicit confirmation. "
-                "Please say something like 'Yes, create this agent' when you're ready."
-            ),
+            "message": verification_result.denial_message,
         }
 
     # Ensure required environment is configured before persisting

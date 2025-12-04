@@ -53,6 +53,15 @@ export function getIntegrationsSummary(result: ToolResultLike): string {
       ? `Downloaded 1 file from ${integration}`
       : `Downloaded ${fileCount} files from ${integration}`;
   }
+  // Check for denied status - can be at top level, in content[0].json.status,
+  // or as a stringified dict in content[0].text (Python dict format with single quotes)
+  const contentBlock = Array.isArray(result?.content) ? result.content[0] : undefined;
+  const nestedJsonStatus = (contentBlock as { json?: { status?: string } } | undefined)?.json?.status;
+  const textContent = (contentBlock as { text?: string } | undefined)?.text ?? '';
+  const hasDeniedInText = textContent.includes("'status': 'denied'") || textContent.includes('"status": "denied"');
+  if (status === 'denied' || nestedJsonStatus === 'denied' || hasDeniedInText) {
+    return `${friendlyLabel}: Denied - User Confirmation Needed`;
+  }
   if (status === 'success' || status === 'completed') return `${friendlyLabel}: Tool call successful`;
   return `${friendlyLabel}: ${status || 'completed'}`;
 }
@@ -128,6 +137,15 @@ export function getFallbackSummary(result: ToolResultLike): string {
   const rawName = result?.name ?? result?.toolName ?? 'tool';
   const status = result?.status ?? 'completed';
   const friendlyLabel = String(rawName);
+  // Check for denied status - can be at top level, in content[0].json.status,
+  // or as a stringified dict in content[0].text (Python dict format with single quotes)
+  const contentBlock = Array.isArray(result?.content) ? result.content[0] : undefined;
+  const nestedJsonStatus = (contentBlock as { json?: { status?: string } } | undefined)?.json?.status;
+  const textContent = (contentBlock as { text?: string } | undefined)?.text ?? '';
+  const hasDeniedInText = textContent.includes("'status': 'denied'") || textContent.includes('"status": "denied"');
+  if (status === 'denied' || nestedJsonStatus === 'denied' || hasDeniedInText) {
+    return `${friendlyLabel}: Denied - User Confirmation Needed`;
+  }
   if (status === 'success' || status === 'completed') return `${friendlyLabel}: Tool call successful`;
   return `${friendlyLabel}: ${status || 'completed'}`;
 }

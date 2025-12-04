@@ -5,17 +5,16 @@ Implements efficient conversation memory management:
 - Summarize every 30 conversation turns (configurable)
 - Keep last 10 turns in full detail
 - Store summaries in DynamoDB (no re-summarization)
-- Use Haiku model with explicit prompting for quality summaries
+- Use fast model (Nova 2 Lite) with explicit prompting for quality summaries
 
 A "turn" = user input + tool calls + tool results + agent response
 """
 
-import json
 from typing import Any, Dict, List, Tuple
 
 import structlog
 
-from .config import HAIKU_MODEL_ID, get_bedrock_runtime_client
+from .config import FAST_MODEL_ID, invoke_fast_model
 from .dynamodb_utils import NumaChatDynamoUtils
 from .utils import log_token_usage
 
@@ -81,7 +80,7 @@ class ProgressiveSummarization:
     1. Load conversation from DynamoDB
     2. Group messages into turns (user input → tools → response = 1 turn)
     3. Check if unsummarized turns >= threshold (30)
-    4. If yes: Create summary with Haiku, store in DynamoDB
+    4. If yes: Create summary with fast model, store in DynamoDB
     5. If no: Load cached summary + recent messages (fast path)
     6. Repeat as conversation grows
 
@@ -101,7 +100,6 @@ class ProgressiveSummarization:
             dynamo_utils: DynamoDB utilities instance for storage
         """
         self.dynamo_utils = dynamo_utils
-        self.bedrock_client = get_bedrock_runtime_client()
 
         logger.info(
             "Progressive summarization initialized",
@@ -206,7 +204,7 @@ class ProgressiveSummarization:
         unsummarized_turns: List[List[Dict]],
     ) -> List[Dict[str, Any]]:
         """
-        Create new summary using Haiku and store in DynamoDB.
+        Create new summary using fast model and store in DynamoDB.
 
         This is the slow path - only runs when threshold is reached.
 
@@ -269,8 +267,8 @@ class ProgressiveSummarization:
         # Check if we're doing recursive summarization (extending an existing summary)
         has_existing_summary = len(existing_summaries) > 0
 
-        # Use Haiku directly to create summary
-        summary_text = self._create_summary_with_haiku(
+        # Use fast model to create summary
+        summary_text = self._create_summary_with_fast_model(
             formatted_messages, has_existing_summary=has_existing_summary
         )
 
@@ -313,11 +311,11 @@ class ProgressiveSummarization:
 
         return result
 
-    def _create_summary_with_haiku(  # pylint: disable=too-many-nested-blocks
+    def _create_summary_with_fast_model(  # pylint: disable=too-many-nested-blocks
         self, messages: List[Dict[str, Any]], has_existing_summary: bool = False
     ) -> str:
         """
-        Create summary by directly calling Haiku via Bedrock API.
+        Create summary by calling fast model (Nova 2 Lite) via Bedrock API.
 
         Args:
             messages: Formatted messages for Bedrock
@@ -432,39 +430,18 @@ class ProgressiveSummarization:
 
                 DENSE MEMORY SUMMARY:"""
 
-            # Call Haiku directly via Bedrock API
-            body = json.dumps(
-                {
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": 2000,
-                    "temperature": 0.1,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [{"type": "text", "text": summarization_prompt}],
-                        }
-                    ],
-                }
+            # Call fast model via helper
+            summary_text, usage_stats, _ = invoke_fast_model(
+                prompt=summarization_prompt,
+                max_tokens=10000,
+                temperature=0.1,
             )
 
-            response = self.bedrock_client.invoke_model(
-                body=body,
-                modelId=HAIKU_MODEL_ID,
-                accept="application/json",
-                contentType="application/json",
-            )
-
-            response_body = json.loads(response.get("body").read())
-
-            # Extract token usage and log it
-            usage_stats = response_body.get("usage", {})
             log_token_usage(
-                model_id=HAIKU_MODEL_ID,
+                model_id=FAST_MODEL_ID,
                 usage_stats=usage_stats,
                 context="Progressive summarization",
             )
-
-            summary_text = response_body["content"][0]["text"].strip()
 
             logger.info(
                 "Summarization completed",
@@ -496,7 +473,7 @@ class ProgressiveSummarization:
 
     def _create_fallback_summary(self, messages: List[Dict[str, Any]]) -> str:
         """
-        Fallback: Create simple summary if Haiku API call fails.
+        Fallback: Create simple summary if fast model API call fails.
 
         Args:
             messages: Formatted messages

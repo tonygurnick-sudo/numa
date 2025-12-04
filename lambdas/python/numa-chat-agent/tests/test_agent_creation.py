@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 
+from numa_chat_agent.intent_verification import IntentVerificationResult
 from numa_chat_agent.tools.agent_creation import (
     AgentPayload,
     AgentToolsConfig,
@@ -16,11 +17,9 @@ class TestAgentCreationTool(unittest.TestCase):
         self.assertEqual(result["status"], "error")
 
     @patch("numa_chat_agent.tools.agent_creation._assert_env_ready")
+    @patch("numa_chat_agent.tools.agent_creation.verify_user_intent_with_context")
     @patch(
-        "numa_chat_agent.tools.agent_creation._call_haiku_classifier", return_value="NO"
-    )
-    @patch(
-        "numa_chat_agent.tools.agent_creation._get_recent_conversation_snippets",
+        "numa_chat_agent.tools.agent_creation.get_recent_conversation_snippets",
         return_value=("assistant: hi", "", []),
     )
     @patch(
@@ -28,10 +27,16 @@ class TestAgentCreationTool(unittest.TestCase):
         return_value={"sub": "user-123", "conversation_id": "conv-1"},
     )
     def test_create_agent_tool_denied_without_confirmation(
-        self, _mock_auth, _mock_history, _mock_classifier, _mock_env
+        self, _mock_auth, _mock_history, mock_verify, _mock_env
     ):
+        mock_verify.return_value = IntentVerificationResult(
+            verified=False,
+            decision="NO",
+            denial_message="Please confirm explicitly.",
+        )
         result = create_agent_tool(title="Test", system_prompt="Prompt")  # type: ignore[arg-type]
         self.assertEqual(result["status"], "denied")
+        self.assertIn("confirm", result["message"].lower())
 
     @patch("numa_chat_agent.tools.agent_creation._assert_env_ready")
     @patch("numa_chat_agent.tools.agent_creation._put_workspace_agent")
@@ -40,12 +45,9 @@ class TestAgentCreationTool(unittest.TestCase):
         "numa_chat_agent.tools.agent_creation._normalise_reference_files",
         return_value=([], []),
     )
+    @patch("numa_chat_agent.tools.agent_creation.verify_user_intent_with_context")
     @patch(
-        "numa_chat_agent.tools.agent_creation._call_haiku_classifier",
-        return_value="YES",
-    )
-    @patch(
-        "numa_chat_agent.tools.agent_creation._get_recent_conversation_snippets",
+        "numa_chat_agent.tools.agent_creation.get_recent_conversation_snippets",
         return_value=("user: create an agent", "please create an agent", []),
     )
     @patch(
@@ -63,12 +65,17 @@ class TestAgentCreationTool(unittest.TestCase):
         mock_payload_from_kwargs,
         _mock_policy,
         _mock_history,
-        _mock_classifier,
+        mock_verify,
         _mock_normalise,
         mock_put_user,
         mock_put_workspace,
         _mock_env,
     ):
+        mock_verify.return_value = IntentVerificationResult(
+            verified=True,
+            decision="YES",
+            denial_message=None,
+        )
         payload = AgentPayload(
             title="Test Agent",
             system_prompt="Do A",

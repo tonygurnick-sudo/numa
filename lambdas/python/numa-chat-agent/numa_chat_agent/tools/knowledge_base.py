@@ -226,7 +226,7 @@ def query_knowledge_base_impl(
         all_content = "\n\n".join(kb_result["content_pieces"])
         refs = kb_result["references"]
 
-        # Create summary using Haiku
+        # Create summary using fast model
         summarised_content = ""
         if all_content and user_intent:
             summarised_content = summarize_combined_content(

@@ -6,6 +6,7 @@ Centralizes environment variables, constants, and client initialization.
 
 import os
 from functools import lru_cache
+from typing import Any
 
 import boto3
 import structlog
@@ -17,7 +18,7 @@ REGION = os.getenv("AWS_REGION", "us-east-1")
 # Region-aware model configuration with max_tokens limits
 REGIONAL_MODEL_MAP = {
     "us-east-1": {
-        "default": {
+        "primary": {
             "model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0",
             "max_tokens": 64000,  # Sonnet 4 limit
         },
@@ -25,13 +26,13 @@ REGIONAL_MODEL_MAP = {
             "model_id": "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
             "max_tokens": 4096,  # Claude 3.5 v1 limit
         },
-        "haiku": {
-            "model_id": "anthropic.claude-3-haiku-20240307-v1:0",
-            "max_tokens": 4096,  # Haiku limit
+        "fast": {
+            "model_id": "global.amazon.nova-2-lite-v1:0",
+            "max_tokens": 100000,  # Nova 2 Lite limit
         },
     },
     "ap-southeast-2": {
-        "default": {
+        "primary": {
             "model_id": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
             "max_tokens": 64000,  # Sonnet 4 limit
         },
@@ -39,40 +40,40 @@ REGIONAL_MODEL_MAP = {
             "model_id": "anthropic.claude-3-5-sonnet-20241022-v2:0",
             "max_tokens": 8192,  # Claude 3.5 v2 limit
         },
-        "haiku": {
-            "model_id": "anthropic.claude-3-haiku-20240307-v1:0",
-            "max_tokens": 4096,  # Haiku limit
+        "fast": {
+            "model_id": "global.amazon.nova-2-lite-v1:0",
+            "max_tokens": 100000,  # Nova 2 Lite limit
         },
     },
 }
 
 
-def get_regional_model(model_type="default"):
+def get_regional_model(model_type="primary"):
     """Get model ID for the current region and model type."""
     regional_models = REGIONAL_MODEL_MAP.get(REGION)
     if not regional_models:
         # Fall back to us-east-1 for unknown regions
         regional_models = REGIONAL_MODEL_MAP["us-east-1"]
 
-    model_config = regional_models.get(model_type, regional_models["default"])
+    model_config = regional_models.get(model_type, regional_models["primary"])
     return model_config["model_id"]
 
 
-def get_regional_model_max_tokens(model_type="default"):
+def get_regional_model_max_tokens(model_type="primary"):
     """Get max tokens for the current region and model type."""
     regional_models = REGIONAL_MODEL_MAP.get(REGION)
     if not regional_models:
         # Fall back to us-east-1 for unknown regions
         regional_models = REGIONAL_MODEL_MAP["us-east-1"]
 
-    model_config = regional_models.get(model_type, regional_models["default"])
+    model_config = regional_models.get(model_type, regional_models["primary"])
     return model_config["max_tokens"]
 
 
 # Set model constants with region-aware defaults, allowing env var override
-MODEL_ID = os.getenv("MODEL_ID", get_regional_model("default"))
+MODEL_ID = os.getenv("MODEL_ID", get_regional_model("primary"))
 FALLBACK_MODEL_ID = os.getenv("FALLBACK_MODEL_ID", get_regional_model("fallback"))
-HAIKU_MODEL_ID = get_regional_model("haiku")
+FAST_MODEL_ID = get_regional_model("fast")
 
 # WebSocket Configuration
 CONNECTION_TABLE = os.getenv("CONNECTION_TABLE")
@@ -215,6 +216,134 @@ def get_pipedream_tool_routing_mode(
     return "numa"
 
 
+# ── Fast Model (Nova 2 Lite) Helper ───────────────────────────────────────
+def invoke_fast_model(
+    prompt: str,
+    max_tokens: int = 10000,
+    temperature: float = 0.1,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: dict[str, Any] | None = None,
+    enable_reasoning: bool = True,
+    reasoning_effort: str = "medium",
+) -> tuple[str, dict[str, Any], list[dict[str, Any]] | None]:
+    """
+    Invoke the fast model (Nova 2 Lite) for summarization and classification tasks.
+
+    Uses the Converse API for compatibility with reasoning config.
+
+    Args:
+        prompt: The user prompt to send
+        max_tokens: Maximum tokens in response (default 10000)
+        temperature: Sampling temperature (default 0.1 for consistency)
+        tools: Optional list of tools in Claude format (will be converted to Nova format)
+        tool_choice: Optional tool choice in Claude format (will be converted to Nova format)
+        enable_reasoning: Whether to enable Nova reasoning (default True)
+        reasoning_effort: Reasoning effort level: "low", "medium", "high" (default "medium")
+
+    Returns:
+        tuple: (response_text, usage_stats, tool_uses)
+            - response_text: The text response from the model
+            - usage_stats: Dict with input_tokens and output_tokens
+            - tool_uses: List of tool use dicts if tools were used, None otherwise
+    """
+    client = get_bedrock_runtime_client()
+
+    # Build converse API parameters
+    messages = [{"role": "user", "content": [{"text": prompt}]}]
+
+    inference_config = {
+        "maxTokens": max_tokens,
+        "temperature": temperature,
+    }
+
+    # Build optional parameters
+    converse_kwargs: dict[str, Any] = {
+        "modelId": FAST_MODEL_ID,
+        "messages": messages,
+        "inferenceConfig": inference_config,
+    }
+
+    # Add tool configuration if provided (convert Claude format to Nova format)
+    if tools:
+        nova_tools = []
+        for tool in tools:
+            nova_tools.append(
+                {
+                    "toolSpec": {
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "inputSchema": {"json": tool["input_schema"]},
+                    }
+                }
+            )
+        tool_config: dict[str, Any] = {"tools": nova_tools}
+
+        # Convert tool_choice if provided
+        if tool_choice and tool_choice.get("type") == "tool":
+            tool_config["toolChoice"] = {"tool": {"name": tool_choice["name"]}}
+        elif tool_choice and tool_choice.get("type") == "any":
+            tool_config["toolChoice"] = {"any": {}}
+
+        converse_kwargs["toolConfig"] = tool_config
+
+    # Add reasoning config if enabled (as API parameter, not in body)
+    if enable_reasoning:
+        converse_kwargs["additionalModelRequestFields"] = {
+            "reasoningConfig": {
+                "type": "enabled",
+                "maxReasoningEffort": reasoning_effort,
+            }
+        }
+
+    logger.debug(
+        "Invoking fast model via converse API",
+        model_id=FAST_MODEL_ID,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        has_tools=bool(tools),
+        enable_reasoning=enable_reasoning,
+    )
+
+    response = client.converse(**converse_kwargs)
+
+    # Extract content from converse response format: output.message.content
+    content = response.get("output", {}).get("message", {}).get("content", [])
+
+    # Extract text and tool uses
+    text = ""
+    tool_uses = []
+    for item in content:
+        if "text" in item:
+            text = item["text"].strip()
+        elif "toolUse" in item:
+            tool_use = item["toolUse"]
+            tool_uses.append(
+                {
+                    "type": "tool_use",
+                    "id": tool_use.get("toolUseId"),
+                    "name": tool_use.get("name"),
+                    "input": tool_use.get("input", {}),
+                }
+            )
+
+    # Extract usage stats (converse API uses camelCase)
+    usage = response.get("usage", {})
+    usage_stats = {
+        "input_tokens": usage.get("inputTokens", 0),
+        "output_tokens": usage.get("outputTokens", 0),
+    }
+
+    logger.debug(
+        "Fast model response",
+        model_id=FAST_MODEL_ID,
+        input_tokens=usage_stats["input_tokens"],
+        output_tokens=usage_stats["output_tokens"],
+        has_tool_uses=bool(tool_uses),
+    )
+
+    return text, usage_stats, tool_uses if tool_uses else None
+
+
 # ── Model Configuration ───────────────────────────────────────────────────
 def get_bedrock_model(
     model_id=None,
@@ -229,7 +358,7 @@ def get_bedrock_model(
     effective_model_id = model_id or MODEL_ID
 
     # Use model-specific max_tokens
-    max_tokens = get_regional_model_max_tokens("default")
+    max_tokens = get_regional_model_max_tokens("primary")
 
     # Get cross-account session if configured
     boto_session = _get_cross_account_bedrock_session()

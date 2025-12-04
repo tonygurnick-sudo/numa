@@ -26,7 +26,7 @@ from ..config import (
     REGION,
     get_lambda_client,
 )
-from ..summarization import call_haiku_summarizer
+from ..summarization import call_fast_model_summarizer
 
 # Prefer the shared Bedrock wrapper used by the router; resolve at runtime safely
 BEDROCK_CLAUDE3_MODEL = None
@@ -499,14 +499,14 @@ Raw payload for reference (JSON):
                 return combined
         except Exception as exc:  # pragma: no cover - defensive fallback
             logger.warning(
-                "Bedrock wrapper summarisation failed; falling back to Haiku helper",
+                "Bedrock wrapper summarisation failed; falling back to fast model",
                 integration=integration_name,
                 tool=tool_name,
                 error=str(exc),
             )
 
-    # Fallback to lightweight Haiku summarizer if the shared wrapper isn't available
-    summary = call_haiku_summarizer(prompt, max_tokens=SUMMARY_MAX_TOKENS)
+    # Fallback to fast model summarizer if the shared wrapper isn't available
+    summary = call_fast_model_summarizer(prompt, max_tokens=SUMMARY_MAX_TOKENS)
     return summary.strip() if summary else ""
 
 

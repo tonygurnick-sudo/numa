@@ -12,7 +12,7 @@ Features:
 - Anti-detection measures including user agent rotation and request spacing
 - Progressive backoff and session-aware rate limiting
 - Comprehensive content scraping with browser-like headers
-- Automatic content summarization using Claude Haiku
+- Automatic content summarization using fast model (Nova 2 Lite)
 - Production-ready error handling and logging
 
 Architecture:
@@ -1077,7 +1077,7 @@ def web_search_impl(query: str, user_intent: str, max_results: int = 3):
         # Combine all content for summarization
         all_content = "\n\n".join(content_pieces)
 
-        # Create summary using Haiku
+        # Create summary using fast model
         summarised_content = ""
         if all_content and user_intent:
             summarised_content = summarize_combined_content(
