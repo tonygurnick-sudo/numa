@@ -101,13 +101,13 @@
     color: var(--brand-textMuted, var(--color-text-muted));
     margin-top: 0.5rem;
     margin-bottom: 0;
-    max-width: 780px; // Prevent subtitle from pushing too close to action buttons
+    max-width: 520px; // Prevent subtitle from pushing too close to action buttons
 
-    @media (max-width: 992px) {
-      max-width: 520px;
+    @include desktop {
+      max-width: 780px;
     }
 
-    @media (max-width: 768px) {
+    @include mobile {
       max-width: 100%;
     }
   }
@@ -154,14 +154,21 @@
       font-size: 1rem;
     }
   }
+
+  // Hide chat page header on mobile during the "new chat" screen to give more space
+  &.new-chat-page-header {
+    @include mobile {
+      display: none;
+    }
+  }
 }
 
 nav {
   color: var(--brand-textMuted, var(--color-eggplant-200));
 
-  @media (max-width: 768px) {
+  @include mobile {
     width: 100%;
-    height: 60px;
+    // height: 60px;
     position: fixed;
     top: 0;
     left: 0;
@@ -179,6 +186,11 @@ nav {
   display: flex;
   background-color: white;
   border-bottom: 1px solid var(--color-lt-gray);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1050;
 
   .dropdown, #nav-dropdown {
     color: var(--brand-primary, var(--color-primary));
@@ -200,7 +212,7 @@ nav {
 
   .navbar-toggler {
     color: var(--brand-primary, var(--color-primary));
-    padding: 0;
+    padding: 0 12px 0 0;
     border: none;
     box-shadow: none;
 
@@ -219,6 +231,7 @@ nav {
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     border: none;
+    margin-top: 0;
 
     .dropdown-item {
       color: var(--brand-text, var(--color-dark));
@@ -244,10 +257,10 @@ nav {
 
 #root {
   background: var(--brand-background);
-  min-height: 100vh;
+  min-height: 100dvh; // Use dynamic viewport height for better mobile support
   width: 100%;
 
-  @media (max-width: 768px) {
+  @include mobile {
     display: block;
     overflow-x: hidden;
   }
@@ -260,8 +273,8 @@ nav {
   flex-direction: column;
   height: 100%;
 
-  @media (max-width: 768px) {
-    padding: 0 1rem;
+  @include mobile {
+    padding: 0 .25rem;
   }
 }
 
@@ -270,7 +283,7 @@ nav {
   padding: 0 2rem;
   background: var(--brand-background, #333333);
 
-  @media (max-width: 768px) {
+  @include mobile {
     padding: 0 1rem;
   }
 }
@@ -315,10 +328,10 @@ header {
   }
 }
 
-@media (max-width: 768px) {
+@include mobile {
   header {
     margin-left: 0;
-    margin-top: 60px;
+    // margin-top: 60px;
 
     .wrapper {
       padding: 16px !important;
@@ -610,14 +623,14 @@ header {
   }
 
   .container-fluid {
-    @media (max-width: 768px) {
+    @include mobile {
       padding-left: 0;
       padding-right: 0;
     }
   }
 
   .row {
-    @media (max-width: 768px) {
+    @include mobile {
       margin-left: 0;
       margin-right: 0;
     }
@@ -671,7 +684,7 @@ header {
   }
 
   .app-details-meta {
-    @media (max-width: 992px) {
+    @include mobile {
       padding: 2rem 1rem !important;
 
       .category-tag {

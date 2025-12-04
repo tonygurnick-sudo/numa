@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { Button, Alert, Modal } from 'react-bootstrap';
+import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
+import { Button, Alert, Modal, Collapse } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
@@ -13,6 +13,8 @@ import { ChatInput } from '../Components/Chat/ChatInput';
 import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/Chat/ChatMessages';
 import { NewChat } from '../Components/Chat/NewChat';
+import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
+import { ResultActions } from '../Components/ResultActions';
 import ResizableSplitView from '../Components/ResizableSplitView';
 import { generateSystemPrompt, getEnabledTools } from '../utils/chatSystemPromptUtils';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
@@ -32,13 +34,16 @@ import { useDocumentProcessor } from '../hooks/useDocumentProcessor';
 import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { autoNameConversation } from '../utils/autoChatTitle';
 import { useChatInactivity } from '../hooks/useChatInactivity';
+import { useDrawerBackClose } from '../hooks/useDrawerBackClose';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import type { AgentSummary } from '../types/agents';
 import { getAgent, listAgents } from '../Services/AgentsService';
 import { getConnectionConfig } from '../config/integrationsConfig';
 import { sortAgentsByPriority } from '../utils/agentSortingUtils';
+import { formatAgentDisplayName } from '../utils/agentUtils';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
+import { AgentAvatar } from '../Components/Agents/AgentAvatar';
 
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
@@ -71,11 +76,14 @@ const NumaChatAgents = () => {
   const [currentAgent, setCurrentAgent] = useState<AgentSummary | null>(null);
   const [pendingAgent, setPendingAgent] = useState<AgentSummary | null>(null);
   const [queuedPreselectedAgent, setQueuedPreselectedAgent] = useState<AgentSummary | null>(null);
-  const [agentError, setAgentError] = useState<React.ReactNode | null>(null);
+  const [agentError, setAgentError] = useState<ReactNode | null>(null);
   const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [personalAgentsLoading, setPersonalAgentsLoading] = useState(false);
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
   const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+  const [showMobileActions, setShowMobileActions] = useState(false);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
 
   // Refs
   const messageEndRef = useRef(null);
@@ -108,6 +116,7 @@ const NumaChatAgents = () => {
     leftFraction,
     setLeftFraction,
     setShowSplitView,
+    setInlineDocument,
     openDocument,
     closeDocument,
   } = documentProcessor;
@@ -136,6 +145,33 @@ const NumaChatAgents = () => {
       resetAgentState();
     }
   }, [agentsFeatureEnabled]);
+
+  // Track viewport to render mobile-only UI without touching desktop layout
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setShowMobileActions(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Allow mobile back button to close the document modal instead of leaving the page
+  useDrawerBackClose({
+    isOpen: showDocumentModal,
+    onClose: () => {
+      setShowDocumentModal(false);
+      closeDocument();
+    },
+    enabled: isMobile,
+    stateKey: 'document-modal',
+  });
 
   // Load global Agents policy once (only when feature enabled)
   useEffect(() => {
@@ -1376,31 +1412,88 @@ const NumaChatAgents = () => {
     }
   };
 
+  const renderActionButtons = () => (
+    <>
+      {agentsFeatureEnabled && agentsMode !== 'off' && (
+        <AgentsSidebar
+          ref={agentsSidebarRef}
+          onSelectAgent={handleAgentSelect}
+          currentAgentId={currentAgent?.agentId ?? null}
+          recentConversations={recentConversations}
+        />
+      )}
+      <Button variant="secondary" onClick={toggleChatHistory} title="Chat History">
+        <i className="bi bi-clock-history me-1"></i>
+        History
+      </Button>
+      <Button variant="primary" onClick={handleNewChatClick}>
+        New Chat
+      </Button>
+    </>
+  );
+
+  const mobileActionsPanelId = 'mobile-chat-actions-panel';
+  const handleMobileActionClick = () => setShowMobileActions(false);
+
+  // Ensure mobile actions start collapsed on mount/navigation
+  useEffect(() => {
+    setShowMobileActions(false);
+  }, []);
+
+  // Close mobile actions when clicking/tapping outside
+  useEffect(() => {
+    if (!isMobile || !showMobileActions) return;
+
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('.mobile-chat-actions')) return;
+      setShowMobileActions(false);
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [isMobile, showMobileActions]);
+
   return (
     <div className="dashboard">
-      {/* Page header with title and action buttons */}
-      <PageHeader
-        title="Numa Chat"
-        actions={
-          <>
-            {agentsFeatureEnabled && agentsMode !== 'off' && (
-              <AgentsSidebar
-                ref={agentsSidebarRef}
-                onSelectAgent={handleAgentSelect}
-                currentAgentId={currentAgent?.agentId ?? null}
-                recentConversations={recentConversations}
-              />
-            )}
-            <Button variant="secondary" onClick={toggleChatHistory} title="Chat History">
-              <i className="bi bi-clock-history me-1"></i>
-              History
-            </Button>
-            <Button variant="primary" onClick={handleNewChatClick}>
-              New Chat
-            </Button>
-          </>
-        }
-      />
+      {/* Desktop header */}
+      {!isMobile && (
+        <PageHeader
+          title="Numa Chat"
+          actions={renderActionButtons()}
+          className={shouldShowNewChatView ? 'new-chat-page-header' : ''}
+        />
+      )}
+
+      {/* Mobile action toggle lives just below the nav bar */}
+      {isMobile && !shouldShowNewChatView && (
+        <div className="mobile-chat-actions">
+          <button
+            type="button"
+            className={`mobile-actions-toggle ${showMobileActions ? 'open' : ''}`}
+            onClick={() => setShowMobileActions((open) => !open)}
+            aria-expanded={showMobileActions}
+            aria-controls={mobileActionsPanelId}
+            aria-label={showMobileActions ? 'Hide chat actions' : 'Show chat actions'}
+          >
+            <span className="toggle-icon">
+              <i className="bi bi-plus"></i>
+            </span>
+          </button>
+          <Collapse in={showMobileActions}>
+            <div id={mobileActionsPanelId} className="mobile-actions-panel">
+              <div className="d-flex flex-wrap gap-2" onClick={handleMobileActionClick}>
+                {renderActionButtons()}
+              </div>
+            </div>
+          </Collapse>
+        </div>
+      )}
 
       {/* Main content */}
       <LayoutDashboard>
@@ -1419,6 +1512,22 @@ const NumaChatAgents = () => {
             {/* White container wrapper */}
             <div className="chat-white-container">
               <div className="chat-content flex-grow-1 d-flex flex-column">
+                {/* Agent info section (if agent is selected) */}
+                {currentAgent && (
+                  <div className="chat-agent-info d-flex align-items-center gap-2 p-3 border-bottom">
+                    <AgentAvatar agent={currentAgent} size={32} />
+                    <div className="chat-agent-meta">
+                      <div
+                        className="fw-semibold"
+                        style={{ fontSize: '1.1rem', color: 'var(--brand-primary, var(--color-primary))' }}
+                      >
+                        {formatAgentDisplayName(currentAgent.title)}
+                      </div>
+                      <div className="small text-muted">AI Agent Assistant</div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Missing integrations confirmation modal */}
                 <Modal show={!!missingConfirm} onHide={() => setMissingConfirm(null)} centered>
                   <Modal.Header closeButton>
@@ -1543,7 +1652,16 @@ const NumaChatAgents = () => {
                               messages={messages}
                               messageEndRef={messageEndRef}
                               loadingIndicatorStyle={{}}
-                              onOpenDocument={openDocument}
+                              onOpenDocument={(title, content) => {
+                                setInlineDocument({ title, content });
+                                if (isMobile) {
+                                  setShowSplitView(false);
+                                  setLeftFraction(0.99);
+                                  setShowDocumentModal(true);
+                                } else {
+                                  openDocument(title, content);
+                                }
+                              }}
                               isConversationLoading={false}
                               currentAgent={currentAgent}
                               conversationId={conversationId}
@@ -1604,6 +1722,35 @@ const NumaChatAgents = () => {
           </div>
         </div>
       </LayoutDashboard>
+
+      {/* Mobile document viewer */}
+      <Modal
+        show={isMobile && showDocumentModal && !!inlineDocument}
+        onHide={() => {
+          setShowDocumentModal(false);
+          closeDocument();
+        }}
+        fullscreen
+        centered
+        scrollable
+        dialogClassName="document-modal"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>{inlineDocument?.title || 'Document'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="message-content markdown-content">
+            <MarkdownContent content={inlineDocument?.content || ''} />
+          </div>
+        </Modal.Body>
+        {inlineDocument?.content ? (
+          <Modal.Footer>
+            <div className="flex-grow-1">
+              <ResultActions content={inlineDocument.content} title={inlineDocument.title || 'Document'} />
+            </div>
+          </Modal.Footer>
+        ) : null}
+      </Modal>
 
       {/* File upload */}
       <ChatFileUpload

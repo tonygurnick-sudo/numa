@@ -9,6 +9,7 @@ import {
   getConnectionDisplayName,
 } from '../../config/integrationsConfig';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
+import { useDrawerBackClose } from '../../hooks/useDrawerBackClose';
 
 // WebSocket message size limit (AWS API Gateway limit is 32KB)
 const MAX_MESSAGE_LENGTH = 20000; // Conservative limit accounting for JSON overhead
@@ -39,10 +40,14 @@ const ChatInput = ({
   // Multi‑KB selection (controlled by parent)
   enabledKBIds = [],
   setEnabledKBIds,
+  dropdownDirection = 'up',
 }) => {
   const internalRef = useRef(null);
   const inputRef = externalInputRef || internalRef;
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
+  const [showKBDropdown, setShowKBDropdown] = useState(false);
+  const [showToolsDropdown, setShowToolsDropdown] = useState(false);
+  const [isMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const {
     selectedKB: _selectedKB,
     availableKBs,
@@ -52,6 +57,21 @@ const ChatInput = ({
   } = useKnowledgeBase();
   const agentsFeatureEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
+
+  // Enable mobile back button to close dropdowns
+  useDrawerBackClose({
+    isOpen: showKBDropdown,
+    onClose: () => setShowKBDropdown(false),
+    enabled: isMobile,
+    stateKey: 'kb-dropdown',
+  });
+
+  useDrawerBackClose({
+    isOpen: showToolsDropdown,
+    onClose: () => setShowToolsDropdown(false),
+    enabled: isMobile,
+    stateKey: 'tools-dropdown',
+  });
 
   // Agent mode is the default and only mode; remove legacy flag checks
 
@@ -192,7 +212,12 @@ const ChatInput = ({
                   placement="top"
                   overlay={<Tooltip id="tooltip-knowledge-bases">Knowledge Bases</Tooltip>}
                 >
-                  <Dropdown drop="up" className="kb-selector-compact-dropdown">
+                  <Dropdown
+                    drop={dropdownDirection}
+                    className="kb-selector-compact-dropdown"
+                    show={showKBDropdown}
+                    onToggle={(isOpen) => setShowKBDropdown(isOpen)}
+                  >
                     <Dropdown.Toggle
                       variant="link"
                       className={`kb-selector-compact-toggle ${enabledKBIds.length > 0 ? 'active' : ''}`}
@@ -226,9 +251,52 @@ const ChatInput = ({
                       )}
                     </Dropdown.Toggle>
 
-                    <Dropdown.Menu className="p-3" style={{ minWidth: '280px', zIndex: 9999 }}>
+                    <Dropdown.Menu
+                      className="p-3 kb-dropdown-menu"
+                      style={{ minWidth: '280px', zIndex: 9999 }}
+                      popperConfig={{
+                        strategy: 'fixed',
+                        modifiers: [
+                          {
+                            name: 'offset',
+                            options: {
+                              offset: [0, 8], // [skidding, distance] - 8px gap above button
+                            },
+                          },
+                          {
+                            name: 'preventOverflow',
+                            options: {
+                              boundary: 'viewport',
+                              padding: 8,
+                              altAxis: true, // Allow horizontal adjustment to avoid clipping on narrow screens
+                            },
+                          },
+                          {
+                            name: 'flip',
+                            enabled: false, // Disable flip to force it to stay above
+                          },
+                        ],
+                      }}
+                    >
+                      {/* Mobile Close Button */}
+                      <div className="kb-mobile-header d-md-none">
+                        <span className="kb-header-title">Knowledge Bases</span>
+                        <Button
+                          variant="link"
+                          className="kb-close-button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowKBDropdown(false);
+                          }}
+                          aria-label="Close"
+                        >
+                          <i className="bi bi-x-lg"></i>
+                        </Button>
+                      </div>
+
                       {/* KB Selection */}
-                      <Dropdown.Header>Available Knowledge Bases</Dropdown.Header>
+                      <Dropdown.Header className="d-none d-md-block">Available Knowledge Bases</Dropdown.Header>
                       {isLoadingKBs ? (
                         <div className="text-center py-2">
                           <Spinner animation="border" size="sm" />
@@ -289,7 +357,12 @@ const ChatInput = ({
             {autoToolsEnabled !== undefined && setAutoToolsEnabled && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                 <OverlayTrigger placement="top" overlay={<Tooltip id="tooltip-tools">Tools</Tooltip>}>
-                  <Dropdown drop="up" className="tools-settings-dropdown">
+                  <Dropdown
+                    drop={dropdownDirection}
+                    className="tools-settings-dropdown"
+                    show={showToolsDropdown}
+                    onToggle={(isOpen) => setShowToolsDropdown(isOpen)}
+                  >
                     <Dropdown.Toggle
                       variant="link"
                       className={`tools-settings-toggle ${
@@ -303,7 +376,55 @@ const ChatInput = ({
                       <i className="bi bi-tools"></i>
                     </Dropdown.Toggle>
 
-                    <Dropdown.Menu className="p-3" style={{ minWidth: '250px', zIndex: 9999 }}>
+                    <Dropdown.Menu
+                      className="p-3 tools-dropdown-menu"
+                      style={{
+                        minWidth: 'min(480px, calc(100vw - 1rem))',
+                        maxWidth: 'calc(100vw - 1rem)',
+                        zIndex: 9999,
+                      }}
+                      renderOnMount={isMobile}
+                      popperConfig={{
+                        strategy: 'fixed',
+                        modifiers: [
+                          {
+                            name: 'offset',
+                            options: {
+                              offset: [0, 8],
+                            },
+                          },
+                          {
+                            name: 'preventOverflow',
+                            options: {
+                              boundary: 'viewport',
+                              padding: 8,
+                              altAxis: false, // Prevent horizontal shifting - keep centered
+                            },
+                          },
+                          {
+                            name: 'flip',
+                            enabled: false,
+                          },
+                        ],
+                      }}
+                    >
+                      {/* Mobile Close Button */}
+                      <div className="tools-mobile-header d-md-none">
+                        <span className="tools-header-title">Tools</span>
+                        <Button
+                          variant="link"
+                          className="tools-close-button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowToolsDropdown(false);
+                          }}
+                          aria-label="Close"
+                        >
+                          <i className="bi bi-x-lg"></i>
+                        </Button>
+                      </div>
+
                       <div className="mb-3">
                         <Form.Check
                           type="switch"
