@@ -30,6 +30,7 @@ export const SUPPORTED_INTEGRATIONS = [
   'google_forms',
   'google_docs',
   'telegram_bot_api',
+  'microsoft_teams',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];

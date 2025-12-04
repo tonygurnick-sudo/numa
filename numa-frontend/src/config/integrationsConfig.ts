@@ -34,6 +34,7 @@ import googleSheetsIcon from '../assets/icons/google_sheets.svg';
 import googleFormsIcon from '../assets/icons/google_forms.svg';
 import googleDocsIcon from '../assets/icons/google_docs.svg';
 import telegramIcon from '../assets/icons/telegram_bot_api.svg';
+import microsoftTeamsIcon from '../assets/icons/microsoft_teams.svg';
 
 export type BootstrapColor =
   | 'primary'
@@ -340,6 +341,16 @@ export const CONNECTIONS_CONFIG: Record<string, ConnectionConfigEntry> = {
     fallback_icon: 'bi bi-send-fill',
     fallback_color: 'info',
     example_query: 'Send a Telegram message to the support channel about this issue.',
+  },
+  microsoft_teams: {
+    id: 'microsoft_teams',
+    name: 'Microsoft Teams',
+    description: 'Send messages, manage channels, and collaborate via Microsoft Teams.',
+    auth_type: 'oauth',
+    img_src: microsoftTeamsIcon,
+    fallback_icon: 'bi bi-people-fill',
+    fallback_color: 'primary',
+    example_query: 'Post an update to the project channel and mention the owner.',
   },
 };
 

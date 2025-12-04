@@ -123,6 +123,9 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
 
   // Telegram Bot API
   telegram_bot_api: [],
+
+  // Microsoft Teams
+  microsoft_teams: [],
 };
 
 export const getDefaultDenyTools = (appName: string): string[] => {
