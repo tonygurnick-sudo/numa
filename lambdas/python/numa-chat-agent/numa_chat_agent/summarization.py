@@ -1,23 +1,22 @@
 """
 Content summarization module for Numa Chat Agent.
 
-Provides fast, cost-effective content summarization using Claude Haiku.
+Provides fast, cost-effective content summarization using Nova 2 Lite.
 """
 
-import json
 from typing import List
 
 import structlog
 
-from .config import HAIKU_MODEL_ID, get_bedrock_runtime_client
+from .config import FAST_MODEL_ID, invoke_fast_model
 from .utils import log_token_usage
 
 logger = structlog.get_logger()
 
 
-def call_haiku_summarizer(prompt: str, max_tokens: int = 2000) -> str:
+def call_fast_model_summarizer(prompt: str, max_tokens: int = 10000) -> str:
     """
-    Call Claude Haiku for fast, cost-effective summarization.
+    Call fast model (Nova 2 Lite) for cost-effective summarization.
 
     Args:
         prompt: Summarization prompt
@@ -27,53 +26,31 @@ def call_haiku_summarizer(prompt: str, max_tokens: int = 2000) -> str:
         Summarized text, or empty string if failed
     """
     try:
-        client = get_bedrock_runtime_client()
-
-        body = json.dumps(
-            {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": max_tokens,
-                "temperature": 0.1,  # Low temperature for consistency
-                "messages": [
-                    {"role": "user", "content": [{"type": "text", "text": prompt}]}
-                ],
-            }
+        text, usage_stats, _ = invoke_fast_model(
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=0.1,
         )
 
-        response = client.invoke_model(
-            body=body,
-            modelId=HAIKU_MODEL_ID,
-            accept="application/json",
-            contentType="application/json",
-        )
-
-        response_body = json.loads(response.get("body").read())
-
-        # Extract token usage information and log it
-        usage_stats = response_body.get("usage", {})
         log_token_usage(
-            model_id=HAIKU_MODEL_ID,
+            model_id=FAST_MODEL_ID,
             usage_stats=usage_stats,
-            context="Haiku summarization",
+            context="Fast model summarization",
         )
-
-        # Log additional summarization metrics
-        input_tokens = usage_stats.get("input_tokens", 0)
-        output_tokens = usage_stats.get("output_tokens", 0)
 
         logger.info(
-            "Haiku summarization completed",
-            model_id=HAIKU_MODEL_ID,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
+            "Fast model summarization completed",
+            model_id=FAST_MODEL_ID,
+            input_tokens=usage_stats.get("input_tokens", 0),
+            output_tokens=usage_stats.get("output_tokens", 0),
             prompt_length=len(prompt),
-            response_length=len(response_body["content"][0]["text"]),
+            response_length=len(text),
         )
 
-        return response_body["content"][0]["text"].strip()
+        return text
 
     except Exception as e:
-        logger.error("Haiku summarization failed", error=str(e), exc_info=True)
+        logger.error("Fast model summarization failed", error=str(e), exc_info=True)
         # Return empty string on failure - tools will handle fallback
         return ""
 
@@ -152,7 +129,7 @@ Provide a comprehensive summary:"""
         user_intent_preview=user_intent[:100],
     )
 
-    summary = call_haiku_summarizer(prompt)
+    summary = call_fast_model_summarizer(prompt)
 
     if summary:
         logger.info(

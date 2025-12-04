@@ -1,5 +1,6 @@
 // Renders only the inner body; UnifiedToolCard handles framing
 
+import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
 import { getWebSearchPayload } from './helpers';
 import type { WebSearchPayload, ToolResultLike } from './helpers';
 
@@ -45,7 +46,9 @@ const WebSearchBody = ({ payload }: { payload: WebSearchPayload }) => {
       {hasSummary && !hasError && (
         <div className="ws-summary">
           <strong>Summary of Relevant Content:</strong>
-          <div style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem' }}>{summarised_content}</div>
+          <div style={{ marginTop: '0.5rem' }}>
+            <MarkdownContent content={summarised_content} />
+          </div>
         </div>
       )}
       {!hasSummary && !hasError && results && results.length > 0 && (

@@ -17,6 +17,7 @@ The router:
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +27,13 @@ import structlog
 from jsonschema import Draft7Validator  # type: ignore[import-untyped,unused-ignore]
 
 from ....auth import get_current_user_auth
+from ....intent_verification import (
+    IntentVerificationConfig,
+    get_delete_config,
+    get_reply_config,
+    get_send_config,
+    verify_user_intent,
+)
 from ...postprocessing import postprocess_tool_result
 
 try:
@@ -47,6 +55,56 @@ except ImportError:  # pragma: no cover
     BedrockClaude3Model = None  # type: ignore
 
 logger = structlog.get_logger(__name__)
+
+# ── Material Tool Verification Configuration ──────────────────────────────────
+
+MATERIAL_TOOL_VERIFICATION_ENABLED = (
+    os.getenv("MATERIAL_TOOL_VERIFICATION_ENABLED", "true").lower() == "true"
+)
+
+MATERIAL_TOOL_PATTERNS = ["send", "reply", "delete"]
+
+
+def _is_material_tool(tool_name: str) -> bool:
+    """Check if tool name indicates a material action requiring verification.
+
+    Material tools are those that have significant side effects like sending
+    messages, replying to threads, or deleting data. These require explicit
+    user confirmation before execution.
+
+    Args:
+        tool_name: The name of the tool to check.
+
+    Returns:
+        True if the tool matches a material pattern and verification is enabled.
+    """
+    if not MATERIAL_TOOL_VERIFICATION_ENABLED:
+        return False
+    name_lower = tool_name.lower()
+    return any(pattern in name_lower for pattern in MATERIAL_TOOL_PATTERNS)
+
+
+def _get_material_tool_config(tool_name: str) -> IntentVerificationConfig:
+    """Get the appropriate intent verification config for a material tool.
+
+    Args:
+        tool_name: The name of the tool.
+
+    Returns:
+        IntentVerificationConfig with appropriate action type and messages.
+    """
+    name_lower = tool_name.lower()
+
+    if "delete" in name_lower:
+        return get_delete_config(tool_name)
+    elif "reply" in name_lower:
+        return get_reply_config(tool_name)
+    else:
+        # Default to send for any other matching pattern
+        return get_send_config(tool_name)
+
+
+# ── Prompt Configuration ──────────────────────────────────────────────────────
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 BASE_PROMPT_FILE = PROMPTS_DIR / "base_prompt.md"
@@ -425,6 +483,41 @@ class ToolsOnlyIntegrationRouter:
             raise ValueError(
                 f"Unknown Pipedream tool '{tool_name}'. Available: {', '.join(sorted(self._definitions))}"
             )
+
+        # Check if this is a material tool requiring explicit user confirmation
+        if _is_material_tool(tool_name):
+            user_auth = get_current_user_auth() or {}
+            user_id = user_auth.get("sub")
+            conversation_id = user_auth.get("conversation_id") or user_auth.get(
+                "conversationId"
+            )
+
+            if user_id and conversation_id:
+                config = _get_material_tool_config(tool_name)
+                verification_result = verify_user_intent(
+                    config, conversation_id, user_id
+                )
+
+                if not verification_result.verified:
+                    logger.info(
+                        "Material tool execution denied - user intent not verified",
+                        integration=self.integration_name,
+                        tool=tool_name,
+                        decision=verification_result.decision,
+                    )
+                    return {
+                        "status": "denied",
+                        "integration": self.integration_name,
+                        "tool": tool_name,
+                        "message": verification_result.denial_message,
+                    }
+
+                logger.info(
+                    "Material tool execution approved - user intent verified",
+                    integration=self.integration_name,
+                    tool=tool_name,
+                    decision=verification_result.decision,
+                )
 
         # Augment instruction with timezone guidance to ensure sub-agent always
         # considers user's timezone for time-sensitive operations

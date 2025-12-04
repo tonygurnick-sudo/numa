@@ -8,8 +8,9 @@ os.environ.setdefault("CLIENT_NAME", "acme")
 os.environ.setdefault("TOOL_OUTPUTS_PREFIX", "numa-chat/tool-outputs")
 os.environ.setdefault("EXTRACT_CONTENT_LAMBDA_NAME", "acme_extract-content")
 
-from numa_chat_agent.mcp import postprocessing as pp  # noqa: E402
-from numa_chat_agent.mcp.postprocessing import postprocess_tool_result  # noqa: E402
+# pylint: disable=wrong-import-position
+from numa_chat_agent.mcp import postprocessing as pp
+from numa_chat_agent.mcp.postprocessing import postprocess_tool_result
 
 
 def test_postprocess_returns_raw_for_small_payload():
@@ -40,7 +41,7 @@ def test_postprocess_full_payload_skips_summary():
 def test_postprocess_summarises_large_payload(monkeypatch):
     payload = {"rows": [{"id": i, "value": f"row-{i}"} for i in range(100)]}
     monkeypatch.setattr(
-        pp, "call_haiku_summarizer", lambda *args, **kwargs: "Summary response"
+        pp, "call_fast_model_summarizer", lambda *args, **kwargs: "Summary response"
     )
 
     result = postprocess_tool_result(
@@ -110,7 +111,7 @@ def test_postprocess_filestash_download(monkeypatch):
 
     lambda_client = mock.Mock()
 
-    def _invoke_payload(**kwargs):
+    def _invoke_payload(**_kwargs):
         return {
             "Payload": mock.Mock(
                 read=lambda: json.dumps(
@@ -119,7 +120,7 @@ def test_postprocess_filestash_download(monkeypatch):
             )
         }
 
-    lambda_client.invoke.side_effect = lambda **kwargs: _invoke_payload(**kwargs)
+    lambda_client.invoke.side_effect = _invoke_payload
     monkeypatch.setattr(pp, "get_lambda_client", lambda region_name=None: lambda_client)
 
     response_mock = mock.Mock()
@@ -139,7 +140,7 @@ def test_postprocess_filestash_download(monkeypatch):
     object_key = write_mock.call_args[0][0]
     assert object_key.startswith("downloads/user123/")
     assert read_mock.call_count == 1
-    assert pp.requests.get.call_count == 1
+    assert pp.requests.get.call_count == 1  # pylint: disable=no-member
     assert result["content"][0]["json"]["type"] == "integrations-file-download"
     files = result["content"][0]["json"]["files"]
     assert files[0]["filename"] == "report.pdf"
@@ -185,7 +186,7 @@ def test_postprocess_filestash_download_from_string(monkeypatch):
 
     lambda_client = mock.Mock()
 
-    def _invoke_payload(**kwargs):
+    def _invoke_payload2(**_kwargs):
         return {
             "Payload": mock.Mock(
                 read=lambda: json.dumps(
@@ -194,7 +195,7 @@ def test_postprocess_filestash_download_from_string(monkeypatch):
             )
         }
 
-    lambda_client.invoke.side_effect = lambda **kwargs: _invoke_payload(**kwargs)
+    lambda_client.invoke.side_effect = _invoke_payload2
     monkeypatch.setattr(pp, "get_lambda_client", lambda region_name=None: lambda_client)
 
     response_mock = mock.Mock()
@@ -214,7 +215,7 @@ def test_postprocess_filestash_download_from_string(monkeypatch):
     object_key = write_mock.call_args[0][0]
     assert object_key.startswith("downloads/user123/")
     assert read_mock.call_count == 1
-    assert pp.requests.get.call_count == 1
+    assert pp.requests.get.call_count == 1  # pylint: disable=no-member
     files = result["content"][0]["json"]["files"]
     assert files[0]["filename"] == "report.pdf"
     assert files[0]["filetype"] == "application/octet-stream"
@@ -244,14 +245,14 @@ def test_postprocess_filestash_extract_failure(monkeypatch):
 
     lambda_client = mock.Mock()
 
-    def _invoke_payload(**kwargs):
+    def _invoke_payload3(**_kwargs):
         return {
             "Payload": mock.Mock(
                 read=lambda: json.dumps({"error": "extract failed"}).encode("utf-8")
             )
         }
 
-    lambda_client.invoke.side_effect = lambda **kwargs: _invoke_payload(**kwargs)
+    lambda_client.invoke.side_effect = _invoke_payload3
     monkeypatch.setattr(pp, "get_lambda_client", lambda region_name=None: lambda_client)
 
     response_mock = mock.Mock()

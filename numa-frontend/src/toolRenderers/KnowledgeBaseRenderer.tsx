@@ -1,4 +1,5 @@
 import { ChatReferencesDropdown } from '../Components/Chat/ChatReferencesDropdown';
+import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
 import { useAuth } from '../Providers/AuthProvider';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
@@ -50,7 +51,9 @@ const KnowledgeBaseBody = ({
       {hasSummary && (
         <div className="kb-summary">
           <strong>Summary of Relevant Content:</strong>
-          <div style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem' }}>{summarised_content}</div>
+          <div style={{ marginTop: '0.5rem' }}>
+            <MarkdownContent content={summarised_content} />
+          </div>
         </div>
       )}
       {!hasSummary && Array.isArray(knowledgeText) && knowledgeText.length > 0 && (

@@ -131,6 +131,9 @@ export class NumaChatAgent extends Construct {
             `arn:aws:bedrock:*:*:inference-profile/anthropic.claude-*`,
             `arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-*`,
             `arn:aws:bedrock:*:*:inference-profile/apac.anthropic.claude-*`,
+            // Nova models for fast summarization
+            `arn:aws:bedrock:*::foundation-model/amazon.nova-*`,
+            `arn:aws:bedrock:*:*:inference-profile/global.amazon.nova-*`,
           ],
         },
         {
