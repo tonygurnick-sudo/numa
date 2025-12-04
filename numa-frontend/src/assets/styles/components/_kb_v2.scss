@@ -1,6 +1,7 @@
 /**
  * KB V2 Styles - Apple-style modern design
  */
+@use '../abstracts/mixins' as *;
 
 // KB Card (for selector grid)
 .kb-card {
@@ -442,7 +443,7 @@
 }
 
 // Responsive
-@media (max-width: 768px) {
+@include mobile {
   .kb-file-explorer {
     .file-table {
       font-size: 0.875rem;

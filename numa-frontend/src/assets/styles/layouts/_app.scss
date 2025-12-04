@@ -1,4 +1,6 @@
 
+@use '../abstracts/mixins' as *;
+
 .app-job-naming-toggle {
     display: inline-flex;
     align-items: center;
@@ -37,7 +39,7 @@
     max-width: 100%;
     width: 100%;
 
-    @media (max-width: 768px) {
+    @include mobile {
       padding: 0;
       margin: 0;
 
@@ -53,7 +55,7 @@
       -webkit-overflow-scrolling: touch;
       margin-bottom: 1rem;
 
-      @media (max-width: 768px) {
+      @include mobile {
         margin: 0;
         padding: 0.5rem;
         background: none;
@@ -70,24 +72,29 @@
       max-width: 100%;
       width: 100%;
 
-      @media (max-width: 768px) {
+      @include mobile {
         padding: 0.5rem;
+        min-height: 300px; // Reduce min-height on mobile
+      }
+
+      @include mobile-xs {
+        min-height: 200px; // Further reduce on very small screens
       }
 
       .card {
-        @media (max-width: 768px) {
+        @include mobile {
           border-radius: 0.5rem;
         }
 
         .card-body {
-          @media (max-width: 768px) {
+          @include mobile {
             padding: 0.75rem;
           }
         }
       }
 
       textarea {
-        @media (max-width: 768px) {
+        @include mobile {
           font-size: 16px;
           padding: 0.5rem;
         }

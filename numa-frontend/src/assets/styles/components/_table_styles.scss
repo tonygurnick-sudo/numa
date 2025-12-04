@@ -28,7 +28,7 @@
 // Table container with scrolling
 .numa-table-container {
   overflow-x: auto;
-  max-height: calc(100vh - 300px);
+  max-height: calc(100dvh - 300px); // Use dynamic viewport height for better mobile support
 
   .file-table {
     table-layout: fixed;

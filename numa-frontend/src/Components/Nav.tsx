@@ -1,12 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Navbar, Button, Dropdown } from 'react-bootstrap';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import { useBranding } from '../Providers/BrandingContext';
 import DefaultLogo from '../../public/numa-logo.svg';
 import { useBrandingAsset } from '../hooks/useBrandingAsset';
 import { VersionDisplay } from './VersionDisplay';
+import { useDrawerBackClose } from '../hooks/useDrawerBackClose';
 
 interface NavProps {
   isCollapsed?: boolean;
@@ -59,7 +60,15 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
 
   const MobileNav = () => {
     const [showDropdown, setShowDropdown] = useState(false);
-    const toggleDropdown = () => setShowDropdown(!showDropdown);
+    const toggleDropdown = () => setShowDropdown((prev) => !prev);
+    const handleClose = useCallback(() => setShowDropdown(false), []);
+
+    useDrawerBackClose({
+      isOpen: showDropdown,
+      onClose: handleClose,
+      enabled: isMobile,
+      stateKey: 'nav-menu',
+    });
 
     return (
       <Navbar className="mobile-nav" expand={false}>
@@ -92,7 +101,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
           </Button>
         </div>
         <Dropdown show={showDropdown} className="w-100" id="nav-dropdown">
-          <Dropdown.Menu className="w-100 mt-2">
+          <Dropdown.Menu className="w-100 mt-0">
             {navItems.map((item) => (
               <FeatureWrapper key={item.to} requiredFeature={item.feature}>
                 <Dropdown.Item onClick={() => navigate(item.to)}>

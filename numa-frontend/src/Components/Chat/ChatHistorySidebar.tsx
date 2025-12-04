@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { Button, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useAuth } from '../../Providers/AuthProvider';
 import AgentAvatar from '../Agents/AgentAvatar';
 import { useAgentById } from '../../hooks/useAgentById';
+import { useDrawerBackClose } from '../../hooks/useDrawerBackClose';
 
 type ChatHistorySidebarProps = {
   onSelectConversation: (conversationId: string) => void;
@@ -50,11 +51,28 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
     const [conversations, setConversations] = useState<ConversationMeta[]>([]);
     const [localError, setLocalError] = useState(null); // local error state
     const sidebarRef = useRef<HTMLDivElement | null>(null);
+    const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
     const { user, numaChatDynamoUtils } = useAuth();
 
     // Grab user info from token
     const idToken = user?.decoded_tokens?.idToken ?? {};
     const sub = idToken.sub;
+
+    const handleClose = useCallback(() => setShow(false), []);
+
+    useEffect(() => {
+      if (typeof window === 'undefined') return;
+      const onResize = () => setIsMobile(window.innerWidth <= 768);
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }, []);
+
+    useDrawerBackClose({
+      isOpen: show,
+      onClose: handleClose,
+      enabled: isMobile,
+      stateKey: 'chat-history',
+    });
 
     // Toggle the sidebar open/closed
     const handleShow = () => setShow(!show);
@@ -157,6 +175,10 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
       }
     };
 
+    const topOffsetPx = isMobile ? 60 : 0;
+    const topOffset = `calc(${topOffsetPx}px + env(safe-area-inset-top, 0px))`;
+    const sidebarHeight = `calc(100dvh - ${topOffsetPx}px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))`;
+
     return (
       <div className="chat-history-sidebar">
         <div
@@ -165,9 +187,9 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
           style={{
             position: 'fixed',
             right: show ? '0' : '-320px',
-            top: '0',
+            top: topOffset,
             width: '320px',
-            height: '100vh',
+            height: sidebarHeight,
             backgroundColor: 'white',
             boxShadow: '-2px 0 5px rgba(0,0,0,0.1)',
             transition: 'right 0.3s ease-in-out',
@@ -190,7 +212,7 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
           <div
             className="chat-history-list"
             style={{
-              maxHeight: 'calc(100vh - 100px)',
+              maxHeight: `calc(${sidebarHeight} - 90px)`,
               overflowY: 'auto',
             }}
           >

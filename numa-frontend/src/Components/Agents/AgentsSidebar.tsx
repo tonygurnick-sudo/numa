@@ -1,4 +1,12 @@
-import { useState, useEffect, forwardRef, useImperativeHandle, ForwardRefRenderFunction } from 'react';
+import {
+  useState,
+  useEffect,
+  forwardRef,
+  useImperativeHandle,
+  ForwardRefRenderFunction,
+  useCallback,
+  useRef,
+} from 'react';
 import { Button, Offcanvas, Spinner, Alert } from 'react-bootstrap';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsService';
@@ -8,6 +16,7 @@ import type { ConversationMeta } from '../../hooks/useChatInactivity';
 import { useNavigate } from 'react-router-dom';
 import AgentAvatar from './AgentAvatar';
 import { sortAgentsByPriority } from '../../utils/agentSortingUtils';
+import { useDrawerBackClose } from '../../hooks/useDrawerBackClose';
 
 type AgentsSidebarProps = {
   onSelectAgent?: (agent: AgentSummary) => void;
@@ -31,6 +40,17 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+  const skipBackOnCloseRef = useRef(false);
+
+  const handleClose = useCallback(() => setShow(false), []);
+  const handleManageAgents = useCallback(() => {
+    if (isMobile) {
+      skipBackOnCloseRef.current = true;
+    }
+    setShow(false);
+    navigate('/agents', { replace: isMobile });
+  }, [isMobile, navigate]);
 
   const loadAgents = async () => {
     try {
@@ -73,6 +93,21 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
   );
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useDrawerBackClose({
+    isOpen: show,
+    onClose: handleClose,
+    enabled: isMobile,
+    stateKey: 'agents-sidebar',
+    skipBackOnCloseRef,
+  });
+
+  useEffect(() => {
     let cancelled = false;
     const init = async () => {
       try {
@@ -99,23 +134,23 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
     setShow(false);
   };
 
+  const offcanvasStyle = {
+    width: '320px',
+    maxWidth: '320px',
+    zIndex: 1100,
+    top: isMobile ? 'calc(60px + env(safe-area-inset-top, 0px))' : undefined,
+  } as const;
+
   return (
     <>
       <Button variant="secondary" className="btn" onClick={() => setShow(true)} disabled={agentsMode === 'off'}>
         <i className="bi bi-robot me-1"></i> Agents
       </Button>
-      <Offcanvas show={show} placement="end" onHide={() => setShow(false)} backdrop scroll>
-        <Offcanvas.Header closeButton>
+      <Offcanvas show={show} placement="end" onHide={() => setShow(false)} backdrop scroll style={offcanvasStyle}>
+        <Offcanvas.Header closeButton closeVariant="dark">
           <div className="d-flex align-items-center justify-content-between w-100">
             <Offcanvas.Title className="mb-0">My Agents</Offcanvas.Title>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setShow(false);
-                navigate('/agents');
-              }}
-            >
+            <Button variant="secondary" size="sm" onClick={handleManageAgents}>
               Manage
             </Button>
           </div>

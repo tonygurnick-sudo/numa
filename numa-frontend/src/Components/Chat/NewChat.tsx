@@ -332,272 +332,234 @@ export const NewChat = ({
   return (
     <div
       ref={wrapperRef}
-      className="d-flex flex-column align-items-center h-100"
-      style={{
-        paddingTop: 'max(13vh, 4rem)',
-        paddingBottom: '0rem',
-        paddingLeft: '1rem',
-        paddingRight: '1rem',
-        overflow: 'hidden',
-        minHeight: '100%',
-      }}
+      className="d-flex flex-column h-100 new-chat-wrapper"
       onDragEnterCapture={handleDragEnter}
       onDragOverCapture={handleDragOver}
       onDragLeaveCapture={handleDragLeave}
       onDropCapture={handleDrop}
       data-dragging={isDragging ? 'true' : 'false'}
     >
-      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
-        {/* Greeting */}
-        <div
-          style={{
-            marginBottom: '2.5rem',
-            textAlign: 'center',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.75rem',
-            animation: 'fadeIn 0.6s ease-in-out',
-          }}
-        >
-          <img
-            src={logoSrc}
-            alt={logoAlt}
-            style={{
-              width: '32px',
-              height: '32px',
-              opacity: 0.9,
-            }}
-          />
-          <span
-            style={{
-              fontSize: '33px',
-              fontWeight: 600,
-              color: '#343C6A',
-              lineHeight: '100%',
-            }}
-          >
-            {greeting}
-          </span>
-        </div>
+      {/* Greeting */}
+      <div className="new-chat-hero">
+        <img src={logoSrc} alt={logoAlt} className="new-chat-logo" />
+        <span className="new-chat-greeting-text">{greeting}</span>
+      </div>
 
+      <div className="chat-input-wrapper new-chat-input-wrapper" style={{ animation: 'fadeIn 0.8s ease-in-out' }}>
+        <ChatInput
+          inputMessage={inputMessage}
+          setInputMessage={setInputMessage}
+          handleSubmit={handleSubmit}
+          setShowUploadModal={setShowUploadModal}
+          buttonStatus={buttonStatus}
+          webSearchEnabled={webSearchEnabled}
+          setWebSearchEnabled={setWebSearchEnabled}
+          createAgentEnabled={createAgentEnabled}
+          setCreateAgentEnabled={setCreateAgentEnabled}
+          autoToolsEnabled={autoToolsEnabled}
+          setAutoToolsEnabled={setAutoToolsEnabled}
+          availableConnections={availableConnections}
+          enabledConnections={enabledConnections}
+          setEnabledConnections={setEnabledConnections}
+          connectionsLoading={connectionsLoading}
+          hasPipedreamFeature={hasPipedreamFeature}
+          uploadsInProgress={uploadsInProgress}
+          noToolsActive={noToolsActive}
+          externalInputRef={inputRef}
+          autoFocus={true}
+          placeholderOverride={'How can I help you today?'}
+          // Multi‑KB selection forwarded from parent when provided
+          enabledKBIds={enabledKBIds || []}
+          setEnabledKBIds={setEnabledKBIds}
+          dropdownDirection="down" // New chat hero sits higher; open menus downward to avoid clipping
+        />
+      </div>
+
+      {/* Personal Agents Row */}
+      {personalAgents.length > 0 && (
         <div
-          className="chat-input-wrapper"
+          className="agents-row-container"
           style={{
             width: '100%',
             maxWidth: '1200px',
             marginLeft: 'auto',
             marginRight: 'auto',
-            marginBottom: '1.5rem',
-            animation: 'fadeIn 0.8s ease-in-out',
+            marginBottom: '1rem',
+            animation: 'fadeIn 0.6s ease-in-out',
           }}
         >
-          <ChatInput
-            inputMessage={inputMessage}
-            setInputMessage={setInputMessage}
-            handleSubmit={handleSubmit}
-            setShowUploadModal={setShowUploadModal}
-            buttonStatus={buttonStatus}
-            webSearchEnabled={webSearchEnabled}
-            setWebSearchEnabled={setWebSearchEnabled}
-            createAgentEnabled={createAgentEnabled}
-            setCreateAgentEnabled={setCreateAgentEnabled}
-            autoToolsEnabled={autoToolsEnabled}
-            setAutoToolsEnabled={setAutoToolsEnabled}
-            availableConnections={availableConnections}
-            enabledConnections={enabledConnections}
-            setEnabledConnections={setEnabledConnections}
-            connectionsLoading={connectionsLoading}
-            hasPipedreamFeature={hasPipedreamFeature}
-            uploadsInProgress={uploadsInProgress}
-            noToolsActive={noToolsActive}
-            externalInputRef={inputRef}
-            autoFocus={true}
-            placeholderOverride={'How can I help you today?'}
-            // Multi‑KB selection forwarded from parent when provided
-            enabledKBIds={enabledKBIds || []}
-            setEnabledKBIds={setEnabledKBIds}
-          />
-        </div>
-
-        {/* Personal Agents Row */}
-        {personalAgents.length > 0 && (
-          <div
-            className="agents-row-container"
-            style={{
-              width: '100%',
-              maxWidth: '1200px',
-              marginLeft: 'auto',
-              marginRight: 'auto',
-              marginBottom: '1rem',
-              animation: 'fadeIn 0.6s ease-in-out',
-            }}
-          >
-            {_agentsLoading ? (
-              <div className="d-flex justify-content-center align-items-center" style={{ minHeight: 80 }}>
-                <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
-                  <span className="visually-hidden">Loading agents...</span>
-                </Spinner>
-              </div>
-            ) : (
-              <div className="agents-horizontal-scroll">
-                <div
-                  className="d-flex align-items-center"
-                  style={{ gap: '1rem', overflowX: 'auto', paddingBottom: '0.5rem' }}
-                >
-                  {personalAgents.map((agent) => (
-                    <OverlayTrigger
-                      key={agent.agentId}
-                      placement="top"
-                      overlay={<Tooltip id={`agent-${agent.agentId}`}>{agent.title}</Tooltip>}
+          {_agentsLoading ? (
+            <div className="d-flex justify-content-center align-items-center" style={{ minHeight: 80 }}>
+              <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
+                <span className="visually-hidden">Loading agents...</span>
+              </Spinner>
+            </div>
+          ) : (
+            <div className="agents-horizontal-scroll">
+              <div
+                className="d-flex align-items-center"
+                style={{ gap: '1rem', overflowX: 'auto', paddingBottom: '0.5rem' }}
+              >
+                {personalAgents.map((agent) => (
+                  <OverlayTrigger
+                    key={agent.agentId}
+                    placement="top"
+                    overlay={<Tooltip id={`agent-${agent.agentId}`}>{agent.title}</Tooltip>}
+                  >
+                    <div
+                      className="agent-icon-wrapper"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSelectAgent?.(agent)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectAgent?.(agent);
+                        }
+                      }}
+                      style={{
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease-in-out',
+                        transform: 'scale(1)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
                     >
-                      <div
-                        className="agent-icon-wrapper"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => onSelectAgent?.(agent)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            onSelectAgent?.(agent);
-                          }
-                        }}
-                        style={{
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease-in-out',
-                          transform: 'scale(1)',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = 'scale(1.1)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'scale(1)';
-                        }}
-                      >
-                        <AgentAvatar agent={agent} size={48} rounded={true} alt={agent.title} />
+                      <AgentAvatar agent={agent} size={48} rounded={true} alt={agent.title} />
+                    </div>
+                  </OverlayTrigger>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Conversation History */}
+      {suggestionsLoading || recentConversations.length > 0 ? (
+        <div
+          className="history-panel-fullwidth"
+          style={{
+            width: '100%',
+            position: 'relative',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          <div className="history-inner">
+            <div className="suggestions-header static-header">Continue where you left off</div>
+          </div>
+          {suggestionsLoading ? (
+            <div
+              className="d-flex justify-content-center align-items-center history-scroll"
+              style={{ minHeight: 100, animation: 'fadeIn 0.3s ease-in-out' }}
+            >
+              <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
+                <span className="visually-hidden">Loading recent conversations...</span>
+              </Spinner>
+            </div>
+          ) : recentConversations.length > 0 ? (
+            <div className="conversation-suggestions history-scroll">
+              <div className="history-inner">
+                <div className="d-flex flex-column" style={{ gap: '0.75rem', paddingBottom: '0.75rem' }}>
+                  {recentConversations.map((convo) => (
+                    <div
+                      key={convo.conversation_id}
+                      className="text-start conversation-suggestion-btn"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleContinueClick(convo.conversation_id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleContinueClick(convo.conversation_id);
+                        }
+                      }}
+                      onMouseEnter={(e) => {
+                        const primaryColor =
+                          getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
+                          '75, 0, 125';
+                        const rgb = primaryColor.startsWith('#') ? hexToRgb(primaryColor) : primaryColor;
+                        e.currentTarget.style.backgroundColor = `rgba(${rgb}, 0.05)`;
+                        e.currentTarget.style.borderColor = `rgba(${rgb}, 0.3)`;
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
+                        e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <ConversationAvatar convo={convo} />
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {convo.conversationName || 'Untitled Chat'}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
+                          {convo.isAgentConversation && convo.agentTitle
+                            ? `${convo.agentTitle} • ${formatRelativeTime(convo.latestTimestamp)}`
+                            : formatRelativeTime(convo.latestTimestamp)}
+                        </div>
                       </div>
-                    </OverlayTrigger>
+                      {(onRenameConversation || onDeleteConversation) && (
+                        <div
+                          className="conversation-actions d-flex flex-column align-items-center"
+                          style={{ gap: '0.25rem' }}
+                        >
+                          {onRenameConversation && (
+                            <OverlayTrigger
+                              placement="left"
+                              overlay={<Tooltip id={`rename-${convo.conversation_id}`}>Rename</Tooltip>}
+                            >
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="p-0 text-secondary"
+                                aria-label="Rename conversation"
+                                onClick={(e) =>
+                                  handleRename(e, convo.conversation_id, convo.conversationName || 'Untitled Chat')
+                                }
+                                style={{ lineHeight: 1 }}
+                              >
+                                <i className="bi bi-pencil" />
+                              </Button>
+                            </OverlayTrigger>
+                          )}
+                          {onDeleteConversation && (
+                            <OverlayTrigger
+                              placement="left"
+                              overlay={<Tooltip id={`delete-${convo.conversation_id}`}>Delete</Tooltip>}
+                            >
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="p-0 text-danger"
+                                aria-label="Delete conversation"
+                                onClick={(e) => handleDelete(e, convo.conversation_id)}
+                                style={{ lineHeight: 1 }}
+                              >
+                                <i className="bi bi-trash" />
+                              </Button>
+                            </OverlayTrigger>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Conversation History */}
-        {suggestionsLoading || recentConversations.length > 0 ? (
-          <div
-            className="history-panel-fullwidth"
-            style={{ width: '100%', position: 'relative', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}
-          >
-            {suggestionsLoading ? (
-              <div
-                className="d-flex justify-content-center align-items-center"
-                style={{ minHeight: 100, animation: 'fadeIn 0.3s ease-in-out' }}
-              >
-                <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
-                  <span className="visually-hidden">Loading recent conversations...</span>
-                </Spinner>
-              </div>
-            ) : recentConversations.length > 0 ? (
-              <div className="conversation-suggestions">
-                <div style={{ maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto', width: '100%' }}>
-                  <div className="suggestions-header">Continue where you left off</div>
-                  <div className="d-flex flex-column" style={{ gap: '0.75rem', paddingBottom: '1.5rem' }}>
-                    {recentConversations.map((convo) => (
-                      <div
-                        key={convo.conversation_id}
-                        className="text-start conversation-suggestion-btn"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => handleContinueClick(convo.conversation_id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleContinueClick(convo.conversation_id);
-                          }
-                        }}
-                        onMouseEnter={(e) => {
-                          const primaryColor =
-                            getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
-                            '75, 0, 125';
-                          const rgb = primaryColor.startsWith('#') ? hexToRgb(primaryColor) : primaryColor;
-                          e.currentTarget.style.backgroundColor = `rgba(${rgb}, 0.05)`;
-                          e.currentTarget.style.borderColor = `rgba(${rgb}, 0.3)`;
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
-                          e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)';
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      >
-                        <ConversationAvatar convo={convo} />
-                        <div style={{ flex: 1, overflow: 'hidden' }}>
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {convo.conversationName || 'Untitled Chat'}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
-                            {convo.isAgentConversation && convo.agentTitle
-                              ? `${convo.agentTitle} • ${formatRelativeTime(convo.latestTimestamp)}`
-                              : formatRelativeTime(convo.latestTimestamp)}
-                          </div>
-                        </div>
-                        {(onRenameConversation || onDeleteConversation) && (
-                          <div
-                            className="conversation-actions d-flex flex-column align-items-center"
-                            style={{ gap: '0.25rem' }}
-                          >
-                            {onRenameConversation && (
-                              <OverlayTrigger
-                                placement="left"
-                                overlay={<Tooltip id={`rename-${convo.conversation_id}`}>Rename</Tooltip>}
-                              >
-                                <Button
-                                  variant="link"
-                                  size="sm"
-                                  className="p-0 text-secondary"
-                                  aria-label="Rename conversation"
-                                  onClick={(e) =>
-                                    handleRename(e, convo.conversation_id, convo.conversationName || 'Untitled Chat')
-                                  }
-                                  style={{ lineHeight: 1 }}
-                                >
-                                  <i className="bi bi-pencil" />
-                                </Button>
-                              </OverlayTrigger>
-                            )}
-                            {onDeleteConversation && (
-                              <OverlayTrigger
-                                placement="left"
-                                overlay={<Tooltip id={`delete-${convo.conversation_id}`}>Delete</Tooltip>}
-                              >
-                                <Button
-                                  variant="link"
-                                  size="sm"
-                                  className="p-0 text-danger"
-                                  aria-label="Delete conversation"
-                                  onClick={(e) => handleDelete(e, convo.conversation_id)}
-                                  style={{ lineHeight: 1 }}
-                                >
-                                  <i className="bi bi-trash" />
-                                </Button>
-                              </OverlayTrigger>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }

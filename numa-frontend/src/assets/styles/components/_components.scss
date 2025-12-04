@@ -380,7 +380,7 @@ label {
 
 .nav-component {
   @include flex-center-column;
-  height: 100vh;
+  height: 100dvh; // Use dynamic viewport height for better mobile support
   border-right: 1px solid var(--color-mid-gray);
   background-color: white;
   overflow-x: hidden;
@@ -829,7 +829,7 @@ label {
   right: -280px;
   top: 0;
   width: 280px;
-  height: 100vh;
+  height: 100dvh; // Use dynamic viewport height for better mobile support
   background-color: white;
   box-shadow: -2px 0 5px rgba(0, 0, 0, 0.2);
   transition: right 0.3s ease-in-out;
@@ -841,9 +841,9 @@ label {
     right: 0;
   }
 
-  @media (max-width: 768px) {
-    top: 60px;
-    height: calc(100vh - 60px);
+  @include mobile {
+    top: calc(60px + env(safe-area-inset-top, 0px));
+    height: calc(100dvh - 60px - env(safe-area-inset-top, 0px));
   }
 
   .sidebar-header {
@@ -1098,7 +1098,7 @@ label {
     min-width: 100px;
   }
 
-  @media (max-width: 576px) {
+  @include mobile {
     flex-direction: column;
     gap: 1rem;
 
