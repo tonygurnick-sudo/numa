@@ -9,6 +9,7 @@ import {
 import { ListBucketsCommand, S3Client } from '@aws-sdk/client-s3';
 import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
 import { AwsCredentialIdentityProvider } from '@smithy/types';
+import { withPRM } from '../lib/prm-node/prm';
 export { type AwsCredentialIdentityProvider } from '@smithy/types';
 
 export interface AWSClientConfig {
@@ -54,7 +55,7 @@ export async function getQInstanceDetails(
 
 async function getQApplicationId(awsClientConfig: AWSClientConfig, customerName?: string): Promise<string> {
   console.log('Get Q application ID');
-  const qBusiness = new QBusinessClient(awsClientConfig);
+  const qBusiness = withPRM(QBusinessClient, awsClientConfig);
   const applications = (await qBusiness.send(new ListApplicationsCommand())).applications;
   return (
     await customerNameFilter({
@@ -68,7 +69,7 @@ async function getQApplicationId(awsClientConfig: AWSClientConfig, customerName?
 
 async function getQIndexId(awsClientConfig: AWSClientConfig, applicationId: string): Promise<string> {
   console.log('Get Q index ID');
-  const qBusiness = new QBusinessClient(awsClientConfig);
+  const qBusiness = withPRM(QBusinessClient, awsClientConfig);
   const indices = (
     await qBusiness.send(
       new ListIndicesCommand({
@@ -87,7 +88,7 @@ async function getQDataSourceId(
   indexId: string,
 ): Promise<string> {
   console.log('Get Q data source ID');
-  const qBusiness = new QBusinessClient(awsClientConfig);
+  const qBusiness = withPRM(QBusinessClient, awsClientConfig);
   const dataSources = (
     await qBusiness.send(
       new ListDataSourcesCommand({
@@ -102,7 +103,7 @@ async function getQDataSourceId(
 }
 
 async function getQDataBucket(awsClientConfig: AWSClientConfig, customerName?: string): Promise<string> {
-  const s3 = new S3Client(awsClientConfig);
+  const s3 = withPRM(S3Client, awsClientConfig);
   const buckets = (await s3.send(new ListBucketsCommand())).Buckets.filter((bucket) =>
     bucket.Name.match(/^numa-.*-data$/),
   );
@@ -119,7 +120,7 @@ async function getQDataBucket(awsClientConfig: AWSClientConfig, customerName?: s
 
 export async function getQUserPool(awsClientConfig: AWSClientConfig, customerName?: string): Promise<string> {
   console.log('Get Q user pool');
-  const client = new CognitoIdentityProviderClient(awsClientConfig);
+  const client = withPRM(CognitoIdentityProviderClient, awsClientConfig);
   const userPools = (
     await client.send(
       new ListUserPoolsCommand({
@@ -139,7 +140,7 @@ export async function getQUserPool(awsClientConfig: AWSClientConfig, customerNam
 
 async function getRetrieverId(awsClientConfig: AWSClientConfig, appId: string): Promise<string> {
   console.log('Get retriever ID');
-  const client = new QBusinessClient(awsClientConfig);
+  const client = withPRM(QBusinessClient, awsClientConfig);
   try {
     const result = await client.send(new ListRetrieversCommand({ applicationId: appId }));
     const retrievers = result.retrievers ?? [];

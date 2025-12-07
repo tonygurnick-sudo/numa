@@ -11,6 +11,8 @@ import structlog
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+from prm import client as prm_client
+
 from .bedrock_model_config import (
     FALLBACK_SEQUENCES,
     ModelInfo,
@@ -30,7 +32,7 @@ CLAUDE_3_5_SONNET_OUTPUT_PRICE = 0.015
 MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 logger = structlog.get_logger(__name__)
-s3_client = boto3.client("s3")
+s3_client = prm_client("s3")
 
 
 class UnsupportedFiletypeError(Exception):
@@ -79,24 +81,24 @@ class BedrockClaude3Model:
         # Initialize Bedrock client
         bedrock_account = os.environ.get("BEDROCK_ACCOUNT")
         if bedrock_account:
-            sts = boto3.client("sts")
+            sts = prm_client("sts")
             credentials = sts.assume_role(
                 RoleArn=f"arn:aws:iam::{bedrock_account}:role/bedrock-quota-sharing",
                 RoleSessionName="bedrock-quota-sharing",
             )["Credentials"]
 
-            self.bedrock_client = boto3.client(
+            self.bedrock_client = prm_client(
                 service_name="bedrock-runtime",
-                region_name=self.bedrock_region.value,
+                region=self.bedrock_region.value,
                 config=Config(read_timeout=1000),
                 aws_access_key_id=credentials["AccessKeyId"],
                 aws_secret_access_key=credentials["SecretAccessKey"],
                 aws_session_token=credentials["SessionToken"],
             )
         else:
-            self.bedrock_client = boto3.client(
+            self.bedrock_client = prm_client(
                 service_name="bedrock-runtime",
-                region_name=self.bedrock_region.value,
+                region=self.bedrock_region.value,
                 config=Config(read_timeout=1000),
             )
 

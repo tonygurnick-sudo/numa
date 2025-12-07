@@ -10,10 +10,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urljoin
 
-import boto3
 import botocore
 import requests
 from requests.adapters import HTTPAdapter, Retry
+
+from prm import client as prm_client
+from prm import resource as prm_resource
 
 # If your repo uses structlog/powertools consistently, you can swap these in:
 try:
@@ -74,9 +76,9 @@ ENV_PROBE_STATE_KEY = os.getenv("PROBE_STATE_KEY", "synergy-cuttriss")
 ENV_PROBE_STATE_PK_ATTR = os.getenv("PROBE_STATE_PK_ATTR", "stateId")
 
 # Boto3 clients
-s3 = boto3.client("s3")
-secrets = boto3.client("secretsmanager")
-dynamodb = boto3.resource("dynamodb")
+s3 = prm_client("s3")
+secrets = prm_client("secretsmanager")
+dynamodb = prm_resource("dynamodb")
 
 # ----- Helpers ---------------------------------------------------------------
 

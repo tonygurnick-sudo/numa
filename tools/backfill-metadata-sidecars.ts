@@ -20,6 +20,7 @@ import type { ClientConfig } from '../infra/stacks/numa-client-stack';
 import { S3Client, ListObjectsV2Command, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { temporaryCredentials } from './utils';
 import type { AWSClientConfig } from './utils';
+import { withPRM } from '../lib/prm-node/prm';
 
 const program = new Command();
 program
@@ -31,7 +32,7 @@ async function getAws(clientName: string): Promise<{ cfg: ClientConfig; s3: S3Cl
   const cfg = await getClientConfig<ClientConfig>(clientName);
   const credentials = temporaryCredentials(cfg.clientAccountId);
   const aws: AWSClientConfig = { region: cfg.region, credentials };
-  const s3 = new S3Client(aws);
+  const s3 = withPRM(S3Client, aws);
   const bucket = `numa-${clientName}-data`;
   return { cfg, s3, bucket };
 }

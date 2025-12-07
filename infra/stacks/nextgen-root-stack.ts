@@ -38,6 +38,7 @@ export class NextGenRootStack extends TerraformStack {
           Repository: process.env['CI_PROJECT_PATH'] ?? 'unknown',
           ServiceName: 'arcanum-numa-accounts',
           StackName: name,
+          'aws-apn-id': 'pc:cl23v3vsno0k35czlg7e3ld9p',
         },
       },
     ];

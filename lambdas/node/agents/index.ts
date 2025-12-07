@@ -4,8 +4,9 @@ import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCom
 import { randomUUID } from 'crypto';
 import { S3Client, CopyObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { GetCommand as DdbGetCommand } from '@aws-sdk/lib-dynamodb';
+import { withPRM } from '../../../lib/prm-node/prm';
 
-const client = new DynamoDBClient({});
+const client = withPRM(DynamoDBClient, {});
 const dynamo = DynamoDBDocumentClient.from(client, {
   marshallOptions: {
     removeUndefinedValues: true,
@@ -646,7 +647,7 @@ const handleCreateAgent = async (
         const inPublicPrefix =
           img.s3Bucket === OUTPUTS_BUCKET_NAME && img.s3Key.startsWith('numa-chat/agent-icons/public/');
         if (!inPublicPrefix) {
-          const s3 = new S3Client({});
+          const s3 = withPRM(S3Client, {});
           const extMatch = img.s3Key.match(/\.([a-zA-Z0-9]+)$/);
           const ext = (extMatch?.[1] || 'png').toLowerCase();
           const destKey = `numa-chat/agent-icons/public/${agentId}.${ext}`;
@@ -751,7 +752,7 @@ const handleUpdateAgent = async (
           const inPublicPrefix =
             img.s3Bucket === OUTPUTS_BUCKET_NAME && img.s3Key.startsWith('numa-chat/agent-icons/public/');
           if (!inPublicPrefix) {
-            const s3 = new S3Client({});
+            const s3 = withPRM(S3Client, {});
             const extMatch = img.s3Key.match(/\.([a-zA-Z0-9]+)$/);
             const ext = (extMatch?.[1] || 'png').toLowerCase();
             const destKey = `numa-chat/agent-icons/public/${publicAgentId}.${ext}`;
@@ -838,7 +839,7 @@ const handleUpdateAgent = async (
         const inPublicPrefix =
           img.s3Bucket === OUTPUTS_BUCKET_NAME && img.s3Key.startsWith('numa-chat/agent-icons/public/');
         if (!inPublicPrefix) {
-          const s3 = new S3Client({});
+          const s3 = withPRM(S3Client, {});
           const extMatch = img.s3Key.match(/\.([a-zA-Z0-9]+)$/);
           const ext = (extMatch?.[1] || 'png').toLowerCase();
           const destKey = `numa-chat/agent-icons/public/${workspaceAgent.agent_id}.${ext}`;
@@ -889,7 +890,7 @@ const handleDeleteAgent = async (agentId: string, auth: AuthContext): Promise<Re
         img.s3Bucket === OUTPUTS_BUCKET_NAME &&
         img.s3Key.startsWith(`numa-chat/agent-icons/${auth.sub}/`)
       ) {
-        const s3 = new S3Client({});
+        const s3 = withPRM(S3Client, {});
         await s3.send(new DeleteObjectCommand({ Bucket: OUTPUTS_BUCKET_NAME, Key: img.s3Key }));
       }
     } catch (e) {
@@ -924,7 +925,7 @@ const handleDeleteAgent = async (agentId: string, auth: AuthContext): Promise<Re
         img.s3Bucket === OUTPUTS_BUCKET_NAME &&
         img.s3Key.startsWith('numa-chat/agent-icons/public/')
       ) {
-        const s3 = new S3Client({});
+        const s3 = withPRM(S3Client, {});
         await s3.send(new DeleteObjectCommand({ Bucket: OUTPUTS_BUCKET_NAME, Key: img.s3Key }));
       }
     } catch (e) {
@@ -962,7 +963,7 @@ const duplicateWorkspaceAgent = async (
 
   if (workspaceAgent.icon_image?.s3Bucket && workspaceAgent.icon_image?.s3Key && OUTPUTS_BUCKET_NAME) {
     try {
-      const s3 = new S3Client({});
+      const s3 = withPRM(S3Client, {});
       const srcBucket = workspaceAgent.icon_image.s3Bucket;
       const srcKey = workspaceAgent.icon_image.s3Key;
       const extMatch = srcKey.match(/\.([a-zA-Z0-9]+)$/);

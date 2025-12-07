@@ -11,9 +11,10 @@ import os
 from datetime import datetime
 from typing import Any, Dict, TypedDict
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
+
+from prm import resource as prm_resource
 
 
 class MarkUrlEvent(TypedDict, total=False):
@@ -29,7 +30,7 @@ class MarkUrlEvent(TypedDict, total=False):
 
 
 logger = structlog.get_logger()
-dynamodb = boto3.resource("dynamodb")
+dynamodb = prm_resource("dynamodb")
 
 STATUS_MAP = {"success": "completed", "failed": "failed", "error": "failed"}
 

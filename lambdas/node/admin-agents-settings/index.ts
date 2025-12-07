@@ -1,11 +1,12 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { withPRM } from '../../../lib/prm-node/prm';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 const TABLE_NAME = process.env.AGENTS_SETTINGS_TABLE_NAME as string;
 const CLIENT_NAME = process.env.CLIENT_NAME as string;
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddb = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}));
 
 type AgentsMode = 'off' | 'personal_only' | 'full';
 

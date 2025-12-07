@@ -3,8 +3,9 @@
 import os
 from typing import Optional, TypedDict
 
-import boto3
 import structlog
+
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
@@ -33,7 +34,7 @@ def get_cross_account_bedrock_credentials() -> Optional[BedrockCredentials]:
     region = os.environ.get("AWS_REGION", "us-east-1")
 
     try:
-        sts = boto3.client("sts", region_name=region)
+        sts = prm_client("sts", region=region)
         response = sts.assume_role(
             RoleArn=f"arn:aws:iam::{bedrock_account}:role/bedrock-quota-sharing",
             RoleSessionName="claude-code-agent",

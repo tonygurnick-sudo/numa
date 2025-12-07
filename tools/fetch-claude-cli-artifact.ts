@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { pipeline, Readable } from 'node:stream';
 import { promisify } from 'node:util';
 import AdmZip from 'adm-zip';
+import { withPRM } from '../lib/prm-node/prm';
 
 const streamPipeline = promisify(pipeline);
 
@@ -67,7 +68,7 @@ async function main(): Promise<void> {
 
   fs.mkdirSync(DEST_DIR, { recursive: true });
 
-  const s3 = new S3Client({ region, credentials: fromNodeProviderChain() });
+  const s3 = withPRM(S3Client, { region, credentials: fromNodeProviderChain() });
   const resp = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   if (!resp.Body) throw new Error('Empty S3 response body');
   const body = resp.Body as Readable;

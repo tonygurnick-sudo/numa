@@ -7,13 +7,14 @@ import re
 import time
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-import boto3
 import jwt
 import requests
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from jwt import algorithms
+
+from prm import client as prm_client
 
 from . import clear_current_user_auth, create_fresh_agent, set_current_user_auth
 from .dynamodb_utils import (
@@ -44,10 +45,10 @@ _COGNITO_CLIENT = None
 
 
 def _get_cognito_client():
-    """Get cached Cognito client."""
+    """Get cached Cognito client with PRM tracking."""
     global _COGNITO_CLIENT  # pylint: disable=global-statement
     if _COGNITO_CLIENT is None:
-        _COGNITO_CLIENT = boto3.client("cognito-idp", region_name=REGION)
+        _COGNITO_CLIENT = prm_client("cognito-idp", region=REGION)
     return _COGNITO_CLIENT
 
 
@@ -211,7 +212,7 @@ def _count_s3_documents(bucket_name: str, prefix: str) -> int:
         Count of objects in the prefix (excluding metadata.json files)
     """
     try:
-        s3_client = boto3.client("s3", region_name=REGION)
+        s3_client = prm_client("s3", region=REGION)
         paginator = s3_client.get_paginator("list_objects_v2")
 
         count = 0

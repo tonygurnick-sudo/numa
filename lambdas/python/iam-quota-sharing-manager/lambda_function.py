@@ -7,12 +7,12 @@ Safe to call multiple times - checks existence before creating.
 
 import json
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from botocore.exceptions import ClientError
 
 from helpers import setup_logging
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
@@ -38,8 +38,8 @@ def handler(event: dict, _context: LambdaContext) -> dict:
     setup_logging()
     logger.info("Starting IAM quota sharing manager", lambda_event=event)
 
-    iam = boto3.client("iam")
-    account_id = boto3.client("sts").get_caller_identity()["Account"]
+    iam = prm_client("iam")
+    account_id = prm_client("sts").get_caller_identity()["Account"]
 
     result = {
         "role_arn": None,

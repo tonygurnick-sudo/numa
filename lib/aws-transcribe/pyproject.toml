@@ -24,6 +24,7 @@ python = "~3.13.0"
 
 boto3 = "1.40.25"
 structlog = "25.2.0"
+prm = {path = "../prm", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.40.25"

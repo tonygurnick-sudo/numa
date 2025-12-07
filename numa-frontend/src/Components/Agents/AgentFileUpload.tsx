@@ -7,6 +7,7 @@ import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { processFile } from '../../utils/fileProcessing';
 import type { AgentReferenceFile } from '../../types/agents';
+import { withPRM } from '../../utils/prmUtils';
 
 type AgentFileUploadProps = {
   onFilesUploaded: (files: AgentReferenceFile[]) => void;
@@ -83,7 +84,7 @@ export const AgentFileUpload = ({
         throw new Error('Unable to obtain AWS credentials');
       }
 
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region,
         credentials,
       });

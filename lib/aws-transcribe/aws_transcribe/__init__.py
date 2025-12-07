@@ -7,9 +7,11 @@ import boto3
 import structlog
 from botocore.exceptions import ClientError
 
+from prm import client as prm_client
+
 logger = structlog.get_logger(__name__)
-s3_client = boto3.client("s3")
-transcribe_client = boto3.client("transcribe")
+s3_client = prm_client("s3")
+transcribe_client = prm_client("transcribe")
 
 
 class TranscriptionError(Exception):

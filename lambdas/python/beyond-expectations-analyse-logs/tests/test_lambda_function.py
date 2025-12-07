@@ -8,7 +8,14 @@ from unittest.mock import Mock, patch
 
 # Add the lib directory to the Python path to find the required modules
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
-sys.path.append(os.path.join(project_root, "lib/helpers"))
+for rel_path in ("lib/helpers", "lib/bedrock", "lib/prm"):
+    lib_path = os.path.join(project_root, rel_path)
+    if lib_path not in sys.path:
+        sys.path.append(lib_path)
+# Ensure the lambda package itself is importable
+lambda_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if lambda_dir not in sys.path:
+    sys.path.append(lambda_dir)
 
 # Mock the helpers module before importing lambda_function
 sys.modules["helpers"] = Mock()

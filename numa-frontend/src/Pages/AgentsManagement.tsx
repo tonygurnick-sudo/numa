@@ -15,6 +15,7 @@ import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
 import { PageHeader } from '../Components/PageHeader';
+import { withPRM } from '../utils/prmUtils';
 
 type FilterOption = 'all' | 'personal' | 'public';
 
@@ -210,7 +211,7 @@ export const AgentsManagement = () => {
         roleArn,
         roleSessionName: cognitoUserId,
       });
-      const lambdaClient = new LambdaClient({ region: REGION, credentials });
+      const lambdaClient = withPRM(LambdaClient, { region: REGION, credentials });
       const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
       const status = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
         ttlMs: 30 * 60 * 1000,
@@ -250,7 +251,7 @@ export const AgentsManagement = () => {
           roleArn,
           roleSessionName: cognitoUserId,
         });
-        const lambdaClient = new LambdaClient({ region: REGION, credentials });
+        const lambdaClient = withPRM(LambdaClient, { region: REGION, credentials });
         const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
         await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
           ttlMs: 30 * 60 * 1000,

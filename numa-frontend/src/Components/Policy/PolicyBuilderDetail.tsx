@@ -16,6 +16,7 @@ import { createDocxBlob } from '../../Services/fileConverter';
 import { getPolicyBuilderBucketInfo } from '../../utils/bucketNameUtil';
 import { useJobsApi } from '../../Services/jobsApi';
 import { saveAs } from 'file-saver';
+import { withPRM } from '../../utils/prmUtils';
 
 export const PolicyBuilderDetail = () => {
   const [activeTab, setActiveTab] = useState('policies');
@@ -178,7 +179,7 @@ export const PolicyBuilderDetail = () => {
 
       const region = window.sessionStorage.getItem('REGION');
 
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region: region,
         credentials,
       });
@@ -578,7 +579,7 @@ export const PolicyBuilderDetail = () => {
       const region = window.sessionStorage.getItem('REGION');
 
       // Create S3 client with fresh credentials
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region: region,
         credentials,
       });

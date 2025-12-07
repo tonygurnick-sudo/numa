@@ -1,7 +1,6 @@
 import os
 import typing
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
@@ -10,10 +9,11 @@ import claude_prompts
 import claude_tools
 import helpers
 import markdown_to_pdf
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
-s3_client = boto3.client("s3")
+s3_client = prm_client("s3")
 
 SEPARATOR = "--------------------------------\n"
 

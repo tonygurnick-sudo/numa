@@ -15,12 +15,14 @@ from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, TypedDict
 from urllib.parse import urldefrag, urljoin, urlparse
 
-import boto3
 import httpx
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from botocore.exceptions import ClientError
 from bs4 import BeautifulSoup, Tag
+
+from prm import client as prm_client
+from prm import resource as prm_resource
 
 
 class CrawlPageEvent(TypedDict, total=False):
@@ -61,8 +63,8 @@ EXTRACTABLE_FILE_TYPES = {
 
 
 logger = structlog.get_logger()
-s3 = boto3.client("s3")
-dynamodb = boto3.resource("dynamodb")
+s3 = prm_client("s3")
+dynamodb = prm_resource("dynamodb")
 
 
 class ScrapedContent(TypedDict):

@@ -16,6 +16,7 @@ import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsS
 import { PipedreamProxyService } from '../../Services/PipedreamProxyService';
 import { getConnectionConfig } from '../../config/integrationsConfig';
 import { downloadAgentExport, parseAgentImport, serializeAgentPayloadToExport } from '../../utils/agentExport';
+import { withPRM } from '../../utils/prmUtils';
 
 type AgentCreateModalProps = {
   show: boolean;
@@ -158,7 +159,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                 roleArn,
                 roleSessionName: cognitoUserId,
               });
-              const lambdaClient = new LambdaClient({ region: REGION, credentials });
+              const lambdaClient = withPRM(LambdaClient, { region: REGION, credentials });
               const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
 
               const status = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {

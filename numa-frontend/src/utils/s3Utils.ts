@@ -9,6 +9,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import JSZip from 'jszip';
+import { withPRM } from './prmUtils';
 
 const SIGNED_URL_CACHE = new Map<string, { url: string; expiresAt: number }>();
 const SIGNED_URL_EXPIRY_SKEW_MS = 5000;
@@ -39,7 +40,7 @@ export const fetchFileFromS3 = async (s3Key, s3Bucket, region, getCredentials) =
     throw new Error('AWS Credentials are missing.');
   }
 
-  const s3Client = new S3Client({
+  const s3Client = withPRM(S3Client, {
     region,
     credentials,
   });
@@ -70,7 +71,7 @@ export const doesObjectExist = async (s3Key, s3Bucket, region, getCredentials) =
     throw new Error('AWS Credentials are missing.');
   }
 
-  const s3Client = new S3Client({ region, credentials });
+  const s3Client = withPRM(S3Client, { region, credentials });
 
   try {
     await s3Client.send(
@@ -116,7 +117,7 @@ export const getInitialBrandingAssetUrl = (
 
 export const uploadFileToS3 = async (content, contentType, s3Bucket, s3Key, region, getCredentials) => {
   const credentials = await getCredentials();
-  const s3Client = new S3Client({ region, credentials });
+  const s3Client = withPRM(S3Client, { region, credentials });
 
   // Upload file to S3
   const command = new PutObjectCommand({
@@ -148,7 +149,7 @@ export const getSignedUrlForS3Object = async (s3Key, s3Bucket, region, getCreden
     throw new Error('AWS Credentials are missing.');
   }
 
-  const s3Client = new S3Client({
+  const s3Client = withPRM(S3Client, {
     region,
     credentials,
   });
@@ -401,7 +402,7 @@ export const getUrlTagFromS3Object = async (s3Key, s3Bucket, region, getCredenti
       return null;
     }
 
-    const s3Client = new S3Client({
+    const s3Client = withPRM(S3Client, {
       region,
       credentials,
     });
@@ -460,7 +461,7 @@ export const listObjectsInFolder = async (folderPrefix, s3Bucket, region, getCre
       throw new Error('AWS Credentials are missing.');
     }
 
-    const s3Client = new S3Client({
+    const s3Client = withPRM(S3Client, {
       region,
       credentials,
     });
@@ -508,7 +509,7 @@ export const deleteMultipleObjectsFromS3 = async (objectKeys, s3Bucket, region, 
       throw new Error('AWS Credentials are missing.');
     }
 
-    const s3Client = new S3Client({
+    const s3Client = withPRM(S3Client, {
       region,
       credentials,
     });
@@ -631,7 +632,7 @@ export const downloadFolderAsZip = async (
       throw new Error('AWS Credentials are missing.');
     }
 
-    const s3Client = new S3Client({
+    const s3Client = withPRM(S3Client, {
       region,
       credentials,
     });
@@ -740,7 +741,7 @@ export const downloadMultipleFilesAsZip = async (
       throw new Error('AWS Credentials are missing.');
     }
 
-    const s3Client = new S3Client({
+    const s3Client = withPRM(S3Client, {
       region,
       credentials,
     });
@@ -825,7 +826,7 @@ export const listFoldersInKB = async (
       throw new Error('AWS Credentials are missing.');
     }
 
-    const s3Client = new S3Client({
+    const s3Client = withPRM(S3Client, {
       region,
       credentials,
     });

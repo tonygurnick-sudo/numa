@@ -13,8 +13,9 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
-import boto3
 import structlog
+
+from prm import resource as prm_resource
 
 logger = structlog.get_logger()
 
@@ -42,7 +43,7 @@ class SecurityValidator:
     """Handles security validation for proxy requests."""
 
     def __init__(self) -> None:
-        self.dynamodb = boto3.resource("dynamodb")
+        self.dynamodb = prm_resource("dynamodb")
 
         # Security mapping table
         self.security_table_name = os.environ.get("SECURITY_MAPPING_TABLE")

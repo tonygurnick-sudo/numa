@@ -7,6 +7,7 @@ import { useAuth } from '../../Providers/AuthProvider';
 import type { AgentSummary } from '../../types/agents';
 import { AGENT_ICON_CATALOG } from '../../config/agentIconCatalog';
 import AgentAvatar from './AgentAvatar';
+import { withPRM } from '../../utils/prmUtils';
 
 type IconImage = { s3Bucket: string; s3Key: string };
 
@@ -112,7 +113,7 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
 
         const credentials = await getCredentials();
         if (!credentials) throw new Error('Unable to obtain AWS credentials');
-        const s3 = new S3Client({ region, credentials });
+        const s3 = withPRM(S3Client, { region, credentials });
         const put = new PutObjectCommand({
           Bucket: bucketName,
           Key: s3Key,

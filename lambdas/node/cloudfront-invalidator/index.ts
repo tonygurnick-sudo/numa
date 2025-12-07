@@ -1,11 +1,12 @@
 import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-cloudfront';
+import { withPRM } from '../../../lib/prm-node/prm';
 import { randomUUID } from 'node:crypto';
 
 export async function handler(event: Event): Promise<void> {
   const { distributionId, paths } = event;
   const items = paths?.split(',').map((path) => (path.startsWith('/') ? path : `/${path}`)) ?? ['/*'];
 
-  const client = new CloudFrontClient({ region: 'us-east-1' });
+  const client = withPRM(CloudFrontClient, { region: 'us-east-1' });
   const input = {
     DistributionId: distributionId,
     InvalidationBatch: {

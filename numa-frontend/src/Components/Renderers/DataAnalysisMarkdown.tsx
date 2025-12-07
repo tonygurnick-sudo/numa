@@ -407,7 +407,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
       const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
       const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
 
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region,
         credentials,
       });

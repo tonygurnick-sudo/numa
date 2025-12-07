@@ -3,6 +3,7 @@ import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { AgentSummary } from '../../types/agents';
 import { useAuth } from '../../Providers/AuthProvider';
+import { withPRM } from '../../utils/prmUtils';
 
 type IconImage = { s3Bucket: string; s3Key: string };
 
@@ -102,7 +103,7 @@ export const AgentAvatar = ({
         promise = (async () => {
           const credentials = await getCredentials();
           if (!credentials) throw new Error('Missing AWS credentials');
-          const s3 = new S3Client({ region: resolvedRegion || undefined, credentials });
+          const s3 = withPRM(S3Client, { region: resolvedRegion || undefined, credentials });
           const [bucket, key] = imageKey.split('|');
           const cmd = new GetObjectCommand({ Bucket: bucket, Key: key });
           const url = await getSignedUrl(s3, cmd, { expiresIn: 60 * 10 }); // 10 minutes

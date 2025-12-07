@@ -13,7 +13,6 @@ from threading import Semaphore
 from typing import Any, Dict, List, Sequence, Union
 from urllib.parse import urlparse
 
-import boto3
 import fitz  # type: ignore[import-untyped]  # PyMuPDF
 import structlog
 from botocore.config import Config
@@ -21,6 +20,8 @@ from botocore.exceptions import ClientError
 from opentelemetry import trace
 from opentelemetry.instrumentation.threading import ThreadingInstrumentor
 from PIL import Image
+
+from prm import client as prm_client
 
 tracer = trace.get_tracer(__name__)
 ThreadingInstrumentor().instrument()
@@ -113,10 +114,10 @@ VISION_EXTRACTION_PROMPT_SINGLE = (
 )
 
 logger = structlog.get_logger(__name__)
-s3_client = boto3.client("s3", config=Config(max_pool_connections=CONNECTION_POOL_SIZE))
-bedrock_client = boto3.client(
+s3_client = prm_client("s3", config=Config(max_pool_connections=CONNECTION_POOL_SIZE))
+bedrock_client = prm_client(
     "bedrock-runtime",
-    region_name=AWS_REGION,
+    region=AWS_REGION,
     config=Config(max_pool_connections=CONNECTION_POOL_SIZE),
 )
 

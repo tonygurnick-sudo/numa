@@ -8,14 +8,15 @@ import json
 import os
 from datetime import datetime, timezone
 
-import boto3
 import structlog
 from botocore.exceptions import ClientError
+
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
 # Initialize DynamoDB client
-dynamodb = boto3.client("dynamodb")
+dynamodb = prm_client("dynamodb")
 
 
 def handler(event, context):

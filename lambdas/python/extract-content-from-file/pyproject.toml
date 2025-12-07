@@ -26,6 +26,7 @@ python = "~3.13.0"
 aws-transcribe = {path = "../../../lib/aws-transcribe", develop = true}
 bedrock = {path = "../../../lib/bedrock", develop = true}
 helpers = {path = "../../../lib/helpers", develop = true}
+prm = {path = "../../../lib/prm", develop = true}
 structlog = "25.2.0"
 openpyxl = "^3.1.5"
 python-docx = "^1.1.2"

@@ -5,8 +5,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import boto3
 import structlog
+
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
@@ -38,7 +39,8 @@ class KnowledgeBaseManager:
     def __init__(self, client_name: Optional[str] = None):
         self.client_name = client_name or os.environ.get("CLIENT_NAME", "")
         self.table_name = f"numa-{self.client_name}-knowledge-bases"
-        self.dynamodb: DynamoDBClient = boto3.client("dynamodb")
+
+        self.dynamodb: DynamoDBClient = prm_client("dynamodb")
         self.tenant_pk = f"TENANT#{self.client_name}"
 
     @staticmethod

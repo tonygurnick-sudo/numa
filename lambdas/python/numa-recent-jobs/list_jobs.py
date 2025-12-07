@@ -3,10 +3,11 @@ import os
 from datetime import datetime
 from decimal import Decimal
 
-import boto3
 from boto3.dynamodb.conditions import Key
 
-dynamodb = boto3.resource("dynamodb")
+from prm import resource as prm_resource
+
+dynamodb = prm_resource("dynamodb")
 
 
 class DecimalEncoder(json.JSONEncoder):

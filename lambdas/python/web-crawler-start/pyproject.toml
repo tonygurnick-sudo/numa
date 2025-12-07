@@ -21,6 +21,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "~3.13.0"
+prm = {path = "../../../lib/prm", develop = true}
 structlog = "^25.2.0"
 aws-lambda-powertools = "^3.9.0"
 

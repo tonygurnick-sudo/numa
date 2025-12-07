@@ -42,6 +42,7 @@ beautifulsoup4 = ">=4.12.3"
 html5lib = ">=1.1"
 XlsxWriter = ">=3.2.0"
 plotly = ">=5.24.1"
+prm = {path = "../../../lib/prm", develop = true}
 
 # Common data-analysis stack expected by the agent's prompt
 

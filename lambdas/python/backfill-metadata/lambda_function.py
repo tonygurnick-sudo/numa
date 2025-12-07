@@ -11,14 +11,15 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
-import boto3
 import structlog
 from botocore.exceptions import ClientError
+
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
 # Initialize AWS clients
-s3 = boto3.client("s3")
+s3 = prm_client("s3")
 
 
 def handler(event, context):

@@ -1,6 +1,7 @@
 import { STSClient, AssumeRoleCommand, Credentials as StsCreds } from '@aws-sdk/client-sts';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { AccountClient, PutAccountNameCommand } from '@aws-sdk/client-account';
+import { withPRM } from '../../../lib/prm-node/prm';
 
 type Action = 'updateAccountName' | 'getSystemUserSecret' | 'precheckAssumeClientRole';
 
@@ -28,7 +29,7 @@ const CLIENT_ASSUME_ROLE_NAME = process.env.CLIENT_ASSUME_ROLE_NAME || 'ArcanumA
 const DEFAULT_SECRET_NAME = process.env.DEFAULT_SECRET_NAME || 'system-user-password';
 
 async function assumeRole(roleArn: string, sessionName: string): Promise<StsCreds> {
-  const sts = new STSClient({});
+  const sts = withPRM(STSClient, {});
   const out = await sts.send(new AssumeRoleCommand({ RoleArn: roleArn, RoleSessionName: sessionName }));
   if (!out.Credentials) throw new Error('AssumeRole returned no credentials');
   return out.Credentials;
@@ -55,7 +56,7 @@ async function doUpdateAccountName(e: UpdateAccountNameEvent): Promise<{ account
   if (!e.accountId || !e.newName) throw new Error('Missing accountId or newName');
   const roleArn = `arn:aws:iam::${e.accountId}:role/${CLIENT_ASSUME_ROLE_NAME}`;
   const assumed = await assumeRole(roleArn, 'portal-nextgen-rename');
-  const account = new AccountClient({
+  const account = withPRM(AccountClient, {
     region: 'us-east-1',
     credentials: credsToProvider(assumed),
   });
@@ -70,7 +71,7 @@ async function doGetSystemUserSecret(
   const roleArn = e.roleArn || `arn:aws:iam::${e.accountId}:role/${CLIENT_ASSUME_ROLE_NAME}`;
   const assumed = await assumeRole(roleArn, 'portal-nextgen-secret');
   const region = e.region || 'us-east-1';
-  const sm = new SecretsManagerClient({
+  const sm = withPRM(SecretsManagerClient, {
     region,
     credentials: credsToProvider(assumed),
   });

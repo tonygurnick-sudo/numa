@@ -29,6 +29,7 @@ aws-lambda-powertools = "3.9.0"
 httpx = "^0.28.1"
 mcp = ">=1.8.0,<2.0.0"
 strands-agents-tools = "0.2.1"
+prm = {path = "../../../lib/prm", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.16.1"

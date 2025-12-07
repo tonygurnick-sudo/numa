@@ -6,7 +6,6 @@ import urllib.parse
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
@@ -16,6 +15,7 @@ import helpers
 import report_html
 import s3_helpers
 import timezone_utils
+from prm import client as prm_client
 from prompts import ERROR_SUMMARY_PROMPT
 from tools import ERROR_SUMMARY_TOOLS
 
@@ -712,7 +712,7 @@ def generate_email_notification(
     )
 
     # Read both HTML reports from S3 to attach them
-    s3_client = boto3.client("s3")
+    s3_client = prm_client("s3")
 
     # Read summary report
     summary_report_object = s3_client.get_object(

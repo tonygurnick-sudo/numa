@@ -4,6 +4,7 @@ import axios from 'axios';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useAuth } from '../Providers/AuthProvider';
+import { withPRM } from '../utils/prmUtils';
 
 // Type definitions
 interface Config {
@@ -216,7 +217,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           }
 
           // User generates a presigned URL
-          const s3Client = new S3Client({ region: region, credentials: await getCredentials() });
+          const s3Client = withPRM(S3Client, { region: region, credentials: await getCredentials() });
 
           const command = new PutObjectCommand({
             Bucket: `numa-${config.CLIENT_NAME}-data`,

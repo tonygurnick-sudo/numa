@@ -17,6 +17,7 @@ import {
   type S3VectorsConfiguration,
   type StorageConfiguration,
 } from '@aws-sdk/client-bedrock-agent';
+import { withPRM } from '../../../lib/prm-node/prm';
 
 /**
  * Custom resource handler for managing complete S3 Vectors Knowledge Base stack.
@@ -28,8 +29,8 @@ import {
 export async function handler(event: Event): Promise<Response> {
   console.log('Event:', JSON.stringify(event, null, 2));
 
-  const s3VectorsClient = new S3VectorsClient({ region: event.ResourceProperties.Region });
-  const bedrockClient = new BedrockAgentClient({ region: event.ResourceProperties.Region });
+  const s3VectorsClient = withPRM(S3VectorsClient, { region: event.ResourceProperties.Region });
+  const bedrockClient = withPRM(BedrockAgentClient, { region: event.ResourceProperties.Region });
 
   try {
     if (event.RequestType === 'Create') {
