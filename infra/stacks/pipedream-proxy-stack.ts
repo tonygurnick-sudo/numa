@@ -65,6 +65,7 @@ export class PipedreamProxyStack extends TerraformStack {
             ServiceName: 'pipedream-proxy',
             StackName: name,
             Environment: props.environmentName,
+            'aws-apn-id': 'pc:cl23v3vsno0k35czlg7e3ld9p',
           },
         },
       ],

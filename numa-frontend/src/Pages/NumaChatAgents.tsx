@@ -438,7 +438,7 @@ const NumaChatAgents = () => {
           roleArn,
           roleSessionName: cognitoUserId,
         });
-        const client = new LambdaClient({ region: REGION, credentials });
+        const client = withPRM(LambdaClient, { region: REGION, credentials });
         setLambdaClient(client);
         console.log('Lambda client initialized successfully for Pipedream relay');
       } catch (e) {

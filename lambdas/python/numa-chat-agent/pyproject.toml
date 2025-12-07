@@ -29,6 +29,7 @@ include = [
 [tool.poetry.dependencies]
 python = "~3.13.0"
 bedrock = {path = "../../../lib/bedrock", develop = true}
+prm = {path = "../../../lib/prm", develop = true}
 aws-lambda-powertools = "3.9.0"
 strands-agents = "1.0.0"
 strands-agents-tools = "0.2.1"

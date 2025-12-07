@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { argv } from 'node:process';
 import { AWSClientConfig, BasicClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
 import { getClientConfig } from '@arcanumai/client-config';
+import { withPRM } from '../lib/prm-node/prm';
 
 const args = argv.slice(2);
 
@@ -16,7 +17,7 @@ export async function uploadFiles(awsClientConfig: AWSClientConfig, zipFile: str
   const tmp = await mkdtemp(join(tmpdir(), 's3Upload-'));
   const zip = new AdmZip(zipFile);
   zip.extractAllTo(tmp);
-  const s3 = new S3Client(awsClientConfig);
+  const s3 = withPRM(S3Client, awsClientConfig);
   for (const fileName of await readdir(tmp)) {
     console.log(join(tmp, fileName));
     const readStream = createReadStream(join(tmp, fileName));
@@ -33,7 +34,7 @@ export async function uploadFiles(awsClientConfig: AWSClientConfig, zipFile: str
   await rm(tmp, { recursive: true });
 }
 export async function startSync(awsClientConfig, applicationId: string, indexId: string, dataSourceId): Promise<void> {
-  const qbusiness = new QBusinessClient(awsClientConfig);
+  const qbusiness = withPRM(QBusinessClient, awsClientConfig);
   const response = await qbusiness.send(
     new StartDataSourceSyncJobCommand({
       applicationId,

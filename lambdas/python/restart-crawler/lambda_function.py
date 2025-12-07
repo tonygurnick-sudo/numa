@@ -11,12 +11,13 @@ import json
 import uuid
 from typing import Any, Dict
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
+from prm import client as prm_client
+
 logger = structlog.get_logger()
-sfn = boto3.client("stepfunctions")
+sfn = prm_client("stepfunctions")
 
 
 def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:

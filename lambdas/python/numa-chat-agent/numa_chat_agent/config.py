@@ -12,6 +12,11 @@ import boto3
 import structlog
 from strands.models.bedrock import BedrockModel
 
+# Import PRM (Partner Revenue Measurement) helper for AWS SDK clients
+# This adds the APN User-Agent to all boto3 clients for AWS Partner tracking
+from prm import client as prm_client
+from prm import resource as prm_resource
+
 # ── Environment Variables & Constants ──────────────────────────────────────
 REGION = os.getenv("AWS_REGION", "us-east-1")
 
@@ -109,38 +114,40 @@ logger = structlog.get_logger()
 
 # ── Client Initialization ─────────────────────────────────────────────────
 def get_qbusiness_client():
-    """Get Q Business client instance."""
-    return boto3.client("qbusiness", region_name=REGION)
+    """Get Q Business client instance with PRM tracking."""
+    return prm_client("qbusiness", region=REGION)
 
 
 def get_bedrock_agent_runtime_client():
-    """Get Bedrock Agent Runtime client instance."""
-    return boto3.client("bedrock-agent-runtime", region_name=REGION)
+    """Get Bedrock Agent Runtime client instance with PRM tracking."""
+    return prm_client("bedrock-agent-runtime", region=REGION)
 
 
 def get_bedrock_runtime_client():
-    """Get Bedrock Runtime client instance."""
-    return boto3.client("bedrock-runtime", region_name=REGION)
+    """Get Bedrock Runtime client instance with PRM tracking."""
+    return prm_client("bedrock-runtime", region=REGION)
 
 
 def get_dynamodb_resource():
-    """Get DynamoDB resource instance."""
-    return boto3.resource("dynamodb")
+    """Get DynamoDB resource instance with PRM tracking."""
+    return prm_resource("dynamodb")
 
 
 def get_sts_client():
-    """Get STS client instance."""
-    return boto3.client("sts", region_name=REGION)
+    """Get STS client instance with PRM tracking."""
+    return prm_client("sts", region=REGION)
 
 
 def get_apigateway_management_client(endpoint_url: str):
-    """Get API Gateway Management client for WebSocket connections."""
-    return boto3.client("apigatewaymanagementapi", endpoint_url=endpoint_url)
+    """Get API Gateway Management client for WebSocket connections with PRM tracking."""
+    return prm_client(
+        "apigatewaymanagementapi", region=REGION, endpoint_url=endpoint_url
+    )
 
 
 def get_lambda_client(region_name: str | None = None):
-    """Get Lambda client instance."""
-    return boto3.client("lambda", region_name=region_name or "us-east-1")
+    """Get Lambda client instance with PRM tracking."""
+    return prm_client("lambda", region=region_name or "us-east-1")
 
 
 def _get_cross_account_bedrock_session() -> boto3.Session | None:
@@ -157,7 +164,7 @@ def _get_cross_account_bedrock_session() -> boto3.Session | None:
         return None
 
     try:
-        sts = boto3.client("sts", region_name=REGION)
+        sts = prm_client("sts", region=REGION)
         credentials = sts.assume_role(
             RoleArn=f"arn:aws:iam::{BEDROCK_ACCOUNT}:role/bedrock-quota-sharing",
             RoleSessionName="numa-chat-agent",

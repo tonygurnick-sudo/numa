@@ -17,6 +17,7 @@ import { Preloader } from '../Components/Preloader';
 import { UploadStatusRow } from '../Components/Status/UploadStatusRow';
 import PropTypes from 'prop-types';
 import { useJobsApi } from '../Services/jobsApi';
+import { withPRM } from '../utils/prmUtils';
 
 // ---------- Types ----------
 type NumaAppWithTasks = { tasks?: Array<{ id: string }> };
@@ -508,7 +509,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
       const resolvedKbIdForUpload = resolveKbIdForMetadata(kb_id);
       const resolvedTenantName = (typeof window !== 'undefined' && window.sessionStorage.getItem('CLIENT_NAME')) || '';
 
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region: resolvedRegion,
         credentials,
       });

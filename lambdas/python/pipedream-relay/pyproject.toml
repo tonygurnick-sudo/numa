@@ -25,6 +25,7 @@ python = "^3.13"
 boto3 = "^1.37.0"
 structlog = "^25.2.0"
 aws-lambda-powertools = "3.9.0"
+prm = {path = "../../../lib/prm", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.16.1"

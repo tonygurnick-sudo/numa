@@ -24,6 +24,7 @@ import { BedrockAgentRuntimeClient, RetrieveCommand } from '@aws-sdk/client-bedr
 import { DynamoDBClient, PutItemCommand, QueryCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
 import { ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { fromWebToken } from '@aws-sdk/credential-providers';
+import { withPRM } from '../src/utils/prmUtils';
 import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
 import { jwtDecode } from 'jwt-decode';
 import dotenv from 'dotenv';
@@ -94,7 +95,7 @@ const TEST_USERS = {
 };
 
 // AWS clients
-const cognitoClient = new CognitoIdentityProviderClient({ region: derivedConfig.REGION });
+const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: derivedConfig.REGION });
 
 // Cache for authentication tokens to avoid re-authenticating for each test
 const authCache = new Map();
@@ -388,7 +389,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials, username } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+  const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -416,7 +417,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+  const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -445,7 +446,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+  const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -513,7 +514,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+  const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -670,7 +671,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+  const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -698,7 +699,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+  const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -742,7 +743,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+  const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -771,7 +772,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+  const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -899,7 +900,7 @@ test.describe('AWS Access Permission Tests', () => {
         adminGroups,
       );
 
-      const adminS3Client = new S3Client({
+      const adminS3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials: adminCredentials,
       });
@@ -919,7 +920,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups: standardGroups } = extractGroupsAndFeatures(standardDecoded);
       const { credentials: standardCredentials } = await getAWSCredentials(standardTokens.idToken, standardGroups);
 
-      const standardS3Client = new S3Client({
+      const standardS3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials: standardCredentials,
       });
@@ -1014,7 +1015,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -1044,7 +1045,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -1132,7 +1133,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -1143,7 +1144,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups: adminGroups } = extractGroupsAndFeatures(adminDecoded);
       const { credentials: adminCredentials } = await getAWSCredentials(adminTokens.idToken, adminGroups);
 
-      const adminS3Client = new S3Client({
+      const adminS3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials: adminCredentials,
       });

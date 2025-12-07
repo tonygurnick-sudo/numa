@@ -1,8 +1,23 @@
 import json
+import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from lambda_function import extract_full_document, extraction_page_by_page, handler
+project_root = Path(__file__).resolve().parents[4]
+for rel_path in ("lib/bedrock", "lib/prm"):
+    lib_path = project_root / rel_path
+    if str(lib_path) not in sys.path:
+        sys.path.append(str(lib_path))
+lambda_dir = Path(__file__).resolve().parents[1]
+if str(lambda_dir) not in sys.path:
+    sys.path.append(str(lambda_dir))
+
+from lambda_function import (  # pylint: disable=wrong-import-position
+    extract_full_document,
+    extraction_page_by_page,
+    handler,
+)
 
 
 class TestLambdaFunction(unittest.TestCase):

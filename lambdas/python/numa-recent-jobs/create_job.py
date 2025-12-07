@@ -10,9 +10,9 @@ except ImportError:  # pragma: no cover - legacy runtimes
     UTC = timezone.utc
 from uuid import uuid4
 
-import boto3
+from prm import resource as prm_resource
 
-dynamodb = boto3.resource("dynamodb")
+dynamodb = prm_resource("dynamodb")
 
 
 def handler(event, _context):

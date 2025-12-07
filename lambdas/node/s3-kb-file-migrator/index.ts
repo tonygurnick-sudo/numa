@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
+import { withPRM } from '../../../lib/prm-node/prm';
 
 /**
  * Lambda function to migrate S3 files to documents/company/ prefix for S3 Vectors Knowledge Base.
@@ -45,7 +46,7 @@ export async function handler(event: LambdaEvent): Promise<MigrationResult> {
     throw new Error('bucketName is required');
   }
 
-  const s3Client = new S3Client({});
+  const s3Client = withPRM(S3Client, {});
   const result: MigrationResult = {
     processed: 0,
     copied: 0,

@@ -15,6 +15,7 @@ import {
 
 import { createFrontendClient } from '@pipedream/sdk/browser';
 import { LambdaClient } from '@aws-sdk/client-lambda';
+import { withPRM } from '../utils/prmUtils';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
 import { GenericTestConnection } from '../Components/GenericTestConnection';
@@ -90,7 +91,7 @@ export const NumaIntegrations = () => {
           roleSessionName: cognitoUserId,
           durationSeconds: 3600,
         });
-        const newClient = new LambdaClient({ region: REGION, credentials });
+        const newClient = withPRM(LambdaClient, { region: REGION, credentials });
         setLambdaClient(newClient);
         if (!lambdaInitializedRef.current) {
           console.log('Lambda client initialized successfully for integrations proxy');

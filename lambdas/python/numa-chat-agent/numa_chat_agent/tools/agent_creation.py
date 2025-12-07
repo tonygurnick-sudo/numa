@@ -14,10 +14,12 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-import boto3
 import structlog
 from botocore.exceptions import ClientError
 from strands import tool
+
+from prm import client as prm_client
+from prm import resource as prm_resource
 
 from ..auth import get_current_user_auth
 from ..intent_verification import (
@@ -185,7 +187,7 @@ def _check_policy_allows_visibility(visibility: str) -> Tuple[str, Optional[str]
     if not AGENTS_SETTINGS_TABLE:
         return visibility, None
 
-    dynamodb = boto3.resource("dynamodb")
+    dynamodb = prm_resource("dynamodb")
     table = dynamodb.Table(AGENTS_SETTINGS_TABLE)
 
     try:
@@ -275,7 +277,7 @@ def _normalise_reference_files(
         if ek_norm and ek_norm not in extracted_index:
             extracted_index[ek_norm] = fi
 
-    s3_client = boto3.client("s3")
+    s3_client = prm_client("s3")
     attached_files: List[Dict[str, Any]] = []
     warnings: List[str] = []
 
@@ -386,7 +388,7 @@ def _put_user_agent(
     dynamodb, payload: AgentPayload, user_id: str, agent_id: str, now_ms: int
 ) -> Dict[str, Any]:
     if dynamodb is None:
-        dynamodb = boto3.resource("dynamodb")
+        dynamodb = prm_resource("dynamodb")
     if not USER_AGENTS_TABLE:
         raise RuntimeError("USER_AGENTS_TABLE environment variable is not set")
     table = dynamodb.Table(USER_AGENTS_TABLE)
@@ -421,7 +423,7 @@ def _put_workspace_agent(
     dynamodb, payload: AgentPayload, user_id: str, agent_id: str, now_ms: int
 ) -> Dict[str, Any]:
     if dynamodb is None:
-        dynamodb = boto3.resource("dynamodb")
+        dynamodb = prm_resource("dynamodb")
     if not WORKSPACE_AGENTS_TABLE:
         raise RuntimeError("WORKSPACE_AGENTS_TABLE environment variable is not set")
     table = dynamodb.Table(WORKSPACE_AGENTS_TABLE)

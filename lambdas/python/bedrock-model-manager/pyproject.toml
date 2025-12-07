@@ -27,6 +27,7 @@ aws-lambda-powertools = "3.9.0"
 helpers = {path = "../../../lib/helpers", develop = true}
 requests = "2.32.5"
 structlog = "25.2.0"
+prm = {path = "../../../lib/prm", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "1.40.25"

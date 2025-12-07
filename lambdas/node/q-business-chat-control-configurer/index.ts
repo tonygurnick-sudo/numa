@@ -1,4 +1,5 @@
 import { QBusinessClient, UpdateChatControlsConfigurationCommand } from '@aws-sdk/client-qbusiness';
+import { withPRM } from '../../../lib/prm-node/prm';
 import { Handler } from 'aws-lambda';
 
 interface ChatControlConfiguration {
@@ -10,7 +11,7 @@ interface ChatControlConfiguration {
 export const handler: Handler<ChatControlConfiguration, void> = async (event) => {
   console.log('Event received:', JSON.stringify(event, null, 2));
 
-  const client = new QBusinessClient({ region: process.env['Q_BUSINESS_REGION'] });
+  const client = withPRM(QBusinessClient, { region: process.env['Q_BUSINESS_REGION'] });
 
   await client.send(
     new UpdateChatControlsConfigurationCommand({

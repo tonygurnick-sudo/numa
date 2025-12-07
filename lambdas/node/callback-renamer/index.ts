@@ -3,11 +3,12 @@ import {
   DescribeUserPoolClientCommand,
   UpdateUserPoolClientCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
+import { withPRM } from '../../../lib/prm-node/prm';
 
 export async function handler(event: Event): Promise<void> {
   const { userPoolId, userPoolClientId, callbackAddress } = event;
 
-  const client = new CognitoIdentityProviderClient({ region: process.env['Q_BUSINESS_REGION'] });
+  const client = withPRM(CognitoIdentityProviderClient, { region: process.env['Q_BUSINESS_REGION'] });
   const describeCommand = new DescribeUserPoolClientCommand({
     ClientId: userPoolClientId,
     UserPoolId: userPoolId,

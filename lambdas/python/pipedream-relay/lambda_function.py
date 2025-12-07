@@ -15,12 +15,13 @@ import os
 from functools import lru_cache
 from typing import Any, Dict
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from botocore.session import Session
 
 from policy_store import PolicyStore
+from prm import client as prm_client
+from prm import resource as prm_resource
 
 
 @lru_cache(maxsize=1)
@@ -32,7 +33,7 @@ def _get_global_table():
     table_name = os.environ.get("GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME")
     if not table_name:
         return None
-    dynamodb = boto3.resource("dynamodb")
+    dynamodb = prm_resource("dynamodb")
     return dynamodb.Table(table_name)
 
 
@@ -179,7 +180,7 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
                 return _error_response(500, "Identity verification setup failed")
 
             # Create Lambda client for cross-account invocation (target region us-east-1)
-            lambda_client = boto3.client("lambda", region_name="us-east-1")
+            lambda_client = prm_client("lambda", region="us-east-1")
 
             # Add STS proof URL to the request payload
             proxy_payload = event.copy()

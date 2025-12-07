@@ -1,5 +1,6 @@
 import { BedrockAgentClient, GetIngestionJobCommand, ListIngestionJobsCommand } from '@aws-sdk/client-bedrock-agent';
 import { S3Client, DeleteObjectCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+import { withPRM } from '../../../lib/prm-node/prm';
 
 /**
  * Lambda function to clean up files from S3 datasource that failed during Bedrock ingestion.
@@ -13,8 +14,8 @@ export async function handler(event: Event): Promise<CleanupResult> {
 
   const { knowledgeBaseId, dataSourceId, bucketName } = event;
 
-  const bedrockClient = new BedrockAgentClient({});
-  const s3Client = new S3Client({});
+  const bedrockClient = withPRM(BedrockAgentClient, {});
+  const s3Client = withPRM(S3Client, {});
 
   try {
     // Get the latest ingestion job

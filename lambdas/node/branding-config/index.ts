@@ -3,9 +3,10 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { withPRM } from '../../../lib/prm-node/prm';
 
 const TABLE_NAME = process.env.BRANDING_TABLE_NAME as string | undefined;
-const ddbDoc = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddbDoc = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}));
 
 const CLIENT_NAME = process.env.CLIENT_NAME as string | undefined;
 const BRANDING_PROVIDER_ENABLED = (process.env.BRANDING_PROVIDER_ENABLED ?? 'false') === 'true';
@@ -105,7 +106,7 @@ async function presignS3Uri(s3Uri: string | null | undefined, expiresIn = 14400)
   }
 
   try {
-    const s3Client = new S3Client({ region: AWS_REGION });
+    const s3Client = withPRM(S3Client, { region: AWS_REGION });
     const command = new GetObjectCommand({ Bucket: bucket, Key: key });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK type compatibility workaround
     return await getSignedUrl(s3Client as any, command, { expiresIn });

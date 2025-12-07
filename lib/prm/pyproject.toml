@@ -1,0 +1,32 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
+[tool.poetry]
+name = "prm"
+version = "0.1.0"
+description = "AWS Partner Revenue Measurement (PRM) helper for Numa"
+authors = ["Arcanum AI"]
+readme = "README.md"
+include = ["prm/py.typed"]
+packages = [
+    { include = "prm" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+boto3 = ">1,<2"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = "1.40.25"
+mypy = "1.17.1"
+pylint = "3.3.8"
+pyright = "1.1.403"

@@ -34,6 +34,7 @@ googlesearch-python = "^1.1.0"
 beautifulsoup4 = "^4.12.2"
 bedrock = {path = "../../../lib/bedrock", develop = true}
 helpers = {path = "../../../lib/helpers", develop = true}
+prm = {path = "../../../lib/prm", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.17.1"

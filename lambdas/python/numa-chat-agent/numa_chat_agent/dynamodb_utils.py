@@ -9,8 +9,9 @@ import mimetypes
 import os
 from typing import Any, Dict, List, Optional
 
-import boto3
 import structlog
+
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
@@ -24,7 +25,8 @@ class NumaChatDynamoUtils:
     def __init__(self, region: Optional[str] = None):
         """Initialize DynamoDB client and determine table name."""
         self.region = region or os.environ.get("AWS_REGION", "us-east-1")
-        self.dynamodb = boto3.client("dynamodb", region_name=self.region)
+
+        self.dynamodb = prm_client("dynamodb", region=self.region)
 
         # Determine table name explicitly via environment, then fall back to client name
         explicit_table = os.environ.get("CHAT_HISTORY_TABLE")

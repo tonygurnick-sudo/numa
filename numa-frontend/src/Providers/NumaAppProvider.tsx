@@ -11,6 +11,7 @@ import {
 import { useJobsApi } from '../Services/jobsApi';
 import { useNumaRequest } from './NumaRequestContext';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { withPRM } from '../utils/prmUtils';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   NumaAppContext,
@@ -668,7 +669,7 @@ export const NumaAppProvider = ({ children }) => {
   const fetchS3Content = async (bucket, key, credentials) => {
     try {
       const region = window.sessionStorage.getItem('REGION');
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region: region,
         credentials,
       });

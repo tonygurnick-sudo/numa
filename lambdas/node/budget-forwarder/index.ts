@@ -1,8 +1,9 @@
 import { SNSHandler, SNSEvent } from 'aws-lambda';
 import * as process from 'node:process';
 import { SNSClient, PublishCommand, MessageAttributeValue } from '@aws-sdk/client-sns';
+import { withPRM } from '../../../lib/prm-node/prm';
 
-const snsClient = new SNSClient({ region: 'us-east-1' });
+const snsClient = withPRM(SNSClient, { region: 'us-east-1' });
 const centralTopicArn = process.env.CENTRAL_SNS_TOPIC_ARN || '';
 const clientName = process.env.CLIENT_NAME || '';
 const accountId = process.env.ACCOUNT_ID || '';

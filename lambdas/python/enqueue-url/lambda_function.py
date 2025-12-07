@@ -11,10 +11,11 @@ import os
 from datetime import datetime
 from typing import Any, Dict, NotRequired, Optional, Sequence, TypedDict
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from botocore.exceptions import ClientError
+
+from prm import resource as prm_resource
 
 
 class EnqueueUrlEvent(TypedDict):
@@ -29,7 +30,7 @@ class EnqueueUrlEvent(TypedDict):
 
 
 logger = structlog.get_logger()
-dynamodb = boto3.resource("dynamodb")
+dynamodb = prm_resource("dynamodb")
 
 REQUIRED_EVENT_FIELDS: Sequence[str] = ("url", "userId")
 MIN_DEPTH, MAX_DEPTH = 1, 5

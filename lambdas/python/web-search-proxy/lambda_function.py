@@ -14,7 +14,6 @@ import json
 import time
 from typing import Any, Dict, Optional
 
-import boto3
 import httpx
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -23,10 +22,11 @@ from googlesearch import search
 
 import bedrock
 import helpers
+from prm import client as prm_client
 from prompts import REWRITE_QUERY_PROMPT
 
 logger = structlog.get_logger()
-dynamodb = boto3.client("dynamodb")
+dynamodb = prm_client("dynamodb")
 
 
 def fetch_conversation_context(

@@ -1,0 +1,22 @@
+{
+  "name": "@numa/prm",
+  "version": "0.1.0",
+  "description": "AWS Partner Revenue Measurement (PRM) helper for Numa Node.js/TypeScript lambdas",
+  "main": "dist/prm.js",
+  "types": "dist/prm.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "aws",
+    "prm",
+    "partner-revenue-measurement",
+    "numa"
+  ],
+  "author": "Arcanum AI",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

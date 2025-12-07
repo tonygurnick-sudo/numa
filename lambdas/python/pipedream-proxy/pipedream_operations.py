@@ -9,11 +9,12 @@ import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-import boto3
 import requests
 import structlog
 from mcp.client.streamable_http import streamablehttp_client
 from strands.tools.mcp import MCPClient
+
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
@@ -100,7 +101,7 @@ class PipedreamOperations:
         if not self.secret_arn:
             raise ValueError("PIPEDREAM_SECRET_ARN environment variable not set")
 
-        self.secrets_client = boto3.client("secretsmanager")
+        self.secrets_client = prm_client("secretsmanager")
         self._credentials: Optional[Dict[str, str]] = None
 
     def get_credentials(self) -> Dict[str, str]:

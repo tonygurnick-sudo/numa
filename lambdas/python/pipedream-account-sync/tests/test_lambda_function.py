@@ -82,11 +82,11 @@ class TestGetClientAccountIds(unittest.TestCase):
             "NUMA_CLIENT_CONFIG_TABLE_ARN": "arn:aws:dynamodb:us-east-1:123456789012:table/numa-client-config"
         }
 
-    @patch("boto3.client")
-    def test_get_client_account_ids_direct_success(self, mock_boto_client) -> None:
+    @patch("lambda_function.prm_client")
+    def test_get_client_account_ids_direct_success(self, mock_prm_client) -> None:
         """Test successful client account ID retrieval."""
         mock_dynamodb_client = Mock()
-        mock_boto_client.return_value = mock_dynamodb_client
+        mock_prm_client.return_value = mock_dynamodb_client
 
         # Mock DynamoDB client response format
         mock_dynamodb_client.scan.return_value = {
@@ -113,18 +113,18 @@ class TestGetClientAccountIds(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-        mock_boto_client.assert_called_once_with("dynamodb", region_name="us-east-1")
+        mock_prm_client.assert_called_once_with("dynamodb", region="us-east-1")
         mock_dynamodb_client.scan.assert_called_once_with(
             TableName="arn:aws:dynamodb:us-east-1:123456789012:table/numa-client-config"
         )
 
-    @patch("boto3.client")
+    @patch("lambda_function.prm_client")
     def test_get_client_account_ids_direct_with_pagination(
-        self, mock_boto_client
+        self, mock_prm_client
     ) -> None:
         """Test client account ID retrieval with pagination."""
         mock_dynamodb_client = Mock()
-        mock_boto_client.return_value = mock_dynamodb_client
+        mock_prm_client.return_value = mock_dynamodb_client
 
         # First scan call
         mock_dynamodb_client.scan.side_effect = [
@@ -155,11 +155,11 @@ class TestGetClientAccountIds(unittest.TestCase):
         self.assertEqual(result, expected)
         self.assertEqual(mock_dynamodb_client.scan.call_count, 2)
 
-    @patch("boto3.client")
-    def test_get_client_account_ids_direct_empty_table(self, mock_boto_client) -> None:
+    @patch("lambda_function.prm_client")
+    def test_get_client_account_ids_direct_empty_table(self, mock_prm_client) -> None:
         """Test client account ID retrieval from empty table."""
         mock_dynamodb_client = Mock()
-        mock_boto_client.return_value = mock_dynamodb_client
+        mock_prm_client.return_value = mock_dynamodb_client
 
         mock_dynamodb_client.scan.return_value = {"Items": []}
 
@@ -168,13 +168,13 @@ class TestGetClientAccountIds(unittest.TestCase):
 
         self.assertEqual(result, {})
 
-    @patch("boto3.client")
+    @patch("lambda_function.prm_client")
     def test_get_client_account_ids_direct_dynamodb_failure(
-        self, mock_boto_client
+        self, mock_prm_client
     ) -> None:
         """Test client account ID retrieval with DynamoDB failure."""
         mock_dynamodb_client = Mock()
-        mock_boto_client.return_value = mock_dynamodb_client
+        mock_prm_client.return_value = mock_dynamodb_client
 
         mock_dynamodb_client.scan.side_effect = ClientError(
             {

@@ -11,7 +11,6 @@ import time
 import uuid
 from typing import Any, Dict, Iterator, List, Sequence, TypeVar
 
-import boto3
 import docx
 import structlog
 from docx.document import Document as DocxDocument
@@ -26,8 +25,9 @@ import aws_transcribe
 import fm_vision_extraction
 import helpers
 from fm_vision_extraction import Document, DocumentPage
+from prm import client as prm_client
 
-s3_client = boto3.client("s3")
+s3_client = prm_client("s3")
 logger = structlog.get_logger(__name__)
 tracer = trace.get_tracer(__name__)
 

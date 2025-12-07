@@ -1,13 +1,14 @@
 import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
 import { DescribeExecutionCommand, SFNClient, StartExecutionCommand } from '@aws-sdk/client-sfn';
 import { DynamoDBClient, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { withPRM } from '../../../lib/prm-node/prm';
 
 const runningStates = ['RUNNING', 'PENDING_REDRIVE'];
 
 export async function handler(event: Event): Promise<{ event: string }> {
   // Extract job ID from event if available
   const jobId = event.jobId;
-  const client = new SFNClient({
+  const client = withPRM(SFNClient, {
     region: process.env.TARGET_REGION,
     credentials: fromTemporaryCredentials({
       params: {
@@ -78,7 +79,7 @@ async function updateJobStatus(jobId: string, status: string, errorMessage: stri
   try {
     const tableName = process.env.JOBS_TABLE_NAME || 'numa-jobs';
 
-    const dynamoClient = new DynamoDBClient({
+    const dynamoClient = withPRM(DynamoDBClient, {
       region: process.env.TARGET_REGION,
     });
 

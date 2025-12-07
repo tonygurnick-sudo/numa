@@ -2,7 +2,6 @@ import json
 import os
 import traceback
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.data_classes import (
     APIGatewayProxyEvent,
@@ -12,8 +11,9 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from botocore import exceptions
 
 import helpers
+from prm import client as prm_client
 
-s3_client = boto3.client("s3")
+s3_client = prm_client("s3")
 logger = structlog.get_logger()
 
 

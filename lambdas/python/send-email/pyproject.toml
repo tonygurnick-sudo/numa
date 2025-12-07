@@ -22,10 +22,11 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "~3.13.0"
-
+boto3 = "^1.34.0"
 aws-lambda-powertools = "3.9.0"
 helpers = {path = "../../../lib/helpers", develop = true}
 s3_helpers = {path = "../../../lib/s3_helpers", develop = true}
+prm = {path = "../../../lib/prm", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.17.1"

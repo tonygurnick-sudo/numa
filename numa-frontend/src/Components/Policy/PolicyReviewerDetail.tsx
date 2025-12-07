@@ -9,6 +9,7 @@ import {
 } from 'react-bootstrap-icons';
 import { useAuth } from '../../Providers/AuthProvider';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { withPRM } from '../../utils/prmUtils';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
@@ -417,7 +418,7 @@ export const PolicyReviewerDetail = () => {
       // upload new file
       if (!isEditing && selectedFile) {
         const credentials = await getCredentials();
-        const s3Client = new S3Client({
+        const s3Client = withPRM(S3Client, {
           region: getRegion(),
           credentials,
         });
@@ -528,7 +529,7 @@ export const PolicyReviewerDetail = () => {
    **********************/
   const downloadMarkdown = async (policy, type) => {
     const credentials = await getCredentials();
-    const s3Client = new S3Client({
+    const s3Client = withPRM(S3Client, {
       region: getRegion(),
       credentials,
     });
@@ -653,7 +654,7 @@ export const PolicyReviewerDetail = () => {
       }
 
       const credentials = await getCredentials();
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region: getRegion(),
         credentials,
       });

@@ -5,13 +5,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional, Union
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from botocore.exceptions import ClientError
 
 import helpers
 import s3_helpers
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
@@ -209,7 +209,7 @@ def send_raw_email(
     Returns:
         Dictionary with information about the sent message
     """
-    ses_client = boto3.client("ses")
+    ses_client = prm_client("ses")
 
     # Convert message to string if it's a MIMEMultipart
     if isinstance(message, MIMEMultipart):
@@ -289,7 +289,7 @@ def send_simple_email(
     Returns:
         Dictionary with information about the sent message
     """
-    ses_client = boto3.client("ses")
+    ses_client = prm_client("ses")
 
     # Check required sender address
     if not from_address:

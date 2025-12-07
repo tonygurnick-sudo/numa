@@ -1,4 +1,5 @@
 import { STSClient, AssumeRoleCommand, Credentials } from '@aws-sdk/client-sts';
+import { withPRM } from '../../../lib/prm-node/prm';
 
 interface Event {
   roleArn?: string;
@@ -12,7 +13,7 @@ export async function handler(event: Event = {}): Promise<{ Credentials: Credent
   const sessionName = event.sessionName || 'portal-deploy-backend';
   const durationSeconds = event.durationSeconds || 3600;
 
-  const sts = new STSClient({});
+  const sts = withPRM(STSClient, {});
   const out = await sts.send(
     new AssumeRoleCommand({ RoleArn: roleArn, RoleSessionName: sessionName, DurationSeconds: durationSeconds }),
   );

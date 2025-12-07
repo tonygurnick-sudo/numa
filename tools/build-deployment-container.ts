@@ -4,6 +4,7 @@ import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withPRM } from '../lib/prm-node/prm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
@@ -40,7 +41,7 @@ async function generatePresignedUrl(): Promise<string> {
 
   try {
     console.log(`Generating presigned URL for s3://${bucket}/${key}...`);
-    const s3 = new S3Client({ region, credentials: fromNodeProviderChain() });
+    const s3 = withPRM(S3Client, { region, credentials: fromNodeProviderChain() });
 
     // Test if the object exists first (HEAD, not GET)
     await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));

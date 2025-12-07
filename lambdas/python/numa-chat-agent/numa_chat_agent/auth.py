@@ -4,8 +4,9 @@ Authentication module for Numa Chat Agent.
 Handles user authentication, role assumption, and Q Business client creation.
 """
 
-import boto3
 import structlog
+
+from prm import client as prm_client
 
 from .config import REGION, get_qbusiness_client, get_sts_client
 
@@ -94,9 +95,9 @@ def create_authenticated_qbusiness_client(user_auth):
         credentials = response["Credentials"]
 
         # Create Q Business client with assumed role credentials
-        qb_client = boto3.client(
+        qb_client = prm_client(
             "qbusiness",
-            region_name=region,
+            region=region,
             aws_access_key_id=credentials["AccessKeyId"],
             aws_secret_access_key=credentials["SecretAccessKey"],
             aws_session_token=credentials["SessionToken"],

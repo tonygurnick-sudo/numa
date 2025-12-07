@@ -25,6 +25,7 @@ python = "~3.13.0"
 
 aws-lambda-powertools = "3.9.0"
 bedrock = {path = "../../../lib/bedrock", develop = true}
+prm = {path = "../../../lib/prm", develop = true}
 helpers = {path = "../../../lib/helpers", develop = true}
 structlog = "25.2.0"
 

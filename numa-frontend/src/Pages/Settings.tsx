@@ -22,6 +22,7 @@ import { getIntegrationsListFormat, type IntegrationListItem } from '../config/i
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
+import { withPRM } from '../utils/prmUtils';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import BrandingAdminPanel from '../Components/Branding/BrandingAdminPanel';
 import { UNSAFE_NavigationContext } from 'react-router-dom';
@@ -102,7 +103,7 @@ export default function SettingsPage() {
           roleArn,
           roleSessionName: cognitoUserId,
         });
-        setLambdaClient(new LambdaClient({ region: REGION, credentials }));
+        setLambdaClient(withPRM(LambdaClient, { region: REGION, credentials }));
       } catch (e) {
         console.error('Settings: init lambda failed', e);
       }

@@ -2,12 +2,13 @@ import logging
 import os
 from typing import Optional
 
-import boto3
 import structlog
+
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
-s3_client = boto3.client("s3")
+s3_client = prm_client("s3")
 
 
 def read(key: str, bucket: Optional[str] = None) -> bytes:

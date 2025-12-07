@@ -1,5 +1,6 @@
 import { RDSDataServiceException, RDSData } from '@aws-sdk/client-rds-data';
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
+import { withPRM } from '../../../lib/prm-node/prm';
 
 const retryPause = 2000;
 const retryAttempts = 20;
@@ -28,7 +29,7 @@ function retryWrapper<I, O>(operation: (input: I) => Promise<O>): typeof operati
 }
 
 async function getBedrockUserPassword(bedrockUserSecretArn: string): Promise<string> {
-  const smClient = new SecretsManagerClient();
+  const smClient = withPRM(SecretsManagerClient, {});
 
   const passwordInput = {
     SecretId: bedrockUserSecretArn,
@@ -45,7 +46,7 @@ async function getBedrockUserPassword(bedrockUserSecretArn: string): Promise<str
 }
 
 export async function handler(event: Event): Promise<void> {
-  const rdsClient = new RDSData();
+  const rdsClient = withPRM(RDSData, {});
   const role = 'bedrock_user';
   const password = await getBedrockUserPassword(event.ResourceProperties.BedrockUserSecretArn);
 

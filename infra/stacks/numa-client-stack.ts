@@ -104,6 +104,7 @@ export class NumaClientStack extends TerraformStack {
             Repository: process.env['CI_PROJECT_PATH'] ?? 'unknown',
             ServiceName: 'numa',
             StackName: name,
+            'aws-apn-id': 'pc:cl23v3vsno0k35czlg7e3ld9p',
           },
         },
       ],

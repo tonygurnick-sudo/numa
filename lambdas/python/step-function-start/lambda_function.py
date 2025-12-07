@@ -3,7 +3,6 @@ import json
 import os
 import typing
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.data_classes import (
     APIGatewayProxyEvent,
@@ -12,8 +11,9 @@ from aws_lambda_powertools.utilities.data_classes import (
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import helpers
+from prm import client as prm_client
 
-step_functions_client = boto3.client("stepfunctions")
+step_functions_client = prm_client("stepfunctions")
 logger = structlog.get_logger()
 
 

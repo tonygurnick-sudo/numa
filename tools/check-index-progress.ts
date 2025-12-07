@@ -9,6 +9,7 @@ import {
 import { argv } from 'node:process';
 import { AWSClientConfig, BasicClientConfig, getQInstanceDetails, temporaryCredentials } from './utils';
 import { getClientConfig } from '@arcanumai/client-config';
+import { withPRM } from '../lib/prm-node/prm';
 
 const args = argv.slice(2);
 
@@ -17,7 +18,7 @@ async function listDataSources(
   applicationId: string,
   indexId: string,
 ): Promise<DataSource[]> {
-  const qbusiness = new QBusinessClient(awsClientConfig);
+  const qbusiness = withPRM(QBusinessClient, awsClientConfig);
   const response = await qbusiness.send(
     new ListDataSourcesCommand({
       applicationId,
@@ -33,7 +34,7 @@ async function findSyncJobs(
   indexId: string,
   dataSourceId: string,
 ): Promise<DataSourceSyncJob[]> {
-  const qbusiness = new QBusinessClient(awsClientConfig);
+  const qbusiness = withPRM(QBusinessClient, awsClientConfig);
   const response = await qbusiness.send(
     new ListDataSourceSyncJobsCommand({
       applicationId,
@@ -50,7 +51,7 @@ async function startSync(
   indexId: string,
   dataSourceId: string,
 ): Promise<void> {
-  const qbusiness = new QBusinessClient(awsClientConfig);
+  const qbusiness = withPRM(QBusinessClient, awsClientConfig);
   await qbusiness.send(
     new StartDataSourceSyncJobCommand({
       applicationId,

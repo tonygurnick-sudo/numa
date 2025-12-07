@@ -19,6 +19,7 @@ from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 
 import helpers
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
@@ -138,13 +139,13 @@ def __signed_request(
 
 
 def __get_client_account_credentials(account_id: str) -> tuple:
-    bare_client = boto3.client("sts")
+    bare_client = prm_client("sts")
     deployer_response = bare_client.assume_role(
         RoleArn=f"arn:aws:iam::{DEPLOYER_ACCOUNT_ID}:role/{DEPLOYER_ACCOUNT_ROLE_NAME}",
         RoleSessionName="enable-bedrock-session",
     )
     deployer_credential_dict = deployer_response["Credentials"]
-    deployer_client = boto3.client(
+    deployer_client = prm_client(
         "sts",
         aws_access_key_id=deployer_credential_dict["AccessKeyId"],
         aws_secret_access_key=deployer_credential_dict["SecretAccessKey"],

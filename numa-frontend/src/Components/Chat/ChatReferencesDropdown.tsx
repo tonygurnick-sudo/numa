@@ -3,6 +3,7 @@ import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import { getContentType } from '../../utils/fileUtils';
 import { getUrlTagFromS3Object } from '../../utils/s3Utils';
 import { Button, Collapse } from 'react-bootstrap';
+import { withPRM } from '../../utils/prmUtils';
 
 type ChatReferencesDropdownProps = {
   references: string[];
@@ -203,7 +204,7 @@ const ChatReferencesDropdown = ({
 
       const contentType = getContentType(s3Key);
 
-      const s3Client = new S3Client({
+      const s3Client = withPRM(S3Client, {
         region,
         credentials,
         ResponseContentDisposition: `inline; filename="${s3Key}"`,

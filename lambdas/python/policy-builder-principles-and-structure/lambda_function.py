@@ -1,6 +1,5 @@
 import os
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
@@ -8,10 +7,11 @@ import bedrock
 import claude_prompts
 import claude_tools
 import helpers
+from prm import client as prm_client
 
 logger = structlog.get_logger()
 
-s3_client = boto3.client("s3")
+s3_client = prm_client("s3")
 
 
 def __read_string_from_s3(key) -> str:

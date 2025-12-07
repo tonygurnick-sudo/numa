@@ -11,7 +11,6 @@ import uuid
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.data_classes import (
     APIGatewayProxyEvent,
@@ -20,14 +19,17 @@ from aws_lambda_powertools.utilities.data_classes import (
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from boto3.dynamodb.conditions import Key
 
+from prm import client as prm_client
+from prm import resource as prm_resource
+
 MAX_PAGES = 10000
 MAX_STATS_LIMIT = 2000
 DEFAULT_KB_ID = "company"
 DEFAULT_INDEX_NAME = "kbId-status-index"
 
 logger = structlog.get_logger()
-step_function_client = boto3.client("stepfunctions")
-dynamodb = boto3.resource("dynamodb")
+step_function_client = prm_client("stepfunctions")
+dynamodb = prm_resource("dynamodb")
 
 
 def _decode_next_token(token: Optional[str]) -> Optional[Dict[str, Any]]:

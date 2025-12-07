@@ -19,6 +19,7 @@ import {
 import { NumaChatDynamoUtils } from '../utils/DynamoDBUtils';
 import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
 import Notification from '../Components/Notification';
+import { withPRM } from '../utils/prmUtils';
 
 const AuthContext = createContext(null);
 
@@ -142,7 +143,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return false;
       }
 
-      const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
+      const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
 
       // Use GetUser to validate the token - this will fail if token is revoked
       const getUserCommand = new GetUserCommand({
@@ -312,7 +313,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
         const SECRET_HASH = await fetchSecretHash(username);
 
-        const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
+        const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
 
         const params = {
           AuthFlow: 'REFRESH_TOKEN_AUTH',
@@ -546,7 +547,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         durationSeconds: 900,
       });
 
-      const newClient = new QBusinessClient({
+      const newClient = withPRM(QBusinessClient, {
         region: REGION,
         credentials: await credentials(),
       });
@@ -617,7 +618,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         });
       }
 
-      const newClient = new BedrockRuntimeClient({
+      const newClient = withPRM(BedrockRuntimeClient, {
         region: REGION,
         credentials,
       });
@@ -678,7 +679,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
       });
 
-      const newClient = new BedrockAgentRuntimeClient({
+      const newClient = withPRM(BedrockAgentRuntimeClient, {
         region: REGION,
         credentials: await credentials(),
       });
@@ -736,7 +737,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
       });
 
-      const newClient = new BedrockAgentClient({
+      const newClient = withPRM(BedrockAgentClient, {
         region: REGION,
         credentials: await credentials(),
       });
@@ -799,7 +800,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         durationSeconds: 900,
       })();
 
-      const newClient = new DynamoDBClient({
+      const newClient = withPRM(DynamoDBClient, {
         region: REGION,
         credentials: credentials,
       });
@@ -860,7 +861,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         durationSeconds: 900,
       })();
 
-      const newQAppsClient = new QAppsClient({
+      const newQAppsClient = withPRM(QAppsClient, {
         region: REGION,
         credentials: credentials,
       });
@@ -1064,7 +1065,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const REGION = window.sessionStorage.getItem('REGION');
     const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
     const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-    const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
+    const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
 
     const lowercaseUsername = username.toLowerCase();
     const SECRET_HASH = await fetchSecretHash(lowercaseUsername);
@@ -1253,7 +1254,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         },
       });
 
-      const cognitoClient = new CognitoIdentityProviderClient({
+      const cognitoClient = withPRM(CognitoIdentityProviderClient, {
         region: REGION,
       });
       await cognitoClient.send(command);
@@ -1277,7 +1278,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         SecretHash: SECRET_HASH,
       });
 
-      const cognitoClient = new CognitoIdentityProviderClient({
+      const cognitoClient = withPRM(CognitoIdentityProviderClient, {
         region: REGION,
       });
       await cognitoClient.send(command);

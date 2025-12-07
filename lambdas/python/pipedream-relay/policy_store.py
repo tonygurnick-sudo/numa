@@ -8,8 +8,9 @@ import os
 import time
 from typing import Any, Dict, Tuple
 
-import boto3
 import structlog
+
+from prm import resource as prm_resource
 
 logger = structlog.get_logger()
 
@@ -29,7 +30,7 @@ class PolicyStore:
             raise ValueError(
                 "USER_INTEGRATION_SETTINGS_TABLE_NAME (or MCP_POLICY_TABLE_NAME) environment variable not set"
             )
-        self._table = boto3.resource("dynamodb").Table(table_name)
+        self._table = prm_resource("dynamodb").Table(table_name)
 
     @staticmethod
     def _parse_external_user_id(external_user_id: str) -> Tuple[str, str]:

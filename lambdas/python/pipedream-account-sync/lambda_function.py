@@ -16,9 +16,11 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-import boto3
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
+
+from prm import client as prm_client
+from prm import resource as prm_resource
 
 logger = structlog.get_logger()
 
@@ -153,7 +155,7 @@ def get_client_account_ids_direct() -> Dict[str, str]:
             )
 
         # Create DynamoDB client for cross-account access
-        dynamodb_client = boto3.client("dynamodb", region_name="us-east-1")
+        dynamodb_client = prm_client("dynamodb", region="us-east-1")
 
         logger.info("Scanning client config table for account IDs", table_arn=table_arn)
 
@@ -200,7 +202,7 @@ def update_allowed_accounts_table(
 ) -> Dict[str, int]:
     """Update the allowed accounts table with current account IDs and client names."""
     try:
-        dynamodb = boto3.resource("dynamodb")
+        dynamodb = prm_resource("dynamodb")
         table = dynamodb.Table(table_name)
 
         logger.info("Updating allowed accounts table", table_name=table_name)

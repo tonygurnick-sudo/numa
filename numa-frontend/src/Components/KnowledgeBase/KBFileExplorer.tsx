@@ -5,6 +5,7 @@ import { useAuth } from '../../Providers/AuthProvider';
 import { useKBState } from '../../Providers/KBStateProvider';
 import { getUrlTagFromS3Object, listObjectsInFolder, deleteMultipleObjectsFromS3 } from '../../utils/s3Utils';
 import '../../assets/styles/components/_knowledge_base_management.scss';
+import { withPRM } from '../../utils/prmUtils';
 
 // Type definitions
 interface S3Object {
@@ -446,7 +447,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       setIsLoadingFiles(true);
       try {
         const credentials = await getCredentials();
-        const s3Client = new S3Client({ region, credentials });
+        const s3Client = withPRM(S3Client, { region, credentials });
 
         // Determine the prefix based on kbId
         const prefix = basePrefix;
@@ -558,7 +559,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       setCreateFolderError(null);
       try {
         const credentials = await getCredentials();
-        const s3Client = new S3Client({ region, credentials });
+        const s3Client = withPRM(S3Client, { region, credentials });
         const bucketName = `numa-${CLIENT_NAME}-data`;
 
         await s3Client.send(

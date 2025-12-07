@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getPolicyBuilderBucketInfo } from '../../utils/bucketNameUtil';
 import { S3Client } from '@aws-sdk/client-s3';
+import { withPRM } from '../../utils/prmUtils';
 
 vi.mock('@aws-sdk/client-s3', () => {
   return {
@@ -19,7 +20,7 @@ describe('bucketNameUtil', () => {
 
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    s3Client = new S3Client();
+    s3Client = withPRM(S3Client, {});
   });
 
   afterEach(() => {

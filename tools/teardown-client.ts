@@ -24,6 +24,7 @@ import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { deleteClientConfig } from './delete-config';
 import { spawn } from 'node:child_process';
+import { withPRM } from '../lib/prm-node/prm';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 interface Options {
@@ -258,10 +259,10 @@ async function main(): Promise<void> {
         process.env.AWS_REGION = cfg.region;
         process.env.AWS_DEFAULT_REGION = cfg.region;
 
-        const s3 = new S3Client(cfg);
-        const sfn = new SFNClient(cfg);
-        const iam = new IAMClient(cfg);
-        const rds = new RDSClient(cfg);
+        const s3 = withPRM(S3Client, cfg);
+        const sfn = withPRM(SFNClient, cfg);
+        const iam = withPRM(IAMClient, cfg);
+        const rds = withPRM(RDSClient, cfg);
 
         const checkOnly = !!opts.check;
         const skipFinalSnapshot = opts.skipFinalSnapshot !== false;

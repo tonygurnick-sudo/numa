@@ -12,6 +12,7 @@ import {
   AdminUserGlobalSignOutCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { DeleteUserCommand, GetUserCommand } from '@aws-sdk/client-qbusiness';
+import { withPRM } from './prmUtils';
 
 // This is not secure, but will do fine for a temporary password.
 function genPassword(length = 16) {
@@ -30,7 +31,7 @@ function genPassword(length = 16) {
 
 export class UserManagementUtils {
   constructor(region, credentials) {
-    this.cognitoClient = new CognitoIdentityProviderClient({
+    this.cognitoClient = withPRM(CognitoIdentityProviderClient, {
       region,
       credentials,
     });
