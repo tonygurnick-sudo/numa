@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, Form, Button, Row, Col, Alert, Spinner } from 'react-bootstrap'
 import { nextgenBrokerService } from '@/services/nextgenBrokerService'
 import { clientService } from '@/services/clientService'
 import { activityService } from '@/services/activityService'
+import { validateClientName, sanitizeClientName } from '@/utils/clientValidation'
 
 export default function SetupNextgenClient() {
   const [accountId, setAccountId] = useState('')
   const [clientId, setClientId] = useState('')
+  const [clientIdError, setClientIdError] = useState<string | null>(null)
   const [renaming, setRenaming] = useState(false)
   const [renameOk, setRenameOk] = useState<null | { accountId: string; name: string }>(null)
   const [renameErr, setRenameErr] = useState<string | null>(null)
@@ -16,7 +18,17 @@ export default function SetupNextgenClient() {
   const [secretErr, setSecretErr] = useState<string | null>(null)
   const [gettingSecret, setGettingSecret] = useState(false)
 
-  const canRename = accountId.trim().length === 12 && !!clientId
+  // Validate client ID whenever it changes
+  useEffect(() => {
+    if (clientId.trim().length > 0) {
+      const error = validateClientName(clientId)
+      setClientIdError(error)
+    } else {
+      setClientIdError(null)
+    }
+  }, [clientId])
+
+  const canRename = accountId.trim().length === 12 && !!clientId && !clientIdError
 
   const onRename = async () => {
     setRenameErr(null)
@@ -106,8 +118,29 @@ export default function SetupNextgenClient() {
           <Col md={6}>
             <Form.Group>
               <Form.Label className="fw-semibold">Client ID</Form.Label>
-              <Form.Control value={clientId} onChange={e => setClientId(e.target.value)} placeholder="e.g. arcanum-demo" />
-              <Form.Text className="text-muted">Used as the account name and portal client name</Form.Text>
+              <Form.Control
+                value={clientId}
+                onChange={e => setClientId(e.target.value)}
+                placeholder="e.g. arcanum-demo"
+                className={clientIdError ? 'border-danger' : clientId ? 'border-success' : ''}
+                isInvalid={!!clientIdError}
+              />
+              {clientIdError ? (
+                <>
+                  <Form.Control.Feedback type="invalid">
+                    {clientIdError}
+                  </Form.Control.Feedback>
+                  {sanitizeClientName(clientId) && sanitizeClientName(clientId) !== clientId && (
+                    <Form.Text className="text-info">
+                      Suggested: <strong>{sanitizeClientName(clientId)}</strong>
+                    </Form.Text>
+                  )}
+                </>
+              ) : (
+                <Form.Text className="text-muted">
+                  Used as the account name and portal client name
+                </Form.Text>
+              )}
             </Form.Group>
           </Col>
         </Row>

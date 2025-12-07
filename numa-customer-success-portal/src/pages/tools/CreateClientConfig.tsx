@@ -6,6 +6,7 @@ import { getDefaultClientConfigValues, type ClientConfig, clientConfigSchema } f
 import { DEFAULT_ADMIN_FEATURES, DEFAULT_STANDARD_FEATURES, featuresListToString, stringToFeatures } from '@/constants/features'
 import { FeatureChecklist } from '@/components/FeatureChecklist'
 import { ConfigField } from '@/components/ConfigField'
+import { validateClientName, sanitizeClientName } from '@/utils/clientValidation'
 
 const REGION_OPTIONS = [
   { label: 'US East (N. Virginia) us-east-1', value: 'us-east-1' },
@@ -54,6 +55,7 @@ export default function CreateClientConfig() {
   const defaults = getDefaultClientConfigValues()
 
   const [clientName, setClientName] = useState('')
+  const [clientNameError, setClientNameError] = useState<string | null>(null)
   const [clientAccountId, setClientAccountId] = useState('')
   const [region, setRegion] = useState(defaults.qBusinessRegion)
   const [allProdApps, setAllProdApps] = useState(true)
@@ -90,12 +92,27 @@ export default function CreateClientConfig() {
     // only run once on mount
   }, [])
 
+  // Validate client name whenever it changes
+  useEffect(() => {
+    if (clientName.trim().length > 0) {
+      const error = validateClientName(clientName)
+      setClientNameError(error)
+    } else {
+      setClientNameError(null)
+    }
+  }, [clientName])
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setSuccess(null)
     if (!clientName || !clientAccountId) {
       setError('Client name and account ID are required')
+      return
+    }
+    // Check for client name validation errors
+    if (clientNameError) {
+      setError(`Invalid client name: ${clientNameError}`)
       return
     }
 
@@ -169,11 +186,25 @@ export default function CreateClientConfig() {
                     value={clientName}
                     onChange={e => setClientName(e.target.value)}
                     placeholder="e.g. arcanum-demo"
-                    className={clientName ? 'border-primary' : ''}
+                    className={clientNameError ? 'border-danger' : clientName ? 'border-success' : ''}
+                    isInvalid={!!clientNameError}
                   />
-                  <Form.Text className="text-muted">
-                    Unique identifier for this client deployment
-                  </Form.Text>
+                  {clientNameError ? (
+                    <>
+                      <Form.Control.Feedback type="invalid">
+                        {clientNameError}
+                      </Form.Control.Feedback>
+                      {sanitizeClientName(clientName) && sanitizeClientName(clientName) !== clientName && (
+                        <Form.Text className="text-info">
+                          Suggested: <strong>{sanitizeClientName(clientName)}</strong>
+                        </Form.Text>
+                      )}
+                    </>
+                  ) : (
+                    <Form.Text className="text-muted">
+                      Unique identifier for this client deployment
+                    </Form.Text>
+                  )}
                 </Form.Group>
               </Col>
               <Col md={6}>
@@ -377,7 +408,7 @@ export default function CreateClientConfig() {
             <div className="d-flex align-items-center gap-3 mb-4">
               <Button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !!clientNameError}
                 className="px-4"
               >
                 {submitting ? (
@@ -390,7 +421,7 @@ export default function CreateClientConfig() {
                 )}
               </Button>
               <div className="text-muted small">
-                Default values are applied automatically for unspecified settings
+                {clientNameError ? 'Fix validation errors to continue' : 'Default values are applied automatically for unspecified settings'}
               </div>
             </div>
 
@@ -465,16 +496,16 @@ export default function CreateClientConfig() {
             <Col md={6} className="d-flex gap-2">
               <Button
                 variant="secondary"
-                disabled={!uploadedConfig || !clientName}
+                disabled={!uploadedConfig || !clientName || !!clientNameError}
                 onClick={() => setShowJsonPreview(true)}
               >
                 Preview JSON
               </Button>
               <Button
                 variant="primary"
-                disabled={!uploadedConfig || !clientName || submitting}
+                disabled={!uploadedConfig || !clientName || !!clientNameError || submitting}
                 onClick={async () => {
-                  if (!uploadedConfig || !clientName) return
+                  if (!uploadedConfig || !clientName || clientNameError) return
                   setError(null)
                   try {
                     setSubmitting(true)

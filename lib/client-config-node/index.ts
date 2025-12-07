@@ -9,6 +9,47 @@ const TableName = 'numa-client-config';
 const ClientKey = 'clientName';
 const ConfigKey = 'config';
 
+// Client name validation regex: lowercase alphanumeric with optional dashes
+const CLIENT_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * Validates a client name against naming conventions.
+ * Client names must be lowercase letters, numbers, and dashes only.
+ * No leading/trailing dashes, no consecutive dashes.
+ *
+ * @param clientName - The client name to validate
+ * @returns null if valid, error message string if invalid
+ */
+function validateClientName(clientName: string): string | null {
+  if (!clientName || clientName.trim().length === 0) {
+    return 'Client name is required';
+  }
+
+  const trimmedName = clientName.trim();
+
+  // Check for invalid characters (this catches uppercase, special chars, spaces, etc.)
+  if (!/^[a-z0-9-]+$/.test(trimmedName)) {
+    return 'Client name can only contain lowercase letters, numbers, and dashes';
+  }
+
+  // Check for leading/trailing dashes
+  if (trimmedName.startsWith('-') || trimmedName.endsWith('-')) {
+    return 'Client name cannot start or end with a dash';
+  }
+
+  // Check for consecutive dashes
+  if (trimmedName.includes('--')) {
+    return 'Client name cannot contain consecutive dashes';
+  }
+
+  // Final pattern check
+  if (!CLIENT_NAME_PATTERN.test(trimmedName)) {
+    return 'Client name format is invalid';
+  }
+
+  return null; // Valid
+}
+
 interface ListClientProps {
   credentials?: RuntimeConfigAwsCredentialIdentityProvider;
 }
@@ -157,6 +198,13 @@ export async function putClientConfig<ClientConfig>(
   credentials?: RuntimeConfigAwsCredentialIdentityProvider,
 ): Promise<boolean> {
   const props = typeof x === 'string' ? { clientName: x, config, schema, credentials } : x;
+
+  // Validate client name format
+  const nameError = validateClientName(props.clientName);
+  if (nameError) {
+    throw new Error(`Invalid client name: ${nameError}`);
+  }
+
   if (props.schema) {
     props.schema.parse(config);
   }
