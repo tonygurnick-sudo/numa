@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, Form, Button, Row, Col, Alert, Spinner, InputGroup } from 'react-bootstrap'
 import { nextgenBrokerService } from '@/services/nextgenBrokerService'
+import { validateClientName, sanitizeClientName } from '@/utils/clientValidation'
 
 export default function SetupNonNextgenClient() {
   const [accountId, setAccountId] = useState('')
   const [clientId, setClientId] = useState('')
+  const [clientIdError, setClientIdError] = useState<string | null>(null)
   const [roleName, setRoleName] = useState('ArcanumAIAccess')
   const [checking, setChecking] = useState(false)
   const [okMsg, setOkMsg] = useState<string | null>(null)
@@ -15,6 +17,16 @@ export default function SetupNonNextgenClient() {
   const [secret, setSecret] = useState<string | null>(null)
   const [secretUser, setSecretUser] = useState<string | null>(null)
   const [secretPass, setSecretPass] = useState<string | null>(null)
+
+  // Validate client ID whenever it changes
+  useEffect(() => {
+    if (clientId.trim().length > 0) {
+      const error = validateClientName(clientId)
+      setClientIdError(error)
+    } else {
+      setClientIdError(null)
+    }
+  }, [clientId])
 
   const precheck = async () => {
     setOkMsg(null)
@@ -84,8 +96,29 @@ export default function SetupNonNextgenClient() {
           <Col md={6}>
             <Form.Group>
               <Form.Label className="fw-semibold">Client ID</Form.Label>
-              <Form.Control value={clientId} onChange={e => setClientId(e.target.value)} placeholder="e.g. arcanum-demo" />
-              <Form.Text className="text-muted">Used to form the client portal URL</Form.Text>
+              <Form.Control
+                value={clientId}
+                onChange={e => setClientId(e.target.value)}
+                placeholder="e.g. arcanum-demo"
+                className={clientIdError ? 'border-danger' : clientId ? 'border-success' : ''}
+                isInvalid={!!clientIdError}
+              />
+              {clientIdError ? (
+                <>
+                  <Form.Control.Feedback type="invalid">
+                    {clientIdError}
+                  </Form.Control.Feedback>
+                  {sanitizeClientName(clientId) && sanitizeClientName(clientId) !== clientId && (
+                    <Form.Text className="text-info">
+                      Suggested: <strong>{sanitizeClientName(clientId)}</strong>
+                    </Form.Text>
+                  )}
+                </>
+              ) : (
+                <Form.Text className="text-muted">
+                  Used to form the client portal URL
+                </Form.Text>
+              )}
             </Form.Group>
           </Col>
         </Row>

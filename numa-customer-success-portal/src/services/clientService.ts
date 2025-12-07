@@ -7,6 +7,7 @@ import { getConfigValue } from './configService'
 import { authService } from './authService'
 import { activityService } from './activityService'
 import { clientConfigSchema } from '@/types'
+import { validateClientName } from '@/utils/clientValidation'
 
 export class ClientService {
   private cachedClients: Client[] = []
@@ -169,6 +170,12 @@ export class ClientService {
   }
 
   async replaceClientConfig(name: string, newConfig: ClientConfig): Promise<void> {
+    // Validate client name format
+    const nameError = validateClientName(name)
+    if (nameError) {
+      throw new Error(`Invalid client name: ${nameError}`)
+    }
+
     let beforeConfig: ClientConfig | null = null
     try {
       const credentials = this.getCredentialsProvider()
@@ -227,6 +234,12 @@ export class ClientService {
   }
 
   async createClientConfig(name: string, config: ClientConfig): Promise<void> {
+    // Validate client name format
+    const nameError = validateClientName(name)
+    if (nameError) {
+      throw new Error(`Invalid client name: ${nameError}`)
+    }
+
     try {
       const credentials = this.getCredentialsProvider()
       // Validate against schema before write
