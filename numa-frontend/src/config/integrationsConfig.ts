@@ -334,7 +334,7 @@ export const CONNECTIONS_CONFIG: Record<string, ConnectionConfigEntry> = {
   },
   telegram_bot_api: {
     id: 'telegram_bot_api',
-    name: 'Telegram Bot API',
+    name: 'Telegram',
     description: 'Send messages and manage chats via Telegram bots.',
     auth_type: 'oauth',
     img_src: telegramIcon,
