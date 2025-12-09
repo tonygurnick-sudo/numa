@@ -25,8 +25,8 @@ const AuthContext = createContext(null);
 
 const MINUTE = 1000 * 60;
 
-// Refresh tokens/groups less frequently to reduce churn (was 5 minutes)
-const REFRESH_PERIOD = 15 * MINUTE;
+// Base interval to sanity-check tokens; expiry-based scheduling will run sooner when needed
+const REFRESH_PERIOD = 10 * MINUTE;
 
 export const AuthProvider = ({ children, initialTokens }) => {
   const [user, setUser] = useState(null);
@@ -37,6 +37,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const [tokenRevocationState, setTokenRevocationState] = useState({
     show: false,
     timer: null,
+    reason: 'revocation',
   });
 
   const tokensRef = useRef(
@@ -56,8 +57,37 @@ export const AuthProvider = ({ children, initialTokens }) => {
   // Add ref to track ongoing refresh operations
   const refreshInProgressRef = useRef(false);
   const refreshPromiseRef = useRef(null);
+  const tokenCheckRef = useRef(null);
 
   const lastRefreshTimeRef = useRef(0);
+  const refreshTimeoutRef = useRef(null);
+
+  const clearScheduledRefresh = useCallback(() => {
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleRefreshBeforeExpiry = useCallback(() => {
+    clearScheduledRefresh();
+
+    const accessExp = decodedTokensRef.current.accessToken?.exp;
+    if (!accessExp) return;
+
+    const now = Date.now();
+    const targetTime = accessExp * 1000 - 10 * MINUTE;
+    const minDelay = 3 * MINUTE;
+    const delay = Math.max(minDelay, targetTime - now);
+
+    const timeoutDelay = delay > 0 ? delay : 1000;
+    const tokenCheckFn = tokenCheckRef.current || checkAndRefreshTokens;
+    if (!tokenCheckFn) return;
+
+    refreshTimeoutRef.current = setTimeout(() => {
+      tokenCheckRef.current?.() ?? tokenCheckFn();
+    }, timeoutDelay);
+  }, [clearScheduledRefresh]);
 
   // Decode tokens without triggering re-renders
   const decodeTokens = async () => {
@@ -133,14 +163,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const validateTokenWithCognito = async (accessToken) => {
     if (!accessToken) {
       console.error('🚫 validateTokenWithCognito: No access token provided');
-      return false;
+      return { valid: false, reason: 'missing' };
     }
 
     try {
       const REGION = window.sessionStorage.getItem('REGION');
       if (!REGION) {
         console.error('🚫 validateTokenWithCognito: No REGION in session storage');
-        return false;
+        return { valid: false, reason: 'missing-region' };
       }
 
       const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
@@ -151,7 +181,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       });
 
       await cognitoClient.send(getUserCommand);
-      return true;
+      return { valid: true };
     } catch (error) {
       console.warn(
         '🚫 validateTokenWithCognito: Token validation failed with Cognito:',
@@ -160,27 +190,33 @@ export const AuthProvider = ({ children, initialTokens }) => {
         error.name,
       );
 
-      // Common errors when token is revoked or invalid
-      if (
-        error.name === 'NotAuthorizedException' ||
-        error.name === 'UserNotFoundException' ||
-        error.name === 'TokenRefreshException'
-      ) {
+      const message = error.message?.toLowerCase() || '';
+      const isExpired = message.includes('expired');
+      const isNotAuthorized = error.name === 'NotAuthorizedException';
+      const isUserMissing = error.name === 'UserNotFoundException';
+      const isRefreshException = error.name === 'TokenRefreshException';
+
+      if (isExpired && isNotAuthorized) {
+        return { valid: false, reason: 'expired' };
+      }
+
+      if (isNotAuthorized || isUserMissing || isRefreshException) {
         console.error('🚫 validateTokenWithCognito: Token is invalid/revoked, returning false');
-        return false;
+        return { valid: false, reason: 'revoked' };
       }
 
       // For other errors, assume token is still valid to avoid false positives
       console.warn('⚠️ validateTokenWithCognito: Unknown error, assuming token is still valid');
-      return true;
+      return { valid: true };
     }
   };
 
   // Token revocation notification functions
-  const showTokenRevocationNotification = useCallback(() => {
+  const showTokenRevocationNotification = useCallback((reason = 'revocation') => {
     setTokenRevocationState({
       show: true,
       timer: null,
+      reason,
     });
 
     // Auto-dismiss after 5 seconds
@@ -198,6 +234,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     setTokenRevocationState({
       show: false,
       timer: null,
+      reason: 'revocation',
     });
   }, [tokenRevocationState.timer]);
 
@@ -266,6 +303,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     localStorage.removeItem('lastTokenValidation');
     tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
     decodedTokensRef.current = { accessToken: null, idToken: null };
+    clearScheduledRefresh();
 
     // Clear all AWS clients to force re-authentication
     setQBusinessClient(null);
@@ -280,7 +318,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     setUser(null);
     setAuthError(null);
     setLoading(false);
-  }, []);
+  }, [clearScheduledRefresh]);
 
   const refreshTokens = useCallback(async () => {
     // Prevent concurrent refresh operations
@@ -365,6 +403,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
           if (hasAdmin !== hadAdmin) {
             if (!hasAdmin && hadAdmin) {
               // Demoted from admin - logout immediately
+              showTokenRevocationNotification('revocation');
               logout();
               return false;
             } else if (hasAdmin && !hadAdmin) {
@@ -414,9 +453,11 @@ export const AuthProvider = ({ children, initialTokens }) => {
         }));
 
         lastRefreshTimeRef.current = Date.now();
+        scheduleRefreshBeforeExpiry();
         return true;
       } catch (error) {
         console.error('❌ Error refreshing tokens:', error);
+        showTokenRevocationNotification('expired');
         logout();
         return false;
       } finally {
@@ -427,7 +468,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     refreshPromiseRef.current = refreshOperation();
     return refreshPromiseRef.current;
-  }, [logout]);
+  }, [logout, scheduleRefreshBeforeExpiry, showTokenRevocationNotification]);
 
   // Centralized token validation function
   const ensureValidTokens = async () => {
@@ -447,13 +488,29 @@ export const AuthProvider = ({ children, initialTokens }) => {
     // Only do this every 30 seconds to avoid excessive API calls
     const now = Date.now();
     const lastValidation = localStorage.getItem('lastTokenValidation');
-    const shouldValidate = !lastValidation || now - parseInt(lastValidation) > 30000;
+    const parsedLastValidation = lastValidation ? parseInt(lastValidation) : null;
+    const shouldValidate = parsedLastValidation ? now - parsedLastValidation > 30000 : false;
+
+    // If we've never validated before, seed the timestamp and skip the initial remote check
+    if (!parsedLastValidation) {
+      localStorage.setItem('lastTokenValidation', now.toString());
+      return true;
+    }
 
     if (shouldValidate && accessToken) {
-      const isValid = await validateTokenWithCognito(accessToken);
-      if (!isValid) {
-        console.error('Token has been revoked, forcing logout');
-        showTokenRevocationNotification();
+      const validation = await validateTokenWithCognito(accessToken);
+
+      if (!validation.valid) {
+        if (validation.reason === 'expired') {
+          const refreshed = await refreshTokens();
+          if (refreshed) {
+            return true;
+          }
+          showTokenRevocationNotification('expired');
+        } else {
+          console.error('Token has been revoked, forcing logout');
+          showTokenRevocationNotification('revocation');
+        }
         logout();
         return false;
       }
@@ -473,11 +530,19 @@ export const AuthProvider = ({ children, initialTokens }) => {
       return false;
     }
 
-    const isValid = await validateTokenWithCognito(accessToken);
+    const validation = await validateTokenWithCognito(accessToken);
 
-    if (!isValid) {
-      console.error('Token has been revoked during forced validation, forcing logout');
-      showTokenRevocationNotification();
+    if (!validation.valid) {
+      if (validation.reason === 'expired') {
+        const refreshed = await refreshTokens();
+        if (refreshed) {
+          return true;
+        }
+        showTokenRevocationNotification('expired');
+      } else {
+        console.error('Token has been revoked during forced validation, forcing logout');
+        showTokenRevocationNotification('revocation');
+      }
       logout();
       return false;
     }
@@ -922,19 +987,40 @@ export const AuthProvider = ({ children, initialTokens }) => {
     try {
       const now = Date.now();
 
-      // Check if tokens are actually expired or will expire soon
       const isAccessTokenExpired = isTokenExpired(decodedTokensRef.current.accessToken);
       const isIdTokenExpired = isTokenExpired(decodedTokensRef.current.idToken);
+
+      // Always refresh first if tokens are expired/near expiry
+      if (isAccessTokenExpired || isIdTokenExpired) {
+        console.debug('🔄 Token refresh: Tokens expired or near expiry');
+        const refreshed = await refreshTokens();
+        if (refreshed) {
+          lastRefreshTimeRef.current = now;
+          return true;
+        }
+        showTokenRevocationNotification('expired');
+        logout();
+        return false;
+      }
 
       // Check token revocation periodically (every 2 minutes during regular checks)
       const lastValidation = localStorage.getItem('lastTokenValidation');
       const shouldValidateRevocation = !lastValidation || now - parseInt(lastValidation) > 120000;
 
       if (shouldValidateRevocation) {
-        const isValid = await validateTokenWithCognito(accessToken);
-        if (!isValid) {
-          console.error('Token has been revoked during periodic check, forcing logout');
-          showTokenRevocationNotification();
+        const validation = await validateTokenWithCognito(accessToken);
+        if (!validation.valid) {
+          if (validation.reason === 'expired') {
+            const refreshed = await refreshTokens();
+            if (refreshed) {
+              lastRefreshTimeRef.current = now;
+              return true;
+            }
+            showTokenRevocationNotification('expired');
+          } else {
+            console.error('Token has been revoked during periodic check, forcing logout');
+            showTokenRevocationNotification('revocation');
+          }
           logout();
           return false;
         }
@@ -945,38 +1031,38 @@ export const AuthProvider = ({ children, initialTokens }) => {
       const lastGroupCheck = localStorage.getItem('lastGroupCheck');
       const shouldCheckGroups = !lastGroupCheck || now - parseInt(lastGroupCheck) > 30000;
 
-      // Refresh if tokens expired OR if it's time to check for group changes
-      const needsRefresh = isAccessTokenExpired || isIdTokenExpired || shouldCheckGroups;
+      if (shouldCheckGroups) {
+        // Skip the first group check to avoid unnecessary refresh when tokens are already valid
+        if (!lastGroupCheck) {
+          localStorage.setItem('lastGroupCheck', now.toString());
+          lastRefreshTimeRef.current = now;
+          return true;
+        }
 
-      if (!needsRefresh) {
-        // Update last check time even when not refreshing (for accurate time tracking)
-        lastRefreshTimeRef.current = now;
-        return true;
-      }
-
-      if (isAccessTokenExpired || isIdTokenExpired) {
-        console.debug('🔄 Token refresh: Tokens expired');
-      } else if (shouldCheckGroups) {
         console.log('🔄 Periodic group check: Refreshing tokens to check for group changes');
         console.log('Current user groups before check:', user?.groups);
         localStorage.setItem('lastGroupCheck', now.toString());
-      }
-
-      const refreshed = await refreshTokens();
-      if (refreshed) {
-        lastRefreshTimeRef.current = now;
-      }
-
-      if (!refreshed) {
+        const refreshed = await refreshTokens();
+        if (refreshed) {
+          lastRefreshTimeRef.current = now;
+          return true;
+        }
         logout();
         return false;
       }
+
+      // Update last check time when nothing else was needed
+      lastRefreshTimeRef.current = now;
       return true;
     } catch (error) {
       console.error('Error decoding token during check:', error);
       return false;
     }
   }, [refreshTokens, showTokenRevocationNotification, logout]);
+
+  useEffect(() => {
+    tokenCheckRef.current = checkAndRefreshTokens;
+  }, [checkAndRefreshTokens]);
 
   useEffect(() => {
     if (!user || initialTokens) return;
@@ -986,6 +1072,25 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     return () => clearInterval(intervalId);
   }, [user, checkAndRefreshTokens]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkAndRefreshTokens();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [checkAndRefreshTokens]);
+
+  useEffect(() => {
+    return () => {
+      clearScheduledRefresh();
+    };
+  }, [clearScheduledRefresh]);
 
   const loadUserFromTokens = async () => {
     const accessToken = localStorage.getItem('accessToken');
@@ -1040,7 +1145,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
           groups,
           features: features || [],
         });
+
+        // Seed validation/group check timestamps so we don't immediately refresh valid tokens
+        const now = Date.now().toString();
+        localStorage.setItem('lastTokenValidation', now);
+        localStorage.setItem('lastGroupCheck', now);
       }
+      scheduleRefreshBeforeExpiry();
     } else {
       console.error('❌ No refresh token found');
       setUser(null);
@@ -1050,8 +1161,11 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   useEffect(() => {
-    loadUserFromTokens();
-  }, []);
+    // Skip loading from localStorage if initialTokens are provided (e.g., in tests)
+    if (!initialTokens) {
+      loadUserFromTokens();
+    }
+  }, [initialTokens]);
 
   const getUserInfo = useCallback(() => {
     if (!user) return null;
@@ -1226,12 +1340,22 @@ export const AuthProvider = ({ children, initialTokens }) => {
       groups,
       features: features || [],
     }));
+
+    // Seed validation/group check timestamps so we don't immediately refresh valid tokens
+    const now = Date.now().toString();
+    localStorage.setItem('lastTokenValidation', now);
+    localStorage.setItem('lastGroupCheck', now);
   };
 
   // Initialize user state from testConfig if available
   useEffect(() => {
     if (initialTokens) {
+      // Update refs to match the provided tokens
+      tokensRef.current = initialTokens.tokens;
+      decodedTokensRef.current = initialTokens.decoded_tokens;
       setUser(initialTokens);
+      setLoading(false);
+      setTokenValidationComplete(true);
     }
   }, [initialTokens]);
 
@@ -1412,12 +1536,18 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const TokenRevocationNotificationComponent = () => {
     if (!tokenRevocationState.show) return null;
 
+    const isRevocation = tokenRevocationState.reason === 'revocation';
+    const title = isRevocation ? 'Session Ended' : 'Session Expired';
+    const message = isRevocation
+      ? 'Your permissions changed or an administrator ended your session. You will be redirected to the login page.'
+      : 'Your session has expired. You will be redirected to the login page.';
+
     return (
       <Notification
         show={tokenRevocationState.show}
         variant="warning"
-        title="Session Expired"
-        message="Your session has been terminated by an administrator. You will be redirected to the login page."
+        title={title}
+        message={message}
         onDismiss={dismissTokenRevocationNotification}
         autoDismiss={true}
         autoDismissDelay={5000}
