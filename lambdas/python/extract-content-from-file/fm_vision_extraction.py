@@ -160,7 +160,35 @@ def extract_content(
 def _process_image(
     file_content: bytes, file_extension: str, model_id: str = VISION_MODEL_ID
 ) -> str:
-    """Process single image with foundation model"""
+    """Process single image with foundation model.
+
+    Automatically resizes and compresses large images to meet Bedrock's limits:
+    - Maximum image size: 3.75 MB (to stay under 5 MB base64 limit)
+    - Maximum dimension: 8000 pixels
+    """
+    # Check if image needs preprocessing (resize/compress)
+    if len(file_content) > MAX_IMAGE_SIZE:
+        logger.info(
+            f"Image size {len(file_content):,} bytes exceeds limit, compressing..."
+        )
+        img: Image.Image = Image.open(io.BytesIO(file_content))
+
+        # Convert to RGB if necessary (handles RGBA, P mode, etc.)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+
+        # Resize if dimensions exceed maximum
+        if max(img.size) > MAX_IMAGE_DIMENSION:
+            img.thumbnail(
+                (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.Resampling.LANCZOS
+            )
+            logger.info(f"Resized image to {img.size}")
+
+        # Compress to JPEG under size limit
+        file_content = _compress_image(img)
+        file_extension = ".jpg"
+        logger.info(f"Compressed image to {len(file_content):,} bytes")
+
     return _process_image_batch(
         [file_content], [file_extension], model_id, start_page=None, end_page=None
     )
