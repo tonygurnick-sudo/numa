@@ -25,7 +25,7 @@ import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { DEFAULT_BRANDING_THEME } from '../../Providers/BrandingContext';
 import type { BrandingTheme, BrandingColors } from '../../Providers/BrandingContext';
 import { useAuth } from '../../Providers/AuthProvider';
-import { getSignedUrlForS3Object, uploadFileToS3 } from '../../utils/s3Utils';
+import { getSignedUrlForS3Object, uploadFileToS3, resolveS3Location, buildS3HttpsUrl } from '../../utils/s3Utils';
 import { useToast } from '../../Providers/ToastContext';
 import { brandingService, BRANDING_PREVIEW_KEY } from '../../Services/BrandingService';
 
@@ -477,33 +477,20 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       }));
     };
 
-  const parseS3Uri = (uri: string) => {
-    if (!uri?.startsWith('s3://')) {
-      return null;
-    }
-
-    const withoutScheme = uri.slice('s3://'.length);
-    const firstSlashIndex = withoutScheme.indexOf('/');
-    if (firstSlashIndex === -1) {
-      return null;
-    }
-
-    const bucket = withoutScheme.slice(0, firstSlashIndex);
-    const key = withoutScheme.slice(firstSlashIndex + 1);
-    return { bucket, key };
-  };
-
-  const toPreviewUrl = (uri: string) => {
-    if (!s3Region) {
+  // Convert S3 URI or HTTPS URL to unsigned HTTPS URL for display
+  // (used for thumbnails where signing isn't critical)
+  const toPreviewUrl = (uri: string): string => {
+    if (!uri) return uri;
+    // If already HTTPS, return as-is (might be presigned)
+    if (uri.startsWith('http://') || uri.startsWith('https://')) {
       return uri;
     }
-
-    const parsed = parseS3Uri(uri);
-    if (!parsed) {
-      return uri;
+    // Try to parse and convert to HTTPS
+    const parsed = resolveS3Location(uri);
+    if (parsed && s3Region) {
+      return buildS3HttpsUrl(parsed.bucket, parsed.key, s3Region) || uri;
     }
-
-    return `https://${parsed.bucket}.s3.${s3Region}.amazonaws.com/${parsed.key}`;
+    return uri;
   };
 
   const openAssetInNewTab = async (uri: string | undefined) => {
@@ -511,9 +498,10 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       return;
     }
 
-    const parsed = parseS3Uri(uri);
+    const parsed = resolveS3Location(uri);
     if (!parsed || !s3Region) {
-      window.open(toPreviewUrl(uri), '_blank');
+      // If we can't parse, just open the URL directly (might be a presigned URL)
+      window.open(uri, '_blank');
       return;
     }
 
@@ -539,9 +527,10 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
             return [type, undefined] as const;
           }
 
-          const parsed = parseS3Uri(uri);
+          const parsed = resolveS3Location(uri);
           if (!parsed || !s3Region) {
-            return [type, toPreviewUrl(uri)] as const;
+            // Can't parse - might already be a presigned URL, use as-is
+            return [type, uri] as const;
           }
 
           try {
@@ -549,7 +538,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
             return [type, signedUrl] as const;
           } catch (error) {
             console.error('Failed to generate preview URL for asset', { type, error });
-            return [type, toPreviewUrl(uri)] as const;
+            return [type, uri] as const;
           }
         }),
       );

@@ -14,10 +14,27 @@ vi.mock('../../Providers/AuthProvider', () => ({
   }),
 }));
 
+// Mock the useBranding hook
+vi.mock('../../Providers/BrandingContext', () => ({
+  useBranding: () => ({
+    branding: {
+      name: 'Test',
+      resolvedAssets: {},
+      assets: {},
+      logo: '/test-logo.svg',
+    },
+  }),
+}));
+
+// Mock the useBrandingAsset hook
+vi.mock('../../hooks/useBrandingAsset', () => ({
+  useBrandingAsset: (rawValue: string, fallback: string) => rawValue || fallback,
+}));
+
 describe('ChatMessages Component - Additional Tests', () => {
   const loadingIndicatorStyle = {};
 
-  const dummyRef = React.createRef();
+  const dummyRef = React.createRef<HTMLDivElement>();
   const noop = () => {};
 
   beforeEach(() => {
@@ -28,7 +45,7 @@ describe('ChatMessages Component - Additional Tests', () => {
   it('renders ephemeral message for "initializing" status', () => {
     const messages = [
       {
-        role: 'assistant',
+        role: 'assistant' as const,
         content: '',
         status: 'initializing',
       },
@@ -39,6 +56,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         messageEndRef={dummyRef}
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
+        isConversationLoading={false}
       />,
     );
     expect(screen.getByText('Initializing chat...')).toBeInTheDocument();
@@ -47,7 +65,7 @@ describe('ChatMessages Component - Additional Tests', () => {
   it('renders ephemeral message for "processingFile" status', () => {
     const messages = [
       {
-        role: 'assistant',
+        role: 'assistant' as const,
         content: '',
         status: 'processingFile',
       },
@@ -58,6 +76,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         messageEndRef={dummyRef}
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
+        isConversationLoading={false}
       />,
     );
     expect(screen.getByText('Processing Upload...')).toBeInTheDocument();
@@ -66,7 +85,7 @@ describe('ChatMessages Component - Additional Tests', () => {
   it('renders ephemeral message for "thinking" status', () => {
     const messages = [
       {
-        role: 'assistant',
+        role: 'assistant' as const,
         content: '',
         status: 'thinking',
       },
@@ -77,6 +96,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         messageEndRef={dummyRef}
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
+        isConversationLoading={false}
       />,
     );
     expect(screen.getByText('Thinking...')).toBeInTheDocument();
@@ -85,7 +105,7 @@ describe('ChatMessages Component - Additional Tests', () => {
   it('renders a normal user message correctly', () => {
     const messages = [
       {
-        role: 'user',
+        role: 'user' as const,
         content: 'Hello, this is a user message.',
       },
     ];
@@ -95,6 +115,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         messageEndRef={dummyRef}
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
+        isConversationLoading={false}
       />,
     );
     expect(screen.getByText('You:')).toBeInTheDocument();
@@ -104,7 +125,7 @@ describe('ChatMessages Component - Additional Tests', () => {
   it('renders ChatReferencesDropdown when references are provided', () => {
     const messages = [
       {
-        role: 'assistant',
+        role: 'assistant' as const,
         content: 'Message with references',
         references: ['s3://bucket/file.txt'],
       },
@@ -115,6 +136,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         messageEndRef={dummyRef}
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
+        isConversationLoading={false}
       />,
     );
     // Assuming that the ChatReferencesDropdown renders a button with text "Show References"
@@ -124,7 +146,7 @@ describe('ChatMessages Component - Additional Tests', () => {
   it('adds message-with-doc class when docTitle and docContent are provided', () => {
     const messages = [
       {
-        role: 'assistant',
+        role: 'assistant' as const,
         content: 'Message with a document bubble',
         docTitle: 'My Doc',
         docContent: 'Document content here',
@@ -136,6 +158,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         messageEndRef={dummyRef}
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
+        isConversationLoading={false}
       />,
     );
     // The container should have a message with class "message-with-doc"
@@ -146,7 +169,7 @@ describe('ChatMessages Component - Additional Tests', () => {
   it("doesn't render legacy 'querying' status (agent mode only)", () => {
     const messages = [
       {
-        role: 'assistant',
+        role: 'assistant' as const,
         content: '',
         status: 'querying',
       },
@@ -157,6 +180,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         messageEndRef={dummyRef}
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
+        isConversationLoading={false}
       />,
     );
     expect(screen.queryByText('Querying data sources...')).not.toBeInTheDocument();
@@ -165,9 +189,9 @@ describe('ChatMessages Component - Additional Tests', () => {
   it('renders segment-based content in agent mode', () => {
     const messages = [
       {
-        role: 'assistant',
+        role: 'assistant' as const,
         content: 'Fallback content',
-        segments: [{ kind: 'text', text: 'This is segment text' }],
+        segments: [{ kind: 'text' as const, text: 'This is segment text' }],
       },
     ];
     render(
@@ -176,6 +200,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         messageEndRef={dummyRef}
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
+        isConversationLoading={false}
       />,
     );
     expect(screen.getByText('This is segment text')).toBeInTheDocument();

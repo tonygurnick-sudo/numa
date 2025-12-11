@@ -7,9 +7,26 @@ import React from 'react';
 import '@testing-library/jest-dom';
 import { NewChat } from '../../Components/Chat/NewChat';
 
-// ✅ Minimal mock so ConversationAvatar’s hook doesn’t require a provider
+// ✅ Minimal mock so ConversationAvatar's hook doesn't require a provider
 vi.mock('../../hooks/useAgentById', () => ({
   useAgentById: (_agentId?: string) => ({ agent: null }),
+}));
+
+// Mock useBranding hook
+vi.mock('../../Providers/BrandingContext', () => ({
+  useBranding: () => ({
+    branding: {
+      name: 'Test',
+      resolvedAssets: {},
+      assets: {},
+      logo: '/test-logo.svg',
+    },
+  }),
+}));
+
+// Mock useBrandingAsset hook
+vi.mock('../../hooks/useBrandingAsset', () => ({
+  useBrandingAsset: (rawValue: string, fallback: string) => rawValue || fallback,
 }));
 
 // ✅ Keep ChatInput lightweight and controllable

@@ -373,6 +373,7 @@ export class NumaClientStack extends TerraformStack {
       key: 'manifest.json',
       content: JSON.stringify({ apps: apps.map((app) => app.manifest) }),
       contentType: 'application/json',
+      cacheControl: 'no-cache, no-store, must-revalidate',
     });
 
     // When building in a container, we don't have access to the git repo, so need to pass through the values as environment variables.
