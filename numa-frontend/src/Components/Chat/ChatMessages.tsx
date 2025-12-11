@@ -148,8 +148,9 @@ const ChatMessages = ({
                         src={branding.resolvedAssets.logoNav}
                         alt={`${branding.name ?? 'Assistant'} logo`}
                         style={{
-                          width: '20px',
-                          height: '20px',
+                          maxHeight: '20px',
+                          maxWidth: '60px',
+                          objectFit: 'contain',
                           marginRight: '7px',
                           marginBottom: '2px',
                           verticalAlign: 'middle',
@@ -190,8 +191,9 @@ const ChatMessages = ({
                         src={branding.resolvedAssets.logoNav}
                         alt={`${branding.name ?? 'Assistant'} logo`}
                         style={{
-                          width: '20px',
-                          height: '20px',
+                          maxHeight: '20px',
+                          maxWidth: '60px',
+                          objectFit: 'contain',
                           marginRight: '7px',
                           marginBottom: '2px',
                           verticalAlign: 'middle',

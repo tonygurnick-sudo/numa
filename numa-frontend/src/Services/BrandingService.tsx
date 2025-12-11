@@ -17,6 +17,9 @@ const BRANDING_CACHE_KEY = 'BRANDING_CONFIG_CACHE';
 const BRANDING_CACHE_TS_KEY = 'BRANDING_CONFIG_CACHE_TS';
 const BRANDING_CACHE_TTL_MS = 60 * 15 * 1000; // 15 minute
 
+// Key for preview mode - stores temporary branding data for preview in new tab
+export const BRANDING_PREVIEW_KEY = 'BRANDING_PREVIEW_DATA';
+
 type BrandingAssets = NonNullable<BrandingTheme['assets']>;
 
 type BrandingApiTheme = BrandingTheme & {
@@ -431,6 +434,49 @@ class BrandingService {
   }
 
   /**
+   * Check for and apply preview branding data from sessionStorage.
+   * Used when opening a new tab to preview a specific version's branding.
+   * Returns true if preview data was found and applied.
+   */
+  private _checkForPreview(): boolean {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    try {
+      const previewData = window.sessionStorage.getItem(BRANDING_PREVIEW_KEY);
+      if (!previewData) {
+        return false;
+      }
+
+      // Clear preview data immediately to prevent re-applying on refresh
+      window.sessionStorage.removeItem(BRANDING_PREVIEW_KEY);
+
+      const parsed = JSON.parse(previewData) as { branding?: BrandingTheme };
+      if (!parsed?.branding) {
+        return false;
+      }
+
+      console.debug('Branding: Applying preview mode branding');
+
+      // Apply preview branding without persisting to cache
+      this._applyConfig(
+        {
+          branding: this._mergeBranding(parsed.branding),
+          features: {},
+          tenantEnabled: true,
+        },
+        { persist: false, notify: true, tenantEnabled: true },
+      );
+
+      return true;
+    } catch (error) {
+      console.warn('Branding: Failed to apply preview data', error);
+      return false;
+    }
+  }
+
+  /**
    * Initialize the branding service
    */
   async initialize(options: { forceRemote?: boolean } = {}): Promise<void> {
@@ -450,6 +496,12 @@ class BrandingService {
 
     const run = async () => {
       try {
+        // Check for preview mode first - if found, apply preview branding and return early
+        if (!forceRemote && this._checkForPreview()) {
+          this.initialized = true;
+          return;
+        }
+
         const brandingEnabled = this._isBrandingEnabled();
         this.clientName = this._detectClientName();
 
@@ -619,7 +671,7 @@ class BrandingService {
    */
   _applyBrandingTokens(): void {
     const clientSlug = this.getClientName();
-    const clientDisplayName = this.config?.branding?.name ?? clientSlug;
+
     const replaceClientSlug = (value?: string | null): string | undefined => {
       if (typeof value !== 'string') {
         return value ?? undefined;
@@ -627,38 +679,23 @@ class BrandingService {
       return value.replace(/\{clientName\}/g, clientSlug);
     };
 
-    const replaceClientDisplayName = (value?: string | null): string | undefined => {
-      if (typeof value !== 'string') {
-        return value ?? undefined;
-      }
-      // Only replace "Numa" if we have a non-empty brand name to replace it with
-      if (!clientDisplayName) {
-        return value;
-      }
-      return value.replace(/Numa/g, clientDisplayName);
-    };
-
     const login = this.config?.branding?.loginPage;
     if (login) {
       if (typeof login.title === 'string') {
-        const withSlug = replaceClientSlug(login.title) ?? login.title;
-        login.title = replaceClientDisplayName(withSlug) ?? withSlug;
+        login.title = replaceClientSlug(login.title) ?? login.title;
       }
       if (typeof login.welcomeMessage === 'string') {
-        const withSlug = replaceClientSlug(login.welcomeMessage) ?? login.welcomeMessage;
-        login.welcomeMessage = replaceClientDisplayName(withSlug) ?? withSlug;
+        login.welcomeMessage = replaceClientSlug(login.welcomeMessage) ?? login.welcomeMessage;
       }
     }
 
     const splash = this.config?.branding?.splashScreen;
     if (splash) {
       if (typeof splash.title === 'string') {
-        const withSlug = replaceClientSlug(splash.title) ?? splash.title;
-        splash.title = replaceClientDisplayName(withSlug) ?? withSlug;
+        splash.title = replaceClientSlug(splash.title) ?? splash.title;
       }
       if (typeof splash.description === 'string') {
-        const withSlug = replaceClientSlug(splash.description) ?? splash.description;
-        splash.description = replaceClientDisplayName(withSlug) ?? withSlug;
+        splash.description = replaceClientSlug(splash.description) ?? splash.description;
       }
     }
   }
@@ -711,15 +748,14 @@ class BrandingService {
   }
 
   /**
-   * Replace client name in text
+   * Replace client name placeholder in text
    * @param {string} text
    * @returns {string}
    */
   replaceClientName(text: string): string {
     if (!text) return text;
-
-    const branding = this.getBranding();
-    return text.replace(/Numa/g, branding.name);
+    const clientSlug = this.getClientName();
+    return text.replace(/\{clientName\}/g, clientSlug);
   }
 }
 

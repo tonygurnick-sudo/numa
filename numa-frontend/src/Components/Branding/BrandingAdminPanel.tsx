@@ -2,12 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react';
 import {
   Accordion,
+  Alert,
   Badge,
   Button,
   Card,
   Col,
   Form,
   ListGroup,
+  Modal,
   OverlayTrigger,
   Row,
   Spinner,
@@ -25,7 +27,7 @@ import type { BrandingTheme, BrandingColors } from '../../Providers/BrandingCont
 import { useAuth } from '../../Providers/AuthProvider';
 import { getSignedUrlForS3Object, uploadFileToS3 } from '../../utils/s3Utils';
 import { useToast } from '../../Providers/ToastContext';
-import { brandingService } from '../../Services/BrandingService';
+import { brandingService, BRANDING_PREVIEW_KEY } from '../../Services/BrandingService';
 
 type AssetType = 'logoNav' | 'logoLoginRight' | 'favicon';
 
@@ -217,6 +219,11 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
   const [previewPrimaryHovered, setPreviewPrimaryHovered] = useState(false);
   const [previewSecondaryHovered, setPreviewSecondaryHovered] = useState(false);
   const [paletteSecondaryHovered, setPaletteSecondaryHovered] = useState(false);
+  const [showVersionModal, setShowVersionModal] = useState(false);
+  const [versionLabel, setVersionLabel] = useState('');
+  const [previewingVersionId, setPreviewingVersionId] = useState<string | null>(null);
+  const [showRevertModal, setShowRevertModal] = useState(false);
+  const [revertTargetVersion, setRevertTargetVersion] = useState<BrandingVersionSummary | null>(null);
   const { showToast } = useToast();
   // Mark the form as dirty
   const markDirty = useCallback(() => {
@@ -407,7 +414,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                 color: paletteSecondaryHovered
                   ? previewColors.buttonSecondaryHoverText
                   : previewColors.buttonSecondaryText,
-                borderColor: previewColors.buttonSecondaryBorder,
+                border: `1px solid ${previewColors.buttonSecondaryBorder}`,
               }}
             >
               Secondary Action
@@ -673,7 +680,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
     }
   };
 
-  const saveChanges = async (options?: { createVersion?: boolean }) => {
+  const saveChanges = async (options?: { createVersion?: boolean; label?: string }) => {
     try {
       setSaving(true);
       showToast({ variant: 'info', message: 'Saving branding changes…' });
@@ -689,6 +696,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
           colors: trimmedColors,
         },
         createVersion: options?.createVersion,
+        label: options?.label,
       };
 
       await BrandingAdminService.saveConfig(numaPut, payload);
@@ -704,6 +712,55 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveVersion = async () => {
+    setShowVersionModal(false);
+    await saveChanges({ createVersion: true, label: versionLabel.trim() || undefined });
+    setVersionLabel('');
+  };
+
+  const openVersionModal = () => {
+    setVersionLabel(new Date().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }));
+    setShowVersionModal(true);
+  };
+
+  const previewVersion = async (versionId: string) => {
+    try {
+      setPreviewingVersionId(versionId);
+      showToast({ variant: 'info', message: 'Loading preview...' });
+
+      // Fetch the full version config from backend
+      const versionConfig = await BrandingAdminService.fetchVersion(numaGet, versionId);
+
+      if (!versionConfig.branding) {
+        throw new Error('Version config not found');
+      }
+
+      // Store preview branding data in sessionStorage for the new tab
+      const previewData = {
+        branding: mergeBranding(versionConfig.branding),
+      };
+      sessionStorage.setItem(BRANDING_PREVIEW_KEY, JSON.stringify(previewData));
+
+      // Open new tab to the home page - it will pick up the preview branding
+      window.open('/', '_blank');
+
+      showToast({
+        variant: 'info',
+        title: 'Preview opened',
+        message: 'A new tab has opened with a preview of this branding version. Close the tab when done.',
+        autoHideDurationMs: 6000,
+      });
+    } catch (error) {
+      showToast({
+        variant: 'error',
+        title: 'Preview failed',
+        message: (error as Error).message || 'Failed to load version for preview',
+      });
+    } finally {
+      setPreviewingVersionId(null);
     }
   };
 
@@ -767,38 +824,215 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
 
   return (
     <div className="d-flex flex-column gap-3">
-      <Card className="border-0 shadow-sm">
-        <Card.Body>
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <div>
-              <Card.Title className="mb-1">Branding Controls</Card.Title>
-              <Card.Subtitle className="text-muted">
-                Manage tenant branding, colors, and assets. Changes publish immediately after saving.
-              </Card.Subtitle>
-            </div>
-            <Form.Check
-              type="switch"
-              id="branding-enabled-toggle"
-              label={enabled ? 'Branding enabled' : 'Branding disabled'}
-              checked={enabled}
-              onChange={(event) => {
-                markDirty();
-                setEnabled(event.target.checked);
-              }}
-            />
+      {isDirty && (
+        <Alert
+          variant="warning"
+          className="position-sticky mb-0 d-flex justify-content-between align-items-center shadow-sm"
+          style={{
+            top: '1rem',
+            zIndex: 1020,
+            backgroundColor: '#fff4e5',
+            borderColor: '#ffc107',
+          }}
+        >
+          <div className="d-flex align-items-center">
+            <i className="bi bi-exclamation-circle me-2" />
+            <span>
+              <strong>Unsaved changes.</strong> Your modifications have not been saved yet.
+            </span>
           </div>
-
-          <div className="d-flex flex-wrap gap-2 justify-content-end mb-3">
-            <Button variant="secondary" size="sm" onClick={resetToDefault} disabled={saving}>
-              Reset to Default
+          <div className="d-flex gap-2">
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => void loadConfig({ force: true })}
+              disabled={saving}
+            >
+              Discard
+            </Button>
+            <Button variant="warning" size="sm" onClick={() => void saveChanges()} disabled={saving}>
+              {saving ? <Spinner animation="border" size="sm" /> : 'Save Now'}
             </Button>
           </div>
+        </Alert>
+      )}
+      <div>
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <h5 className="mb-1 fw-semibold">Branding Controls</h5>
+            <p className="text-muted mb-0 small">
+              Manage tenant branding, colors, and assets. Changes publish immediately after saving.
+            </p>
+          </div>
+          <Form.Check
+            type="switch"
+            id="branding-enabled-toggle"
+            label={<span className="ms-2">{enabled ? 'Branding enabled' : 'Branding disabled'}</span>}
+            checked={enabled}
+            onChange={(event) => {
+              markDirty();
+              setEnabled(event.target.checked);
+            }}
+          />
+        </div>
 
-          <Row className="gy-4 align-items-start">
-            <Col xs={12} xl={7}>
-              <Card className="h-100">
-                <Card.Body>
-                  <Card.Title className="fs-6">Color Palette</Card.Title>
+        <Accordion alwaysOpen={false} className="mb-3">
+          <Accordion.Item eventKey="history">
+            <Accordion.Header
+              onClick={() => {
+                void fetchHistoryIfNeeded();
+              }}
+            >
+              <i className="bi bi-clock-history me-2" />
+              Version History
+            </Accordion.Header>
+            <Accordion.Body>
+              {historyLoading ? (
+                <div className="d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" />
+                  <span>Loading versions…</span>
+                </div>
+              ) : history.length === 0 ? (
+                <div className="text-muted">
+                  No published versions yet. Save a new version to create a restore point.
+                </div>
+              ) : (
+                <ListGroup variant="flush">
+                  {history.map((item) => {
+                    console.log('Version history item:', item);
+                    const formattedTimestamp = item.updatedAt
+                      ? new Date(item.updatedAt).toLocaleString(undefined, {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })
+                      : undefined;
+                    const displayLabel = item.label || formattedTimestamp || item.versionId;
+                    const metaParts: string[] = [];
+                    if (formattedTimestamp && formattedTimestamp !== displayLabel) {
+                      metaParts.push(formattedTimestamp);
+                    }
+                    metaParts.push(item.updatedBy || 'system');
+
+                    return (
+                      <ListGroup.Item
+                        key={item.versionId}
+                        className="d-flex justify-content-between align-items-center"
+                      >
+                        <div className="d-flex align-items-center gap-3">
+                          {item.primaryColor && (
+                            <div
+                              className="rounded-2 flex-shrink-0"
+                              style={{
+                                width: 24,
+                                height: 24,
+                                backgroundColor: item.primaryColor,
+                                border: '1px solid rgba(0,0,0,0.1)',
+                              }}
+                              title={`Primary color: ${item.primaryColor}`}
+                            />
+                          )}
+                          <div
+                            className="rounded-2 flex-shrink-0 d-flex align-items-center justify-content-center"
+                            style={{
+                              width: 24,
+                              height: 24,
+                              border: '1px solid rgba(0,0,0,0.1)',
+                              backgroundColor: '#f8f9fa',
+                              overflow: 'hidden',
+                            }}
+                            title="Navigation logo"
+                          >
+                            <img
+                              src={item.logoNav ? toPreviewUrl(item.logoNav) : '/numa-logo.svg'}
+                              alt={item.logoNav ? 'Logo' : 'Default logo'}
+                              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                            />
+                          </div>
+                          <div>
+                            <div className="fw-semibold">{displayLabel}</div>
+                            <div className="small text-muted">{metaParts.join(' · ')}</div>
+                          </div>
+                        </div>
+                        <div className="d-flex gap-2">
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => void previewVersion(item.versionId)}
+                            disabled={saving || previewingVersionId === item.versionId}
+                          >
+                            {previewingVersionId === item.versionId ? (
+                              <Spinner animation="border" size="sm" />
+                            ) : (
+                              <>
+                                <i className="bi bi-eye me-1" />
+                                Preview
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={() => {
+                              setRevertTargetVersion(item);
+                              setShowRevertModal(true);
+                            }}
+                            disabled={saving}
+                          >
+                            Revert
+                          </Button>
+                        </div>
+                      </ListGroup.Item>
+                    );
+                  })}
+                </ListGroup>
+              )}
+            </Accordion.Body>
+          </Accordion.Item>
+        </Accordion>
+
+        {!enabled ? (
+          <Alert variant="info" className="mb-0 d-flex align-items-center">
+            <i className="bi bi-info-circle-fill me-2 fs-5" />
+            <div>
+              <strong>Branding is currently disabled.</strong> Please enable branding above to modify the Numa component
+              colour scheme and login panels.
+            </div>
+          </Alert>
+        ) : (
+          <div>
+            <div className="d-flex flex-wrap gap-2 justify-content-between mb-3">
+              <Button variant="secondary" size="sm" onClick={resetToDefault} disabled={saving}>
+                Reset to Default
+              </Button>
+              <div className="d-flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void loadConfig({ force: true })}
+                  disabled={saving || !isDirty}
+                >
+                  Discard Changes
+                </Button>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={() => void saveChanges()}
+                  disabled={saving || !isDirty}
+                >
+                  {saving ? <Spinner animation="border" size="sm" /> : <i className="bi bi-check-lg me-2" />}
+                  Save Changes
+                </Button>
+                <Button variant="primary" size="sm" onClick={openVersionModal} disabled={saving || !isDirty}>
+                  {saving ? <Spinner animation="border" size="sm" /> : <i className="bi bi-layers me-2" />}
+                  Save as New Version
+                </Button>
+              </div>
+            </div>
+
+            <h6 className="fw-semibold text-uppercase text-muted small mb-3">Color Palette</h6>
+            <Row className="gy-4 align-items-start">
+              <Col xs={12} xl={7}>
+                <div>
                   <div className="d-flex flex-column gap-4">
                     {COLOR_GROUPS.map(({ title, fields }) => (
                       <div key={title} className="border rounded-3 p-3">
@@ -836,7 +1070,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                   </div>
 
                   <div className="mt-4 border-top pt-3">
-                    <Card.Title className="fs-6 mb-3">Branding Details</Card.Title>
+                    <h6 className="fw-semibold text-uppercase text-muted small mb-3">Branding Details</h6>
                     <div className="d-flex flex-column gap-3">
                       <Form.Group controlId="branding-name">
                         <Form.Label>Brand Name</Form.Label>
@@ -867,7 +1101,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                     </div>
                   </div>
                   <div className="mt-4 border-top pt-3">
-                    <Card.Title className="fs-6 mb-3">Splash Screen</Card.Title>
+                    <h6 className="fw-semibold text-uppercase text-muted small mb-3">Splash Screen</h6>
                     <div className="d-flex flex-column gap-3">
                       <Form.Group controlId="branding-splash-title">
                         <Form.Label>Splash Title</Form.Label>
@@ -910,331 +1144,338 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                       </Form.Group>
                     </div>
                   </div>
-                </Card.Body>
-              </Card>
-            </Col>
-            <Col xs={12} xl={5}>
-              <div className="position-sticky" style={{ top: '1rem' }}>
-                <Card className="h-100" style={{ background: previewColors.background }}>
-                  <Card.Body className="d-flex flex-column gap-3">
-                    <Card.Title className="fs-6 mb-0">Preview</Card.Title>
-                    <div
-                      className="rounded-3 p-3"
-                      style={{ background: previewColors.surface, border: `1px solid ${previewColors.border}` }}
-                    >
-                      <div className="d-flex justify-content-between align-items-center">
+                </div>
+              </Col>
+              <Col xs={12} xl={5}>
+                <div className="position-sticky" style={{ top: '1rem' }}>
+                  <Card className="h-100" style={{ background: previewColors.background }}>
+                    <Card.Body className="d-flex flex-column gap-3">
+                      <Card.Title className="fs-6 mb-0">Preview</Card.Title>
+                      <div
+                        className="rounded-3 p-3"
+                        style={{ background: previewColors.surface, border: `1px solid ${previewColors.border}` }}
+                      >
+                        <div className="d-flex justify-content-between align-items-center">
+                          <div className="d-flex align-items-center gap-2">
+                            <span
+                              className="rounded-circle d-inline-flex align-items-center justify-content-center"
+                              style={{
+                                width: '40px',
+                                height: '40px',
+                                background: previewColors.primary,
+                                color: previewColors.primaryContrast,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {branding.name?.substring(0, 2).toUpperCase() || 'BR'}
+                            </span>
+                            <span style={{ color: previewColors.surfaceContrast, fontWeight: 600 }}>
+                              {branding.name || 'Brand'}
+                            </span>
+                          </div>
+                          <Badge
+                            bg="light"
+                            text="dark"
+                            style={{ border: `1px solid ${previewColors.border}`, color: previewColors.text }}
+                          >
+                            Active
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="d-flex gap-2">
+                        <Button
+                          onMouseEnter={() => setPreviewPrimaryHovered(true)}
+                          onMouseLeave={() => setPreviewPrimaryHovered(false)}
+                          onFocus={() => setPreviewPrimaryHovered(true)}
+                          onBlur={() => setPreviewPrimaryHovered(false)}
+                          style={{
+                            background: previewPrimaryHovered
+                              ? previewColors.buttonPrimaryHover
+                              : previewColors.buttonPrimary,
+                            border: `1px solid ${previewColors.buttonPrimaryBorder}`,
+                            color: previewColors.buttonPrimaryText,
+                          }}
+                        >
+                          Primary Action
+                        </Button>
+                        <Button
+                          variant="outline-primary"
+                          onMouseEnter={() => setPreviewSecondaryHovered(true)}
+                          onMouseLeave={() => setPreviewSecondaryHovered(false)}
+                          onFocus={() => setPreviewSecondaryHovered(true)}
+                          onBlur={() => setPreviewSecondaryHovered(false)}
+                          style={{
+                            background: previewSecondaryHovered
+                              ? previewColors.buttonSecondaryHover
+                              : previewColors.buttonSecondary,
+                            color: previewSecondaryHovered
+                              ? previewColors.buttonSecondaryHoverText
+                              : previewColors.buttonSecondaryText,
+                            border: `1px solid ${previewColors.buttonSecondaryBorder}`,
+                          }}
+                        >
+                          Secondary Action
+                        </Button>
+                      </div>
+
+                      <div>
+                        <h5 style={{ color: previewColors.text }}>Section Header</h5>
+                        <p style={{ color: previewColors.textMuted }}>
+                          Supporting copy uses muted text color for hierarchy and readability.
+                        </p>
+                      </div>
+
+                      <div
+                        className="rounded-4 p-3 d-flex flex-column gap-3"
+                        style={{
+                          border: `1px solid ${previewColors.border}`,
+                          background: previewColors.background,
+                        }}
+                      >
                         <div className="d-flex align-items-center gap-2">
                           <span
                             className="rounded-circle d-inline-flex align-items-center justify-content-center"
                             style={{
-                              width: '40px',
-                              height: '40px',
+                              width: '36px',
+                              height: '36px',
                               background: previewColors.primary,
                               color: previewColors.primaryContrast,
                               fontWeight: 600,
                             }}
                           >
-                            {branding.name?.substring(0, 2).toUpperCase() || 'BR'}
+                            N
                           </span>
-                          <span style={{ color: previewColors.surfaceContrast, fontWeight: 600 }}>
-                            {branding.name || 'Brand'}
-                          </span>
-                        </div>
-                        <Badge
-                          bg="light"
-                          text="dark"
-                          style={{ border: `1px solid ${previewColors.border}`, color: previewColors.text }}
-                        >
-                          Active
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div className="d-flex gap-2">
-                      <Button
-                        onMouseEnter={() => setPreviewPrimaryHovered(true)}
-                        onMouseLeave={() => setPreviewPrimaryHovered(false)}
-                        onFocus={() => setPreviewPrimaryHovered(true)}
-                        onBlur={() => setPreviewPrimaryHovered(false)}
-                        style={{
-                          background: previewPrimaryHovered
-                            ? previewColors.buttonPrimaryHover
-                            : previewColors.buttonPrimary,
-                          border: `1px solid ${previewColors.buttonPrimaryBorder}`,
-                          color: previewColors.buttonPrimaryText,
-                        }}
-                      >
-                        Primary Action
-                      </Button>
-                      <Button
-                        variant="outline-primary"
-                        onMouseEnter={() => setPreviewSecondaryHovered(true)}
-                        onMouseLeave={() => setPreviewSecondaryHovered(false)}
-                        onFocus={() => setPreviewSecondaryHovered(true)}
-                        onBlur={() => setPreviewSecondaryHovered(false)}
-                        style={{
-                          background: previewSecondaryHovered
-                            ? previewColors.buttonSecondaryHover
-                            : previewColors.buttonSecondary,
-                          color: previewColors.buttonSecondaryText,
-                          borderColor: previewColors.buttonSecondaryBorder,
-                        }}
-                      >
-                        Secondary Action
-                      </Button>
-                    </div>
-
-                    <div>
-                      <h5 style={{ color: previewColors.text }}>Section Header</h5>
-                      <p style={{ color: previewColors.textMuted }}>
-                        Supporting copy uses muted text color for hierarchy and readability.
-                      </p>
-                    </div>
-
-                    <div
-                      className="rounded-4 p-3 d-flex flex-column gap-3"
-                      style={{
-                        border: `1px solid ${previewColors.border}`,
-                        background: previewColors.background,
-                      }}
-                    >
-                      <div className="d-flex align-items-center gap-2">
-                        <span
-                          className="rounded-circle d-inline-flex align-items-center justify-content-center"
-                          style={{
-                            width: '36px',
-                            height: '36px',
-                            background: previewColors.primary,
-                            color: previewColors.primaryContrast,
-                            fontWeight: 600,
-                          }}
-                        >
-                          N
-                        </span>
-                        <div className="d-flex flex-column">
-                          <span className="fw-semibold" style={{ color: previewColors.text }}>
-                            Numa Assistant
-                          </span>
-                          <small className="text-muted">Online</small>
-                        </div>
-                      </div>
-
-                      <div className="d-flex flex-column gap-3">
-                        <div
-                          className="rounded-4 p-3 align-self-start"
-                          style={{
-                            background: previewColors.surface,
-                            color: previewColors.surfaceContrast,
-                            maxWidth: '85%',
-                          }}
-                        >
-                          <p className="mb-1 fw-semibold">Numa Assistant</p>
-                          <p className="mb-0" style={{ color: previewColors.textMuted }}>
-                            Hi! I can help you with onboarding, training resources, or account updates. What would you
-                            like to do today?
-                          </p>
+                          <div className="d-flex flex-column">
+                            <span className="fw-semibold" style={{ color: previewColors.text }}>
+                              Numa Assistant
+                            </span>
+                            <small className="text-muted">Online</small>
+                          </div>
                         </div>
 
-                        <div className="d-flex justify-content-end">
+                        <div className="d-flex flex-column gap-3">
                           <div
-                            className="rounded-4 p-3"
+                            className="rounded-4 p-3 align-self-start"
                             style={{
-                              background: previewColors.messageUser,
-                              color: previewColors.buttonPrimaryText,
-                              maxWidth: '75%',
-                              boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                              background: previewColors.surface,
+                              color: previewColors.surfaceContrast,
+                              maxWidth: '85%',
                             }}
                           >
-                            I&apos;d like the onboarding checklist and the latest adoption metrics.
+                            <p className="mb-1 fw-semibold">Numa Assistant</p>
+                            <p className="mb-0" style={{ color: previewColors.textMuted }}>
+                              Hi! I can help you with onboarding, training resources, or account updates. What would you
+                              like to do today?
+                            </p>
                           </div>
+
+                          <div className="d-flex justify-content-end">
+                            <div
+                              className="rounded-4 p-3"
+                              style={{
+                                background: previewColors.messageUser,
+                                color: previewColors.buttonPrimaryText,
+                                maxWidth: '75%',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                              }}
+                            >
+                              I&apos;d like the onboarding checklist and the latest adoption metrics.
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          className="d-flex gap-2 align-items-center pt-2 border-top"
+                          style={{ borderColor: previewColors.border }}
+                        >
+                          <div
+                            className="flex-grow-1 rounded-pill px-3 py-2 d-flex align-items-center gap-2"
+                            style={{
+                              background: previewColors.surface,
+                              border: `1px solid ${previewColors.border}`,
+                              color: previewColors.textMuted,
+                            }}
+                          >
+                            <i className="bi bi-send" style={{ color: previewColors.textMuted }}></i>
+                            <span>Type a message…</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            style={{
+                              background: previewColors.buttonPrimary,
+                              border: `1px solid ${previewColors.buttonPrimaryBorder}`,
+                              color: previewColors.buttonPrimaryText,
+                            }}
+                          >
+                            Send
+                          </Button>
                         </div>
                       </div>
 
                       <div
-                        className="d-flex gap-2 align-items-center pt-2 border-top"
-                        style={{ borderColor: previewColors.border }}
+                        className="rounded-3 p-4"
+                        style={{
+                          border: `1px dashed ${previewColors.border}`,
+                          background: previewColors.background,
+                        }}
                       >
-                        <div
-                          className="flex-grow-1 rounded-pill px-3 py-2 d-flex align-items-center gap-2"
-                          style={{
-                            background: previewColors.surface,
-                            border: `1px solid ${previewColors.border}`,
-                            color: previewColors.textMuted,
-                          }}
-                        >
-                          <i className="bi bi-send" style={{ color: previewColors.textMuted }}></i>
-                          <span>Type a message…</span>
+                        <div className="d-flex flex-column gap-2 text-center">
+                          <span className="fw-semibold" style={{ color: previewColors.text }}>
+                            Login Preview
+                          </span>
+                          <Button
+                            size="sm"
+                            style={{
+                              background: previewColors.buttonPrimary,
+                              border: `1px solid ${previewColors.buttonPrimaryBorder}`,
+                              color: previewColors.buttonPrimaryText,
+                            }}
+                          >
+                            Sign in
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          style={{
-                            background: previewColors.buttonPrimary,
-                            border: `1px solid ${previewColors.buttonPrimaryBorder}`,
-                            color: previewColors.buttonPrimaryText,
-                          }}
-                        >
-                          Send
-                        </Button>
                       </div>
-                    </div>
-
-                    <div
-                      className="rounded-3 p-4"
-                      style={{
-                        border: `1px dashed ${previewColors.border}`,
-                        background: previewColors.background,
-                      }}
-                    >
-                      <div className="d-flex flex-column gap-2 text-center">
-                        <span className="fw-semibold" style={{ color: previewColors.text }}>
-                          Login Preview
-                        </span>
-                        <Button
-                          size="sm"
-                          style={{
-                            background: previewColors.buttonPrimary,
-                            border: `1px solid ${previewColors.buttonPrimaryBorder}`,
-                            color: previewColors.buttonPrimaryText,
-                          }}
-                        >
-                          Sign in
-                        </Button>
-                      </div>
-                    </div>
-                  </Card.Body>
-                </Card>
-              </div>
-            </Col>
-          </Row>
-
-          <Row className="mt-4 gy-4">
-            {(Object.keys(ASSET_CONSTRAINTS) as AssetType[]).map((type) => {
-              const constraint = ASSET_CONSTRAINTS[type];
-              const currentUrl = branding.assets?.[type];
-              const previewUrl = previewUrls[type] || (currentUrl ? toPreviewUrl(currentUrl) : undefined);
-              return (
-                <Col key={type} md={4}>
-                  <Card className="h-100">
-                    <Card.Body className="d-flex flex-column">
-                      <div className="d-flex justify-content-between align-items-center mb-2">
-                        <Card.Title className="fs-6 mb-0">{constraint.label}</Card.Title>
-                        {uploading[type] && <Spinner animation="border" size="sm" />}
-                      </div>
-                      <OverlayTrigger placement="top" overlay={<Tooltip>{constraint.description}</Tooltip>}>
-                        <Form.Text muted>{constraint.description}</Form.Text>
-                      </OverlayTrigger>
-                      <div className="mt-3">
-                        <Form.Control type="file" accept={constraint.accept} onChange={onFileChange(type)} />
-                      </div>
-                      {previewUrl && (
-                        <div className="mt-3 text-center">
-                          {type === 'favicon' ? (
-                            <img src={previewUrl} alt={`${constraint.label} preview`} width={32} height={32} />
-                          ) : (
-                            <img
-                              src={previewUrl}
-                              alt={`${constraint.label} preview`}
-                              style={{
-                                maxHeight: type === 'logoNav' ? 48 : 120,
-                                maxWidth: '100%',
-                                objectFit: 'contain',
-                              }}
-                            />
-                          )}
-                          <div className="small mt-2">
-                            <a
-                              href="#"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                void openAssetInNewTab(currentUrl);
-                              }}
-                              rel="noopener noreferrer"
-                            >
-                              View asset
-                            </a>
-                          </div>
-                        </div>
-                      )}
                     </Card.Body>
                   </Card>
-                </Col>
-              );
-            })}
-          </Row>
-        </Card.Body>
-        <Card.Footer className="d-flex justify-content-end gap-2">
-          <Button variant="secondary" onClick={() => void loadConfig({ force: true })} disabled={saving || !isDirty}>
-            Discard Changes
+                </div>
+              </Col>
+            </Row>
+
+            <Row className="mt-4 gy-4">
+              {(Object.keys(ASSET_CONSTRAINTS) as AssetType[]).map((type) => {
+                const constraint = ASSET_CONSTRAINTS[type];
+                const currentUrl = branding.assets?.[type];
+                const previewUrl = previewUrls[type] || (currentUrl ? toPreviewUrl(currentUrl) : undefined);
+                return (
+                  <Col key={type} md={4}>
+                    <Card className="h-100">
+                      <Card.Body className="d-flex flex-column">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <Card.Title className="fs-6 mb-0">{constraint.label}</Card.Title>
+                          {uploading[type] && <Spinner animation="border" size="sm" />}
+                        </div>
+                        <OverlayTrigger placement="top" overlay={<Tooltip>{constraint.description}</Tooltip>}>
+                          <Form.Text muted>{constraint.description}</Form.Text>
+                        </OverlayTrigger>
+                        <div className="mt-3">
+                          <Form.Control type="file" accept={constraint.accept} onChange={onFileChange(type)} />
+                        </div>
+                        {previewUrl && (
+                          <div className="mt-3 text-center">
+                            {type === 'favicon' ? (
+                              <img src={previewUrl} alt={`${constraint.label} preview`} width={32} height={32} />
+                            ) : (
+                              <img
+                                src={previewUrl}
+                                alt={`${constraint.label} preview`}
+                                style={{
+                                  maxHeight: type === 'logoNav' ? 48 : 120,
+                                  maxWidth: '100%',
+                                  objectFit: 'contain',
+                                }}
+                              />
+                            )}
+                            <div className="small mt-2">
+                              <a
+                                href="#"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  void openAssetInNewTab(currentUrl);
+                                }}
+                                rel="noopener noreferrer"
+                              >
+                                View asset
+                              </a>
+                            </div>
+                          </div>
+                        )}
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                );
+              })}
+            </Row>
+          </div>
+        )}
+        {enabled && (
+          <div className="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+            <Button variant="secondary" onClick={() => void loadConfig({ force: true })} disabled={saving || !isDirty}>
+              Discard Changes
+            </Button>
+            <Button variant="outline-secondary" onClick={() => void saveChanges()} disabled={saving || !isDirty}>
+              {saving ? <Spinner animation="border" size="sm" /> : <i className="bi bi-check-lg me-2" />}
+              Save Changes
+            </Button>
+            <Button variant="primary" onClick={openVersionModal} disabled={saving || !isDirty}>
+              {saving ? <Spinner animation="border" size="sm" /> : <i className="bi bi-layers me-2" />}
+              Save as New Version
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <Modal show={showVersionModal} onHide={() => setShowVersionModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Save as New Version</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-3">
+            Create a named version of your current branding settings. You can restore to this version later.
+          </p>
+          <Form.Group controlId="version-label">
+            <Form.Label>Version Name</Form.Label>
+            <Form.Control
+              type="text"
+              value={versionLabel}
+              onChange={(e) => setVersionLabel(e.target.value)}
+              placeholder="e.g., Holiday theme, Q4 rebrand"
+              autoFocus
+            />
+            <Form.Text className="text-muted">Give this version a memorable name to help identify it later.</Form.Text>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowVersionModal(false)}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => void handleSaveVersion()} disabled={saving}>
+            {saving ? <Spinner animation="border" size="sm" /> : 'Save Version'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showRevertModal} onHide={() => setShowRevertModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Revert to Previous Version</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            Are you sure you want to revert to{' '}
+            <strong>{revertTargetVersion?.label || revertTargetVersion?.versionId}</strong>?
+          </p>
+          <p className="text-muted mb-0">
+            This will replace your current branding settings with this version. Any unsaved changes will be lost.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowRevertModal(false)}>
+            Cancel
           </Button>
           <Button
-            variant="outline-primary"
-            onClick={() => void saveChanges({ createVersion: true })}
-            disabled={saving || !isDirty}
-          >
-            {saving ? <Spinner animation="border" size="sm" /> : <i className="bi bi-layers me-2" />}
-            Save as New Version
-          </Button>
-          <Button variant="primary" onClick={() => void saveChanges()} disabled={saving || !isDirty}>
-            {saving ? <Spinner animation="border" size="sm" /> : <i className="bi bi-check-lg me-2" />}
-            Save Changes
-          </Button>
-        </Card.Footer>
-      </Card>
-      <Accordion alwaysOpen={false} flush>
-        <Accordion.Item eventKey="history">
-          <Accordion.Header
+            variant="primary"
             onClick={() => {
-              void fetchHistoryIfNeeded();
+              if (revertTargetVersion) {
+                setShowRevertModal(false);
+                void revertVersion(revertTargetVersion.versionId);
+              }
             }}
+            disabled={saving}
           >
-            Version History
-          </Accordion.Header>
-          <Accordion.Body>
-            {historyLoading ? (
-              <div className="d-flex align-items-center gap-2">
-                <Spinner animation="border" size="sm" />
-                <span>Loading versions…</span>
-              </div>
-            ) : history.length === 0 ? (
-              <div className="text-muted">No published versions yet.</div>
-            ) : (
-              <ListGroup variant="flush">
-                {history.map((item) => {
-                  const formattedTimestamp = item.updatedAt
-                    ? new Date(item.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-                    : undefined;
-                  const displayLabel = item.label || formattedTimestamp || item.versionId;
-                  const metaParts: string[] = [];
-                  if (formattedTimestamp && formattedTimestamp !== displayLabel) {
-                    metaParts.push(formattedTimestamp);
-                  }
-                  metaParts.push(item.updatedBy || 'system');
-                  if (item.versionId) {
-                    metaParts.push(item.versionId);
-                  }
-
-                  return (
-                    <ListGroup.Item key={item.versionId} className="d-flex justify-content-between align-items-center">
-                      <div>
-                        <div className="fw-semibold">{displayLabel}</div>
-                        <div className="small text-muted">{metaParts.join(' · ')}</div>
-                      </div>
-                      <Button
-                        variant="outline-primary"
-                        size="sm"
-                        onClick={() => revertVersion(item.versionId)}
-                        disabled={saving}
-                      >
-                        Revert
-                      </Button>
-                    </ListGroup.Item>
-                  );
-                })}
-              </ListGroup>
-            )}
-          </Accordion.Body>
-        </Accordion.Item>
-      </Accordion>
+            {saving ? <Spinner animation="border" size="sm" /> : 'Revert'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

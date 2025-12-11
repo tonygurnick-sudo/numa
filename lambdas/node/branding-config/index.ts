@@ -26,6 +26,8 @@ type BrandingVersionSummary = {
   label?: string;
   updatedAt?: string;
   updatedBy?: string;
+  primaryColor?: string;
+  logoNav?: string;
 };
 
 function parseJwt(token: string): JwtClaims {
@@ -75,11 +77,22 @@ async function fetchHistory(clientId: string): Promise<BrandingVersionSummary[]>
     const configId = String(item.config_id ?? '');
     const versionIdField = typeof item.versionId === 'string' ? item.versionId : undefined;
     const versionId = versionIdField || configId.replace(VERSION_PREFIX, '');
+    // Try top-level first, fall back to nested config path for older versions
+    const config = item.config as Record<string, unknown> | undefined;
+    const branding = config?.branding as Record<string, unknown> | undefined;
+    const assets = branding?.assets as Record<string, string | null | undefined> | undefined;
+    const colors = branding?.colors as Record<string, string> | undefined;
+
+    const logoNav = typeof item.logoNav === 'string' ? item.logoNav : (assets?.logoNav ?? undefined);
+    const primaryColor = typeof item.primaryColor === 'string' ? item.primaryColor : (colors?.primary ?? undefined);
+
     return {
       versionId,
       label: typeof item.label === 'string' ? item.label : undefined,
       updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : undefined,
       updatedBy: typeof item.updatedBy === 'string' ? item.updatedBy : undefined,
+      primaryColor,
+      logoNav,
     };
   });
 }
@@ -182,7 +195,34 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       }
     }
 
+    if (method === 'GET' && hasVersions && versionId) {
+      // GET single version: /branding/:clientId/versions/:versionId
+      const { admin } = isAdminFromAuth(event);
+      if (!admin) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) };
+      }
+
+      const versionKey = `${VERSION_PREFIX}${versionId}`;
+      const versionRes = await ddbDoc.send(
+        new GetCommand({
+          TableName: TABLE_NAME,
+          Key: { client_id: clientId, config_id: versionKey },
+        }),
+      );
+
+      if (!versionRes.Item) {
+        return { statusCode: 404, headers, body: JSON.stringify({ error: 'version_not_found' }) };
+      }
+
+      const versionItem = versionRes.Item as Record<string, unknown>;
+      const config = (versionItem.config as Record<string, unknown>) ?? versionItem;
+      const presignedConfig = await presignBrandingAssets(config);
+
+      return { statusCode: 200, headers, body: JSON.stringify(presignedConfig) };
+    }
+
     if (method === 'GET' && hasVersions) {
+      // GET version list: /branding/:clientId/versions
       const { admin } = isAdminFromAuth(event);
       if (!admin) {
         return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) };
@@ -229,7 +269,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'invalid_payload' }) };
       }
 
-      const { createVersion, ...configWithoutFlag } = (payload || {}) as BrandingPayload & { createVersion?: boolean };
+      const { createVersion, label, ...configWithoutFlag } = (payload || {}) as BrandingPayload & {
+        createVersion?: boolean;
+        label?: string;
+      };
 
       const enabledEntry =
         typeof configWithoutFlag === 'object' &&
@@ -257,10 +300,20 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
       if (createVersion) {
         const versionIdValue = nowIso;
+        // Extract primary color and logo from branding config for quick display in history
+        const brandingData = configWithoutFlag?.branding as Record<string, unknown> | undefined;
+        const colors = brandingData?.colors as Record<string, string> | undefined;
+        const primaryColor = colors?.primary;
+        const assets = brandingData?.assets as Record<string, string | null | undefined> | undefined;
+        const logoNav = assets?.logoNav;
+
         const versionItem: Record<string, unknown> = {
           ...item,
           config_id: `${VERSION_PREFIX}${versionIdValue}`,
           versionId: versionIdValue,
+          ...(label && typeof label === 'string' ? { label } : {}),
+          ...(primaryColor ? { primaryColor } : {}),
+          ...(logoNav ? { logoNav } : {}),
         };
         await ddbDoc.send(new PutCommand({ TableName: TABLE_NAME, Item: versionItem }));
       }

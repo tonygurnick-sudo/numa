@@ -5,6 +5,8 @@ export type BrandingVersionSummary = {
   label?: string;
   updatedAt?: string;
   updatedBy?: string;
+  primaryColor?: string;
+  logoNav?: string | null;
 };
 
 export type BrandingConfigResponse = {
@@ -38,6 +40,7 @@ export type BrandingSavePayload = {
     };
   };
   createVersion?: boolean;
+  label?: string;
 };
 
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
@@ -193,6 +196,13 @@ export const BrandingAdminService = {
     const clientId = getClientId();
     const result = (await numaPost(
       `${getBaseUrl()}/branding/${clientId}/versions/${versionId}/revert`,
+    )) as BrandingConfigResponse;
+    return result || {};
+  },
+  async fetchVersion(numaGet: NumaGet, versionId: string): Promise<BrandingConfigResponse> {
+    const clientId = getClientId();
+    const result = (await numaGet(
+      `${getBaseUrl()}/branding/${clientId}/versions/${versionId}`,
     )) as BrandingConfigResponse;
     return result || {};
   },

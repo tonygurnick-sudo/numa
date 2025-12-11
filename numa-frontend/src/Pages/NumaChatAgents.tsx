@@ -44,6 +44,7 @@ import { sortAgentsByPriority } from '../utils/agentSortingUtils';
 import { formatAgentDisplayName } from '../utils/agentUtils';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import { AgentAvatar } from '../Components/Agents/AgentAvatar';
+import { withPRM } from '../utils/prmUtils';
 
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
