@@ -5,7 +5,6 @@ import {
   Col,
   Tabs,
   Tab,
-  Card,
   Button,
   Spinner,
   Modal,
@@ -365,358 +364,355 @@ export default function SettingsPage() {
         </Container>
       </header>
 
-      <main>
-        <Container>
-          {/* Note: company-wide banner and preview notice moved into Integrations tab */}
+      <div className="app-content">
+        <div className="content-panel">
+          <div className="content-panel__body">
+            {/* Note: company-wide banner and preview notice moved into Integrations tab */}
 
-          {error && (
-            <Alert variant="danger" className="mb-3">
-              {error}
-            </Alert>
-          )}
-
-          <Card className="border-0 shadow-sm">
-            <Card.Body>
-              <Tabs activeKey={activeKey} onSelect={handleTabSelect} className="mb-3">
+            {error && (
+              <Alert variant="danger" className="mb-3">
+                {error}
+              </Alert>
+            )}
+            <Tabs activeKey={activeKey} onSelect={handleTabSelect} className="mb-3">
+              <Tab
+                eventKey="users"
+                title={
+                  <span>
+                    <i className="bi bi-people-fill me-2"></i>Users
+                  </span>
+                }
+              >
+                <UserManagement />
+              </Tab>
+              {agentsFeatureEnabled && (
                 <Tab
-                  eventKey="users"
+                  eventKey="agents"
                   title={
                     <span>
-                      <i className="bi bi-people-fill me-2"></i>Users
+                      <i className="bi bi-robot me-2"></i>Agents
                     </span>
                   }
                 >
-                  <UserManagement />
-                </Tab>
-                {agentsFeatureEnabled && (
-                  <Tab
-                    eventKey="agents"
-                    title={
-                      <span>
-                        <i className="bi bi-robot me-2"></i>Agents
-                      </span>
-                    }
-                  >
-                    <div className="mb-3">
-                      <Alert variant="secondary" className="mb-3">
-                        <div className="d-flex align-items-start">
-                          <i className="bi bi-building-gear me-2 mt-1"></i>
-                          <div>
-                            <div className="fw-semibold">Company-wide agents policy</div>
-                            <div className="small text-muted">
-                              Choose how agents work across your company. Changes take effect immediately for everyone.
-                            </div>
+                  <div className="mb-3">
+                    <Alert variant="secondary" className="mb-3">
+                      <div className="d-flex align-items-start">
+                        <i className="bi bi-building-gear me-2 mt-1"></i>
+                        <div>
+                          <div className="fw-semibold">Company-wide agents policy</div>
+                          <div className="small text-muted">
+                            Choose how agents work across your company. Changes take effect immediately for everyone.
                           </div>
                         </div>
-                      </Alert>
-                      {agentsLoading ? (
-                        <div className="text-center py-4">
-                          <Spinner animation="border" />
-                        </div>
-                      ) : (
-                        <div className="d-flex flex-column gap-2">
-                          {[
-                            {
-                              key: 'off',
-                              label: 'Agents Off',
-                              desc: 'Agents are disabled for everyone. The Agents UI shows a notice that it is disabled and to contact an admin.',
-                            },
-                            {
-                              key: 'personal_only',
-                              label: 'Personal Agents Only',
-                              desc: 'Users can create and use personal agents. Company sharing is disabled and the Company Agent Marketplace is hidden.',
-                            },
-                            {
-                              key: 'full',
-                              label: 'Agents On (Full)',
-                              desc: 'Users can create and use personal agents and share company agents. The marketplace is available.',
-                            },
-                          ].map((opt) => {
-                            const selected = agentsMode === (opt.key as AgentsMode);
-                            return (
-                              <div
-                                key={opt.key}
-                                className={`p-3 border rounded-3 bg-white d-flex align-items-start justify-content-between ${selected ? 'border-primary border-2' : ''}`}
-                                role="button"
-                                onClick={async () => {
-                                  if (agentsSaving || agentsMode === (opt.key as AgentsMode)) return;
-                                  // Confirmation copy per mode transition
-                                  let message = '';
-                                  if (opt.key === 'off') {
-                                    message =
-                                      'Turn off Agents for everyone? Users will not be able to create or use agents. The Agents UI will display a disabled notice. Continue?';
-                                  } else if (opt.key === 'personal_only') {
-                                    message =
-                                      'Disable company agent sharing? The Company Agent Marketplace will be hidden and users can only create and use personal agents. Existing company agents will be hidden. Continue?';
-                                  } else {
-                                    message = 'Enable Agents and company sharing for everyone?';
-                                  }
-                                  const ok = window.confirm(message);
-                                  if (!ok) return;
-                                  try {
-                                    setAgentsSaving(true);
-                                    await AdminAgentsService.update(opt.key as AgentsMode, numaPut);
-                                    setAgentsMode(opt.key as AgentsMode);
-                                  } catch (e) {
-                                    alert((e as Error).message || 'Failed to update agents policy');
-                                  } finally {
-                                    setAgentsSaving(false);
-                                  }
-                                }}
-                                style={{
-                                  cursor: agentsSaving ? 'not-allowed' : 'pointer',
-                                  opacity: agentsSaving ? 0.7 : 1,
-                                }}
-                              >
-                                <div className="me-3">
-                                  <div className="fw-semibold" style={{ fontSize: '0.95rem' }}>
-                                    {opt.label}
-                                  </div>
-                                  <div className="text-muted small" style={{ maxWidth: 720 }}>
-                                    {opt.desc}
-                                  </div>
+                      </div>
+                    </Alert>
+                    {agentsLoading ? (
+                      <div className="text-center py-4">
+                        <Spinner animation="border" />
+                      </div>
+                    ) : (
+                      <div className="d-flex flex-column gap-2">
+                        {[
+                          {
+                            key: 'off',
+                            label: 'Agents Off',
+                            desc: 'Agents are disabled for everyone. The Agents UI shows a notice that it is disabled and to contact an admin.',
+                          },
+                          {
+                            key: 'personal_only',
+                            label: 'Personal Agents Only',
+                            desc: 'Users can create and use personal agents. Company sharing is disabled and the Company Agent Marketplace is hidden.',
+                          },
+                          {
+                            key: 'full',
+                            label: 'Agents On (Full)',
+                            desc: 'Users can create and use personal agents and share company agents. The marketplace is available.',
+                          },
+                        ].map((opt) => {
+                          const selected = agentsMode === (opt.key as AgentsMode);
+                          return (
+                            <div
+                              key={opt.key}
+                              className={`p-3 border rounded-3 bg-white d-flex align-items-start justify-content-between ${selected ? 'border-primary border-2' : ''}`}
+                              role="button"
+                              onClick={async () => {
+                                if (agentsSaving || agentsMode === (opt.key as AgentsMode)) return;
+                                // Confirmation copy per mode transition
+                                let message = '';
+                                if (opt.key === 'off') {
+                                  message =
+                                    'Turn off Agents for everyone? Users will not be able to create or use agents. The Agents UI will display a disabled notice. Continue?';
+                                } else if (opt.key === 'personal_only') {
+                                  message =
+                                    'Disable company agent sharing? The Company Agent Marketplace will be hidden and users can only create and use personal agents. Existing company agents will be hidden. Continue?';
+                                } else {
+                                  message = 'Enable Agents and company sharing for everyone?';
+                                }
+                                const ok = window.confirm(message);
+                                if (!ok) return;
+                                try {
+                                  setAgentsSaving(true);
+                                  await AdminAgentsService.update(opt.key as AgentsMode, numaPut);
+                                  setAgentsMode(opt.key as AgentsMode);
+                                } catch (e) {
+                                  alert((e as Error).message || 'Failed to update agents policy');
+                                } finally {
+                                  setAgentsSaving(false);
+                                }
+                              }}
+                              style={{
+                                cursor: agentsSaving ? 'not-allowed' : 'pointer',
+                                opacity: agentsSaving ? 0.7 : 1,
+                              }}
+                            >
+                              <div className="me-3">
+                                <div className="fw-semibold" style={{ fontSize: '0.95rem' }}>
+                                  {opt.label}
                                 </div>
-                                <div className="ms-3 align-self-center">
-                                  {selected ? (
-                                    <i className="bi bi-check-circle-fill text-primary"></i>
-                                  ) : (
-                                    <i className="bi bi-circle text-secondary"></i>
-                                  )}
+                                <div className="text-muted small" style={{ maxWidth: 720 }}>
+                                  {opt.desc}
                                 </div>
                               </div>
-                            );
-                          })}
-                          <div className="text-muted small mt-2">
-                            Users will still see gentle hints where agents are disabled (e.g., “Agents are disabled.
-                            Contact your admin”).
-                          </div>
+                              <div className="ms-3 align-self-center">
+                                {selected ? (
+                                  <i className="bi bi-check-circle-fill text-primary"></i>
+                                ) : (
+                                  <i className="bi bi-circle text-secondary"></i>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div className="text-muted small mt-2">
+                          Users will still see gentle hints where agents are disabled (e.g., “Agents are disabled.
+                          Contact your admin”).
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Tab>
+              )}
+              <Tab
+                eventKey="integrations"
+                title={
+                  <span>
+                    <i className="bi bi-plug-fill me-2"></i>Integrations
+                  </span>
+                }
+              >
+                <Alert variant="secondary" className="mb-3">
+                  <div className="d-flex align-items-start">
+                    <i className="bi bi-building-gear me-2 mt-1"></i>
+                    <div>
+                      <div className="fw-semibold">Company-wide settings</div>
+                      <div className="small text-muted">
+                        These settings apply to everyone in your Numa environment. Use the toggle to enable/disable each
+                        integration for your company, and use <span className="fw-semibold">Manage Tools</span> to turn
+                        specific capabilities off globally.
+                      </div>
+                    </div>
+                  </div>
+                </Alert>
+                {previewMode && (
+                  <Alert variant="info" className="mb-3">
+                    Numa Integrations are not enabled in your Numa environment. Contact your account administrator to
+                    request access.
+                  </Alert>
+                )}
+                {loadingSettings ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" variant="primary" />
+                  </div>
+                ) : (
+                  <div>
+                    {AVAILABLE_INTEGRATIONS.sort((a, b) => a.name.localeCompare(b.name)).map(renderIntegrationRow)}
+                  </div>
+                )}
+              </Tab>
+              {allowBrandingTab && (
+                <Tab
+                  eventKey="branding"
+                  title={
+                    <span>
+                      <i className="bi bi-palette-fill me-2"></i>Branding
+                    </span>
+                  }
+                >
+                  <BrandingAdminPanel onDirtyChange={handleBrandingDirtyChange} />
+                </Tab>
+              )}
+            </Tabs>
+          </div>
+        </div>
+      </div>
+
+      <Modal show={!!manageToolsFor} onHide={() => setManageToolsFor(null)} centered size="lg">
+        <Modal.Header closeButton className="border-0 pb-2">
+          <Modal.Title>
+            <div className="d-flex align-items-center">
+              <i className="bi bi-sliders me-2 text-primary"></i>
+              Manage Tools – {manageToolsFor}
+            </div>
+            <div className="small text-muted fw-normal mt-2" style={{ fontSize: '0.85rem' }}>
+              These tool settings are company-wide. Users cannot enable tools you disable here.
+            </div>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="pt-2" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          {toolsLoading ? (
+            <div className="text-center py-5">
+              <Spinner animation="border" variant="primary" />
+              <p className="mt-3 text-muted mb-0">Loading tools...</p>
+            </div>
+          ) : toolsError ? (
+            <Alert variant="danger" className="mb-0">
+              <i className="bi bi-exclamation-triangle-fill me-2"></i>
+              {toolsError}
+            </Alert>
+          ) : toolList.length === 0 ? (
+            <div className="text-center py-5">
+              <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
+              <p className="text-muted mt-2 mb-0">No tools found for this integration.</p>
+            </div>
+          ) : (
+            <div className="d-flex flex-column gap-2">
+              {toolList.map((t) => {
+                const allowed = toolToggles[t.name] ?? true;
+
+                // Helper functions for formatting tool names
+                const stripPrefix = (name: string, prefix?: string | null) =>
+                  prefix && name.startsWith(prefix + '-') ? name.slice(prefix.length + 1) : name;
+                const toTitle = (s: string) =>
+                  s
+                    .split('-')
+                    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+                    .join(' ');
+
+                // Parse markdown links in description and clean up display
+                const parseDescription = (desc: string | undefined) => {
+                  if (!desc) return null;
+
+                  // Match markdown links: [text](url)
+                  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+                  const parts: (string | React.ReactElement)[] = [];
+                  let lastIndex = 0;
+                  let match: RegExpExecArray | null;
+
+                  while ((match = linkRegex.exec(desc)) !== null) {
+                    // Add text before the link
+                    if (match.index > lastIndex) {
+                      parts.push(desc.substring(lastIndex, match.index));
+                    }
+
+                    // Replace "See the docs" with "see documentation"
+                    const linkText = match[1].toLowerCase().includes('see') ? 'see documentation' : match[1];
+
+                    // Add the link as JSX
+                    parts.push(
+                      <a
+                        key={match.index}
+                        href={match[2]}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-decoration-none"
+                      >
+                        [{linkText}]
+                      </a>,
+                    );
+
+                    lastIndex = match.index + match[0].length;
+                  }
+
+                  // Add any remaining text
+                  if (lastIndex < desc.length) {
+                    parts.push(desc.substring(lastIndex));
+                  }
+
+                  return parts.length > 0 ? parts : desc;
+                };
+
+                const displayName = toTitle(stripPrefix(t.name, manageToolsFor));
+
+                return (
+                  <div
+                    key={t.name}
+                    className={`d-flex align-items-start justify-content-between p-3 border rounded-3 ${allowed ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
+                    style={{
+                      transition: 'all 0.2s ease',
+                      borderColor: allowed ? 'var(--bs-border-color)' : 'var(--bs-border-color-translucent)',
+                    }}
+                  >
+                    <div className="flex-grow-1 me-3">
+                      <div className="d-flex align-items-center mb-1">
+                        <div
+                          className={`rounded-circle me-2 ${allowed ? 'bg-success' : 'bg-secondary'}`}
+                          style={{ width: '8px', height: '8px', transition: 'all 0.2s ease' }}
+                        ></div>
+                        <span className={`fw-semibold ${allowed ? 'text-dark' : 'text-muted'}`}>{displayName}</span>
+                      </div>
+                      {t.description && (
+                        <div
+                          className={`small ${allowed ? 'text-muted' : 'text-secondary'}`}
+                          style={{
+                            maxWidth: 720,
+                            whiteSpace: 'normal',
+                            wordBreak: 'break-word',
+                            lineHeight: '1.4',
+                            fontSize: '0.85rem',
+                          }}
+                        >
+                          {parseDescription(t.description)}
                         </div>
                       )}
                     </div>
-                  </Tab>
-                )}
-                <Tab
-                  eventKey="integrations"
-                  title={
-                    <span>
-                      <i className="bi bi-plug-fill me-2"></i>Integrations
-                    </span>
-                  }
-                >
-                  <Alert variant="secondary" className="mb-3">
-                    <div className="d-flex align-items-start">
-                      <i className="bi bi-building-gear me-2 mt-1"></i>
-                      <div>
-                        <div className="fw-semibold">Company-wide settings</div>
-                        <div className="small text-muted">
-                          These settings apply to everyone in your Numa environment. Use the toggle to enable/disable
-                          each integration for your company, and use <span className="fw-semibold">Manage Tools</span>{' '}
-                          to turn specific capabilities off globally.
-                        </div>
-                      </div>
-                    </div>
-                  </Alert>
-                  {previewMode && (
-                    <Alert variant="info" className="mb-3">
-                      Numa Integrations are not enabled in your Numa environment. Contact your account administrator to
-                      request access.
-                    </Alert>
-                  )}
-                  {loadingSettings ? (
-                    <div className="text-center py-5">
-                      <Spinner animation="border" variant="primary" />
-                    </div>
-                  ) : (
-                    <div>
-                      {AVAILABLE_INTEGRATIONS.sort((a, b) => a.name.localeCompare(b.name)).map(renderIntegrationRow)}
-                    </div>
-                  )}
-                </Tab>
-                {allowBrandingTab && (
-                  <Tab
-                    eventKey="branding"
-                    title={
-                      <span>
-                        <i className="bi bi-palette-fill me-2"></i>Branding
-                      </span>
-                    }
-                  >
-                    <BrandingAdminPanel onDirtyChange={handleBrandingDirtyChange} />
-                  </Tab>
-                )}
-              </Tabs>
-            </Card.Body>
-          </Card>
-
-          <Modal show={!!manageToolsFor} onHide={() => setManageToolsFor(null)} centered size="lg">
-            <Modal.Header closeButton className="border-0 pb-2">
-              <Modal.Title>
-                <div className="d-flex align-items-center">
-                  <i className="bi bi-sliders me-2 text-primary"></i>
-                  Manage Tools – {manageToolsFor}
-                </div>
-                <div className="small text-muted fw-normal mt-2" style={{ fontSize: '0.85rem' }}>
-                  These tool settings are company-wide. Users cannot enable tools you disable here.
-                </div>
-              </Modal.Title>
-            </Modal.Header>
-            <Modal.Body className="pt-2" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-              {toolsLoading ? (
-                <div className="text-center py-5">
-                  <Spinner animation="border" variant="primary" />
-                  <p className="mt-3 text-muted mb-0">Loading tools...</p>
-                </div>
-              ) : toolsError ? (
-                <Alert variant="danger" className="mb-0">
-                  <i className="bi bi-exclamation-triangle-fill me-2"></i>
-                  {toolsError}
-                </Alert>
-              ) : toolList.length === 0 ? (
-                <div className="text-center py-5">
-                  <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
-                  <p className="text-muted mt-2 mb-0">No tools found for this integration.</p>
-                </div>
-              ) : (
-                <div className="d-flex flex-column gap-2">
-                  {toolList.map((t) => {
-                    const allowed = toolToggles[t.name] ?? true;
-
-                    // Helper functions for formatting tool names
-                    const stripPrefix = (name: string, prefix?: string | null) =>
-                      prefix && name.startsWith(prefix + '-') ? name.slice(prefix.length + 1) : name;
-                    const toTitle = (s: string) =>
-                      s
-                        .split('-')
-                        .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-                        .join(' ');
-
-                    // Parse markdown links in description and clean up display
-                    const parseDescription = (desc: string | undefined) => {
-                      if (!desc) return null;
-
-                      // Match markdown links: [text](url)
-                      const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-                      const parts: (string | React.ReactElement)[] = [];
-                      let lastIndex = 0;
-                      let match: RegExpExecArray | null;
-
-                      while ((match = linkRegex.exec(desc)) !== null) {
-                        // Add text before the link
-                        if (match.index > lastIndex) {
-                          parts.push(desc.substring(lastIndex, match.index));
-                        }
-
-                        // Replace "See the docs" with "see documentation"
-                        const linkText = match[1].toLowerCase().includes('see') ? 'see documentation' : match[1];
-
-                        // Add the link as JSX
-                        parts.push(
-                          <a
-                            key={match.index}
-                            href={match[2]}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-decoration-none"
-                          >
-                            [{linkText}]
-                          </a>,
-                        );
-
-                        lastIndex = match.index + match[0].length;
-                      }
-
-                      // Add any remaining text
-                      if (lastIndex < desc.length) {
-                        parts.push(desc.substring(lastIndex));
-                      }
-
-                      return parts.length > 0 ? parts : desc;
-                    };
-
-                    const displayName = toTitle(stripPrefix(t.name, manageToolsFor));
-
-                    return (
-                      <div
-                        key={t.name}
-                        className={`d-flex align-items-start justify-content-between p-3 border rounded-3 ${allowed ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
+                    <div className="form-check form-switch ms-2">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        checked={allowed}
+                        onChange={(e) => setToolToggles({ ...toolToggles, [t.name]: e.target.checked })}
                         style={{
-                          transition: 'all 0.2s ease',
-                          borderColor: allowed ? 'var(--bs-border-color)' : 'var(--bs-border-color-translucent)',
+                          transform: 'scale(1.1)',
                         }}
-                      >
-                        <div className="flex-grow-1 me-3">
-                          <div className="d-flex align-items-center mb-1">
-                            <div
-                              className={`rounded-circle me-2 ${allowed ? 'bg-success' : 'bg-secondary'}`}
-                              style={{ width: '8px', height: '8px', transition: 'all 0.2s ease' }}
-                            ></div>
-                            <span className={`fw-semibold ${allowed ? 'text-dark' : 'text-muted'}`}>{displayName}</span>
-                          </div>
-                          {t.description && (
-                            <div
-                              className={`small ${allowed ? 'text-muted' : 'text-secondary'}`}
-                              style={{
-                                maxWidth: 720,
-                                whiteSpace: 'normal',
-                                wordBreak: 'break-word',
-                                lineHeight: '1.4',
-                                fontSize: '0.85rem',
-                              }}
-                            >
-                              {parseDescription(t.description)}
-                            </div>
-                          )}
-                        </div>
-                        <div className="form-check form-switch ms-2">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={allowed}
-                            onChange={(e) => setToolToggles({ ...toolToggles, [t.name]: e.target.checked })}
-                            style={{
-                              transform: 'scale(1.1)',
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer
+          className="border-top pt-3"
+          style={{
+            position: 'sticky',
+            bottom: 0,
+            backgroundColor: 'white',
+            zIndex: 1050,
+            boxShadow: '0 -2px 8px rgba(0,0,0,0.05)',
+          }}
+        >
+          <div className="d-flex justify-content-between align-items-center w-100">
+            <small className="text-muted">
+              {toolList.length > 0 && (
+                <span>
+                  <i className="bi bi-info-circle me-1"></i>
+                  {Object.values(toolToggles).filter(Boolean).length} of {toolList.length} tools enabled
+                </span>
               )}
-            </Modal.Body>
-            <Modal.Footer
-              className="border-top pt-3"
-              style={{
-                position: 'sticky',
-                bottom: 0,
-                backgroundColor: 'white',
-                zIndex: 1050,
-                boxShadow: '0 -2px 8px rgba(0,0,0,0.05)',
-              }}
-            >
-              <div className="d-flex justify-content-between align-items-center w-100">
-                <small className="text-muted">
-                  {toolList.length > 0 && (
-                    <span>
-                      <i className="bi bi-info-circle me-1"></i>
-                      {Object.values(toolToggles).filter(Boolean).length} of {toolList.length} tools enabled
-                    </span>
-                  )}
-                </small>
-                <div>
-                  <Button variant="secondary" onClick={() => setManageToolsFor(null)} className="me-2">
-                    Cancel
-                  </Button>
-                  <Button variant="primary" onClick={saveManageTools} disabled={toolsLoading || !!toolsError}>
-                    <i className="bi bi-check-lg me-2"></i>
-                    Save Changes
-                  </Button>
-                </div>
-              </div>
-            </Modal.Footer>
-          </Modal>
-        </Container>
-      </main>
+            </small>
+            <div>
+              <Button variant="secondary" onClick={() => setManageToolsFor(null)} className="me-2">
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={saveManageTools} disabled={toolsLoading || !!toolsError}>
+                <i className="bi bi-check-lg me-2"></i>
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

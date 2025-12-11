@@ -122,8 +122,11 @@ describe('BrandingAdminPanel', () => {
     const nameInput = screen.getByLabelText('Brand Name') as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: 'Updated Brand' } });
 
-    const saveButton = screen.getByRole('button', { name: /save changes/i });
-    fireEvent.click(saveButton);
+    // Find the Save Changes button that is NOT disabled (the one that becomes enabled after making changes)
+    const saveButtons = screen.getAllByRole('button', { name: /save changes/i });
+    const saveButton = saveButtons.find((btn) => !btn.hasAttribute('disabled'));
+    expect(saveButton).toBeDefined();
+    fireEvent.click(saveButton!);
 
     await waitFor(() => {
       expect(serviceMocks.mockSaveConfig).toHaveBeenCalledWith(
@@ -135,7 +138,7 @@ describe('BrandingAdminPanel', () => {
     });
   });
 
-  it('saves changes with createVersion flag when Save as New Version is clicked', async () => {
+  it('saves changes with createVersion flag when Save as New Version is clicked and confirmed in modal', async () => {
     renderWithProviders(<BrandingAdminPanel />);
 
     await waitFor(() => {
@@ -145,8 +148,20 @@ describe('BrandingAdminPanel', () => {
     const nameInput = screen.getByLabelText('Brand Name') as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: 'Versioned Brand' } });
 
-    const saveAsVersionButton = screen.getByRole('button', { name: /save as new version/i });
-    fireEvent.click(saveAsVersionButton);
+    // Click the button to open the version modal (find the one that is not disabled)
+    const saveAsVersionButtons = screen.getAllByRole('button', { name: /save as new version/i });
+    const saveAsVersionButton = saveAsVersionButtons.find((btn) => !btn.hasAttribute('disabled'));
+    expect(saveAsVersionButton).toBeDefined();
+    fireEvent.click(saveAsVersionButton!);
+
+    // Wait for modal to appear and find the save button inside it
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    // Click the "Save Version" button inside the modal
+    const saveVersionButton = screen.getByRole('button', { name: /save version/i });
+    fireEvent.click(saveVersionButton);
 
     await waitFor(() => {
       expect(serviceMocks.mockSaveConfig).toHaveBeenCalledWith(
@@ -168,8 +183,11 @@ describe('BrandingAdminPanel', () => {
     const nameInput = screen.getByLabelText('Brand Name') as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: 'Toast Success' } });
 
-    const saveButton = screen.getByRole('button', { name: /save changes/i });
-    fireEvent.click(saveButton);
+    // Find the Save Changes button that is NOT disabled
+    const saveButtons = screen.getAllByRole('button', { name: /save changes/i });
+    const saveButton = saveButtons.find((btn) => !btn.hasAttribute('disabled'));
+    expect(saveButton).toBeDefined();
+    fireEvent.click(saveButton!);
 
     await waitFor(() => {
       expect(serviceMocks.mockSaveConfig).toHaveBeenCalled();
@@ -199,8 +217,11 @@ describe('BrandingAdminPanel', () => {
     const nameInput = screen.getByLabelText('Brand Name') as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: 'Toast Error' } });
 
-    const saveButton = screen.getByRole('button', { name: /save changes/i });
-    fireEvent.click(saveButton);
+    // Find the Save Changes button that is NOT disabled
+    const saveButtons = screen.getAllByRole('button', { name: /save changes/i });
+    const saveButton = saveButtons.find((btn) => !btn.hasAttribute('disabled'));
+    expect(saveButton).toBeDefined();
+    fireEvent.click(saveButton!);
 
     await waitFor(() => {
       expect(serviceMocks.mockSaveConfig).toHaveBeenCalled();
@@ -224,15 +245,20 @@ describe('BrandingAdminPanel', () => {
     const nameInput = screen.getByLabelText('Brand Name') as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: 'Dirty Name' } });
 
-    const discardButton = screen.getByRole('button', { name: /discard changes/i });
-    fireEvent.click(discardButton);
+    // Find the Discard Changes button that is NOT disabled
+    const discardButtons = screen.getAllByRole('button', { name: /discard changes/i });
+    const discardButton = discardButtons.find((btn) => !btn.hasAttribute('disabled'));
+    expect(discardButton).toBeDefined();
+    fireEvent.click(discardButton!);
 
     await waitFor(() => {
       expect(serviceMocks.mockFetchConfig).toHaveBeenCalledTimes(2);
     });
 
+    // After discard, all Save Changes buttons should be disabled
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+      const saveButtons = screen.getAllByRole('button', { name: /save changes/i });
+      expect(saveButtons.every((btn) => btn.hasAttribute('disabled'))).toBe(true);
     });
   });
 
@@ -366,6 +392,18 @@ describe('BrandingAdminPanel', () => {
 
     const revertButton = await screen.findByRole('button', { name: /revert/i });
     fireEvent.click(revertButton);
+
+    // Wait for the confirmation modal and click the confirm button
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    // Find and click the Revert button in the modal footer
+    const confirmRevertButton = screen
+      .getAllByRole('button', { name: /revert/i })
+      .find((btn) => btn.closest('.modal-footer'));
+    expect(confirmRevertButton).toBeDefined();
+    fireEvent.click(confirmRevertButton!);
 
     await waitFor(() => {
       expect(serviceMocks.mockRevertVersion).toHaveBeenCalledWith(expect.any(Function), 'ver-123');

@@ -1207,7 +1207,7 @@ $border-radius-pill: 1rem;
     z-index: 999;
     padding: 20px;
     overflow-y: auto;
-    border-left: 1px solid #ddd;
+    border-left: 1px solid var(--brand-border, #ddd);
 
     &.show {
       right: 0;
@@ -1348,12 +1348,12 @@ $border-radius-pill: 1rem;
 
       /* The clickable button itself */
       .doc-open-bubble-button {
-        background-color: rgba(248, 245, 251, 0.85);
-        color: #4b007d;
+        background-color: color-mix(in srgb, var(--brand-primary, #4b007d) 8%, white 92%);
+        color: var(--brand-primary, #4b007d);
         border-radius: 20px;
         font-size: 0.9rem;
         padding: 6px 12px;
-        box-shadow: 0 2px 4px rgba(75, 0, 125, 0.1);
+        box-shadow: 0 2px 4px color-mix(in srgb, var(--brand-primary, #4b007d) 10%, transparent 90%);
         transition: all 0.3s ease;
         text-align: left;
         /* Constrain width so the text is truncated, expands on hover */
@@ -1372,10 +1372,10 @@ $border-radius-pill: 1rem;
         &:hover,
         &:focus {
           max-width: none;
-          background-color: rgba(248, 245, 251, 0.95);
-          color: #3a005f;
-          border-color: #c0a1da;
-          box-shadow: 0 3px 6px rgba(75, 0, 125, 0.15);
+          background-color: color-mix(in srgb, var(--brand-primary, #4b007d) 12%, white 88%);
+          color: var(--brand-hover, var(--brand-primary, #3a005f));
+          border-color: color-mix(in srgb, var(--brand-primary, #4b007d) 40%, white 60%);
+          box-shadow: 0 3px 6px color-mix(in srgb, var(--brand-primary, #4b007d) 15%, transparent 85%);
         }
       }
     }
@@ -1537,13 +1537,14 @@ $border-radius-pill: 1rem;
   }
 
   .new-chat-logo {
-    width: 32px;
-    height: 32px;
+    max-height: 32px;
+    max-width: 120px;
+    object-fit: contain;
     opacity: 0.9;
 
     @include mobile {
-      width: 28px;
-      height: 28px;
+      max-height: 28px;
+      max-width: 100px;
     }
   }
 

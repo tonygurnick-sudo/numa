@@ -252,6 +252,17 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         route: { verb: 'GET', path: 'branding/{clientId}/versions' },
       });
 
+      // GET single branding version for preview
+      this.addLambdaFunction(this, 'branding-config-version-get', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/branding-config',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        environment: brandingEnv,
+        additionalPolicyStatements: brandingReadPolicy,
+        route: { verb: 'GET', path: 'branding/{clientId}/versions/{versionId}' },
+      });
+
       // PUT branding config per client
       this.addLambdaFunction(this, 'branding-config-put', {
         addAuthorizer: true,
