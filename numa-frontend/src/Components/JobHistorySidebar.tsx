@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNumaApp } from '../Providers/NumaAppContext';
-import { Button, ListGroup, Offcanvas } from 'react-bootstrap';
+import { Button, ListGroup } from 'react-bootstrap';
 import { formatDistanceToNow } from 'date-fns';
 import { Preloader } from './Preloader';
 import { CheckCircleFill, ArrowClockwise, ExclamationCircleFill, FileEarmarkArrowUp } from 'react-bootstrap-icons';
+import { useDrawerBackClose } from '../hooks/useDrawerBackClose';
 
 const SIDEBAR_NAME_LIMIT = 60;
 
@@ -26,8 +27,41 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const loaderRef = useRef(null);
+  const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
 
-  const handleClose = () => setJobHistorySidebarOpen(false);
+  const handleClose = useCallback(() => setJobHistorySidebarOpen(false), [setJobHistorySidebarOpen]);
+
+  // Mobile detection
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Enable back button to close drawer on mobile
+  useDrawerBackClose({
+    isOpen: jobHistorySidebarOpen,
+    onClose: handleClose,
+    enabled: isMobile,
+    stateKey: 'job-history',
+  });
+
+  // Hide sidebar if user clicks outside (but not on the history button)
+  useEffect(() => {
+    if (!jobHistorySidebarOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target?.closest('.job-history-toggle') && !sidebarRef.current?.contains(target)) {
+        handleClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [jobHistorySidebarOpen, handleClose]);
+
   const handleShow = async () => {
     setJobHistorySidebarOpen(true);
     setIsLoading(true);
@@ -187,8 +221,14 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
     return null;
   }
 
+  // Calculate mobile-aware positioning like ChatHistorySidebar
+  const topOffsetPx = isMobile ? 60 : 0;
+  const topOffset = `calc(${topOffsetPx}px + env(safe-area-inset-top, 0px))`;
+  const sidebarHeight = `calc(100dvh - ${topOffsetPx}px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))`;
+  const sidebarWidth = isMobile ? '100%' : '400px';
+
   return (
-    <>
+    <div className="job-history-sidebar">
       {!hideToggle && (
         <Button
           onClick={handleShow}
@@ -202,19 +242,45 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
         </Button>
       )}
 
-      <Offcanvas
-        show={jobHistorySidebarOpen}
-        onHide={handleClose}
-        placement="end"
-        style={{ width: '400px', boxShadow: '0 0 15px rgba(0,0,0,0.2)' }}
+      <div
+        ref={sidebarRef}
+        className={`job-history-content ${jobHistorySidebarOpen ? 'show' : ''}`}
+        style={{
+          position: 'fixed',
+          right: jobHistorySidebarOpen ? '0' : isMobile ? '-100%' : '-400px',
+          top: topOffset,
+          width: sidebarWidth,
+          height: sidebarHeight,
+          backgroundColor: 'white',
+          boxShadow: '-2px 0 15px rgba(0,0,0,0.2)',
+          transition: 'right 0.3s ease-in-out',
+          zIndex: 1050,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
       >
-        <Offcanvas.Header closeButton className="border-bottom bg-light py-3">
-          <Offcanvas.Title className="d-flex align-items-center">
+        <div className="sidebar-header d-flex justify-content-between align-items-center border-bottom bg-light py-3 px-3">
+          <h6 className="mb-0 d-flex align-items-center">
             <i className="bi bi-clock-history me-2"></i>
             Job History - {numaAppData?.appName || 'App'}
-          </Offcanvas.Title>
-        </Offcanvas.Header>
-        <Offcanvas.Body className="p-3">
+          </h6>
+          <Button
+            variant="link"
+            className="close-button p-0 text-muted"
+            aria-label="Close job history"
+            onClick={handleClose}
+          >
+            <i className="bi bi-x-lg"></i>
+          </Button>
+        </div>
+        <div
+          className="job-history-body p-3"
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            maxHeight: `calc(${sidebarHeight} - 60px)`,
+          }}
+        >
           {isLoading ? (
             <div className="text-center py-5">
               <Preloader smallscreen={true} />
@@ -412,9 +478,9 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                 })()}
             </ListGroup>
           )}
-        </Offcanvas.Body>
-      </Offcanvas>
-    </>
+        </div>
+      </div>
+    </div>
   );
 };
 
