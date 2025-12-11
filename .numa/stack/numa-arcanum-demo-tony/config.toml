@@ -1,0 +1,4 @@
+stack = "numa-arcanum-demo-tony"
+branch = "feature/numa-cli"
+clientAccountId = "905418183804"
+region = "us-east-1"

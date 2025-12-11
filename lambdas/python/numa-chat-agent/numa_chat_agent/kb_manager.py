@@ -122,7 +122,6 @@ class KnowledgeBaseManager:
             "created_at": {"S": now},
             "updated_at": {"S": now},
             "status": {"S": "ACTIVE"},
-            "document_count": {"N": "0"},
         }
 
         self.dynamodb.put_item(TableName=self.table_name, Item=kb_item)
@@ -244,6 +243,7 @@ class KnowledgeBaseManager:
                     memberships[kb_id]["is_shared"] = visibility["is_shared"]
                     memberships[kb_id]["is_public"] = visibility["is_public"]
                     memberships[kb_id]["kb_name"] = kb.get("kb_name", kb_id)
+                    memberships[kb_id]["document_count"] = kb.get("document_count")
                 else:
                     memberships[kb_id] = {
                         "kb_id": kb_id,
@@ -251,6 +251,7 @@ class KnowledgeBaseManager:
                         "role": role,
                         "is_shared": visibility["is_shared"],
                         "is_public": visibility["is_public"],
+                        "document_count": kb.get("document_count"),
                     }
 
         return sorted(
@@ -457,6 +458,32 @@ class KnowledgeBaseManager:
             logger.error("Error deleting KB", kb_id=kb_id, error=str(e))
             return False
 
+    def update_document_count(self, kb_id: str, count: int) -> bool:
+        """
+        Update the document count for a KB.
+
+        Args:
+            kb_id: KB ID
+            count: New document count
+
+        Returns:
+            True if successful
+        """
+        try:
+            self.dynamodb.update_item(
+                TableName=self.table_name,
+                Key={"PK": {"S": self.tenant_pk}, "SK": {"S": f"KB#{kb_id}"}},
+                UpdateExpression="SET document_count = :count",
+                ExpressionAttributeValues={":count": {"N": str(count)}},
+            )
+            logger.debug("Updated document count", kb_id=kb_id, count=count)
+            return True
+        except Exception as e:
+            logger.error(
+                "Error updating document count", kb_id=kb_id, count=count, error=str(e)
+            )
+            return False
+
     def _kb_name_exists(self, name: str) -> bool:
         """Check if KB name already exists (excluding ARCHIVED KBs)."""
         try:
@@ -601,7 +628,11 @@ class KnowledgeBaseManager:
             "created_by": created_by,
             "created_at": item.get("created_at", {}).get("S"),
             "status": item["status"]["S"],
-            "document_count": int(item.get("document_count", {}).get("N", 0)),
+            "document_count": (
+                int(item["document_count"]["N"])
+                if item.get("document_count", {}).get("N")
+                else None
+            ),
             "is_shared": visibility["is_shared"],
             "is_public": visibility["is_public"],
         }

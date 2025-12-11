@@ -21,7 +21,7 @@ import { useAuth } from '../Providers/AuthProvider';
 export function UserKBDetailPage(): React.JSX.Element {
   const { kbId } = useParams<{ kbId: string }>();
   const navigate = useNavigate();
-  const { availableKBs } = useKnowledgeBase();
+  const { availableKBs, fetchKBDetails } = useKnowledgeBase();
   const { getCredentials, region: authRegion } = useAuth();
 
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -45,6 +45,13 @@ export function UserKBDetailPage(): React.JSX.Element {
       navigate('/user-knowledge-bases');
     }
   }, [currentKB, availableKBs, kbId, navigate]);
+
+  // Fetch KB details to update document count in the cache
+  useEffect(() => {
+    if (kbId) {
+      fetchKBDetails(kbId);
+    }
+  }, [kbId, fetchKBDetails]);
 
   // Reset clearFileUploader after it's been used
   useEffect(() => {
@@ -142,6 +149,11 @@ export function UserKBDetailPage(): React.JSX.Element {
     setShowUploadModal(false);
     setUploadSuccess(true);
     setTimeout(() => setUploadSuccess(false), 3000);
+
+    // Refresh the file explorer to show newly uploaded files
+    if (fileExplorerRef.current) {
+      fileExplorerRef.current.refreshFiles();
+    }
   }
 
   if (!currentKB) {

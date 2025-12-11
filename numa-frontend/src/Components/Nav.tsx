@@ -26,19 +26,10 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
   const userEmail = user?.decoded_tokens?.idToken?.email || 'user@example.com';
   const userInitial = userEmail?.[0]?.toUpperCase() || 'U';
 
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [navItems, setNavItems] = useState([]);
   const isExpanded = !isCollapsed;
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
 
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
+  // Use CSS media queries for responsive behavior instead of JavaScript state
 
   useEffect(() => {
     let isMounted = true;
@@ -66,7 +57,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
     useDrawerBackClose({
       isOpen: showDropdown,
       onClose: handleClose,
-      enabled: isMobile,
+      enabled: true, // Always enabled for mobile nav
       stateKey: 'nav-menu',
     });
 
@@ -121,74 +112,49 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
     );
   };
 
-  return isMobile ? (
-    <MobileNav />
-  ) : (
-    <nav className={`nav-component ${isExpanded ? 'expanded' : 'collapsed'}`}>
-      <div
-        className="btn-home-logo"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          navigate('/dash');
-        }}
-        role="button"
-      >
-        <img
-          src={navLogo}
-          className="logo-bk"
-          alt={navName}
-          style={{ maxHeight: 48, maxWidth: '100%', objectFit: 'contain' }}
-        />
-        {isExpanded && <span className="logo-text">{navName}</span>}
+  return (
+    <div>
+      {/* Mobile nav - only show on mobile screens via CSS */}
+      <div className="d-md-none">
+        <MobileNav />
       </div>
 
-      {/* Toggle collapse button - below logo */}
-      {onToggleCollapse && (
-        <button
-          className="nav-toggle-btn"
-          onClick={onToggleCollapse}
-          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      {/* Desktop nav - only show on desktop screens via CSS */}
+      <nav className={`nav-component d-none d-md-flex ${isExpanded ? 'expanded' : 'collapsed'}`}>
+        <div
+          className="btn-home-logo"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            navigate('/dash');
+          }}
+          role="button"
         >
-          <i className={`bi ${isCollapsed ? 'bi-chevron-right' : 'bi-chevron-left'}`}></i>
-        </button>
-      )}
-      <div className="divider"></div>
+          <img
+            src={navLogo}
+            className="logo-bk"
+            alt={navName}
+            style={{ maxHeight: 48, maxWidth: '100%', objectFit: 'contain' }}
+          />
+          {isExpanded && <span className="logo-text">{navName}</span>}
+        </div>
 
-      <ul className="nav-links">
-        {navItems
-          .filter((item) => !item.footerOnly)
-          .map((item) => (
-            <FeatureWrapper key={item.to} requiredFeature={item.feature}>
-              <li>
-                <div
-                  className="nav-link nav-item"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    navigate(item.to);
-                  }}
-                  title={item.label}
-                  role="button"
-                >
-                  <div className="nav-icon-container">
-                    <i className={`${item.icon} icon`}></i>
-                  </div>
-                  <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>
-                    {isExpanded ? getExpandedLabel(item.label) : ''}
-                  </span>
-                </div>
-              </li>
-            </FeatureWrapper>
-          ))}
-      </ul>
+        {/* Toggle collapse button - below logo */}
+        {onToggleCollapse && (
+          <button
+            className="nav-toggle-btn"
+            onClick={onToggleCollapse}
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <i className={`bi ${isCollapsed ? 'bi-chevron-right' : 'bi-chevron-left'}`}></i>
+          </button>
+        )}
+        <div className="divider"></div>
 
-      <footer className="footer">
-        <div className="footer-divider"></div>
         <ul className="nav-links">
           {navItems
-            .filter((item) => item.footerOnly)
+            .filter((item) => !item.footerOnly)
             .map((item) => (
               <FeatureWrapper key={item.to} requiredFeature={item.feature}>
                 <li>
@@ -212,29 +178,60 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
                 </li>
               </FeatureWrapper>
             ))}
-          <li>
-            <div className="nav-link nav-item" onClick={authLogout} title="Log out" role="button">
-              <div className="nav-icon-container">
-                <i className="bi bi-box-arrow-right icon"></i>
-              </div>
-              <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>{isExpanded ? 'Log out' : ''}</span>
-            </div>
-          </li>
         </ul>
-        <div className="user-profile-divider"></div>
-        <div className="user-profile-section">
-          <div className="user-avatar">
-            <span className="user-initial">{userInitial}</span>
-          </div>
-          {isExpanded && (
-            <div className="user-info">
-              <div className="user-email">{userEmail}</div>
+
+        <footer className="footer">
+          <div className="footer-divider"></div>
+          <ul className="nav-links">
+            {navItems
+              .filter((item) => item.footerOnly)
+              .map((item) => (
+                <FeatureWrapper key={item.to} requiredFeature={item.feature}>
+                  <li>
+                    <div
+                      className="nav-link nav-item"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        navigate(item.to);
+                      }}
+                      title={item.label}
+                      role="button"
+                    >
+                      <div className="nav-icon-container">
+                        <i className={`${item.icon} icon`}></i>
+                      </div>
+                      <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>
+                        {isExpanded ? getExpandedLabel(item.label) : ''}
+                      </span>
+                    </div>
+                  </li>
+                </FeatureWrapper>
+              ))}
+            <li>
+              <div className="nav-link nav-item" onClick={authLogout} title="Log out" role="button">
+                <div className="nav-icon-container">
+                  <i className="bi bi-box-arrow-right icon"></i>
+                </div>
+                <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>{isExpanded ? 'Log out' : ''}</span>
+              </div>
+            </li>
+          </ul>
+          <div className="user-profile-divider"></div>
+          <div className="user-profile-section">
+            <div className="user-avatar">
+              <span className="user-initial">{userInitial}</span>
             </div>
-          )}
-        </div>
-        <VersionDisplay />
-      </footer>
-    </nav>
+            {isExpanded && (
+              <div className="user-info">
+                <div className="user-email">{userEmail}</div>
+              </div>
+            )}
+          </div>
+          <VersionDisplay />
+        </footer>
+      </nav>
+    </div>
   );
 };
 

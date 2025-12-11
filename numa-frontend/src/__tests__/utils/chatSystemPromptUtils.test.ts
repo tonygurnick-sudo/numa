@@ -180,14 +180,19 @@ describe('chatSystemPromptUtils', () => {
     it('includes rubric-based web_search guidance when web_search is enabled', () => {
       const email = 'test@example.com';
       const prompt = generateSystemPrompt(['web_search'], email, '');
-      expect(prompt).toContain('Decision rubric: Use web_search when the user explicitly asks you to look online');
-      expect(prompt).toContain('do not apologise');
+      expect(prompt).toContain('Use web_search to find current information from the internet');
+      expect(prompt).toContain(
+        '**IMPORTANT Tool Priority**: ALWAYS prioritize query_knowledge_base results when available',
+      );
     });
 
     it('omits rubric guidance when web_search is not enabled', () => {
       const email = 'test@example.com';
       const prompt = generateSystemPrompt(['query_knowledge_base'], email, '');
-      expect(prompt).not.toContain('Decision rubric: Use web_search');
+      expect(prompt).not.toContain('Use web_search to find current information from the internet');
+      expect(prompt).not.toContain(
+        '**IMPORTANT Tool Priority**: ALWAYS prioritize query_knowledge_base results when available',
+      );
     });
 
     it('includes user email and date metadata', () => {

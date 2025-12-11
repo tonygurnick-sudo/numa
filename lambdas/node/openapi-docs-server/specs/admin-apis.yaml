@@ -1,0 +1,608 @@
+openapi: 3.0.3
+info:
+  title: Numa Admin APIs
+  description: |
+    Administrative APIs for managing Numa platform settings, integrations,
+    agents, and system configuration.
+
+    These APIs are typically used by administrators and authorized users
+    to configure and manage the platform.
+  version: 1.0.0
+  contact:
+    name: Numa Platform
+    url: https://numa.ai
+servers:
+  - url: https://api.numa.ai
+    description: Production API
+components:
+  securitySchemes:
+    CognitoAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    CloudFrontSecret:
+      type: apiKey
+      in: header
+      name: x-arcanum-cloudfront-secret
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+      required: [error]
+
+    Integration:
+      type: object
+      properties:
+        integration_id:
+          type: string
+          description: Unique integration identifier
+        name:
+          type: string
+          description: Integration display name
+        provider:
+          type: string
+          description: Integration provider (e.g., 'pipedream', 'zapier')
+        status:
+          type: string
+          enum: [active, inactive, error]
+          description: Integration status
+        config:
+          type: object
+          description: Integration configuration
+        permissions:
+          type: array
+          items:
+            type: string
+          description: Required permissions
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [integration_id, name, provider, status]
+
+    Agent:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: Unique agent identifier
+        name:
+          type: string
+          description: Agent display name
+        description:
+          type: string
+          description: Agent description
+        model:
+          type: string
+          description: AI model used by agent
+        system_prompt:
+          type: string
+          description: System prompt configuration
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Agent creativity setting
+        max_tokens:
+          type: integer
+          minimum: 1
+          maximum: 8192
+          description: Maximum response length
+        tools:
+          type: array
+          items:
+            type: string
+          description: Available tools for the agent
+        status:
+          type: string
+          enum: [active, inactive, testing]
+        created_by:
+          type: string
+          description: User who created the agent
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [agent_id, name, model, status]
+
+    BrandingConfig:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: Client identifier
+        name:
+          type: string
+          description: Client display name
+        logo:
+          type: string
+          format: uri
+          description: Logo URL
+        logo_nav:
+          type: string
+          format: uri
+          description: Navigation logo URL
+        colors:
+          type: object
+          properties:
+            primary:
+              type: string
+              pattern: '^#[0-9A-Fa-f]{6}$'
+            secondary:
+              type: string
+              pattern: '^#[0-9A-Fa-f]{6}$'
+            accent:
+              type: string
+              pattern: '^#[0-9A-Fa-f]{6}$'
+          description: Brand color scheme
+        domains:
+          type: array
+          items:
+            type: string
+            format: hostname
+          description: Allowed domains
+        updated_at:
+          type: string
+          format: date-time
+      required: [client_id, name]
+
+paths:
+  /api/settings/integrations:
+    get:
+      tags: [Integrations]
+      summary: List integration settings
+      description: |
+        Retrieve all configured integrations for the client.
+        Includes status, configuration, and permission information.
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by integration status
+          schema:
+            type: string
+            enum: [active, inactive, error]
+        - name: provider
+          in: query
+          description: Filter by integration provider
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of integrations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integrations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Integration'
+                  total:
+                    type: integer
+                    description: Total number of integrations
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags: [Integrations]
+      summary: Create new integration
+      description: Configure a new integration for the client
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Integration name
+                  example: "Salesforce CRM"
+                provider:
+                  type: string
+                  description: Integration provider
+                  example: "pipedream"
+                config:
+                  type: object
+                  description: Provider-specific configuration
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                  description: Required permissions
+                  example: ["read:contacts", "write:opportunities"]
+              required: [name, provider, config]
+      responses:
+        '201':
+          description: Integration created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Integration'
+        '400':
+          description: Invalid configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/settings/integrations/{integration_id}:
+    parameters:
+      - name: integration_id
+        in: path
+        required: true
+        description: Integration identifier
+        schema:
+          type: string
+
+    get:
+      tags: [Integrations]
+      summary: Get integration details
+      description: Retrieve detailed information about a specific integration
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      responses:
+        '200':
+          description: Integration details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Integration'
+        '404':
+          description: Integration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags: [Integrations]
+      summary: Update integration
+      description: Update integration configuration and settings
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                config:
+                  type: object
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                status:
+                  type: string
+                  enum: [active, inactive]
+      responses:
+        '200':
+          description: Integration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Integration'
+        '404':
+          description: Integration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [Integrations]
+      summary: Delete integration
+      description: Remove an integration configuration
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      responses:
+        '204':
+          description: Integration deleted successfully
+        '404':
+          description: Integration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/settings/agents:
+    get:
+      tags: [Agents]
+      summary: List configured agents
+      description: |
+        Retrieve all AI agents configured for the client.
+        Includes agent settings, prompts, and tool configurations.
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by agent status
+          schema:
+            type: string
+            enum: [active, inactive, testing]
+      responses:
+        '200':
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Agent'
+                  total:
+                    type: integer
+
+    post:
+      tags: [Agents]
+      summary: Create new agent
+      description: Configure a new AI agent
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Customer Support Agent"
+                description:
+                  type: string
+                  example: "Specialized agent for customer support inquiries"
+                model:
+                  type: string
+                  example: "claude-3-sonnet"
+                system_prompt:
+                  type: string
+                  example: "You are a helpful customer support agent..."
+                temperature:
+                  type: number
+                  default: 0.7
+                max_tokens:
+                  type: integer
+                  default: 4096
+                tools:
+                  type: array
+                  items:
+                    type: string
+                  example: ["web_search", "query_knowledge_base"]
+              required: [name, model, system_prompt]
+      responses:
+        '201':
+          description: Agent created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+
+  /api/settings/agents/{agent_id}:
+    parameters:
+      - name: agent_id
+        in: path
+        required: true
+        description: Agent identifier
+        schema:
+          type: string
+
+    get:
+      tags: [Agents]
+      summary: Get agent details
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      responses:
+        '200':
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+
+    put:
+      tags: [Agents]
+      summary: Update agent
+      description: Update agent configuration and settings
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                system_prompt:
+                  type: string
+                temperature:
+                  type: number
+                max_tokens:
+                  type: integer
+                tools:
+                  type: array
+                  items:
+                    type: string
+                status:
+                  type: string
+                  enum: [active, inactive, testing]
+      responses:
+        '200':
+          description: Agent updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+
+    delete:
+      tags: [Agents]
+      summary: Delete agent
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      responses:
+        '204':
+          description: Agent deleted successfully
+        '404':
+          description: Agent not found
+
+  /api/branding/{client_id}:
+    parameters:
+      - name: client_id
+        in: path
+        required: true
+        description: Client identifier
+        schema:
+          type: string
+
+    get:
+      tags: [Branding]
+      summary: Get branding configuration
+      description: Retrieve branding settings for a client
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      responses:
+        '200':
+          description: Branding configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandingConfig'
+        '404':
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags: [Branding]
+      summary: Update branding configuration
+      description: Update branding settings for a client
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                logo:
+                  type: string
+                  format: uri
+                logo_nav:
+                  type: string
+                  format: uri
+                colors:
+                  type: object
+                  properties:
+                    primary:
+                      type: string
+                      pattern: '^#[0-9A-Fa-f]{6}$'
+                    secondary:
+                      type: string
+                      pattern: '^#[0-9A-Fa-f]{6}$'
+                    accent:
+                      type: string
+                      pattern: '^#[0-9A-Fa-f]{6}$'
+                domains:
+                  type: array
+                  items:
+                    type: string
+                    format: hostname
+      responses:
+        '200':
+          description: Branding updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandingConfig'
+        '400':
+          description: Invalid branding configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/agents:
+    get:
+      tags: [Public Agents]
+      summary: List available agents
+      description: Get list of agents available for chat interactions
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      responses:
+        '200':
+          description: Available agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    agent_id:
+                      type: string
+                    name:
+                      type: string
+                    description:
+                      type: string
+                    status:
+                      type: string
+                      enum: [active, inactive]
+                  required: [agent_id, name, status]
+
+tags:
+  - name: Integrations
+    description: External integration management
+  - name: Agents
+    description: AI agent configuration and management
+  - name: Branding
+    description: Client branding and appearance settings
+  - name: Public Agents
+    description: Public agent endpoints for chat interactions

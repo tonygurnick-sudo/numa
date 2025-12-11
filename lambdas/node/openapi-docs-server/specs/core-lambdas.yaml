@@ -1,0 +1,456 @@
+openapi: 3.0.3
+info:
+  title: Numa Core Lambda APIs
+  description: |
+    Core utility and processing APIs that support the Numa platform infrastructure.
+
+    These APIs handle authentication, content processing, web search, and other
+    foundational services used by the chat agent and applications.
+  version: 1.0.0
+  contact:
+    name: Numa Platform
+    url: https://numa.ai
+servers:
+  - url: https://api.numa.ai
+    description: Production API
+components:
+  securitySchemes:
+    CognitoAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    CloudFrontSecret:
+      type: apiKey
+      in: header
+      name: x-arcanum-cloudfront-secret
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+      required: [error]
+
+    SearchResult:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Page title
+        url:
+          type: string
+          format: uri
+          description: Source URL
+        snippet:
+          type: string
+          description: Text excerpt
+        timestamp:
+          type: string
+          format: date-time
+          description: When the result was indexed
+      required: [title, url, snippet]
+
+    ExtractionResult:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Extracted text content
+        metadata:
+          type: object
+          properties:
+            title:
+              type: string
+            author:
+              type: string
+            pages:
+              type: integer
+            format:
+              type: string
+          description: Document metadata
+        success:
+          type: boolean
+          description: Whether extraction was successful
+      required: [content, success]
+
+paths:
+  /api/srp-hasher:
+    post:
+      tags: [Authentication]
+      summary: Generate SRP hash
+      description: |
+        Generate SRP (Secure Remote Password) hash for authentication flows.
+        Used internally by the authentication system.
+      security:
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  format: password
+                  description: Password to hash
+                salt:
+                  type: string
+                  description: Salt for hashing
+              required: [password, salt]
+      responses:
+        '200':
+          description: SRP hash generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hash:
+                    type: string
+                    description: Generated SRP hash
+                  salt:
+                    type: string
+                    description: Salt used for hashing
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/web-search:
+    post:
+      tags: [Search]
+      summary: Perform web search
+      description: |
+        Execute web search queries and return relevant results.
+        Used by the chat agent for real-time information retrieval.
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: Search query
+                  example: "latest AI developments 2024"
+                max_results:
+                  type: integer
+                  description: Maximum number of results
+                  default: 10
+                  minimum: 1
+                  maximum: 50
+                safe_search:
+                  type: boolean
+                  description: Enable safe search filtering
+                  default: true
+              required: [query]
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SearchResult'
+                  total_results:
+                    type: integer
+                    description: Total number of results found
+                  query:
+                    type: string
+                    description: Original search query
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/web-search-proxy/scrape:
+    post:
+      tags: [Search]
+      summary: Scrape web page content
+      description: |
+        Scrape and extract content from web pages for analysis.
+        Used to get full content from search results.
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: URL to scrape
+                  example: "https://example.com/article"
+                extract_text:
+                  type: boolean
+                  description: Extract only text content
+                  default: true
+                max_length:
+                  type: integer
+                  description: Maximum content length
+                  default: 50000
+              required: [url]
+      responses:
+        '200':
+          description: Scraped content
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: string
+                    description: Extracted content
+                  title:
+                    type: string
+                    description: Page title
+                  url:
+                    type: string
+                    description: Scraped URL
+                  success:
+                    type: boolean
+                    description: Whether scraping was successful
+        '400':
+          description: Invalid URL or request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/extract-content:
+    post:
+      tags: [Processing]
+      summary: Extract content from files
+      description: |
+        Extract text content from various file formats (PDF, Word, etc.).
+        Used by applications and knowledge base ingestion.
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to extract content from
+                preserve_formatting:
+                  type: boolean
+                  description: Preserve original formatting
+                  default: false
+              required: [file]
+          application/json:
+            schema:
+              type: object
+              properties:
+                s3_key:
+                  type: string
+                  description: S3 key of file to process
+                bucket:
+                  type: string
+                  description: S3 bucket name
+                preserve_formatting:
+                  type: boolean
+                  default: false
+              required: [s3_key, bucket]
+      responses:
+        '200':
+          description: Content extracted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractionResult'
+        '400':
+          description: Invalid file or unsupported format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/document-converter:
+    post:
+      tags: [Processing]
+      summary: Convert document formats
+      description: |
+        Convert documents between different formats.
+        Supports conversions like PDF to text, Word to PDF, etc.
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input_s3_key:
+                  type: string
+                  description: Source file S3 key
+                output_format:
+                  type: string
+                  enum: [pdf, docx, txt, html]
+                  description: Target format
+                options:
+                  type: object
+                  description: Format-specific options
+              required: [input_s3_key, output_format]
+      responses:
+        '200':
+          description: Conversion completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  output_s3_key:
+                    type: string
+                    description: Converted file S3 key
+                  format:
+                    type: string
+                    description: Output format
+                  size:
+                    type: integer
+                    description: File size in bytes
+
+  /api/start-web-crawler:
+    post:
+      tags: [Web Crawler]
+      summary: Start web crawling job
+      description: |
+        Initiate a web crawling job to index websites for knowledge bases.
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                urls:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  description: URLs to crawl
+                  example: ["https://docs.example.com"]
+                kb_id:
+                  type: string
+                  description: Target knowledge base
+                max_depth:
+                  type: integer
+                  description: Maximum crawl depth
+                  default: 3
+                  minimum: 1
+                  maximum: 10
+              required: [urls, kb_id]
+      responses:
+        '200':
+          description: Crawl job started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                    description: Crawl job identifier
+                  status:
+                    type: string
+                    enum: [started, running, completed, failed]
+                  urls:
+                    type: array
+                    items:
+                      type: string
+                  estimated_duration:
+                    type: string
+                    description: Estimated completion time
+
+  /api/web-crawler-stats:
+    get:
+      tags: [Web Crawler]
+      summary: Get web crawler statistics
+      description: Get statistics and status of web crawling jobs
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      parameters:
+        - name: job_id
+          in: query
+          description: Specific job ID to get stats for
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Crawler statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        job_id:
+                          type: string
+                        status:
+                          type: string
+                        pages_crawled:
+                          type: integer
+                        pages_indexed:
+                          type: integer
+                        start_time:
+                          type: string
+                          format: date-time
+                        end_time:
+                          type: string
+                          format: date-time
+                  total_jobs:
+                    type: integer
+                  active_jobs:
+                    type: integer
+
+tags:
+  - name: Authentication
+    description: Authentication and security utilities
+  - name: Search
+    description: Web search and content discovery
+  - name: Processing
+    description: Document processing and conversion
+  - name: Web Crawler
+    description: Web crawling and indexing services

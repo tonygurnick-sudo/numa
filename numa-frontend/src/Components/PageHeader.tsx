@@ -58,8 +58,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, icon, a
       <Container fluid>
         <Row>
           <Col lg={12}>
-            <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
-              <div className="d-flex align-items-center gap-3">
+            <div className="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3">
+              <div className="d-flex align-items-center gap-3 flex-grow-1 min-w-0">
                 {icon && (
                   <div
                     className="page-icon"
@@ -79,12 +79,36 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, icon, a
                       : icon.element}
                   </div>
                 )}
-                <div>
-                  <h1 className="page-title">{title}</h1>
-                  {subtitle && <p className="page-subtitle">{subtitle}</p>}
+                <div className="min-w-0 flex-grow-1">
+                  <h1
+                    className="page-title text-truncate"
+                    style={{
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      marginBottom: subtitle ? '0.25rem' : '0',
+                    }}
+                    title={typeof title === 'string' ? title : undefined}
+                  >
+                    {title}
+                  </h1>
+                  {subtitle && (
+                    <p
+                      className="page-subtitle text-truncate"
+                      style={{
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        marginBottom: '0',
+                      }}
+                      title={subtitle}
+                    >
+                      {subtitle}
+                    </p>
+                  )}
                 </div>
               </div>
-              {actions && <div className="d-flex gap-2 align-items-center">{actions}</div>}
+              {actions && <div className="d-flex gap-2 align-items-center flex-shrink-0 flex-wrap">{actions}</div>}
             </div>
           </Col>
         </Row>

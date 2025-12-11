@@ -645,6 +645,18 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * Optional configuration for the Cuttriss 12d Synergy data sync Lambda.
          */
         cuttrissDataSync: cuttrissDataSyncConfigSchema.optional(),
+
+        /**
+         * Whether to enable OpenAPI documentation server
+         *
+         * @default false
+         */
+        enableOpenApiDocs: z.boolean().optional(),
+
+        /**
+         * CloudWatch log group for OpenAPI docs (internal use)
+         */
+        logGroup: z.any().optional(),
       })
       .strict(),
   );

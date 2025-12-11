@@ -3,6 +3,32 @@ import { useCallback, useMemo } from 'react';
 import { useAuth } from './AuthProvider';
 import { NumaRequestContext } from './NumaRequestContext';
 
+// Move parseNestedJson completely outside component - pure function
+const parseNestedJson = (data) => {
+  if (typeof data === 'string') {
+    try {
+      return JSON.parse(data);
+    } catch {
+      return data;
+    }
+  }
+
+  if (Array.isArray(data)) {
+    return data.map((item) => {
+      if (item.body && typeof item.body === 'string') {
+        try {
+          item.body = JSON.parse(item.body);
+        } catch {
+          // Keep original string if parsing fails
+        }
+      }
+      return item;
+    });
+  }
+
+  return data;
+};
+
 export const NumaRequestProvider = ({ children }) => {
   const { user } = useAuth();
 
@@ -16,36 +42,11 @@ export const NumaRequestProvider = ({ children }) => {
     [user],
   );
 
-  const parseNestedJson = useCallback((data) => {
-    if (typeof data === 'string') {
-      try {
-        return JSON.parse(data);
-      } catch {
-        return data;
-      }
-    }
-
-    if (Array.isArray(data)) {
-      return data.map((item) => {
-        if (item.body && typeof item.body === 'string') {
-          try {
-            item.body = JSON.parse(item.body);
-          } catch {
-            // Keep original string if parsing fails
-          }
-        }
-        return item;
-      });
-    }
-
-    return data;
-  }, []);
-
   const axiosConfig = useMemo(
     () => ({
       transformResponse: [...axios.defaults.transformResponse, (data) => parseNestedJson(data)],
     }),
-    [parseNestedJson],
+    [], // No dependencies needed since parseNestedJson is stable
   );
 
   // Common request methods
