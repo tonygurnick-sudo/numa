@@ -20,6 +20,7 @@ interface KnowledgeBaseContextType {
   // Functions
   refreshKBs: () => Promise<void>;
   selectKBById: (kbId: string) => void;
+  fetchKBDetails: (kbId: string) => Promise<void>; // Fetches KB details and updates cache
 }
 
 const KnowledgeBaseContext = createContext<KnowledgeBaseContextType | undefined>(undefined);
@@ -46,6 +47,7 @@ function sanitizeUserKB(kb: UserKB | null | undefined): UserKB | null {
     kb_name: typeof kb.kb_name === 'string' && kb.kb_name.trim().length > 0 ? kb.kb_name : kbId,
     role: kb.role === 'EDITOR' || kb.role === 'OWNER' ? kb.role : 'VIEWER',
     is_shared: isShared,
+    document_count: kb.document_count,
   };
 }
 
@@ -91,7 +93,7 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
     return initial?.kb_id ?? null;
   });
   const [availableKBs, setAvailableKBs] = useState<UserKB[]>([]);
-  const [isLoadingKBs, setIsLoadingKBs] = useState<boolean>(false);
+  const [isLoadingKBs, setIsLoadingKBs] = useState<boolean>(true); // Start loading immediately
   const [kbError, setKbError] = useState<string | null>(null);
 
   /**
@@ -122,30 +124,55 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
 
       setAvailableKBs(augmentedKbs);
 
-      // Always ensure "company" KB exists and set it as default if no KB is selected
-      const companyKB = augmentedKbs.find((kb) => kb.kb_id === 'company');
-      if (companyKB) {
-        // If no KB is selected, or selected KB no longer exists, default to company KB
-        if (!selectedKB || !augmentedKbs.find((kb) => kb.kb_id === selectedKB.kb_id)) {
-          setSelectedKB(companyKB);
+      // Use setSelectedKB with a function to avoid dependency on selectedKB state
+      setSelectedKBState((currentSelected) => {
+        // Always ensure "company" KB exists and set it as default if no KB is selected
+        const companyKB = augmentedKbs.find((kb) => kb.kb_id === 'company');
+        if (companyKB) {
+          // If no KB is selected, or selected KB no longer exists, default to company KB
+          if (!currentSelected || !augmentedKbs.find((kb) => kb.kb_id === currentSelected.kb_id)) {
+            setSelectedKbId(companyKB.kb_id);
+            saveSelectedKBToStorage(companyKB);
+            return companyKB;
+          }
+        } else if (augmentedKbs.length > 0 && !currentSelected) {
+          // If no company KB but other KBs exist, select the first one
+          setSelectedKbId(augmentedKbs[0].kb_id);
+          saveSelectedKBToStorage(augmentedKbs[0]);
+          return augmentedKbs[0];
         }
-      } else if (augmentedKbs.length > 0 && !selectedKB) {
-        // If no company KB but other KBs exist, select the first one
-        setSelectedKB(augmentedKbs[0]);
-      }
+        return currentSelected;
+      });
     } catch (error) {
       console.error('Error fetching KBs:', error);
-      setKbError(error instanceof Error ? error.message : 'Failed to load knowledge bases');
+
+      // Check if this might be an auth-related error
+      const token = window.localStorage.getItem('idToken');
+
+      let errorMessage = 'Failed to load knowledge bases';
+      if (!token) {
+        errorMessage = 'Authentication tokens not ready. Please wait or refresh the page.';
+        console.debug('KB loading failed due to missing auth tokens', { hasToken: !!token });
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      setKbError(errorMessage);
 
       // On error, default to company KB
       setAvailableKBs([DEFAULT_COMPANY_KB]);
-      if (!selectedKB) {
-        setSelectedKB(DEFAULT_COMPANY_KB);
-      }
+      setSelectedKBState((currentSelected) => {
+        if (!currentSelected) {
+          setSelectedKbId(DEFAULT_COMPANY_KB.kb_id);
+          saveSelectedKBToStorage(DEFAULT_COMPANY_KB);
+          return DEFAULT_COMPANY_KB;
+        }
+        return currentSelected;
+      });
     } finally {
       setIsLoadingKBs(false);
     }
-  }, [selectedKB, setSelectedKB]);
+  }, []); // Remove selectedKB dependency to avoid loops
 
   /**
    * Select a KB by ID
@@ -165,11 +192,90 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
   );
 
   /**
-   * Load KBs on mount
+   * Fetch KB details and update the cache with fresh data (including document_count)
+   * This triggers the backend to calculate and persist the document count from S3
+   */
+  const fetchKBDetails = useCallback(
+    async (kbId: string) => {
+      const normalizedId = typeof kbId === 'string' ? kbId.trim() : '';
+      if (!normalizedId || normalizedId === 'company') {
+        // Skip for company KB or invalid IDs
+        return;
+      }
+
+      try {
+        const kbDetails = await knowledgeBaseService.getKB(normalizedId);
+
+        // Update the KB in availableKBs with fresh data
+        setAvailableKBs((prev) =>
+          prev.map((kb) => {
+            if (kb.kb_id === normalizedId) {
+              return {
+                ...kb,
+                kb_name: kbDetails.kb_name,
+                is_shared: kbDetails.is_shared,
+                document_count: kbDetails.document_count,
+              };
+            }
+            return kb;
+          }),
+        );
+      } catch (error) {
+        // Silently fail - this is a background refresh, not critical
+        console.debug('Failed to fetch KB details for count update:', error);
+      }
+    },
+    [setAvailableKBs],
+  );
+
+  /**
+   * Load KBs on mount - with retry logic for auth timing
+   * Note: Empty dependency array to run only once on mount
    */
   useEffect(() => {
-    refreshKBs();
-  }, []);
+    let retryCount = 0;
+    let timeoutId: NodeJS.Timeout | null = null;
+    let isCancelled = false;
+    const maxRetries = 10;
+    const retryDelay = 500; // Start with 500ms delay
+
+    const attemptLoadKBs = async () => {
+      if (isCancelled) return;
+
+      // Check if auth tokens are available
+      const token = window.localStorage.getItem('idToken');
+
+      if (token) {
+        // Token is available, proceed with loading (CloudFront will inject the secret header automatically)
+        if (!isCancelled) {
+          await refreshKBs();
+        }
+        return;
+      }
+
+      // Tokens not ready yet, retry if we haven't exceeded max retries
+      if (retryCount < maxRetries && !isCancelled) {
+        retryCount++;
+        console.debug(`KB loading attempt ${retryCount}/${maxRetries}: waiting for auth tokens...`);
+        timeoutId = setTimeout(attemptLoadKBs, retryDelay * retryCount); // Exponential backoff
+      } else if (!isCancelled) {
+        console.warn('Max retries reached for KB loading - proceeding without full auth');
+        // Still attempt to load in case there's cached data or fallback logic
+        await refreshKBs();
+      }
+    };
+
+    // Start the loading process
+    attemptLoadKBs();
+
+    // Cleanup function to prevent memory leaks
+    return () => {
+      isCancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, []); // Empty dependency array - only run on mount
 
   const value: KnowledgeBaseContextType = {
     selectedKB,
@@ -180,6 +286,7 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
     kbError,
     refreshKBs,
     selectKBById,
+    fetchKBDetails,
   };
 
   return <KnowledgeBaseContext.Provider value={value}>{children}</KnowledgeBaseContext.Provider>;

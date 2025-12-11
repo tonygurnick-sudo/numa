@@ -24,6 +24,7 @@ export interface UserKB {
   kb_name: string;
   role: 'VIEWER' | 'EDITOR' | 'OWNER';
   is_shared?: boolean; // Whether KB is shared with other users
+  document_count?: number; // Cached count, updated when KB is viewed
 }
 
 export interface CreateKBRequest {
@@ -119,6 +120,8 @@ class KnowledgeBaseService {
 
   /**
    * Get CloudFront shared secret from session storage
+   * Note: This is normally injected by CloudFront automatically,
+   * but may be needed for direct API testing
    */
   private getCloudfrontSecret(): string | null {
     return window.sessionStorage.getItem('CLOUDFRONT_SHARED_SECRET');

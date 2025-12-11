@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { Button, Alert, Modal, Collapse } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
@@ -134,10 +134,13 @@ const NumaChatAgents = () => {
   const userEmail = idToken.email || '';
   const userName = userEmail.split('@')[0] || undefined; // Extract first part of email as name
 
-  // Feature flag: agents enabled?
-  const agentsFeatureEnabled = useMemo(
-    () => (typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false),
-    [],
+  // Simple direct access - no need for useMemo for primitive values
+  const userId = user?.attributes?.sub;
+  const userExists = !!user;
+
+  // Feature flag: agents enabled? - read once on mount, not in useMemo
+  const [agentsFeatureEnabled] = useState(() =>
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false,
   );
 
   // If feature disabled, ensure no agent is selected and agent-specific flags are off
@@ -151,12 +154,19 @@ const NumaChatAgents = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    // Set initial mobile state
+    const initial = window.innerWidth <= 768;
+    setIsMobile(initial);
+
     const handleResize = () => {
       const mobile = window.innerWidth <= 768;
-      setIsMobile(mobile);
-      if (!mobile) {
-        setShowMobileActions(false);
-      }
+      setIsMobile((prev) => {
+        if (prev === mobile) return prev; // Prevent unnecessary updates
+        if (!mobile) {
+          setShowMobileActions(false);
+        }
+        return mobile;
+      });
     };
 
     window.addEventListener('resize', handleResize);
@@ -199,10 +209,10 @@ const NumaChatAgents = () => {
       return;
     }
     const loadPersonalAgents = async () => {
-      if (!user) return;
+      if (!userExists || !userId) return;
 
       // Cache configuration
-      const CACHE_KEY = `numa_personal_agents_${user.attributes?.sub || 'unknown'}`;
+      const CACHE_KEY = `numa_personal_agents_${userId}`;
       const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
       // Check cache first
@@ -260,7 +270,7 @@ const NumaChatAgents = () => {
       }
     };
     loadPersonalAgents();
-  }, [user, numaGet, agentsFeatureEnabled]);
+  }, [userExists, userId, numaGet, agentsFeatureEnabled]);
 
   // Cleanup preselect timer on unmount
   useEffect(() => {
@@ -272,53 +282,56 @@ const NumaChatAgents = () => {
     };
   }, []);
 
-  // Memoize constants to prevent unnecessary rerenders
-  const REGION = useMemo(() => window.sessionStorage.getItem('REGION'), []);
+  // Read region once on mount, not in useMemo
+  const [REGION] = useState(() => window.sessionStorage.getItem('REGION'));
 
-  const applyAgentConfiguration = (agent: AgentSummary | null) => {
-    if (!agent) {
-      setAutoToolsEnabled(true);
-      setWebSearchEnabled(false);
-      setCreateAgentEnabled(false);
-      setEnabledConnections([]);
-      // Reset KB selection to all available when no agent
-      setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
-      return;
-    }
+  const applyAgentConfiguration = useCallback(
+    (agent: AgentSummary | null) => {
+      if (!agent) {
+        setAutoToolsEnabled(true);
+        setWebSearchEnabled(false);
+        setCreateAgentEnabled(false);
+        setEnabledConnections([]);
+        // Reset KB selection to all available when no agent
+        setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
+        return;
+      }
 
-    const config = agent.toolsConfig ?? {};
-    setAutoToolsEnabled(config.autoToolsEnabled ?? true);
-    setWebSearchEnabled(config.webSearchEnabled ?? false);
-    setCreateAgentEnabled(config.createAgentEnabled ?? false);
-    setEnabledConnections(config.enabledConnections ?? []);
+      const config = agent.toolsConfig ?? {};
+      setAutoToolsEnabled(config.autoToolsEnabled ?? true);
+      setWebSearchEnabled(config.webSearchEnabled ?? false);
+      setCreateAgentEnabled(config.createAgentEnabled ?? false);
+      setEnabledConnections(config.enabledConnections ?? []);
 
-    // Apply KB constraints from agent
-    const allowedKBs = config.allowedKnowledgeBases;
-    if (allowedKBs === null || allowedKBs === undefined) {
-      // Backwards compat: check queryDataSources for existing agents
-      if (config.queryDataSources === false) {
-        // No KB access
+      // Apply KB constraints from agent
+      const allowedKBs = config.allowedKnowledgeBases;
+      if (allowedKBs === null || allowedKBs === undefined) {
+        // Backwards compat: check queryDataSources for existing agents
+        if (config.queryDataSources === false) {
+          // No KB access
+          setEnabledKBIds([]);
+        } else {
+          // All KBs allowed - enable all available
+          setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
+        }
+      } else if (allowedKBs.length === 0) {
+        // Explicit no KB access
         setEnabledKBIds([]);
       } else {
-        // All KBs allowed - enable all available
-        setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
+        // Specific KBs allowed - enable only those that are both allowed and available
+        const allowedSet = new Set(allowedKBs);
+        setEnabledKBIds(availableKBs.filter((kb) => allowedSet.has(kb.kb_id)).map((kb) => kb.kb_id));
       }
-    } else if (allowedKBs.length === 0) {
-      // Explicit no KB access
-      setEnabledKBIds([]);
-    } else {
-      // Specific KBs allowed - enable only those that are both allowed and available
-      const allowedSet = new Set(allowedKBs);
-      setEnabledKBIds(availableKBs.filter((kb) => allowedSet.has(kb.kb_id)).map((kb) => kb.kb_id));
-    }
-  };
+    },
+    [availableKBs],
+  );
 
-  const resetAgentState = () => {
+  const resetAgentState = useCallback(() => {
     setCurrentAgent(null);
     setPendingAgent(null);
     applyAgentConfiguration(null);
     setAgentError(null);
-  };
+  }, [applyAgentConfiguration]);
 
   const getMissingIntegrations = (agent: AgentSummary): string[] => {
     const required = agent.requiredIntegrations ?? [];

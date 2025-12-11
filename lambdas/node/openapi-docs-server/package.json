@@ -1,0 +1,36 @@
+{
+  "name": "openapi-docs-server",
+  "packageManager": "yarn@4.9.2",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "clean": "rimraf dist lambda_function.zip",
+    "build": "yarn clean && esbuild --bundle --format=esm --platform=node --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" index.ts",
+    "bundle": "yarn build && zip -X -j lambda_function.zip dist/*",
+    "lint": "eslint && tsc --noEmit",
+    "test": "mkdir -p test-reports; node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "mime-types": "^2.1.35",
+    "swagger-ui-dist": "^5.17.14"
+  },
+  "devDependencies": {
+    "@arcanumai/style": "workspace:*",
+    "@types/aws-lambda": "^8.10.146",
+    "@types/js-yaml": "^4.0.9",
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^22.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^10.0.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "prettier": "^3.4.2",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

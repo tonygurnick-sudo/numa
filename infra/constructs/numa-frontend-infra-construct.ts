@@ -30,6 +30,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 import { NumaLogGroup } from './numa-log-group';
 import { KnowledgeBase } from './knowledge-base-construct';
+import { OpenAPIDocsConstruct } from './openapi-docs-construct';
 
 export class NumaFrontendInfra extends Construct {
   readonly apiGateway: Apigatewayv2Api;
@@ -38,6 +39,7 @@ export class NumaFrontendInfra extends Construct {
   readonly distribution: CloudfrontDistribution;
   readonly brandingAssetsPrefix = 'branding/';
   readonly cloudfrontSecretParameter: SsmParameter;
+  readonly openApiDocs?: OpenAPIDocsConstruct;
 
   constructor(scope: Construct, name: string, props: NumaFrontendInfraProps) {
     super(scope, name);
@@ -276,6 +278,18 @@ export class NumaFrontendInfra extends Construct {
 
     const accessIdentity = new CloudfrontOriginAccessIdentity(this, 'identity', {});
 
+    // Optionally create OpenAPI documentation server
+    if (props.enableOpenApiDocs && props.logGroup) {
+      this.openApiDocs = new OpenAPIDocsConstruct(this, 'openapi-docs', {
+        clientName: props.clientName,
+        cognitoUserPoolId: props.userPoolId,
+        cognitoUserPoolClientId: props.userPoolClientId,
+        apiBaseUrl: `https://${props.domainName}/api`,
+        cloudfrontSecretArn: cloudfrontSecretParameter.arn,
+        logGroup: props.logGroup,
+      });
+    }
+
     // Build origins array including the chat agent Function URL
     const origins: CloudfrontDistributionOrigin[] = [
       {
@@ -312,6 +326,27 @@ export class NumaFrontendInfra extends Construct {
       domainName: chatOriginDomain,
       originId: 'chat-agent-fnurl',
     });
+
+    // Add OpenAPI docs origin if enabled
+    if (this.openApiDocs) {
+      const docsOriginDomain = Fn.replace(
+        Fn.replace(this.openApiDocs.functionUrl.functionUrl, '/^https?:\/{2}/', ''),
+        '/\/$/',
+        '',
+      );
+      origins.push({
+        customHeader: [{ name: 'x-arcanum-cloudfront-secret', value: cloudfrontSecretParameter.value }],
+        customOriginConfig: {
+          httpPort: 80,
+          httpsPort: 443,
+          originProtocolPolicy: 'https-only',
+          originSslProtocols: ['TLSv1.2'],
+          originReadTimeout: 30,
+        },
+        domainName: docsOriginDomain,
+        originId: 'openapi-docs-fnurl',
+      });
+    }
 
     // Build ordered cache behaviors (more specific routes before generic /api/*)
     const orderedCacheBehavior: CloudfrontDistributionOrderedCacheBehavior[] = [
@@ -402,16 +437,32 @@ export class NumaFrontendInfra extends Construct {
         cachePolicyId: cachingDisabledPolicyId,
         originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac',
       },
-      {
-        targetOriginId: 'api-gateway',
-        allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+    ];
+
+    // Add OpenAPI docs cache behavior if enabled
+    if (this.openApiDocs) {
+      orderedCacheBehavior.push({
+        targetOriginId: 'openapi-docs-fnurl',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
         cachedMethods: ['GET', 'HEAD'],
-        pathPattern: '/api/*',
+        pathPattern: '/docs/*',
         viewerProtocolPolicy: 'redirect-to-https',
         compress: true,
-        cachePolicyId: apiCachePolicy.id,
-      },
-    ];
+        // Use caching optimized policy for static documentation assets
+        cachePolicyId: cachingOptimizedPolicyId,
+      });
+    }
+
+    // Add generic API pattern last (catch-all)
+    orderedCacheBehavior.push({
+      targetOriginId: 'api-gateway',
+      allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+      cachedMethods: ['GET', 'HEAD'],
+      pathPattern: '/api/*',
+      viewerProtocolPolicy: 'redirect-to-https',
+      compress: true,
+      cachePolicyId: apiCachePolicy.id,
+    });
 
     this.distribution = new CloudfrontDistribution(this, 'cloudfront', {
       aliases: [props.domainName],
@@ -524,4 +575,6 @@ export interface NumaFrontendInfraProps {
   chatAgentFunctionUrl: string;
   cloudfrontSecretParam?: SsmParameter;
   devInstance?: boolean;
+  enableOpenApiDocs?: boolean;
+  logGroup?: import('@cdktf/provider-aws/lib/cloudwatch-log-group').CloudwatchLogGroup;
 }

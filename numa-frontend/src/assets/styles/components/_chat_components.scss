@@ -278,6 +278,9 @@ $border-radius-pill: 1rem;
       display: flex;
       flex-direction: column;
       max-height: calc(100dvh - 180px);
+      // Hide scrollbars
+      scrollbar-width: none; // Firefox
+      -ms-overflow-style: none; // IE
 
       @include mobile{
         max-height: calc(100dvh - 90px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
@@ -285,12 +288,9 @@ $border-radius-pill: 1rem;
         min-height: 0;
       }
 
-      // Hide scrollbars
       &::-webkit-scrollbar {
         display: none; // Chrome, Safari, Edge
       }
-      scrollbar-width: none; // Firefox
-      -ms-overflow-style: none; // IE
 
       .message {
         @include message-background;
@@ -990,18 +990,18 @@ $border-radius-pill: 1rem;
     display: flex;
     flex-direction: column;
     height: 100%;
+    // Hide scrollbars
+    scrollbar-width: none; // Firefox
+    -ms-overflow-style: none; // IE
 
     @include mobile {
       padding-bottom: env(safe-area-inset-bottom, 12px);
       scroll-padding-top: 2.5rem; // keep items from sliding under sticky title
     }
 
-    // Hide scrollbars
     &::-webkit-scrollbar {
       display: none; // Chrome, Safari, Edge
     }
-    scrollbar-width: none; // Firefox
-    -ms-overflow-style: none; // IE
 
     // Sticky header for conversation history
     .static-header {

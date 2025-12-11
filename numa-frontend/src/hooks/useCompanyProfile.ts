@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../Providers/AuthProvider';
 import { loadCompanyProfile } from '../utils/chatSystemPromptUtils';
 
@@ -12,23 +12,26 @@ export const useCompanyProfile = () => {
 
   const { getCredentials } = useAuth();
 
-  // Memoize constants to prevent unnecessary rerenders
-  const REGION = useMemo(() => window.sessionStorage.getItem('REGION'), []);
-  const CLIENT_NAME = useMemo(() => window.sessionStorage.getItem('CLIENT_NAME'), []);
-  const companyBucket = useMemo(() => `numa-${CLIENT_NAME}-company`, [CLIENT_NAME]);
+  // Read sessionStorage only once on initialization, not in useMemo
+  const [config] = useState(() => ({
+    REGION: window.sessionStorage.getItem('REGION'),
+    CLIENT_NAME: window.sessionStorage.getItem('CLIENT_NAME'),
+  }));
+
+  const companyBucket = `numa-${config.CLIENT_NAME}-company`;
 
   /**
    * Load company profile from S3
    */
   const fetchCompanyProfile = async () => {
-    if (!REGION || !companyBucket || !getCredentials) {
+    if (!config.REGION || !companyBucket || !getCredentials) {
       console.log('Missing required parameters for loading company profile');
       setIsCompanyProfileLoaded(true); // Mark as loaded even if failed to prevent repeated attempts
       return;
     }
 
     try {
-      const profileText = await loadCompanyProfile(companyBucket, REGION, getCredentials);
+      const profileText = await loadCompanyProfile(companyBucket, config.REGION, getCredentials);
       setCompanyProfile(profileText);
       console.log('Company profile loaded successfully');
     } catch (error) {
@@ -38,12 +41,12 @@ export const useCompanyProfile = () => {
     }
   };
 
-  // Load company profile when component mounts
+  // Load company profile when component mounts - removed unnecessary dependencies
   useEffect(() => {
-    if (!isCompanyProfileLoaded && REGION && companyBucket) {
+    if (!isCompanyProfileLoaded && config.REGION && companyBucket) {
       fetchCompanyProfile();
     }
-  }, [REGION, companyBucket, isCompanyProfileLoaded]);
+  }, [isCompanyProfileLoaded]); // Only depend on loading state
 
   return {
     companyProfile,

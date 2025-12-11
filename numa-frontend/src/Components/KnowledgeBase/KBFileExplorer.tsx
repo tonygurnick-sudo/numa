@@ -48,6 +48,7 @@ interface TableRow {
   kbStatus?: string | null;
   errorMessage?: string | null;
   urlTag?: string | null;
+  fileObject?: S3Object;
   children?: TableRow[];
 }
 
@@ -70,6 +71,7 @@ interface KBFileExplorerProps {
 
 export interface KBFileExplorerHandle {
   openCreateFolder: () => void;
+  refreshFiles: () => Promise<void>;
 }
 
 /**
@@ -124,7 +126,32 @@ function resolveStatus(file: S3Object): Status {
   const hasError =
     file.kbDoc?.status?.toUpperCase() === 'FAILED' || !!(file.kbDoc?.error && Object.keys(file.kbDoc.error).length > 0);
   if (hasError) return 'failed';
+
+  // Check for specific indexing states
+  const status = file.kbDoc?.status?.toUpperCase();
+  if (status === 'INDEXING' || status === 'PROCESSING' || status === 'SYNCING') return 'pending';
+
   return file.kbDoc ? 'indexed' : 'pending';
+}
+
+/**
+ * Get status display text for a file
+ */
+function getStatusDisplayText(file: S3Object, status: Status): string {
+  if (status === 'indexed') return 'Indexed';
+  if (status === 'failed') return 'Failed';
+  if (status === 'warning') return 'Warning';
+
+  // For pending status, check if it's a web crawler file
+  if (file.urlTag) {
+    const kbStatus = file.kbDoc?.status?.toUpperCase();
+    if (kbStatus === 'INDEXING' || kbStatus === 'PROCESSING' || kbStatus === 'SYNCING') {
+      return 'Indexing';
+    }
+    return 'Crawling';
+  }
+
+  return 'Pending';
 }
 
 /**
@@ -255,6 +282,76 @@ function sortTree(node: TreeNode, sortColumn: SortColumn = 'name', sortDirection
 }
 
 /**
+ * Calculate folder status based on its contents
+ */
+function calculateFolderStatus(node: TreeNode): { status: Status; hasWebCrawlerContent: boolean } {
+  let hasIndexed = false;
+  let hasWarning = false;
+  let hasFailed = false;
+  let hasPending = false;
+  let hasWebCrawlerContent = false;
+
+  // Check files in this folder
+  for (const file of node.files) {
+    if (file.urlTag) hasWebCrawlerContent = true;
+    const fileStatus = resolveStatus(file);
+
+    switch (fileStatus) {
+      case 'indexed':
+        hasIndexed = true;
+        break;
+      case 'warning':
+        hasWarning = true;
+        break;
+      case 'failed':
+        hasFailed = true;
+        break;
+      case 'pending':
+        hasPending = true;
+        break;
+    }
+  }
+
+  // Check child folders recursively and aggregate their statuses
+  for (const [_childName, childNode] of Object.entries(node.children)) {
+    const childResult = calculateFolderStatus(childNode);
+    if (childResult.hasWebCrawlerContent) {
+      hasWebCrawlerContent = true;
+    }
+
+    // Aggregate child statuses
+    switch (childResult.status) {
+      case 'indexed':
+        hasIndexed = true;
+        break;
+      case 'warning':
+        hasWarning = true;
+        break;
+      case 'failed':
+        hasFailed = true;
+        break;
+      case 'pending':
+        hasPending = true;
+        break;
+    }
+  }
+
+  // Determine overall status priority: failed > warning > pending > indexed
+  let status: Status = 'pending'; // Default
+  if (hasFailed) status = 'failed';
+  else if (hasWarning) status = 'warning';
+  else if (hasPending) status = 'pending';
+  else if (hasIndexed) status = 'indexed';
+
+  // If no direct content but has web crawler children, inherit their status
+  if (!hasIndexed && !hasPending && !hasWarning && !hasFailed && hasWebCrawlerContent) {
+    status = 'indexed'; // Assume indexed if we detected web crawler content
+  }
+
+  return { status, hasWebCrawlerContent };
+}
+
+/**
  * Build rows for tree with status
  */
 function buildRowsForTree(node: TreeNode, depth: number, parentPath: string): TableRow[] {
@@ -262,6 +359,14 @@ function buildRowsForTree(node: TreeNode, depth: number, parentPath: string): Ta
 
   for (const folderName of Object.keys(node.children)) {
     const folderId = parentPath ? `${parentPath}/${folderName}` : folderName;
+    const childNode = node.children[folderName];
+    const folderStatus = calculateFolderStatus(childNode);
+
+    // Special handling for web crawler folders
+    const isDomainFolder = /^[a-zA-Z0-9.-]+\.(com|org|net|edu|co\.nz|nz|au|uk|io|ai|dev)$/i.test(folderName);
+    const isWebCrawlerParentFolder = folderName === 'web-crawler' || folderName === 'scraped-content';
+    const shouldBeWebCrawlerFolder = folderStatus.hasWebCrawlerContent || isDomainFolder || isWebCrawlerParentFolder;
+
     const folderRow: TableRow = {
       id: folderId,
       type: 'folder',
@@ -269,10 +374,11 @@ function buildRowsForTree(node: TreeNode, depth: number, parentPath: string): Ta
       depth,
       uploadDate: '—',
       size: '—',
-      status: 'indexed' as const,
+      status: folderStatus.status,
+      urlTag: shouldBeWebCrawlerFolder ? 'web-crawler-folder' : null,
       children: [],
     };
-    const childNode = node.children[folderName];
+
     folderRow.children = buildRowsForTree(childNode, depth + 1, folderId);
     rows.push(folderRow);
   }
@@ -306,6 +412,7 @@ function buildRowsForTree(node: TreeNode, depth: number, parentPath: string): Ta
       kbStatus,
       errorMessage,
       urlTag,
+      fileObject: f, // Add reference to original file object
     });
   });
 
@@ -389,6 +496,8 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     const [createFolderError, setCreateFolderError] = useState<string | null>(null);
     const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
     const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
+    const [isUserInitiatedRefresh, setIsUserInitiatedRefresh] = useState<boolean>(false);
+    const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
 
     const [searchValue, setSearchValue] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -442,9 +551,13 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     async function fetchFiles(): Promise<void> {
       if (!CLIENT_NAME) {
         console.error('CLIENT_NAME is not set');
+        setIsInitialLoad(false);
         return;
       }
-      setIsLoadingFiles(true);
+      // Set loading state for user-initiated refresh or initial load
+      if (isUserInitiatedRefresh || isInitialLoad) {
+        setIsLoadingFiles(true);
+      }
       try {
         const credentials = await getCredentials();
         const s3Client = withPRM(S3Client, { region, credentials });
@@ -501,7 +614,14 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       } catch (err) {
         console.error('Failed to list objects from S3', err);
       } finally {
-        setIsLoadingFiles(false);
+        // Clear loading state if we set it
+        if (isUserInitiatedRefresh || isInitialLoad) {
+          setIsLoadingFiles(false);
+        }
+        // Mark initial load as complete
+        if (isInitialLoad) {
+          setIsInitialLoad(false);
+        }
       }
     }
 
@@ -519,13 +639,19 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
 
     useImperativeHandle(ref, () => ({
       openCreateFolder: () => setShowCreateFolderModal(true),
+      refreshFiles: handleRefresh,
     }));
 
     /**
      * Refresh data
      */
     async function handleRefresh(): Promise<void> {
-      await Promise.all([refreshKBState({ force: true }), fetchFiles()]);
+      setIsUserInitiatedRefresh(true);
+      try {
+        await Promise.all([refreshKBState({ force: true }), fetchFiles()]);
+      } finally {
+        setIsUserInitiatedRefresh(false);
+      }
     }
 
     /**
@@ -959,7 +1085,10 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       }
     }
 
-    const isLoading = isLoadingFiles || kbStateLoading;
+    // Show loading spinner for initial load or user-initiated actions
+    const isLoading =
+      (isLoadingFiles && (isUserInitiatedRefresh || isInitialLoad)) ||
+      (kbStateLoading && (isUserInitiatedRefresh || isInitialLoad));
     const canEdit = role === 'EDITOR' || role === 'OWNER';
 
     return (
@@ -971,69 +1100,106 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         )}
 
         {/* Action Bar */}
-        <div className="d-flex justify-content-between align-items-center mb-3 p-3 bg-light rounded">
-          <div className="d-flex align-items-center gap-3">
-            {/* Search */}
-            <Form.Control
-              type="text"
-              placeholder="Search files..."
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              style={{ width: '250px' }}
-            />
+        <div className="mb-3 p-3 bg-light rounded">
+          {/* Responsive Layout: Single row on larger screens, stacked on smaller screens */}
+          <div className="d-flex flex-column flex-xl-row justify-content-xl-between align-items-start align-items-xl-center gap-3">
+            {/* Search and Filter Group */}
+            <div className="d-flex align-items-center gap-3 flex-wrap">
+              {/* Search */}
+              <Form.Control
+                type="text"
+                placeholder="Search files..."
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                className="flex-shrink-0"
+                style={{ width: '250px', minWidth: '150px' }}
+              />
 
-            {/* Status Filter */}
-            <Form.Select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              style={{ width: '150px' }}
-            >
-              <option value="all">All Files</option>
-              <option value="pending">Pending</option>
-              <option value="indexed">Indexed</option>
-              <option value="warning">Warning</option>
-              <option value="failed">Failed</option>
-            </Form.Select>
-          </div>
+              {/* Status Filter */}
+              <Form.Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                className="flex-shrink-0"
+                style={{ width: '150px', minWidth: '120px' }}
+              >
+                <option value="all">All Files</option>
+                <option value="pending">Pending</option>
+                <option value="indexed">Indexed</option>
+                <option value="warning">Warning</option>
+                <option value="failed">Failed</option>
+              </Form.Select>
+            </div>
 
-          <div className="d-flex align-items-center gap-2">
-            {canEdit && (
-              <>
-                <span className="text-muted">{selectedItems.size || 0} selected</span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={selectedItems.size === 0}
-                  onClick={handleClearSelection}
-                >
-                  <i className="bi bi-x-circle me-1"></i>
-                  Clear
-                </Button>
+            {/* Button Toolbar Group */}
+            <div className="d-flex flex-column flex-lg-row justify-content-lg-end align-items-start align-items-lg-center gap-2">
+              {/* Selection Buttons Group */}
+              {canEdit && (
+                <div className="d-flex align-items-center gap-2">
+                  <div className="btn-group" role="group">
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      disabled={selectedItems.size === 0}
+                      onClick={handleClearSelection}
+                      className="text-nowrap"
+                    >
+                      <i className="bi bi-x-circle me-1 d-inline d-sm-none"></i>
+                      <i className="bi bi-x-circle me-1 d-none d-sm-inline"></i>
+                      <span className="d-none d-sm-inline">Clear</span>
+                    </Button>
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      disabled={selectedItems.size === rows.length}
+                      onClick={handleSelectAll}
+                      className="text-nowrap"
+                    >
+                      <i className="bi bi-check-all me-1 d-inline d-sm-none"></i>
+                      <i className="bi bi-check-all me-1 d-none d-sm-inline"></i>
+                      <span className="d-none d-sm-inline">Select All</span>
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={selectedItems.size === 0}
+                      onClick={confirmBulkDelete}
+                      className="text-nowrap"
+                    >
+                      <i className="bi bi-trash me-1 d-inline d-sm-none"></i>
+                      <i className="bi bi-trash me-1 d-none d-sm-inline"></i>
+                      <span className="d-none d-sm-inline">Delete</span>
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons Group */}
+              <div className="d-flex gap-2 flex-nowrap">
+                {canEdit && (
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={() => setShowCreateFolderModal(true)}
+                    className="text-nowrap"
+                  >
+                    <i className="bi bi-folder-plus me-1 d-inline d-sm-none"></i>
+                    <i className="bi bi-folder-plus me-1 d-none d-sm-inline"></i>
+                    <span className="d-none d-sm-inline">New Folder</span>
+                  </Button>
+                )}
                 <Button
                   variant="primary"
                   size="sm"
-                  disabled={selectedItems.size === rows.length}
-                  onClick={handleSelectAll}
+                  onClick={handleRefresh}
+                  disabled={isUserInitiatedRefresh}
+                  className="text-nowrap"
                 >
-                  <i className="bi bi-check-all me-1"></i>
-                  Select All
+                  <i className="bi bi-arrow-clockwise me-1 d-inline d-sm-none"></i>
+                  <i className="bi bi-arrow-clockwise me-1 d-none d-sm-inline"></i>
+                  <span className="d-none d-sm-inline">Refresh</span>
                 </Button>
-                <Button variant="danger" size="sm" disabled={selectedItems.size === 0} onClick={confirmBulkDelete}>
-                  <i className="bi bi-trash me-1"></i>
-                  Delete
-                </Button>
-              </>
-            )}
-            {canEdit && (
-              <Button variant="outline-secondary" size="sm" onClick={() => setShowCreateFolderModal(true)}>
-                <i className="bi bi-folder-plus me-1"></i>
-                New Folder
-              </Button>
-            )}
-            <Button variant="primary" size="sm" onClick={handleRefresh} disabled={isLoading}>
-              <i className="bi bi-arrow-clockwise me-1"></i>
-              Refresh
-            </Button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1055,31 +1221,79 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
             <Table hover size="sm" className="mb-0 file-table">
               <thead className="sticky-table-header numa-table-header">
                 <tr>
-                  <th className="sortable-header" onClick={() => handleSortToggle('name')}>
-                    Name
-                    {sortColumn === 'name' && (
-                      <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1`}></i>
-                    )}
+                  <th
+                    className="sortable-header"
+                    onClick={() => handleSortToggle('name')}
+                    style={{
+                      width: '40%',
+                      minWidth: '150px',
+                      maxWidth: '300px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <div className="d-flex align-items-center justify-content-between">
+                      <span className="text-truncate">Name</span>
+                      {sortColumn === 'name' && (
+                        <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`}></i>
+                      )}
+                    </div>
                   </th>
-                  <th className="sortable-header" onClick={() => handleSortToggle('status')}>
-                    Status
-                    {sortColumn === 'status' && (
-                      <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1`}></i>
-                    )}
+                  <th
+                    className="sortable-header"
+                    onClick={() => handleSortToggle('status')}
+                    style={{
+                      width: '120px',
+                      minWidth: '100px',
+                      maxWidth: '120px',
+                    }}
+                  >
+                    <div className="d-flex align-items-center justify-content-between">
+                      <span>Status</span>
+                      {sortColumn === 'status' && (
+                        <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`}></i>
+                      )}
+                    </div>
                   </th>
-                  <th className="sortable-header" onClick={() => handleSortToggle('date')}>
-                    Upload Date
-                    {sortColumn === 'date' && (
-                      <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1`}></i>
-                    )}
+                  <th
+                    className="sortable-header d-none d-md-table-cell"
+                    onClick={() => handleSortToggle('date')}
+                    style={{
+                      width: '140px',
+                      minWidth: '120px',
+                      maxWidth: '160px',
+                    }}
+                  >
+                    <div className="d-flex align-items-center justify-content-between">
+                      <span className="text-nowrap">Upload Date</span>
+                      {sortColumn === 'date' && (
+                        <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`}></i>
+                      )}
+                    </div>
                   </th>
-                  <th className="sortable-header" onClick={() => handleSortToggle('size')}>
-                    Size
-                    {sortColumn === 'size' && (
-                      <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1`}></i>
-                    )}
+                  <th
+                    className="sortable-header d-none d-sm-table-cell"
+                    onClick={() => handleSortToggle('size')}
+                    style={{
+                      width: '80px',
+                      minWidth: '70px',
+                      maxWidth: '90px',
+                    }}
+                  >
+                    <div className="d-flex align-items-center justify-content-between">
+                      <span>Size</span>
+                      {sortColumn === 'size' && (
+                        <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`}></i>
+                      )}
+                    </div>
                   </th>
-                  {canEdit && <th>Select</th>}
+                  {canEdit && (
+                    <th style={{ width: '60px', minWidth: '50px' }}>
+                      <span className="d-none d-sm-inline">Select</span>
+                      <span className="d-inline d-sm-none">Sel</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1089,28 +1303,44 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
 
                   return (
                     <tr key={row.id}>
-                      <td>
-                        <div className={`file-tree-item depth-${row.depth}`}>
+                      <td
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: '300px',
+                        }}
+                      >
+                        <div className={`file-tree-item depth-${row.depth}`} title={row.displayName || row.name}>
                           {isFolder ? (
                             <i
-                              className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1 folder-toggle`}
+                              className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1 folder-toggle flex-shrink-0`}
                               onClick={() => toggleFolder(row.id)}
                             />
                           ) : (
-                            <span className="file-icon-spacer" />
+                            <span className="file-icon-spacer flex-shrink-0" />
                           )}
                           {isFolder ? (
                             <>
-                              <i className="bi bi-folder me-2 folder-icon" />
-                              <strong>{row.name}</strong>
+                              <i
+                                className={`bi ${row.urlTag === 'web-crawler-folder' ? 'bi-globe2' : 'bi-folder'} me-2 folder-icon flex-shrink-0`}
+                              />
+                              <strong className="text-truncate">{row.name}</strong>
+                              {row.urlTag === 'web-crawler-folder' && (
+                                <Badge bg="info" className="ms-2 flex-shrink-0 small">
+                                  Web Crawler
+                                </Badge>
+                              )}
                             </>
                           ) : (
                             <>
-                              <i className="bi bi-file-earmark me-2 file-icon" />
-                              <span>{row.displayName || row.name}</span>
+                              <i className="bi bi-file-earmark me-2 file-icon flex-shrink-0" />
+                              <span className="text-truncate" style={{ minWidth: 0 }}>
+                                {row.displayName || row.name}
+                              </span>
                               {row.urlTag && (
-                                <Badge bg="info" className="ms-2">
-                                  URL
+                                <Badge bg="info" className="ms-2 flex-shrink-0">
+                                  Web Crawler
                                 </Badge>
                               )}
                             </>
@@ -1118,7 +1348,31 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                         </div>
                       </td>
                       <td>
-                        {!isFolder && (
+                        {isFolder ? (
+                          // Show status for web crawler folders
+                          row.urlTag === 'web-crawler-folder' ? (
+                            <Badge
+                              bg={
+                                row.status === 'indexed'
+                                  ? 'success'
+                                  : row.status === 'failed'
+                                    ? 'danger'
+                                    : row.status === 'warning'
+                                      ? 'warning'
+                                      : 'secondary'
+                              }
+                              text={row.status === 'warning' ? 'dark' : undefined}
+                            >
+                              {row.status === 'indexed'
+                                ? 'Indexed'
+                                : row.status === 'failed'
+                                  ? 'Failed'
+                                  : row.status === 'warning'
+                                    ? 'Warning'
+                                    : 'Indexing'}
+                            </Badge>
+                          ) : null
+                        ) : (
                           <>
                             {(row.status === 'failed' || row.status === 'warning') && row.errorMessage ? (
                               <OverlayTrigger
@@ -1148,24 +1402,39 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                                       ? 'danger'
                                       : row.status === 'warning'
                                         ? 'warning'
-                                        : 'secondary'
+                                        : row.fileObject?.urlTag &&
+                                            (row.fileObject?.kbDoc?.status === 'INDEXING' ||
+                                              row.fileObject?.kbDoc?.status === 'PROCESSING' ||
+                                              row.fileObject?.kbDoc?.status === 'SYNCING')
+                                          ? 'warning'
+                                          : 'secondary'
                                 }
-                                text={row.status === 'warning' ? 'dark' : undefined}
+                                text={
+                                  row.status === 'warning' ||
+                                  (row.fileObject?.urlTag &&
+                                    (row.fileObject?.kbDoc?.status === 'INDEXING' ||
+                                      row.fileObject?.kbDoc?.status === 'PROCESSING' ||
+                                      row.fileObject?.kbDoc?.status === 'SYNCING'))
+                                    ? 'dark'
+                                    : undefined
+                                }
                               >
-                                {row.status === 'indexed'
-                                  ? 'Indexed'
-                                  : row.status === 'failed'
-                                    ? 'Failed'
-                                    : row.status === 'warning'
-                                      ? 'Warning'
-                                      : 'Pending'}
+                                {row.fileObject
+                                  ? getStatusDisplayText(row.fileObject, row.status)
+                                  : row.status === 'indexed'
+                                    ? 'Indexed'
+                                    : row.status === 'failed'
+                                      ? 'Failed'
+                                      : row.status === 'warning'
+                                        ? 'Warning'
+                                        : 'Pending'}
                               </Badge>
                             )}
                           </>
                         )}
                       </td>
-                      <td>{row.uploadDate}</td>
-                      <td>{row.size}</td>
+                      <td className="d-none d-md-table-cell">{row.uploadDate}</td>
+                      <td className="d-none d-sm-table-cell">{row.size}</td>
                       {canEdit && (
                         <td>
                           <input

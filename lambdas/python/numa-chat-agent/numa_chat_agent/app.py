@@ -883,11 +883,13 @@ async def get_kb(request: Request, kb_id: str) -> Response:
         if not kb:
             return JSONResponse({"error": "KB not found"}, status_code=404)
 
-        # Enrich KB data with actual document count from S3
+        # Enrich KB data with actual document count from S3 and persist to DynamoDB
         if CLIENT_NAME and kb.get("s3_prefix"):
             data_bucket = f"numa-{CLIENT_NAME}-data"
             actual_count = _count_s3_documents(data_bucket, kb["s3_prefix"])
             kb["document_count"] = actual_count
+            # Persist the count so list endpoint shows accurate cached value
+            kb_manager.update_document_count(kb_id, actual_count)
 
         # Enrich KB data with editor emails
         editors = kb.get("editors", [])

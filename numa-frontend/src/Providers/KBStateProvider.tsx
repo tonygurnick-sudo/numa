@@ -6,7 +6,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { useAuth } from './AuthProvider';
-import { getKnowledgeBaseState } from '../utils/knowledgeBaseUtils';
+import { kbRequestManager } from '../Services/kbRequestManager';
 import { useNumaRequest } from './NumaRequestContext';
 
 // Cache TTL: 30 minutes (aligns with AWS sync schedule)
@@ -90,7 +90,7 @@ export function KBStateProvider({ kbId, kbType, children }: KBStateProviderProps
   // Track in-flight requests to prevent duplicate calls
   const inflightRequestRef = useRef<Promise<void> | null>(null);
 
-  const { qBusinessClient, bedrockAgentClient, getCredentials, region: authRegion } = useAuth();
+  const { qBusinessClient, bedrockAgentClient, getCredentials: _getCredentials, region: authRegion } = useAuth();
   const { numaGet } = useNumaRequest();
   const region = authRegion || window.sessionStorage.getItem('REGION') || 'ap-southeast-2';
   const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
@@ -101,6 +101,21 @@ export function KBStateProvider({ kbId, kbType, children }: KBStateProviderProps
 
   // Calculate S3 prefix filter based on KB type (matching actual S3 bucket structure)
   const s3PrefixFilter = kbType === 'user' ? `documents/kb-${kbId}/` : 'documents/company/';
+
+  /**
+   * Fetch web crawler stats from the API
+   */
+  const fetchCrawlerStats = async (kbIdToQuery: string) => {
+    try {
+      console.log(`[KBStateProvider] Fetching crawler stats for KB: ${kbIdToQuery}`);
+      const response = await numaGet(`/api/web-crawler-stats?kb_id=${kbIdToQuery}`);
+      console.log(`[KBStateProvider] Crawler stats response:`, response);
+      return response;
+    } catch (error) {
+      console.warn(`[KBStateProvider] Failed to fetch crawler stats for ${kbIdToQuery}:`, error);
+      throw error;
+    }
+  };
 
   /**
    * Check if cache is valid
@@ -114,7 +129,7 @@ export function KBStateProvider({ kbId, kbType, children }: KBStateProviderProps
   }
 
   /**
-   * Fetch KB state from API
+   * Fetch KB state from API using request manager for deduplication
    */
   async function fetchKBState(options?: { force?: boolean }): Promise<void> {
     // If cache is valid and not forcing, return cached data
@@ -132,12 +147,13 @@ export function KBStateProvider({ kbId, kbType, children }: KBStateProviderProps
       return;
     }
 
-    // Create and store the fetch promise
+    // Create and store the fetch promise using request manager
     const fetchPromise = (async () => {
       try {
         setCache((prev) => ({ ...prev, isLoading: true, error: null }));
 
-        const state = await getKnowledgeBaseState({
+        // Create config object for request manager
+        const config = {
           preferredKnowledgeBase: PREFERRED_KNOWLEDGE_BASE,
           qBusinessClient,
           qApplicationId: Q_APPLICATION_ID,
@@ -145,20 +161,25 @@ export function KBStateProvider({ kbId, kbType, children }: KBStateProviderProps
           bedrockAgentClient,
           bedrockKnowledgeBaseId: BEDROCK_KNOWLEDGE_BASE_ID,
           clientDisplayName: `numa-${CLIENT_NAME}`,
-          getCredentials,
           region,
           s3PrefixFilter,
           kbType,
           kbId,
-          fetchCrawlerStats: async (targetKbId?: string) => {
-            const target = targetKbId || kbId;
-            return numaGet('/api/web-crawler-stats', { kb_id: target, limit: 2000 });
-          },
-        });
+          fetchCrawlerStats, // Web crawler stats integration
+        };
 
-        if (state?.error) {
-          throw new Error(state.error);
-        }
+        // Use request manager for deduplication and throttling protection
+        const state = await kbRequestManager.getKBState(
+          kbId,
+          bedrockAgentClient,
+          qBusinessClient,
+          PREFERRED_KNOWLEDGE_BASE,
+          {
+            force: options?.force,
+            timeout: 30000,
+            config,
+          },
+        );
 
         setCache({
           data: state as KBState,
@@ -187,6 +208,8 @@ export function KBStateProvider({ kbId, kbType, children }: KBStateProviderProps
    * Invalidate cache (mark as stale)
    */
   function invalidateCache(): void {
+    // Invalidate both local cache and request manager cache
+    kbRequestManager.invalidateCache(kbId, PREFERRED_KNOWLEDGE_BASE);
     setCache((prev) => ({
       ...prev,
       timestamp: 0, // Mark as expired

@@ -1,0 +1,642 @@
+openapi: 3.0.3
+info:
+  title: Numa Apps API
+  description: |
+    Numa Apps are AI-powered applications that follow a standardized input/output pattern
+    orchestrated by AWS Step Functions. Each app provides specialized functionality
+    for different business use cases.
+
+    ## Common Pattern
+    All Numa Apps follow this pattern:
+    1. **Start**: `POST /api/{app-id}` - Initiate execution with input data
+    2. **Status**: `GET /api/{app-id}?execution_id={id}` - Check execution status and get results
+    3. **Jobs** (optional): Some apps support job management with additional endpoints
+
+    ## Available Apps
+    - **Document Summariser**: Extract and summarize document content
+    - **Policy Builder**: Generate company policies from templates
+    - **Candidate Screening**: Analyze resumes and job applications
+    - **Financial Analysis**: Analyze financial documents and data
+    - **Contract Review**: Review contracts for risks and compliance
+    - **Market Research**: Gather and analyze market intelligence
+    - **And many more...**
+  version: 1.0.0
+  contact:
+    name: Numa Platform
+    url: https://numa.ai
+servers:
+  - url: https://api.numa.ai
+    description: Production API
+components:
+  securitySchemes:
+    CognitoAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    CloudFrontSecret:
+      type: apiKey
+      in: header
+      name: x-arcanum-cloudfront-secret
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+      required: [error]
+
+    ExecutionRequest:
+      type: object
+      properties:
+        input_data:
+          type: object
+          description: App-specific input data
+        configuration:
+          type: object
+          description: Optional execution configuration
+          properties:
+            priority:
+              type: string
+              enum: [low, normal, high]
+              default: normal
+            timeout_minutes:
+              type: integer
+              minimum: 1
+              maximum: 60
+              default: 15
+        metadata:
+          type: object
+          description: Optional metadata for tracking
+      required: [input_data]
+
+    ExecutionResponse:
+      type: object
+      properties:
+        execution_id:
+          type: string
+          description: Unique execution identifier
+        status:
+          type: string
+          enum: [RUNNING, SUCCEEDED, FAILED, TIMED_OUT, ABORTED]
+          description: Current execution status
+        app_id:
+          type: string
+          description: App identifier
+        started_at:
+          type: string
+          format: date-time
+          description: Execution start time
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update time
+        results:
+          type: object
+          description: Execution results (available when status is SUCCEEDED)
+        error:
+          type: object
+          description: Error details (available when status is FAILED)
+          properties:
+            message:
+              type: string
+            code:
+              type: string
+            details:
+              type: object
+        progress:
+          type: object
+          description: Execution progress information
+          properties:
+            current_step:
+              type: string
+            completed_steps:
+              type: integer
+            total_steps:
+              type: integer
+            percentage:
+              type: number
+              minimum: 0
+              maximum: 100
+      required: [execution_id, status, app_id, started_at]
+
+    JobRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Job name or title
+        description:
+          type: string
+          description: Job description
+        input_data:
+          type: object
+          description: Job input data
+        schedule:
+          type: object
+          description: Optional scheduling configuration
+          properties:
+            type:
+              type: string
+              enum: [immediate, delayed, recurring]
+            delay_minutes:
+              type: integer
+              minimum: 1
+            cron_expression:
+              type: string
+              description: Cron expression for recurring jobs
+        priority:
+          type: string
+          enum: [low, normal, high]
+          default: normal
+      required: [name, input_data]
+
+    JobResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed, cancelled]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        executions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionResponse'
+          description: Related executions
+      required: [job_id, name, status, created_at]
+
+paths:
+  # Document Summariser App
+  /api/document-summariser:
+    post:
+      tags: [Document Apps]
+      summary: Start document summarization
+      description: |
+        Analyze and summarize uploaded documents. Supports various formats
+        including PDF, Word, PowerPoint, and text files.
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ExecutionRequest'
+                - type: object
+                  properties:
+                    input_data:
+                      type: object
+                      properties:
+                        s3_key:
+                          type: string
+                          description: S3 key of document to summarize
+                        summary_length:
+                          type: string
+                          enum: [brief, detailed, comprehensive]
+                          default: detailed
+                        focus_areas:
+                          type: array
+                          items:
+                            type: string
+                          description: Specific areas to focus on
+                          example: ["key findings", "recommendations", "risks"]
+                      required: [s3_key]
+            examples:
+              pdf_summary:
+                summary: Summarize a PDF report
+                value:
+                  input_data:
+                    s3_key: "documents/quarterly-report.pdf"
+                    summary_length: "detailed"
+                    focus_areas: ["key findings", "financial performance"]
+      responses:
+        '200':
+          description: Summarization started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResponse'
+              examples:
+                started_execution:
+                  value:
+                    execution_id: "exec_12345"
+                    status: "RUNNING"
+                    app_id: "document-summariser"
+                    started_at: "2024-12-10T13:30:00Z"
+                    updated_at: "2024-12-10T13:30:00Z"
+                    progress:
+                      current_step: "extracting_content"
+                      completed_steps: 1
+                      total_steps: 4
+                      percentage: 25
+
+    get:
+      tags: [Document Apps]
+      summary: Get document summarization status
+      description: Check the status and retrieve results of a document summarization
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      parameters:
+        - name: execution_id
+          in: query
+          required: true
+          description: Execution ID returned from the start request
+          schema:
+            type: string
+            example: "exec_12345"
+      responses:
+        '200':
+          description: Execution status and results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResponse'
+              examples:
+                completed_execution:
+                  value:
+                    execution_id: "exec_12345"
+                    status: "SUCCEEDED"
+                    app_id: "document-summariser"
+                    started_at: "2024-12-10T13:30:00Z"
+                    updated_at: "2024-12-10T13:32:15Z"
+                    results:
+                      summary: "This quarterly report shows strong performance..."
+                      key_points:
+                        - "Revenue increased by 15%"
+                        - "New market expansion successful"
+                      word_count: 245
+                      original_pages: 12
+
+  # Policy Builder App
+  /api/policy-builder:
+    post:
+      tags: [Business Apps]
+      summary: Start policy generation
+      description: Generate company policies based on templates and requirements
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ExecutionRequest'
+                - type: object
+                  properties:
+                    input_data:
+                      type: object
+                      properties:
+                        policy_type:
+                          type: string
+                          enum: [hr, security, compliance, remote_work, data_privacy]
+                          description: Type of policy to generate
+                        company_size:
+                          type: string
+                          enum: [startup, small, medium, large, enterprise]
+                        industry:
+                          type: string
+                          description: Company industry
+                        requirements:
+                          type: array
+                          items:
+                            type: string
+                          description: Specific requirements or guidelines
+                        jurisdiction:
+                          type: string
+                          description: Legal jurisdiction (e.g., "US", "EU", "CA")
+                      required: [policy_type, company_size]
+            examples:
+              remote_work_policy:
+                summary: Generate remote work policy
+                value:
+                  input_data:
+                    policy_type: "remote_work"
+                    company_size: "medium"
+                    industry: "Technology"
+                    requirements: ["flexible hours", "equipment provision", "security protocols"]
+                    jurisdiction: "US"
+      responses:
+        '200':
+          description: Policy generation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResponse'
+
+    get:
+      tags: [Business Apps]
+      summary: Get policy generation status
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      parameters:
+        - name: execution_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Policy generation status and results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResponse'
+
+  # Candidate Screening App
+  /api/candidate-screening:
+    post:
+      tags: [HR Apps]
+      summary: Start candidate screening
+      description: Analyze resumes and applications against job requirements
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ExecutionRequest'
+                - type: object
+                  properties:
+                    input_data:
+                      type: object
+                      properties:
+                        resume_s3_key:
+                          type: string
+                          description: S3 key of candidate resume
+                        job_description:
+                          type: string
+                          description: Job description text
+                        required_skills:
+                          type: array
+                          items:
+                            type: string
+                          description: Required skills for the position
+                        screening_criteria:
+                          type: object
+                          properties:
+                            min_experience_years:
+                              type: integer
+                            education_level:
+                              type: string
+                              enum: [high_school, bachelors, masters, phd]
+                            certifications:
+                              type: array
+                              items:
+                                type: string
+                      required: [resume_s3_key, job_description]
+
+    get:
+      tags: [HR Apps]
+      summary: Get candidate screening results
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      parameters:
+        - name: execution_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Screening results
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ExecutionResponse'
+                  - type: object
+                    properties:
+                      results:
+                        type: object
+                        properties:
+                          overall_score:
+                            type: number
+                            minimum: 0
+                            maximum: 100
+                          skill_matches:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                skill:
+                                  type: string
+                                match_percentage:
+                                  type: number
+                          experience_analysis:
+                            type: object
+                          recommendations:
+                            type: array
+                            items:
+                              type: string
+
+  # Financial Analysis App
+  /api/financial-analysis:
+    post:
+      tags: [Finance Apps]
+      summary: Start financial analysis
+      description: Analyze financial documents and generate insights
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ExecutionRequest'
+                - type: object
+                  properties:
+                    input_data:
+                      type: object
+                      properties:
+                        document_s3_keys:
+                          type: array
+                          items:
+                            type: string
+                          description: S3 keys of financial documents
+                        analysis_type:
+                          type: string
+                          enum: [ratio_analysis, trend_analysis, benchmarking, risk_assessment]
+                        time_period:
+                          type: object
+                          properties:
+                            start_date:
+                              type: string
+                              format: date
+                            end_date:
+                              type: string
+                              format: date
+                        comparison_data:
+                          type: object
+                          description: Optional comparison benchmarks
+                      required: [document_s3_keys, analysis_type]
+
+    get:
+      tags: [Finance Apps]
+      summary: Get financial analysis results
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      parameters:
+        - name: execution_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Financial analysis results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResponse'
+
+  # Job Management (for apps that support it)
+  /api/{app_id}/jobs:
+    parameters:
+      - name: app_id
+        in: path
+        required: true
+        description: App identifier
+        schema:
+          type: string
+          enum: [document-summariser, policy-builder, candidate-screening, financial-analysis]
+
+    get:
+      tags: [Job Management]
+      summary: List jobs for app
+      description: Get all jobs for a specific app
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter jobs by status
+          schema:
+            type: string
+            enum: [queued, running, completed, failed, cancelled]
+        - name: limit
+          in: query
+          description: Maximum number of jobs to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JobResponse'
+                  total:
+                    type: integer
+                  has_more:
+                    type: boolean
+
+    post:
+      tags: [Job Management]
+      summary: Create new job
+      description: Create a new job for the specified app
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+      responses:
+        '201':
+          description: Job created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+
+  /api/{app_id}/jobs/{job_id}:
+    parameters:
+      - name: app_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      tags: [Job Management]
+      summary: Get job details
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+
+    delete:
+      tags: [Job Management]
+      summary: Cancel job
+      description: Cancel a running or queued job
+      security:
+        - CognitoAuth: []
+        - CloudFrontSecret: []
+      responses:
+        '204':
+          description: Job cancelled successfully
+        '409':
+          description: Job cannot be cancelled (already completed or failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+tags:
+  - name: Document Apps
+    description: Document processing and analysis applications
+  - name: Business Apps
+    description: Business process automation applications
+  - name: HR Apps
+    description: Human resources and recruitment applications
+  - name: Finance Apps
+    description: Financial analysis and reporting applications
+  - name: Job Management
+    description: Job queue and batch processing management

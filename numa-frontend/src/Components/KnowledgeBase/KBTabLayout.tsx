@@ -3,6 +3,7 @@ import { Tabs, Tab, Card } from 'react-bootstrap';
 import { KBFileExplorer } from './KBFileExplorer';
 import type { KBFileExplorerHandle } from './KBFileExplorer';
 import { KBWebCrawlerTab } from './KBWebCrawlerTab';
+import { KBDataSourcesTab } from './KBDataSourcesTab';
 import { KBSettingsTab } from './KBSettingsTab';
 import { KBStateProvider, useKBState } from '../../Providers/KBStateProvider';
 
@@ -56,7 +57,22 @@ function KBTabLayoutInner({
             </div>
           </Tab>
 
-          {/* Tab 2: Web Crawler */}
+          {/* Tab 2: Data Sources */}
+          <Tab
+            eventKey="data-sources"
+            title={
+              <>
+                <i className="bi bi-database me-2"></i>
+                Data Sources
+              </>
+            }
+          >
+            <div className="p-4">
+              <KBDataSourcesTab kbId={kbId} kbType={kbType} role={role} />
+            </div>
+          </Tab>
+
+          {/* Tab 3: Web Crawler */}
           <Tab
             eventKey="web-crawler"
             title={
@@ -71,7 +87,7 @@ function KBTabLayoutInner({
             </div>
           </Tab>
 
-          {/* Tab 3: Settings */}
+          {/* Tab 4: Settings */}
           <Tab
             eventKey="settings"
             title={
@@ -93,7 +109,7 @@ function KBTabLayoutInner({
 
 /**
  * KBTabLayout Component
- * Provides the 3-tab structure: Knowledge Base, Web Crawler, Settings
+ * Provides the 4-tab structure: Knowledge Base, Data Sources, Web Crawler, Settings
  */
 export function KBTabLayout(props: KBTabLayoutProps): React.JSX.Element {
   return (

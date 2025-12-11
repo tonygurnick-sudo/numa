@@ -133,6 +133,11 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
     setShowUploadModal(false);
     setUploadSuccess(true);
     setTimeout(() => setUploadSuccess(false), 3000);
+
+    // Refresh the file explorer to show newly uploaded files
+    if (fileExplorerRef.current) {
+      fileExplorerRef.current.refreshFiles();
+    }
   }
 
   return (
@@ -142,14 +147,20 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
         subtitle="Shared knowledge across your organization"
         actions={
           canAdd ? (
-            <div className="d-flex gap-2">
-              <Button variant="secondary" onClick={() => fileExplorerRef.current?.openCreateFolder()}>
-                <i className="bi bi-folder-plus me-2"></i>
-                New Folder
+            <div className="d-flex gap-2 flex-wrap">
+              <Button
+                variant="secondary"
+                onClick={() => fileExplorerRef.current?.openCreateFolder()}
+                className="text-nowrap"
+              >
+                <i className="bi bi-folder-plus me-2 d-none d-sm-inline"></i>
+                <i className="bi bi-folder-plus me-2 d-inline d-sm-none"></i>
+                <span className="d-none d-sm-inline">New Folder</span>
               </Button>
-              <Button variant="primary" onClick={() => setShowUploadModal(true)}>
-                <i className="bi bi-upload me-2"></i>
-                Upload Files
+              <Button variant="primary" onClick={() => setShowUploadModal(true)} className="text-nowrap">
+                <i className="bi bi-upload me-2 d-none d-sm-inline"></i>
+                <i className="bi bi-upload me-2 d-inline d-sm-none"></i>
+                <span className="d-none d-sm-inline">Upload Files</span>
               </Button>
             </div>
           ) : null

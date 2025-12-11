@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Alert, Button, Badge, Form, Modal } from 'react-bootstrap';
+import { Card, Alert, Button, Badge, Form, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -214,42 +214,105 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
               </div>
             </div>
           ) : (
-            <Row>
-              <Col xs={12} md={6}>
-                <div className="mb-2">
-                  <strong>Status:</strong>{' '}
-                  {syncStatus === 'ACTIVE' || syncStatus === 'AVAILABLE' ? (
-                    <Badge bg="success" className="ms-1">
-                      {syncStatus}
-                    </Badge>
-                  ) : (
-                    <span className="ms-1">{syncStatus || 'Unknown'}</span>
-                  )}
-                </div>
+            <>
+              {/* Status Table */}
+              <div className="table-responsive">
+                <table className="table table-borderless mb-0">
+                  <tbody>
+                    <tr>
+                      <td className="ps-0 fw-semibold">Status</td>
+                      <td className="pe-0 text-end">
+                        {syncStatus === 'ACTIVE' || syncStatus === 'AVAILABLE' ? (
+                          <Badge bg="success">{syncStatus}</Badge>
+                        ) : (
+                          <Badge bg="secondary">{syncStatus || 'Unknown'}</Badge>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="ps-0 fw-semibold">Last synced</td>
+                      <td className="pe-0 text-end text-muted">
+                        {lastSuccessfulSync
+                          ? new Date(lastSuccessfulSync).toLocaleString('en-NZ')
+                          : 'No successful sync yet'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="ps-0 fw-semibold">Next scheduled index</td>
+                      <td className="pe-0 text-end text-muted">{getNextSyncTime().toLocaleTimeString()}</td>
+                    </tr>
+                    <tr>
+                      <td className="ps-0 fw-semibold">Total Documents</td>
+                      <td className="pe-0 text-end">
+                        {kbState?.documents ? (
+                          <div className="d-flex align-items-center justify-content-end gap-2">
+                            <span>{kbState.documents.length}</span>
+                            {kbState.failedDocuments && kbState.failedDocuments.length > 0 && (
+                              <Badge bg="warning" className="small">
+                                {kbState.failedDocuments.length} failed
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="ps-0 fw-semibold">Data Sources</td>
+                      <td className="pe-0 text-end">
+                        {kbState?.dataSources ? kbState.dataSources.length : <span className="text-muted">—</span>}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
-                {lastSuccessfulSync ? (
-                  <p className="text-muted small mb-2">
-                    <strong>Last synced:</strong> {new Date(lastSuccessfulSync).toLocaleString('en-NZ')}
-                  </p>
-                ) : (
-                  <p className="text-muted small mb-2">No successful sync yet.</p>
-                )}
-
-                <p className="text-muted small mb-2">
-                  <strong>Next scheduled index:</strong> {getNextSyncTime().toLocaleTimeString()}
-                </p>
-
-                {syncJobStatus === 'SYNCING' && (
-                  <Alert variant="warning" className="d-flex align-items-center mt-3">
-                    <span className="spinner-border spinner-border-sm me-2" />
-                    <strong>Indexing in progress...</strong>
-                  </Alert>
-                )}
-              </Col>
-            </Row>
+              {syncJobStatus === 'SYNCING' && (
+                <Alert variant="warning" className="d-flex align-items-center mt-3 mb-0">
+                  <span className="spinner-border spinner-border-sm me-2" />
+                  <strong>Indexing in progress...</strong>
+                </Alert>
+              )}
+            </>
           )}
         </Card.Body>
       </Card>
+
+      {/* Sync Metrics Section */}
+      {kbState?.syncMetrics && Object.keys(kbState.syncMetrics).length > 0 && (
+        <Card className="mb-4">
+          <Card.Header>
+            <Card.Title className="mb-0">
+              <i className="bi bi-graph-up me-2"></i>
+              Sync Metrics
+            </Card.Title>
+          </Card.Header>
+          <Card.Body>
+            <div className="table-responsive">
+              <table className="table table-borderless mb-0">
+                <tbody>
+                  {Object.entries(kbState.syncMetrics).map(([key, value]) => (
+                    <tr key={key}>
+                      <td className="ps-0 fw-semibold">
+                        {key
+                          .replace(/([A-Z])/g, ' $1')
+                          .replace(/^./, (str) => str.toUpperCase())
+                          .replace(/number of /gi, '')}
+                      </td>
+                      <td className="pe-0 text-end">
+                        <span className={value === 0 ? 'text-muted' : ''}>
+                          {typeof value === 'number' ? value.toLocaleString() : value}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card.Body>
+        </Card>
+      )}
 
       {/* Permissions Section */}
       <Card>
@@ -269,32 +332,42 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
           {kbType === 'company' ? (
             // Company KB: Show group roles
             <div>
-              <p className="text-muted small mb-3">
-                Access to the company knowledge base is controlled by group roles.
-              </p>
-              <div className="mb-2">
-                <strong>View Company Data:</strong>{' '}
-                {user?.features?.includes('useCompanyData') ? (
-                  <Badge bg="success">Enabled</Badge>
-                ) : (
-                  <Badge bg="secondary">Disabled</Badge>
-                )}
-              </div>
-              <div className="mb-2">
-                <strong>Add to Company Data:</strong>{' '}
-                {user?.features?.includes('addToCompanyData') ? (
-                  <Badge bg="success">Enabled</Badge>
-                ) : (
-                  <Badge bg="secondary">Disabled</Badge>
-                )}
-              </div>
-              <div className="mb-2">
-                <strong>Delete from Company Data:</strong>{' '}
-                {user?.features?.includes('deleteFromCompanyData') ? (
-                  <Badge bg="success">Enabled</Badge>
-                ) : (
-                  <Badge bg="secondary">Disabled</Badge>
-                )}
+              <p className="text-muted mb-3">Access to the company knowledge base is controlled by group roles.</p>
+              <div className="table-responsive">
+                <table className="table table-borderless mb-0">
+                  <tbody>
+                    <tr>
+                      <td className="ps-0 fw-semibold">View Company Data</td>
+                      <td className="pe-0 text-end">
+                        {user?.features?.includes('useCompanyData') ? (
+                          <Badge bg="success">Enabled</Badge>
+                        ) : (
+                          <Badge bg="secondary">Disabled</Badge>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="ps-0 fw-semibold">Add to Company Data</td>
+                      <td className="pe-0 text-end">
+                        {user?.features?.includes('addToCompanyData') ? (
+                          <Badge bg="success">Enabled</Badge>
+                        ) : (
+                          <Badge bg="secondary">Disabled</Badge>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="ps-0 fw-semibold">Delete from Company Data</td>
+                      <td className="pe-0 text-end">
+                        {user?.features?.includes('deleteFromCompanyData') ? (
+                          <Badge bg="success">Enabled</Badge>
+                        ) : (
+                          <Badge bg="secondary">Disabled</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           ) : (

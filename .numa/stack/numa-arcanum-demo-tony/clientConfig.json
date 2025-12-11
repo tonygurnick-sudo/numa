@@ -1,0 +1,13 @@
+{
+  "provisionQResources": false,
+  "devInstance": true,
+  "vectorStorageType": "s3vectors",
+  "allowBedrockQuotaSharing": true,
+  "pipedreamIntegrations": false,
+  "createServiceLinkedRole": false,
+  "brandingProviderEnabled": true,
+  "allApps": true,
+  "clientAccountId": "905418183804",
+  "preferredKnowledgeBase": "bedrock",
+  "region": "us-east-1"
+}

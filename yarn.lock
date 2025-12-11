@@ -9716,6 +9716,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@scarf/scarf@npm:=1.4.0":
+  version: 1.4.0
+  resolution: "@scarf/scarf@npm:1.4.0"
+  checksum: 10c0/332118bb488e7a70eaad068fb1a33f016d30442fb0498b37a80cb425c1e741853a5de1a04dce03526ed6265481ecf744aa6e13f072178d19e6b94b19f623ae1c
+  languageName: node
+  linkType: hard
+
 "@sentry-internal/tracing@npm:7.120.3":
   version: 7.120.3
   resolution: "@sentry-internal/tracing@npm:7.120.3"
@@ -13259,6 +13266,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/js-yaml@npm:^4.0.9":
+  version: 4.0.9
+  resolution: "@types/js-yaml@npm:4.0.9"
+  checksum: 10c0/24de857aa8d61526bbfbbaa383aa538283ad17363fcd5bb5148e2c7f604547db36646440e739d78241ed008702a8920665d1add5618687b6743858fae00da211
+  languageName: node
+  linkType: hard
+
 "@types/jsbn@npm:1.2.30":
   version: 1.2.30
   resolution: "@types/jsbn@npm:1.2.30"
@@ -13302,6 +13316,13 @@ __metadata:
   dependencies:
     "@types/unist": "npm:*"
   checksum: 10c0/84f403dbe582ee508fd9c7643ac781ad8597fcbfc9ccb8d4715a2c92e4545e5772cbd0dbdf18eda65789386d81b009967fdef01b24faf6640f817287f54d9c82
+  languageName: node
+  linkType: hard
+
+"@types/mime-types@npm:^2.1.4":
+  version: 2.1.4
+  resolution: "@types/mime-types@npm:2.1.4"
+  checksum: 10c0/a10d57881d14a053556b3d09292de467968d965b0a06d06732c748da39b3aa569270b5b9f32529fd0e9ac1e5f3b91abb894f5b1996373254a65cb87903c86622
   languageName: node
   linkType: hard
 
@@ -21386,6 +21407,31 @@ __metadata:
   languageName: node
   linkType: hard
 
+"openapi-docs-server@workspace:lambdas/node/openapi-docs-server":
+  version: 0.0.0-use.local
+  resolution: "openapi-docs-server@workspace:lambdas/node/openapi-docs-server"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/js-yaml": "npm:^4.0.9"
+    "@types/mime-types": "npm:^2.1.4"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    eslint-config-prettier: "npm:^10.0.0"
+    eslint-plugin-prettier: "npm:^5.2.1"
+    js-yaml: "npm:^4.1.0"
+    mime-types: "npm:^2.1.35"
+    prettier: "npm:^3.4.2"
+    rimraf: "npm:^6.0.1"
+    swagger-ui-dist: "npm:^5.17.14"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
 "optionator@npm:^0.8.1":
   version: 0.8.3
   resolution: "optionator@npm:0.8.3"
@@ -24083,6 +24129,15 @@ __metadata:
   version: 6.0.3
   resolution: "svg-pathdata@npm:6.0.3"
   checksum: 10c0/1ba4ad2fa81e86df37d6e78d3be9e664bbedf97773b725a863a85db384285be32dc37d9c0d61e477d89594ee95b967d2c53d6bee2d76420aab670ab4124a38b9
+  languageName: node
+  linkType: hard
+
+"swagger-ui-dist@npm:^5.17.14":
+  version: 5.30.3
+  resolution: "swagger-ui-dist@npm:5.30.3"
+  dependencies:
+    "@scarf/scarf": "npm:=1.4.0"
+  checksum: 10c0/51a889e8f72a34e9ff9140e51cbd1f9067b6ca38b49ae229d5f1c84b5a6234ba58ff4c9a8b5f76a5f93ad17ae93e7db6a8bddbe7a324972f19e92ae3794626c1
   languageName: node
   linkType: hard
 

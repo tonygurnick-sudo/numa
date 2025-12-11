@@ -46,12 +46,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
 
     if (method === 'GET' && /\/settings\/agents\/?$/.test(path)) {
-      const res = await ddb.send(
-        new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'policy' } }),
-      );
+      const res = await ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'policy' } }));
       // Item may not exist on first read; default to 'full'
-      const item = (res.Item as { mode?: AgentsMode } | undefined);
-      const mode: AgentsMode = item?.mode === 'off' || item?.mode === 'personal_only' || item?.mode === 'full' ? item.mode : 'full';
+      const item = res.Item as { mode?: AgentsMode } | undefined;
+      const mode: AgentsMode =
+        item?.mode === 'off' || item?.mode === 'personal_only' || item?.mode === 'full' ? item.mode : 'full';
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ mode }) };
     }
 
@@ -65,7 +64,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Invalid mode' }) };
       }
       await ddb.send(
-        new PutCommand({ TableName: TABLE_NAME, Item: { setting: 'policy', mode, updatedAt: new Date().toISOString() } }),
+        new PutCommand({
+          TableName: TABLE_NAME,
+          Item: { setting: 'policy', mode, updatedAt: new Date().toISOString() },
+        }),
       );
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) };
     }
