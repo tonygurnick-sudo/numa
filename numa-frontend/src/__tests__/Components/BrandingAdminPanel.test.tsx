@@ -55,6 +55,31 @@ vi.mock('../../Providers/ToastContext', () => ({
 vi.mock('../../utils/s3Utils', () => ({
   uploadFileToS3: s3Mocks.uploadFileToS3,
   getSignedUrlForS3Object: s3Mocks.getSignedUrlForS3Object,
+  resolveS3Location: (uri: string) => {
+    if (!uri) return null;
+    if (uri.startsWith('s3://')) {
+      const withoutScheme = uri.slice(5);
+      const slashIndex = withoutScheme.indexOf('/');
+      if (slashIndex === -1) return null;
+      return { bucket: withoutScheme.slice(0, slashIndex), key: withoutScheme.slice(slashIndex + 1) };
+    }
+    // Handle HTTPS S3 URLs
+    try {
+      const url = new URL(uri);
+      if (url.hostname.includes('.s3.')) {
+        const bucket = url.hostname.split('.s3.')[0];
+        const key = url.pathname.slice(1);
+        return { bucket, key };
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  },
+  buildS3HttpsUrl: (bucket: string, key: string, region: string) => {
+    if (!bucket || !key) return undefined;
+    return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+  },
 }));
 
 describe('BrandingAdminPanel', () => {

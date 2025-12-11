@@ -6,6 +6,7 @@ import { ChatInput } from './ChatInput';
 import type { ConversationMeta } from '../../hooks/useChatInactivity';
 import numaIcon from '/numa-logo.svg?url';
 import { useBranding } from '../../Providers/BrandingContext';
+import { useBrandingAsset } from '../../hooks/useBrandingAsset';
 import AgentAvatar from '../Agents/AgentAvatar';
 import { useAgentById } from '../../hooks/useAgentById';
 
@@ -309,7 +310,8 @@ export const NewChat = ({
   // ------- End DnD -------
 
   const { branding } = useBranding();
-  const logoSrc = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || numaIcon;
+  const rawLogoSrc = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || numaIcon;
+  const logoSrc = useBrandingAsset(rawLogoSrc, numaIcon);
   const logoAlt = branding.name || 'Logo';
   const handleContinueClick = (conversationId: string) => {
     hideSuggestions();

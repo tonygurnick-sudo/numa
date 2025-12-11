@@ -12,6 +12,8 @@ import type { AgentSummary } from '../../types/agents';
 import { formatAgentDisplayName } from '../../utils/agentUtils';
 import { downloadFileFromS3 } from '../../utils/s3Utils';
 import { useBranding } from '../../Providers/BrandingContext';
+import { useBrandingAsset } from '../../hooks/useBrandingAsset';
+import numaIcon from '/numa-logo.svg?url';
 
 /**
  * A small helper bubble for opening doc if docTitle/docContent exist
@@ -99,6 +101,8 @@ const ChatMessages = ({
 }) => {
   const { getCredentials } = useAuth();
   const { branding } = useBranding();
+  const rawLogoSrc = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || numaIcon;
+  const logoSrc = useBrandingAsset(rawLogoSrc, numaIcon);
 
   // Agent mode is the default and only mode; remove legacy flag checks
 
@@ -143,20 +147,18 @@ const ChatMessages = ({
                   </>
                 ) : (
                   <>
-                    {branding.resolvedAssets?.logoNav ? (
-                      <img
-                        src={branding.resolvedAssets.logoNav}
-                        alt={`${branding.name ?? 'Assistant'} logo`}
-                        style={{
-                          maxHeight: '20px',
-                          maxWidth: '60px',
-                          objectFit: 'contain',
-                          marginRight: '7px',
-                          marginBottom: '2px',
-                          verticalAlign: 'middle',
-                        }}
-                      />
-                    ) : null}
+                    <img
+                      src={logoSrc}
+                      alt={`${branding.name ?? 'Assistant'} logo`}
+                      style={{
+                        maxHeight: '20px',
+                        maxWidth: '60px',
+                        objectFit: 'contain',
+                        marginRight: '7px',
+                        marginBottom: '2px',
+                        verticalAlign: 'middle',
+                      }}
+                    />
                     {branding.name || 'Assistant'}:
                   </>
                 )}
@@ -186,20 +188,18 @@ const ChatMessages = ({
                   </>
                 ) : (
                   <>
-                    {branding.resolvedAssets?.logoNav ? (
-                      <img
-                        src={branding.resolvedAssets.logoNav}
-                        alt={`${branding.name ?? 'Assistant'} logo`}
-                        style={{
-                          maxHeight: '20px',
-                          maxWidth: '60px',
-                          objectFit: 'contain',
-                          marginRight: '7px',
-                          marginBottom: '2px',
-                          verticalAlign: 'middle',
-                        }}
-                      />
-                    ) : null}
+                    <img
+                      src={logoSrc}
+                      alt={`${branding.name ?? 'Assistant'} logo`}
+                      style={{
+                        maxHeight: '20px',
+                        maxWidth: '60px',
+                        objectFit: 'contain',
+                        marginRight: '7px',
+                        marginBottom: '2px',
+                        verticalAlign: 'middle',
+                      }}
+                    />
                     {branding.name || 'Assistant'}:
                   </>
                 )

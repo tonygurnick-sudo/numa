@@ -13,6 +13,7 @@ export const manifestService = {
 
     try {
       const response = await fetch('/manifest.json', {
+        cache: 'no-store',
         headers: {
           'Content-Type': 'application/json',
         },
