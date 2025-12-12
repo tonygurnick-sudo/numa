@@ -27,6 +27,9 @@ class EnqueueUrlEvent(TypedDict):
     crawlDepth: NotRequired[int]
     crawlSessionId: NotRequired[str]
     kbId: NotRequired[str]
+    isSeedUrl: NotRequired[bool]
+    limitToPath: NotRequired[bool]
+    seedUrlPrefix: NotRequired[str]
 
 
 logger = structlog.get_logger()
@@ -43,6 +46,9 @@ class CrawlUrlRequest(TypedDict):
     userId: str
     crawlSessionId: str
     kbId: str
+    isSeedUrl: bool
+    limitToPath: bool
+    seedUrlPrefix: Optional[str]
 
 
 def _get_table():
@@ -94,6 +100,9 @@ def _validate_request(
         "userId": str(event["userId"]),
         "crawlSessionId": str(event.get("crawlSessionId", "unknown")),
         "kbId": str(event.get("kbId", "company")),
+        "isSeedUrl": bool(event.get("isSeedUrl", False)),
+        "limitToPath": bool(event.get("limitToPath", True)),
+        "seedUrlPrefix": event.get("seedUrlPrefix"),
     }
 
 
@@ -110,6 +119,8 @@ def add_url_to_dynamodb(request: CrawlUrlRequest) -> Dict[str, Any]:
             "crawlDepth": request["crawlDepth"],
             "crawlSessionId": request["crawlSessionId"],
             "kbId": request["kbId"],
+            "isSeedUrl": request["isSeedUrl"],
+            "limitToPath": request["limitToPath"],
             "status": "pending",
             "createdAt": now,
             "updatedAt": now,
@@ -117,6 +128,9 @@ def add_url_to_dynamodb(request: CrawlUrlRequest) -> Dict[str, Any]:
             "pagesSuccessful": 0,
             "linksEnqueued": 0,
         }
+        # Only store seedUrlPrefix if it's set (avoid storing None in DynamoDB)
+        if request.get("seedUrlPrefix"):
+            item["seedUrlPrefix"] = request["seedUrlPrefix"]
 
         table.put_item(Item=item)
 

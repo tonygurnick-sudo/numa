@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
-import { Table, Button, Form, Badge, Alert, Modal, OverlayTrigger, Tooltip } from 'react-bootstrap';
-import { S3Client, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
+import { Table, Button, Form, Badge, Alert, Modal, OverlayTrigger, Tooltip, Spinner } from 'react-bootstrap';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useKBState } from '../../Providers/KBStateProvider';
-import { getUrlTagFromS3Object, listObjectsInFolder, deleteMultipleObjectsFromS3 } from '../../utils/s3Utils';
+import { listObjectsInFolder, deleteMultipleObjectsFromS3 } from '../../utils/s3Utils';
+import { knowledgeBaseService, S3FileInfo, KBDocument } from '../../Services/knowledgeBaseService';
 import '../../assets/styles/components/_knowledge_base_management.scss';
 import { withPRM } from '../../utils/prmUtils';
 
@@ -14,19 +15,6 @@ interface S3Object {
   Size: number;
   urlTag?: string;
   kbDoc?: KBDocument;
-}
-
-interface KBDocument {
-  documentId: string;
-  status: string;
-  updatedAt: string;
-  error?: {
-    errorMessage?: string;
-    errorCode?: string;
-  };
-  fileName?: string;
-  isInferred?: boolean;
-  statusReason?: string;
 }
 
 interface TreeNode {
@@ -519,6 +507,13 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     const basePrefix = kbId === 'company' ? 'documents/company/' : `documents/kb-${kbId}/`;
 
     /**
+     * Determine if status indicators are ready to show.
+     * We wait for both file listing AND KB state to be loaded to avoid
+     * showing false WARNING status when KB state is still loading.
+     */
+    const isStatusReady = !isLoadingFiles && !isInitialLoad && !kbStateLoading && kbState !== null;
+
+    /**
      * Build folder options from existing keys (relative to basePrefix)
      */
     const folderOptions = useMemo(() => {
@@ -546,73 +541,33 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     }, [allObjectKeys, basePrefix, files]);
 
     /**
-     * Fetch files from S3
+     * Fetch files via backend API (replaces direct S3 calls)
+     * The backend also updates the document count in DynamoDB
      */
     async function fetchFiles(): Promise<void> {
-      if (!CLIENT_NAME) {
-        console.error('CLIENT_NAME is not set');
-        setIsInitialLoad(false);
-        return;
-      }
       // Set loading state for user-initiated refresh or initial load
       if (isUserInitiatedRefresh || isInitialLoad) {
         setIsLoadingFiles(true);
       }
       try {
-        const credentials = await getCredentials();
-        const s3Client = withPRM(S3Client, { region, credentials });
+        // Use backend API to list files - this also updates the doc count
+        const { files: fileInfos } = await knowledgeBaseService.listKBFiles(kbId);
 
-        // Determine the prefix based on kbId
-        const prefix = basePrefix;
+        // Transform API response to S3Object format expected by the component
+        const s3Files: S3Object[] = fileInfos.map((f: S3FileInfo) => ({
+          Key: f.key,
+          LastModified: f.lastModified ? new Date(f.lastModified) : new Date(),
+          Size: f.size,
+          urlTag: f.urlTag,
+        }));
 
-        const cmd = new ListObjectsV2Command({
-          Bucket: `numa-${CLIENT_NAME}-data`,
-          Prefix: prefix,
-        });
-        const resp = await s3Client.send(cmd);
+        // Build set of all keys for folder detection
+        const allKeys = new Set<string>(fileInfos.map((f: S3FileInfo) => f.key));
 
-        const allKeys = new Set<string>();
-        (resp.Contents || []).forEach((obj) => {
-          if (obj.Key) allKeys.add(obj.Key);
-        });
-
-        const files = (resp.Contents || []) as S3Object[];
-        // Keep folder markers for tree structure, but hide metadata sidecars
-        const visibleFiles = files.filter((file) => file.Key && !file.Key.endsWith('.metadata.json'));
-
-        // Process scraped files
-        const scrapedFiles = visibleFiles.filter((file) => file.Key && file.Key.includes('scraped-content/'));
-        const otherFiles = visibleFiles.filter((file) => file.Key && !file.Key.includes('scraped-content/'));
-
-        const batchSize = 5;
-        const scrapedFilesWithTags: S3Object[] = [];
-
-        for (let i = 0; i < scrapedFiles.length; i += batchSize) {
-          const batch = scrapedFiles.slice(i, i + batchSize);
-          const batchResults = await Promise.all(
-            batch.map(async (file): Promise<S3Object> => {
-              try {
-                const bucket = `numa-${CLIENT_NAME}-data`;
-                const urlTag = await getUrlTagFromS3Object(file.Key!, bucket, region, getCredentials);
-                return { ...file, urlTag } as S3Object;
-              } catch (error) {
-                console.error('Error getting URL tag:', error);
-                return file as S3Object;
-              }
-            }),
-          );
-          scrapedFilesWithTags.push(...batchResults);
-
-          if (i + batchSize < scrapedFiles.length) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-        }
-
-        const filesWithTags: S3Object[] = [...scrapedFilesWithTags, ...(otherFiles as S3Object[])];
-        setFiles(filesWithTags);
+        setFiles(s3Files);
         setAllObjectKeys(allKeys);
       } catch (err) {
-        console.error('Failed to list objects from S3', err);
+        console.error('Failed to list KB files', err);
       } finally {
         // Clear loading state if we set it
         if (isUserInitiatedRefresh || isInitialLoad) {
@@ -1348,7 +1303,10 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                         </div>
                       </td>
                       <td>
-                        {isFolder ? (
+                        {!isStatusReady ? (
+                          // Show loading spinner while waiting for KB state
+                          <Spinner animation="border" size="sm" variant="secondary" />
+                        ) : isFolder ? (
                           // Show status for web crawler folders
                           row.urlTag === 'web-crawler-folder' ? (
                             <Badge

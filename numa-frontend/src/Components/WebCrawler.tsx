@@ -26,6 +26,7 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
   const [isCrawling, setIsCrawling] = useState<boolean>(false);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState<boolean>(false);
+  const [limitToPath, setLimitToPath] = useState<boolean>(true);
   const { startWebCrawler } = useWebCrawler();
 
   const handleAddUrl = () => {
@@ -79,7 +80,9 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
 
   const handleUpdateDepth = (index: number, depth: string) => {
     const updatedEntries = [...urlEntries];
-    updatedEntries[index].depth = parseInt(depth, 10);
+    const parsed = parseInt(depth, 10);
+    // Default to 5 if input is empty or invalid
+    updatedEntries[index].depth = isNaN(parsed) ? 5 : parsed;
     setUrlEntries(updatedEntries);
   };
 
@@ -105,6 +108,7 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
       const result = await startWebCrawler(urls, {
         urlDepthMap,
         kb_id,
+        limitToPath,
       });
 
       if (result.success) {
@@ -171,6 +175,21 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
                 ) : (
                   <Form.Text className="text-muted mt-2">Enter a website URL to crawl</Form.Text>
                 )}
+              </Form.Group>
+
+              <Form.Group className="mb-4">
+                <Form.Check
+                  type="checkbox"
+                  id="limit-to-path"
+                  label="Limit to pages under this URL"
+                  checked={limitToPath}
+                  onChange={(e) => setLimitToPath(e.target.checked)}
+                  disabled={isCrawling}
+                />
+                <Form.Text className="text-muted">
+                  If enabled, Numa will not follow links outside this part of the website and will only add pages that
+                  start with this URL path
+                </Form.Text>
               </Form.Group>
 
               <div className="d-grid">

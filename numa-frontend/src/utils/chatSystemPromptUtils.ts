@@ -246,7 +246,7 @@ Today's Date: ${TODAY}`;
         : [];
       const kbGuidance =
         kbList.length > 0
-          ? `- Use query_knowledge_base to search internal knowledge bases. Always include kb_id and choose from: ${kbList.join(
+          ? `- Use query_knowledge_base to search internal knowledge bases. You can search all KBs unless it's clear which KB the user intends you to query. Always include kb_id and choose from: ${kbList.join(
               ', ',
             )}. If none are enabled, do not call this tool.`
           : `- Use query_knowledge_base to search internal knowledge bases. Always include kb_id. If none are enabled, do not call this tool.`;

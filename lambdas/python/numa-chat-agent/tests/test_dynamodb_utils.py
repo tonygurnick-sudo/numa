@@ -15,7 +15,6 @@ from numa_chat_agent.dynamodb_utils import (
 
 # Mock external dependencies before importing
 sys.modules["structlog"] = Mock()
-sys.modules["boto3"] = Mock()
 
 
 class TestConversationMemoryFunctions(unittest.TestCase):

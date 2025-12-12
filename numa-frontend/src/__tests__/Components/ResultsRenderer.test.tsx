@@ -19,6 +19,14 @@ vi.mock('../../Providers/NumaAppContext', () => ({
   useNumaApp: vi.fn(),
 }));
 
+vi.mock('../../Providers/KnowledgeBaseProvider', () => ({
+  useKnowledgeBase: vi.fn().mockReturnValue({
+    availableKBs: [],
+    isLoadingKBs: false,
+    refreshKnowledgeBases: vi.fn(),
+  }),
+}));
+
 vi.mock('../../utils/s3Utils', () => ({
   downloadFileFromS3: vi.fn(),
   downloadFileWithSignedUrl: vi.fn().mockReturnValue(Promise.resolve()),

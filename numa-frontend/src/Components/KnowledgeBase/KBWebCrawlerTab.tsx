@@ -11,9 +11,11 @@ interface DataSource {
   status: string;
   source: string;
   isWebCrawler?: boolean;
+  isSeedUrl?: boolean;
   url?: string;
   pageCount?: number;
   lastCrawled?: string;
+  sourceUrl?: string;
 }
 
 interface KBWebCrawlerTabProps {
@@ -78,12 +80,12 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
         </Alert>
       )}
 
-      {/* Existing Crawled Domains */}
+      {/* Existing Crawled URLs */}
       <Card>
         <Card.Header>
           <Card.Title className="mb-0">
             <i className="bi bi-list-ul me-2"></i>
-            Crawled Domains
+            Crawled URLs
           </Card.Title>
         </Card.Header>
         <Card.Body>
@@ -98,7 +100,7 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
               <div className="spinner-border text-primary">
                 <span className="visually-hidden">Loading...</span>
               </div>
-              <p className="mt-3 text-muted small">Loading crawled domains...</p>
+              <p className="mt-3 text-muted small">Loading crawled URLs...</p>
             </div>
           ) : dataSources.length === 0 ? (
             <div className="text-center p-4 bg-light rounded">
@@ -110,7 +112,7 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
             <Table hover responsive>
               <thead>
                 <tr>
-                  <th>Domain</th>
+                  <th>Seed URL</th>
                   <th>Pages Crawled</th>
                   <th>Last Crawled</th>
                   <th>Status</th>
@@ -118,17 +120,19 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
               </thead>
               <tbody>
                 {dataSources.map((source, index) => {
-                  const domain =
-                    source.url ||
-                    (source.dataSourceId && source.dataSourceId.startsWith('web-crawler-')
-                      ? source.dataSourceId.replace('web-crawler-', '')
-                      : source.name);
+                  // Use sourceUrl or name for seed URLs, fall back to domain extraction for older data
+                  const displayUrl = source.sourceUrl || source.name;
+                  // Truncate long URLs for display (show first 60 chars + ... if longer)
+                  const truncatedUrl =
+                    displayUrl && displayUrl.length > 60 ? `${displayUrl.substring(0, 60)}...` : displayUrl;
 
                   return (
                     <tr key={source.dataSourceId || index}>
-                      <td>
+                      <td title={displayUrl}>
                         <i className="bi bi-globe2 me-2 text-primary"></i>
-                        {domain}
+                        <a href={displayUrl} target="_blank" rel="noopener noreferrer" className="text-decoration-none">
+                          {truncatedUrl}
+                        </a>
                       </td>
                       <td>{source.pageCount || 0}</td>
                       <td>{source.lastCrawled ? new Date(source.lastCrawled).toLocaleString('en-NZ') : 'Unknown'}</td>

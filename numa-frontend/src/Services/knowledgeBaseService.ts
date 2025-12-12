@@ -41,6 +41,62 @@ export interface UpdateKBRequest {
   editors?: string[];
 }
 
+export interface S3FileInfo {
+  key: string;
+  lastModified: string | null;
+  size: number;
+  urlTag?: string;
+}
+
+export interface ListKBFilesResponse {
+  files: S3FileInfo[];
+  document_count: number;
+}
+
+// KB State types (for sync status, documents, ingestion jobs)
+export interface KBDocument {
+  documentId: string;
+  status: string;
+  updatedAt?: string;
+  error?: {
+    errorMessage?: string;
+    errorCode?: string;
+  };
+  fileName?: string;
+  isInferred?: boolean;
+  statusReason?: string;
+}
+
+export interface KBDataSource {
+  dataSourceId: string;
+  name?: string;
+  displayName?: string;
+  type?: string;
+  status?: string;
+  source?: string;
+  isWebCrawler?: boolean;
+  url?: string;
+  pageCount?: number;
+  lastCrawled?: string;
+  lastSynced?: string;
+  lastUpdated?: string;
+}
+
+export interface KBState {
+  dataSourceId?: string;
+  syncStatus?: string;
+  syncJobStatus?: string;
+  lastSuccessfulSync?: string | null;
+  lastUpdated?: string | null;
+  syncMetrics?: Record<string, number>;
+  documents: KBDocument[];
+  dataSources: KBDataSource[];
+  failedDocuments: KBDocument[];
+  source: 'q-business' | 'bedrock';
+  error?: string;
+  message?: string;
+}
+
 class KnowledgeBaseService {
   private baseUrl: string;
 
@@ -237,6 +293,42 @@ class KnowledgeBaseService {
       await this.parseJsonResponse<Record<string, unknown>>(response, 'Failed to delete KB');
     } catch (error) {
       console.error('Error deleting KB:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * List files in a KB's S3 prefix
+   * This also updates the document count in the backend
+   */
+  async listKBFiles(kbId: string): Promise<ListKBFilesResponse> {
+    try {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/files`), {
+        method: 'GET',
+        headers: this.getHeaders(),
+      });
+
+      return this.parseJsonResponse<ListKBFilesResponse>(response, 'Failed to list KB files');
+    } catch (error) {
+      console.error('Error listing KB files:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get KB state including documents, sync status, and ingestion jobs
+   * This replaces the frontend AWS SDK calls for KB state
+   */
+  async getKBState(kbId: string): Promise<KBState> {
+    try {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/state`), {
+        method: 'GET',
+        headers: this.getHeaders(),
+      });
+
+      return this.parseJsonResponse<KBState>(response, 'Failed to get KB state');
+    } catch (error) {
+      console.error('Error getting KB state:', error);
       throw error;
     }
   }

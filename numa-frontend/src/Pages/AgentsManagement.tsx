@@ -290,7 +290,7 @@ export const AgentsManagement = () => {
   };
 
   const totalAgents = myAgents.length + workspaceAgents.length;
-  const personalCount = myAgents.filter((a) => a.visibility === 'personal').length;
+  const personalCount = myAgents.filter((a) => a.scope === 'user').length;
   const publicCount = workspaceAgents.length;
 
   return (
