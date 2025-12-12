@@ -10,6 +10,7 @@ interface ChatAgentConfiguration {
   preferredKnowledgeBase: 'bedrock' | 'q';
   qApplicationId?: string;
   qRetrieverId?: string;
+  qIndexId?: string;
   bedrockKnowledgeBaseId?: string;
 }
 
@@ -36,6 +37,8 @@ export interface ChatAgentHttpProps {
   cloudfrontSharedSecret: string;
   /** Optional AWS account ID to use for cross-account Bedrock quota sharing */
   bedrockAccount?: string;
+  /** Optional crawl URLs table name for web crawler stats in KB state */
+  crawlUrlsTableName?: string;
 }
 
 export class NumaChatAgent extends Construct {
@@ -97,6 +100,7 @@ export class NumaChatAgent extends Construct {
         COGNITO_USER_POOL_CLIENT_ID: props.userPoolClientId,
         Q_APPLICATION_ID: config.qApplicationId ?? '',
         Q_RETRIEVER_ID: config.qRetrieverId ?? '',
+        Q_INDEX_ID: config.qIndexId ?? '',
         BEDROCK_KNOWLEDGE_BASE_ID: config.bedrockKnowledgeBaseId ?? '',
         PREFERRED_KNOWLEDGE_BASE: config.preferredKnowledgeBase,
         BUCKET: props.outputsBucketName,
@@ -116,6 +120,7 @@ export class NumaChatAgent extends Construct {
         AWS_LWA_INVOKE_MODE: 'response_stream',
         ...(props.mcpPolicyTableName && { MCP_POLICY_TABLE_NAME: props.mcpPolicyTableName }),
         ...(props.bedrockAccount && { BEDROCK_ACCOUNT: props.bedrockAccount }),
+        ...(props.crawlUrlsTableName && { CRAWL_URLS_TABLE_NAME: props.crawlUrlsTableName }),
       },
       logGroup: agentLogGroup,
       resourceNameSuffix: '_chat_agent',
@@ -209,6 +214,20 @@ export class NumaChatAgent extends Construct {
                   `arn:aws:bedrock:${props.region}:${callerIdentity.accountId}:knowledge-base/${props.chatAgentConfiguration.bedrockKnowledgeBaseId}`,
                 ],
               },
+              // KB state endpoint permissions (list data sources, ingestion jobs, documents)
+              {
+                effect: 'Allow',
+                actions: [
+                  'bedrock:ListDataSources',
+                  'bedrock:ListIngestionJobs',
+                  'bedrock:GetIngestionJob',
+                  'bedrock:ListKnowledgeBaseDocuments',
+                ],
+                resources: [
+                  `arn:aws:bedrock:${props.region}:${callerIdentity.accountId}:knowledge-base/${props.chatAgentConfiguration.bedrockKnowledgeBaseId}`,
+                  `arn:aws:bedrock:${props.region}:${callerIdentity.accountId}:knowledge-base/${props.chatAgentConfiguration.bedrockKnowledgeBaseId}/data-source/*`,
+                ],
+              },
             ]
           : []),
         ...(props.chatAgentConfiguration.qApplicationId
@@ -218,6 +237,16 @@ export class NumaChatAgent extends Construct {
                 actions: ['qbusiness:SearchRelevantContent'],
                 resources: [
                   `arn:aws:qbusiness:${props.region}:${callerIdentity.accountId}:application/${props.chatAgentConfiguration.qApplicationId}`,
+                ],
+              },
+              // KB state endpoint permissions (list data sources, sync jobs, documents)
+              {
+                effect: 'Allow',
+                actions: ['qbusiness:ListDataSources', 'qbusiness:ListDataSourceSyncJobs', 'qbusiness:ListDocuments'],
+                resources: [
+                  `arn:aws:qbusiness:${props.region}:${callerIdentity.accountId}:application/${props.chatAgentConfiguration.qApplicationId}`,
+                  `arn:aws:qbusiness:${props.region}:${callerIdentity.accountId}:application/${props.chatAgentConfiguration.qApplicationId}/index/*`,
+                  `arn:aws:qbusiness:${props.region}:${callerIdentity.accountId}:application/${props.chatAgentConfiguration.qApplicationId}/index/*/data-source/*`,
                 ],
               },
             ]
@@ -281,6 +310,19 @@ export class NumaChatAgent extends Construct {
                 effect: 'Allow',
                 actions: ['sts:AssumeRole'],
                 resources: [`arn:aws:iam::${props.bedrockAccount}:role/bedrock-quota-sharing`],
+              },
+            ]
+          : []),
+        // Web crawler stats - read from crawl URLs table for KB state endpoint
+        ...(props.crawlUrlsTableName
+          ? [
+              {
+                effect: 'Allow',
+                actions: ['dynamodb:Query'],
+                resources: [
+                  `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.crawlUrlsTableName}`,
+                  `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.crawlUrlsTableName}/index/*`,
+                ],
               },
             ]
           : []),

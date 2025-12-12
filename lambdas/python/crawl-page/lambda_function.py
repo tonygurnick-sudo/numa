@@ -34,6 +34,8 @@ class CrawlPageEvent(TypedDict, total=False):
     title: str
     crawlSessionId: str
     kbId: str
+    limitToPath: bool
+    seedUrlPrefix: str
 
 
 # User agents for retry logic
@@ -76,7 +78,25 @@ class ScrapedContent(TypedDict):
     links: List[str]
 
 
-def _parse_html(html: str, url: str) -> tuple[str, str, List[str]]:
+def _url_matches_prefix(url: str, seed_prefix: Optional[str]) -> bool:
+    """Check if URL starts with the seed URL prefix.
+
+    Used to limit crawling to pages under the original seed URL path.
+    """
+    if not seed_prefix:
+        return True
+    # Normalize: ensure prefix ends without trailing slash for comparison
+    normalized_prefix = seed_prefix.rstrip("/")
+    # URL must either equal the prefix or start with prefix + "/"
+    return url == normalized_prefix or url.startswith(normalized_prefix + "/")
+
+
+def _parse_html(
+    html: str,
+    url: str,
+    limit_to_path: bool = True,
+    seed_url_prefix: Optional[str] = None,
+) -> tuple[str, str, List[str]]:
     """Return (title, cleaned_text, links) from raw HTML."""
     soup = BeautifulSoup(html, "html.parser")
 
@@ -129,6 +149,8 @@ def _parse_html(html: str, url: str) -> tuple[str, str, List[str]]:
                     ".msi",
                 )
             )
+            # Apply path prefix filter if enabled
+            and (not limit_to_path or _url_matches_prefix(link, seed_url_prefix))
         ):
             same_host_links.append(link)
             if len(same_host_links) >= MAX_SAME_HOST_LINKS:
@@ -173,7 +195,11 @@ def _get_required_env(*names: str) -> Dict[str, str]:
     return {n: os.environ[n] for n in names}
 
 
-async def fetch_page(url: str) -> Optional[ScrapedContent]:
+async def fetch_page(
+    url: str,
+    limit_to_path: bool = True,
+    seed_url_prefix: Optional[str] = None,
+) -> Optional[ScrapedContent]:
     """Download *url* and return structured information or None on error."""
     user_agents = [PRIMARY_USER_AGENT, FALLBACK_USER_AGENT]
 
@@ -191,7 +217,9 @@ async def fetch_page(url: str) -> Optional[ScrapedContent]:
                         logger.warning("Content too large", url=url)
                         return None
 
-                    title, text, links = _parse_html(r.text, url)
+                    title, text, links = _parse_html(
+                        r.text, url, limit_to_path, seed_url_prefix
+                    )
                     content = f"Title: {title}\nURL: {url}\n\n{text}"
 
                     if attempt > 1:
@@ -258,6 +286,8 @@ def enqueue_links(
     table_name: str,
     crawl_session_id: str,
     kb_id: str = "company",
+    limit_to_path: bool = True,
+    seed_url_prefix: Optional[str] = None,
 ) -> int:
     """Push *links* into DynamoDB with decremented depth; returns count enqueued."""
     if current_depth <= 1:
@@ -270,22 +300,27 @@ def enqueue_links(
 
     for link in links:
         try:
-            table.put_item(
-                Item={
-                    "userId": user_id,
-                    "url": link,
-                    "title": link,
-                    "crawlDepth": new_depth,
-                    "crawlSessionId": crawl_session_id,
-                    "kbId": kb_id,
-                    "status": "pending",
-                    "createdAt": now,
-                    "updatedAt": now,
-                    "pagesAttempted": 0,
-                    "pagesSuccessful": 0,
-                    "linksEnqueued": 0,
-                }
-            )
+            item = {
+                "userId": user_id,
+                "url": link,
+                "title": link,
+                "crawlDepth": new_depth,
+                "crawlSessionId": crawl_session_id,
+                "kbId": kb_id,
+                "isSeedUrl": False,
+                "limitToPath": limit_to_path,
+                "status": "pending",
+                "createdAt": now,
+                "updatedAt": now,
+                "pagesAttempted": 0,
+                "pagesSuccessful": 0,
+                "linksEnqueued": 0,
+            }
+            # Propagate seedUrlPrefix to child URLs for consistent filtering
+            if seed_url_prefix:
+                item["seedUrlPrefix"] = seed_url_prefix
+
+            table.put_item(Item=item)
             enqueued += 1
             logger.debug("Enqueued link", url=link, depth=new_depth)
         except ClientError as e:  # noqa: BLE001
@@ -495,6 +530,8 @@ async def process_url(
     prefix: str,
     crawl_session_id: str,
     kb_id: str = "company",
+    limit_to_path: bool = True,
+    seed_url_prefix: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Fetch, store, and enqueue a single URL."""
     start = datetime.utcnow()
@@ -513,8 +550,8 @@ async def process_url(
         # Route to file download handler
         return await process_file_url(url, bucket, user_id, prefix, crawl_session_id)
 
-    # Existing HTML processing logic (unchanged)
-    scraped = await fetch_page(url)
+    # Existing HTML processing logic with path filtering
+    scraped = await fetch_page(url, limit_to_path, seed_url_prefix)
     if not scraped:
         return {
             "url": url,
@@ -553,6 +590,8 @@ async def process_url(
             table_name,
             crawl_session_id,
             kb_id,
+            limit_to_path,
+            seed_url_prefix,
         )
         if crawl_depth > 1
         else 0
@@ -605,6 +644,8 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
     user_id = event.get("userId", "anonymous")
     crawl_session_id = event.get("crawlSessionId", "unknown")
     kb_id = event.get("kbId", "company")
+    limit_to_path = event.get("limitToPath", True)
+    seed_url_prefix = event.get("seedUrlPrefix")
 
     # Use KB-aware prefix for web crawler content
     if kb_id == "company":
@@ -623,6 +664,8 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
                 prefix=prefix,
                 crawl_session_id=crawl_session_id,
                 kb_id=kb_id,
+                limit_to_path=limit_to_path,
+                seed_url_prefix=seed_url_prefix,
             )
         )
         return {

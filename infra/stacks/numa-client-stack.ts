@@ -198,6 +198,7 @@ export class NumaClientStack extends TerraformStack {
         preferredKnowledgeBase: clientConfig.preferredKnowledgeBase as 'q' | 'bedrock',
         qApplicationId: core.qBusinessApplicationId,
         qRetrieverId: core.qBusinessRetrieverId,
+        qIndexId: core.qBusinessIndexId,
         bedrockKnowledgeBaseId: knowledgeBase.knowledgeBaseId,
       },
       userPoolId: core.userPoolId,
@@ -220,6 +221,8 @@ export class NumaClientStack extends TerraformStack {
       cloudfrontSharedSecret: cfSecretParam.value,
       // Cross-account Bedrock quota sharing
       bedrockAccount: clientConfig.bedrockAccount,
+      // Web crawler stats for KB state endpoint
+      crawlUrlsTableName: core.webCrawler.crawlUrlsTable.name,
     });
 
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
@@ -679,11 +682,11 @@ export interface AppDefinition {
 export const appLibrary: Record<string, AppDefinition> = {
   'beyond-expectations': { app: BeyondExpectations, isProdApp: false },
   'candidate-screening': { app: CandidateScreening, isProdApp: true },
-  'company-profile': { app: CompanyProfile, isProdApp: true },
+  'company-profile': { app: CompanyProfile, isProdApp: false },
   'contract-analysis': { app: ContractAnalysis, isProdApp: true },
   'council-recourse-consents': { app: CouncilResourceConsents, isProdApp: false },
   'costing-calculator': { app: CostingCalculator, isProdApp: false },
-  'data-analysis': { app: DataAnalysis, isProdApp: false },
+  'data-analysis': { app: DataAnalysis, isProdApp: true },
   'document-summariser': { app: DocumentSummariser, isProdApp: true },
   'financial-analysis': { app: FinancialAnalysis, isProdApp: true },
   'gdsr-assessment': { app: GdsrAssessment, isProdApp: false },

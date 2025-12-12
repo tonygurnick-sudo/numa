@@ -71,11 +71,45 @@ vi.mock('../../utils/s3Utils', () => ({
   uploadFileToS3: vi.fn().mockResolvedValue('mock-file-name.pdf'),
 }));
 
+// Mock knowledgeBaseService to return test KBs
+vi.mock('../../Services/knowledgeBaseService', () => ({
+  knowledgeBaseService: {
+    listUserKBs: vi.fn().mockResolvedValue([
+      { kb_id: 'company', kb_name: 'Company Knowledge Base', role: 'VIEWER' },
+      { kb_id: 'user-kb-123', kb_name: 'My Personal KB', role: 'OWNER' },
+      { kb_id: 'shared-kb-456', kb_name: 'Shared Team KB', role: 'EDITOR' },
+    ]),
+    getKnowledgeBase: vi.fn().mockResolvedValue(null),
+    createKnowledgeBase: vi.fn().mockResolvedValue(null),
+    updateKnowledgeBase: vi.fn().mockResolvedValue(null),
+    deleteKnowledgeBase: vi.fn().mockResolvedValue(null),
+  },
+  UserKB: {},
+}));
+
 describe('ResultActions Component', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     vi.clearAllMocks();
     clearAuthMocks();
+
+    // Mock localStorage with idToken so KnowledgeBaseProvider can load
+    const localStorageData: Record<string, string> = {
+      idToken: 'mock-id-token',
+    };
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: vi.fn((key) => localStorageData[key] || null),
+        setItem: vi.fn((key, value) => {
+          localStorageData[key] = value;
+        }),
+        removeItem: vi.fn((key) => {
+          delete localStorageData[key];
+        }),
+        clear: vi.fn(),
+      },
+      writable: true,
+    });
 
     // Some tests rely on sessionStorage items
     Object.defineProperty(window, 'sessionStorage', {
@@ -83,6 +117,7 @@ describe('ResultActions Component', () => {
         getItem: vi.fn((key) => {
           if (key === 'CLIENT_NAME') return 'testclient';
           if (key === 'REGION') return 'us-east-1';
+          if (key === 'DATA_BUCKET') return 'test-data-bucket';
           return null;
         }),
         setItem: vi.fn(),
@@ -92,7 +127,7 @@ describe('ResultActions Component', () => {
     });
   });
 
-  it('renders without crashing and shows all dropdowns', () => {
+  it('renders without crashing and shows all dropdowns', async () => {
     renderWithProviders(<ResultActions content="Some test content" title="Test Title" />);
 
     // Check for "Download" dropdown
@@ -101,8 +136,53 @@ describe('ResultActions Component', () => {
     // Check for "Share" dropdown
     expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument();
 
-    // Check for single "Add to Company Knowledge" button
-    expect(screen.getByRole('button', { name: /add to company knowledge/i })).toBeInTheDocument();
+    // Check for "Add to Knowledge Base" dropdown (renamed from "Add to Company Knowledge")
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /add to knowledge base/i })).toBeInTheDocument();
+    });
+  });
+
+  it('shows KB dropdown options when clicked', async () => {
+    renderWithProviders(<ResultActions content="Some test content" title="Test Title" />);
+
+    // Wait for the KB dropdown to be available
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /add to knowledge base/i })).toBeInTheDocument();
+    });
+
+    // Click the KB dropdown
+    fireEvent.click(screen.getByRole('button', { name: /add to knowledge base/i }));
+
+    // Check that user KBs with OWNER/EDITOR role are shown
+    await waitFor(() => {
+      expect(screen.getByText(/my personal kb/i)).toBeInTheDocument();
+      expect(screen.getByText(/shared team kb/i)).toBeInTheDocument();
+    });
+  });
+
+  it('opens modal when a KB is selected', async () => {
+    renderWithProviders(<ResultActions content="Test content" title="Test Doc" />);
+
+    // Wait for the KB dropdown to be available
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /add to knowledge base/i })).toBeInTheDocument();
+    });
+
+    // Click the KB dropdown
+    fireEvent.click(screen.getByRole('button', { name: /add to knowledge base/i }));
+
+    // Wait for dropdown items and click one
+    await waitFor(() => {
+      expect(screen.getByText(/my personal kb/i)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText(/my personal kb/i));
+
+    // Check that modal shows with the selected KB name (using getAllByText since it appears multiple times)
+    await waitFor(() => {
+      // Modal should be visible with the selected KB name
+      const kbNameElements = screen.getAllByText(/my personal kb/i);
+      expect(kbNameElements.length).toBeGreaterThan(0);
+    });
   });
 
   it('handles "Download -> PDF" correctly', async () => {

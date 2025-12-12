@@ -154,3 +154,5 @@ infra/assets/layers/claude-cli/bin/
 infra/assets/layers/claude-cli/*.zip
 infra/assets/artifacts/claude-cli/bin/claude
 clientConfigProd.json
+
+infra/assets/artifacts/numa-workspace-agent/

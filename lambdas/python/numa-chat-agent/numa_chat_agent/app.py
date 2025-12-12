@@ -6,15 +6,18 @@ import os
 import re
 import time
 from typing import Any, AsyncGenerator, Dict, List, Optional
+from urllib.parse import urlparse
 
 import jwt
 import requests
 import structlog
+from boto3.dynamodb.conditions import Key
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from jwt import algorithms
 
 from prm import client as prm_client
+from prm import resource as prm_resource
 
 from . import clear_current_user_auth, create_fresh_agent, set_current_user_auth
 from .dynamodb_utils import (
@@ -883,13 +886,9 @@ async def get_kb(request: Request, kb_id: str) -> Response:
         if not kb:
             return JSONResponse({"error": "KB not found"}, status_code=404)
 
-        # Enrich KB data with actual document count from S3 and persist to DynamoDB
-        if CLIENT_NAME and kb.get("s3_prefix"):
-            data_bucket = f"numa-{CLIENT_NAME}-data"
-            actual_count = _count_s3_documents(data_bucket, kb["s3_prefix"])
-            kb["document_count"] = actual_count
-            # Persist the count so list endpoint shows accurate cached value
-            kb_manager.update_document_count(kb_id, actual_count)
+        # Note: document_count is returned from DynamoDB cache.
+        # It's updated when the user views KB files via GET /api/kb/{kb_id}/files.
+        # This avoids redundant S3 listings on every KB info request.
 
         # Enrich KB data with editor emails
         editors = kb.get("editors", [])
@@ -912,6 +911,764 @@ async def get_kb(request: Request, kb_id: str) -> Response:
 
     except Exception as exc:  # pylint: disable=broad-except
         logger.error("KB get failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+# Environment variables for KB state
+PREFERRED_KNOWLEDGE_BASE = os.environ.get("PREFERRED_KNOWLEDGE_BASE", "bedrock")
+BEDROCK_KNOWLEDGE_BASE_ID = os.environ.get("BEDROCK_KNOWLEDGE_BASE_ID")
+Q_APPLICATION_ID = os.environ.get("Q_APPLICATION_ID")
+Q_INDEX_ID = os.environ.get("Q_INDEX_ID")
+CRAWL_URLS_TABLE_NAME = os.environ.get("CRAWL_URLS_TABLE_NAME")
+
+
+def _sanitize_failed_s3_uri(uri: str) -> Optional[str]:
+    """Clean up S3 URI from failure reason messages."""
+    if not uri:
+        return None
+    trimmed = uri.strip()
+    if not trimmed:
+        return None
+    # Remove diagnostic suffix like " (error details)"
+    without_suffix = re.sub(r"\s+\([^)]*\)$", "", trimmed)
+    # Remove trailing punctuation
+    cleaned = re.sub(r"[;.,]+$", "", without_suffix)
+    return cleaned if cleaned.startswith("s3://") else None
+
+
+def _extract_failed_doc_from_uri(
+    uri: str, job_updated_at: Any
+) -> Optional[Dict[str, Any]]:
+    """Extract a failed document entry from an S3 URI."""
+    sanitized = _sanitize_failed_s3_uri(uri)
+    if not sanitized:
+        return None
+
+    # Extract filename from URI
+    key_match = re.search(r"[^/]+$", sanitized)
+    filename = key_match.group(0) if key_match else sanitized
+
+    return {
+        "documentId": sanitized,
+        "status": "FAILED",
+        "updatedAt": (
+            job_updated_at.isoformat()
+            if hasattr(job_updated_at, "isoformat")
+            else str(job_updated_at)
+        ),
+        "error": {
+            "errorMessage": "File format not supported or processing failed during ingestion"
+        },
+        "fileName": filename,
+    }
+
+
+def _collect_failed_docs_from_job(
+    bedrock_agent: Any,
+    kb_id: str,
+    data_source_id: str,
+    job: Dict[str, Any],
+    s3_uri_pattern: re.Pattern,
+) -> List[Dict[str, Any]]:
+    """Collect failed documents from a single ingestion job."""
+    try:
+        job_details = bedrock_agent.get_ingestion_job(
+            knowledgeBaseId=kb_id,
+            dataSourceId=data_source_id,
+            ingestionJobId=job.get("ingestionJobId"),
+        )
+        failure_reasons = (
+            job_details.get("ingestionJob", {}).get("failureReasons") or []
+        )
+        job_updated = job.get("updatedAt", "")
+        failed_docs: List[Dict[str, Any]] = []
+
+        for reason in failure_reasons:
+            for uri in s3_uri_pattern.findall(reason):
+                failed_doc = _extract_failed_doc_from_uri(uri, job_updated)
+                if failed_doc:
+                    failed_docs.append(failed_doc)
+        return failed_docs
+    except Exception as job_err:
+        logger.debug(
+            "Error fetching ingestion job details",
+            job_id=job.get("ingestionJobId"),
+            error=str(job_err),
+        )
+        return []
+
+
+def _filter_documents_by_prefix(
+    documents: List[Dict[str, Any]], s3_prefix_filter: str, kb_type: str
+) -> List[Dict[str, Any]]:
+    """Filter documents based on KB type and S3 prefix."""
+    if not documents:
+        return []
+    if not s3_prefix_filter or not kb_type:
+        return documents
+
+    filtered = []
+    for doc in documents:
+        s3_uri = doc.get("documentId", "")
+        if kb_type == "user":
+            # For user KBs: only include documents in the specific user KB prefix
+            if s3_prefix_filter in s3_uri:
+                filtered.append(doc)
+        elif kb_type == "company":
+            # For company KB: include documents/company/ prefix
+            if s3_prefix_filter in s3_uri or (
+                "documents/company/" in s3_uri and "documents/kb-" not in s3_uri
+            ):
+                filtered.append(doc)
+        else:
+            filtered.append(doc)
+    return filtered
+
+
+def _compute_kb_metrics(
+    filtered_docs: List[Dict[str, Any]], failed_docs: List[Dict[str, Any]]
+) -> Dict[str, int]:
+    """
+    Compute sync metrics specific to a KB's filtered documents.
+
+    Instead of using global job statistics (which are shared across all KBs),
+    compute metrics from the already-filtered document list for accurate per-KB stats.
+    """
+    # Count documents by status - Bedrock uses 'status' field directly
+    indexed = sum(1 for d in filtered_docs if d.get("status") == "INDEXED")
+    failed = len(failed_docs)
+    # Pending = total docs minus indexed (failed docs are tracked separately)
+    pending = len(filtered_docs) - indexed
+
+    return {
+        "documentsIndexed": indexed,
+        "documentsFailed": failed,
+        "documentsPending": pending,
+        "totalDocuments": len(filtered_docs),
+    }
+
+
+def _serialize_datetime(obj: Any) -> Any:
+    """Recursively convert datetime objects to ISO format strings."""
+    if hasattr(obj, "isoformat"):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: _serialize_datetime(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_serialize_datetime(item) for item in obj]
+    return obj
+
+
+def _serialize_data_sources(sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Serialize datetime fields in data source objects for JSON response."""
+    return [_serialize_datetime(source) for source in sources]
+
+
+def _get_web_crawler_stats(kb_id: str) -> List[Dict[str, Any]]:
+    """
+    Fetch web crawler stats from DynamoDB crawl URLs table.
+
+    Returns seed URLs (the actual URLs users submitted) with page counts.
+    Falls back to domain aggregation for older crawls without isSeedUrl field.
+    """
+    if not CRAWL_URLS_TABLE_NAME:
+        return []
+
+    try:
+        dynamodb = prm_resource("dynamodb")
+        table = dynamodb.Table(CRAWL_URLS_TABLE_NAME)
+
+        # Query completed URLs for this KB using the kbId-status-index GSI
+        response = table.query(
+            IndexName="kbId-status-index",
+            KeyConditionExpression=Key("kbId").eq(kb_id)
+            & Key("status").eq("completed"),
+            Limit=2000,
+        )
+
+        items = response.get("Items", [])
+        if not items:
+            return []
+
+        # Separate seed URLs from regular URLs
+        seed_urls: List[Dict[str, Any]] = []
+        urls_by_session: Dict[str, List[Dict[str, Any]]] = {}
+
+        for item in items:
+            session_id = item.get("crawlSessionId", "unknown")
+            urls_by_session.setdefault(session_id, []).append(item)
+
+            # Check if this is a seed URL
+            if item.get("isSeedUrl"):
+                seed_urls.append(item)
+
+        # If we have seed URLs, use them as data sources
+        if seed_urls:
+            data_sources = []
+            for seed in seed_urls:
+                url = seed.get("url", "")
+                session_id = seed.get("crawlSessionId", "unknown")
+                domain = urlparse(url).netloc
+
+                # Count pages in this crawl session
+                session_pages = urls_by_session.get(session_id, [])
+                page_count = len(session_pages)
+
+                # Find the most recent update time in the session
+                last_crawled = None
+                for page in session_pages:
+                    updated = page.get("updatedAt") or page.get("createdAt")
+                    if updated and (last_crawled is None or updated > last_crawled):
+                        last_crawled = updated
+
+                # Convert datetime to ISO string
+                if last_crawled and hasattr(last_crawled, "isoformat"):
+                    last_crawled = last_crawled.isoformat()
+
+                data_sources.append(
+                    {
+                        "dataSourceId": f"web-crawler-{session_id}",
+                        "name": url,
+                        "displayName": url,
+                        "type": "Numa Web Crawler",
+                        "status": "ACTIVE",
+                        "pageCount": page_count,
+                        "lastCrawled": last_crawled,
+                        "isWebCrawler": True,
+                        "domain": domain,
+                        "sourceUrl": url,
+                        "isSeedUrl": True,
+                    }
+                )
+
+            # Sort by last crawled desc
+            data_sources.sort(
+                key=lambda d: (d.get("lastCrawled") or "", d.get("name") or ""),
+                reverse=True,
+            )
+            return data_sources
+
+        # Fallback: aggregate by domain for older crawls without isSeedUrl
+        domains: Dict[str, Dict[str, Any]] = {}
+        for item in items:
+            url = item.get("url")
+            if not url:
+                continue
+            domain = urlparse(url).netloc
+            if not domain:
+                continue
+
+            entry = domains.setdefault(
+                domain, {"domain": domain, "pageCount": 0, "lastCrawled": None}
+            )
+            entry["pageCount"] += 1
+
+            updated = item.get("updatedAt") or item.get("createdAt")
+            if updated and (
+                entry["lastCrawled"] is None or updated > entry["lastCrawled"]
+            ):
+                entry["lastCrawled"] = updated
+
+        # Convert to data source format
+        data_sources = []
+        for entry in domains.values():
+            domain_url = f"https://{entry['domain']}"
+            # Convert lastCrawled datetime to ISO string
+            last_crawled = entry["lastCrawled"]
+            if last_crawled and hasattr(last_crawled, "isoformat"):
+                last_crawled = last_crawled.isoformat()
+            data_sources.append(
+                {
+                    "dataSourceId": f"web-crawler-{entry['domain']}",
+                    "name": domain_url,
+                    "displayName": domain_url,
+                    "type": "Numa Web Crawler",
+                    "status": "ACTIVE",
+                    "pageCount": entry["pageCount"],
+                    "lastCrawled": last_crawled,
+                    "isWebCrawler": True,
+                    "domain": entry["domain"],
+                    "sourceUrl": domain_url,
+                }
+            )
+
+        # Sort by last crawled desc
+        data_sources.sort(
+            key=lambda d: (d.get("lastCrawled") or "", d.get("domain") or ""),
+            reverse=True,
+        )
+        return data_sources
+
+    except Exception as e:
+        logger.warning("Failed to fetch web crawler stats", kb_id=kb_id, error=str(e))
+        return []
+
+
+def _get_bedrock_kb_state(
+    kb_id: str, s3_prefix_filter: str, kb_type: str
+) -> Dict[str, Any]:
+    """
+    Get KB state from Bedrock Knowledge Base.
+
+    Returns data sources, ingestion jobs, documents, and failed documents.
+    """
+    if not BEDROCK_KNOWLEDGE_BASE_ID:
+        return {"error": "Bedrock Knowledge Base ID not configured"}
+
+    try:
+        bedrock_agent = prm_client("bedrock-agent", region=REGION)
+        client_display_name = f"numa-{CLIENT_NAME}".lower()
+
+        # List data sources
+        ds_resp = bedrock_agent.list_data_sources(
+            knowledgeBaseId=BEDROCK_KNOWLEDGE_BASE_ID
+        )
+        summaries = ds_resp.get("dataSourceSummaries", [])
+
+        if not summaries:
+            return {
+                "error": "no-data-source",
+                "message": "No Bedrock data source found",
+                "dataSources": [],
+                "source": "bedrock",
+            }
+
+        # Find matching data source
+        ds = None
+        for s in summaries:
+            name = (s.get("name") or "").lower()
+            display = (s.get("displayName") or "").lower()
+            if (
+                name == client_display_name
+                or display == client_display_name
+                or name.startswith(client_display_name)
+            ):
+                ds = s
+                break
+        if not ds:
+            ds = summaries[0]
+
+        data_source_id = ds.get("dataSourceId")
+
+        # List ingestion jobs (sorted by most recent)
+        job_resp = bedrock_agent.list_ingestion_jobs(
+            knowledgeBaseId=BEDROCK_KNOWLEDGE_BASE_ID,
+            dataSourceId=data_source_id,
+            maxResults=10,
+            sortBy={"attribute": "STARTED_AT", "order": "DESCENDING"},
+        )
+        ingestion_jobs = job_resp.get("ingestionJobSummaries", [])
+        latest_job = ingestion_jobs[0] if ingestion_jobs else None
+        last_success = next(
+            (j for j in ingestion_jobs if j.get("status") == "COMPLETE"), None
+        )
+
+        # Get failed documents from recent ingestion jobs
+        failed_documents_map: Dict[str, Dict[str, Any]] = {}
+        recent_jobs = ingestion_jobs[:3]
+        s3_uri_pattern = re.compile(r"s3://[^,;\]]+")
+
+        for job in recent_jobs:
+            job_failed_docs = _collect_failed_docs_from_job(
+                bedrock_agent,
+                BEDROCK_KNOWLEDGE_BASE_ID,
+                data_source_id,
+                job,
+                s3_uri_pattern,
+            )
+            for doc in job_failed_docs:
+                if doc["documentId"] not in failed_documents_map:
+                    failed_documents_map[doc["documentId"]] = doc
+
+        failed_documents = list(failed_documents_map.values())
+
+        # List all KB documents (paginated)
+        docs: List[Dict[str, Any]] = []
+        next_token = None
+        while True:
+            list_params: Dict[str, Any] = {
+                "knowledgeBaseId": BEDROCK_KNOWLEDGE_BASE_ID,
+                "dataSourceId": data_source_id,
+            }
+            if next_token:
+                list_params["nextToken"] = next_token
+
+            doc_resp = bedrock_agent.list_knowledge_base_documents(**list_params)
+            raw_docs = doc_resp.get("documentDetails", [])
+
+            # Normalize document format
+            for doc in raw_docs:
+                identifier = doc.get("identifier", {})
+                s3_info = identifier.get("s3", {})
+                if s3_info.get("uri"):
+                    doc["documentId"] = s3_info["uri"]
+                docs.append(doc)
+
+            next_token = doc_resp.get("nextToken")
+            if not next_token:
+                break
+
+        # Map Bedrock status to expected UI status
+        def map_status(status: Optional[str]) -> Optional[str]:
+            if status == "IN_PROGRESS":
+                return "SYNCING"
+            if status == "COMPLETE":
+                return "SUCCEEDED"
+            return status
+
+        # Filter documents by S3 prefix
+        filtered_docs = _filter_documents_by_prefix(docs, s3_prefix_filter, kb_type)
+        filtered_failed = _filter_documents_by_prefix(
+            failed_documents, s3_prefix_filter, kb_type
+        )
+
+        return {
+            "dataSourceId": data_source_id,
+            "syncStatus": ds.get("status"),
+            "syncJobStatus": map_status(
+                latest_job.get("status") if latest_job else None
+            ),
+            "lastSuccessfulSync": (
+                last_success.get("updatedAt").isoformat()
+                if last_success and hasattr(last_success.get("updatedAt"), "isoformat")
+                else str(last_success.get("updatedAt", "")) if last_success else None
+            ),
+            "lastUpdated": (
+                (latest_job.get("updatedAt") or latest_job.get("startedAt")).isoformat()
+                if latest_job
+                and hasattr(
+                    latest_job.get("updatedAt") or latest_job.get("startedAt"),
+                    "isoformat",
+                )
+                else str(latest_job.get("updatedAt", "")) if latest_job else None
+            ),
+            "syncMetrics": _compute_kb_metrics(filtered_docs, filtered_failed),
+            "documents": _serialize_datetime(filtered_docs),
+            "dataSources": _serialize_data_sources(summaries)
+            + _get_web_crawler_stats(kb_id),
+            "failedDocuments": _serialize_datetime(filtered_failed),
+            "source": "bedrock",
+        }
+
+    except Exception as e:
+        logger.error("Error getting Bedrock KB state", error=str(e), exc_info=True)
+        return {"error": str(e), "source": "bedrock"}
+
+
+def _get_qbusiness_kb_state(
+    kb_id: str, s3_prefix_filter: str, kb_type: str
+) -> Dict[str, Any]:
+    """
+    Get KB state from Q Business.
+
+    Returns data sources, sync jobs, and documents.
+    """
+    if not Q_APPLICATION_ID or not Q_INDEX_ID:
+        return {"error": "Q Business Application or Index ID not configured"}
+
+    try:
+        qbusiness = prm_client("qbusiness", region=REGION)
+        client_display_name = f"numa-{CLIENT_NAME}"
+
+        # List data sources
+        ds_resp = qbusiness.list_data_sources(
+            applicationId=Q_APPLICATION_ID, indexId=Q_INDEX_ID
+        )
+        all_data_sources = ds_resp.get("dataSources", [])
+
+        if not all_data_sources:
+            return {
+                "error": "no-data-source",
+                "message": "No Q Business data source found",
+                "dataSources": [],
+                "source": "q-business",
+            }
+
+        # Find matching data source
+        ds = next(
+            (
+                d
+                for d in all_data_sources
+                if d.get("displayName") == client_display_name
+            ),
+            all_data_sources[0],
+        )
+
+        data_source_id = ds.get("dataSourceId")
+
+        # List sync jobs
+        job_resp = qbusiness.list_data_source_sync_jobs(
+            applicationId=Q_APPLICATION_ID,
+            indexId=Q_INDEX_ID,
+            dataSourceId=data_source_id,
+            maxResults=10,
+        )
+        job_history = job_resp.get("history", [])
+        latest_job = job_history[0] if job_history else None
+        last_success = next(
+            (j for j in job_history if j.get("status") in ("SUCCEEDED", "INCOMPLETE")),
+            None,
+        )
+
+        # List all documents (paginated)
+        docs: List[Dict[str, Any]] = []
+        next_token = None
+        while True:
+            list_params: Dict[str, Any] = {
+                "applicationId": Q_APPLICATION_ID,
+                "indexId": Q_INDEX_ID,
+                "dataSourceIds": [data_source_id],
+            }
+            if next_token:
+                list_params["nextToken"] = next_token
+
+            doc_resp = qbusiness.list_documents(**list_params)
+            docs.extend(doc_resp.get("documentDetailList", []))
+
+            next_token = doc_resp.get("nextToken")
+            if not next_token:
+                break
+
+        # Filter documents by S3 prefix
+        filtered_docs = _filter_documents_by_prefix(docs, s3_prefix_filter, kb_type)
+
+        return {
+            "dataSourceId": data_source_id,
+            "syncStatus": ds.get("status"),
+            "syncJobStatus": latest_job.get("status") if latest_job else None,
+            "lastSuccessfulSync": (
+                last_success.get("endTime").isoformat()
+                if last_success and hasattr(last_success.get("endTime"), "isoformat")
+                else str(last_success.get("endTime", "")) if last_success else None
+            ),
+            "lastUpdated": (
+                (latest_job.get("endTime") or latest_job.get("startTime")).isoformat()
+                if latest_job
+                and hasattr(
+                    latest_job.get("endTime") or latest_job.get("startTime"),
+                    "isoformat",
+                )
+                else str(latest_job.get("endTime", "")) if latest_job else None
+            ),
+            "syncMetrics": _compute_kb_metrics(filtered_docs, []),
+            "documents": _serialize_datetime(filtered_docs),
+            "dataSources": _serialize_data_sources(all_data_sources)
+            + _get_web_crawler_stats(kb_id),
+            "failedDocuments": [],  # Q Business doesn't have this feature yet
+            "source": "q-business",
+        }
+
+    except Exception as e:
+        logger.error("Error getting Q Business KB state", error=str(e), exc_info=True)
+        return {"error": str(e), "source": "q-business"}
+
+
+def _get_s3_url_tag(s3_client: Any, bucket_name: str, key: str) -> Optional[str]:
+    """Fetch URL metadata tag from an S3 object."""
+    try:
+        head_resp = s3_client.head_object(Bucket=bucket_name, Key=key)
+        return head_resp.get("Metadata", {}).get("url", "") or None
+    except Exception as head_err:
+        logger.debug(
+            "Could not fetch URL tag for scraped file",
+            key=key,
+            error=str(head_err),
+        )
+        return None
+
+
+def _list_kb_files(bucket_name: str, prefix: str) -> List[Dict[str, Any]]:
+    """
+    List all files in an S3 bucket prefix with metadata.
+
+    Args:
+        bucket_name: S3 bucket name
+        prefix: S3 prefix to search (e.g., "documents/kb-123/")
+
+    Returns:
+        List of file objects with key, lastModified, size, and optionally urlTag
+    """
+    try:
+        s3_client = prm_client("s3", region=REGION)
+        paginator = s3_client.get_paginator("list_objects_v2")
+
+        files: List[Dict[str, Any]] = []
+        for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+            contents = page.get("Contents", [])
+            for obj in contents:
+                key_val = obj.get("Key") if isinstance(obj, dict) else None
+                if not isinstance(key_val, str):
+                    continue
+                # Skip directories and metadata.json files
+                if key_val.endswith("/") or key_val.endswith(".metadata.json"):
+                    continue
+
+                last_modified = obj.get("LastModified")
+                file_info: Dict[str, Any] = {
+                    "key": key_val,
+                    "lastModified": (
+                        last_modified.isoformat() if last_modified else None
+                    ),
+                    "size": obj.get("Size", 0),
+                }
+
+                # Fetch URL tag for web crawler files
+                if "web-crawler/" in key_val or "scraped-content/" in key_val:
+                    url_tag = _get_s3_url_tag(s3_client, bucket_name, key_val)
+                    if url_tag:
+                        file_info["urlTag"] = url_tag
+
+                files.append(file_info)
+
+        logger.debug(
+            "Listed S3 files", bucket=bucket_name, prefix=prefix, count=len(files)
+        )
+        return files
+    except Exception as e:
+        logger.error(
+            "Error listing S3 files",
+            bucket=bucket_name,
+            prefix=prefix,
+            error=str(e),
+        )
+        return []
+
+
+@app.get("/api/kb/{kb_id}/files")
+async def list_kb_files(request: Request, kb_id: str) -> Response:
+    """List files in a KB's S3 prefix and update document count."""
+    try:
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        if CF_SHARED_SECRET:
+            if headers.get("x-arcanum-cloudfront-secret") != CF_SHARED_SECRET:
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+        auth = headers.get("authorization")
+        if not auth:
+            return JSONResponse(
+                {"error": "Missing Authorization header"}, status_code=401
+            )
+
+        user = _verify_jwt_token(auth)
+        user_id = user.get("sub")
+        if not isinstance(user_id, str) or not user_id:
+            return JSONResponse({"error": "Invalid user ID"}, status_code=401)
+
+        # Initialize KB manager
+        kb_manager = KnowledgeBaseManager()
+
+        # Check permission (VIEWER or higher)
+        if not kb_manager.check_permission(kb_id, user_id, "VIEWER"):
+            return JSONResponse({"error": "Access denied"}, status_code=403)
+
+        # Get KB to find S3 prefix
+        kb = kb_manager.get_kb(kb_id)
+        if not kb:
+            return JSONResponse({"error": "KB not found"}, status_code=404)
+
+        if not CLIENT_NAME or not kb.get("s3_prefix"):
+            return JSONResponse(
+                {"error": "KB configuration incomplete"}, status_code=500
+            )
+
+        data_bucket = f"numa-{CLIENT_NAME}-data"
+        s3_prefix = kb["s3_prefix"]
+
+        # List files from S3
+        files = _list_kb_files(data_bucket, s3_prefix)
+
+        # Update cached document count in DynamoDB
+        doc_count = len(files)
+        kb_manager.update_document_count(kb_id, doc_count)
+
+        logger.info(
+            "Listed KB files",
+            kb_id=kb_id,
+            user_id=user_id,
+            file_count=doc_count,
+        )
+
+        return JSONResponse(
+            {"files": files, "document_count": doc_count}, status_code=200
+        )
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB files list failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+@app.get("/api/kb/{kb_id}/state")
+async def get_kb_state(request: Request, kb_id: str) -> Response:
+    """Get KB state including documents, sync status, and ingestion jobs.
+
+    Returns:
+        {
+            "dataSourceId": "...",
+            "syncStatus": "ACTIVE|AVAILABLE|...",
+            "syncJobStatus": "SYNCING|SUCCEEDED|FAILED",
+            "lastSuccessfulSync": "2024-01-01T00:00:00Z",
+            "lastUpdated": "2024-01-01T00:00:00Z",
+            "syncMetrics": {...},
+            "documents": [...],
+            "dataSources": [...],
+            "failedDocuments": [...],
+            "source": "bedrock|q-business"
+        }
+    """
+    try:
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        if CF_SHARED_SECRET:
+            if headers.get("x-arcanum-cloudfront-secret") != CF_SHARED_SECRET:
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+        auth = headers.get("authorization")
+        if not auth:
+            return JSONResponse(
+                {"error": "Missing Authorization header"}, status_code=401
+            )
+
+        user = _verify_jwt_token(auth)
+        user_id = user.get("sub")
+        if not isinstance(user_id, str) or not user_id:
+            return JSONResponse({"error": "Invalid user ID"}, status_code=401)
+
+        # Initialize KB manager
+        kb_manager = KnowledgeBaseManager()
+
+        # Check permission (VIEWER or higher)
+        if not kb_manager.check_permission(kb_id, user_id, "VIEWER"):
+            return JSONResponse({"error": "Access denied"}, status_code=403)
+
+        # Get KB to determine S3 prefix filter
+        kb = kb_manager.get_kb(kb_id)
+        if not kb:
+            return JSONResponse({"error": "KB not found"}, status_code=404)
+
+        # Determine KB type and S3 prefix filter
+        s3_prefix = kb.get("s3_prefix", "")
+        kb_type = "company" if kb_id == "company" else "user"
+        s3_prefix_filter = (
+            s3_prefix  # e.g., "documents/kb-123/" or "documents/company/"
+        )
+
+        # Get KB state based on preferred knowledge base type
+        if PREFERRED_KNOWLEDGE_BASE == "q":
+            state = _get_qbusiness_kb_state(kb_id, s3_prefix_filter, kb_type)
+        else:
+            state = _get_bedrock_kb_state(kb_id, s3_prefix_filter, kb_type)
+
+        logger.info(
+            "Got KB state",
+            kb_id=kb_id,
+            user_id=user_id,
+            source=state.get("source"),
+            doc_count=len(state.get("documents", [])),
+        )
+
+        return JSONResponse(state, status_code=200)
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB state fetch failed", error=str(exc), exc_info=True)
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 

@@ -433,22 +433,21 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                                     <span style={{ color: '#0d6efd', fontWeight: '500' }}>View Progress</span>{' '}
                                     <i
                                       style={{ lineHeight: '1px', color: '#0d6efd' }}
-                                      className="bi bi-arrow-right ms-1 bounce-icon"
+                                      className="bi bi-arrow-right ms-1"
                                     ></i>
                                   </>
                                 );
                               case 'files-uploaded':
                                 return (
                                   <>
-                                    Continue{' '}
-                                    <i style={{ lineHeight: '1px' }} className="bi bi-arrow-right ms-1 bounce-icon"></i>
+                                    Continue <i style={{ lineHeight: '1px' }} className="bi bi-arrow-right ms-1"></i>
                                   </>
                                 );
                               default:
                                 return (
                                   <>
                                     View Results{' '}
-                                    <i style={{ lineHeight: '1px' }} className="bi bi-arrow-right ms-1 bounce-icon"></i>
+                                    <i style={{ lineHeight: '1px' }} className="bi bi-arrow-right ms-1"></i>
                                   </>
                                 );
                             }

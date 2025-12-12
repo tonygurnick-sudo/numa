@@ -4,6 +4,7 @@ import { useAuth } from '../Providers/AuthProvider';
 interface WebCrawlerOptions {
   urlDepthMap?: Record<string, number>;
   kb_id?: string;
+  limitToPath?: boolean;
 }
 
 interface WebCrawlerResult {
@@ -18,7 +19,7 @@ export const useWebCrawler = () => {
 
   const startWebCrawler = async (urls: string[], options: WebCrawlerOptions = {}): Promise<WebCrawlerResult> => {
     try {
-      const { urlDepthMap = {}, kb_id = 'company' } = options;
+      const { urlDepthMap = {}, kb_id = 'company', limitToPath = true } = options;
 
       let userId = 'anonymous';
       if (user && user.decoded_tokens && user.decoded_tokens.idToken) {
@@ -26,12 +27,13 @@ export const useWebCrawler = () => {
         userId = idToken.email || idToken.sub || 'anonymous';
       }
 
-      // Create payload with URL-specific depths and KB ID
+      // Create payload with URL-specific depths, KB ID, and path limiting option
       const payload = {
         urls,
         userId,
         urlDepthMap,
         kb_id,
+        limitToPath,
       };
 
       // @ts-expect-error - numaPost accepts arguments but context types are not properly defined

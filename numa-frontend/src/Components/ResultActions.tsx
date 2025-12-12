@@ -1,15 +1,16 @@
-import { useState } from 'react';
-import { Dropdown, Button, Modal, Form, Spinner } from 'react-bootstrap';
+import { useState, useMemo } from 'react';
+import { Dropdown, Button, Modal, Form, Spinner, Badge } from 'react-bootstrap';
 import { saveAs } from 'file-saver';
 import { jsPDF } from 'jspdf';
 import ReactDOMServer from 'react-dom/server';
 import { MarkdownContent } from './Renderers/MarkdownContent';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
+import { UserKB } from '../Services/knowledgeBaseService';
 import { uploadFileToS3 } from '../utils/s3Utils';
 import { createDocxBlob } from '../Services/fileConverter';
 import { downloadDocx, downloadPdf } from '../Services/documentConverterService';
-import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import { getExportOptionsForApp } from '../config/exportConfig';
 
 // Helper function to convert markdown to formatted plain text
@@ -56,9 +57,20 @@ interface ResultActionsProps {
   appType?: string | null;
 }
 
+// Helper function to build KB prefix for S3 paths
+const buildKbPrefix = (kbId: string | null | undefined): string => {
+  const rawId = typeof kbId === 'string' ? kbId.trim() : '';
+  if (!rawId || rawId === 'company') {
+    return 'documents/company/';
+  }
+  const normalized = rawId.replace(/^kb-/, '');
+  return `documents/kb-${normalized}/`;
+};
+
 const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result', appType = null }) => {
-  const { getCredentials } = useAuth();
+  const { getCredentials, user } = useAuth();
   const { numaPost } = useNumaRequest();
+  const { availableKBs, isLoadingKBs } = useKnowledgeBase();
 
   const exportOptions = getExportOptionsForApp(appType);
 
@@ -67,9 +79,25 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
   const [modalStep, setModalStep] = useState('confirm');
   const [docName, setDocName] = useState(title);
   const [successMessage, setSuccessMessage] = useState('');
+  const [selectedKB, setSelectedKB] = useState<UserKB | null>(null);
 
   // Download loading state
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Check if user has feature flag for company KB
+  const hasCompanyDataFeature = Boolean(user?.features?.includes('addToCompanyData'));
+
+  // Filter KBs to only show writable ones
+  const writableKBs = useMemo(() => {
+    return availableKBs.filter((kb) => {
+      // Company KB: show if user has feature flag (regardless of role)
+      if (kb.kb_id === 'company') {
+        return hasCompanyDataFeature;
+      }
+      // User KBs: must be OWNER or EDITOR
+      return kb.role === 'OWNER' || kb.role === 'EDITOR';
+    });
+  }, [availableKBs, hasCompanyDataFeature]);
 
   // ─────────────────────────────────────────────────────────────
   // PDF Creation Constants
@@ -530,8 +558,9 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
   };
 
   // ─────────────────────────────────────────────────────────────
-  // SINGLE Button -> Upload as TEXT file to Knowledge Base
-  const handleShowModal = () => {
+  // KB Selection -> Upload as TEXT file to Knowledge Base
+  const handleSelectKBAndShowModal = (kb: UserKB) => {
+    setSelectedKB(kb);
     setDocName(title);
     setModalStep('confirm');
     setShowModal(true);
@@ -546,18 +575,36 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
       const extension = 'txt';
 
       const bucketName = window.sessionStorage.getItem('DATA_BUCKET');
+      const clientName = window.sessionStorage.getItem('CLIENT_NAME');
       const currentDate = new Date();
       const dateStr = currentDate.toLocaleDateString().replace(/\//g, '-');
       const timeStr = currentDate.toLocaleTimeString();
       const fileName = `${docName}-${dateStr}-${timeStr}.${extension}`;
       const region = window.sessionStorage.getItem('REGION');
 
+      // Build S3 key with KB prefix
+      const prefix = buildKbPrefix(selectedKB?.kb_id);
+      const s3Key = `${prefix}${fileName}`;
+
       const arrayBuffer = await blob.arrayBuffer();
 
-      await uploadFileToS3(arrayBuffer, contentType, bucketName, fileName, region, getCredentials);
+      // Upload the file
+      await uploadFileToS3(arrayBuffer, contentType, bucketName, s3Key, region, getCredentials);
+
+      // Upload metadata sidecar for Bedrock indexing
+      const metadata = {
+        kb_id: selectedKB?.kb_id || 'company',
+        tenant_id: clientName,
+        uploaded_at: currentDate.toISOString(),
+        uploader_id: user?.sub || 'unknown',
+      };
+      const metadataKey = `${s3Key}.metadata.json`;
+      const metadataBlob = new Blob([JSON.stringify(metadata)], { type: 'application/json' });
+      const metadataBuffer = await metadataBlob.arrayBuffer();
+      await uploadFileToS3(metadataBuffer, 'application/json', bucketName, metadataKey, region, getCredentials);
 
       setSuccessMessage(
-        `Text file "${fileName}" has been added and will be searchable in your Company Knowledge after the next scheduled sync.`,
+        `Text file "${fileName}" has been added to "${selectedKB?.kb_name || 'your knowledge base'}" and will be searchable after the next scheduled sync.`,
       );
       setModalStep('success');
     } catch (err: unknown) {
@@ -750,25 +797,47 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
         </Dropdown.Menu>
       </Dropdown>
 
-      <FeatureWrapper feature="addToCompanyData">
-        <Button variant="btn btn-secondary" onClick={handleShowModal}>
+      <Dropdown>
+        <Dropdown.Toggle
+          variant="btn btn-secondary"
+          id="kb-dropdown"
+          disabled={writableKBs.length === 0 || isLoadingKBs}
+        >
           <i className="bi bi-database me-2"></i>
-          Add to Company Knowledge
-        </Button>
-      </FeatureWrapper>
+          Add to Knowledge Base
+        </Dropdown.Toggle>
+        <Dropdown.Menu>
+          {writableKBs.map((kb) => (
+            <Dropdown.Item key={kb.kb_id} onClick={() => handleSelectKBAndShowModal(kb)}>
+              {kb.kb_name}
+              {kb.kb_id === 'company' && (
+                <Badge bg="secondary" className="ms-2">
+                  Default
+                </Badge>
+              )}
+              {kb.role && kb.kb_id !== 'company' && (
+                <Badge bg="info" className="ms-2">
+                  {kb.role}
+                </Badge>
+              )}
+            </Dropdown.Item>
+          ))}
+          {writableKBs.length === 0 && !isLoadingKBs && (
+            <Dropdown.Item disabled>No knowledge bases available</Dropdown.Item>
+          )}
+        </Dropdown.Menu>
+      </Dropdown>
 
       <Modal show={showModal} onHide={handleModalCancel} backdrop="static" centered>
         {modalStep === 'confirm' && (
           <>
-            <FeatureWrapper feature="addToCompanyData">
-              <Modal.Header closeButton>
-                <Modal.Title>Add to Company Knowledge</Modal.Title>
-              </Modal.Header>
-            </FeatureWrapper>
+            <Modal.Header closeButton>
+              <Modal.Title>Add to {selectedKB?.kb_name || 'Knowledge Base'}</Modal.Title>
+            </Modal.Header>
             <Modal.Body>
               <p>
-                You are about to add this to your <strong>company knowledge</strong>. It will be searchable after the
-                next scheduled sync.
+                You are about to add this to <strong>{selectedKB?.kb_name || 'your knowledge base'}</strong>. It will be
+                searchable after the next scheduled sync.
               </p>
               <p>Please confirm and/or edit the title:</p>
               <Form.Group className="mb-3">
@@ -780,11 +849,9 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
               <Button variant="secondary" onClick={handleModalCancel}>
                 Cancel
               </Button>
-              <FeatureWrapper feature="addToCompanyData">
-                <Button variant="primary" onClick={handleModalYes}>
-                  Add to Company Knowledge
-                </Button>
-              </FeatureWrapper>
+              <Button variant="primary" onClick={handleModalYes}>
+                Add to {selectedKB?.kb_name || 'Knowledge Base'}
+              </Button>
             </Modal.Footer>
           </>
         )}
@@ -798,7 +865,9 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
               <Spinner animation="border" role="status">
                 <span className="visually-hidden">Uploading...</span>
               </Spinner>
-              <p style={{ marginTop: '1rem' }}>Uploading to your company knowledge, please wait...</p>
+              <p style={{ marginTop: '1rem' }}>
+                Uploading to {selectedKB?.kb_name || 'your knowledge base'}, please wait...
+              </p>
             </Modal.Body>
           </>
         )}

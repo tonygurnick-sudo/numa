@@ -132,6 +132,7 @@ def _start_crawler(body: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, A
     max_depth = min(body.get("maxDepth", 5), 5)
     url_depth_map = body.get("urlDepthMap", {})
     kb_id = body.get("kb_id", DEFAULT_KB_ID)
+    limit_to_path = body.get("limitToPath", True)
 
     if not urls:
         return {
@@ -173,6 +174,9 @@ def _start_crawler(body: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, A
                 "userId": user_id,
                 "crawlSessionId": crawl_session_id,
                 "kbId": kb_id,
+                "isSeedUrl": True,
+                "limitToPath": limit_to_path,
+                "seedUrlPrefix": url if limit_to_path else None,
             }
             for url in urls
         ],
@@ -181,6 +185,7 @@ def _start_crawler(body: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, A
         "maxPages": max_pages,
         "maxDepth": max_depth,
         "kbId": kb_id,
+        "limitToPath": limit_to_path,
     }
 
     try:
