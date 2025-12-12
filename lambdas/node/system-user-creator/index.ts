@@ -6,6 +6,17 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import { withPRM } from '../../../lib/prm-node/prm';
 
+const MAX_RETRIES = 5;
+const INITIAL_DELAY_MS = 2000;
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isAccessDenied(err: unknown): boolean {
+  return err instanceof Error && (err.name === 'AccessDeniedException' || err.name === 'AccessDenied');
+}
+
 interface Event {
   userPoolId: string;
   username: string;
@@ -18,11 +29,12 @@ interface Response {
   created: boolean;
 }
 
-export async function handler(event: Event): Promise<Response> {
-  const { userPoolId, username, password } = event;
-
-  const client = withPRM(CognitoIdentityProviderClient, { region: process.env['AWS_REGION'] });
-
+async function createOrUpdateUser(
+  client: CognitoIdentityProviderClient,
+  userPoolId: string,
+  username: string,
+  password: string,
+): Promise<boolean> {
   let userExists = false;
 
   try {
@@ -40,7 +52,7 @@ export async function handler(event: Event): Promise<Response> {
       // User doesn't exist, we'll create it
       console.log(`User ${username} does not exist, will create`);
     } else {
-      // Unexpected error
+      // Unexpected error (including AccessDenied)
       throw err;
     }
   }
@@ -72,9 +84,34 @@ export async function handler(event: Event): Promise<Response> {
   );
   console.log(`Password set for user ${username}`);
 
-  return {
-    success: true,
-    username,
-    created: !userExists,
-  };
+  return !userExists;
+}
+
+export async function handler(event: Event): Promise<Response> {
+  const { userPoolId, username, password } = event;
+
+  const client = withPRM(CognitoIdentityProviderClient, { region: process.env['AWS_REGION'] });
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const created = await createOrUpdateUser(client, userPoolId, username, password);
+      return {
+        success: true,
+        username,
+        created,
+      };
+    } catch (err) {
+      if (isAccessDenied(err) && attempt < MAX_RETRIES) {
+        // IAM policy propagation delay - retry with exponential backoff
+        const delayMs = INITIAL_DELAY_MS * Math.pow(2, attempt - 1);
+        console.log(`AccessDenied on attempt ${attempt}/${MAX_RETRIES}, retrying in ${delayMs}ms...`);
+        await sleep(delayMs);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  // This should never be reached due to the throw in the loop
+  throw new Error('Unexpected: exhausted retries without success or error');
 }
