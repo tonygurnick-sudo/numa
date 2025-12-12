@@ -1,6 +1,5 @@
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
-import { CognitoUser } from '@cdktf/provider-aws/lib/cognito-user';
 import { CognitoUserInGroup } from '@cdktf/provider-aws/lib/cognito-user-in-group';
 import { CognitoUserPool } from '@cdktf/provider-aws/lib/cognito-user-pool';
 import { CognitoUserPoolClient } from '@cdktf/provider-aws/lib/cognito-user-pool-client';
@@ -36,6 +35,7 @@ import {
   qBusinessChatControlConfigurerPropsSchema,
 } from './q-business-chat-control-configurer-construct';
 import { SetCallbackUrl } from './set-callback-url-construct';
+import { SystemUserCreator } from './system-user-creator-construct';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
@@ -183,15 +183,12 @@ export class CoreNumaInfra extends Construct {
       minUpper: 5,
     }).result;
     const systemUserEmail = 'numa-system-user@arcanum.ai';
-    const systemUser = new CognitoUser(this, 'system-user', {
-      enabled: true,
-      username: systemUserEmail,
-      attributes: {
-        email: systemUserEmail,
-        email_verified: 'true',
-      },
-      password: systemUserPassword,
+    // Use SystemUserCreator for idempotent user creation - won't fail if user already exists
+    const systemUser = new SystemUserCreator(this, 'system-user', {
       userPoolId: userPool.id,
+      userPoolArn: userPool.arn,
+      username: systemUserEmail,
+      password: systemUserPassword,
     });
     const systemUserSecret = new SecretsmanagerSecret(this, 'system-user-secret-manager-secret', {
       name: `${props.clientName}-system-user-password`,
@@ -1103,7 +1100,7 @@ export class CoreNumaInfra extends Construct {
       groupName: 'admin',
       username: systemUser.username,
       userPoolId: userPool.id,
-      dependsOn: [this.cognitoGroups.cognitoGroups['admin']],
+      dependsOn: [this.cognitoGroups.cognitoGroups['admin'], ...systemUser.dependsOn],
     });
 
     const bedrockModelManagerPolicyStatements = [

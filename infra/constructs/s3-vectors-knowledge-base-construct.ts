@@ -3,6 +3,7 @@ import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
+import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
@@ -67,8 +68,9 @@ export class S3VectorsKnowledgeBase extends Construct {
       }).json,
     });
 
-    const customResourcePolicy = new IamPolicy(this, 'custom-resource-policy', {
-      name: `${props.clientName}-s3vectors-manager`,
+    // Use inline policy to avoid IAM eventual consistency issues on first deploy
+    const customResourceInlinePolicy = new IamRolePolicy(this, 'custom-resource-policy', {
+      role: customResourceRole.name,
       policy: new DataAwsIamPolicyDocument(this, 'custom-resource-policy-doc', {
         statement: [
           {
@@ -103,16 +105,10 @@ export class S3VectorsKnowledgeBase extends Construct {
       }).json,
     });
 
-    const policyAttachments = [
-      new IamRolePolicyAttachment(this, 'lambda-basic-execution', {
-        role: customResourceRole.name,
-        policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
-      }),
-      new IamRolePolicyAttachment(this, 'custom-policy-attachment', {
-        role: customResourceRole.name,
-        policyArn: customResourcePolicy.arn,
-      }),
-    ];
+    const basicExecutionAttachment = new IamRolePolicyAttachment(this, 'lambda-basic-execution', {
+      role: customResourceRole.name,
+      policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+    });
 
     // IAM Role for Bedrock Knowledge Base (must be created before Lambda invocation)
     const knowledgeBaseRole = new IamRole(this, 'knowledge-base-role', {
@@ -127,8 +123,9 @@ export class S3VectorsKnowledgeBase extends Construct {
       }).json,
     });
 
-    const knowledgeBasePolicy = new IamPolicy(this, 'knowledge-base-policy', {
-      name: `${props.clientName}-kb-s3vectors`,
+    // Use inline policy to avoid IAM eventual consistency issues on first deploy
+    const knowledgeBaseInlinePolicy = new IamRolePolicy(this, 'knowledge-base-policy', {
+      role: knowledgeBaseRole.name,
       policy: new DataAwsIamPolicyDocument(this, 'kb-policy-doc', {
         statement: [
           {
@@ -157,11 +154,6 @@ export class S3VectorsKnowledgeBase extends Construct {
           },
         ],
       }).json,
-    });
-
-    const kbPolicyAttachment = new IamRolePolicyAttachment(this, 'kb-policy-attachment', {
-      role: knowledgeBaseRole.name,
-      policyArn: knowledgeBasePolicy.arn,
     });
 
     // Add bucket policy to allow Knowledge Base role to access data bucket
@@ -343,10 +335,10 @@ export class S3VectorsKnowledgeBase extends Construct {
       },
       dependsOn: [
         func,
-        ...policyAttachments,
+        basicExecutionAttachment,
+        customResourceInlinePolicy,
         knowledgeBaseRole,
-        knowledgeBasePolicy,
-        kbPolicyAttachment,
+        knowledgeBaseInlinePolicy,
         dataBucketPolicy,
       ],
     });
