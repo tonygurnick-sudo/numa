@@ -44,6 +44,7 @@ variables:
         - lambdas/node/s3-kb-file-migrator
         - lambdas/node/s3-vectors-manager
         - lambdas/node/srp-hasher
+        - lambdas/node/system-user-creator
         - lambdas/node/token-adjuster
         - lambdas/node/vector-db-init
 
@@ -61,6 +62,7 @@ variables:
         - lambdas/node/cloudfront-invalidator
         - lambdas/node/q-business-chat-control-configurer
         - lambdas/node/srp-hasher
+        - lambdas/node/system-user-creator
         - lambdas/node/token-adjuster
         - lambdas/node/vector-db-init
         - lib/client-config-node

@@ -24183,6 +24183,28 @@ __metadata:
   languageName: node
   linkType: hard
 
+"system-user-creator@workspace:lambdas/node/system-user-creator":
+  version: 0.0.0-use.local
+  resolution: "system-user-creator@workspace:lambdas/node/system-user-creator"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.799.0"
+    "@aws-sdk/types": "npm:^3.696.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    eslint-config-prettier: "npm:^10.0.0"
+    eslint-plugin-prettier: "npm:^5.2.1"
+    prettier: "npm:^3.4.2"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
 "tabbable@npm:^6.0.0":
   version: 6.2.0
   resolution: "tabbable@npm:6.2.0"

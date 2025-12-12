@@ -2,8 +2,8 @@ import { createAssumptionPolicy } from '@arcanumai/cdktf-util';
 import { TypescriptLambdaConstruct } from '@arcanumai/typescript-lambda-construct';
 import { CloudfrontDistribution } from '@cdktf/provider-aws/lib/cloudfront-distribution';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
-import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamRolePolicyAttachment } from '@cdktf/provider-aws/lib/iam-role-policy-attachment';
 import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
@@ -16,7 +16,21 @@ export class InvalidateCloudfront extends Construct {
   constructor(scope: Construct, name: string, props: InvalidateCloudfrontProps) {
     super(scope, name);
 
-    const invalidatePolicy = new IamPolicy(this, 'invalidate-domain-policy', {
+    const role = new IamRole(this, 'role', {
+      assumeRolePolicy: createAssumptionPolicy({
+        Service: 'lambda.amazonaws.com',
+      }),
+    });
+
+    // Use inline policy instead of managed policy attachment to avoid IAM eventual consistency issues
+    // Inline policies propagate immediately, preventing AccessDenied errors on first deploy
+    const basicPolicyAttachment = new IamRolePolicyAttachment(this, 'role-policy-attachment-basic', {
+      role: role.name,
+      policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+    });
+
+    const inlinePolicy = new IamRolePolicy(this, 'invalidate-policy', {
+      role: role.name,
       policy: new DataAwsIamPolicyDocument(this, 'domain-invalidation-policy-document', {
         statement: [
           {
@@ -26,22 +40,6 @@ export class InvalidateCloudfront extends Construct {
         ],
       }).json,
     });
-    const role = new IamRole(this, 'role', {
-      assumeRolePolicy: createAssumptionPolicy({
-        Service: 'lambda.amazonaws.com',
-      }),
-    });
-
-    const policyAttachments = [
-      new IamRolePolicyAttachment(this, 'role-policy-attachment-basic', {
-        role: role.name,
-        policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
-      }),
-      new IamRolePolicyAttachment(this, 'role-policy-attachment-invalidate', {
-        role: role.name,
-        policyArn: invalidatePolicy.arn,
-      }),
-    ];
 
     const invalidaterPath = path.resolve(import.meta.dirname, '..', '..', 'lambdas', 'node', 'cloudfront-invalidator');
     const invalidaterFilename = path.resolve(invalidaterPath, 'lambda_function.zip');
@@ -81,7 +79,7 @@ export class InvalidateCloudfront extends Construct {
           ),
         ),
       },
-      dependsOn: [...props.dependsOn, func, ...policyAttachments],
+      dependsOn: [...props.dependsOn, func, basicPolicyAttachment, inlinePolicy],
     });
   }
 }
