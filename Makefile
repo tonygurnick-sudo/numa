@@ -26,8 +26,10 @@ export HONEYCOMB_KEY_ID := hcamk_01jp5y4xp1z77ed2p3sj7jn2dx
 
 CDKTF := yarn --cwd infra dlx cdktf-cli
 STACK := numa-arcanum-demo-tony
+SYSTEM_USER_FUNCTION_RESOURCE := aws_lambda_function.numa_system-user_function_38BDAEEC
+SYSTEM_USER_FUNCTION_NAME := system-user-creator---TfToken-TOKEN-81--
 
-.PHONY: init get plan deploy clean
+.PHONY: init get plan import deploy clean
 .DEFAULT_GOAL := deploy
 
 init:
@@ -39,6 +41,13 @@ get:
 
 plan:
 	$(CDKTF) diff $(STACK)
+
+import: init get
+	@if $(CDKTF) terraform state list $(STACK) | rg -q --fixed-strings "$(SYSTEM_USER_FUNCTION_RESOURCE)"; then \
+		echo "Lambda function already imported into state"; \
+	else \
+		$(CDKTF) terraform import "$(STACK).$(SYSTEM_USER_FUNCTION_RESOURCE)" "$(SYSTEM_USER_FUNCTION_NAME)"; \
+	fi
 
 deploy: init get
 	lambdas/package-all.sh
