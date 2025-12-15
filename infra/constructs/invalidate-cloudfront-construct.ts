@@ -45,7 +45,7 @@ export class InvalidateCloudfront extends Construct {
     const invalidaterFilename = path.resolve(invalidaterPath, 'lambda_function.zip');
     const oldfunc = new TypescriptLambdaConstruct(this, 'function', {
       lambdaProps: {
-        functionName: 'cloudfront-invalidater-' + props.cloudfrontDistribution.id,
+        functionName: `${props.clientName}-cloudfront-invalidator`,
         role: role.arn,
         runtime: 'nodejs22.x',
       },
@@ -53,7 +53,7 @@ export class InvalidateCloudfront extends Construct {
     });
     oldfunc.lambdaFunction.moveTo('invalidater_function');
     const func = new LambdaFunction(this, 'invalidator-function', {
-      functionName: 'cloudfront-invalidater-' + props.cloudfrontDistribution.id,
+      functionName: `${props.clientName}-cloudfront-invalidator`,
       role: role.arn,
       runtime: 'nodejs22.x',
       handler: 'index.handler',
@@ -85,6 +85,7 @@ export class InvalidateCloudfront extends Construct {
 }
 
 export interface InvalidateCloudfrontProps {
+  clientName: string;
   cloudfrontDistribution: CloudfrontDistribution;
   paths?: string[];
   dependsOn: S3Object[];

@@ -1,6 +1,5 @@
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { CloudcontrolapiResource } from '@cdktf/provider-aws/lib/cloudcontrolapi-resource';
-import { CognitoUserInGroup } from '@cdktf/provider-aws/lib/cognito-user-in-group';
 import { CognitoUserPool } from '@cdktf/provider-aws/lib/cognito-user-pool';
 import { CognitoUserPoolClient } from '@cdktf/provider-aws/lib/cognito-user-pool-client';
 import { CognitoUserPoolDomain } from '@cdktf/provider-aws/lib/cognito-user-pool-domain';
@@ -183,12 +182,15 @@ export class CoreNumaInfra extends Construct {
       minUpper: 5,
     }).result;
     const systemUserEmail = 'numa-system-user@arcanum.ai';
-    // Use SystemUserCreator for idempotent user creation - won't fail if user already exists
-    const systemUser = new SystemUserCreator(this, 'system-user', {
+    // Use SystemUserCreator for idempotent user creation and admin group membership
+    // This won't fail if user already exists and ensures they're always in the admin group
+    new SystemUserCreator(this, 'system-user', {
+      clientName: props.clientName,
       userPoolId: userPool.id,
       userPoolArn: userPool.arn,
       username: systemUserEmail,
       password: systemUserPassword,
+      groupName: 'admin',
     });
     const systemUserSecret = new SecretsmanagerSecret(this, 'system-user-secret-manager-secret', {
       name: `${props.clientName}-system-user-password`,
@@ -1095,13 +1097,8 @@ export class CoreNumaInfra extends Construct {
       new TerraformOutput(this, 'pipedream-relay-lambda-arn', { value: pipedreamRelayLambda.lambda.arn });
     }
 
-    // Add system user to admin group
-    new CognitoUserInGroup(this, 'system-user-admin-group', {
-      groupName: 'admin',
-      username: systemUser.username,
-      userPoolId: userPool.id,
-      dependsOn: [this.cognitoGroups.cognitoGroups['admin'], ...systemUser.dependsOn],
-    });
+    // Note: System user admin group membership is now handled by the SystemUserCreator Lambda
+    // This ensures the user is always in the admin group, even if previous deployments failed
 
     const bedrockModelManagerPolicyStatements = [
       {

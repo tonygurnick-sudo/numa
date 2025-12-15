@@ -12,6 +12,7 @@ import path from 'node:path';
 /**
  * Creates a Cognito user idempotently using a Lambda invocation.
  * Unlike the CognitoUser resource, this won't fail if the user already exists.
+ * Also adds the user to the specified group (e.g., admin).
  */
 export class SystemUserCreator extends Construct {
   public readonly invocation: LambdaInvocation;
@@ -39,7 +40,13 @@ export class SystemUserCreator extends Construct {
       policy: new DataAwsIamPolicyDocument(this, 'cognito-policy-document', {
         statement: [
           {
-            actions: ['cognito-idp:AdminGetUser', 'cognito-idp:AdminCreateUser', 'cognito-idp:AdminSetUserPassword'],
+            actions: [
+              'cognito-idp:AdminGetUser',
+              'cognito-idp:AdminCreateUser',
+              'cognito-idp:AdminSetUserPassword',
+              'cognito-idp:AdminListGroupsForUser',
+              'cognito-idp:AdminAddUserToGroup',
+            ],
             resources: [props.userPoolArn],
           },
         ],
@@ -50,27 +57,28 @@ export class SystemUserCreator extends Construct {
     const lambdaFilename = path.resolve(lambdaPath, 'lambda_function.zip');
 
     const func = new LambdaFunction(this, 'function', {
-      functionName: `system-user-creator-${props.userPoolId.replace(/[^a-zA-Z0-9]/g, '-')}`,
+      functionName: `${props.clientName}-system-user-creator`,
       role: role.arn,
       runtime: 'nodejs22.x',
       handler: 'index.handler',
       filename: lambdaFilename,
       sourceCodeHash: Fn.filebase64sha256(lambdaFilename),
-      timeout: 30,
+      timeout: 60, // Increased timeout for retries
     });
 
-    const input = JSON.stringify({
+    const inputObject = {
       userPoolId: props.userPoolId,
       username: props.username,
       password: props.password,
-    });
+      groupName: props.groupName,
+    };
 
     this.invocation = new LambdaInvocation(this, 'invocation', {
       functionName: func.functionName,
-      input,
+      input: Fn.jsonencode(inputObject),
       triggers: {
-        // Re-run when password changes
-        passwordHash: Fn.sha256(props.password),
+        // Re-run when password or group changes
+        inputHash: Fn.sha256(Fn.jsonencode(inputObject)),
       },
       dependsOn: [func, basicPolicyAttachment, cognitoPolicy],
     });
@@ -85,8 +93,10 @@ export class SystemUserCreator extends Construct {
 }
 
 export interface SystemUserCreatorProps {
+  clientName: string;
   userPoolId: string;
   userPoolArn: string;
   username: string;
   password: string;
+  groupName: string;
 }
