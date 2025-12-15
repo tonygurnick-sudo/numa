@@ -400,6 +400,7 @@ export class NumaClientStack extends TerraformStack {
     });
 
     new InvalidateCloudfront(this, 'invalidate', {
+      clientName: props.clientName,
       cloudfrontDistribution: fe.distribution,
       dependsOn: [manifest, configObject, version, ...objects],
     });

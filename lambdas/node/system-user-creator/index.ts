@@ -3,6 +3,8 @@ import {
   AdminGetUserCommand,
   AdminCreateUserCommand,
   AdminSetUserPasswordCommand,
+  AdminListGroupsForUserCommand,
+  AdminAddUserToGroupCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { withPRM } from '../../../lib/prm-node/prm';
 
@@ -21,12 +23,14 @@ interface Event {
   userPoolId: string;
   username: string;
   password: string;
+  groupName: string;
 }
 
 interface Response {
   success: boolean;
   username: string;
   created: boolean;
+  addedToGroup: boolean;
 }
 
 async function createOrUpdateUser(
@@ -34,7 +38,8 @@ async function createOrUpdateUser(
   userPoolId: string,
   username: string,
   password: string,
-): Promise<boolean> {
+  groupName: string,
+): Promise<{ created: boolean; addedToGroup: boolean }> {
   let userExists = false;
 
   try {
@@ -74,31 +79,68 @@ async function createOrUpdateUser(
   }
 
   // Set the permanent password (works for both new and existing users)
-  await client.send(
-    new AdminSetUserPasswordCommand({
+  try {
+    await client.send(
+      new AdminSetUserPasswordCommand({
+        UserPoolId: userPoolId,
+        Username: username,
+        Password: password,
+        Permanent: true,
+      }),
+    );
+    console.log(`Password set for user ${username}`);
+  } catch (err) {
+    // If password history policy prevents reusing the same password, that's fine -
+    // it means the password is already set to what we want
+    if (err instanceof Error && err.name === 'PasswordHistoryPolicyViolationException') {
+      console.log(`Password for user ${username} unchanged (already set to desired value)`);
+    } else {
+      throw err;
+    }
+  }
+
+  // Check if user is already in the group
+  const groupsResponse = await client.send(
+    new AdminListGroupsForUserCommand({
       UserPoolId: userPoolId,
       Username: username,
-      Password: password,
-      Permanent: true,
     }),
   );
-  console.log(`Password set for user ${username}`);
 
-  return !userExists;
+  const isInGroup = groupsResponse.Groups?.some((g) => g.GroupName === groupName) ?? false;
+
+  let addedToGroup = false;
+  if (!isInGroup) {
+    // Add user to the group
+    await client.send(
+      new AdminAddUserToGroupCommand({
+        UserPoolId: userPoolId,
+        Username: username,
+        GroupName: groupName,
+      }),
+    );
+    addedToGroup = true;
+    console.log(`User ${username} added to group ${groupName}`);
+  } else {
+    console.log(`User ${username} is already in group ${groupName}`);
+  }
+
+  return { created: !userExists, addedToGroup };
 }
 
 export async function handler(event: Event): Promise<Response> {
-  const { userPoolId, username, password } = event;
+  const { userPoolId, username, password, groupName } = event;
 
   const client = withPRM(CognitoIdentityProviderClient, { region: process.env['AWS_REGION'] });
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const created = await createOrUpdateUser(client, userPoolId, username, password);
+      const result = await createOrUpdateUser(client, userPoolId, username, password, groupName);
       return {
         success: true,
         username,
-        created,
+        created: result.created,
+        addedToGroup: result.addedToGroup,
       };
     } catch (err) {
       if (isAccessDenied(err) && attempt < MAX_RETRIES) {
