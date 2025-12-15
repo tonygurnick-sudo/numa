@@ -11,6 +11,7 @@ import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
 import path from 'node:path';
+import { awsNameWithHashedPrefix } from './aws-name-utils';
 
 const OTEL_COLLECTOR_LAYER_VERSION = '0_16_0';
 const OTEL_LANGUAGE_LAYER_VERSION = '0_15_0';
@@ -24,7 +25,7 @@ export class NumaLambda extends Construct {
   constructor(scope: Construct, name: string, props: NumaLambdaProps) {
     super(scope, name);
 
-    const resourceName = props.clientName.slice(0, 64 - props.resourceNameSuffix.length) + props.resourceNameSuffix;
+    const resourceName = awsNameWithHashedPrefix(props.clientName, props.resourceNameSuffix, 64);
 
     props.runtime ??= 'python3.13';
 

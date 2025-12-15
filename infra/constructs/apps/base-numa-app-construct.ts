@@ -21,6 +21,7 @@ import {
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { NumaLogGroup } from '../numa-log-group';
 import { z } from 'zod';
+import { awsNameWithHashedPrefix } from '../aws-name-utils';
 
 export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
   abstract readonly manifest: NumaAppManifest;
@@ -35,7 +36,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
 
   protected getResourceName(suffix: string): string {
     const appSpecificSuffix = `-${this.appId}${suffix}`;
-    return `${this.clientName}`.slice(0, 64 - appSpecificSuffix.length) + appSpecificSuffix;
+    return awsNameWithHashedPrefix(this.clientName, appSpecificSuffix, 64);
   }
 
   constructor(scope: Construct, name: string, props: AppSpecificBaseNumaAppProps) {
@@ -132,9 +133,8 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       policyArn: stepFunctionPolicy.arn,
     });
 
-    const functionNameSuffix = `-${this.appId}_${name}_step-function`;
     const stepFunction = new SfnStateMachine(this, name + '_step-function', {
-      name: this.clientName.slice(0, 80 - functionNameSuffix.length) + functionNameSuffix,
+      name: awsNameWithHashedPrefix(this.clientName, `-${this.appId}_${name}_step-function`, 80),
       definition: props.stepFunctionDefinition,
       roleArn: stepFunctionRole.arn,
       loggingConfiguration: {
