@@ -1,4 +1,4 @@
-import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as mime from 'mime-types';
@@ -9,7 +9,6 @@ import { generateSwaggerConfig } from './lib/swagger-config.js';
 const logger = {
   info: (msg: string, meta?: any) => console.log(`INFO: ${msg}`, meta ? JSON.stringify(meta) : ''),
   error: (msg: string, meta?: any) => console.error(`ERROR: ${msg}`, meta ? JSON.stringify(meta) : ''),
-  addContext: (context?: any) => {}, // no-op for compatibility
 };
 
 interface LambdaResponse {
@@ -23,8 +22,7 @@ interface LambdaResponse {
  * Main Lambda handler for OpenAPI documentation server
  * Serves Swagger UI, OpenAPI specifications, and handles authentication
  */
-export const handler = async (event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> => {
-  logger.addContext(context);
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   logger.info('Processing request', {
     path: event.path,
     method: event.httpMethod,

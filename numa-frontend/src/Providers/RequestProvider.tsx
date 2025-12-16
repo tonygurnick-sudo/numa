@@ -72,31 +72,34 @@ export const NumaRequestProvider = ({ children }) => {
   const numaPost = useCallback(
     async (url, data, headers = {}) => {
       const response = await axios.post(url, data, {
+        ...axiosConfig,
         headers: { ...defaultHeaders, ...headers },
       });
       return response.data;
     },
-    [defaultHeaders],
+    [axiosConfig, defaultHeaders],
   );
 
   const numaPut = useCallback(
     async (url, data, headers = {}) => {
       const response = await axios.put(url, data, {
+        ...axiosConfig,
         headers: { ...defaultHeaders, ...headers },
       });
       return response.data;
     },
-    [defaultHeaders],
+    [axiosConfig, defaultHeaders],
   );
 
   const numaDelete = useCallback(
     async (url, headers = {}) => {
       const response = await axios.delete(url, {
+        ...axiosConfig,
         headers: { ...defaultHeaders, ...headers },
       });
       return response.data;
     },
-    [defaultHeaders],
+    [axiosConfig, defaultHeaders],
   );
 
   const value = useMemo(

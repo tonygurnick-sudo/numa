@@ -74,6 +74,7 @@ export class CoreNumaInfra extends Construct {
   readonly workspaceAgentsTable: DynamodbTable;
   readonly userAgentsTable: DynamodbTable;
   readonly agentsSettingsTable: DynamodbTable;
+  readonly chatSettingsTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
@@ -531,6 +532,19 @@ export class CoreNumaInfra extends Construct {
         Name: `${numaClient}-agents-settings`,
         Environment: props.environmentName,
         Purpose: 'agents-settings',
+      },
+    });
+
+    // User chat settings table (per-user defaults for tools, KBs, integrations)
+    this.chatSettingsTable = new DynamodbTable(this, 'user-chat-settings-table', {
+      name: `${numaClient}-chat-settings`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'user_id',
+      attribute: [{ name: 'user_id', type: 'S' }],
+      tags: {
+        Name: `${numaClient}-chat-settings`,
+        Environment: props.environmentName,
+        Purpose: 'user-chat-settings',
       },
     });
 
