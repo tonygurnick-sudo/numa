@@ -30,7 +30,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   defaultKBIds: ['company'],
   autoToolsEnabled: true,
   webSearchEnabled: true,
-  createAgentEnabled: false,
+  createAgentEnabled: true, // Should be true when autoToolsEnabled is true
   defaultConnectionIds: [],
 };
 
