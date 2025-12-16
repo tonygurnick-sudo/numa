@@ -350,6 +350,42 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'PUT', path: 'settings/agents' },
     });
 
+    // User Chat Settings API (per-user defaults for tools, KBs, integrations)
+    const chatSettingsEnv = {
+      CLIENT_NAME: props.clientName,
+      CHAT_SETTINGS_TABLE_NAME: props.chatSettingsTableName,
+    } as Record<string, string>;
+
+    const chatSettingsPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.chatSettingsTableName}`],
+      },
+    ];
+
+    // GET user chat settings
+    this.addLambdaFunction(this, 'chat-settings-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/chat-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: chatSettingsEnv,
+      additionalPolicyStatements: chatSettingsPolicy,
+      route: { verb: 'GET', path: 'chat/settings' },
+    });
+
+    // PUT user chat settings
+    this.addLambdaFunction(this, 'chat-settings-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/chat-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: chatSettingsEnv,
+      additionalPolicyStatements: chatSettingsPolicy,
+      route: { verb: 'PUT', path: 'chat/settings' },
+    });
+
     // Agents API (list/create/update/delete/copy)
     const agentsEnv = {
       CLIENT_NAME: props.clientName,
@@ -497,4 +533,6 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   userAgentsTableName: string;
   /** Exact agents settings table name, passed from Core to avoid name drift. */
   agentsSettingsTableName: string;
+  /** User chat settings table name for per-user defaults (tools, KBs, integrations). */
+  chatSettingsTableName: string;
 }

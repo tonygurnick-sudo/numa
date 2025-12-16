@@ -212,21 +212,22 @@ nav {
     }
   }
 
-  .btn-home-logo-mobile {
-    display: flex;
-    align-items: center;
-    flex-shrink: 1; // Allow logo section to shrink
-    min-width: 0; // Allow flex item to shrink below content width
-    white-space: nowrap;
-    overflow: hidden;
+	  .btn-home-logo-mobile {
+	    display: flex;
+	    align-items: center;
+	    padding-left: 12px;
+	    gap: 8px;
+	    flex-shrink: 1; // Allow logo section to shrink
+	    min-width: 0; // Allow flex item to shrink below content width
+	    white-space: nowrap;
+	    overflow: hidden;
 
-    img {
-      height: 36px;
-      padding-left: 12px;
-      flex-shrink: 0; // Keep image size stable
+	    img {
+	      height: 36px;
+	      flex-shrink: 0; // Keep image size stable
 
-      // Hide purple asterisk logo on smaller screens to save space
-      @media (max-width: 400px) {
+	      // Hide purple asterisk logo on smaller screens to save space
+	      @media (max-width: 400px) {
         display: none;
       }
     }

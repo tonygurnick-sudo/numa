@@ -85,6 +85,7 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
 
     // Identify agent metadata from meta entry (if present)
     const metaItem = conversationHistory.find((item) => item.message_type === 'meta');
+    const chatConfig = metaItem?.chatConfig ?? null;
 
     const agentMeta = metaItem?.isAgentConversation
       ? {
@@ -356,6 +357,7 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
     return {
       messages: chatMessages,
       agentMeta,
+      chatConfig,
     };
   } catch (error) {
     console.error('Error loading conversation:', error);

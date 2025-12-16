@@ -58,6 +58,10 @@ const ChatInput = ({
   const agentsFeatureEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
 
+  const maxVisibleConnectionIcons = isMobile ? 2 : 4;
+  const visibleConnectionIds = enabledConnections.slice(0, maxVisibleConnectionIcons);
+  const hiddenConnectionCount = Math.max(0, enabledConnections.length - visibleConnectionIds.length);
+
   // Enable mobile back button to close dropdowns
   useDrawerBackClose({
     isOpen: showKBDropdown,
@@ -529,11 +533,11 @@ const ChatInput = ({
                       <i className="bi bi-link-45deg"></i>
                       {/* Show enabled connection icons */}
                       {enabledConnections.length > 0 && (
-                        <>
-                          {enabledConnections.map((connectionId) => {
+                        <span className="connection-icons">
+                          {visibleConnectionIds.map((connectionId) => {
                             const connection = availableConnections.find((conn) => conn.id === connectionId);
                             return connection ? (
-                              <div key={connectionId} className="connection-icon">
+                              <span key={connectionId} className="connection-icon">
                                 <img
                                   src={getConnectionIcon(connection.id)}
                                   alt={connection.name}
@@ -549,10 +553,15 @@ const ChatInput = ({
                                   className={`${getConnectionFallbackIcon(connection.id)} text-${getConnectionFallbackColor(connection.id)}`}
                                   style={{ fontSize: '20px', display: 'none' }}
                                 />
-                              </div>
+                              </span>
                             ) : null;
                           })}
-                        </>
+                          {hiddenConnectionCount > 0 && (
+                            <Badge bg="secondary" pill className="connection-more-badge">
+                              +{hiddenConnectionCount}
+                            </Badge>
+                          )}
+                        </span>
                       )}
                     </>
                   )}

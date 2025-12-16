@@ -269,6 +269,7 @@ export class NumaClientStack extends TerraformStack {
       workspaceAgentsTableName: core.workspaceAgentsTable.name,
       userAgentsTableName: core.userAgentsTable.name,
       agentsSettingsTableName: core.agentsSettingsTable.name,
+      chatSettingsTableName: core.chatSettingsTable.name,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(

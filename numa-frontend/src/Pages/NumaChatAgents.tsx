@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode, type SetStateAction } from 'react';
 import { Button, Alert, Modal, Collapse } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
@@ -43,8 +43,17 @@ import { getConnectionConfig } from '../config/integrationsConfig';
 import { sortAgentsByPriority } from '../utils/agentSortingUtils';
 import { formatAgentDisplayName } from '../utils/agentUtils';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
+import { ChatSettingsService, type ChatSettings, DEFAULT_CHAT_SETTINGS } from '../Services/ChatSettingsService';
 import { AgentAvatar } from '../Components/Agents/AgentAvatar';
 import { withPRM } from '../utils/prmUtils';
+
+type ConversationChatConfig = {
+  autoToolsEnabled?: boolean;
+  webSearchEnabled?: boolean;
+  createAgentEnabled?: boolean;
+  enabledKBIds?: string[];
+  enabledConnectionIds?: string[];
+};
 
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
@@ -81,10 +90,19 @@ const NumaChatAgents = () => {
   const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [personalAgentsLoading, setPersonalAgentsLoading] = useState(false);
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
+  const [agentsFeatureEnabled] = useState(() =>
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false,
+  );
   const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [userChatSettings, setUserChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
+  const [chatSettingsLoaded, setChatSettingsLoaded] = useState(false);
+  const [userSettingsModified, setUserSettingsModified] = useState(false);
+  const [pendingConversationChatConfig, setPendingConversationChatConfig] = useState<ConversationChatConfig | null>(
+    null,
+  );
 
   // Refs
   const messageEndRef = useRef(null);
@@ -94,6 +112,8 @@ const NumaChatAgents = () => {
   const preselectActivatedRef = useRef(false);
   const preselectTimerRef = useRef<number | null>(null);
   const autoNamingAttemptedRef = useRef<Set<string>>(new Set());
+  const conversationChatConfigSaveTimeoutRef = useRef<number | null>(null);
+  const isApplyingConversationChatConfigRef = useRef(false);
 
   // Custom hooks
   const conversationManager = useConversationManager();
@@ -124,24 +144,215 @@ const NumaChatAgents = () => {
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
   const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken } = useAuth();
-  const { numaGet } = useNumaRequest();
-  const { selectedKB: _selectedKB, selectedKbId: _selectedKbId, availableKBs } = useKnowledgeBase();
-  const [enabledKBIds, setEnabledKBIds] = useState<string[]>([]);
-
-  // Extract user info from token
+  // Extract user info from token early (used by hooks/deps below)
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const sub = idToken.sub;
   const userEmail = idToken.email || '';
   const userName = userEmail.split('@')[0] || undefined; // Extract first part of email as name
+  const { numaGet } = useNumaRequest();
+  const { selectedKB: _selectedKB, selectedKbId: _selectedKbId, availableKBs } = useKnowledgeBase();
+  const [enabledKBIds, setEnabledKBIds] = useState<string[]>([]);
+  const markUserSettingsModified = useCallback(() => {
+    setUserSettingsModified(true);
+  }, []);
+
+  const connectedSet = useMemo(
+    () => new Set(availableConnections.filter((conn) => conn.isConnected).map((conn) => conn.id)),
+    [availableConnections],
+  );
+
+  const applyConversationChatConfig = useCallback(
+    (config: unknown) => {
+      if (!config || typeof config !== 'object') return;
+
+      const parsed = config as ConversationChatConfig;
+      isApplyingConversationChatConfigRef.current = true;
+
+      if (typeof parsed.autoToolsEnabled === 'boolean') {
+        setAutoToolsEnabled(parsed.autoToolsEnabled);
+      }
+      if (typeof parsed.webSearchEnabled === 'boolean') {
+        setWebSearchEnabled(parsed.webSearchEnabled);
+      }
+      if (typeof parsed.createAgentEnabled === 'boolean') {
+        setCreateAgentEnabled(agentsFeatureEnabled ? parsed.createAgentEnabled : false);
+      }
+
+      if (Array.isArray(parsed.enabledKBIds)) {
+        if (availableKBs.length > 0) {
+          const availableSet = new Set(availableKBs.map((kb) => kb.kb_id));
+          setEnabledKBIds(parsed.enabledKBIds.filter((id) => availableSet.has(id)));
+        }
+      }
+
+      if (Array.isArray(parsed.enabledConnectionIds)) {
+        if (availableConnections.length > 0) {
+          const connected = new Set(availableConnections.filter((conn) => conn.isConnected).map((conn) => conn.id));
+          setEnabledConnections(parsed.enabledConnectionIds.filter((id) => connected.has(id)));
+        }
+      }
+
+      window.setTimeout(() => {
+        isApplyingConversationChatConfigRef.current = false;
+      }, 0);
+    },
+    [agentsFeatureEnabled, availableConnections, availableKBs],
+  );
+
+  useEffect(() => {
+    if (!pendingConversationChatConfig) return;
+    applyConversationChatConfig(pendingConversationChatConfig);
+  }, [applyConversationChatConfig, pendingConversationChatConfig]);
+
+  const handleUserSetWebSearchEnabled = useCallback(
+    (value: SetStateAction<boolean>) => {
+      markUserSettingsModified();
+      setWebSearchEnabled(value);
+    },
+    [markUserSettingsModified],
+  );
+
+  const handleUserSetCreateAgentEnabled = useCallback(
+    (value: SetStateAction<boolean>) => {
+      markUserSettingsModified();
+      setCreateAgentEnabled(value);
+    },
+    [markUserSettingsModified],
+  );
+
+  const handleUserSetAutoToolsEnabled = useCallback(
+    (value: SetStateAction<boolean>) => {
+      markUserSettingsModified();
+      setAutoToolsEnabled(value);
+    },
+    [markUserSettingsModified],
+  );
+
+  const handleUserSetEnabledConnections = useCallback(
+    (value: SetStateAction<string[]>) => {
+      markUserSettingsModified();
+      setEnabledConnections(value);
+    },
+    [markUserSettingsModified],
+  );
+
+  const handleUserSetEnabledKBIds = useCallback(
+    (value: SetStateAction<string[]>) => {
+      markUserSettingsModified();
+      setEnabledKBIds(value);
+    },
+    [markUserSettingsModified],
+  );
+
+  // Persist current chat controls to the conversation meta item so resuming a chat restores its last state.
+  useEffect(() => {
+    if (!conversationId || !numaChatDynamoUtils || !sub) return;
+    if (isApplyingConversationChatConfigRef.current) return;
+
+    if (conversationChatConfigSaveTimeoutRef.current) {
+      window.clearTimeout(conversationChatConfigSaveTimeoutRef.current);
+      conversationChatConfigSaveTimeoutRef.current = null;
+    }
+
+    conversationChatConfigSaveTimeoutRef.current = window.setTimeout(() => {
+      const payload: ConversationChatConfig = {
+        autoToolsEnabled,
+        webSearchEnabled,
+        createAgentEnabled: agentsFeatureEnabled ? createAgentEnabled : false,
+        enabledKBIds,
+        enabledConnectionIds: enabledConnections,
+      };
+
+      numaChatDynamoUtils
+        .updateMetaItem(conversationId, sub, { chatConfig: payload })
+        .catch((err) => console.debug('[NumaChat] Unable to persist chat config to conversation meta', err));
+    }, 600);
+
+    return () => {
+      if (conversationChatConfigSaveTimeoutRef.current) {
+        window.clearTimeout(conversationChatConfigSaveTimeoutRef.current);
+        conversationChatConfigSaveTimeoutRef.current = null;
+      }
+    };
+  }, [
+    autoToolsEnabled,
+    conversationId,
+    createAgentEnabled,
+    enabledConnections,
+    enabledKBIds,
+    agentsFeatureEnabled,
+    numaChatDynamoUtils,
+    sub,
+    webSearchEnabled,
+  ]);
+
+  const defaultKBIdsFromSettings = useMemo(() => {
+    if (!Array.isArray(userChatSettings.defaultKBIds) || userChatSettings.defaultKBIds.length === 0) {
+      return [];
+    }
+
+    const defaultKBSet = new Set(userChatSettings.defaultKBIds);
+    const availableDefaultKBs = availableKBs.filter((kb) => defaultKBSet.has(kb.kb_id));
+    return availableDefaultKBs.map((kb) => kb.kb_id);
+  }, [availableKBs, userChatSettings.defaultKBIds]);
+
+  const defaultConnectionIdsFromSettings = useMemo(
+    () => userChatSettings.defaultConnectionIds.filter((id) => connectedSet.has(id)),
+    [connectedSet, userChatSettings.defaultConnectionIds],
+  );
+
+  const applyAgentConfiguration = useCallback(
+    (agent: AgentSummary | null) => {
+      if (!agent) {
+        // Apply user's default chat settings when no agent is selected
+        setAutoToolsEnabled(userChatSettings.autoToolsEnabled);
+        setWebSearchEnabled(userChatSettings.webSearchEnabled);
+        setCreateAgentEnabled(userChatSettings.createAgentEnabled);
+        setEnabledConnections(defaultConnectionIdsFromSettings);
+        // Apply user's default KB selection, filtered by what's available
+        setEnabledKBIds(defaultKBIdsFromSettings);
+        return;
+      }
+
+      const config = agent.toolsConfig ?? {};
+      setAutoToolsEnabled(config.autoToolsEnabled ?? true);
+      setWebSearchEnabled(config.webSearchEnabled ?? false);
+      setCreateAgentEnabled(config.createAgentEnabled ?? false);
+      setEnabledConnections(config.enabledConnections ?? []);
+
+      // Apply KB constraints from agent
+      const allowedKBs = config.allowedKnowledgeBases;
+      if (allowedKBs === null || allowedKBs === undefined) {
+        // Backwards compat: check queryDataSources for existing agents
+        if (config.queryDataSources === false) {
+          // No KB access
+          setEnabledKBIds([]);
+        } else {
+          // All KBs allowed - enable all available
+          setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
+        }
+      } else if (allowedKBs.length === 0) {
+        // Explicit no KB access
+        setEnabledKBIds([]);
+      } else {
+        // Specific KBs allowed - enable only those that are both allowed and available
+        const allowedSet = new Set(allowedKBs);
+        setEnabledKBIds(availableKBs.filter((kb) => allowedSet.has(kb.kb_id)).map((kb) => kb.kb_id));
+      }
+    },
+    [availableKBs, defaultConnectionIdsFromSettings, defaultKBIdsFromSettings, userChatSettings],
+  );
+
+  const resetAgentState = useCallback(() => {
+    setCurrentAgent(null);
+    setPendingAgent(null);
+    applyAgentConfiguration(null);
+    setAgentError(null);
+  }, [applyAgentConfiguration]);
 
   // Simple direct access - no need for useMemo for primitive values
   const userId = user?.attributes?.sub;
   const userExists = !!user;
-
-  // Feature flag: agents enabled? - read once on mount, not in useMemo
-  const [agentsFeatureEnabled] = useState(() =>
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false,
-  );
 
   // If feature disabled, ensure no agent is selected and agent-specific flags are off
   useEffect(() => {
@@ -201,6 +412,44 @@ const NumaChatAgents = () => {
       }
     })();
   }, [numaGet, agentsFeatureEnabled]);
+
+  // Load user chat settings once on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const settings = await ChatSettingsService.get(numaGet);
+        setUserChatSettings(settings);
+      } catch (err) {
+        console.warn('Failed to load user chat settings, using defaults', err);
+        setUserChatSettings(DEFAULT_CHAT_SETTINGS);
+      } finally {
+        setChatSettingsLoaded(true);
+      }
+    })();
+  }, [numaGet]);
+
+  // Apply user chat settings defaults on initial load (when no agent is selected)
+  useEffect(() => {
+    if (
+      chatSettingsLoaded &&
+      !currentAgent &&
+      availableKBs.length > 0 &&
+      !userSettingsModified &&
+      !isConversationLoading &&
+      !pendingConversationChatConfig
+    ) {
+      // Apply defaults only if user hasn't manually changed settings yet
+      applyAgentConfiguration(null);
+    }
+  }, [
+    chatSettingsLoaded,
+    availableKBs,
+    currentAgent,
+    applyAgentConfiguration,
+    userSettingsModified,
+    isConversationLoading,
+    pendingConversationChatConfig,
+  ]);
 
   // Load personal agents once on mount (only when feature enabled)
   useEffect(() => {
@@ -284,54 +533,6 @@ const NumaChatAgents = () => {
 
   // Read region once on mount, not in useMemo
   const [REGION] = useState(() => window.sessionStorage.getItem('REGION'));
-
-  const applyAgentConfiguration = useCallback(
-    (agent: AgentSummary | null) => {
-      if (!agent) {
-        setAutoToolsEnabled(true);
-        setWebSearchEnabled(false);
-        setCreateAgentEnabled(false);
-        setEnabledConnections([]);
-        // Reset KB selection to all available when no agent
-        setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
-        return;
-      }
-
-      const config = agent.toolsConfig ?? {};
-      setAutoToolsEnabled(config.autoToolsEnabled ?? true);
-      setWebSearchEnabled(config.webSearchEnabled ?? false);
-      setCreateAgentEnabled(config.createAgentEnabled ?? false);
-      setEnabledConnections(config.enabledConnections ?? []);
-
-      // Apply KB constraints from agent
-      const allowedKBs = config.allowedKnowledgeBases;
-      if (allowedKBs === null || allowedKBs === undefined) {
-        // Backwards compat: check queryDataSources for existing agents
-        if (config.queryDataSources === false) {
-          // No KB access
-          setEnabledKBIds([]);
-        } else {
-          // All KBs allowed - enable all available
-          setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
-        }
-      } else if (allowedKBs.length === 0) {
-        // Explicit no KB access
-        setEnabledKBIds([]);
-      } else {
-        // Specific KBs allowed - enable only those that are both allowed and available
-        const allowedSet = new Set(allowedKBs);
-        setEnabledKBIds(availableKBs.filter((kb) => allowedSet.has(kb.kb_id)).map((kb) => kb.kb_id));
-      }
-    },
-    [availableKBs],
-  );
-
-  const resetAgentState = useCallback(() => {
-    setCurrentAgent(null);
-    setPendingAgent(null);
-    applyAgentConfiguration(null);
-    setAgentError(null);
-  }, [applyAgentConfiguration]);
 
   const getMissingIntegrations = (agent: AgentSummary): string[] => {
     const required = agent.requiredIntegrations ?? [];
@@ -582,6 +783,7 @@ const NumaChatAgents = () => {
     setButtonStatus('idle');
     resetStreamingState();
     resetAgentState();
+    setPendingConversationChatConfig(null);
 
     // Clear all UI states
     setMessages([]);
@@ -709,6 +911,7 @@ const NumaChatAgents = () => {
     setButtonStatus('idle');
     resetStreamingState();
     resetAgentState();
+    setPendingConversationChatConfig(null);
 
     // Clear all UI states
     setMessages([]);
@@ -1307,15 +1510,15 @@ const NumaChatAgents = () => {
     hideSuggestions();
 
     try {
-      const { messages: chatMessages, agentMeta } = await loadConversation(
-        selectedConversationId,
-        numaChatDynamoUtils,
-        sub,
-        getAccessToken,
-      );
+      const {
+        messages: chatMessages,
+        agentMeta,
+        chatConfig,
+      } = await loadConversation(selectedConversationId, numaChatDynamoUtils, sub, getAccessToken);
       setMessages(chatMessages);
       setConversationId(selectedConversationId);
       localStorage.setItem('currentConversationId', selectedConversationId);
+      setPendingConversationChatConfig((chatConfig as ConversationChatConfig) || null);
 
       // Mark this conversation as already having been through auto-naming consideration
       // This prevents re-triggering auto-naming when resuming an existing conversation
@@ -1333,7 +1536,12 @@ const NumaChatAgents = () => {
           resetAgentState();
         }
       } else {
-        resetAgentState();
+        setCurrentAgent(null);
+        setPendingAgent(null);
+        setAgentError(null);
+        if (!chatConfig) {
+          applyAgentConfiguration(null);
+        }
       }
     } catch (error) {
       console.error('Error loading conversation:', error);
@@ -1635,14 +1843,14 @@ const NumaChatAgents = () => {
                               setShowUploadModal={setShowUploadModal}
                               buttonStatus={buttonStatus}
                               webSearchEnabled={webSearchEnabled}
-                              setWebSearchEnabled={setWebSearchEnabled}
+                              setWebSearchEnabled={handleUserSetWebSearchEnabled}
                               createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
-                              setCreateAgentEnabled={setCreateAgentEnabled}
+                              setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
                               autoToolsEnabled={autoToolsEnabled}
-                              setAutoToolsEnabled={setAutoToolsEnabled}
+                              setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
                               availableConnections={availableConnections}
                               enabledConnections={enabledConnections}
-                              setEnabledConnections={setEnabledConnections}
+                              setEnabledConnections={handleUserSetEnabledConnections}
                               connectionsLoading={connectionsLoading}
                               hasPipedreamFeature={hasPipedreamFeature}
                               uploadsInProgress={isFileProcessing}
@@ -1659,7 +1867,7 @@ const NumaChatAgents = () => {
                               onSelectAgent={handleAgentSelect}
                               agentsLoading={agentsFeatureEnabled ? personalAgentsLoading : false}
                               enabledKBIds={enabledKBIds}
-                              setEnabledKBIds={setEnabledKBIds}
+                              setEnabledKBIds={handleUserSetEnabledKBIds}
                             />
                           ) : (
                             <ChatMessages
@@ -1696,14 +1904,14 @@ const NumaChatAgents = () => {
                               setShowUploadModal={setShowUploadModal}
                               buttonStatus={buttonStatus}
                               webSearchEnabled={webSearchEnabled}
-                              setWebSearchEnabled={setWebSearchEnabled}
+                              setWebSearchEnabled={handleUserSetWebSearchEnabled}
                               createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
-                              setCreateAgentEnabled={setCreateAgentEnabled}
+                              setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
                               autoToolsEnabled={autoToolsEnabled}
-                              setAutoToolsEnabled={setAutoToolsEnabled}
+                              setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
                               availableConnections={availableConnections}
                               enabledConnections={enabledConnections}
-                              setEnabledConnections={setEnabledConnections}
+                              setEnabledConnections={handleUserSetEnabledConnections}
                               connectionsLoading={connectionsLoading}
                               hasPipedreamFeature={hasPipedreamFeature}
                               uploadsInProgress={isFileProcessing}
@@ -1711,7 +1919,7 @@ const NumaChatAgents = () => {
                               externalInputRef={inputRef}
                               autoFocus={true}
                               enabledKBIds={enabledKBIds}
-                              setEnabledKBIds={setEnabledKBIds}
+                              setEnabledKBIds={handleUserSetEnabledKBIds}
                             />
                           </div>
                         )}

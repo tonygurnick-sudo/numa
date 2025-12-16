@@ -6,6 +6,7 @@ const Dash = lazy(() => import('../Pages/Dash').then((m) => ({ default: m.Dash }
 const AppDetail = lazy(() => import('../Pages/AppDetail'));
 const UserManagement = lazy(() => import('../Pages/UserManagement'));
 const SettingsPage = lazy(() => import('../Pages/Settings'));
+const UserProfilePage = lazy(() => import('../Pages/UserProfile'));
 const NumaChatAgents = lazy(() => import('../Pages/NumaChatAgents').then((m) => ({ default: m.NumaChatAgents })));
 const CompanyKnowledgeBase = lazy(() =>
   import('../Pages/CompanyKnowledgeBase').then((m) => ({ default: m.CompanyKnowledgeBase })),
@@ -72,12 +73,17 @@ export const ROUTE_CONFIG = [
     requiredFeature: 'useCompanyData',
     // No nav - accessed via clicking on a KB card
   },
-  // Dedicated Settings page replaces User Management in nav
+  // Dedicated Admin Settings page replaces User Management in nav
+  {
+    path: '/profile',
+    element: () => <UserProfilePage />,
+    nav: { label: 'Profile', icon: 'bi bi-person-circle', footerOnly: true },
+  },
   {
     path: '/settings',
     element: () => <SettingsPage />,
     requiredFeature: 'manageUsers',
-    nav: { label: 'Settings', icon: 'bi bi-gear-fill', footerOnly: true },
+    nav: { label: 'Admin Settings', icon: 'bi bi-gear-fill', footerOnly: true },
   },
   // Keep legacy route for deep links (no nav)
   {

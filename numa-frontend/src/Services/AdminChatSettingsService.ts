@@ -1,0 +1,118 @@
+import { DEFAULT_CHAT_SETTINGS, type ChatSettings } from './ChatSettingsService';
+
+export type GlobalChatSettings = ChatSettings & {
+  allowUserDefaults: boolean;
+};
+
+export const DEFAULT_GLOBAL_CHAT_SETTINGS: GlobalChatSettings = {
+  ...DEFAULT_CHAT_SETTINGS,
+  allowUserDefaults: false,
+};
+
+type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
+type NumaPut = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
+
+export const AdminChatSettingsService = {
+  async getGlobal(numaGet?: NumaGet): Promise<GlobalChatSettings> {
+    try {
+      if (numaGet) {
+        const res = (await numaGet('/api/chat/settings?scope=global')) as unknown;
+        return validateGlobal(res);
+      }
+
+      const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+      const idToken = localStorage.getItem('idToken');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+      const resp = await fetch(`${API_ENDPOINT}/chat/settings?scope=global`, { method: 'GET', headers });
+      if (!resp.ok) return { ...DEFAULT_GLOBAL_CHAT_SETTINGS };
+      const json = (await resp.json()) as unknown;
+      return validateGlobal(json);
+    } catch (e) {
+      console.warn('Error fetching global chat settings, using defaults', e);
+      return { ...DEFAULT_GLOBAL_CHAT_SETTINGS };
+    }
+  },
+
+  async updateGlobal(settings: Partial<GlobalChatSettings>, numaPut?: NumaPut): Promise<GlobalChatSettings> {
+    if (numaPut) {
+      const res = (await numaPut('/api/chat/settings?scope=global', settings)) as unknown;
+      return validateGlobal(res);
+    }
+
+    const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+    const idToken = localStorage.getItem('idToken');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+    const resp = await fetch(`${API_ENDPOINT}/chat/settings?scope=global`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(settings),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || 'Failed to update global chat settings');
+    }
+
+    const json = (await resp.json()) as unknown;
+    return validateGlobal(json);
+  },
+};
+
+function parseJsonIfNeeded(data: unknown): unknown {
+  if (typeof data !== 'string') return data;
+  try {
+    return JSON.parse(data) as unknown;
+  } catch {
+    return data;
+  }
+}
+
+function parseBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  return undefined;
+}
+
+function validateGlobal(data: unknown): GlobalChatSettings {
+  const normalized = parseJsonIfNeeded(data);
+
+  if (typeof normalized !== 'object' || normalized === null) {
+    return { ...DEFAULT_GLOBAL_CHAT_SETTINGS };
+  }
+
+  const obj = normalized as Record<string, unknown>;
+  const allowUserDefaults =
+    parseBoolean(obj.allowUserDefaults) ??
+    parseBoolean(obj.allow_user_defaults) ??
+    DEFAULT_GLOBAL_CHAT_SETTINGS.allowUserDefaults;
+
+  return {
+    defaultKBIds: Array.isArray(obj.defaultKBIds)
+      ? obj.defaultKBIds.filter((id): id is string => typeof id === 'string')
+      : DEFAULT_GLOBAL_CHAT_SETTINGS.defaultKBIds,
+    autoToolsEnabled:
+      typeof obj.autoToolsEnabled === 'boolean' ? obj.autoToolsEnabled : DEFAULT_GLOBAL_CHAT_SETTINGS.autoToolsEnabled,
+    webSearchEnabled:
+      typeof obj.webSearchEnabled === 'boolean' ? obj.webSearchEnabled : DEFAULT_GLOBAL_CHAT_SETTINGS.webSearchEnabled,
+    createAgentEnabled:
+      typeof obj.createAgentEnabled === 'boolean'
+        ? obj.createAgentEnabled
+        : DEFAULT_GLOBAL_CHAT_SETTINGS.createAgentEnabled,
+    defaultConnectionIds: Array.isArray(obj.defaultConnectionIds)
+      ? obj.defaultConnectionIds.filter((id): id is string => typeof id === 'string')
+      : DEFAULT_GLOBAL_CHAT_SETTINGS.defaultConnectionIds,
+    allowUserDefaults,
+  };
+}

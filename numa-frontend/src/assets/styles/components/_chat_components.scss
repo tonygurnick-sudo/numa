@@ -354,11 +354,15 @@ $border-radius-pill: 1rem;
         display: flex;
         align-items: center;
         gap: 10px; /* Space between items */
+        min-width: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
       }
       .right-controls {
         display: flex;
         align-items: center;
         gap: 10px; /* Space between items */
+        flex: 0 0 auto;
 
         .kb-selector-inline {
           display: flex;
@@ -493,6 +497,9 @@ $border-radius-pill: 1rem;
       // Connections toggle button
       .connections-toggle {
         @include toggle-button-base;
+        max-width: 100%;
+        overflow: hidden;
+        white-space: nowrap;
 
         > i {
           font-size: 1.5625rem; // 25px to match other icons
@@ -510,6 +517,18 @@ $border-radius-pill: 1rem;
           img, i {
             border-radius: 4px;
           }
+        }
+
+        .connection-icons {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          overflow: hidden;
+          max-width: 100%;
+        }
+
+        .connection-more-badge {
+          flex: 0 0 auto;
         }
 
         .enable-connection-text {
