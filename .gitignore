@@ -155,4 +155,8 @@ infra/assets/layers/claude-cli/*.zip
 infra/assets/artifacts/claude-cli/bin/claude
 clientConfigProd.json
 
+# Claude Code - ignore settings but share skills
+.claude/*
+!.claude/skills/
+
 infra/assets/artifacts/numa-workspace-agent/
