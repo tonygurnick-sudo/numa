@@ -1064,6 +1064,49 @@ def _serialize_data_sources(sources: List[Dict[str, Any]]) -> List[Dict[str, Any
     return [_serialize_datetime(source) for source in sources]
 
 
+def _check_web_crawler_content_exists(domain: str, kb_id: str) -> bool:
+    """
+    Check if any web crawler content exists in S3 for the given domain.
+
+    This validates that DynamoDB crawl entries have corresponding S3 content,
+    filtering out orphaned metadata entries where crawls failed or content
+    was never uploaded.
+
+    Args:
+        domain: The domain to check (e.g., "www.example.com")
+        kb_id: The knowledge base ID ("company" or a specific KB ID)
+
+    Returns:
+        True if content exists in S3, False otherwise
+    """
+    if not CLIENT_NAME or not domain:
+        return False
+
+    try:
+        s3_client = prm_client("s3", region=REGION)
+        bucket_name = f"numa-{CLIENT_NAME}-data"
+
+        if kb_id == "company":
+            prefix = f"documents/company/web-crawler/{domain}/"
+        else:
+            prefix = f"documents/kb-{kb_id}/web-crawler/{domain}/"
+
+        response = s3_client.list_objects_v2(
+            Bucket=bucket_name,
+            Prefix=prefix,
+            MaxKeys=1,
+        )
+        return response.get("KeyCount", 0) > 0
+    except Exception as e:
+        logger.warning(
+            "Error checking web crawler content",
+            domain=domain,
+            kb_id=kb_id,
+            error=str(e),
+        )
+        return False
+
+
 def _get_web_crawler_stats(kb_id: str) -> List[Dict[str, Any]]:
     """
     Fetch web crawler stats from DynamoDB crawl URLs table.
@@ -1141,6 +1184,15 @@ def _get_web_crawler_stats(kb_id: str) -> List[Dict[str, Any]]:
                     }
                 )
 
+            # Filter to only include domains with actual S3 content
+            # This handles cases where DynamoDB has entries but crawl content
+            # was never uploaded to S3 (e.g., crawl failures, timeouts)
+            data_sources = [
+                ds
+                for ds in data_sources
+                if _check_web_crawler_content_exists(ds.get("domain", ""), kb_id)
+            ]
+
             # Sort by last crawled desc
             data_sources.sort(
                 key=lambda d: (d.get("lastCrawled") or "", d.get("name") or ""),
@@ -1191,6 +1243,15 @@ def _get_web_crawler_stats(kb_id: str) -> List[Dict[str, Any]]:
                     "sourceUrl": domain_url,
                 }
             )
+
+        # Filter to only include domains with actual S3 content
+        # This handles cases where DynamoDB has entries but crawl content
+        # was never uploaded to S3 (e.g., crawl failures, timeouts)
+        data_sources = [
+            ds
+            for ds in data_sources
+            if _check_web_crawler_content_exists(ds.get("domain", ""), kb_id)
+        ]
 
         # Sort by last crawled desc
         data_sources.sort(
