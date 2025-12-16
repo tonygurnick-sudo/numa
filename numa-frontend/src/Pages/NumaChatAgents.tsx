@@ -150,7 +150,7 @@ const NumaChatAgents = () => {
   const userEmail = idToken.email || '';
   const userName = userEmail.split('@')[0] || undefined; // Extract first part of email as name
   const { numaGet } = useNumaRequest();
-  const { selectedKB: _selectedKB, selectedKbId: _selectedKbId, availableKBs } = useKnowledgeBase();
+  const { selectedKB: _selectedKB, selectedKbId: _selectedKbId, availableKBs, isLoadingKBs } = useKnowledgeBase();
   const [enabledKBIds, setEnabledKBIds] = useState<string[]>([]);
   const markUserSettingsModified = useCallback(() => {
     setUserSettingsModified(true);
@@ -305,9 +305,11 @@ const NumaChatAgents = () => {
     (agent: AgentSummary | null) => {
       if (!agent) {
         // Apply user's default chat settings when no agent is selected
-        setAutoToolsEnabled(userChatSettings.autoToolsEnabled);
-        setWebSearchEnabled(userChatSettings.webSearchEnabled);
-        setCreateAgentEnabled(userChatSettings.createAgentEnabled);
+        const autoTools = userChatSettings.autoToolsEnabled;
+        setAutoToolsEnabled(autoTools);
+        // When autoTools is enabled, individual tools should also be enabled
+        setWebSearchEnabled(autoTools || userChatSettings.webSearchEnabled);
+        setCreateAgentEnabled(autoTools || userChatSettings.createAgentEnabled);
         setEnabledConnections(defaultConnectionIdsFromSettings);
         // Apply user's default KB selection, filtered by what's available
         setEnabledKBIds(defaultKBIdsFromSettings);
@@ -315,9 +317,11 @@ const NumaChatAgents = () => {
       }
 
       const config = agent.toolsConfig ?? {};
-      setAutoToolsEnabled(config.autoToolsEnabled ?? true);
-      setWebSearchEnabled(config.webSearchEnabled ?? false);
-      setCreateAgentEnabled(config.createAgentEnabled ?? false);
+      const autoTools = config.autoToolsEnabled ?? true;
+      setAutoToolsEnabled(autoTools);
+      // When autoTools is enabled, individual tools should also be enabled
+      setWebSearchEnabled(autoTools || (config.webSearchEnabled ?? false));
+      setCreateAgentEnabled(autoTools || (config.createAgentEnabled ?? false));
       setEnabledConnections(config.enabledConnections ?? []);
 
       // Apply KB constraints from agent
@@ -1868,6 +1872,9 @@ const NumaChatAgents = () => {
                               agentsLoading={agentsFeatureEnabled ? personalAgentsLoading : false}
                               enabledKBIds={enabledKBIds}
                               setEnabledKBIds={handleUserSetEnabledKBIds}
+                              availableKBs={availableKBs}
+                              isLoadingKBs={isLoadingKBs}
+                              agentsFeatureEnabled={agentsFeatureEnabled}
                             />
                           ) : (
                             <ChatMessages

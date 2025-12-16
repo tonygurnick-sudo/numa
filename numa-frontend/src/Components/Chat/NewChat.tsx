@@ -1,8 +1,9 @@
 import type React from 'react'; // for React.DragEvent types
-import { Button, Spinner, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Button, Spinner, OverlayTrigger, Tooltip, Nav } from 'react-bootstrap';
 import { Dispatch, SetStateAction, RefObject, useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import { ChatInput } from './ChatInput';
+import { ChatSettingsPanel } from './ChatSettingsPanel';
 import type { ConversationMeta } from '../../hooks/useChatInactivity';
 import numaIcon from '/numa-logo.svg?url';
 import { useBranding } from '../../Providers/BrandingContext';
@@ -33,6 +34,12 @@ type AgentSummary = {
   iconImage?: { s3Bucket: string; s3Key: string };
   agentType?: string;
   visibility?: string;
+};
+
+type KnowledgeBase = {
+  kb_id: string;
+  kb_name: string;
+  role?: string;
 };
 
 type NewChatProps = {
@@ -69,6 +76,10 @@ type NewChatProps = {
   // Multi‑KB selection (optional; when provided, ChatInput will control selection)
   enabledKBIds?: string[];
   setEnabledKBIds?: Dispatch<SetStateAction<string[]>>;
+  // For ChatSettingsPanel
+  availableKBs?: KnowledgeBase[];
+  isLoadingKBs?: boolean;
+  agentsFeatureEnabled?: boolean;
 };
 
 // Avatar for recent conversations
@@ -163,7 +174,22 @@ export const NewChat = ({
   onFilesDropped,
   enabledKBIds,
   setEnabledKBIds,
+  availableKBs = [],
+  isLoadingKBs = false,
+  agentsFeatureEnabled = false,
 }: NewChatProps) => {
+  // ------- Mobile detection and tab state -------
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+  const [activeTab, setActiveTab] = useState<'settings' | 'history'>('settings');
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // ------- Drag & Drop (no visual change to the page itself) -------
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -441,34 +467,60 @@ export const NewChat = ({
         </div>
       )}
 
-      {/* Conversation History */}
-      {suggestionsLoading || recentConversations.length > 0 ? (
-        <div
-          className="history-panel-fullwidth"
-          style={{
-            width: '100%',
-            position: 'relative',
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
-        >
-          <div className="history-inner">
-            <div className="suggestions-header static-header">Continue where you left off</div>
-          </div>
-          {suggestionsLoading ? (
-            <div
-              className="d-flex justify-content-center align-items-center history-scroll"
-              style={{ minHeight: 100, animation: 'fadeIn 0.3s ease-in-out' }}
-            >
-              <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
-                <span className="visually-hidden">Loading recent conversations...</span>
-              </Spinner>
+      {/* Settings Panel and Conversation History */}
+      {(() => {
+        const isDisabled = buttonStatus === 'streaming' || uploadsInProgress;
+
+        // Settings Panel Content
+        const settingsPanelContent = (
+          <ChatSettingsPanel
+            autoToolsEnabled={autoToolsEnabled}
+            setAutoToolsEnabled={setAutoToolsEnabled}
+            webSearchEnabled={webSearchEnabled}
+            setWebSearchEnabled={setWebSearchEnabled}
+            createAgentEnabled={createAgentEnabled}
+            setCreateAgentEnabled={setCreateAgentEnabled}
+            agentsFeatureEnabled={agentsFeatureEnabled}
+            enabledKBIds={enabledKBIds || []}
+            setEnabledKBIds={setEnabledKBIds || (() => {})}
+            availableKBs={availableKBs}
+            isLoadingKBs={isLoadingKBs}
+            enabledConnections={enabledConnections}
+            setEnabledConnections={setEnabledConnections}
+            availableConnections={availableConnections}
+            connectionsLoading={connectionsLoading}
+            hasPipedreamFeature={hasPipedreamFeature}
+            isDisabled={isDisabled}
+          />
+        );
+
+        // History Panel Content
+        const historyPanelContent = (
+          <div
+            className="history-panel-content"
+            style={{
+              width: '100%',
+              position: 'relative',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 0,
+            }}
+          >
+            <div className="history-inner">
+              <div className="suggestions-header static-header">Continue where you left off</div>
             </div>
-          ) : recentConversations.length > 0 ? (
-            <div className="conversation-suggestions history-scroll">
-              <div className="history-inner">
+            {suggestionsLoading ? (
+              <div
+                className="d-flex justify-content-center align-items-center history-scroll"
+                style={{ minHeight: 100, animation: 'fadeIn 0.3s ease-in-out' }}
+              >
+                <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
+                  <span className="visually-hidden">Loading recent conversations...</span>
+                </Spinner>
+              </div>
+            ) : recentConversations.length > 0 ? (
+              <div className="conversation-suggestions" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                 <div className="d-flex flex-column" style={{ gap: '0.75rem', paddingBottom: '0.75rem' }}>
                   {recentConversations.map((convo) => (
                     <div
@@ -558,10 +610,182 @@ export const NewChat = ({
                   ))}
                 </div>
               </div>
+            ) : (
+              <div className="d-flex align-items-center justify-content-center history-scroll">
+                <div className="text-muted text-center py-3">No recent conversations</div>
+              </div>
+            )}
+          </div>
+        );
+
+        // Mobile Layout: Tabs
+        if (isMobile) {
+          return (
+            <div
+              className="new-chat-content-area"
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            >
+              <Nav variant="pills" className="new-chat-tabs justify-content-center mb-3">
+                <Nav.Item>
+                  <Nav.Link
+                    active={activeTab === 'settings'}
+                    onClick={() => setActiveTab('settings')}
+                    className="new-chat-tab-link"
+                  >
+                    <i className="bi bi-sliders me-1" /> Settings
+                  </Nav.Link>
+                </Nav.Item>
+                <Nav.Item>
+                  <Nav.Link
+                    active={activeTab === 'history'}
+                    onClick={() => setActiveTab('history')}
+                    className="new-chat-tab-link"
+                  >
+                    <i className="bi bi-clock-history me-1" /> History
+                    {recentConversations.length > 0 && (
+                      <span className="badge bg-secondary ms-1">{recentConversations.length}</span>
+                    )}
+                  </Nav.Link>
+                </Nav.Item>
+              </Nav>
+              <div
+                className="new-chat-tab-content"
+                style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+              >
+                {activeTab === 'settings' && (
+                  <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>{settingsPanelContent}</div>
+                )}
+                {activeTab === 'history' && (
+                  <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                    {historyPanelContent}
+                  </div>
+                )}
+              </div>
             </div>
-          ) : null}
-        </div>
-      ) : null}
+          );
+        }
+
+        // Desktop Layout: Two Columns
+        return (
+          <div className="new-chat-desktop-layout">
+            <div className="new-chat-desktop-column settings-column">
+              <div className="suggestions-header static-header mb-2">Chat Settings</div>
+              <div className="new-chat-desktop-scroll">{settingsPanelContent}</div>
+            </div>
+            <div className="new-chat-desktop-column history-column">
+              <div className="suggestions-header static-header mb-2">Continue where you left off</div>
+              <div className="new-chat-desktop-scroll conversation-suggestions">
+                {suggestionsLoading ? (
+                  <div
+                    className="d-flex justify-content-center align-items-center"
+                    style={{ minHeight: 100, animation: 'fadeIn 0.3s ease-in-out' }}
+                  >
+                    <Spinner
+                      animation="border"
+                      role="status"
+                      size="sm"
+                      style={{ color: 'var(--brand-primary, #4b007d)' }}
+                    >
+                      <span className="visually-hidden">Loading recent conversations...</span>
+                    </Spinner>
+                  </div>
+                ) : recentConversations.length > 0 ? (
+                  <div className="d-flex flex-column" style={{ gap: '0.75rem' }}>
+                    {recentConversations.map((convo) => (
+                      <div
+                        key={convo.conversation_id}
+                        className="text-start conversation-suggestion-btn"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleContinueClick(convo.conversation_id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleContinueClick(convo.conversation_id);
+                          }
+                        }}
+                        onMouseEnter={(e) => {
+                          const primaryColor =
+                            getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
+                            '75, 0, 125';
+                          const rgb = primaryColor.startsWith('#') ? hexToRgb(primaryColor) : primaryColor;
+                          e.currentTarget.style.backgroundColor = `rgba(${rgb}, 0.05)`;
+                          e.currentTarget.style.borderColor = `rgba(${rgb}, 0.3)`;
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
+                          e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      >
+                        <ConversationAvatar convo={convo} />
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {convo.conversationName || 'Untitled Chat'}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
+                            {convo.isAgentConversation && convo.agentTitle
+                              ? `${convo.agentTitle} • ${formatRelativeTime(convo.latestTimestamp)}`
+                              : formatRelativeTime(convo.latestTimestamp)}
+                          </div>
+                        </div>
+                        {(onRenameConversation || onDeleteConversation) && (
+                          <div
+                            className="conversation-actions d-flex flex-column align-items-center"
+                            style={{ gap: '0.25rem' }}
+                          >
+                            {onRenameConversation && (
+                              <OverlayTrigger
+                                placement="left"
+                                overlay={<Tooltip id={`rename-${convo.conversation_id}`}>Rename</Tooltip>}
+                              >
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="p-0 text-secondary"
+                                  aria-label="Rename conversation"
+                                  onClick={(e) =>
+                                    handleRename(e, convo.conversation_id, convo.conversationName || 'Untitled Chat')
+                                  }
+                                  style={{ lineHeight: 1 }}
+                                >
+                                  <i className="bi bi-pencil" />
+                                </Button>
+                              </OverlayTrigger>
+                            )}
+                            {onDeleteConversation && (
+                              <OverlayTrigger
+                                placement="left"
+                                overlay={<Tooltip id={`delete-${convo.conversation_id}`}>Delete</Tooltip>}
+                              >
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="p-0 text-danger"
+                                  aria-label="Delete conversation"
+                                  onClick={(e) => handleDelete(e, convo.conversation_id)}
+                                  style={{ lineHeight: 1 }}
+                                >
+                                  <i className="bi bi-trash" />
+                                </Button>
+                              </OverlayTrigger>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-muted text-center py-3">No recent conversations</div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }
