@@ -38,6 +38,7 @@ variables:
         - lambdas/node/budget-forwarder
         - lambdas/node/branding-config
         - lambdas/node/callback-renamer
+        - lambdas/node/chat-settings
         - lambdas/node/cloudfront-invalidator
         - lambdas/node/document-converter
         - lambdas/node/q-business-chat-control-configurer
@@ -59,6 +60,7 @@ variables:
         - lambdas/node/budget-forwarder
         - lambdas/node/branding-config
         - lambdas/node/callback-renamer
+        - lambdas/node/chat-settings
         - lambdas/node/cloudfront-invalidator
         - lambdas/node/q-business-chat-control-configurer
         - lambdas/node/srp-hasher
