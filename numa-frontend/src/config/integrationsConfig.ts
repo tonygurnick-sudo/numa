@@ -35,6 +35,10 @@ import googleFormsIcon from '../assets/icons/google_forms.svg';
 import googleDocsIcon from '../assets/icons/google_docs.svg';
 import telegramIcon from '../assets/icons/telegram_bot_api.svg';
 import microsoftTeamsIcon from '../assets/icons/microsoft_teams.svg';
+import zoomIcon from '../assets/icons/zoom.svg';
+import microsoftExcelIcon from '../assets/icons/microsoft_excel.svg';
+import boxIcon from '../assets/icons/box.svg';
+import smartsheetIcon from '../assets/icons/smartsheet.svg';
 
 export type BootstrapColor =
   | 'primary'
@@ -351,6 +355,46 @@ export const CONNECTIONS_CONFIG: Record<string, ConnectionConfigEntry> = {
     fallback_icon: 'bi bi-people-fill',
     fallback_color: 'primary',
     example_query: 'Post an update to the project channel and mention the owner.',
+  },
+  zoom: {
+    id: 'zoom',
+    name: 'Zoom',
+    description: 'Schedule meetings, manage recordings, and automate Zoom workflows.',
+    auth_type: 'oauth',
+    img_src: zoomIcon,
+    fallback_icon: 'bi bi-camera-video',
+    fallback_color: 'info',
+    example_query: 'Schedule a Zoom meeting for tomorrow at 10am with this agenda.',
+  },
+  microsoft_excel: {
+    id: 'microsoft_excel',
+    name: 'Microsoft Excel',
+    description: 'Read, update, and manage Excel workbooks and worksheets.',
+    auth_type: 'oauth',
+    img_src: microsoftExcelIcon,
+    fallback_icon: 'bi bi-file-earmark-spreadsheet',
+    fallback_color: 'success',
+    example_query: 'Append a row to the monthly report sheet with these numbers.',
+  },
+  smartsheet: {
+    id: 'smartsheet',
+    name: 'Smartsheet',
+    description: 'Read, update, and automate Smartsheet sheets, rows, and attachments.',
+    auth_type: 'oauth',
+    img_src: smartsheetIcon,
+    fallback_icon: 'bi bi-grid',
+    fallback_color: 'primary',
+    example_query: 'Add a row to the project tracker sheet with this status update.',
+  },
+  box: {
+    id: 'box',
+    name: 'Box',
+    description: 'Manage files, folders, and sharing in Box.',
+    auth_type: 'oauth',
+    img_src: boxIcon,
+    fallback_icon: 'bi bi-box-seam',
+    fallback_color: 'primary',
+    example_query: 'Find the latest proposal PDF in the shared Box folder.',
   },
 };
 

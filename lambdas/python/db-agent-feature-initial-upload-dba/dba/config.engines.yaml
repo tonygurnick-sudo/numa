@@ -1,0 +1,332 @@
+# DB CLI Tool - Engine Configuration
+# Engines define HOW to process data, you provide WHAT data at runtime
+
+# Active datasource (for regular --datasource usage)
+active_datasource: production
+# AI Configuration
+ai:
+  provider: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  agentic_model: claude-3-5-haiku-20241022
+  single_query_model: claude-sonnet-4-5-20250929
+# Output Settings
+output:
+  default_format: csv
+  max_bytes: 20480
+  head_lines: 200
+  tail_lines: 200
+  threshold: 400
+# ============================================================================
+# NAMED DATASOURCES (Traditional - full config per datasource)
+# ============================================================================
+datasources:
+  production:
+    type: postgres
+    description: "Production database"
+    connection:
+      host_env: DB_HOST
+      port_env: DB_PORT
+      database_env: DB_NAME
+      user_env: DB_USER
+      password_env: DB_PASSWORD
+    query_command: |
+      psql -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$DB_USER" --csv -c "{{QUERY}}"
+    schema_command: |
+      psql -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$DB_USER" -c "\dt"
+  testing:
+    type: postgres
+    description: Testing database
+    connection:
+      host_env: TEST_DB_HOST
+      port_env: TEST_DB_PORT
+      database_env: TEST_DB_NAME
+      user_env: TEST_DB_USER
+      password_env: TEST_DB_PASSWORD
+# ============================================================================
+# ENGINES (Ad-hoc - reusable templates for different data sources)
+# ============================================================================
+# Engines define the processing pipeline with placeholders for runtime params
+# Usage: db --engine <name> --param value "QUERY"
+engines:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Local CSV via SQLite
+  # ──────────────────────────────────────────────────────────────────────────
+  csv-sqlite:
+    description: "Query local CSV files using SQLite"
+    # Runtime parameters this engine accepts
+    parameters:
+      - name: CSV_FILE
+        description: "Path to CSV file"
+        required: true
+        cli_flag: --csv
+        example: "./sales.csv"
+      - name: TABLE_NAME
+        description: "Table name in SQLite (default: data)"
+        required: false
+        cli_flag: --table
+        default: "data"
+    # Placeholders available in commands:
+    # {{CSV_FILE}}    - from --csv flag
+    # {{TABLE_NAME}}  - from --table flag or default "data"
+    # {{TEMP_DB}}     - auto-generated temp database path
+    # {{QUERY}}       - the SQL query to execute
+
+    # Pipeline: import -> query -> cleanup
+    import_command: |
+      TEMP_DB="/tmp/db_cli_$$.sqlite"
+      sqlite3 "$TEMP_DB" <<EOF
+      .mode csv
+      .import {{CSV_FILE}} {{TABLE_NAME}}
+      EOF
+    query_command: |
+      sqlite3 -csv "$TEMP_DB" "{{QUERY}}"
+    schema_command: |
+      sqlite3 "$TEMP_DB" ".schema {{TABLE_NAME}}"
+    cleanup_command: |
+      rm -f "$TEMP_DB"
+  # ──────────────────────────────────────────────────────────────────────────
+  # S3 CSV via SQLite (download then query)
+  # ──────────────────────────────────────────────────────────────────────────
+  s3-csv-sqlite:
+    description: "Download CSV from S3 and query via SQLite"
+    parameters:
+      - name: S3_PATH
+        description: "S3 path (s3://bucket/path/file.csv)"
+        required: true
+        cli_flag: --s3
+        example: "s3://my-bucket/data/sales.csv"
+      - name: TABLE_NAME
+        description: "Table name in SQLite (default: data)"
+        required: false
+        cli_flag: --table
+        default: "data"
+      - name: AWS_REGION
+        description: "AWS region (default: us-east-1)"
+        required: false
+        cli_flag: --region
+        default: "us-east-1"
+    # Placeholders: {{S3_PATH}}, {{TABLE_NAME}}, {{AWS_REGION}}, {{TEMP_CSV}}, {{TEMP_DB}}, {{QUERY}}
+    download_command: |
+      TEMP_CSV="/tmp/db_cli_$$.csv"
+      TEMP_DB="/tmp/db_cli_$$.sqlite"
+      aws s3 cp {{S3_PATH}} "$TEMP_CSV" --region {{AWS_REGION}}
+    import_command: |
+      sqlite3 "$TEMP_DB" <<EOF
+      .mode csv
+      .import $TEMP_CSV {{TABLE_NAME}}
+      EOF
+    query_command: |
+      sqlite3 -csv "$TEMP_DB" "{{QUERY}}"
+    schema_command: |
+      sqlite3 "$TEMP_DB" ".schema {{TABLE_NAME}}"
+    cleanup_command: |
+      rm -f "$TEMP_CSV" "$TEMP_DB"
+  # ──────────────────────────────────────────────────────────────────────────
+  # S3 CSV via DuckDB (no download, direct query)
+  # ──────────────────────────────────────────────────────────────────────────
+  s3-csv-duckdb:
+    description: "Query S3 CSV directly using DuckDB (no download)"
+    parameters:
+      - name: S3_PATH
+        description: "S3 path (s3://bucket/path/file.csv)"
+        required: true
+        cli_flag: --s3
+        example: "s3://my-bucket/data/sales.csv"
+    # DuckDB can read S3 directly with credentials from environment
+    # Requires: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+    query_command: |
+      duckdb -csv << 'DUCKDB_EOF'
+      INSTALL httpfs;
+      LOAD httpfs;
+      SET s3_region='{{AWS_REGION}}';
+      {{QUERY}}
+      DUCKDB_EOF
+    # Note: In your query, reference the S3 file directly:
+    # SELECT * FROM '{{S3_PATH}}' WHERE amount > 1000
+    schema_command: |
+      duckdb << 'DUCKDB_EOF'
+      INSTALL httpfs;
+      LOAD httpfs;
+      DESCRIBE SELECT * FROM '{{S3_PATH}}' LIMIT 1;
+      DUCKDB_EOF
+  # ──────────────────────────────────────────────────────────────────────────
+  # Local CSV via DuckDB (fast analytical queries)
+  # ──────────────────────────────────────────────────────────────────────────
+  csv-duckdb:
+    description: "Query local CSV files using DuckDB (fast)"
+    parameters:
+      - name: CSV_FILE
+        description: "Path to CSV file"
+        required: true
+        cli_flag: --csv
+        example: "./sales.csv"
+    # DuckDB can query CSV directly without import
+    query_command: |
+      duckdb -csv << 'DUCKDB_EOF'
+      {{QUERY}}
+      DUCKDB_EOF
+    # Note: In your query, reference the file directly:
+    # SELECT * FROM '{{CSV_FILE}}' WHERE amount > 1000
+    schema_command: |
+      duckdb << 'DUCKDB_EOF'
+      DESCRIBE SELECT * FROM '{{CSV_FILE}}' LIMIT 1;
+      DUCKDB_EOF
+  # ──────────────────────────────────────────────────────────────────────────
+  # Parquet files via DuckDB
+  # ──────────────────────────────────────────────────────────────────────────
+  parquet-duckdb:
+    description: "Query Parquet files using DuckDB"
+    parameters:
+      - name: PARQUET_FILE
+        description: "Path or S3 path to Parquet file"
+        required: true
+        cli_flag: --parquet
+        example: "./data.parquet or s3://bucket/data.parquet"
+    query_command: |
+      duckdb -csv << 'DUCKDB_EOF'
+      INSTALL httpfs;
+      LOAD httpfs;
+      {{QUERY}}
+      DUCKDB_EOF
+    # Query references file directly: SELECT * FROM '{{PARQUET_FILE}}'
+    schema_command: |
+      duckdb << 'DUCKDB_EOF'
+      INSTALL httpfs;
+      LOAD httpfs;
+      DESCRIBE SELECT * FROM '{{PARQUET_FILE}}' LIMIT 1;
+      DUCKDB_EOF
+  # ──────────────────────────────────────────────────────────────────────────
+  # Multiple CSV files (wildcard pattern)
+  # ──────────────────────────────────────────────────────────────────────────
+  csv-pattern-duckdb:
+    description: "Query multiple CSV files with wildcard pattern"
+    parameters:
+      - name: CSV_PATTERN
+        description: "Wildcard pattern for CSV files"
+        required: true
+        cli_flag: --pattern
+        example: "./data/*.csv or s3://bucket/data/202401*.csv"
+    query_command: |
+      duckdb -csv << 'DUCKDB_EOF'
+      INSTALL httpfs;
+      LOAD httpfs;
+      {{QUERY}}
+      DUCKDB_EOF
+    # Query uses pattern: SELECT * FROM '{{CSV_PATTERN}}' WHERE date > '2024-01-01'
+    schema_command: |
+      duckdb << 'DUCKDB_EOF'
+      INSTALL httpfs;
+      LOAD httpfs;
+      DESCRIBE SELECT * FROM '{{CSV_PATTERN}}' LIMIT 1;
+      DUCKDB_EOF
+  # ──────────────────────────────────────────────────────────────────────────
+  # Google Sheets via CSV export
+  # ──────────────────────────────────────────────────────────────────────────
+  gsheet-sqlite:
+    description: "Query Google Sheets by exporting to CSV"
+    parameters:
+      - name: SHEET_ID
+        description: "Google Sheets ID from URL"
+        required: true
+        cli_flag: --sheet-id
+        example: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+      - name: GID
+        description: "Sheet GID (default: 0 for first sheet)"
+        required: false
+        cli_flag: --gid
+        default: "0"
+      - name: TABLE_NAME
+        description: "Table name (default: data)"
+        required: false
+        cli_flag: --table
+        default: "data"
+    download_command: |
+      TEMP_CSV="/tmp/db_cli_$$.csv"
+      TEMP_DB="/tmp/db_cli_$$.sqlite"
+      SHEET_URL="https://docs.google.com/spreadsheets/d/{{SHEET_ID}}/export?format=csv&gid={{GID}}"
+      curl -L "$SHEET_URL" -o "$TEMP_CSV"
+    import_command: |
+      sqlite3 "$TEMP_DB" <<EOF
+      .mode csv
+      .import $TEMP_CSV {{TABLE_NAME}}
+      EOF
+    query_command: |
+      sqlite3 -csv "$TEMP_DB" "{{QUERY}}"
+    schema_command: |
+      sqlite3 "$TEMP_DB" ".schema {{TABLE_NAME}}"
+    cleanup_command: |
+      rm -f "$TEMP_CSV" "$TEMP_DB"
+  # ──────────────────────────────────────────────────────────────────────────
+  # JSON file via jq + SQLite
+  # ──────────────────────────────────────────────────────────────────────────
+  json-sqlite:
+    description: "Query JSON files by converting to CSV then SQLite"
+    parameters:
+      - name: JSON_FILE
+        description: "Path to JSON file (array of objects)"
+        required: true
+        cli_flag: --json
+        example: "./data.json"
+      - name: TABLE_NAME
+        description: "Table name (default: data)"
+        required: false
+        cli_flag: --table
+        default: "data"
+    import_command: |
+      TEMP_CSV="/tmp/db_cli_$$.csv"
+      TEMP_DB="/tmp/db_cli_$$.sqlite"
+      # Convert JSON to CSV using jq
+      jq -r '(.[0] | keys_unsorted) as $keys | $keys, map([.[ $keys[] ]])[] | @csv' {{JSON_FILE}} > "$TEMP_CSV"
+      sqlite3 "$TEMP_DB" <<EOF
+      .mode csv
+      .import $TEMP_CSV {{TABLE_NAME}}
+      EOF
+    query_command: |
+      sqlite3 -csv "$TEMP_DB" "{{QUERY}}"
+    schema_command: |
+      sqlite3 "$TEMP_DB" ".schema {{TABLE_NAME}}"
+    cleanup_command: |
+      rm -f "$TEMP_CSV" "$TEMP_DB"
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+
+# Ad-hoc queries (using engines):
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Local CSV:
+#   db --engine csv-sqlite --csv ./sales.csv "SELECT * FROM data WHERE amount > 1000"
+#   db --engine csv-duckdb --csv ./sales.csv "SELECT * FROM './sales.csv' WHERE region='US'"
+
+# S3 CSV (download):
+#   db --engine s3-csv-sqlite --s3 s3://my-bucket/data.csv "SELECT * FROM data LIMIT 10"
+
+# S3 CSV (direct with DuckDB):
+#   db --engine s3-csv-duckdb --s3 s3://my-bucket/data.csv "SELECT * FROM 's3://my-bucket/data.csv' WHERE date > '2024-01-01'"
+
+# Multiple CSVs:
+#   db --engine csv-pattern-duckdb --pattern "./data/2024*.csv" "SELECT * FROM './data/2024*.csv'"
+
+# Parquet:
+#   db --engine parquet-duckdb --parquet ./data.parquet "SELECT * FROM './data.parquet' LIMIT 100"
+
+# Google Sheets:
+#   db --engine gsheet-sqlite --sheet-id 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms "SELECT * FROM data"
+
+# JSON file:
+#   db --engine json-sqlite --json ./data.json "SELECT * FROM data WHERE status='active'"
+
+# With natural language:
+#   db --engine csv-sqlite --csv ./sales.csv --ask "what are the top selling products?"
+
+# With agentic investigation:
+#   db --engine s3-csv-sqlite --s3 s3://bucket/data.csv --ask "analyze sales trends" --auto
+
+# Named datasources (traditional):
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Use default datasource:
+#   db "SELECT * FROM users"
+
+# Use specific datasource:
+#   db --datasource production "SELECT * FROM orders"
