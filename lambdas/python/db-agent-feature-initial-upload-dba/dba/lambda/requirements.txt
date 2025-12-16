@@ -1,0 +1,11 @@
+# AWS Lambda Dependencies for DB CLI SDK
+
+# Core SDK dependency
+pyyaml>=6.0
+
+# AWS SDK (usually pre-installed in Lambda, but included for completeness)
+boto3>=1.26.0
+
+# Optional: For local testing
+# pytest>=7.4.0
+# requests>=2.31.0

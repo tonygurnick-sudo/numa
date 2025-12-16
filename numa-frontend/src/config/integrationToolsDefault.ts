@@ -113,7 +113,13 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
   podio: [],
 
   // Google Sheets
-  google_sheets: [],
+  google_sheets: [
+    'google-sheets-delete-worksheet',
+    'google-sheets-delete-rows',
+    'google-sheets-clear-rows',
+    'google-sheets-clear-cell',
+    'google-sheets-delete-conditional-format-rule',
+  ],
 
   // Google Forms
   google_forms: [],
@@ -126,6 +132,18 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
 
   // Microsoft Teams
   microsoft_teams: [],
+
+  // Zoom
+  zoom: ['zoom-delete-user', 'zoom-create-user', 'zoom-send-chat-message'],
+
+  // Microsoft Excel
+  microsoft_excel: [],
+
+  // Smartsheet
+  smartsheet: [],
+
+  // Box
+  box: [],
 };
 
 export const getDefaultDenyTools = (appName: string): string[] => {

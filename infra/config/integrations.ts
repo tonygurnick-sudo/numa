@@ -31,6 +31,10 @@ export const SUPPORTED_INTEGRATIONS = [
   'google_docs',
   'telegram_bot_api',
   'microsoft_teams',
+  'zoom',
+  'microsoft_excel',
+  'smartsheet',
+  'box',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];
