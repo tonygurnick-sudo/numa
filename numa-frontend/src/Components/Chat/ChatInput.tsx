@@ -608,47 +608,49 @@ const ChatInput = ({
             <p className="text-muted text-center">No integrations available. Set them up on the Integrations page.</p>
           ) : (
             <div className="d-flex flex-column gap-3">
-              {availableConnections.map((connection) => {
-                const isEnabled = enabledConnections.includes(connection.id);
-                const canToggle = !isEnabled || enabledConnections.length > 1;
+              {availableConnections
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((connection) => {
+                  const isEnabled = enabledConnections.includes(connection.id);
+                  const canToggle = !isEnabled || enabledConnections.length > 1;
 
-                return (
-                  <div
-                    key={connection.id}
-                    className="d-flex align-items-center justify-content-between p-3 border rounded"
-                  >
-                    <div className="d-flex align-items-center gap-3">
-                      <img
-                        src={getConnectionIcon(connection.id)}
-                        alt={connection.name}
-                        style={{ width: '24px', height: '24px' }}
-                        onError={(e) => {
-                          const img = e.currentTarget as HTMLImageElement;
-                          img.style.display = 'none';
-                          const fallback = img.nextElementSibling as HTMLElement | null;
-                          if (fallback) fallback.style.display = 'inline-block';
-                        }}
-                      />
-                      <i
-                        className={`${getConnectionFallbackIcon(connection.id)} text-${getConnectionFallbackColor(connection.id)}`}
-                        style={{ fontSize: '24px', display: 'none' }}
-                      />
-                      <div>
-                        <div className="fw-bold">{getConnectionDisplayName(connection.id)}</div>
-                        <div className="text-muted small">Connected</div>
-                      </div>
-                    </div>
-                    <Button
-                      variant={isEnabled ? 'success' : 'outline-primary'}
-                      size="sm"
-                      disabled={!canToggle && !isEnabled}
-                      onClick={() => handleToggleConnection(connection.id)}
+                  return (
+                    <div
+                      key={connection.id}
+                      className="d-flex align-items-center justify-content-between p-3 border rounded"
                     >
-                      {isEnabled ? 'Enabled' : 'Enable'}
-                    </Button>
-                  </div>
-                );
-              })}
+                      <div className="d-flex align-items-center gap-3">
+                        <img
+                          src={getConnectionIcon(connection.id)}
+                          alt={connection.name}
+                          style={{ width: '24px', height: '24px' }}
+                          onError={(e) => {
+                            const img = e.currentTarget as HTMLImageElement;
+                            img.style.display = 'none';
+                            const fallback = img.nextElementSibling as HTMLElement | null;
+                            if (fallback) fallback.style.display = 'inline-block';
+                          }}
+                        />
+                        <i
+                          className={`${getConnectionFallbackIcon(connection.id)} text-${getConnectionFallbackColor(connection.id)}`}
+                          style={{ fontSize: '24px', display: 'none' }}
+                        />
+                        <div>
+                          <div className="fw-bold">{getConnectionDisplayName(connection.id)}</div>
+                          <div className="text-muted small">Connected</div>
+                        </div>
+                      </div>
+                      <Button
+                        variant={isEnabled ? 'success' : 'outline-primary'}
+                        size="sm"
+                        disabled={!canToggle && !isEnabled}
+                        onClick={() => handleToggleConnection(connection.id)}
+                      >
+                        {isEnabled ? 'Enabled' : 'Enable'}
+                      </Button>
+                    </div>
+                  );
+                })}
             </div>
           )}
         </Modal.Body>

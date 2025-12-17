@@ -44,6 +44,10 @@
   background-color: var(--brand-surface, #ffffff) !important;
 }
 
+.expandable-overflow-box__box {
+  scrollbar-gutter: stable;
+}
+
 .integration-step-circle {
   width: 32px;
   height: 32px;

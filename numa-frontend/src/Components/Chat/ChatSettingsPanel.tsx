@@ -209,40 +209,42 @@ export const ChatSettingsPanel = ({
             </div>
           ) : (
             <div className="border rounded-3 p-2 bg-white" style={{ maxHeight: 180, overflowY: 'auto' }}>
-              {connectedIntegrations.map((conn) => {
-                const iconSrc = getConnectionIcon(conn.id);
-                const fallbackIcon = getConnectionFallbackIcon(conn.id);
-                const displayName = getConnectionDisplayName(conn.id);
+              {connectedIntegrations
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((conn) => {
+                  const iconSrc = getConnectionIcon(conn.id);
+                  const fallbackIcon = getConnectionFallbackIcon(conn.id);
+                  const displayName = getConnectionDisplayName(conn.id);
 
-                return (
-                  <Form.Check
-                    key={conn.id}
-                    type="checkbox"
-                    id={`settings-integration-${conn.id}`}
-                    label={
-                      <span className="d-flex align-items-center gap-2">
-                        {iconSrc ? (
-                          <img
-                            src={iconSrc}
-                            alt={displayName}
-                            style={{ width: 18, height: 18, objectFit: 'contain' }}
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <i className={fallbackIcon} />
-                        )}
-                        {displayName}
-                      </span>
-                    }
-                    checked={enabledConnections.includes(conn.id)}
-                    onChange={(e) => handleIntegrationToggle(conn.id, e.target.checked)}
-                    disabled={isDisabled}
-                    className="py-1"
-                  />
-                );
-              })}
+                  return (
+                    <Form.Check
+                      key={conn.id}
+                      type="checkbox"
+                      id={`settings-integration-${conn.id}`}
+                      label={
+                        <span className="d-flex align-items-center gap-2">
+                          {iconSrc ? (
+                            <img
+                              src={iconSrc}
+                              alt={displayName}
+                              style={{ width: 18, height: 18, objectFit: 'contain' }}
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <i className={fallbackIcon} />
+                          )}
+                          {displayName}
+                        </span>
+                      }
+                      checked={enabledConnections.includes(conn.id)}
+                      onChange={(e) => handleIntegrationToggle(conn.id, e.target.checked)}
+                      disabled={isDisabled}
+                      className="py-1"
+                    />
+                  );
+                })}
             </div>
           )}
           <div className="text-muted small mt-1">Enable integrations to use during this chat</div>
