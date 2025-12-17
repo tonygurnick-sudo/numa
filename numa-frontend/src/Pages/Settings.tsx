@@ -30,6 +30,7 @@ import {
   type GlobalChatSettings,
   DEFAULT_GLOBAL_CHAT_SETTINGS,
 } from '../Services/AdminChatSettingsService';
+import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 
 const AVAILABLE_INTEGRATIONS: IntegrationListItem[] = getIntegrationsListFormat();
 
@@ -431,6 +432,269 @@ export default function SettingsPage() {
               >
                 <UserManagement />
               </Tab>
+              {allowBrandingTab && (
+                <Tab
+                  eventKey="branding"
+                  title={
+                    <span>
+                      <i className="bi bi-palette-fill me-2"></i>Branding
+                    </span>
+                  }
+                >
+                  <BrandingAdminPanel onDirtyChange={handleBrandingDirtyChange} />
+                </Tab>
+              )}
+              {isAdmin && (
+                <Tab
+                  eventKey="chat-defaults"
+                  title={
+                    <span>
+                      <i className="bi bi-chat-dots-fill me-2"></i>Chat Defaults
+                    </span>
+                  }
+                >
+                  <div className="mb-3">
+                    <Alert variant="secondary" className="mb-3">
+                      <div className="d-flex align-items-start">
+                        <i className="bi bi-building-gear me-2 mt-1"></i>
+                        <div>
+                          <div className="fw-semibold">Company-wide chat defaults</div>
+                          <div className="small text-muted">
+                            These defaults apply when users start a new chat without selecting an agent. If user
+                            defaults are allowed, users can override these for themselves.
+                          </div>
+                        </div>
+                      </div>
+                    </Alert>
+
+                    {chatDefaultsError && (
+                      <Alert variant="danger" className="mb-3">
+                        {chatDefaultsError}
+                      </Alert>
+                    )}
+
+                    {chatDefaultsLoading ? (
+                      <div className="text-center py-4">
+                        <Spinner animation="border" />
+                      </div>
+                    ) : (
+                      <Form>
+                        <div className="mb-3 p-3 border rounded-3 bg-light">
+                          <div className="d-flex align-items-start gap-2">
+                            <i className="bi bi-shield-lock-fill text-primary mt-1"></i>
+                            <div className="flex-grow-1">
+                              <div className="d-flex align-items-center justify-content-between gap-3">
+                                <div className="fw-semibold">Allow users to override company defaults</div>
+                                <Form.Check
+                                  type="switch"
+                                  id="chat-defaults-allow-user-defaults"
+                                  label=""
+                                  checked={globalChatSettings.allowUserDefaults}
+                                  onChange={(e) => {
+                                    setGlobalChatSettings((prev) => ({ ...prev, allowUserDefaults: e.target.checked }));
+                                    setChatDefaultsDirty(true);
+                                  }}
+                                />
+                              </div>
+                              <div className="text-muted small">
+                                When this setting is inactive, users will only get the company defaults.
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <Form.Group className="mb-3">
+                          <Form.Label className="fw-semibold">Default knowledge bases</Form.Label>
+                          <div className="d-flex align-items-center gap-2">
+                            <Form.Check
+                              type="switch"
+                              id="chat-defaults-kb-company"
+                              label=""
+                              checked={globalChatSettings.defaultKBIds.includes('company')}
+                              onChange={(e) => {
+                                const nextChecked = e.target.checked;
+                                setGlobalChatSettings((prev) => ({
+                                  ...prev,
+                                  defaultKBIds: nextChecked ? ['company'] : [],
+                                }));
+                                setChatDefaultsDirty(true);
+                              }}
+                            />
+                            <div className="fw-semibold">Company Knowledge Base</div>
+                          </div>
+                          <div className="text-muted small ms-5">
+                            Only the company knowledge base can be set as a company default; user KB defaults can be set
+                            by the user only, and only if personal defaults are active.
+                          </div>
+                        </Form.Group>
+
+                        <div className="mb-3">
+                          <div className="d-flex align-items-center gap-2">
+                            <Form.Check
+                              type="switch"
+                              id="chat-defaults-all-tools"
+                              label=""
+                              checked={globalChatSettings.autoToolsEnabled}
+                              onChange={(e) => {
+                                const nextEnabled = e.target.checked;
+                                setGlobalChatSettings((prev) => ({
+                                  ...prev,
+                                  autoToolsEnabled: nextEnabled,
+                                  ...(nextEnabled
+                                    ? { webSearchEnabled: true, createAgentEnabled: true }
+                                    : { webSearchEnabled: false, createAgentEnabled: false }),
+                                }));
+                                setChatDefaultsDirty(true);
+                              }}
+                            />
+                            <div className="fw-semibold">All Tools</div>
+                          </div>
+                          <div className="text-muted small ms-5">
+                            When enabled, all tools are automatically available
+                          </div>
+
+                          <div className="mt-3 ms-4">
+                            <div className="d-flex align-items-center gap-2">
+                              <Form.Check
+                                type="switch"
+                                id="chat-defaults-web-search"
+                                label=""
+                                checked={globalChatSettings.webSearchEnabled}
+                                disabled={globalChatSettings.autoToolsEnabled}
+                                onChange={(e) => {
+                                  setGlobalChatSettings((prev) => ({ ...prev, webSearchEnabled: e.target.checked }));
+                                  setChatDefaultsDirty(true);
+                                }}
+                              />
+                              <div className="fw-semibold">Web Search</div>
+                            </div>
+                            <div className="text-muted small ms-5">Search the web for current information</div>
+                          </div>
+
+                          <div className="mt-3 ms-4">
+                            <div className="d-flex align-items-center gap-2">
+                              <Form.Check
+                                type="switch"
+                                id="chat-defaults-create-agent"
+                                label=""
+                                checked={globalChatSettings.createAgentEnabled}
+                                disabled={globalChatSettings.autoToolsEnabled}
+                                onChange={(e) => {
+                                  setGlobalChatSettings((prev) => ({ ...prev, createAgentEnabled: e.target.checked }));
+                                  setChatDefaultsDirty(true);
+                                }}
+                              />
+                              <div className="fw-semibold">Agent Creation</div>
+                            </div>
+                            <div className="text-muted small ms-5">
+                              Allow me to create saved agents when you explicitly ask.
+                            </div>
+                          </div>
+                        </div>
+
+                        <Form.Group className="mb-3">
+                          <Form.Label className="fw-semibold">Default integrations</Form.Label>
+                          {previewMode ? (
+                            <div className="text-muted small">Integrations are not enabled in this environment.</div>
+                          ) : (
+                            <>
+                              <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
+                                {AVAILABLE_INTEGRATIONS.filter((integration) => {
+                                  const id = integration.name_slug;
+                                  return globalSettings[id]?.status === 'enabled';
+                                }).map((integration) => {
+                                  const id = integration.name_slug;
+                                  const checked = globalChatSettings.defaultConnectionIds.includes(id);
+                                  return (
+                                    <Form.Check
+                                      key={id}
+                                      type="checkbox"
+                                      id={`chat-defaults-integration-${id}`}
+                                      label={integration.name}
+                                      checked={checked}
+                                      disabled={loadingSettings}
+                                      onChange={(e) => {
+                                        const nextChecked = e.target.checked;
+                                        setGlobalChatSettings((prev) => ({
+                                          ...prev,
+                                          defaultConnectionIds: nextChecked
+                                            ? [...prev.defaultConnectionIds, id]
+                                            : prev.defaultConnectionIds.filter((x) => x !== id),
+                                        }));
+                                        setChatDefaultsDirty(true);
+                                      }}
+                                    />
+                                  );
+                                })}
+                                {AVAILABLE_INTEGRATIONS.filter((integration) => {
+                                  const id = integration.name_slug;
+                                  return globalSettings[id]?.status === 'enabled';
+                                }).length === 0 && (
+                                  <div className="text-muted small">
+                                    No integrations are enabled for this environment.
+                                  </div>
+                                )}
+                              </ExpandableOverflowBox>
+                              <div className="text-muted small mt-1">
+                                Select one or more integrations to enable by default.
+                              </div>
+                            </>
+                          )}
+                        </Form.Group>
+
+                        <div className="d-flex gap-2">
+                          <Button
+                            variant="primary"
+                            disabled={!chatDefaultsDirty || chatDefaultsSaving}
+                            onClick={async () => {
+                              try {
+                                setChatDefaultsSaving(true);
+                                const saved = await AdminChatSettingsService.updateGlobal(
+                                  {
+                                    defaultKBIds: globalChatSettings.defaultKBIds,
+                                    autoToolsEnabled: globalChatSettings.autoToolsEnabled,
+                                    webSearchEnabled: globalChatSettings.webSearchEnabled,
+                                    createAgentEnabled: globalChatSettings.createAgentEnabled,
+                                    defaultConnectionIds: globalChatSettings.defaultConnectionIds,
+                                    allowUserDefaults: globalChatSettings.allowUserDefaults,
+                                  },
+                                  numaPut,
+                                );
+                                setGlobalChatSettings(saved);
+                                setChatDefaultsError(null);
+                                setChatDefaultsDirty(false);
+                              } catch (e) {
+                                setChatDefaultsError((e as Error).message || 'Failed to save chat defaults');
+                              } finally {
+                                setChatDefaultsSaving(false);
+                              }
+                            }}
+                          >
+                            {chatDefaultsSaving ? (
+                              <>
+                                <Spinner as="span" animation="border" size="sm" className="me-2" />
+                                Saving...
+                              </>
+                            ) : (
+                              'Save Changes'
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline-secondary"
+                            disabled={chatDefaultsSaving}
+                            onClick={() => {
+                              setGlobalChatSettings(DEFAULT_GLOBAL_CHAT_SETTINGS);
+                              setChatDefaultsDirty(true);
+                            }}
+                          >
+                            Reset to defaults
+                          </Button>
+                        </div>
+                      </Form>
+                    )}
+                  </div>
+                </Tab>
+              )}
               {agentsFeatureEnabled && (
                 <Tab
                   eventKey="agents"
@@ -530,265 +794,10 @@ export default function SettingsPage() {
                           );
                         })}
                         <div className="text-muted small mt-2">
-                          Users will still see gentle hints where agents are disabled (e.g., “Agents are disabled.
-                          Contact your admin”).
+                          Users will still see gentle hints where agents are disabled (e.g., &quot;Agents are disabled.
+                          Contact your admin&quot;).
                         </div>
                       </div>
-                    )}
-                  </div>
-                </Tab>
-              )}
-              {isAdmin && (
-                <Tab
-                  eventKey="chat-defaults"
-                  title={
-                    <span>
-                      <i className="bi bi-chat-dots-fill me-2"></i>Chat Defaults
-                    </span>
-                  }
-                >
-                  <div className="mb-3">
-                    <Alert variant="secondary" className="mb-3">
-                      <div className="d-flex align-items-start">
-                        <i className="bi bi-building-gear me-2 mt-1"></i>
-                        <div>
-                          <div className="fw-semibold">Company-wide chat defaults</div>
-                          <div className="small text-muted">
-                            These defaults apply when users start a new chat without selecting an agent. If user
-                            defaults are allowed, users can override these for themselves.
-                          </div>
-                        </div>
-                      </div>
-                    </Alert>
-
-                    {chatDefaultsError && (
-                      <Alert variant="danger" className="mb-3">
-                        {chatDefaultsError}
-                      </Alert>
-                    )}
-
-                    {chatDefaultsLoading ? (
-                      <div className="text-center py-4">
-                        <Spinner animation="border" />
-                      </div>
-                    ) : (
-                      <Form>
-                        <Form.Group className="mb-3">
-                          <Form.Label className="fw-semibold">Default knowledge bases</Form.Label>
-                          <div className="d-flex align-items-center gap-2">
-                            <Form.Check
-                              type="switch"
-                              id="chat-defaults-kb-company"
-                              label=""
-                              checked={globalChatSettings.defaultKBIds.includes('company')}
-                              onChange={(e) => {
-                                const nextChecked = e.target.checked;
-                                setGlobalChatSettings((prev) => ({
-                                  ...prev,
-                                  defaultKBIds: nextChecked ? ['company'] : [],
-                                }));
-                                setChatDefaultsDirty(true);
-                              }}
-                            />
-                            <div className="fw-semibold">Company Knowledge Base</div>
-                          </div>
-                          <div className="text-muted small ms-5">
-                            Only the company knowledge base can be set as a company default; other knowledge bases are
-                            personal to each user.
-                          </div>
-                        </Form.Group>
-
-                        <div className="mb-3">
-                          <div className="d-flex align-items-center gap-2">
-                            <Form.Check
-                              type="switch"
-                              id="chat-defaults-all-tools"
-                              label=""
-                              checked={globalChatSettings.autoToolsEnabled}
-                              onChange={(e) => {
-                                const nextEnabled = e.target.checked;
-                                setGlobalChatSettings((prev) => ({
-                                  ...prev,
-                                  autoToolsEnabled: nextEnabled,
-                                  ...(nextEnabled
-                                    ? { webSearchEnabled: true, createAgentEnabled: true }
-                                    : { webSearchEnabled: false, createAgentEnabled: false }),
-                                }));
-                                setChatDefaultsDirty(true);
-                              }}
-                            />
-                            <div className="fw-semibold">All Tools</div>
-                          </div>
-                          <div className="text-muted small ms-5">
-                            When enabled, all tools are automatically available
-                          </div>
-
-                          <div className="mt-3 ms-4">
-                            <div className="d-flex align-items-center gap-2">
-                              <Form.Check
-                                type="switch"
-                                id="chat-defaults-web-search"
-                                label=""
-                                checked={globalChatSettings.webSearchEnabled}
-                                disabled={globalChatSettings.autoToolsEnabled}
-                                onChange={(e) => {
-                                  setGlobalChatSettings((prev) => ({ ...prev, webSearchEnabled: e.target.checked }));
-                                  setChatDefaultsDirty(true);
-                                }}
-                              />
-                              <div className="fw-semibold">Web Search</div>
-                            </div>
-                            <div className="text-muted small ms-5">Search the web for current information</div>
-                          </div>
-
-                          <div className="mt-3 ms-4">
-                            <div className="d-flex align-items-center gap-2">
-                              <Form.Check
-                                type="switch"
-                                id="chat-defaults-create-agent"
-                                label=""
-                                checked={globalChatSettings.createAgentEnabled}
-                                disabled={globalChatSettings.autoToolsEnabled}
-                                onChange={(e) => {
-                                  setGlobalChatSettings((prev) => ({ ...prev, createAgentEnabled: e.target.checked }));
-                                  setChatDefaultsDirty(true);
-                                }}
-                              />
-                              <div className="fw-semibold">Agent Creation</div>
-                            </div>
-                            <div className="text-muted small ms-5">
-                              Allow me to create saved agents when you explicitly ask.
-                            </div>
-                          </div>
-                        </div>
-
-                        <Form.Group className="mb-3">
-                          <Form.Label className="fw-semibold">Default integrations</Form.Label>
-                          {previewMode ? (
-                            <div className="text-muted small">Integrations are not enabled in this environment.</div>
-                          ) : (
-                            <>
-                              <div
-                                className="border rounded-3 p-2 bg-white"
-                                style={{ maxHeight: 240, overflowY: 'auto' }}
-                              >
-                                {AVAILABLE_INTEGRATIONS.filter((integration) => {
-                                  const id = integration.name_slug;
-                                  return globalSettings[id]?.status === 'enabled';
-                                }).map((integration) => {
-                                  const id = integration.name_slug;
-                                  const checked = globalChatSettings.defaultConnectionIds.includes(id);
-                                  return (
-                                    <Form.Check
-                                      key={id}
-                                      type="checkbox"
-                                      id={`chat-defaults-integration-${id}`}
-                                      label={integration.name}
-                                      checked={checked}
-                                      disabled={loadingSettings}
-                                      onChange={(e) => {
-                                        const nextChecked = e.target.checked;
-                                        setGlobalChatSettings((prev) => ({
-                                          ...prev,
-                                          defaultConnectionIds: nextChecked
-                                            ? [...prev.defaultConnectionIds, id]
-                                            : prev.defaultConnectionIds.filter((x) => x !== id),
-                                        }));
-                                        setChatDefaultsDirty(true);
-                                      }}
-                                    />
-                                  );
-                                })}
-                                {AVAILABLE_INTEGRATIONS.filter((integration) => {
-                                  const id = integration.name_slug;
-                                  return globalSettings[id]?.status === 'enabled';
-                                }).length === 0 && (
-                                  <div className="text-muted small">
-                                    No integrations are enabled for this environment.
-                                  </div>
-                                )}
-                              </div>
-                              <div className="text-muted small mt-1">
-                                Select one or more integrations to enable by default.
-                              </div>
-                            </>
-                          )}
-                        </Form.Group>
-
-                        <div className="mb-3 p-3 border rounded-3 bg-light">
-                          <div className="d-flex align-items-start gap-2">
-                            <i className="bi bi-shield-lock-fill text-primary mt-1"></i>
-                            <div className="flex-grow-1">
-                              <div className="d-flex align-items-center justify-content-between gap-3">
-                                <div className="fw-semibold">Allow users to override company defaults</div>
-                                <Form.Check
-                                  type="switch"
-                                  id="chat-defaults-allow-user-defaults"
-                                  label=""
-                                  checked={globalChatSettings.allowUserDefaults}
-                                  onChange={(e) => {
-                                    setGlobalChatSettings((prev) => ({ ...prev, allowUserDefaults: e.target.checked }));
-                                    setChatDefaultsDirty(true);
-                                  }}
-                                />
-                              </div>
-                              <div className="text-muted small">
-                                When disabled, users can’t use personal defaults and all chats will use these company
-                                defaults.
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="d-flex gap-2">
-                          <Button
-                            variant="primary"
-                            disabled={!chatDefaultsDirty || chatDefaultsSaving}
-                            onClick={async () => {
-                              try {
-                                setChatDefaultsSaving(true);
-                                const saved = await AdminChatSettingsService.updateGlobal(
-                                  {
-                                    defaultKBIds: globalChatSettings.defaultKBIds,
-                                    autoToolsEnabled: globalChatSettings.autoToolsEnabled,
-                                    webSearchEnabled: globalChatSettings.webSearchEnabled,
-                                    createAgentEnabled: globalChatSettings.createAgentEnabled,
-                                    defaultConnectionIds: globalChatSettings.defaultConnectionIds,
-                                    allowUserDefaults: globalChatSettings.allowUserDefaults,
-                                  },
-                                  numaPut,
-                                );
-                                setGlobalChatSettings(saved);
-                                setChatDefaultsError(null);
-                                setChatDefaultsDirty(false);
-                              } catch (e) {
-                                setChatDefaultsError((e as Error).message || 'Failed to save chat defaults');
-                              } finally {
-                                setChatDefaultsSaving(false);
-                              }
-                            }}
-                          >
-                            {chatDefaultsSaving ? (
-                              <>
-                                <Spinner as="span" animation="border" size="sm" className="me-2" />
-                                Saving...
-                              </>
-                            ) : (
-                              'Save Changes'
-                            )}
-                          </Button>
-                          <Button
-                            variant="outline-secondary"
-                            disabled={chatDefaultsSaving}
-                            onClick={() => {
-                              setGlobalChatSettings(DEFAULT_GLOBAL_CHAT_SETTINGS);
-                              setChatDefaultsDirty(true);
-                            }}
-                          >
-                            Reset to defaults
-                          </Button>
-                        </div>
-                      </Form>
                     )}
                   </div>
                 </Tab>
@@ -830,18 +839,6 @@ export default function SettingsPage() {
                   </div>
                 )}
               </Tab>
-              {allowBrandingTab && (
-                <Tab
-                  eventKey="branding"
-                  title={
-                    <span>
-                      <i className="bi bi-palette-fill me-2"></i>Branding
-                    </span>
-                  }
-                >
-                  <BrandingAdminPanel onDirtyChange={handleBrandingDirtyChange} />
-                </Tab>
-              )}
             </Tabs>
           </div>
         </div>

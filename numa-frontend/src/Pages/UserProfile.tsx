@@ -5,7 +5,11 @@ import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
-import { AdminChatSettingsService, DEFAULT_GLOBAL_CHAT_SETTINGS } from '../Services/AdminChatSettingsService';
+import {
+  AdminChatSettingsService,
+  DEFAULT_GLOBAL_CHAT_SETTINGS,
+  type GlobalChatSettings,
+} from '../Services/AdminChatSettingsService';
 import {
   ChatSettingsService,
   DEFAULT_CHAT_SETTINGS,
@@ -13,6 +17,7 @@ import {
 } from '../Services/ChatSettingsService';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { withPRM } from '../utils/prmUtils';
+import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 
 type Connection = { id: string; name: string; isConnected: boolean; mcpServerUrl?: string };
 
@@ -25,6 +30,7 @@ export default function UserProfilePage() {
 
   const [globalAllowUserDefaults, setGlobalAllowUserDefaults] = useState<boolean>(false);
   const [globalLoaded, setGlobalLoaded] = useState<boolean>(false);
+  const [companyDefaults, setCompanyDefaults] = useState<GlobalChatSettings>(DEFAULT_GLOBAL_CHAT_SETTINGS);
 
   const [userDefaultsEnabled, setUserDefaultsEnabled] = useState<boolean>(false);
   const [userDefaults, setUserDefaults] = useState(() => ({ ...DEFAULT_CHAT_SETTINGS }));
@@ -51,12 +57,14 @@ export default function UserProfilePage() {
       try {
         const global = await AdminChatSettingsService.getGlobal(numaGet);
         if (cancelled) return;
+        setCompanyDefaults(global);
         setGlobalAllowUserDefaults(Boolean(global.allowUserDefaults));
         if (!global.allowUserDefaults) {
           setUserDefaultsEnabled(false);
         }
       } catch {
         if (cancelled) return;
+        setCompanyDefaults(DEFAULT_GLOBAL_CHAT_SETTINGS);
         setGlobalAllowUserDefaults(Boolean(DEFAULT_GLOBAL_CHAT_SETTINGS.allowUserDefaults));
         if (!DEFAULT_GLOBAL_CHAT_SETTINGS.allowUserDefaults) {
           setUserDefaultsEnabled(false);
@@ -188,10 +196,24 @@ export default function UserProfilePage() {
     }
   }, [globalIntegrationSettings, lambdaClient, user]);
 
-  const enabledKBSet = useMemo(() => new Set(userDefaults.defaultKBIds), [userDefaults.defaultKBIds]);
+  // When user defaults are disabled, show company defaults in the form
+  const displayedSettings = useMemo(() => {
+    if (!userDefaultsEnabled) {
+      return {
+        defaultKBIds: companyDefaults.defaultKBIds,
+        autoToolsEnabled: companyDefaults.autoToolsEnabled,
+        webSearchEnabled: companyDefaults.webSearchEnabled,
+        createAgentEnabled: companyDefaults.createAgentEnabled,
+        defaultConnectionIds: companyDefaults.defaultConnectionIds,
+      };
+    }
+    return userDefaults;
+  }, [userDefaultsEnabled, userDefaults, companyDefaults]);
+
+  const enabledKBSet = useMemo(() => new Set(displayedSettings.defaultKBIds), [displayedSettings.defaultKBIds]);
   const enabledConnectionSet = useMemo(
-    () => new Set(userDefaults.defaultConnectionIds),
-    [userDefaults.defaultConnectionIds],
+    () => new Set(displayedSettings.defaultConnectionIds),
+    [displayedSettings.defaultConnectionIds],
   );
 
   const disableForm = saving || loading || !canEdit || !userDefaultsEnabled;
@@ -272,7 +294,7 @@ export default function UserProfilePage() {
                         <Form.Label className="fw-semibold">Default knowledge bases</Form.Label>
                         {kbError && <div className="text-danger small mb-2">{kbError}</div>}
 
-                        <div className="border rounded-3 p-2 bg-white" style={{ maxHeight: 240, overflowY: 'auto' }}>
+                        <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
                           {isLoadingKBs ? (
                             <div className="text-muted small">Loading knowledge bases…</div>
                           ) : (
@@ -305,7 +327,7 @@ export default function UserProfilePage() {
                           {!isLoadingKBs && kbIdsSorted.length === 0 && (
                             <div className="text-muted small">No knowledge bases available.</div>
                           )}
-                        </div>
+                        </ExpandableOverflowBox>
                         <div className="text-muted small mt-1">
                           Select one or more knowledge bases to enable by default.
                         </div>
@@ -317,7 +339,7 @@ export default function UserProfilePage() {
                             type="switch"
                             id="profile-defaults-all-tools"
                             label=""
-                            checked={userDefaults.autoToolsEnabled}
+                            checked={displayedSettings.autoToolsEnabled}
                             disabled={disableForm}
                             onChange={(e) => {
                               const nextEnabled = e.target.checked;
@@ -341,8 +363,8 @@ export default function UserProfilePage() {
                               type="switch"
                               id="profile-defaults-web-search"
                               label=""
-                              checked={userDefaults.webSearchEnabled}
-                              disabled={disableForm || userDefaults.autoToolsEnabled}
+                              checked={displayedSettings.webSearchEnabled}
+                              disabled={disableForm || displayedSettings.autoToolsEnabled}
                               onChange={(e) => {
                                 setUserDefaults((prev) => ({ ...prev, webSearchEnabled: e.target.checked }));
                                 setDirty(true);
@@ -359,8 +381,8 @@ export default function UserProfilePage() {
                               type="switch"
                               id="profile-defaults-create-agent"
                               label=""
-                              checked={userDefaults.createAgentEnabled}
-                              disabled={disableForm || userDefaults.autoToolsEnabled}
+                              checked={displayedSettings.createAgentEnabled}
+                              disabled={disableForm || displayedSettings.autoToolsEnabled}
                               onChange={(e) => {
                                 setUserDefaults((prev) => ({ ...prev, createAgentEnabled: e.target.checked }));
                                 setDirty(true);
@@ -382,38 +404,37 @@ export default function UserProfilePage() {
                           <div className="text-muted small">Loading integrations…</div>
                         ) : (
                           <>
-                            <div
-                              className="border rounded-3 p-2 bg-white"
-                              style={{ maxHeight: 240, overflowY: 'auto' }}
-                            >
-                              {availableConnections.map((conn) => {
-                                const id = conn.id;
-                                const checked = enabledConnectionSet.has(id);
-                                return (
-                                  <Form.Check
-                                    key={id}
-                                    type="checkbox"
-                                    id={`profile-defaults-integration-${id}`}
-                                    label={conn.name}
-                                    checked={checked}
-                                    disabled={disableForm}
-                                    onChange={(e) => {
-                                      const nextChecked = e.target.checked;
-                                      setUserDefaults((prev) => ({
-                                        ...prev,
-                                        defaultConnectionIds: nextChecked
-                                          ? Array.from(new Set([...prev.defaultConnectionIds, id]))
-                                          : prev.defaultConnectionIds.filter((x) => x !== id),
-                                      }));
-                                      setDirty(true);
-                                    }}
-                                  />
-                                );
-                              })}
+                            <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
+                              {availableConnections
+                                .sort((a, b) => a.name.localeCompare(b.name))
+                                .map((conn) => {
+                                  const id = conn.id;
+                                  const checked = enabledConnectionSet.has(id);
+                                  return (
+                                    <Form.Check
+                                      key={id}
+                                      type="checkbox"
+                                      id={`profile-defaults-integration-${id}`}
+                                      label={conn.name}
+                                      checked={checked}
+                                      disabled={disableForm}
+                                      onChange={(e) => {
+                                        const nextChecked = e.target.checked;
+                                        setUserDefaults((prev) => ({
+                                          ...prev,
+                                          defaultConnectionIds: nextChecked
+                                            ? Array.from(new Set([...prev.defaultConnectionIds, id]))
+                                            : prev.defaultConnectionIds.filter((x) => x !== id),
+                                        }));
+                                        setDirty(true);
+                                      }}
+                                    />
+                                  );
+                                })}
                               {availableConnections.length === 0 && (
                                 <div className="text-muted small">No connected integrations available.</div>
                               )}
-                            </div>
+                            </ExpandableOverflowBox>
                             <div className="text-muted small mt-1">
                               Select one or more integrations to enable by default.
                             </div>
@@ -465,11 +486,17 @@ export default function UserProfilePage() {
                           disabled={saving || !canEdit}
                           onClick={() => {
                             setUserDefaultsEnabled(true);
-                            setUserDefaults({ ...DEFAULT_CHAT_SETTINGS });
+                            setUserDefaults({
+                              defaultKBIds: companyDefaults.defaultKBIds,
+                              autoToolsEnabled: companyDefaults.autoToolsEnabled,
+                              webSearchEnabled: companyDefaults.webSearchEnabled,
+                              createAgentEnabled: companyDefaults.createAgentEnabled,
+                              defaultConnectionIds: companyDefaults.defaultConnectionIds,
+                            });
                             setDirty(true);
                           }}
                         >
-                          Reset to defaults
+                          Reset to company defaults
                         </Button>
                       </div>
                     </>
