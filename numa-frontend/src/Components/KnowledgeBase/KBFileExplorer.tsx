@@ -680,77 +680,81 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       });
 
       // Detect stale pending documents (files uploaded >2 hours before last sync with no kbDoc)
-      const lastSyncTime = kbState?.lastSuccessfulSync ? new Date(kbState.lastSuccessfulSync).getTime() : Date.now();
-      const staleThreshold = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
-      const unsupportedExtensions = [
-        'exe',
-        'dll',
-        'bin',
-        'zip',
-        'tar',
-        'gz',
-        'rar',
-        '7z',
-        'mp3',
-        'mp4',
-        'avi',
-        'mov',
-        'mkv',
-        'wav',
-        'flac',
-        'psd',
-        'ai',
-        'sketch',
-        'fig',
-        'iso',
-        'dmg',
-        'app',
-      ];
+      // Only apply stale detection if there's been at least one successful sync
+      // Before any sync completes, all unindexed files are legitimately pending
+      if (kbState?.lastSuccessfulSync) {
+        const lastSyncTime = new Date(kbState.lastSuccessfulSync).getTime();
+        const staleThreshold = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
+        const unsupportedExtensions = [
+          'exe',
+          'dll',
+          'bin',
+          'zip',
+          'tar',
+          'gz',
+          'rar',
+          '7z',
+          'mp3',
+          'mp4',
+          'avi',
+          'mov',
+          'mkv',
+          'wav',
+          'flac',
+          'psd',
+          'ai',
+          'sketch',
+          'fig',
+          'iso',
+          'dmg',
+          'app',
+        ];
 
-      files.forEach((file) => {
-        const existing = fileMap.get(file.Key);
-        // Skip if already has kbDoc (already indexed or failed)
-        if (existing?.kbDoc) return;
+        files.forEach((file) => {
+          const existing = fileMap.get(file.Key);
+          // Skip if already has kbDoc (already indexed or failed)
+          if (existing?.kbDoc) return;
 
-        const fileTime = file.LastModified ? new Date(file.LastModified).getTime() : Date.now();
-        const fileAge = Date.now() - fileTime;
-        const wasUploadedBeforeSync = fileTime < lastSyncTime;
+          const fileTime = file.LastModified ? new Date(file.LastModified).getTime() : Date.now();
+          const fileAge = Date.now() - fileTime;
+          const wasUploadedBeforeSync = fileTime < lastSyncTime;
 
-        // Check if file is stale (uploaded before last sync and older than 2 hours)
-        if (wasUploadedBeforeSync && fileAge > staleThreshold) {
-          const fileSize = file.Size || 0;
-          const fileName = file.Key.split('/').pop() || '';
-          const fileExt = fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() : '';
+          // Check if file is stale (uploaded before last sync and older than 2 hours)
+          if (wasUploadedBeforeSync && fileAge > staleThreshold) {
+            const fileSize = file.Size || 0;
+            const fileName = file.Key.split('/').pop() || '';
+            const fileExt = fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() : '';
 
-          let errorMessage = '';
-          let errorCode = 'UNKNOWN';
+            let errorMessage = '';
+            let errorCode = 'UNKNOWN';
 
-          // Smart deductions based on file characteristics
-          if (fileSize > 50 * 1024 * 1024) {
-            // 50MB limit
-            errorMessage = 'File too large to be indexed (>50MB limit)';
-            errorCode = 'FILE_TOO_LARGE';
-          } else if (fileExt && unsupportedExtensions.includes(fileExt)) {
-            errorMessage = `Unsupported file type (.${fileExt})`;
-            errorCode = 'UNSUPPORTED_FORMAT';
-          } else {
-            errorMessage = 'Unknown error indexing file - file may still be processing or an uncaught error occurred';
-            errorCode = 'STALE_PENDING';
+            // Smart deductions based on file characteristics
+            if (fileSize > 50 * 1024 * 1024) {
+              // 50MB limit
+              errorMessage = 'File too large to be indexed (>50MB limit)';
+              errorCode = 'FILE_TOO_LARGE';
+            } else if (fileExt && unsupportedExtensions.includes(fileExt)) {
+              errorMessage = `Unsupported file type (.${fileExt})`;
+              errorCode = 'UNSUPPORTED_FORMAT';
+            } else {
+              errorMessage = 'Unknown error indexing file - file may still be processing or an uncaught error occurred';
+              errorCode = 'STALE_PENDING';
+            }
+
+            // Create synthetic kbDoc with WARNING status
+            const syntheticDoc: KBDocument = {
+              documentId: `s3://bucket/${file.Key}`,
+              status: 'WARNING',
+              updatedAt: file.LastModified?.toISOString() || new Date().toISOString(),
+              error: { errorMessage, errorCode },
+              fileName,
+              isInferred: true,
+            };
+
+            fileMap.set(file.Key, { ...existing, kbDoc: syntheticDoc });
           }
-
-          // Create synthetic kbDoc with WARNING status
-          const syntheticDoc: KBDocument = {
-            documentId: `s3://bucket/${file.Key}`,
-            status: 'WARNING',
-            updatedAt: file.LastModified?.toISOString() || new Date().toISOString(),
-            error: { errorMessage, errorCode },
-            fileName,
-            isInferred: true,
-          };
-
-          fileMap.set(file.Key, { ...existing, kbDoc: syntheticDoc });
-        }
-      });
+        });
+      }
 
       failedDocuments.forEach((doc) => {
         const key = documentIdToKey(doc.documentId);
@@ -775,7 +779,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       });
 
       return Array.from(fileMap.values());
-    }, [files, kbDocuments, failedDocuments, allObjectKeys]);
+    }, [files, kbDocuments, failedDocuments, allObjectKeys, kbState]);
 
     /**
      * Filter by status

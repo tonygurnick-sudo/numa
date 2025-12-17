@@ -565,24 +565,30 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
         });
 
         if (isChatFileUpload) {
-          try {
-            const metadataAttributes: Record<string, string> = {
-              kb_id: resolvedKbIdForUpload,
-              uploaded_at: new Date().toISOString(),
-            };
-            if (resolvedTenantName) metadataAttributes.tenant_id = resolvedTenantName;
-            if (userUuid) metadataAttributes.uploader_id = userUuid;
+          // Skip metadata sidecar for Q Business company KB (Q doesn't use sidecars)
+          const preferredKb = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'bedrock';
+          const shouldCreateMetadata = !(preferredKb === 'q' && resolvedKbIdForUpload === 'company');
 
-            await s3Client.send(
-              new PutObjectCommand({
-                Bucket: bucketForUpload,
-                Key: `${s3Key}.metadata.json`,
-                Body: JSON.stringify({ metadataAttributes }),
-                ContentType: 'application/json',
-              }),
-            );
-          } catch (metadataError) {
-            console.warn('Failed to upload metadata sidecar for chat file', metadataError);
+          if (shouldCreateMetadata) {
+            try {
+              const metadataAttributes: Record<string, string> = {
+                kb_id: resolvedKbIdForUpload,
+                uploaded_at: new Date().toISOString(),
+              };
+              if (resolvedTenantName) metadataAttributes.tenant_id = resolvedTenantName;
+              if (userUuid) metadataAttributes.uploader_id = userUuid;
+
+              await s3Client.send(
+                new PutObjectCommand({
+                  Bucket: bucketForUpload,
+                  Key: `${s3Key}.metadata.json`,
+                  Body: JSON.stringify({ metadataAttributes }),
+                  ContentType: 'application/json',
+                }),
+              );
+            } catch (metadataError) {
+              console.warn('Failed to upload metadata sidecar for chat file', metadataError);
+            }
           }
         }
 

@@ -1761,7 +1761,11 @@ async def get_kb_state(request: Request, kb_id: str) -> Response:
         )
 
         # Get KB state based on preferred knowledge base type
-        if PREFERRED_KNOWLEDGE_BASE == "q":
+        # For User KBs, always use Bedrock even if Q is preferred
+        # (Q Business doesn't support per-KB isolation, User KBs are indexed in Bedrock)
+        if kb_type == "user" and PREFERRED_KNOWLEDGE_BASE == "q":
+            state = _get_bedrock_kb_state(kb_id, s3_prefix_filter, kb_type)
+        elif PREFERRED_KNOWLEDGE_BASE == "q":
             state = _get_qbusiness_kb_state(kb_id, s3_prefix_filter, kb_type)
         else:
             state = _get_bedrock_kb_state(kb_id, s3_prefix_filter, kb_type)

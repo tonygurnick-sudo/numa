@@ -17,6 +17,8 @@ export interface WebCrawlerConstructProps {
   dataBucket: NumaCorsEnabledBucket;
   logGroup: CloudwatchLogGroup;
   region: string;
+  /** Whether Q Business resources are provisioned (affects metadata sidecar creation) */
+  provisionQResources?: boolean;
 }
 
 export class WebCrawlerConstruct extends Construct {
@@ -128,6 +130,8 @@ export class WebCrawlerConstruct extends Construct {
       environment: {
         BUCKET_NAME: props.dataBucket.bucket.bucket,
         TABLE_NAME: this.crawlUrlsTable.name,
+        CLIENT_NAME: props.clientName,
+        PREFERRED_KNOWLEDGE_BASE: props.provisionQResources ? 'q' : 'bedrock',
       },
       timeout: 300,
       memorySize: 512,

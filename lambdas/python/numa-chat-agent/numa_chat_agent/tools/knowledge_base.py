@@ -206,7 +206,29 @@ def query_knowledge_base_impl(
 
     try:
         # Query the appropriate knowledge base
-        if provider == "q" and QB_APPLICATION_ID and QB_RETRIEVER_ID:
+        # For User KBs (non-company), always use Bedrock even if Q is preferred
+        # Q Business doesn't support per-KB isolation via metadata filtering
+        if resolved_kb_id != "company" and provider == "q":
+            if BEDROCK_KNOWLEDGE_BASE_ID:
+                logger.info(
+                    "Using Bedrock for User KB query (Q Business doesn't support kb isolation)",
+                    kb_id=resolved_kb_id,
+                )
+                kb_result = query_bedrock_knowledge_base(
+                    query, max_results, resolved_kb_id
+                )
+            else:
+                logger.warning(
+                    "User KB query requested but Bedrock KB not configured",
+                    kb_id=resolved_kb_id,
+                )
+                return {
+                    "status": "error",
+                    "content": [
+                        {"text": "User KBs require Bedrock KB which is not configured"}
+                    ],
+                }
+        elif provider == "q" and QB_APPLICATION_ID and QB_RETRIEVER_ID:
             kb_result = query_qbusiness_knowledge_base(query, max_results)
         elif provider == "bedrock" and BEDROCK_KNOWLEDGE_BASE_ID:
             kb_result = query_bedrock_knowledge_base(query, max_results, resolved_kb_id)

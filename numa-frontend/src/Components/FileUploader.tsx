@@ -251,35 +251,41 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
           console.log(`✅ Successfully uploaded to: ${s3Key}`);
 
-          try {
-            const metadataAttributes: Record<string, string> = {
-              kb_id: resolvedKbId,
-              uploaded_at: metadata.uploaded_at,
-            };
-            if (config?.CLIENT_NAME) {
-              metadataAttributes.tenant_id = config.CLIENT_NAME;
-            }
-            if (userUuid) {
-              metadataAttributes.uploader_id = userUuid;
-            }
+          // Skip metadata sidecar for Q Business company KB (Q doesn't use sidecars)
+          const preferredKb = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'bedrock';
+          const shouldCreateMetadata = !(preferredKb === 'q' && resolvedKbId === 'company');
 
-            const metadataPayload = {
-              metadataAttributes,
-            };
+          if (shouldCreateMetadata) {
+            try {
+              const metadataAttributes: Record<string, string> = {
+                kb_id: resolvedKbId,
+                uploaded_at: metadata.uploaded_at,
+              };
+              if (config?.CLIENT_NAME) {
+                metadataAttributes.tenant_id = config.CLIENT_NAME;
+              }
+              if (userUuid) {
+                metadataAttributes.uploader_id = userUuid;
+              }
 
-            await s3Client.send(
-              new PutObjectCommand({
-                Bucket: `numa-${config.CLIENT_NAME}-data`,
-                Key: `${s3Key}.metadata.json`,
-                Body: JSON.stringify(metadataPayload),
-                ContentType: 'application/json',
-              }),
-            );
-          } catch (metadataError) {
-            console.warn('Failed to upload metadata sidecar for S3 Vectors KB', {
-              file: relativePath,
-              error: metadataError instanceof Error ? metadataError.message : metadataError,
-            });
+              const metadataPayload = {
+                metadataAttributes,
+              };
+
+              await s3Client.send(
+                new PutObjectCommand({
+                  Bucket: `numa-${config.CLIENT_NAME}-data`,
+                  Key: `${s3Key}.metadata.json`,
+                  Body: JSON.stringify(metadataPayload),
+                  ContentType: 'application/json',
+                }),
+              );
+            } catch (metadataError) {
+              console.warn('Failed to upload metadata sidecar for S3 Vectors KB', {
+                file: relativePath,
+                error: metadataError instanceof Error ? metadataError.message : metadataError,
+              });
+            }
           }
         } catch (fileError) {
           console.error('❌ Error uploading file:', {
