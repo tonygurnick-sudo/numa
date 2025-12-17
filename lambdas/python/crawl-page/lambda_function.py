@@ -8,6 +8,7 @@ It's the second step in the web crawler Step Function workflow.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import pathlib
 import urllib.parse
@@ -350,6 +351,55 @@ def upload_to_s3(
         return {"success": False, "message": "Unexpected error", "error": str(exc)}
 
 
+def create_metadata_sidecar(
+    bucket: str,
+    key: str,
+    kb_id: str,
+    tenant_id: str,
+    preferred_kb: str = "bedrock",
+    uploader_id: str = "web-crawler",
+) -> bool:
+    """Create .metadata.json sidecar file for Bedrock KB filtering.
+
+    This creates a sidecar file alongside uploaded content that Bedrock KB uses
+    for metadata filtering. The sidecar contains tenant_id and kb_id attributes
+    that enable proper isolation of search results.
+
+    For Q Business clients, skips metadata creation for company KB since Q doesn't
+    use metadata sidecars and they can cause indexing issues.
+    """
+    # Skip metadata for Q Business company KB (Q doesn't use sidecars)
+    if preferred_kb == "q" and kb_id == "company":
+        logger.debug(
+            "Skipping metadata sidecar for Q Business company KB", key=key, kb_id=kb_id
+        )
+        return True  # Return success (no-op is intentional)
+
+    metadata_key = f"{key}.metadata.json"
+    metadata_payload = {
+        "metadataAttributes": {
+            "tenant_id": tenant_id,
+            "kb_id": kb_id,
+            "uploader_id": uploader_id,
+            "uploaded_at": datetime.utcnow().isoformat(),
+        }
+    }
+    try:
+        s3.put_object(
+            Bucket=bucket,
+            Key=metadata_key,
+            Body=json.dumps(metadata_payload, indent=2),
+            ContentType="application/json",
+        )
+        logger.debug("Created metadata sidecar", key=key, metadata_key=metadata_key)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to create metadata sidecar", key=key, error=str(exc), exc_info=True
+        )
+        return False
+
+
 async def _stream_chunks(response, chunk_size: int) -> AsyncIterator[bytes]:
     """Stream HTTP response in chunks."""
     async for chunk in response.aiter_bytes(chunk_size):
@@ -482,7 +532,14 @@ async def stream_url_to_s3(
 
 
 async def process_file_url(
-    url: str, bucket: str, user_id: str, prefix: str, crawl_session_id: str
+    url: str,
+    bucket: str,
+    user_id: str,
+    prefix: str,
+    crawl_session_id: str,
+    kb_id: str,
+    client_name: str,
+    preferred_kb: str = "bedrock",
 ) -> Dict[str, Any]:
     """Download file to S3 via streaming, return metadata."""
 
@@ -498,6 +555,15 @@ async def process_file_url(
             "reason": f"Download failed: {upload_result['error']}",
             "links_enqueued": 0,
         }
+
+    # Create metadata sidecar for Bedrock KB filtering
+    create_metadata_sidecar(
+        bucket=bucket,
+        key=s3_key,
+        kb_id=kb_id,
+        tenant_id=client_name,
+        preferred_kb=preferred_kb,
+    )
 
     file_extension = pathlib.Path(url).suffix.lower()
 
@@ -530,6 +596,8 @@ async def process_url(
     prefix: str,
     crawl_session_id: str,
     kb_id: str = "company",
+    client_name: str,
+    preferred_kb: str = "bedrock",
     limit_to_path: bool = True,
     seed_url_prefix: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -548,7 +616,16 @@ async def process_url(
 
     if file_extension in EXTRACTABLE_FILE_TYPES:
         # Route to file download handler
-        return await process_file_url(url, bucket, user_id, prefix, crawl_session_id)
+        return await process_file_url(
+            url,
+            bucket,
+            user_id,
+            prefix,
+            crawl_session_id,
+            kb_id,
+            client_name,
+            preferred_kb,
+        )
 
     # Existing HTML processing logic with path filtering
     scraped = await fetch_page(url, limit_to_path, seed_url_prefix)
@@ -581,6 +658,15 @@ async def process_url(
             "reason": "Failed to upload content to S3",
             "links_enqueued": 0,
         }
+
+    # Create metadata sidecar for Bedrock KB filtering
+    create_metadata_sidecar(
+        bucket=bucket,
+        key=s3_key,
+        kb_id=kb_id,
+        tenant_id=client_name,
+        preferred_kb=preferred_kb,
+    )
 
     links_enqueued = (
         enqueue_links(
@@ -628,13 +714,16 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
     logger.info("Received event", input=event)
 
     try:
-        env = _get_required_env("BUCKET_NAME", "TABLE_NAME")
+        env = _get_required_env("BUCKET_NAME", "TABLE_NAME", "CLIENT_NAME")
     except KeyError as exc:
         return {
             "status": "error",
             "message": str(exc),
             "url": event.get("url", "unknown"),
         }
+
+    # Get preferred knowledge base (optional, defaults to bedrock)
+    preferred_kb = os.environ.get("PREFERRED_KNOWLEDGE_BASE", "bedrock")
 
     url = event.get("url")
     if not url:
@@ -664,6 +753,8 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
                 prefix=prefix,
                 crawl_session_id=crawl_session_id,
                 kb_id=kb_id,
+                client_name=env["CLIENT_NAME"],
+                preferred_kb=preferred_kb,
                 limit_to_path=limit_to_path,
                 seed_url_prefix=seed_url_prefix,
             )

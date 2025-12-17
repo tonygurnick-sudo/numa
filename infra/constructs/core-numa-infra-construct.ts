@@ -430,6 +430,7 @@ export class CoreNumaInfra extends Construct {
     });
 
     // Create backfill-metadata Lambda (idempotent; safe to run once post-deploy)
+    // For Q Business clients, this also deletes metadata under documents/company/
     const backfillMetadataLambda = new NumaLambda(this, 'backfill-metadata', {
       clientName: props.clientName,
       lambdaDirectory: 'python/backfill-metadata/',
@@ -438,24 +439,27 @@ export class CoreNumaInfra extends Construct {
       environment: {
         CLIENT_NAME: props.clientName,
         BUCKET_NAME: this.dataBucket.bucket.bucket,
+        PREFERRED_KNOWLEDGE_BASE: props.provisionQResources ? 'q' : 'bedrock',
       },
       additionalPolicyStatements: [
         {
           effect: 'Allow',
-          actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:HeadObject'],
+          actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:HeadObject', 's3:DeleteObject'],
           resources: [this.dataBucket.bucket.arn, `${this.dataBucket.bucket.arn}/*`],
         },
       ],
     });
 
-    // One-time invocation to backfill missing metadata sidecars after deploy.
-    // Re-runs only when the Lambda code hash or bucket name changes.
+    // Backfill metadata sidecars for any files that are missing them.
+    // Runs on every deploy as a safety net (idempotent - skips existing sidecars).
     new LambdaInvocation(this, 'backfill-metadata-invocation', {
       functionName: backfillMetadataLambda.lambda.functionName,
       input: JSON.stringify({}),
       triggers: {
         dataBucketName: this.dataBucket.bucket.bucket,
         backfillSourceHash: backfillMetadataLambda.lambda.sourceCodeHash,
+        // Force re-run on every deploy as a safety net for missing metadata
+        deployTimestamp: Date.now().toString(),
       },
       dependsOn: [
         this.dataBucket.bucket,
@@ -560,6 +564,7 @@ export class CoreNumaInfra extends Construct {
       dataBucket: this.dataBucket,
       logGroup: webCrawlerLogGroup,
       region: props.region,
+      provisionQResources: props.provisionQResources,
     });
 
     // We'll create the Cognito IDP construct after determining Q Business configuration
@@ -866,6 +871,11 @@ export class CoreNumaInfra extends Construct {
               repositoryEndpointMetadata: {
                 BucketName: this.dataBucket.bucket.bucket,
               },
+            },
+            // Restrict sync to company KB folder only - User KBs use Bedrock KB instead
+            // Exclude metadata sidecar files as Q Business can't parse our format
+            additionalProperties: {
+              inclusionPrefixes: ['documents/company/'],
             },
             repositoryConfigurations: {
               document: {

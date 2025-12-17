@@ -592,16 +592,23 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
       await uploadFileToS3(arrayBuffer, contentType, bucketName, s3Key, region, getCredentials);
 
       // Upload metadata sidecar for Bedrock indexing
-      const metadata = {
-        kb_id: selectedKB?.kb_id || 'company',
-        tenant_id: clientName,
-        uploaded_at: currentDate.toISOString(),
-        uploader_id: user?.sub || 'unknown',
-      };
-      const metadataKey = `${s3Key}.metadata.json`;
-      const metadataBlob = new Blob([JSON.stringify(metadata)], { type: 'application/json' });
-      const metadataBuffer = await metadataBlob.arrayBuffer();
-      await uploadFileToS3(metadataBuffer, 'application/json', bucketName, metadataKey, region, getCredentials);
+      // Skip for Q Business company KB (Q doesn't use sidecars)
+      const resolvedKbId = selectedKB?.kb_id || 'company';
+      const preferredKb = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'bedrock';
+      const shouldCreateMetadata = !(preferredKb === 'q' && resolvedKbId === 'company');
+
+      if (shouldCreateMetadata) {
+        const metadata = {
+          kb_id: resolvedKbId,
+          tenant_id: clientName,
+          uploaded_at: currentDate.toISOString(),
+          uploader_id: user?.sub || 'unknown',
+        };
+        const metadataKey = `${s3Key}.metadata.json`;
+        const metadataBlob = new Blob([JSON.stringify(metadata)], { type: 'application/json' });
+        const metadataBuffer = await metadataBlob.arrayBuffer();
+        await uploadFileToS3(metadataBuffer, 'application/json', bucketName, metadataKey, region, getCredentials);
+      }
 
       setSuccessMessage(
         `Text file "${fileName}" has been added to "${selectedKB?.kb_name || 'your knowledge base'}" and will be searchable after the next scheduled sync.`,

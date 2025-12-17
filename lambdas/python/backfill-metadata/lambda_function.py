@@ -1,9 +1,17 @@
-"""Backfill metadata for existing files in default KB.
+"""Backfill metadata for existing files in knowledge bases.
 
-This Lambda iterates through existing files in documents/company/ and creates
-.metadata.json sidecar files for those that don't have them yet.
+This Lambda iterates through existing files in documents/ and either creates
+or deletes .metadata.json sidecar files based on the preferred knowledge base:
 
-This enables existing files to work with the new metadata filtering system.
+- For Q Business clients (PREFERRED_KNOWLEDGE_BASE=q):
+  - Deletes metadata files under documents/company/ (Q doesn't use them)
+  - Creates metadata files under documents/kb-{id}/ (user KBs use Bedrock)
+
+- For Bedrock clients (PREFERRED_KNOWLEDGE_BASE=bedrock):
+  - Creates metadata files for all prefixes
+
+This enables proper metadata filtering for Bedrock KB while avoiding issues
+with Q Business which doesn't use metadata sidecars.
 """
 
 import json
@@ -22,18 +30,64 @@ logger = structlog.get_logger()
 s3 = prm_client("s3")
 
 
+def _is_company_prefix(key: str) -> bool:
+    """Check if a key is under the company KB prefix (documents/company/)."""
+    parts = key.split("/")
+    return len(parts) > 1 and parts[1] == "company"
+
+
+def _delete_company_metadata(bucket_name: str) -> dict:
+    """Delete all .metadata.json files under documents/company/ prefix.
+
+    Used for Q Business clients where metadata sidecars cause issues.
+    Returns stats about deleted files.
+    """
+    paginator = s3.get_paginator("list_objects_v2")
+    pages = paginator.paginate(Bucket=bucket_name, Prefix="documents/company/")
+
+    metadata_deleted = 0
+    errors = 0
+
+    for page in pages:
+        contents = page.get("Contents") if isinstance(page, Mapping) else None
+        if not contents:
+            continue
+
+        for obj in contents:
+            key = obj.get("Key") if isinstance(obj, Mapping) else None
+            if not key or not isinstance(key, str):
+                continue
+
+            # Only delete .metadata.json files
+            if not key.endswith(".metadata.json"):
+                continue
+
+            try:
+                s3.delete_object(Bucket=bucket_name, Key=key)
+                metadata_deleted += 1
+                logger.info("Deleted metadata sidecar", key=key)
+            except ClientError as e:
+                logger.error("Failed to delete metadata", key=key, error=str(e))
+                errors += 1
+
+    return {"metadata_deleted": metadata_deleted, "errors": errors}
+
+
 def handler(event, context):
     """
-    Backfill metadata for existing files in default KB.
+    Backfill or cleanup metadata for existing files.
 
-    Iterates through documents/company/ prefix and creates .metadata.json
-    sidecar files for any files that don't have them.
+    For Q Business clients: Deletes metadata under documents/company/ and
+    creates metadata under documents/kb-{id}/.
+
+    For Bedrock clients: Creates metadata for all files that don't have it.
     """
     try:
         # Explicitly mark Lambda parameters as unused in this handler
         del event, context
         bucket_name = os.environ.get("BUCKET_NAME", "")
         client_name = os.environ.get("CLIENT_NAME", "")
+        preferred_kb = os.environ.get("PREFERRED_KNOWLEDGE_BASE", "bedrock")
 
         if not bucket_name or not client_name:
             raise ValueError("BUCKET_NAME and CLIENT_NAME must be set")
@@ -45,7 +99,22 @@ def handler(event, context):
             bucket=bucket_name,
             prefix=prefix,
             client_name=client_name,
+            preferred_knowledge_base=preferred_kb,
         )
+
+        # For Q Business clients, first delete metadata under documents/company/
+        metadata_deleted = 0
+        if preferred_kb == "q":
+            logger.info(
+                "Q Business detected - deleting metadata under documents/company/"
+            )
+            delete_stats = _delete_company_metadata(bucket_name)
+            metadata_deleted = delete_stats["metadata_deleted"]
+            logger.info(
+                "Deleted company metadata sidecars",
+                metadata_deleted=metadata_deleted,
+                errors=delete_stats["errors"],
+            )
 
         # List all objects in the company KB prefix
         paginator = s3.get_paginator("list_objects_v2")
@@ -77,6 +146,13 @@ def handler(event, context):
 
                 # Skip directories and existing metadata files
                 if key.endswith("/") or key.endswith(".metadata.json"):
+                    continue
+
+                # For Q Business clients, skip creating metadata for company KB
+                # (we already deleted existing ones above)
+                if preferred_kb == "q" and _is_company_prefix(key):
+                    logger.debug("Skipping company file for Q Business", file=key)
+                    metadata_skipped += 1
                     continue
 
                 # Check if metadata file already exists
@@ -162,6 +238,8 @@ def handler(event, context):
             files_processed=files_processed,
             metadata_created=metadata_created,
             metadata_skipped=metadata_skipped,
+            metadata_deleted=metadata_deleted,
+            preferred_knowledge_base=preferred_kb,
         )
 
         return {
@@ -172,6 +250,7 @@ def handler(event, context):
                     "files_processed": files_processed,
                     "metadata_created": metadata_created,
                     "metadata_skipped": metadata_skipped,
+                    "metadata_deleted": metadata_deleted,
                 }
             ),
         }
