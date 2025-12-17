@@ -44,11 +44,6 @@ import { WebCrawlerConstruct } from './web-crawler-construct';
 import { CognitoGroupsConstruct, FEATURE_SET_NAMES } from './cognito-groups-construct';
 import { KnowledgeBase } from './knowledge-base-construct';
 import { PublicS3Bucket } from './public-s3-bucket-construct';
-import {
-  CuttrissDataSyncConstruct,
-  cuttrissDataSyncConfigSchema,
-  CuttrissDataSyncConfig,
-} from './cuttriss-data-sync-construct';
 
 export class CoreNumaInfra extends Construct {
   readonly userPoolId: string;
@@ -239,15 +234,6 @@ export class CoreNumaInfra extends Construct {
       region: props.region,
     });
     this.dataBucket.bucket.moveFromId('aws_s3_bucket.data-source-bucket_1F269801');
-
-    if (props.cuttrissDataSync) {
-      new CuttrissDataSyncConstruct(this, 'cuttriss-data-sync', {
-        clientName: props.clientName,
-        dataBucketName: this.dataBucket.bucket.bucket,
-        dataBucketArn: this.dataBucket.bucket.arn,
-        config: props.cuttrissDataSync,
-      });
-    }
 
     // Create company bucket
     const companyBucket = new NumaCorsEnabledBucket(this, 'company-data-bucket', {
@@ -1271,10 +1257,6 @@ const _coreNumaInfraPropsSchema = z
      */
     agents: z.boolean().optional().default(false),
     /**
-     * Optional configuration for the Cuttriss 12d Synergy sync Lambda.
-     */
-    cuttrissDataSync: cuttrissDataSyncConfigSchema.optional(),
-    /**
      * Additional origins to allow in the S3 bucket CORS policies.
      * Useful for whitelabel frontends that need to access the same S3 buckets.
      * Each origin should be a full URL with protocol (e.g., "https://worldbank.getnolia.io").
@@ -1300,5 +1282,4 @@ export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {
    */
   qBusinessProvider?: AwsProvider;
   knowledgeBase: KnowledgeBase;
-  cuttrissDataSync?: CuttrissDataSyncConfig;
 };
