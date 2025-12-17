@@ -1599,27 +1599,75 @@ def _list_kb_files(bucket_name: str, prefix: str) -> List[Dict[str, Any]]:
 async def list_kb_files(request: Request, kb_id: str) -> Response:
     """List files in a KB's S3 prefix and update document count."""
     try:
+        logger.info(
+            "list_kb_files called",
+            kb_id=kb_id,
+            client_name=CLIENT_NAME,
+        )
+
         headers = {k.lower(): v for k, v in request.headers.items()}
+
+        cf_header = headers.get("x-arcanum-cloudfront-secret")
+
         if CF_SHARED_SECRET:
-            if headers.get("x-arcanum-cloudfront-secret") != CF_SHARED_SECRET:
+            if cf_header != CF_SHARED_SECRET:
+                logger.warning(
+                    "CloudFront secret mismatch - returning 403 Forbidden",
+                    kb_id=kb_id,
+                )
                 return JSONResponse({"error": "Forbidden"}, status_code=403)
 
         auth = headers.get("authorization")
         if not auth:
+            logger.warning("Missing Authorization header", kb_id=kb_id)
             return JSONResponse(
                 {"error": "Missing Authorization header"}, status_code=401
             )
 
         user = _verify_jwt_token(auth)
         user_id = user.get("sub")
+        logger.info("JWT verified", user_id=user_id, kb_id=kb_id)
+
         if not isinstance(user_id, str) or not user_id:
+            logger.warning("Invalid user ID from JWT", kb_id=kb_id)
             return JSONResponse({"error": "Invalid user ID"}, status_code=401)
 
         # Initialize KB manager
         kb_manager = KnowledgeBaseManager()
 
+        # Fetch KB first to log its state before permission check
+        kb_for_debug = kb_manager.get_kb(kb_id)
+        logger.info(
+            "KB lookup for permission check",
+            kb_id=kb_id,
+            kb_exists=kb_for_debug is not None,
+            kb_viewers=kb_for_debug.get("viewers") if kb_for_debug else None,
+            kb_editors=kb_for_debug.get("editors") if kb_for_debug else None,
+            kb_status=kb_for_debug.get("status") if kb_for_debug else None,
+            user_id=user_id,
+            user_in_viewers=(
+                user_id in kb_for_debug.get("viewers", []) if kb_for_debug else False
+            ),
+            wildcard_in_viewers=(
+                "*" in kb_for_debug.get("viewers", []) if kb_for_debug else False
+            ),
+        )
+
         # Check permission (VIEWER or higher)
-        if not kb_manager.check_permission(kb_id, user_id, "VIEWER"):
+        has_permission = kb_manager.check_permission(kb_id, user_id, "VIEWER")
+        logger.info(
+            "Permission check result",
+            kb_id=kb_id,
+            user_id=user_id,
+            has_permission=has_permission,
+        )
+
+        if not has_permission:
+            logger.warning(
+                "Access denied - user lacks VIEWER permission",
+                kb_id=kb_id,
+                user_id=user_id,
+            )
             return JSONResponse({"error": "Access denied"}, status_code=403)
 
         # Get KB to find S3 prefix

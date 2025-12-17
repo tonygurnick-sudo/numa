@@ -153,14 +153,78 @@ class KnowledgeBaseManager:
         logger.info("Created KB", kb_id=kb_id, kb_name=name)
         return self._parse_kb_item(kb_item)
 
+    def _ensure_company_kb_exists(self) -> Optional[Dict[str, Any]]:
+        """
+        Ensure the default company KB exists, creating it if necessary.
+
+        This provides a resilient fallback for stacks deployed before the
+        seed-default-kb Lambda was added, or where the seeding failed.
+
+        Returns:
+            The company KB record if created/exists, None on error.
+        """
+        try:
+            # Check if company KB already exists
+            response = self.dynamodb.get_item(
+                TableName=self.table_name,
+                Key={"PK": {"S": self.tenant_pk}, "SK": {"S": "KB#company"}},
+            )
+            if response.get("Item"):
+                return self._parse_kb_item(response["Item"])
+
+            # Company KB doesn't exist - create it
+            logger.info(
+                "Company KB not found, creating default",
+                client_name=self.client_name,
+                table_name=self.table_name,
+            )
+
+            now = datetime.now(timezone.utc).isoformat()
+            kb_item: Dict[str, AttributeValueTypeDef] = {
+                "PK": {"S": self.tenant_pk},
+                "SK": {"S": "KB#company"},
+                "kb_id": {"S": "company"},
+                "kb_name": {"S": "Company Knowledge Base"},
+                "s3_prefix": {"S": "documents/company/"},
+                "is_default": {"BOOL": True},
+                "viewers": {"SS": ["*"]},  # All users can view
+                "editors": {"L": []},
+                "created_by": {"S": "system"},
+                "created_at": {"S": now},
+                "updated_at": {"S": now},
+                "status": {"S": "ACTIVE"},
+                "document_count": {"N": "0"},
+            }
+
+            self.dynamodb.put_item(TableName=self.table_name, Item=kb_item)
+            logger.info(
+                "Company KB created successfully",
+                client_name=self.client_name,
+            )
+
+            return self._parse_kb_item(kb_item)
+
+        except Exception as e:
+            logger.error(
+                "Error ensuring company KB exists",
+                client_name=self.client_name,
+                error=str(e),
+            )
+            return None
+
     def get_kb(self, kb_id: str) -> Optional[Dict[str, Any]]:
-        """Get KB by ID."""
+        """Get KB by ID. Auto-creates company KB if missing."""
         try:
             response = self.dynamodb.get_item(
                 TableName=self.table_name,
                 Key={"PK": {"S": self.tenant_pk}, "SK": {"S": f"KB#{kb_id}"}},
             )
             item = response.get("Item")
+
+            # If company KB doesn't exist, auto-create it
+            if not item and kb_id == "company":
+                return self._ensure_company_kb_exists()
+
             return self._parse_kb_item(item) if item else None
         except Exception as e:
             logger.error("Error getting KB", kb_id=kb_id, error=str(e))
