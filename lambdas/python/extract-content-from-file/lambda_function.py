@@ -862,6 +862,7 @@ def _handle_extract_chunk(payload: Dict[str, Any], _context) -> Dict[str, Any]:
             - end_page: Last page number (1-indexed)
             - temp_prefix: S3 prefix where page images are stored
             - input_bucket: S3 bucket containing temp images
+            - translate_to_english: (optional) If True, translate content to English
 
     Returns:
         {
@@ -878,12 +879,18 @@ def _handle_extract_chunk(payload: Dict[str, Any], _context) -> Dict[str, Any]:
     end_page = payload["end_page"]
     temp_prefix = payload["temp_prefix"]
     input_bucket = payload["input_bucket"]
+    # Translate to English if explicitly set OR if output_language is not 'english'
+    output_language = payload.get("output_language", "english")
+    translate_to_english = payload.get(
+        "translate_to_english", output_language != "english"
+    )
 
     logger.info(
         f"Extracting chunk {chunk_id}: pages {start_page}-{end_page}",
         chunk_id=chunk_id,
         start_page=start_page,
         end_page=end_page,
+        translate_to_english=translate_to_english,
     )
 
     # Build list of image URIs for this chunk's pages
@@ -897,7 +904,9 @@ def _handle_extract_chunk(payload: Dict[str, Any], _context) -> Dict[str, Any]:
     # Process this chunk's pages - returns DocumentPage objects with correct page numbers
     page_offset = start_page - 1
     pages = fm_vision_extraction.process_pages_concurrent(
-        image_uris, page_offset=page_offset
+        image_uris,
+        page_offset=page_offset,
+        translate_to_english=translate_to_english,
     )
 
     # Convert DocumentPage objects to dicts for JSON serialization
