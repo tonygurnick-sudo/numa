@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -29,7 +30,7 @@ const MarkdownDocument = ({ textContent, copied, handleCopy }) => {
 
       <div className="markdown-document-content">
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={[remarkGfm, remarkBreaks]}
           components={{
             h1: ({ children, ...props }) => (
               <h1 className="markdown-h1" {...props}>
@@ -216,7 +217,7 @@ const MarkdownContent = React.memo(({ content }: MarkdownContentProps) => {
   return (
     <MarkdownErrorBoundary>
       <div className="markdown-body">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
           {content}
         </ReactMarkdown>
       </div>
