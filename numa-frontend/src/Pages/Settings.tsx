@@ -430,7 +430,7 @@ export default function SettingsPage() {
                   </span>
                 }
               >
-                <UserManagement />
+                <UserManagement embedded />
               </Tab>
               {allowBrandingTab && (
                 <Tab

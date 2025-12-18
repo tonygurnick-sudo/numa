@@ -845,8 +845,9 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
           </div>
         </Alert>
       )}
+
       <div>
-        <div className="d-flex justify-content-between align-items-center mb-4">
+        <div className="d-flex justify-content-between align-items-center mb-4 pt-2">
           <div>
             <h5 className="mb-1 fw-semibold">Branding Controls</h5>
             <p className="text-muted mb-0 small">
