@@ -528,7 +528,7 @@ def run(
             kb_keys = s3_helpers.list_objects(prefix=kb_prefix, bucket=bucket)
             kb_count = 0
             for key in kb_keys:
-                if key.endswith("/"):
+                if key.endswith("/") or key.endswith(".metadata.json"):
                     continue
                 filename = key.split(kb_prefix)[-1]
                 if not filename:

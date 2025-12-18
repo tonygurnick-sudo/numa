@@ -679,10 +679,16 @@ export class Nolia extends BaseNumaApp {
             {
               Variable: '$.output_language',
               StringEquals: 'english',
-              Next: 'WriteSuccessStatus',
+              Next: 'ExtractEnglishResult',
             },
           ],
           Default: 'RunPhase5Translate',
+        },
+        // Extract just the Phase 4 result for English (translation step does this for non-English)
+        ExtractEnglishResult: {
+          Type: 'Pass',
+          InputPath: '$.phase4_result.Payload',
+          Next: 'WriteSuccessStatus',
         },
         // Phase 5: Report Translation (only runs for non-English output)
         RunPhase5Translate: this.addLambdaTask(

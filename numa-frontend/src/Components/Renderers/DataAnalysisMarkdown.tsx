@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { Spinner, Button, Dropdown, Accordion } from 'react-bootstrap';
 import * as Papa from 'papaparse';
@@ -861,7 +862,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
               {sections.map((section, sectionIndex) => {
                 if (section.type === 'markdown') {
                   return (
-                    <ReactMarkdown key={`md-${index}-${sectionIndex}`} remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown key={`md-${index}-${sectionIndex}`} remarkPlugins={[remarkGfm, remarkBreaks]}>
                       {section.content}
                     </ReactMarkdown>
                   );
