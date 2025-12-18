@@ -87,6 +87,17 @@ export class Nolia extends BaseNumaApp {
           order: 5,
         },
         {
+          id: 'output-language-selection',
+          title: 'Select Output Language',
+          type: DROPDOWN_TASK,
+          required: false,
+          params: {
+            options: ['english', 'bahasa-indonesia'],
+            default: 'english',
+          },
+          order: 6,
+        },
+        {
           id: 'call-step-function',
           title: 'Run Nolia Analysis',
           type: HTTP_REQUEST_TASK,
@@ -98,9 +109,10 @@ export class Nolia extends BaseNumaApp {
               procurement_kb: '@procurement-kb-selection',
               project_kb: '@project-kb-selection',
               assessment_type: '@assessment-type-selection',
+              output_language: '@output-language-selection',
             },
           },
-          order: 6,
+          order: 7,
         },
       ],
       typicalDurationMinutes: 5,
@@ -269,12 +281,12 @@ export class Nolia extends BaseNumaApp {
           ...this.writeProcessingStatus(),
           Next: 'ApplyDefaults', // Override to go through defaults before Initialize
         },
-        // Apply defaults for optional fields (project_kb, assessment_type) before Initialize
+        // Apply defaults for optional fields (project_kb, assessment_type, output_language) before Initialize
         ApplyDefaults: {
           Type: 'Pass',
           Parameters: {
             'merged.$':
-              'States.JsonMerge(States.StringToJson(\'{"project_kb":"","assessment_type":"evaluation-report"}\'), $$.Execution.Input, false)',
+              'States.JsonMerge(States.StringToJson(\'{"project_kb":"","assessment_type":"evaluation-report","output_language":"english"}\'), $$.Execution.Input, false)',
           },
           Next: 'Initialize',
         },
@@ -291,6 +303,7 @@ export class Nolia extends BaseNumaApp {
             'project_kb.$': '$.merged.project_kb',
             'user_timezone.$': '$.merged.user_timezone',
             'assessment_type.$': '$.merged.assessment_type',
+            'output_language.$': '$.merged.output_language',
           },
           Next: 'CheckFileType',
         },
@@ -320,6 +333,7 @@ export class Nolia extends BaseNumaApp {
             'project_kb.$': '$.project_kb',
             'user_timezone.$': '$.user_timezone',
             'assessment_type.$': '$.assessment_type',
+            'output_language.$': '$.output_language',
             extracted: {
               'output_key.$': '$.input_key',
             },
@@ -343,6 +357,8 @@ export class Nolia extends BaseNumaApp {
               'job_id.$': '$.job_id',
               'user_id.$': '$.user_id',
               app_id: this.appId,
+              // Language for extraction translation
+              'output_language.$': '$.output_language',
             },
           },
           ResultPath: '$.prepare_result',
@@ -352,6 +368,7 @@ export class Nolia extends BaseNumaApp {
             'temp_prefix.$': '$.Payload.temp_prefix',
             'input_bucket.$': '$.Payload.input_bucket',
             'chunks.$': '$.Payload.chunks',
+            'output_language.$': '$$.Execution.Input.output_language',
           },
           Next: 'ExtractChunksMap',
           Retry: [
@@ -375,6 +392,14 @@ export class Nolia extends BaseNumaApp {
           Type: 'Map',
           ItemsPath: '$.prepare_result.chunks',
           MaxConcurrency: 10,
+          ItemSelector: {
+            'chunk_id.$': '$$.Map.Item.Value.chunk_id',
+            'start_page.$': '$$.Map.Item.Value.start_page',
+            'end_page.$': '$$.Map.Item.Value.end_page',
+            'temp_prefix.$': '$$.Map.Item.Value.temp_prefix',
+            'input_bucket.$': '$$.Map.Item.Value.input_bucket',
+            'output_language.$': '$.output_language',
+          },
           ItemProcessor: {
             ProcessorConfig: {
               Mode: 'INLINE',
@@ -393,6 +418,7 @@ export class Nolia extends BaseNumaApp {
                     'end_page.$': '$.end_page',
                     'temp_prefix.$': '$.temp_prefix',
                     'input_bucket.$': '$.input_bucket',
+                    'output_language.$': '$.output_language',
                   },
                 },
                 ResultSelector: {
@@ -635,7 +661,40 @@ export class Nolia extends BaseNumaApp {
             'project_kb.$': '$.project_kb',
             'user_timezone.$': '$.user_timezone',
             'assessment_type.$': '$.assessment_type',
+            'output_language.$': '$.output_language',
             phase: 4,
+            resume_session: true,
+            stream_events: true,
+            use_dynamodb: true,
+          },
+          'CheckOutputLanguage',
+          {
+            ResultPath: '$.phase4_result',
+          },
+        ),
+        // Check if translation is needed (output_language != 'english')
+        CheckOutputLanguage: {
+          Type: 'Choice',
+          Choices: [
+            {
+              Variable: '$.output_language',
+              StringEquals: 'english',
+              Next: 'WriteSuccessStatus',
+            },
+          ],
+          Default: 'RunPhase5Translate',
+        },
+        // Phase 5: Report Translation (only runs for non-English output)
+        RunPhase5Translate: this.addLambdaTask(
+          runner.arn,
+          {
+            agent_type: 'nolia_translate',
+            app_id: this.appId,
+            'job_id.$': '$.job_id',
+            'user_id.$': '$.user_id',
+            'output_language.$': '$.output_language',
+            'assessment_type.$': '$.assessment_type',
+            phase: 5,
             resume_session: true,
             stream_events: true,
             use_dynamodb: true,

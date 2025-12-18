@@ -217,10 +217,14 @@ The `source_reference` column contains the actual policy document citation (e.g.
 ## Your Task
 Review the generated evaluation report and refine it in-place, focusing on:
 
-### 1. Rule-to-Policy Translation (CRITICAL)
-- Replace ANY internal rule identifiers (like "G-001", "P-003", "Rule 4.2.1") with the actual policy document citations from the `source_reference` column in the CSVs
-- The user does not know what our internal rules are - they need the actual policy reference
+### 1. Rule-to-Policy Translation (CRITICAL - DO NOT SKIP)
+**IMPORTANT:** Internal rule identifiers like "G-001", "P-003", "Rule 4.2.1" are internal to our system and MUST NOT appear in the final report. The user has no knowledge of these internal codes.
+
+- Search the ENTIRE report for any pattern like "G-XXX", "P-XXX", or "Rule X.X.X" where X is a number
+- Replace ALL internal rule identifiers with the actual policy document citations from the `source_reference` column in the CSVs
 - Example: Instead of "Rule G-001 requires...", write "ITB Section 28.1 of the Bidding Document requires..."
+- Example: Instead of "P-003 states...", write "BDS 19.2 specifies..."
+- If you cannot find a source_reference for a rule, use the rule's category and description to cite the appropriate World Bank Procurement Regulation section
 
 ### 2. Structure Verification
 - Compare against `output-template.md` for expected structure
@@ -307,9 +311,14 @@ The `source_reference` column contains the actual policy document citation.
 ## Your Task
 Review the generated ToR assessment report and refine it in-place, focusing on:
 
-### 1. Rule-to-Policy Translation (CRITICAL)
-- Replace ANY internal rule identifiers (like "G-001", "P-003") with the actual policy document citations from the `source_reference` column in the CSVs
-- The user does not know what our internal rules are - they need the actual policy reference
+### 1. Rule-to-Policy Translation (CRITICAL - DO NOT SKIP)
+**IMPORTANT:** Internal rule identifiers like "G-001", "P-003", "Rule 4.2.1" are internal to our system and MUST NOT appear in the final report. The user has no knowledge of these internal codes.
+
+- Search the ENTIRE report for any pattern like "G-XXX", "P-XXX", or "Rule X.X.X" where X is a number
+- Replace ALL internal rule identifiers with the actual policy document citations from the `source_reference` column in the CSVs
+- Example: Instead of "Rule G-001 requires...", write "ITB Section 28.1 of the Bidding Document requires..."
+- Example: Instead of "P-003 states...", write "BDS 19.2 specifies..."
+- If you cannot find a source_reference for a rule, use the rule's category and description to cite the appropriate World Bank Procurement Regulation section
 
 ### 2. Structure Verification
 - Verify all required sections are present in the correct order

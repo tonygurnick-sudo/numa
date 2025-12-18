@@ -18,6 +18,7 @@ Available agent types:
 - nolia_procurement: Phase 3 - Procurement-Specific Rules Compliance Check (evaluation-report)
 - nolia_project: Phase 3 - Project-Specific Rules Compliance Check (terms-of-reference)
 - nolia_report: Phase 4 - Final Report Generation
+- nolia_translate: Phase 5 - Report Translation (optional, for non-English output)
 
 To add a new agent type:
 1. Create a new directory with the agent name
@@ -45,6 +46,7 @@ AVAILABLE_AGENTS = [
     "nolia_procurement",  # Phase 3: Procurement-Specific Rules (evaluation-report)
     "nolia_project",  # Phase 3: Project-Specific Rules (terms-of-reference)
     "nolia_report",  # Phase 4: Final Report Generation
+    "nolia_translate",  # Phase 5: Report Translation (optional, non-English output)
 ]
 
 

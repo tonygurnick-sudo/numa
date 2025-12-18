@@ -113,6 +113,38 @@ VISION_EXTRACTION_PROMPT_SINGLE = (
     "Do not skip any content. Do not summarize. Faithfully reconstruct in Markdown."
 )
 
+# Translation prompt - extracts content AND translates to English
+VISION_EXTRACTION_PROMPT_TRANSLATE_TEMPLATE = (
+    "Extract all visible text from the provided document image, TRANSLATE IT TO ENGLISH, "
+    "and format as clean Markdown.\n\n"
+    "IMPORTANT: Regardless of the original document language (e.g., Bahasa Indonesia, French, Spanish), "
+    "ALL extracted text must be translated to English. Preserve the meaning and tone accurately.\n\n"
+    "Formatting requirements:\n"
+    "- Use # ## ### for headings matching the document hierarchy\n"
+    "- Format tables using Markdown syntax: | col1 | col2 | with |---| separator row\n"
+    "- Use **bold** and *italic* for emphasis as shown in the original\n"
+    "- Use bullet points (-) and numbered lists (1.) as appropriate\n"
+    "- Use > for blockquotes\n"
+    "- Use ``` for code blocks\n"
+    "- Describe images/diagrams/figures as: [Image: detailed description]\n\n"
+    "Do not skip any content. Do not summarize or paraphrase. "
+    "Faithfully reconstruct the full document in Markdown IN ENGLISH, preserving all text, structure, and visual elements."
+)
+
+# Translation prompt for single images
+VISION_EXTRACTION_PROMPT_TRANSLATE_SINGLE = (
+    "Extract all visible text from the provided image, TRANSLATE IT TO ENGLISH, "
+    "and format as clean Markdown.\n\n"
+    "IMPORTANT: Regardless of the original document language, ALL extracted text must be translated to English.\n\n"
+    "Formatting requirements:\n"
+    "- Use # ## ### for headings matching the document hierarchy\n"
+    "- Format tables using Markdown syntax: | col1 | col2 | with |---| separator row\n"
+    "- Use **bold** and *italic* for emphasis as shown in the original\n"
+    "- Use bullet points (-) and numbered lists (1.) as appropriate\n"
+    "- Describe images/diagrams/figures as: [Image: detailed description]\n\n"
+    "Do not skip any content. Do not summarize. Faithfully reconstruct in Markdown IN ENGLISH."
+)
+
 logger = structlog.get_logger(__name__)
 s3_client = prm_client("s3", config=Config(max_pool_connections=CONNECTION_POOL_SIZE))
 bedrock_client = prm_client(
@@ -201,6 +233,7 @@ def _process_image_batch(
     model_id: str,
     start_page: int | None = None,
     end_page: int | None = None,
+    translate_to_english: bool = False,
 ) -> str:
     """Process multiple images with foundation model in a single API call.
 
@@ -210,6 +243,7 @@ def _process_image_batch(
         model_id: Bedrock model ID to use
         start_page: Starting page number for this batch (1-indexed), None for single images
         end_page: Ending page number for this batch (1-indexed), None for single images
+        translate_to_english: If True, use translation prompts to translate content to English
 
     Returns:
         Extracted text in Markdown format with page markers
@@ -227,13 +261,21 @@ def _process_image_batch(
             f"Cannot process more than {max_images_per_call} images per API call"
         )
 
-    # Use page-aware prompt for batches, single prompt otherwise
+    # Select appropriate prompt based on translation flag and page context
     if start_page is not None and end_page is not None:
-        text_prompt = VISION_EXTRACTION_PROMPT_TEMPLATE.format(
-            start_page=start_page, end_page=end_page
-        )
+        if translate_to_english:
+            text_prompt = VISION_EXTRACTION_PROMPT_TRANSLATE_TEMPLATE.format(
+                start_page=start_page, end_page=end_page
+            )
+        else:
+            text_prompt = VISION_EXTRACTION_PROMPT_TEMPLATE.format(
+                start_page=start_page, end_page=end_page
+            )
     else:
-        text_prompt = VISION_EXTRACTION_PROMPT_SINGLE
+        if translate_to_english:
+            text_prompt = VISION_EXTRACTION_PROMPT_TRANSLATE_SINGLE
+        else:
+            text_prompt = VISION_EXTRACTION_PROMPT_SINGLE
 
     # Build content based on model type
     content: List[Dict[str, Any]] = []
@@ -358,7 +400,9 @@ def _process_pdf(
 
 @tracer.start_as_current_span("process_pages_concurrent")
 def process_pages_concurrent(
-    image_uris: List[str], page_offset: int = 0
+    image_uris: List[str],
+    page_offset: int = 0,
+    translate_to_english: bool = False,
 ) -> List[DocumentPage]:
     """Process PDF pages concurrently with adaptive batching and worker scaling.
 
@@ -367,6 +411,7 @@ def process_pages_concurrent(
         page_offset: Offset to add to page numbers (0-indexed). For chunk processing,
                      pass start_page - 1 so page numbers are calculated correctly.
                      E.g., for pages 101-200, pass page_offset=100.
+        translate_to_english: If True, translate extracted content to English.
 
     Returns:
         List of DocumentPage objects with page_number assigned from PDF position.
@@ -480,10 +525,16 @@ def process_pages_concurrent(
         model_id: str,
         start_page: int,
         end_page: int,
+        translate: bool = False,
     ):
         """Process image batch with retry logic"""
         return _process_image_batch(
-            contents, extensions, model_id, start_page=start_page, end_page=end_page
+            contents,
+            extensions,
+            model_id,
+            start_page=start_page,
+            end_page=end_page,
+            translate_to_english=translate,
         )
 
     @tracer.start_as_current_span("process_page_batch")
@@ -508,6 +559,7 @@ def process_pages_concurrent(
                     use_fallback_models=True,
                     start_page=page_number,
                     end_page=page_number,
+                    translate=translate_to_english,
                 )
             return (page_number, page_text)
 
