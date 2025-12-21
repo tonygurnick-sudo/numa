@@ -142,7 +142,7 @@ export const ChatSettingsPanel = ({
         </Form.Label>
 
         <div className="mb-3">
-          <div className="d-flex align-items-center gap-2">
+          <div className="settings-toggle-row">
             <Form.Check
               type="switch"
               id="settings-auto-tools"
@@ -150,40 +150,45 @@ export const ChatSettingsPanel = ({
               checked={autoToolsEnabled}
               onChange={(e) => handleAutoToolsToggle(e.target.checked)}
               disabled={isDisabled}
+              className="settings-toggle-switch"
             />
-            <div className="fw-semibold">All Tools</div>
-          </div>
-          <div className="text-muted small ms-5">When enabled, all tools are automatically available</div>
-
-          <div className="mt-3 ms-4">
-            <div className="d-flex align-items-center gap-2">
-              <Form.Check
-                type="switch"
-                id="settings-web-search"
-                label=""
-                checked={webSearchEnabled}
-                onChange={(e) => setWebSearchEnabled(e.target.checked)}
-                disabled={isDisabled || autoToolsEnabled}
-              />
-              <div className={autoToolsEnabled ? 'text-muted' : 'fw-semibold'}>Web Search</div>
+            <div className="settings-toggle-text">
+              <div className="settings-toggle-title">All Tools</div>
+              <div className="settings-toggle-subtitle">When enabled, all tools are automatically available</div>
             </div>
-            <div className="text-muted small ms-5">Search the web for current information</div>
+          </div>
+
+          <div className="settings-toggle-row settings-toggle-row--subtool">
+            <Form.Check
+              type="switch"
+              id="settings-web-search"
+              label=""
+              checked={webSearchEnabled}
+              onChange={(e) => setWebSearchEnabled(e.target.checked)}
+              disabled={isDisabled || autoToolsEnabled}
+              className="settings-toggle-switch"
+            />
+            <div className="settings-toggle-text">
+              <div className={`settings-toggle-title ${autoToolsEnabled ? 'is-disabled' : ''}`}>Web Search</div>
+              <div className="settings-toggle-subtitle">Search the web for current information</div>
+            </div>
           </div>
 
           {agentsFeatureEnabled && (
-            <div className="mt-3 ms-4">
-              <div className="d-flex align-items-center gap-2">
-                <Form.Check
-                  type="switch"
-                  id="settings-create-agent"
-                  label=""
-                  checked={createAgentEnabled}
-                  onChange={(e) => setCreateAgentEnabled(e.target.checked)}
-                  disabled={isDisabled || autoToolsEnabled}
-                />
-                <div className={autoToolsEnabled ? 'text-muted' : 'fw-semibold'}>Agent Creation</div>
+            <div className="settings-toggle-row settings-toggle-row--subtool">
+              <Form.Check
+                type="switch"
+                id="settings-create-agent"
+                label=""
+                checked={createAgentEnabled}
+                onChange={(e) => setCreateAgentEnabled(e.target.checked)}
+                disabled={isDisabled || autoToolsEnabled}
+                className="settings-toggle-switch"
+              />
+              <div className="settings-toggle-text">
+                <div className={`settings-toggle-title ${autoToolsEnabled ? 'is-disabled' : ''}`}>Agent Creation</div>
+                <div className="settings-toggle-subtitle">Allow creating new agents during chat</div>
               </div>
-              <div className="text-muted small ms-5">Allow creating new agents during chat</div>
             </div>
           )}
         </div>
