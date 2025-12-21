@@ -2,7 +2,6 @@ import { ArcanumStack, ArcanumStackProps } from '@arcanumai/cdktf-util';
 import { Construct } from 'constructs';
 import { PublicS3Bucket } from '../constructs/public-s3-bucket-construct';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
-import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { DynamodbResourcePolicy } from '@cdktf/provider-aws/lib/dynamodb-resource-policy';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
@@ -22,23 +21,6 @@ export class QAppsDeployerStack extends ArcanumStack {
       },
     ];
     super(scope, name, props);
-
-    // Configure AWS provider with PRM tags
-    new AwsProvider(this, 'default-provider', {
-      region: props.region ?? 'us-east-1',
-      defaultTags: [
-        {
-          tags: {
-            Arcanum: 'true',
-            CreatedBy: 'CDKTF',
-            Repository: process.env['CI_PROJECT_PATH'] ?? 'unknown',
-            ServiceName: 'numa-deployer',
-            StackName: name,
-            'aws-apn-id': 'pc:cl23v3vsno0k35czlg7e3ld9p',
-          },
-        },
-      ],
-    });
 
     new PublicS3Bucket(this, 'template-bucket', {
       bucket: props.templateBucketName,
@@ -198,10 +180,6 @@ export class QAppsDeployerStack extends ArcanumStack {
 }
 
 export interface QAppsDeployerStackProps extends ArcanumStackProps {
-  /**
-   * AWS region for deployment (defaults to us-east-1 when omitted)
-   */
-  region?: string;
   templateBucketName: string;
   appsBucketName: string;
   arcanumNumaAccount: string;

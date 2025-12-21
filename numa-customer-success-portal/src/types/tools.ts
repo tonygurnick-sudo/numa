@@ -105,6 +105,7 @@ export interface QuotaReportResult {
 
 // Usage Report specific interfaces
 export interface AppRunRecord {
+  clientName: string  // Added for multi-client support
   userId: string
   userEmail?: string
   appId: string
@@ -116,6 +117,7 @@ export interface AppRunRecord {
 }
 
 export interface ChatMessageRecord {
+  clientName: string  // Added for multi-client support
   userId: string
   userEmail?: string
   month: string
@@ -123,9 +125,18 @@ export interface ChatMessageRecord {
   messageType: string
   role: string
   timestamp: string
+  toolName?: string
+  toolType?: string
+  agentId?: string
+  agentTitle?: string
+  agentType?: string
+  agentVersion?: number
+  agentVisibility?: string
+  isAgentConversation?: boolean
 }
 
 export interface UsageSummary {
+  clientName: string  // Added for multi-client support
   userId: string
   userEmail?: string
   month: string
@@ -133,6 +144,89 @@ export interface UsageSummary {
   chatMessages: number
   appRunsByApp: Record<string, number>
   chatMessagesByType: Record<string, number>
+}
+
+export type UsageReportType =
+  | 'summary'
+  | 'app-runs'
+  | 'chat-messages'
+  | 'agents'
+  | 'agent-usage'
+  | 'integrations'
+  | 'integration-chat-usage'
+  | 'agent-integration-usage'
+  | 'knowledge-bases'
+
+export interface KnowledgeBaseRecord {
+  clientName: string
+  kbType: 'bedrock' | 'q-business' | 'unknown'
+  name: string
+  kbId?: string
+  bucket?: string
+  prefix?: string
+  fileCount: number
+  scope: 'company' | 'user'
+  createdBy?: string
+  isDefault?: boolean
+  isShared?: boolean
+  isPublic?: boolean
+  notes?: string
+}
+
+export interface AgentRecord {
+  clientName: string
+  agentId: string
+  agentName: string
+  visibility: string
+  agentType?: string
+  createdBy: string
+  createdByEmail?: string
+  createdAt?: string
+  scope: 'workspace' | 'user'
+}
+
+export interface AgentUsageRecord {
+  clientName: string
+  agentId: string
+  agentName: string
+  userId: string
+  userEmail?: string
+  month: string
+  conversationCount: number
+  visibility?: string
+  agentType?: string
+}
+
+export interface IntegrationRecord {
+  clientName: string
+  integration: string
+  status: string
+  denyTools?: string[]
+  updatedAt?: string
+  updatedBy?: string
+  raw?: Record<string, unknown>
+}
+
+export interface IntegrationChatUsageRecord {
+  clientName: string
+  integration: string
+  userId: string
+  userEmail?: string
+  conversationId: string
+  month: string
+  toolName?: string
+}
+
+export interface AgentIntegrationUsageRecord {
+  clientName: string
+  integration: string
+  userId: string
+  userEmail?: string
+  agentId?: string
+  agentName?: string
+  conversationId: string
+  month: string
+  toolName?: string
 }
 
 export interface DateRange {
@@ -143,23 +237,81 @@ export interface DateRange {
 }
 
 export interface UsageReportParameters {
-  clientName: string
+  clientNames: string[]  // Support multiple clients, empty = all clients
   timePeriod: string // 'current-year', 'previous-month', 'YYYY', 'YYYY-MM'
+  customStartDate?: string
+  customEndDate?: string
+  timeGranularity?: 'month' | 'day'
   outputFormat: 'csv' | 'json'
+  reports: UsageReportType[]
+}
+
+// All Users Report specific interfaces
+export interface UserRecord {
+  clientName: string
+  email: string
+  username: string
+  userType: 'admin' | 'user'
+  status: string
+  enabled: boolean
+  createdAt: string
+  lastLoginAt?: string
+}
+
+export interface AllUsersReportParameters {
+  clientNames: string[]  // Empty = all clients
+  userTypeFilter: 'all' | 'admin' | 'user'
+  outputFormat: 'csv' | 'json'
+  includeLastLogin?: boolean  // Expensive query - calls AdminListUserAuthEvents for each user
+}
+
+export interface AllUsersReportResult {
+  metadata: {
+    clientNames: string[]
+    exportDate: string
+    totalUsers: number
+    adminUsers: number
+    regularUsers: number
+    clientsProcessed: number
+    clientsFailed: number
+  }
+  users: UserRecord[]
+  failedClients?: { clientName: string; error: string }[]
+  message?: string
 }
 
 export interface UsageReportResult {
   metadata: {
-    clientName: string
+    clientNames: string[]  // Changed to array for multi-client
     period: string
     displayName: string
+    timeGranularity?: 'month' | 'day'
     exportDate: string
-    totalAppRuns: number
-    totalChatMessages: number
-    uniqueUsers: number
+    clientsProcessed: number
+    clientsFailed: number
+    selectedReports: UsageReportType[]
+    totalAppRuns?: number
+    totalChatMessages?: number
+    uniqueUsers?: number
+    totalAgents?: number
+    totalAgentUsage?: number
+    uniqueAgentUsers?: number
+    agentConversationCount?: number
+    totalIntegrations?: number
+    totalIntegrationChats?: number
+    totalAgentIntegrationRuns?: number
+    totalKnowledgeBases?: number
+    totalKnowledgeBaseFiles?: number
   }
-  appRuns: AppRunRecord[]
-  chatMessages: ChatMessageRecord[]
-  summary: UsageSummary[]
+  appRuns?: AppRunRecord[]
+  chatMessages?: ChatMessageRecord[]
+  summary?: UsageSummary[]
+  agents?: AgentRecord[]
+  agentUsage?: AgentUsageRecord[]
+  integrations?: IntegrationRecord[]
+  integrationChatUsage?: IntegrationChatUsageRecord[]
+  agentIntegrationUsage?: AgentIntegrationUsageRecord[]
+  knowledgeBases?: KnowledgeBaseRecord[]
+  failedClients?: { clientName: string; error: string }[]  // Track failures
   message?: string // Optional message for when no data is found
 }

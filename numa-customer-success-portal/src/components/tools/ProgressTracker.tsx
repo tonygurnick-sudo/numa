@@ -78,7 +78,8 @@ export function ProgressTracker({
     return `${minutes}m ${remainingSeconds}s`
   }
 
-  const progressPercentage = progress ? Math.round((progress.current / progress.total) * 100) : 0
+  const progressValue = progress ? (progress.current / progress.total) * 100 : 0
+  const progressPercentage = parseFloat(progressValue.toFixed(2)).toString()
 
   return (
     <div className="progress-tracker">
@@ -101,7 +102,7 @@ export function ProgressTracker({
         <div className="mb-3">
           <ProgressBar
             variant={getVariant()}
-            now={progressPercentage}
+            now={progressValue}
             label={`${progressPercentage}%`}
             className="mb-2"
             style={{ height: '8px' }}
@@ -109,7 +110,7 @@ export function ProgressTracker({
           <div className="d-flex justify-content-between align-items-center">
             <small className="text-muted">{progress.message}</small>
             <small className="text-muted">
-              {progress.current} / {progress.total}
+              {progress.current.toFixed(2)} / {progress.total}
             </small>
           </div>
           {progress.details && (

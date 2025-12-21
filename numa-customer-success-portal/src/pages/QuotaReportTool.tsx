@@ -146,12 +146,12 @@ export default function QuotaReportTool() {
       <div className="d-flex align-items-center mb-4">
         <Button
           variant="secondary"
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/tools')}
           className="me-3"
           disabled={isRunning}
         >
           <ArrowLeft className="me-1" />
-          Back to Dashboard
+          Back to Tools
         </Button>
         <div>
           <div className="d-flex align-items-center">

@@ -1,8 +1,11 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState, useRef, type ChangeEvent } from 'react'
 import { Card, Row, Col, Form, Button, Table, Alert, Badge, Spinner, Modal, Tabs, Tab, InputGroup, ButtonGroup, ToggleButton, ListGroup } from 'react-bootstrap'
 import { Link, useNavigate } from 'react-router-dom'
+import { Upload } from 'react-bootstrap-icons'
 import { clientService } from '@/services/clientService'
 import { ClientSelectGroup } from '@/components/ClientSelectGroup'
+import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector'
+import { parseClientNamesFromCSV } from '@/utils/csvUtils'
 import { ecrService } from '@/services/ecrService'
 import { useAuth } from '@/contexts/AuthContext'
 import { startDeployment, listDeploymentsByTimeRange, listDeploymentGroups, saveDeploymentGroup, deleteDeploymentGroup, startGroupDeployment, buildCloudwatchLogsUrl, getDeploymentById, buildStepFunctionsUrl, buildEcsTaskUrl, type DeploymentRecord, overrideDeploymentStatus, listDeploymentLocks, releaseDeploymentLock, type DeploymentLockRecord, stopDeployment, stopGroupDeployment, getGroupConcurrencyBounds, type ListByTimeRangeResult } from '@/services/deploymentService'
@@ -55,6 +58,8 @@ export default function Deployments() {
     description: '',
     maxConcurrency: undefined,
   })
+  const groupCsvInputRef = useRef<HTMLInputElement>(null)
+  const [groupCsvFeedback, setGroupCsvFeedback] = useState<string | null>(null)
   const sfnArn = getConfigValue('DEPLOYMENT_SFN_ARN')
   const groupSfnArn = getConfigValue('DEPLOYMENT_GROUP_SFN_ARN')
   const deploymentsTable = getConfigValue('DEPLOYMENTS_TABLE')
@@ -515,6 +520,7 @@ export default function Deployments() {
     setEditingGroup(null)
     setGroupForm({ groupName: '', clients: [], description: '', maxConcurrency: undefined })
     setGroupModalError(null)
+    setGroupCsvFeedback(null)
     setGroupModalOpen(true)
   }
 
@@ -530,6 +536,7 @@ export default function Deployments() {
       maxConcurrency: group.maxConcurrency,
     })
     setGroupModalError(null)
+    setGroupCsvFeedback(null)
     setGroupModalOpen(true)
   }
 
@@ -539,9 +546,41 @@ export default function Deployments() {
     setGroupModalError(null)
   }
 
-  const handleGroupClientsChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const selected = Array.from(event.target.selectedOptions).map(option => option.value)
-    setGroupForm(prev => ({ ...prev, clients: selected }))
+  const handleGroupCsvUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setGroupCsvFeedback(null)
+
+    try {
+      const text = await file.text()
+      const parsedNames = parseClientNamesFromCSV(text)
+
+      if (parsedNames.length === 0) {
+        setGroupCsvFeedback('No client names found in CSV. Ensure the file has a "Client Name" column.')
+        return
+      }
+
+      // Match against loaded clients
+      const validClientNames = clients.map(c => c.name)
+      const matchedNames = parsedNames.filter(name => validClientNames.includes(name))
+      const unmatchedCount = parsedNames.length - matchedNames.length
+
+      // Add to selection (union with existing)
+      const newSelection = [...new Set([...groupForm.clients, ...matchedNames])]
+      setGroupForm(prev => ({ ...prev, clients: newSelection }))
+
+      if (unmatchedCount > 0) {
+        setGroupCsvFeedback(`Added ${matchedNames.length} clients. ${unmatchedCount} names in CSV did not match any known client.`)
+      } else {
+        setGroupCsvFeedback(`Added ${matchedNames.length} clients from CSV.`)
+      }
+    } catch {
+      setGroupCsvFeedback('Failed to parse CSV file.')
+    }
+
+    // Reset file input
+    e.target.value = ''
   }
 
   const handleGroupFieldChange = (key: 'groupName' | 'description') => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -1393,21 +1432,43 @@ export default function Deployments() {
               {!editingGroup && <Form.Text>Group names must be unique.</Form.Text>}
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Clients</Form.Label>
-              <Form.Select
-                multiple
-                value={groupForm.clients}
-                onChange={handleGroupClientsChange}
-                size={Math.min(Math.max(4, clients.length || 4), 12)}
+              <div className="d-flex align-items-center gap-2 mb-2">
+                <Form.Label className="mb-0">Clients</Form.Label>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={() => groupCsvInputRef.current?.click()}
+                  disabled={groupModalBusy}
+                >
+                  <Upload className="me-1" /> Upload CSV
+                </Button>
+                <input
+                  type="file"
+                  ref={groupCsvInputRef}
+                  accept=".csv"
+                  style={{ display: 'none' }}
+                  onChange={handleGroupCsvUpload}
+                />
+              </div>
+              {groupCsvFeedback && (
+                <Alert variant="info" className="py-1 mb-2">
+                  {groupCsvFeedback}
+                </Alert>
+              )}
+              <GroupedClientSelector
+                clients={clients}
+                selectedClientNames={groupForm.clients}
+                onClientToggle={(name) => {
+                  setGroupForm(prev => ({
+                    ...prev,
+                    clients: prev.clients.includes(name)
+                      ? prev.clients.filter(c => c !== name)
+                      : [...prev.clients, name]
+                  }))
+                }}
+                onSelectClients={(names) => setGroupForm(prev => ({ ...prev, clients: names }))}
                 disabled={groupModalBusy}
-              >
-                {clients.map(client => (
-                  <option key={client.name} value={client.name}>
-                    {client.name}
-                  </option>
-                ))}
-              </Form.Select>
-              <Form.Text>Select one or more clients to include in this group.</Form.Text>
+              />
             </Form.Group>
             <Row className="gy-3">
               <Col md={6}>
