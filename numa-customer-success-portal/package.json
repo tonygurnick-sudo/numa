@@ -18,6 +18,7 @@
     "@aws-sdk/client-ecr": "^3.799.0",
     "@aws-sdk/client-ecs": "^3.799.0",
     "@aws-sdk/client-lambda": "^3.880.0",
+    "@aws-sdk/client-s3": "^3.799.0",
     "@aws-sdk/client-service-quotas": "^3.799.0",
     "@aws-sdk/client-sfn": "^3.799.0",
     "@aws-sdk/client-sts": "^3.692.0",

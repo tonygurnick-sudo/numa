@@ -14,24 +14,73 @@ import {
 import { ArrowLeft, Download, BarChart } from 'react-bootstrap-icons'
 import { Tabs, Tab } from 'react-bootstrap'
 import { ProgressTracker } from '@/components/tools/ProgressTracker'
+import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector'
+import { getSelectionDisplayText } from '@/components/tools/clientSelectionUtils'
 import { useToolExecution } from '@/hooks/useToolExecution'
 import { UsageReportService } from '@/services/usageReportService'
 import { FileExportService } from '@/utils/fileExport'
 import { DateUtils } from '@/utils/dateUtils'
 import { clientService } from '@/services/clientService'
-import type { ToolResult, ToolResultFile, UsageReportParameters } from '@/types/tools'
+import type { Client } from '@/types'
+import type {
+  AgentRecord,
+  AgentUsageRecord,
+  AppRunRecord,
+  ChatMessageRecord,
+  IntegrationRecord,
+  IntegrationChatUsageRecord,
+  AgentIntegrationUsageRecord,
+  KnowledgeBaseRecord,
+  ToolResult,
+  ToolResultFile,
+  UsageReportParameters,
+  UsageReportResult,
+  UsageReportType,
+  UsageSummary,
+} from '@/types/tools'
+
+const DEFAULT_REPORT_TYPES: UsageReportType[] = [
+  'summary',
+  'app-runs',
+  'chat-messages',
+  'agents',
+  'agent-usage',
+  'integrations',
+  'integration-chat-usage',
+  'agent-integration-usage',
+  'knowledge-bases',
+]
+
+const REPORT_OPTIONS: { value: UsageReportType; label: string; description: string }[] = [
+  { value: 'summary', label: 'User Usage Summary', description: 'App runs, chat, agents, integrations, and KBs per user across selected clients' },
+  { value: 'app-runs', label: 'App Runs', description: 'Raw application run records across selected clients' },
+  { value: 'chat-messages', label: 'Chat Messages', description: 'Chat message activity (including meta/tool events)' },
+  { value: 'agents', label: 'Agents Directory', description: 'All public and personal agents with creator details' },
+  { value: 'agent-usage', label: 'Agent Usage', description: 'Conversations per agent and user (meta events only)' },
+  { value: 'integrations', label: 'Integrations', description: 'Integration settings per client with statuses and deny tool lists' },
+  { value: 'integration-chat-usage', label: 'Chat With Integrations', description: 'Tool calls to integrations in chat conversations' },
+  { value: 'agent-integration-usage', label: 'Agents With Integrations', description: 'Agent conversations that invoked integration tools' },
+  { value: 'knowledge-bases', label: 'Knowledge Bases', description: 'Knowledge bases configured per client with file counts' },
+]
 
 export default function UsageReportTool() {
   const navigate = useNavigate()
   const [parameters, setParameters] = useState<UsageReportParameters>({
-    clientName: '',
+    clientNames: [],
     timePeriod: 'current-year',
-    outputFormat: 'csv',
+    customStartDate: '',
+    customEndDate: '',
+    timeGranularity: 'month',
+    outputFormat: 'json',
+    reports: DEFAULT_REPORT_TYPES,
   })
-  const [clients, setClients] = useState<Array<{ name: string }>>([])
+  const [clients, setClients] = useState<Client[]>([])
   const [loadingClients, setLoadingClients] = useState(false)
   const [resultFiles, setResultFiles] = useState<ToolResultFile[]>([])
   const [activeTab, setActiveTab] = useState<string>('summary')
+  // Separate state for month inputs to allow free editing
+  const [startMonthInput, setStartMonthInput] = useState('')
+  const [endMonthInput, setEndMonthInput] = useState('')
 
   const { execution, isRunning, execute, cancel, reset } = useToolExecution({
     onCompleted: (result) => {
@@ -49,6 +98,15 @@ export default function UsageReportTool() {
     loadClients()
   }, [])
 
+  useEffect(() => {
+    const reportsFromResult = execution?.result?.data?.metadata?.selectedReports || []
+    if (execution?.status === 'completed' && reportsFromResult.length > 0) {
+      if (!reportsFromResult.includes(activeTab as UsageReportType)) {
+        setActiveTab(reportsFromResult[0])
+      }
+    }
+  }, [execution, activeTab])
+
   const loadClients = async () => {
     setLoadingClients(true)
     try {
@@ -61,12 +119,67 @@ export default function UsageReportTool() {
     }
   }
 
+  const handleClientToggle = (clientName: string) => {
+    setParameters(prev => {
+      const newClientNames = prev.clientNames.includes(clientName)
+        ? prev.clientNames.filter(n => n !== clientName)
+        : [...prev.clientNames, clientName]
+      return { ...prev, clientNames: newClientNames }
+    })
+  }
+
+  const handleSelectClients = (clientNames: string[]) => {
+    setParameters(prev => ({ ...prev, clientNames }))
+  }
+
+  const handleReportToggle = (report: UsageReportType) => {
+    setParameters(prev => {
+      const nextReports = prev.reports.includes(report)
+        ? prev.reports.filter(r => r !== report)
+        : [...prev.reports, report]
+      return { ...prev, reports: nextReports }
+    })
+  }
+
+  const handleSelectAllReports = () => {
+    setParameters(prev => {
+      return { ...prev, reports: REPORT_OPTIONS.map(r => r.value) }
+    })
+  }
+
+  const handleClearReports = () => {
+    setParameters(prev => ({ ...prev, reports: [] }))
+  }
+
   const handleParameterChange = (field: keyof UsageReportParameters, value: string) => {
-    setParameters(prev => ({ ...prev, [field]: value }))
+    setParameters(prev => {
+      if (field === 'timePeriod' && value !== 'custom') {
+        return { ...prev, timePeriod: value, customStartDate: '', customEndDate: '' }
+      }
+      if (field === 'timeGranularity') {
+        const nextPeriod = value === 'day'
+          ? 'custom'
+          : (prev.timePeriod === 'custom' ? 'current-month' : prev.timePeriod)
+        return { ...prev, timeGranularity: value as 'month' | 'day', timePeriod: nextPeriod }
+      }
+      return { ...prev, [field]: value }
+    })
   }
 
   const handleExecute = async () => {
-    await execute('usage-report', parameters, async (params, onProgress, _signal) => {
+    if (parameters.timePeriod === 'custom' && !isCustomRangeValid) {
+      return
+    }
+    // If all clients are selected, pass empty array to indicate "all clients"
+    const clientNamesToUse = parameters.clientNames.length === clients.length
+      ? []
+      : parameters.clientNames
+    const paramsToUse = { ...parameters, clientNames: clientNamesToUse }
+    if (parameters.reports.length > 0) {
+      setActiveTab(parameters.reports[0])
+    }
+
+    await execute('usage-report', paramsToUse, async (params, onProgress, _signal) => {
       const { result, files } = await UsageReportService.generateReport(
         params as UsageReportParameters,
         onProgress
@@ -92,18 +205,637 @@ export default function UsageReportTool() {
     reset()
     setResultFiles([])
     setActiveTab('summary')
+    setStartMonthInput('')
+    setEndMonthInput('')
     setParameters({
-      clientName: '',
+      clientNames: [],
       timePeriod: 'current-year',
-      outputFormat: 'csv',
+      customStartDate: '',
+      customEndDate: '',
+      timeGranularity: 'month',
+      outputFormat: 'json',
+      reports: DEFAULT_REPORT_TYPES,
     })
   }
 
+  const isCustomRange = parameters.timePeriod === 'custom'
+  const isCustomRangeValid = !isCustomRange ||
+    (!!parameters.customStartDate && !!parameters.customEndDate && parameters.customStartDate <= parameters.customEndDate)
+
   const isFormValid = () => {
-    return parameters.clientName && parameters.timePeriod && parameters.outputFormat
+    // For monthly granularity, also check month input validation
+    const monthInputsValid = parameters.timeGranularity !== 'month' || !hasMonthValidationError
+    return parameters.clientNames.length > 0 &&
+      parameters.timePeriod &&
+      (!isCustomRange || isCustomRangeValid) &&
+      monthInputsValid &&
+      !monthValidationError &&
+      parameters.outputFormat &&
+      parameters.reports.length > 0
   }
 
   const timePeriodOptions = DateUtils.getTimePeriodOptions()
+
+  const currentMonthValue = () => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  }
+  const previousMonthValue = () => {
+    const now = new Date()
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`
+  }
+  const isValidMonth = (month: string) => /^\d{4}-\d{2}$/.test(month)
+  const monthToStartDate = (month: string) => `${month}-01`
+  const monthToEndDate = (month: string) => {
+    const [y, m] = month.split('-').map(Number)
+    const end = new Date(y, m, 0) // last day of month
+    return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+  }
+
+  // Get display values - use input state if set, otherwise derive from parameters
+  const startMonthValue = startMonthInput || (parameters.customStartDate
+    ? parameters.customStartDate.slice(0, 7)
+    : currentMonthValue())
+  const endMonthValue = endMonthInput || (parameters.customEndDate
+    ? parameters.customEndDate.slice(0, 7)
+    : startMonthValue)
+
+  // Validation for month inputs
+  const isStartMonthInputValid = !startMonthInput || isValidMonth(startMonthInput)
+  const isEndMonthInputValid = !endMonthInput || isValidMonth(endMonthInput)
+  const hasMonthValidationError = !isStartMonthInputValid || !isEndMonthInputValid
+
+  // Get validation error message for month inputs
+  const getMonthValidationError = (): string | null => {
+    if (startMonthInput && !isValidMonth(startMonthInput)) {
+      return 'Start month format is invalid. Use YYYY-MM format (e.g., 2025-01).'
+    }
+    if (endMonthInput && !isValidMonth(endMonthInput)) {
+      return 'End month format is invalid. Use YYYY-MM format (e.g., 2025-12).'
+    }
+    if (parameters.customStartDate && parameters.customEndDate &&
+        parameters.customStartDate > parameters.customEndDate) {
+      return 'Start month must be on or before end month.'
+    }
+    return null
+  }
+  const monthValidationError = getMonthValidationError()
+
+  // Handlers for month inputs - update input state immediately, sync to parameters only when valid
+  const handleStartMonthChange = (value: string) => {
+    setStartMonthInput(value)
+    if (isValidMonth(value)) {
+      setParameters(prev => ({
+        ...prev,
+        timePeriod: 'custom',
+        customStartDate: monthToStartDate(value),
+        // If end is not set or is before start, also update end
+        customEndDate: !prev.customEndDate || prev.customEndDate < monthToStartDate(value)
+          ? monthToEndDate(value)
+          : prev.customEndDate,
+      }))
+    }
+  }
+
+  const handleEndMonthChange = (value: string) => {
+    setEndMonthInput(value)
+    if (isValidMonth(value)) {
+      setParameters(prev => ({
+        ...prev,
+        timePeriod: 'custom',
+        customEndDate: monthToEndDate(value),
+      }))
+    }
+  }
+
+  const setMonthRange = (startMonth: string, endMonth: string) => {
+    setStartMonthInput(startMonth)
+    setEndMonthInput(endMonth)
+    if (isValidMonth(startMonth) && isValidMonth(endMonth)) {
+      setParameters(prev => ({
+        ...prev,
+        timePeriod: 'custom',
+        customStartDate: monthToStartDate(startMonth),
+        customEndDate: monthToEndDate(endMonth),
+      }))
+    }
+  }
+
+  const getTimePeriodLabel = () => {
+    if (isCustomRange && parameters.customStartDate && parameters.customEndDate) {
+      return `${parameters.customStartDate} to ${parameters.customEndDate}`
+    }
+    if (/^\d{4}-\d{2}$/.test(parameters.timePeriod)) {
+      return parameters.timePeriod
+    }
+    return timePeriodOptions.find(opt => opt.value === parameters.timePeriod)?.label || 'Select time period...'
+  }
+
+  const getClientSelectionText = () => {
+    return getSelectionDisplayText(clients, parameters.clientNames)
+  }
+
+  const formatReportList = (reports: UsageReportType[]) => {
+    if (reports.length === 0) return 'Select reports...'
+    if (reports.length === REPORT_OPTIONS.length) return `All Reports (${REPORT_OPTIONS.length})`
+    if (reports.length === 1) {
+      const selected = REPORT_OPTIONS.find(r => r.value === reports[0])
+      return selected?.label || reports[0]
+    }
+    return `${reports.length} reports selected`
+  }
+
+  const getReportSelectionText = () => {
+    return formatReportList(parameters.reports)
+  }
+
+  const buildSummaryCards = (metadata: UsageReportResult['metadata']) => {
+    const cards: { label: string; value: string | number; variant: string }[] = [
+      { label: 'Clients', value: metadata.clientsProcessed, variant: 'primary' },
+    ]
+
+    if (metadata.totalAppRuns !== undefined) {
+      cards.push({ label: 'App Runs', value: metadata.totalAppRuns.toLocaleString(), variant: 'primary' })
+    }
+    if (metadata.totalChatMessages !== undefined) {
+      cards.push({ label: 'Chat Messages', value: metadata.totalChatMessages.toLocaleString(), variant: 'success' })
+    }
+    if (metadata.uniqueUsers !== undefined) {
+      cards.push({ label: 'Unique Users', value: metadata.uniqueUsers.toLocaleString(), variant: 'info' })
+    }
+    if (metadata.totalAgents !== undefined) {
+      cards.push({ label: 'Agents', value: metadata.totalAgents.toLocaleString(), variant: 'secondary' })
+    }
+    if (metadata.agentConversationCount !== undefined) {
+      cards.push({ label: 'Agent Conversations', value: metadata.agentConversationCount.toLocaleString(), variant: 'warning' })
+    }
+    if (metadata.uniqueAgentUsers !== undefined) {
+      cards.push({ label: 'Agent Users', value: metadata.uniqueAgentUsers.toLocaleString(), variant: 'dark' })
+    }
+    if (metadata.totalIntegrations !== undefined) {
+      cards.push({ label: 'Integrations', value: metadata.totalIntegrations.toLocaleString(), variant: 'secondary' })
+    }
+    if (metadata.totalIntegrationChats !== undefined) {
+      cards.push({ label: 'Chat + Integrations', value: metadata.totalIntegrationChats.toLocaleString(), variant: 'info' })
+    }
+    if (metadata.totalAgentIntegrationRuns !== undefined) {
+      cards.push({ label: 'Agent + Integrations', value: metadata.totalAgentIntegrationRuns.toLocaleString(), variant: 'primary' })
+    }
+    if (metadata.totalKnowledgeBases !== undefined) {
+      cards.push({ label: 'Knowledge Bases', value: metadata.totalKnowledgeBases.toLocaleString(), variant: 'info' })
+    }
+    if (metadata.totalKnowledgeBaseFiles !== undefined) {
+      cards.push({ label: 'KB Files', value: metadata.totalKnowledgeBaseFiles.toLocaleString(), variant: 'secondary' })
+    }
+
+    cards.push({ label: 'Time Period', value: metadata.displayName, variant: 'warning' })
+
+    return cards
+  }
+
+  const selectedReportsFromResult = execution?.result?.data?.metadata?.selectedReports || []
+  const summaryRows = execution?.result?.data?.summary || []
+  const appRunRows = execution?.result?.data?.appRuns || []
+  const chatRows = execution?.result?.data?.chatMessages || []
+  const agentRows = execution?.result?.data?.agents || []
+  const agentUsageRows = execution?.result?.data?.agentUsage || []
+  const integrationRows = execution?.result?.data?.integrations || []
+  const integrationChatRows = execution?.result?.data?.integrationChatUsage || []
+  const agentIntegrationRows = execution?.result?.data?.agentIntegrationUsage || []
+  const knowledgeBaseRows = execution?.result?.data?.knowledgeBases || []
+
+  const renderSummaryTable = () => (
+    <div className="table-responsive" style={{ maxHeight: '60vh' }}>
+      <table className="table table-sm table-hover align-middle">
+        <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            <th>Client</th>
+            <th>User ID</th>
+            <th>User Email</th>
+            <th>Date</th>
+            <th>App Runs</th>
+            <th>Chat Messages</th>
+            <th>App Runs by App</th>
+            <th>Chat Messages by Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          {summaryRows.length === 0 && (
+            <tr>
+              <td colSpan={8} className="text-center text-muted">
+                No summary records found.
+              </td>
+            </tr>
+          )}
+          {summaryRows.map((row: UsageSummary, i: number) => (
+            <tr key={i}>
+              <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{row.userId}</td>
+              <td>{row.userEmail}</td>
+              <td>{row.month}</td>
+              <td>{row.appRuns}</td>
+              <td>{row.chatMessages}</td>
+              <td><code className="text-muted">{JSON.stringify(row.appRunsByApp)}</code></td>
+              <td><code className="text-muted">{JSON.stringify(row.chatMessagesByType)}</code></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const renderAppRunsTable = () => (
+    <div className="table-responsive" style={{ maxHeight: '60vh' }}>
+      <table className="table table-sm table-hover align-middle">
+        <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            <th>Client</th>
+            <th>User ID</th>
+            <th>User Email</th>
+            <th>App ID</th>
+            <th>App Name</th>
+            <th>Date</th>
+            <th>Job ID</th>
+            <th>Started At</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {appRunRows.length === 0 && (
+            <tr>
+              <td colSpan={9} className="text-center text-muted">
+                No app runs found for the selected period.
+              </td>
+            </tr>
+          )}
+          {appRunRows.map((row: AppRunRecord, i: number) => (
+            <tr key={i}>
+              <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{row.userId}</td>
+              <td>{row.userEmail}</td>
+              <td>{row.appId}</td>
+              <td>{row.appName}</td>
+              <td>{row.month}</td>
+              <td>{row.jobId}</td>
+              <td>{row.startedAt}</td>
+              <td>{row.status}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const renderChatTable = () => (
+    <div className="table-responsive" style={{ maxHeight: '60vh' }}>
+      <table className="table table-sm table-hover align-middle">
+        <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            <th>Client</th>
+            <th>User ID</th>
+            <th>User Email</th>
+            <th>Date</th>
+            <th>Conversation ID</th>
+            <th>Message Type</th>
+            <th>Role</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody>
+          {chatRows.length === 0 && (
+            <tr>
+              <td colSpan={8} className="text-center text-muted">
+                No chat messages found for the selected period.
+              </td>
+            </tr>
+          )}
+          {chatRows.map((row: ChatMessageRecord, i: number) => (
+            <tr key={i}>
+              <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{row.userId}</td>
+              <td>{row.userEmail}</td>
+              <td>{row.month}</td>
+              <td>{row.conversationId}</td>
+              <td>{row.messageType}</td>
+              <td>{row.role}</td>
+              <td>{row.timestamp}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const renderAgentsTable = () => (
+    <div className="table-responsive" style={{ maxHeight: '60vh' }}>
+      <table className="table table-sm table-hover align-middle">
+        <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            <th>Client</th>
+            <th>Agent ID</th>
+            <th>Agent Name</th>
+            <th>Visibility</th>
+            <th>Agent Type</th>
+            <th>Created By (ID)</th>
+            <th>Created By (Email)</th>
+            <th>Created At</th>
+            <th>Scope</th>
+          </tr>
+        </thead>
+        <tbody>
+          {agentRows.length === 0 && (
+            <tr>
+              <td colSpan={9} className="text-center text-muted">
+                No agents found for the selected clients.
+              </td>
+            </tr>
+          )}
+          {agentRows.map((row: AgentRecord, i: number) => (
+            <tr key={i}>
+              <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{row.agentId}</td>
+              <td>{row.agentName}</td>
+              <td>{row.visibility}</td>
+              <td>{row.agentType}</td>
+              <td>{row.createdBy}</td>
+              <td>{row.createdByEmail}</td>
+              <td>{row.createdAt}</td>
+              <td>{row.scope}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const renderAgentUsageTable = () => (
+    <div className="table-responsive" style={{ maxHeight: '60vh' }}>
+      <table className="table table-sm table-hover align-middle">
+        <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            <th>Client</th>
+            <th>Agent ID</th>
+            <th>Agent Name</th>
+            <th>User ID</th>
+            <th>User Email</th>
+            <th>Date</th>
+            <th>Conversations</th>
+            <th>Visibility</th>
+            <th>Agent Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          {agentUsageRows.length === 0 && (
+            <tr>
+              <td colSpan={9} className="text-center text-muted">
+                No agent usage found for the selected period.
+              </td>
+            </tr>
+          )}
+          {agentUsageRows.map((row: AgentUsageRecord, i: number) => (
+            <tr key={i}>
+              <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{row.agentId}</td>
+              <td>{row.agentName}</td>
+              <td>{row.userId}</td>
+              <td>{row.userEmail}</td>
+              <td>{row.month}</td>
+              <td>{row.conversationCount}</td>
+              <td>{row.visibility}</td>
+              <td>{row.agentType}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const renderIntegrationsTable = () => (
+    <div className="table-responsive" style={{ maxHeight: '60vh' }}>
+      <table className="table table-sm table-hover align-middle">
+        <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            <th>Client</th>
+            <th>Integration</th>
+            <th>Status</th>
+            <th>Deny Tools</th>
+            <th>Updated At</th>
+            <th>Updated By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {integrationRows.length === 0 && (
+            <tr>
+              <td colSpan={6} className="text-center text-muted">
+                No integrations found for the selected clients.
+              </td>
+            </tr>
+          )}
+          {integrationRows.map((row: IntegrationRecord, i: number) => (
+            <tr key={i}>
+              <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{row.integration}</td>
+              <td>{row.status}</td>
+              <td><code className="text-muted">{row.denyTools?.join('; ')}</code></td>
+              <td>{row.updatedAt || ''}</td>
+              <td>{row.updatedBy || ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const renderIntegrationChatUsageTable = () => (
+    <div className="table-responsive" style={{ maxHeight: '60vh' }}>
+      <table className="table table-sm table-hover align-middle">
+        <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            <th>Client</th>
+            <th>Integration</th>
+            <th>User ID</th>
+            <th>User Email</th>
+            <th>Conversation ID</th>
+            <th>Date</th>
+            <th>Tool Name</th>
+          </tr>
+        </thead>
+        <tbody>
+          {integrationChatRows.length === 0 && (
+            <tr>
+              <td colSpan={7} className="text-center text-muted">
+                No integration tool calls found in chat for the selected period.
+              </td>
+            </tr>
+          )}
+          {integrationChatRows.map((row: IntegrationChatUsageRecord, i: number) => (
+            <tr key={i}>
+              <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{row.integration}</td>
+              <td>{row.userId}</td>
+              <td>{row.userEmail}</td>
+              <td>{row.conversationId}</td>
+              <td>{row.month}</td>
+              <td>{row.toolName}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const renderAgentIntegrationUsageTable = () => (
+    <div className="table-responsive" style={{ maxHeight: '60vh' }}>
+      <table className="table table-sm table-hover align-middle">
+        <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            <th>Client</th>
+            <th>Integration</th>
+            <th>Agent ID</th>
+            <th>Agent Name</th>
+            <th>User ID</th>
+            <th>User Email</th>
+            <th>Conversation ID</th>
+            <th>Date</th>
+            <th>Tool Name</th>
+          </tr>
+        </thead>
+        <tbody>
+          {agentIntegrationRows.length === 0 && (
+            <tr>
+              <td colSpan={9} className="text-center text-muted">
+                No agent conversations invoking integrations for the selected period.
+              </td>
+            </tr>
+          )}
+          {agentIntegrationRows.map((row: AgentIntegrationUsageRecord, i: number) => (
+            <tr key={i}>
+              <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{row.integration}</td>
+              <td>{row.agentId}</td>
+              <td>{row.agentName}</td>
+              <td>{row.userId}</td>
+              <td>{row.userEmail}</td>
+              <td>{row.conversationId}</td>
+              <td>{row.month}</td>
+              <td>{row.toolName}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const renderKnowledgeBasesTable = () => (
+    <div className="table-responsive" style={{ maxHeight: '60vh' }}>
+      <table className="table table-sm table-hover align-middle">
+        <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            <th>Client</th>
+            <th>KB Type</th>
+            <th>Scope</th>
+            <th>Name</th>
+            <th>KB ID</th>
+            <th>Bucket</th>
+            <th>Prefix</th>
+            <th>File Count</th>
+            <th>Created By</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {knowledgeBaseRows.length === 0 && (
+            <tr>
+              <td colSpan={9} className="text-center text-muted">
+                No knowledge bases found for the selected clients.
+              </td>
+            </tr>
+          )}
+          {knowledgeBaseRows.map((row: KnowledgeBaseRecord, i: number) => (
+            <tr key={i}>
+              <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{row.kbType}</td>
+              <td>{row.scope}</td>
+              <td>{row.name}</td>
+              <td>{row.kbId || ''}</td>
+              <td>{row.bucket || ''}</td>
+              <td><code className="text-muted">{row.prefix || ''}</code></td>
+              <td>{row.fileCount}</td>
+              <td>{row.createdBy || ''}</td>
+              <td>{row.notes || ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const tabConfigs: { key: UsageReportType; title: string; content: JSX.Element }[] = []
+
+  if (selectedReportsFromResult.includes('summary')) {
+    tabConfigs.push({
+      key: 'summary',
+      title: `User/Month Summary (${summaryRows.length})`,
+      content: renderSummaryTable(),
+    })
+  }
+  if (selectedReportsFromResult.includes('app-runs')) {
+    tabConfigs.push({
+      key: 'app-runs',
+      title: `App Runs (${appRunRows.length})`,
+      content: renderAppRunsTable(),
+    })
+  }
+  if (selectedReportsFromResult.includes('chat-messages')) {
+    tabConfigs.push({
+      key: 'chat-messages',
+      title: `Chat Messages (${chatRows.length})`,
+      content: renderChatTable(),
+    })
+  }
+  if (selectedReportsFromResult.includes('agents')) {
+    tabConfigs.push({
+      key: 'agents',
+      title: `Agents (${agentRows.length})`,
+      content: renderAgentsTable(),
+    })
+  }
+  if (selectedReportsFromResult.includes('agent-usage')) {
+    tabConfigs.push({
+      key: 'agent-usage',
+      title: `Agent Usage (${agentUsageRows.length})`,
+      content: renderAgentUsageTable(),
+    })
+  }
+  if (selectedReportsFromResult.includes('integrations')) {
+    tabConfigs.push({
+      key: 'integrations',
+      title: `Integrations (${integrationRows.length})`,
+      content: renderIntegrationsTable(),
+    })
+  }
+  if (selectedReportsFromResult.includes('integration-chat-usage')) {
+    tabConfigs.push({
+      key: 'integration-chat-usage',
+      title: `Chat + Integrations (${integrationChatRows.length})`,
+      content: renderIntegrationChatUsageTable(),
+    })
+  }
+  if (selectedReportsFromResult.includes('agent-integration-usage')) {
+    tabConfigs.push({
+      key: 'agent-integration-usage',
+      title: `Agent + Integrations (${agentIntegrationRows.length})`,
+      content: renderAgentIntegrationUsageTable(),
+    })
+  }
+  if (selectedReportsFromResult.includes('knowledge-bases')) {
+    tabConfigs.push({
+      key: 'knowledge-bases',
+      title: `Knowledge Bases (${knowledgeBaseRows.length})`,
+      content: renderKnowledgeBasesTable(),
+    })
+  }
 
   return (
     <Container fluid>
@@ -111,12 +843,12 @@ export default function UsageReportTool() {
       <div className="d-flex align-items-center mb-4">
         <Button
           variant="secondary"
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/tools')}
           className="me-3"
           disabled={isRunning}
         >
           <ArrowLeft className="me-1" />
-          Back to Dashboard
+          Back to Tools
         </Button>
         <div>
           <div className="d-flex align-items-center">
@@ -124,7 +856,7 @@ export default function UsageReportTool() {
             <h2 className="mb-0">Usage Report Generator</h2>
           </div>
           <p className="text-muted mb-0">
-            Generate comprehensive usage analytics for clients including app runs, chat messages, and user activity summaries.
+            Generate comprehensive usage analytics for one or all clients including app runs, chat messages, and user activity summaries.
           </p>
         </div>
       </div>
@@ -139,24 +871,86 @@ export default function UsageReportTool() {
             <Card.Body>
               {!execution && (
                 <Form>
+                  {/* Client Selection */}
                   <Form.Group className="mb-3">
                     <Form.Label>
-                      Client <span className="text-danger">*</span>
+                      Clients <span className="text-danger">*</span>
                     </Form.Label>
+
+                    <GroupedClientSelector
+                      clients={clients}
+                      selectedClientNames={parameters.clientNames}
+                      onClientToggle={handleClientToggle}
+                      onSelectClients={handleSelectClients}
+                      disabled={isRunning}
+                      loading={loadingClients}
+                    />
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>
+                      Reports <span className="text-danger">*</span>
+                    </Form.Label>
+                    <div className="p-2 bg-light rounded border">
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <Form.Check
+                          type="checkbox"
+                          id="select-all-reports"
+                          label={<strong>Select All Reports ({REPORT_OPTIONS.length})</strong>}
+                          checked={parameters.reports.length === REPORT_OPTIONS.length}
+                          ref={(el: HTMLInputElement | null) => {
+                            if (el) el.indeterminate = parameters.reports.length > 0 && parameters.reports.length < REPORT_OPTIONS.length
+                          }}
+                          onChange={handleSelectAllReports}
+                          disabled={isRunning}
+                          className="mb-0"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          onClick={handleClearReports}
+                          disabled={isRunning || parameters.reports.length === 0}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                      <div className="border rounded p-2 bg-white">
+                        {REPORT_OPTIONS.map(option => (
+                          <Form.Check
+                            key={option.value}
+                            type="checkbox"
+                            id={`report-${option.value}`}
+                            label={
+                              <div>
+                                <div className="fw-semibold">{option.label}</div>
+                                <div className="text-muted small">{option.description}</div>
+                              </div>
+                            }
+                            checked={parameters.reports.includes(option.value)}
+                            onChange={() => handleReportToggle(option.value)}
+                            disabled={isRunning}
+                            className="mb-2"
+                          />
+                        ))}
+                      </div>
+                      <Form.Text className="text-muted">
+                        {getReportSelectionText()}
+                      </Form.Text>
+                    </div>
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Time Granularity</Form.Label>
                     <Form.Select
-                      value={parameters.clientName}
-                      onChange={(e) => handleParameterChange('clientName', e.target.value)}
-                      disabled={isRunning || loadingClients}
+                      value={parameters.timeGranularity || 'month'}
+                      onChange={(e) => handleParameterChange('timeGranularity', e.target.value)}
+                      disabled={isRunning}
                     >
-                      <option value="">Select a client...</option>
-                      {clients.map(client => (
-                        <option key={client.name} value={client.name}>
-                          {client.name}
-                        </option>
-                      ))}
+                      <option value="month">Monthly (default)</option>
+                      <option value="day">Daily</option>
                     </Form.Select>
                     <Form.Text className="text-muted">
-                      Select the client to generate the report for
+                      Controls how periods are grouped in the CSV/JSON output.
                     </Form.Text>
                   </Form.Group>
 
@@ -164,21 +958,87 @@ export default function UsageReportTool() {
                     <Form.Label>
                       Time Period <span className="text-danger">*</span>
                     </Form.Label>
-                    <Form.Select
-                      value={parameters.timePeriod}
-                      onChange={(e) => handleParameterChange('timePeriod', e.target.value)}
-                      disabled={isRunning}
-                    >
-                      <option value="">Select time period...</option>
-                      {timePeriodOptions.map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </Form.Select>
-                    <Form.Text className="text-muted">
-                      Select the time period for the usage report
+                    <Form.Text className="text-muted d-block mb-2">
+                      {parameters.timeGranularity === 'day'
+                        ? 'Select a start and end date (inclusive).'
+                        : 'Select a start and end month (inclusive).'}
                     </Form.Text>
+
+                    {parameters.timeGranularity === 'day' ? (
+                      <div className="d-flex flex-column gap-2">
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={parameters.customStartDate}
+                            onChange={(e) => setParameters(prev => ({ ...prev, customStartDate: e.target.value, timePeriod: 'custom' }))}
+                            disabled={isRunning}
+                          />
+                          <span className="align-self-center">to</span>
+                          <Form.Control
+                            type="date"
+                            value={parameters.customEndDate}
+                            onChange={(e) => setParameters(prev => ({ ...prev, customEndDate: e.target.value, timePeriod: 'custom' }))}
+                            disabled={isRunning}
+                          />
+                        </div>
+                        {!isCustomRangeValid && (
+                          <Form.Text className="text-danger">
+                            Start date must be set, end date must be set, and start must be on or before end.
+                          </Form.Text>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="d-flex flex-column gap-2">
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="month"
+                            value={startMonthValue}
+                            onChange={(e) => handleStartMonthChange(e.target.value)}
+                            disabled={isRunning}
+                            isInvalid={!isStartMonthInputValid}
+                          />
+                          <span className="align-self-center">to</span>
+                          <Form.Control
+                            type="month"
+                            value={endMonthValue}
+                            onChange={(e) => handleEndMonthChange(e.target.value)}
+                            disabled={isRunning}
+                            isInvalid={!isEndMonthInputValid}
+                          />
+                        </div>
+                        <div className="d-flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            onClick={() => setMonthRange(currentMonthValue(), currentMonthValue())}
+                            disabled={isRunning}
+                          >
+                            Current Month
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            onClick={() => setMonthRange(previousMonthValue(), previousMonthValue())}
+                            disabled={isRunning}
+                          >
+                            Previous Month
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            onClick={() => setMonthRange(previousMonthValue(), currentMonthValue())}
+                            disabled={isRunning}
+                          >
+                            Prev → Current
+                          </Button>
+                        </div>
+                        {monthValidationError && (
+                          <Form.Text className="text-danger">
+                            {monthValidationError}
+                          </Form.Text>
+                        )}
+                      </div>
+                    )}
                   </Form.Group>
 
                   <Form.Group className="mb-4">
@@ -216,12 +1076,16 @@ export default function UsageReportTool() {
                 <div>
                   <h6 className="mb-3">Current Parameters</h6>
                   <div className="mb-2">
-                    <strong>Client:</strong> {parameters.clientName}
+                    <strong>Clients:</strong> {getClientSelectionText()}
                   </div>
                   <div className="mb-2">
-                    <strong>Time Period:</strong> {
-                      timePeriodOptions.find(opt => opt.value === parameters.timePeriod)?.label
-                    }
+                    <strong>Reports:</strong> {getReportSelectionText()}
+                  </div>
+                  <div className="mb-2">
+                    <strong>Time Period:</strong> {getTimePeriodLabel()}
+                  </div>
+                  <div className="mb-2">
+                    <strong>Granularity:</strong> {parameters.timeGranularity === 'day' ? 'Daily' : 'Monthly'}
                   </div>
                   <div className="mb-4">
                     <strong>Output Format:</strong> {parameters.outputFormat.toUpperCase()}
@@ -274,7 +1138,7 @@ export default function UsageReportTool() {
                 <div className="text-center text-muted py-5">
                   <BarChart size={48} className="mb-3" />
                   <h5>Configure and Generate Usage Report</h5>
-                  <p>Select a client and time period to get started.</p>
+                  <p>Select clients and time period to get started.</p>
                 </div>
               )}
 
@@ -296,8 +1160,23 @@ export default function UsageReportTool() {
                   <Alert.Heading>No Content Found</Alert.Heading>
                   <p className="mb-0">
                     {execution.result?.data?.message ||
-                      'No usage data was found for the selected client and time period.'}
+                      'No usage data was found for the selected clients and time period.'}
                   </p>
+                </Alert>
+              )}
+
+              {/* Failed Clients Warning */}
+              {execution?.status === 'completed' && execution.result?.data?.failedClients?.length > 0 && (
+                <Alert variant="warning" className="mb-4">
+                  <Alert.Heading>Some Clients Failed</Alert.Heading>
+                  <p>The following clients could not be processed:</p>
+                  <ul className="mb-0">
+                    {execution.result.data.failedClients.map((f: { clientName: string; error: string }) => (
+                      <li key={f.clientName}>
+                        <strong>{f.clientName}:</strong> {f.error}
+                      </li>
+                    ))}
+                  </ul>
                 </Alert>
               )}
 
@@ -338,40 +1217,21 @@ export default function UsageReportTool() {
                   {execution?.result?.data && (
                     <div className="mt-4 p-3 bg-light rounded">
                       <h6 className="mb-2">Report Summary</h6>
-                      <Row>
-                        <Col sm={3}>
-                          <div className="text-center">
-                            <div className="h4 mb-0 text-primary">
-                              {execution.result.data.metadata.totalAppRuns.toLocaleString()}
+                      <Row className="g-3">
+                        {buildSummaryCards(execution.result.data.metadata).map((card, idx) => (
+                          <Col sm={3} md={2} key={`${card.label}-${idx}`}>
+                            <div className="text-center">
+                              <div className={`h4 mb-0 text-${card.variant}`}>
+                                {card.value}
+                              </div>
+                              <small className="text-muted">{card.label}</small>
                             </div>
-                            <small className="text-muted">App Runs</small>
-                          </div>
-                        </Col>
-                        <Col sm={3}>
-                          <div className="text-center">
-                            <div className="h4 mb-0 text-success">
-                              {execution.result.data.metadata.totalChatMessages.toLocaleString()}
-                            </div>
-                            <small className="text-muted">Chat Messages</small>
-                          </div>
-                        </Col>
-                        <Col sm={3}>
-                          <div className="text-center">
-                            <div className="h4 mb-0 text-info">
-                              {execution.result.data.metadata.uniqueUsers}
-                            </div>
-                            <small className="text-muted">Unique Users</small>
-                          </div>
-                        </Col>
-                        <Col sm={3}>
-                          <div className="text-center">
-                            <div className="h4 mb-0 text-warning">
-                              {execution.result.data.metadata.displayName}
-                            </div>
-                            <small className="text-muted">Time Period</small>
-                          </div>
-                        </Col>
+                          </Col>
+                        ))}
                       </Row>
+                      <div className="mt-2 text-muted small">
+                        Selected Reports: {formatReportList(execution.result.data.metadata.selectedReports)}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -388,110 +1248,30 @@ export default function UsageReportTool() {
             <div className="d-flex align-items-center justify-content-between">
               <h5 className="mb-0">Usage Report Tables</h5>
               <small className="text-muted">
-                {execution.result.data.metadata.displayName} • {parameters.clientName}
+                {execution.result.data.metadata.displayName} •{' '}
+                {execution.result.data.metadata.clientsProcessed} client(s)
               </small>
             </div>
           </Card.Header>
           <Card.Body>
-            <Tabs
-              activeKey={activeTab}
-              onSelect={(k) => k && setActiveTab(k)}
-              id="usage-report-tabs"
-              className="mb-3"
-            >
-              <Tab eventKey="summary" title={`Summary (${execution.result.data.summary.length})`}>
-                <div className="table-responsive" style={{ maxHeight: '60vh' }}>
-                  <table className="table table-sm table-hover align-middle">
-                    <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-                      <tr>
-                        <th>User ID</th>
-                        <th>User Email</th>
-                        <th>Month</th>
-                        <th>App Runs</th>
-                        <th>Chat Messages</th>
-                        <th>App Runs by App</th>
-                        <th>Chat Messages by Type</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {execution.result.data.summary.map((row: UsageSummary, i: number) => (
-                        <tr key={i}>
-                          <td>{row.userId}</td>
-                          <td>{row.userEmail}</td>
-                          <td>{row.month}</td>
-                          <td>{row.appRuns}</td>
-                          <td>{row.chatMessages}</td>
-                          <td><code className="text-muted">{JSON.stringify(row.appRunsByApp)}</code></td>
-                          <td><code className="text-muted">{JSON.stringify(row.chatMessagesByType)}</code></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Tab>
-              <Tab eventKey="appRuns" title={`App Runs (${execution.result.data.appRuns.length})`}>
-                <div className="table-responsive" style={{ maxHeight: '60vh' }}>
-                  <table className="table table-sm table-hover align-middle">
-                    <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-                      <tr>
-                        <th>User ID</th>
-                        <th>User Email</th>
-                        <th>App ID</th>
-                        <th>App Name</th>
-                        <th>Month</th>
-                        <th>Job ID</th>
-                        <th>Started At</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {execution.result.data.appRuns.map((row: AppRunRecord, i: number) => (
-                        <tr key={i}>
-                          <td>{row.userId}</td>
-                          <td>{row.userEmail}</td>
-                          <td>{row.appId}</td>
-                          <td>{row.appName}</td>
-                          <td>{row.month}</td>
-                          <td>{row.jobId}</td>
-                          <td>{row.startedAt}</td>
-                          <td>{row.status}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Tab>
-              <Tab eventKey="chat" title={`Chat Messages (${execution.result.data.chatMessages.length})`}>
-                <div className="table-responsive" style={{ maxHeight: '60vh' }}>
-                  <table className="table table-sm table-hover align-middle">
-                    <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-                      <tr>
-                        <th>User ID</th>
-                        <th>User Email</th>
-                        <th>Month</th>
-                        <th>Conversation ID</th>
-                        <th>Message Type</th>
-                        <th>Role</th>
-                        <th>Timestamp</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {execution.result.data.chatMessages.map((row: ChatMessageRecord, i: number) => (
-                        <tr key={i}>
-                          <td>{row.userId}</td>
-                          <td>{row.userEmail}</td>
-                          <td>{row.month}</td>
-                          <td>{row.conversationId}</td>
-                          <td>{row.messageType}</td>
-                          <td>{row.role}</td>
-                          <td>{row.timestamp}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Tab>
-            </Tabs>
+            {tabConfigs.length === 0 ? (
+              <div className="text-center text-muted py-4">
+                No report tabs available for the selection.
+              </div>
+            ) : (
+              <Tabs
+                activeKey={tabConfigs.find(tab => tab.key === activeTab)?.key || tabConfigs[0].key}
+                onSelect={(k) => k && setActiveTab(k)}
+                id="usage-report-tabs"
+                className="mb-3"
+              >
+                {tabConfigs.map(tab => (
+                  <Tab eventKey={tab.key} title={tab.title} key={tab.key}>
+                    {tab.content}
+                  </Tab>
+                ))}
+              </Tabs>
+            )}
           </Card.Body>
         </Card>
       )}

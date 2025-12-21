@@ -1,6 +1,6 @@
 import { getAllClientConfigs, listClients, putClientConfig, getClientConfig } from '@arcanumai/client-config'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocumentClient, DeleteCommand } from '@aws-sdk/lib-dynamodb'
+import { DynamoDBDocumentClient, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { fromCognitoIdentityPool } from '@aws-sdk/credential-providers'
 import { Client, ClientConfig } from '@/types'
 import { getConfigValue } from './configService'
@@ -106,6 +106,12 @@ export class ClientService {
   }
 
   async updateClientConfig(name: string, configUpdates: Partial<ClientConfig>): Promise<void> {
+    // Validate client name format
+    const nameError = validateClientName(name)
+    if (nameError) {
+      throw new Error(`Invalid client name: ${nameError}`)
+    }
+
     let currentConfig: ClientConfig | null = null
 
     try {
@@ -117,11 +123,62 @@ export class ClientService {
         throw new Error(`Client ${name} not found`)
       }
 
-      // Merge updates
-      const updatedConfig = { ...currentConfig, ...configUpdates }
+      const updateKeys = Object.keys(configUpdates) as (keyof ClientConfig)[]
+      if (updateKeys.length === 0) return
 
-      // Update in DynamoDB
-      await putClientConfig(name, updatedConfig, undefined, credentials)
+      // Update only the specified fields in DynamoDB to avoid clobbering unrelated config keys.
+      // If this fails (e.g., due to permissions), fall back to full put (previous behavior).
+      let updatedConfig: ClientConfig = { ...currentConfig, ...configUpdates }
+      updateKeys.forEach(key => {
+        if (configUpdates[key] === undefined) delete (updatedConfig as any)[key]
+      })
+      try {
+        const region = getConfigValue('AWS_REGION') || 'us-east-1'
+        const ddb = new DynamoDBClient({ region, credentials })
+        const doc = DynamoDBDocumentClient.from(ddb)
+
+        const expressionAttributeNames: Record<string, string> = {
+          '#config': 'config',
+        }
+        const expressionAttributeValues: Record<string, unknown> = {}
+        const setExpressions: string[] = []
+        const removeExpressions: string[] = []
+
+        updateKeys.forEach((key, index) => {
+          const nameKey = `#k${index}`
+          expressionAttributeNames[nameKey] = String(key)
+
+          if (configUpdates[key] === undefined) {
+            removeExpressions.push(`#config.${nameKey}`)
+            return
+          }
+
+          const valueKey = `:v${index}`
+          expressionAttributeValues[valueKey] = configUpdates[key]
+          setExpressions.push(`#config.${nameKey} = ${valueKey}`)
+        })
+
+        if (setExpressions.length === 0 && removeExpressions.length === 0) return
+
+        const updateExpressionParts: string[] = []
+        if (setExpressions.length > 0) updateExpressionParts.push(`SET ${setExpressions.join(', ')}`)
+        if (removeExpressions.length > 0) updateExpressionParts.push(`REMOVE ${removeExpressions.join(', ')}`)
+
+        const updateResponse = await doc.send(new UpdateCommand({
+          TableName: 'numa-client-config',
+          Key: { clientName: name },
+          UpdateExpression: updateExpressionParts.join(' '),
+          ExpressionAttributeNames: expressionAttributeNames,
+          ...(setExpressions.length > 0 ? { ExpressionAttributeValues: expressionAttributeValues } : {}),
+          ConditionExpression: 'attribute_exists(clientName)',
+          ReturnValues: 'ALL_NEW',
+        }))
+
+        const afterConfig = (updateResponse.Attributes as any)?.config as ClientConfig | undefined
+        if (afterConfig) updatedConfig = afterConfig
+      } catch {
+        await putClientConfig(name, updatedConfig, undefined, credentials)
+      }
 
       // Clear cache to force refresh
       this.clearCache()
