@@ -135,7 +135,7 @@ describe('S3UploadModule Component', () => {
     await waitForConfigReady();
 
     const fileInput = screen.getByTestId('file-upload-input') as HTMLInputElement;
-    const invalidFile = new File(['test content'], 'test.exe', { type: 'application/x-msdownload' });
+    const invalidFile = new File(['test content'], 'test.pdf', { type: 'application/x-msdownload' });
 
     fireEvent.change(fileInput, { target: { files: [invalidFile] } });
 

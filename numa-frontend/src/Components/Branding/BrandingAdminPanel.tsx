@@ -101,7 +101,7 @@ const ASSET_CONSTRAINTS: Record<AssetType, AssetConstraint> = {
     label: 'Navigation Logo',
     accept: '.svg,.png,.jpg,.jpeg,.webp',
     maxSizeKb: 1500,
-    description: 'SVG, PNG, JPG, or WebP up to 800 KB. Displayed at max-height 48px with auto width.',
+    description: 'SVG, PNG, JPG, or WebP up to 1.5 MB. Displayed at max-height 48px with auto width.',
   },
   logoLoginRight: {
     label: 'Login Panel Image',
@@ -113,7 +113,7 @@ const ASSET_CONSTRAINTS: Record<AssetType, AssetConstraint> = {
     label: 'Favicon',
     accept: '.ico,.png',
     maxSizeKb: 500,
-    description: 'ICO or PNG up to 150 KB. Provide multi-size favicon if available.',
+    description: 'ICO or PNG up to 500 KB. Provide multi-size favicon if available.',
   },
 };
 

@@ -1151,11 +1151,11 @@ export const PolicyReviewerDetail = () => {
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     style={{ display: 'none' }}
-                    accept=".pdf,.doc,.docx,.txt"
+                    accept=".pdf,.docx,.txt"
                   />
                   <UploadIcon size={32} className="mb-3 text-primary" />
                   <p className="mb-1">{selectedFile ? selectedFile.name : 'Drag and drop or click to select a file'}</p>
-                  <small className="text-muted">Supported formats: PDF, Word, Text (Max 10 MB)</small>
+                  <small className="text-muted">Supported formats: PDF, DOCX, TXT (Max 10 MB)</small>
                 </div>
               </Form.Group>
             )}
