@@ -83,6 +83,56 @@ const noop: (..._args: unknown[]) => void = () => {};
 const safeGet = (obj: Record<string, unknown> | null, key: string): string =>
   obj && typeof obj[key] === 'string' ? (obj[key] as string) : '';
 
+// Supported file extensions for extract-content-from-file lambda
+const SUPPORTED_EXTENSIONS = [
+  // Text/Code
+  '.bash',
+  '.cfg',
+  '.conf',
+  '.css',
+  '.csv',
+  '.html',
+  '.ini',
+  '.js',
+  '.json',
+  '.less',
+  '.log',
+  '.markdown',
+  '.md',
+  '.py',
+  '.scss',
+  '.sh',
+  '.sql',
+  '.tex',
+  '.ts',
+  '.txt',
+  '.xml',
+  '.yaml',
+  '.yml',
+  // Documents
+  '.docx',
+  '.xlsx',
+  '.pdf',
+  // Images
+  '.png',
+  '.jpg',
+  '.jpeg',
+  // Audio/Video
+  '.mp3',
+  '.mp4',
+  '.wav',
+  '.flac',
+  '.ogg',
+  '.amr',
+  '.webm',
+  '.m4a',
+];
+
+const getFileExtension = (fileName: string): string => {
+  const lastDot = fileName.lastIndexOf('.');
+  return lastDot >= 0 ? fileName.substring(lastDot).toLowerCase() : '';
+};
+
 /** Convert assorted inputs to a StandardizedFile */
 const standardizeFileFormat = (file: unknown): StandardizedFile | null => {
   if (!file) return null;
@@ -295,6 +345,16 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
       : null;
 
   const validateFile = (file: File) => {
+    // Check file extension against supported formats
+    const ext = getFileExtension(file.name);
+    if (!ext || !SUPPORTED_EXTENSIONS.includes(ext)) {
+      return {
+        validFile: null as File | null,
+        error: `${file.name}: Unsupported file format. Please use PDF, DOCX, XLSX, TXT, or other supported formats.`,
+      };
+    }
+
+    // Task-specific type check (if specified)
     if (acceptedFileTypes && acceptedFileTypes.length > 0) {
       if (!acceptedFileTypes.includes(file.type)) {
         return {

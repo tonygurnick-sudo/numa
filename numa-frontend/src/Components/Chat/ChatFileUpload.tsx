@@ -306,7 +306,6 @@ export const ChatFileUpload = ({
                 // Images
                 'image/jpeg',
                 'image/png',
-                'image/tiff',
                 // Audio/Video
                 'audio/mpeg',
                 'video/mp4',
@@ -376,7 +375,7 @@ export const ChatFileUpload = ({
             <li>PDF (pdf)</li>
             <li>Documents (docx, txt)</li>
             <li>Spreadsheets (csv, xlsx)</li>
-            <li>Images (jpg, jpeg, png, tiff)</li>
+            <li>Images (jpg, jpeg, png)</li>
             <li>Audio/Video (mp3, mp4, wav, flac, ogg, amr, webm, m4a)</li>
             <li>Markdown (md)</li>
             <li>Other (json, xml, html, py, js, ts)</li>
