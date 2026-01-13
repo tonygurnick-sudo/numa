@@ -278,18 +278,11 @@ $border-radius-pill: 1rem;
       display: flex;
       flex-direction: column;
       max-height: calc(100dvh - 180px);
-      // Hide scrollbars
-      scrollbar-width: none; // Firefox
-      -ms-overflow-style: none; // IE
 
       @include mobile{
         max-height: calc(100dvh - 90px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
         padding: 1.2rem 0.5rem 0 0.5rem;
         min-height: 0;
-      }
-
-      &::-webkit-scrollbar {
-        display: none; // Chrome, Safari, Edge
       }
 
       .message {
