@@ -165,7 +165,7 @@ Examples:
     parser.add_argument(
         "--tools",
         nargs="*",
-        choices=["web_search", "query_knowledge_base"],
+        choices=["web_search", "query_knowledge_base", "data_analysis"],
         default=[],
         help="Tools to enable for the agent (default: none)",
     )

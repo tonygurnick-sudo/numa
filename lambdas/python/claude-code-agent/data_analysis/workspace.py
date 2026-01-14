@@ -131,7 +131,8 @@ def hydrate_inputs(
         key = item.get("s3_key") or item.get("key")
         if not key:
             continue
-        data = read(key, bucket=bucket)
+        source_bucket = item.get("s3_bucket") or item.get("bucket") or bucket
+        data = read(key, bucket=source_bucket)
         name = os.path.basename(key)
         dest = inputs_dir / name
         dest.write_bytes(data)

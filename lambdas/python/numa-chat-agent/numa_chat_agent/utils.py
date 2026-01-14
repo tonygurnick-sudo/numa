@@ -202,6 +202,32 @@ def load_file_content_from_ref(file_ref: Dict[str, Any]) -> str:
         file_name = file_ref.get("fileName", "unknown")
         file_type = file_ref.get("fileType", "unknown")
 
+        def _is_data_analysis_file(name: str, mime_type: str) -> bool:
+            name_lower = (name or "").lower()
+            type_lower = (mime_type or "").lower()
+            if name_lower.endswith((".csv", ".xlsx", ".xls", ".json")):
+                return True
+            if type_lower in {
+                "text/csv",
+                "application/csv",
+                "application/json",
+                "application/vnd.ms-excel",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            }:
+                return True
+            return False
+
+        if _is_data_analysis_file(file_name, file_type):
+            logger.info(
+                "Skipping data file content load for chat context",
+                file_name=file_name,
+                file_type=file_type,
+            )
+            return (
+                "Data file detected. Content omitted from chat context to avoid size limits. "
+                "Ask me to run data analysis on this file if you want insights."
+            )
+
         if not s3_bucket or not s3_key:
             error_msg = f"Missing S3 reference data for file {file_name}"
             logger.error(error_msg, file_ref=file_ref)

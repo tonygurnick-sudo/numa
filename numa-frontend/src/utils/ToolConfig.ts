@@ -2,6 +2,7 @@ import type React from 'react';
 import { WebSearchRenderer } from '../toolRenderers/WebSearchRenderer';
 import { KnowledgeBaseRenderer } from '../toolRenderers/KnowledgeBaseRenderer';
 import { FallbackRenderer } from '../toolRenderers/FallbackRenderer';
+import { DataAnalysisRenderer } from '../toolRenderers/DataAnalysisRenderer';
 import { AgentCreationRenderer } from '../toolRenderers/AgentCreationRenderer';
 import { IntegrationsRenderer } from '../toolRenderers/IntegrationsRenderer';
 import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon } from '../config/integrationsConfig';
@@ -26,6 +27,10 @@ export const TOOL_CONFIG: Record<string, ToolDescriptor> = {
   create_agent_tool: {
     label: 'Agent Creation',
     renderer: AgentCreationRenderer,
+  },
+  data_analysis: {
+    label: 'Data Analysis',
+    renderer: DataAnalysisRenderer,
   },
   integrations: {
     label: 'Integration',
@@ -73,6 +78,7 @@ export function resolveToolVisual(toolName: string | null | undefined): ToolVisu
   if (name === 'web_search') return { kind: 'icon', className: 'bi bi-search' };
   if (name === 'query_knowledge_base') return { kind: 'icon', className: 'bi bi-folder2-open' };
   if (name === 'create_agent_tool') return { kind: 'icon', className: 'bi bi-robot' };
+  if (name === 'data_analysis') return { kind: 'icon', className: 'bi bi-bar-chart' };
 
   // Integrations: prefer branded image; fallback to bootstrap icon class from config
   if (name.endsWith('_integration')) {
@@ -118,6 +124,25 @@ export function getToolActionSteps(toolName: string | null | undefined, inputPay
       /* ignore */
     }
     return ['Running query...'];
+  }
+  if (name === 'data_analysis') {
+    const steps: string[] = ['Making a tool call to Data Analysis...'];
+    try {
+      if (inputPayload && typeof inputPayload === 'object') {
+        const obj = inputPayload as Record<string, unknown>;
+        const names = Array.isArray(obj.file_names) ? obj.file_names : undefined;
+        if (Array.isArray(names) && names.length > 0) {
+          steps.push(`Analyzing data file(s): ${names.join(', ')}...`);
+        } else {
+          steps.push('Running data analysis...');
+        }
+      } else {
+        steps.push('Running data analysis...');
+      }
+    } catch {
+      steps.push('Running data analysis...');
+    }
+    return steps;
   }
 
   // Integrations: the `input` typically contains `tool: <action-name>`

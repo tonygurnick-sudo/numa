@@ -17,6 +17,7 @@ import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
 import { ResultActions } from '../Components/ResultActions';
 import ResizableSplitView from '../Components/ResizableSplitView';
 import { generateSystemPrompt, getEnabledTools } from '../utils/chatSystemPromptUtils';
+import { manifestService } from '../Services/manifestService';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import {
   getModelId,
@@ -51,8 +52,15 @@ type ConversationChatConfig = {
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  dataAnalysisEnabled?: boolean;
   enabledKBIds?: string[];
   enabledConnectionIds?: string[];
+};
+
+type DataAnalysisFile = {
+  fileName: string;
+  fileType?: string;
+  s3Key?: string;
 };
 
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
@@ -73,6 +81,8 @@ const NumaChatAgents = () => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [createAgentEnabled, setCreateAgentEnabled] = useState(false);
+  const [dataAnalysisEnabled, setDataAnalysisEnabled] = useState(false);
+  const [dataAnalysisAvailable, setDataAnalysisAvailable] = useState(true);
   const [availableConnections, setAvailableConnections] = useState<
     Array<{ id: string; name: string; isConnected: boolean; mcpServerUrl?: string }>
   >([]);
@@ -103,6 +113,7 @@ const NumaChatAgents = () => {
   const [pendingConversationChatConfig, setPendingConversationChatConfig] = useState<ConversationChatConfig | null>(
     null,
   );
+  const [dataAnalysisBannerFiles, setDataAnalysisBannerFiles] = useState<DataAnalysisFile[] | null>(null);
 
   // Refs
   const messageEndRef = useRef(null);
@@ -114,6 +125,8 @@ const NumaChatAgents = () => {
   const autoNamingAttemptedRef = useRef<Set<string>>(new Set());
   const conversationChatConfigSaveTimeoutRef = useRef<number | null>(null);
   const isApplyingConversationChatConfigRef = useRef(false);
+  const dataAnalysisPollersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  const dataAnalysisEventIndexRef = useRef<Map<string, number>>(new Map());
 
   // Custom hooks
   const conversationManager = useConversationManager();
@@ -174,6 +187,9 @@ const NumaChatAgents = () => {
       if (typeof parsed.webSearchEnabled === 'boolean') {
         setWebSearchEnabled(parsed.webSearchEnabled);
       }
+      if (typeof parsed.dataAnalysisEnabled === 'boolean') {
+        setDataAnalysisEnabled(dataAnalysisAvailable ? parsed.dataAnalysisEnabled : false);
+      }
       if (typeof parsed.createAgentEnabled === 'boolean') {
         setCreateAgentEnabled(agentsFeatureEnabled ? parsed.createAgentEnabled : false);
       }
@@ -196,7 +212,7 @@ const NumaChatAgents = () => {
         isApplyingConversationChatConfigRef.current = false;
       }, 0);
     },
-    [agentsFeatureEnabled, availableConnections, availableKBs],
+    [agentsFeatureEnabled, availableConnections, availableKBs, dataAnalysisAvailable],
   );
 
   useEffect(() => {
@@ -210,6 +226,15 @@ const NumaChatAgents = () => {
       setWebSearchEnabled(value);
     },
     [markUserSettingsModified],
+  );
+
+  const handleUserSetDataAnalysisEnabled = useCallback(
+    (value: SetStateAction<boolean>) => {
+      if (!dataAnalysisAvailable) return;
+      markUserSettingsModified();
+      setDataAnalysisEnabled(value);
+    },
+    [dataAnalysisAvailable, markUserSettingsModified],
   );
 
   const handleUserSetCreateAgentEnabled = useCallback(
@@ -244,6 +269,108 @@ const NumaChatAgents = () => {
     [markUserSettingsModified],
   );
 
+  const isDataAnalysisFile = useCallback((file: { fileName?: string; fileType?: string }) => {
+    const name = (file.fileName || '').toLowerCase();
+    const type = (file.fileType || '').toLowerCase();
+    if (name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.json')) {
+      return true;
+    }
+    return (
+      type === 'text/csv' ||
+      type === 'application/csv' ||
+      type === 'application/json' ||
+      type === 'application/vnd.ms-excel' ||
+      type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+  }, []);
+
+  const handleFilesUploadedForDataAnalysis = useCallback(
+    (files: Array<{ fileName?: string; fileType?: string; filePath?: string }>) => {
+      const toolEnabled = dataAnalysisAvailable && (autoToolsEnabled || dataAnalysisEnabled);
+      if (!toolEnabled) return;
+      const dataFiles = (files || [])
+        .filter((file) => isDataAnalysisFile(file))
+        .map((file) => ({
+          fileName: file.fileName || 'data file',
+          fileType: file.fileType,
+          s3Key: file.filePath,
+        }));
+      if (dataFiles.length > 0) {
+        setDataAnalysisBannerFiles(dataFiles);
+      }
+    },
+    [autoToolsEnabled, dataAnalysisAvailable, dataAnalysisEnabled, isDataAnalysisFile],
+  );
+
+  const addToolCardSteps = useCallback((toolUseId: string, steps: string[]) => {
+    setMessages((prev) => {
+      if (prev.length === 0) return prev;
+      const updated = [...prev];
+      const lastIdx = updated.length - 1;
+      const lastMsg = { ...updated[lastIdx] } as { segments?: unknown[] };
+      const segs = [...(lastMsg.segments || [])];
+      const idx = segs.findIndex(
+        (seg) =>
+          typeof seg === 'object' &&
+          seg !== null &&
+          'kind' in seg &&
+          (seg as { kind: string }).kind === 'tool_card' &&
+          (seg as { toolUseId?: string | null }).toolUseId === toolUseId,
+      );
+      if (idx >= 0) {
+        const seg = segs[idx] as { steps?: string[] };
+        segs[idx] = { ...seg, steps: [...(seg.steps || []), ...steps] };
+        lastMsg.segments = segs;
+        updated[lastIdx] = lastMsg as (typeof updated)[number];
+      }
+      return updated;
+    });
+  }, []);
+
+  const stopDataAnalysisPolling = useCallback((toolUseId: string) => {
+    const timer = dataAnalysisPollersRef.current.get(toolUseId);
+    if (timer) {
+      clearInterval(timer);
+      dataAnalysisPollersRef.current.delete(toolUseId);
+    }
+    dataAnalysisEventIndexRef.current.delete(toolUseId);
+  }, []);
+
+  const startDataAnalysisPolling = useCallback(
+    (toolUseId: string, jobId: string) => {
+      if (!jobId || dataAnalysisPollersRef.current.has(toolUseId)) return;
+
+      const poll = async () => {
+        try {
+          const response = await numaGet(`/api/data-analysis/jobs/${jobId}`);
+          const events = Array.isArray(response?.events) ? response.events : [];
+          const lastIndex = dataAnalysisEventIndexRef.current.get(toolUseId) ?? 0;
+          if (events.length > lastIndex) {
+            const next = events
+              .slice(lastIndex)
+              .map((evt) => (evt && typeof evt.message === 'string' ? evt.message : null))
+              .filter((msg): msg is string => !!msg);
+            if (next.length > 0) {
+              addToolCardSteps(toolUseId, next);
+            }
+            dataAnalysisEventIndexRef.current.set(toolUseId, events.length);
+          }
+          const status = String(response?.status || '').toLowerCase();
+          if (status === 'success' || status === 'failure') {
+            stopDataAnalysisPolling(toolUseId);
+          }
+        } catch (error) {
+          console.warn('[DataAnalysisPolling] Failed to fetch job status', error);
+        }
+      };
+
+      poll();
+      const timer = setInterval(poll, 5000);
+      dataAnalysisPollersRef.current.set(toolUseId, timer);
+    },
+    [addToolCardSteps, numaGet, stopDataAnalysisPolling],
+  );
+
   // Persist current chat controls to the conversation meta item so resuming a chat restores its last state.
   useEffect(() => {
     if (!conversationId || !numaChatDynamoUtils || !sub) return;
@@ -258,6 +385,7 @@ const NumaChatAgents = () => {
       const payload: ConversationChatConfig = {
         autoToolsEnabled,
         webSearchEnabled,
+        dataAnalysisEnabled,
         createAgentEnabled: agentsFeatureEnabled ? createAgentEnabled : false,
         enabledKBIds,
         enabledConnectionIds: enabledConnections,
@@ -278,6 +406,7 @@ const NumaChatAgents = () => {
     autoToolsEnabled,
     conversationId,
     createAgentEnabled,
+    dataAnalysisEnabled,
     enabledConnections,
     enabledKBIds,
     agentsFeatureEnabled,
@@ -309,6 +438,7 @@ const NumaChatAgents = () => {
         setAutoToolsEnabled(autoTools);
         // When autoTools is enabled, individual tools should also be enabled
         setWebSearchEnabled(autoTools || userChatSettings.webSearchEnabled);
+        setDataAnalysisEnabled(dataAnalysisAvailable ? autoTools || userChatSettings.dataAnalysisEnabled : false);
         setCreateAgentEnabled(autoTools || userChatSettings.createAgentEnabled);
         setEnabledConnections(defaultConnectionIdsFromSettings);
         // Apply user's default KB selection, filtered by what's available
@@ -321,6 +451,7 @@ const NumaChatAgents = () => {
       setAutoToolsEnabled(autoTools);
       // When autoTools is enabled, individual tools should also be enabled
       setWebSearchEnabled(autoTools || (config.webSearchEnabled ?? false));
+      setDataAnalysisEnabled(dataAnalysisAvailable ? autoTools || (config.dataAnalysisEnabled ?? false) : false);
       setCreateAgentEnabled(autoTools || (config.createAgentEnabled ?? false));
       setEnabledConnections(config.enabledConnections ?? []);
 
@@ -344,7 +475,7 @@ const NumaChatAgents = () => {
         setEnabledKBIds(availableKBs.filter((kb) => allowedSet.has(kb.kb_id)).map((kb) => kb.kb_id));
       }
     },
-    [availableKBs, defaultConnectionIdsFromSettings, defaultKBIdsFromSettings, userChatSettings],
+    [availableKBs, defaultConnectionIdsFromSettings, defaultKBIdsFromSettings, userChatSettings, dataAnalysisAvailable],
   );
 
   const resetAgentState = useCallback(() => {
@@ -543,6 +674,16 @@ const NumaChatAgents = () => {
     if (required.length === 0) return [];
     const connectedIds = new Set(availableConnections.map((conn) => conn.id));
     return required.filter((integration) => !connectedIds.has(integration));
+  };
+
+  const handleRunDataAnalysisFromBanner = () => {
+    if (!dataAnalysisBannerFiles || dataAnalysisBannerFiles.length === 0) return;
+    const names = dataAnalysisBannerFiles.map((f) => f.fileName).filter(Boolean);
+    const preview = names.slice(0, 3).join(', ');
+    const suffix = names.length > 3 ? ` and ${names.length - 3} more` : '';
+    const prompt = `Run data analysis on the uploaded file(s): ${preview}${suffix}. Summarize key insights and highlight any notable trends or outliers.`;
+    setDataAnalysisBannerFiles(null);
+    handleSubmit({ preventDefault: () => {} }, prompt);
   };
 
   const resolveUserWelcomeMessage = (agent: AgentSummary): string | undefined =>
@@ -794,6 +935,8 @@ const NumaChatAgents = () => {
     setUploadedFiles([]);
     setInputMessage('');
     closeDocument();
+    setDataAnalysisBannerFiles(null);
+    setDataAnalysisBannerFiles(null);
 
     // Reset split view state - hide document panel
     setShowSplitView(false);
@@ -944,6 +1087,7 @@ const NumaChatAgents = () => {
   const configureAgentCall = (
     autoToolsEnabled,
     webSearchEnabled,
+    dataAnalysisEnabled,
     createAgentEnabled,
     idToken,
     companyProfile,
@@ -960,8 +1104,10 @@ const NumaChatAgents = () => {
     const enabledTools = getEnabledTools(
       autoToolsEnabled,
       webSearchEnabled,
+      dataAnalysisEnabled,
       agentsFeatureEnabled ? createAgentEnabled : false,
       enabledKBIds,
+      dataAnalysisAvailable,
     );
 
     // Create the system prompt based on tool availability
@@ -1207,7 +1353,7 @@ const NumaChatAgents = () => {
   };
 
   // Submit user input
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, overrideMessage?: string) => {
     e.preventDefault();
 
     // Prevent duplicate submissions (React StrictMode protection) - check FIRST
@@ -1218,7 +1364,8 @@ const NumaChatAgents = () => {
     isProcessingRef.current = true;
 
     // Validate input
-    if (!inputMessage.trim() && uploadedFiles.length === 0) {
+    const userMsg = (overrideMessage ?? inputMessage).trim();
+    if (!userMsg && uploadedFiles.length === 0) {
       isProcessingRef.current = false; // Reset flag on early return
       return;
     }
@@ -1227,7 +1374,10 @@ const NumaChatAgents = () => {
     resetInactivityTimer();
     // Hide suggestions on first interaction
     hideSuggestions();
-
+    // Dismiss data analysis banner on any message send
+    if (dataAnalysisBannerFiles) {
+      setDataAnalysisBannerFiles(null);
+    }
     // Prepare UI
     setInputMessage('');
     if (inputRef.current) {
@@ -1244,7 +1394,7 @@ const NumaChatAgents = () => {
       const activeAgent = pendingAgent || currentAgent;
 
       const cid = await ensureConversationReady(
-        inputMessage,
+        userMsg,
         activeAgent
           ? {
               agentId: activeAgent.agentId,
@@ -1256,8 +1406,6 @@ const NumaChatAgents = () => {
             }
           : undefined,
       );
-      const userMsg = inputMessage;
-
       // Add user message to local UI state
       const userMsgObject = { role: 'user', content: userMsg };
       setMessages((prev) => [...prev, userMsgObject]);
@@ -1315,6 +1463,7 @@ const NumaChatAgents = () => {
       const { modelId, enabledTools, systemPrompt, userAuth, clientName } = configureAgentCall(
         autoToolsEnabled,
         webSearchEnabled,
+        dataAnalysisEnabled,
         createAgentEnabled,
         idToken,
         companyProfile,
@@ -1454,6 +1603,8 @@ const NumaChatAgents = () => {
                       }
                     : null,
                 conversationId: cid,
+                startDataAnalysisPolling,
+                stopDataAnalysisPolling,
               },
             );
           },
@@ -1506,6 +1657,7 @@ const NumaChatAgents = () => {
     setIsManuallyLoading(true);
     setIsConversationLoading(true);
     setMessages([]); // Clear current messages immediately
+    setDataAnalysisBannerFiles(null);
     resetUserNewChatFlag(); // Reset the flag since user is explicitly loading a conversation
 
     // This is a user interaction
@@ -1565,7 +1717,79 @@ const NumaChatAgents = () => {
 
   // Derived flag to show warning when no tools active in manual mode
   const noToolsActive =
-    !currentAgent && !autoToolsEnabled && enabledKBIds.length === 0 && !webSearchEnabled && !createAgentEnabled;
+    !currentAgent &&
+    !autoToolsEnabled &&
+    enabledKBIds.length === 0 &&
+    !webSearchEnabled &&
+    !dataAnalysisEnabled &&
+    !createAgentEnabled;
+
+  const dataAnalysisToolEnabled = dataAnalysisAvailable && (autoToolsEnabled || dataAnalysisEnabled);
+
+  useEffect(() => {
+    if (!autoToolsEnabled && !dataAnalysisEnabled) {
+      setDataAnalysisBannerFiles(null);
+    }
+  }, [autoToolsEnabled, dataAnalysisEnabled]);
+
+  useEffect(() => {
+    return () => {
+      dataAnalysisPollersRef.current.forEach((timer) => clearInterval(timer));
+      dataAnalysisPollersRef.current.clear();
+      dataAnalysisEventIndexRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadAvailability = async () => {
+      try {
+        const apps = await manifestService.fetchAppsFromManifest();
+        const dataAnalysisApp = apps?.find((app: { id?: string }) => app?.id === 'data-analysis');
+        const status = String(dataAnalysisApp?.status || '').toLowerCase();
+        const isActive = status === 'active';
+        if (isMounted) {
+          setDataAnalysisAvailable(isActive);
+          if (!isActive) {
+            setDataAnalysisEnabled(false);
+            setDataAnalysisBannerFiles(null);
+          }
+        }
+      } catch (error) {
+        console.warn('[NumaChat] Unable to determine data analysis availability', error);
+        if (isMounted) {
+          setDataAnalysisAvailable(false);
+          setDataAnalysisEnabled(false);
+          setDataAnalysisBannerFiles(null);
+        }
+      }
+    };
+    loadAvailability();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const dataAnalysisBanner =
+    dataAnalysisAvailable && dataAnalysisBannerFiles && dataAnalysisBannerFiles.length > 0 ? (
+      <div className="alert alert-info d-flex align-items-center justify-content-between gap-3 mx-3 mt-3">
+        <div>
+          <div className="fw-semibold">Analyze uploaded data?</div>
+          <div className="small text-muted">
+            Run Data Analysis on {dataAnalysisBannerFiles.map((f) => f.fileName).join(', ')}.
+          </div>
+          <div className="small text-muted">This may take up to 5 minutes.</div>
+        </div>
+        <div className="d-flex gap-2">
+          <Button size="sm" variant="primary" onClick={handleRunDataAnalysisFromBanner}>
+            Run Data Analysis
+          </Button>
+          <Button size="sm" variant="outline-secondary" onClick={() => setDataAnalysisBannerFiles(null)}>
+            Not now
+          </Button>
+        </div>
+      </div>
+    ) : null;
 
   // Helper: push buffered text as its own segment then clear buffer, and save to DynamoDB
   const flushPendingText = (currentConversationId = null, preserveContent = false) => {
@@ -1850,6 +2074,9 @@ const NumaChatAgents = () => {
                               setWebSearchEnabled={handleUserSetWebSearchEnabled}
                               createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                               setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
+                              dataAnalysisEnabled={dataAnalysisEnabled}
+                              setDataAnalysisEnabled={handleUserSetDataAnalysisEnabled}
+                              dataAnalysisAvailable={dataAnalysisAvailable}
                               autoToolsEnabled={autoToolsEnabled}
                               setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
                               availableConnections={availableConnections}
@@ -1875,6 +2102,7 @@ const NumaChatAgents = () => {
                               availableKBs={availableKBs}
                               isLoadingKBs={isLoadingKBs}
                               agentsFeatureEnabled={agentsFeatureEnabled}
+                              dataAnalysisBanner={dataAnalysisBanner}
                             />
                           ) : (
                             <ChatMessages
@@ -1904,6 +2132,7 @@ const NumaChatAgents = () => {
                         {/* pinned input at bottom (hide during initial new chat flow) */}
                         {!shouldShowNewChatView && (
                           <div className="chat-input-wrapper">
+                            {dataAnalysisBanner}
                             <ChatInput
                               inputMessage={inputMessage}
                               setInputMessage={setInputMessage}
@@ -1914,6 +2143,9 @@ const NumaChatAgents = () => {
                               setWebSearchEnabled={handleUserSetWebSearchEnabled}
                               createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                               setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
+                              dataAnalysisEnabled={dataAnalysisEnabled}
+                              setDataAnalysisEnabled={handleUserSetDataAnalysisEnabled}
+                              dataAnalysisAvailable={dataAnalysisAvailable}
                               autoToolsEnabled={autoToolsEnabled}
                               setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
                               availableConnections={availableConnections}
@@ -1997,6 +2229,9 @@ const NumaChatAgents = () => {
         currentAgent={currentAgent}
         setPendingAgent={setPendingAgent}
         resetInactivityTimer={resetInactivityTimer}
+        dataAnalysisAvailable={dataAnalysisAvailable}
+        dataAnalysisToolEnabled={dataAnalysisToolEnabled}
+        onFilesUploaded={handleFilesUploadedForDataAnalysis}
       />
     </div>
   );

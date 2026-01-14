@@ -26,6 +26,9 @@ export type ChatSettingsPanelProps = {
   setWebSearchEnabled: Dispatch<SetStateAction<boolean>>;
   createAgentEnabled: boolean;
   setCreateAgentEnabled: Dispatch<SetStateAction<boolean>>;
+  dataAnalysisEnabled: boolean;
+  setDataAnalysisEnabled: Dispatch<SetStateAction<boolean>>;
+  dataAnalysisAvailable?: boolean;
   agentsFeatureEnabled: boolean;
 
   // Knowledge Bases
@@ -52,6 +55,9 @@ export const ChatSettingsPanel = ({
   setWebSearchEnabled,
   createAgentEnabled,
   setCreateAgentEnabled,
+  dataAnalysisEnabled,
+  setDataAnalysisEnabled,
+  dataAnalysisAvailable = true,
   agentsFeatureEnabled,
   enabledKBIds,
   setEnabledKBIds,
@@ -88,6 +94,7 @@ export const ChatSettingsPanel = ({
     // When enabling auto tools, also enable individual tools
     if (checked) {
       setWebSearchEnabled(true);
+      setDataAnalysisEnabled(true);
       if (agentsFeatureEnabled) {
         setCreateAgentEnabled(true);
       }
@@ -173,6 +180,24 @@ export const ChatSettingsPanel = ({
               <div className="settings-toggle-subtitle">Search the web for current information</div>
             </div>
           </div>
+
+          {dataAnalysisAvailable && (
+            <div className="settings-toggle-row settings-toggle-row--subtool">
+              <Form.Check
+                type="switch"
+                id="settings-data-analysis"
+                label=""
+                checked={dataAnalysisEnabled}
+                onChange={(e) => setDataAnalysisEnabled(e.target.checked)}
+                disabled={isDisabled || autoToolsEnabled}
+                className="settings-toggle-switch"
+              />
+              <div className="settings-toggle-text">
+                <div className={`settings-toggle-title ${autoToolsEnabled ? 'is-disabled' : ''}`}>Data Analysis</div>
+                <div className="settings-toggle-subtitle">Analyze CSV, Excel, or JSON data files</div>
+              </div>
+            </div>
+          )}
 
           {agentsFeatureEnabled && (
             <div className="settings-toggle-row settings-toggle-row--subtool">

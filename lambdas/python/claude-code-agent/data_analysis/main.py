@@ -32,7 +32,7 @@ from utils import (
 )
 
 from . import conversation, workspace
-from .prompts import SYSTEM_PROMPT
+from .prompts import get_data_analysis_prompt
 from .settings import ENV_VARS, SETTINGS_JSON
 
 logger = structlog.get_logger()
@@ -459,6 +459,10 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     # Extract core identifiers
     app_id, job_id, user_id = event["app_id"], event["job_id"], event["user_id"]
     user_prompt = event.get("prompt", "").strip()
+    analysis_mode = str(
+        event.get("analysis_mode") or event.get("analysisMode") or "full"
+    ).lower()
+    simple_mode = analysis_mode in {"simple", "chat", "chat_simple", "fast", "light"}
 
     # Setup workspace and S3 paths
     workdir = Path(f"/tmp/cc_ws/{job_id}")
@@ -503,7 +507,9 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
     # Build system prompt with runtime context
     system_prompt = _build_runtime_system_prompt(
-        workdir, event.get("user_timezone", "UTC")
+        workdir,
+        event.get("user_timezone", "UTC"),
+        simple_mode=simple_mode,
     )
 
     # Run Claude CLI with streaming
@@ -560,7 +566,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     )
 
 
-def _build_runtime_system_prompt(workdir: Path, user_tz: str) -> str:
+def _build_runtime_system_prompt(workdir: Path, user_tz: str, simple_mode: bool) -> str:
     """Build system prompt with current date and platform info."""
     tz: Union[ZoneInfo, timezone]
     try:
@@ -574,6 +580,7 @@ def _build_runtime_system_prompt(workdir: Path, user_tz: str) -> str:
         working_directory=str(workdir),
         platform_info=_get_platform_info(),
         today_date=today_date,
+        simple_mode=simple_mode,
     )
 
 
@@ -583,7 +590,10 @@ def _build_runtime_system_prompt(workdir: Path, user_tz: str) -> str:
 
 
 def build_system_prompt(
-    working_directory: str, platform_info: str, today_date: str
+    working_directory: str,
+    platform_info: str,
+    today_date: str,
+    simple_mode: bool,
 ) -> str:
     """
     Build the complete system prompt with runtime context for data analysis.
@@ -596,11 +606,69 @@ def build_system_prompt(
     Returns:
         Formatted system prompt with context
     """
-    return SYSTEM_PROMPT.format(
+    return get_data_analysis_prompt(simple=simple_mode).format(
         working_directory=working_directory,
         platform=platform_info,
         today_date=today_date,
     )
+
+
+def _build_cli_args(
+    bin_path: str,
+    cc_session_id: Optional[str],
+    prompt: str,
+    system_prompt: str,
+) -> List[str]:
+    """Build CLI command arguments."""
+    permission_mode = (SETTINGS_JSON.get("permissions", {}) or {}).get("defaultMode")
+    if not permission_mode:
+        raise RuntimeError("SETTINGS_JSON.permissions.defaultMode is required")
+
+    allowed_tools: List[str] = []
+    tools_cfg = SETTINGS_JSON.get("tools", {})
+    for t in tools_cfg.get("allow", []) or []:
+        if isinstance(t, str) and t:
+            allowed_tools.append(t)
+    for pat in tools_cfg.get("bash_allow", []) or []:
+        if isinstance(pat, str) and pat:
+            allowed_tools.append(f"Bash({pat})")
+    if not allowed_tools:
+        raise RuntimeError("SETTINGS_JSON.tools must define at least one allowed tool")
+
+    args = [bin_path, "-p", "--verbose"]
+    if cc_session_id:
+        args += ["--resume", cc_session_id, prompt]
+    else:
+        args += [prompt]
+    args += [
+        "--output-format",
+        "stream-json",
+        "--permission-mode",
+        permission_mode,
+        "--allowedTools",
+        ",".join(allowed_tools),
+        "--append-system-prompt",
+        system_prompt,
+    ]
+    return args
+
+
+def _build_cli_env(env_overrides: Optional[dict[str, str]] = None) -> dict[str, str]:
+    """Build environment for CLI execution."""
+    bedrock_creds = get_cross_account_bedrock_credentials()
+    env: dict[str, str] = {
+        **os.environ,
+        **ENV_VARS,
+        "HOME": os.environ.get("HOME", "/tmp"),
+        "PYTHONPATH": ":".join(
+            filter(None, [os.environ.get("PYTHONPATH"), "/opt/python", "/var/task"])
+        ),
+    }
+    if env_overrides:
+        env.update(env_overrides)
+    if bedrock_creds:
+        env.update(cast(dict[str, str], bedrock_creds))
+    return env
 
 
 def _run_claude_with_streaming(
@@ -612,6 +680,7 @@ def _run_claude_with_streaming(
     trace_path: Path,
     stream_events: bool,
     app_context: Optional[AppContext],
+    env_overrides: Optional[dict[str, str]] = None,
 ) -> Tuple[Optional[str], int]:
     """
     Run Claude CLI with event streaming support for data analysis.
@@ -629,64 +698,9 @@ def _run_claude_with_streaming(
     Returns:
         Tuple of (new_session_id, return_code)
     """
-    # Build command arguments from settings
-    permission_mode = (SETTINGS_JSON.get("permissions", {}) or {}).get("defaultMode")
-    if not permission_mode:
-        raise RuntimeError("SETTINGS_JSON.permissions.defaultMode is required")
+    args = _build_cli_args(bin_path, cc_session_id, prompt, system_prompt)
+    env = _build_cli_env(env_overrides)
 
-    # Build allowed tools list
-    allowed_tools: List[str] = []
-    tools_cfg = SETTINGS_JSON.get("tools", {})
-    for t in tools_cfg.get("allow", []) or []:
-        if isinstance(t, str) and t:
-            allowed_tools.append(t)
-    for pat in tools_cfg.get("bash_allow", []) or []:
-        if isinstance(pat, str) and pat:
-            allowed_tools.append(f"Bash({pat})")
-    if not allowed_tools:
-        raise RuntimeError("SETTINGS_JSON.tools must define at least one allowed tool")
-
-    # Build CLI command
-    args = [bin_path, "-p", "--verbose"]
-    if cc_session_id:
-        args += ["--resume", cc_session_id, prompt]
-    else:
-        args += [prompt]
-    args += [
-        "--output-format",
-        "stream-json",
-        "--permission-mode",
-        permission_mode,
-        "--allowedTools",
-        ",".join(allowed_tools),
-        "--append-system-prompt",
-        system_prompt,
-    ]
-
-    # Get cross-account credentials if BEDROCK_ACCOUNT is configured
-    bedrock_creds = get_cross_account_bedrock_credentials()
-
-    # Prepare environment
-    env: dict[str, str] = {
-        **os.environ,
-        **ENV_VARS,
-        "HOME": os.environ.get("HOME", "/tmp"),
-        "PYTHONPATH": ":".join(
-            filter(
-                None,
-                [
-                    os.environ.get("PYTHONPATH"),
-                    "/opt/python",
-                    "/var/task",
-                ],
-            )
-        ),
-    }
-    # Inject cross-account creds if available
-    if bedrock_creds:
-        env.update(cast(dict[str, str], bedrock_creds))
-
-    # Execute CLI and stream output
     with trace_path.open("w", encoding="utf-8") as trace_file:
         with subprocess.Popen(
             args,
@@ -697,6 +711,7 @@ def _run_claude_with_streaming(
             env=env,
         ) as proc:
             new_session_id: Optional[str] = None
+            stderr_snippet = ""
 
             try:
                 assert proc.stdout is not None
@@ -708,7 +723,6 @@ def _run_claude_with_streaming(
                         if isinstance(obj, dict) and obj.get("session_id"):
                             new_session_id = obj.get("session_id")
 
-                        # Stream events if enabled
                         if stream_events and app_context:
                             event_msg = _extract_meaningful_event(obj)
                             if event_msg:
@@ -722,17 +736,25 @@ def _run_claude_with_streaming(
                                     event_type=obj.get("type"),
                                 )
                     except json.JSONDecodeError:
-                        pass  # Ignore non-JSON lines
+                        pass
 
             finally:
                 proc.wait(timeout=840)
+                if proc.stderr:
+                    try:
+                        stderr_snippet = proc.stderr.read()[:1024]
+                    except ValueError:
+                        stderr_snippet = ""
 
-        if proc.returncode != 0:
-            err = (proc.stderr.read() if proc.stderr else "")[:1024]
-            logger.error("Claude CLI failed", returncode=proc.returncode, stderr=err)
-            raise RuntimeError(f"Claude CLI failed: {err}")
+            if proc.returncode != 0:
+                logger.error(
+                    "Claude CLI failed",
+                    returncode=proc.returncode,
+                    stderr=stderr_snippet,
+                )
+                raise RuntimeError(f"Claude CLI failed: {stderr_snippet}")
 
-        return new_session_id, proc.returncode
+            return new_session_id, proc.returncode
 
 
 def _process_outputs_and_get_result(

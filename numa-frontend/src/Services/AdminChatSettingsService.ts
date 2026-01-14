@@ -110,6 +110,10 @@ function validateGlobal(data: unknown): GlobalChatSettings {
       typeof obj.createAgentEnabled === 'boolean'
         ? obj.createAgentEnabled
         : DEFAULT_GLOBAL_CHAT_SETTINGS.createAgentEnabled,
+    dataAnalysisEnabled:
+      typeof obj.dataAnalysisEnabled === 'boolean'
+        ? obj.dataAnalysisEnabled
+        : DEFAULT_GLOBAL_CHAT_SETTINGS.dataAnalysisEnabled,
     defaultConnectionIds: Array.isArray(obj.defaultConnectionIds)
       ? obj.defaultConnectionIds.filter((id): id is string => typeof id === 'string')
       : DEFAULT_GLOBAL_CHAT_SETTINGS.defaultConnectionIds,

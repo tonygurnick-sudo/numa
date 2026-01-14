@@ -18,6 +18,7 @@ import {
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { withPRM } from '../utils/prmUtils';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
+import { manifestService } from '../Services/manifestService';
 
 type Connection = { id: string; name: string; isConnected: boolean; mcpServerUrl?: string };
 
@@ -47,6 +48,7 @@ export default function UserProfilePage() {
   const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false);
   const [availableConnections, setAvailableConnections] = useState<Connection[]>([]);
+  const [dataAnalysisAvailable, setDataAnalysisAvailable] = useState(true);
   const [globalIntegrationSettings, setGlobalIntegrationSettings] = useState<
     Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }>
   >({});
@@ -77,6 +79,31 @@ export default function UserProfilePage() {
       cancelled = true;
     };
   }, [numaGet]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const apps = await manifestService.fetchAppsFromManifest();
+        const dataAnalysisApp = apps?.find((app: { id?: string }) => app?.id === 'data-analysis');
+        const status = String(dataAnalysisApp?.status || '').toLowerCase();
+        if (!cancelled) setDataAnalysisAvailable(status === 'active');
+      } catch (error) {
+        console.warn('[UserProfile] Unable to determine data analysis availability', error);
+        if (!cancelled) setDataAnalysisAvailable(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!dataAnalysisAvailable) {
+      setUserDefaults((prev) => ({ ...prev, dataAnalysisEnabled: false }));
+      setDirty(true);
+    }
+  }, [dataAnalysisAvailable]);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,6 +231,7 @@ export default function UserProfilePage() {
         autoToolsEnabled: companyDefaults.autoToolsEnabled,
         webSearchEnabled: companyDefaults.webSearchEnabled,
         createAgentEnabled: companyDefaults.createAgentEnabled,
+        dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
         defaultConnectionIds: companyDefaults.defaultConnectionIds,
       };
     }
@@ -347,8 +375,8 @@ export default function UserProfilePage() {
                                 ...prev,
                                 autoToolsEnabled: nextEnabled,
                                 ...(nextEnabled
-                                  ? { webSearchEnabled: true, createAgentEnabled: true }
-                                  : { webSearchEnabled: false, createAgentEnabled: false }),
+                                  ? { webSearchEnabled: true, dataAnalysisEnabled: true, createAgentEnabled: true }
+                                  : { webSearchEnabled: false, dataAnalysisEnabled: false, createAgentEnabled: false }),
                               }));
                               setDirty(true);
                             }}
@@ -374,6 +402,26 @@ export default function UserProfilePage() {
                           </div>
                           <div className="text-muted small ms-5">Search the web for current information</div>
                         </div>
+
+                        {dataAnalysisAvailable && (
+                          <div className="mt-3 ms-4">
+                            <div className="d-flex align-items-center gap-2">
+                              <Form.Check
+                                type="switch"
+                                id="profile-defaults-data-analysis"
+                                label=""
+                                checked={displayedSettings.dataAnalysisEnabled}
+                                disabled={disableForm || displayedSettings.autoToolsEnabled}
+                                onChange={(e) => {
+                                  setUserDefaults((prev) => ({ ...prev, dataAnalysisEnabled: e.target.checked }));
+                                  setDirty(true);
+                                }}
+                              />
+                              <div className="fw-semibold">Data Analysis</div>
+                            </div>
+                            <div className="text-muted small ms-5">Analyze CSV, Excel, or JSON data files</div>
+                          </div>
+                        )}
 
                         <div className="mt-3 ms-4">
                           <div className="d-flex align-items-center gap-2">
@@ -457,6 +505,7 @@ export default function UserProfilePage() {
                                 autoToolsEnabled: userDefaults.autoToolsEnabled,
                                 webSearchEnabled: userDefaults.webSearchEnabled,
                                 createAgentEnabled: userDefaults.createAgentEnabled,
+                                dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
                                 defaultConnectionIds: userDefaults.defaultConnectionIds,
                               };
 
@@ -491,6 +540,7 @@ export default function UserProfilePage() {
                               autoToolsEnabled: companyDefaults.autoToolsEnabled,
                               webSearchEnabled: companyDefaults.webSearchEnabled,
                               createAgentEnabled: companyDefaults.createAgentEnabled,
+                              dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
                               defaultConnectionIds: companyDefaults.defaultConnectionIds,
                             });
                             setDirty(true);

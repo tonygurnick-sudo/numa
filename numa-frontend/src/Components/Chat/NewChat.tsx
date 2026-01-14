@@ -52,6 +52,9 @@ type NewChatProps = {
   setWebSearchEnabled: Dispatch<SetStateAction<boolean>>;
   createAgentEnabled: boolean;
   setCreateAgentEnabled: Dispatch<SetStateAction<boolean>>;
+  dataAnalysisEnabled: boolean;
+  setDataAnalysisEnabled: Dispatch<SetStateAction<boolean>>;
+  dataAnalysisAvailable?: boolean;
   autoToolsEnabled: boolean;
   setAutoToolsEnabled: Dispatch<SetStateAction<boolean>>;
   availableConnections: ConnectionOption[];
@@ -80,6 +83,7 @@ type NewChatProps = {
   availableKBs?: KnowledgeBase[];
   isLoadingKBs?: boolean;
   agentsFeatureEnabled?: boolean;
+  dataAnalysisBanner?: React.ReactNode;
 };
 
 // Avatar for recent conversations
@@ -151,6 +155,9 @@ export const NewChat = ({
   setWebSearchEnabled,
   createAgentEnabled,
   setCreateAgentEnabled,
+  dataAnalysisEnabled,
+  setDataAnalysisEnabled,
+  dataAnalysisAvailable = true,
   autoToolsEnabled,
   setAutoToolsEnabled,
   availableConnections,
@@ -177,6 +184,7 @@ export const NewChat = ({
   availableKBs = [],
   isLoadingKBs = false,
   agentsFeatureEnabled = false,
+  dataAnalysisBanner,
 }: NewChatProps) => {
   // ------- Mobile detection and tab state -------
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
@@ -374,6 +382,7 @@ export const NewChat = ({
       </div>
 
       <div className="chat-input-wrapper new-chat-input-wrapper" style={{ animation: 'fadeIn 0.8s ease-in-out' }}>
+        {dataAnalysisBanner}
         <ChatInput
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
@@ -384,6 +393,9 @@ export const NewChat = ({
           setWebSearchEnabled={setWebSearchEnabled}
           createAgentEnabled={createAgentEnabled}
           setCreateAgentEnabled={setCreateAgentEnabled}
+          dataAnalysisEnabled={dataAnalysisEnabled}
+          setDataAnalysisEnabled={setDataAnalysisEnabled}
+          dataAnalysisAvailable={dataAnalysisAvailable}
           autoToolsEnabled={autoToolsEnabled}
           setAutoToolsEnabled={setAutoToolsEnabled}
           availableConnections={availableConnections}
@@ -480,6 +492,9 @@ export const NewChat = ({
             setWebSearchEnabled={setWebSearchEnabled}
             createAgentEnabled={createAgentEnabled}
             setCreateAgentEnabled={setCreateAgentEnabled}
+            dataAnalysisEnabled={dataAnalysisEnabled}
+            setDataAnalysisEnabled={setDataAnalysisEnabled}
+            dataAnalysisAvailable={dataAnalysisAvailable}
             agentsFeatureEnabled={agentsFeatureEnabled}
             enabledKBIds={enabledKBIds || []}
             setEnabledKBIds={setEnabledKBIds || (() => {})}

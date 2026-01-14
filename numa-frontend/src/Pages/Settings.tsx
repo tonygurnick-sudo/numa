@@ -31,6 +31,7 @@ import {
   DEFAULT_GLOBAL_CHAT_SETTINGS,
 } from '../Services/AdminChatSettingsService';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
+import { manifestService } from '../Services/manifestService';
 
 const AVAILABLE_INTEGRATIONS: IntegrationListItem[] = getIntegrationsListFormat();
 
@@ -84,6 +85,7 @@ export default function SettingsPage() {
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
   const [agentsLoading, setAgentsLoading] = useState<boolean>(true);
   const [agentsSaving, setAgentsSaving] = useState<boolean>(false);
+  const [dataAnalysisAvailable, setDataAnalysisAvailable] = useState(true);
 
   // Pipedream feature + relay
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
@@ -115,6 +117,33 @@ export default function SettingsPage() {
     };
     initLambda();
   }, [user, previewMode]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadAvailability = async () => {
+      try {
+        const apps = await manifestService.fetchAppsFromManifest();
+        const dataAnalysisApp = apps?.find((app: { id?: string }) => app?.id === 'data-analysis');
+        const status = String(dataAnalysisApp?.status || '').toLowerCase();
+        const isActive = status === 'active';
+        if (isMounted) setDataAnalysisAvailable(isActive);
+      } catch (error) {
+        console.warn('[Settings] Unable to determine data analysis availability', error);
+        if (isMounted) setDataAnalysisAvailable(false);
+      }
+    };
+    loadAvailability();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!dataAnalysisAvailable) {
+      setGlobalChatSettings((prev) => ({ ...prev, dataAnalysisEnabled: false }));
+      setChatDefaultsDirty(true);
+    }
+  }, [dataAnalysisAvailable]);
 
   const loadGlobal = async () => {
     try {
@@ -541,8 +570,16 @@ export default function SettingsPage() {
                                   ...prev,
                                   autoToolsEnabled: nextEnabled,
                                   ...(nextEnabled
-                                    ? { webSearchEnabled: true, createAgentEnabled: true }
-                                    : { webSearchEnabled: false, createAgentEnabled: false }),
+                                    ? {
+                                        webSearchEnabled: true,
+                                        dataAnalysisEnabled: true,
+                                        createAgentEnabled: true,
+                                      }
+                                    : {
+                                        webSearchEnabled: false,
+                                        dataAnalysisEnabled: false,
+                                        createAgentEnabled: false,
+                                      }),
                                 }));
                                 setChatDefaultsDirty(true);
                               }}
@@ -570,6 +607,29 @@ export default function SettingsPage() {
                             </div>
                             <div className="text-muted small ms-5">Search the web for current information</div>
                           </div>
+
+                          {dataAnalysisAvailable && (
+                            <div className="mt-3 ms-4">
+                              <div className="d-flex align-items-center gap-2">
+                                <Form.Check
+                                  type="switch"
+                                  id="chat-defaults-data-analysis"
+                                  label=""
+                                  checked={globalChatSettings.dataAnalysisEnabled}
+                                  disabled={globalChatSettings.autoToolsEnabled}
+                                  onChange={(e) => {
+                                    setGlobalChatSettings((prev) => ({
+                                      ...prev,
+                                      dataAnalysisEnabled: e.target.checked,
+                                    }));
+                                    setChatDefaultsDirty(true);
+                                  }}
+                                />
+                                <div className="fw-semibold">Data Analysis</div>
+                              </div>
+                              <div className="text-muted small ms-5">Analyze CSV, Excel, or JSON data files</div>
+                            </div>
+                          )}
 
                           <div className="mt-3 ms-4">
                             <div className="d-flex align-items-center gap-2">
@@ -655,6 +715,7 @@ export default function SettingsPage() {
                                     autoToolsEnabled: globalChatSettings.autoToolsEnabled,
                                     webSearchEnabled: globalChatSettings.webSearchEnabled,
                                     createAgentEnabled: globalChatSettings.createAgentEnabled,
+                                    dataAnalysisEnabled: globalChatSettings.dataAnalysisEnabled,
                                     defaultConnectionIds: globalChatSettings.defaultConnectionIds,
                                     allowUserDefaults: globalChatSettings.allowUserDefaults,
                                   },

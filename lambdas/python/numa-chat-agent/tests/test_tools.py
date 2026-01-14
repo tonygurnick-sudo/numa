@@ -60,7 +60,12 @@ class TestTools(unittest.TestCase):
     def test_tool_registry_completeness(self):
         """Test that all tools are registered in AVAILABLE_TOOLS"""
         # Verify expected tools are present
-        expected_tools = ["query_knowledge_base", "web_search", "create_agent_tool"]
+        expected_tools = [
+            "query_knowledge_base",
+            "web_search",
+            "create_agent_tool",
+            "data_analysis",
+        ]
 
         for tool_name in expected_tools:
             self.assertIn(tool_name, AVAILABLE_TOOLS)
@@ -86,7 +91,12 @@ class TestTools(unittest.TestCase):
 
     def test_validate_enabled_tools_all_valid(self):
         """Test validation of all valid tool names"""
-        valid_tools = ["query_knowledge_base", "web_search", "create_agent_tool"]
+        valid_tools = [
+            "query_knowledge_base",
+            "web_search",
+            "create_agent_tool",
+            "data_analysis",
+        ]
         invalid_tools = validate_enabled_tools(valid_tools)
 
         # Should return empty list for all valid tools
