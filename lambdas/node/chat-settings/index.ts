@@ -14,6 +14,7 @@ export type ChatSettings = {
   autoToolsEnabled: boolean;
   webSearchEnabled: boolean;
   createAgentEnabled: boolean;
+  dataAnalysisEnabled: boolean;
   defaultConnectionIds: string[];
 };
 
@@ -39,6 +40,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   autoToolsEnabled: true,
   webSearchEnabled: true,
   createAgentEnabled: false,
+  dataAnalysisEnabled: true,
   defaultConnectionIds: [],
 };
 
@@ -116,6 +118,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       autoToolsEnabled: DEFAULT_SETTINGS.autoToolsEnabled,
       webSearchEnabled: DEFAULT_SETTINGS.webSearchEnabled,
       createAgentEnabled: DEFAULT_SETTINGS.createAgentEnabled,
+      dataAnalysisEnabled: DEFAULT_SETTINGS.dataAnalysisEnabled,
       defaultConnectionIds: DEFAULT_SETTINGS.defaultConnectionIds,
       allowUserDefaults: false,
     };
@@ -135,6 +138,8 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       typeof item?.webSearchEnabled === 'boolean' ? item!.webSearchEnabled : DEFAULT_SETTINGS.webSearchEnabled,
     createAgentEnabled:
       typeof item?.createAgentEnabled === 'boolean' ? item!.createAgentEnabled : DEFAULT_SETTINGS.createAgentEnabled,
+    dataAnalysisEnabled:
+      typeof item?.dataAnalysisEnabled === 'boolean' ? item!.dataAnalysisEnabled : DEFAULT_SETTINGS.dataAnalysisEnabled,
     defaultConnectionIds: Array.isArray(item?.defaultConnectionIds)
       ? item!.defaultConnectionIds
       : DEFAULT_SETTINGS.defaultConnectionIds,
@@ -170,6 +175,10 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     typeof userItem?.createAgentEnabled === 'boolean'
       ? (userItem!.createAgentEnabled as boolean)
       : globalSettings.createAgentEnabled;
+  const dataAnalysisEnabled =
+    typeof userItem?.dataAnalysisEnabled === 'boolean'
+      ? (userItem!.dataAnalysisEnabled as boolean)
+      : globalSettings.dataAnalysisEnabled;
   const defaultConnectionIds = Array.isArray(userItem?.defaultConnectionIds)
     ? (userItem!.defaultConnectionIds as unknown[]).filter((id): id is string => typeof id === 'string')
     : globalSettings.defaultConnectionIds;
@@ -181,6 +190,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     autoToolsEnabled,
     webSearchEnabled,
     createAgentEnabled,
+    dataAnalysisEnabled,
     defaultConnectionIds,
     userDefaultsEnabled,
   };
@@ -253,6 +263,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           'createAgentEnabled' in body && typeof body.createAgentEnabled === 'boolean'
             ? body.createAgentEnabled
             : currentGlobal.createAgentEnabled,
+        dataAnalysisEnabled:
+          'dataAnalysisEnabled' in body && typeof body.dataAnalysisEnabled === 'boolean'
+            ? body.dataAnalysisEnabled
+            : currentGlobal.dataAnalysisEnabled,
         defaultConnectionIds:
           'defaultConnectionIds' in body
             ? Array.isArray(body.defaultConnectionIds)
@@ -277,6 +291,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         autoToolsEnabled: updatedSettings.autoToolsEnabled,
         webSearchEnabled: updatedSettings.webSearchEnabled,
         createAgentEnabled: updatedSettings.createAgentEnabled,
+        dataAnalysisEnabled: updatedSettings.dataAnalysisEnabled,
         defaultConnectionIds: updatedSettings.defaultConnectionIds,
         allowUserDefaults: updatedSettings.allowUserDefaults,
       };
@@ -294,6 +309,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           autoToolsEnabled: globalSettings.autoToolsEnabled,
           webSearchEnabled: globalSettings.webSearchEnabled,
           createAgentEnabled: globalSettings.createAgentEnabled,
+          dataAnalysisEnabled: globalSettings.dataAnalysisEnabled,
           defaultConnectionIds: globalSettings.defaultConnectionIds,
         };
         return { statusCode: 200, headers: HEADERS, body: JSON.stringify(settings) };
@@ -307,6 +323,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         autoToolsEnabled: merged.autoToolsEnabled,
         webSearchEnabled: merged.webSearchEnabled,
         createAgentEnabled: merged.createAgentEnabled,
+        dataAnalysisEnabled: merged.dataAnalysisEnabled,
         defaultConnectionIds: merged.defaultConnectionIds,
       };
 
@@ -326,6 +343,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
             autoToolsEnabled: globalSettings.autoToolsEnabled,
             webSearchEnabled: globalSettings.webSearchEnabled,
             createAgentEnabled: globalSettings.createAgentEnabled,
+            dataAnalysisEnabled: globalSettings.dataAnalysisEnabled,
             defaultConnectionIds: globalSettings.defaultConnectionIds,
           };
 
@@ -404,6 +422,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         next.createAgentEnabled = current.createAgentEnabled;
       }
 
+      // dataAnalysisEnabled
+      if ('dataAnalysisEnabled' in body) {
+        if (body.dataAnalysisEnabled === null) {
+          // clear override
+        } else if (typeof body.dataAnalysisEnabled === 'boolean') {
+          next.dataAnalysisEnabled = body.dataAnalysisEnabled;
+        }
+      } else if (typeof current.dataAnalysisEnabled === 'boolean') {
+        next.dataAnalysisEnabled = current.dataAnalysisEnabled;
+      }
+
       // defaultConnectionIds
       if ('defaultConnectionIds' in body) {
         if (body.defaultConnectionIds === null) {
@@ -439,6 +468,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'autoToolsEnabled' in next ||
         'webSearchEnabled' in next ||
         'createAgentEnabled' in next ||
+        'dataAnalysisEnabled' in next ||
         'defaultConnectionIds' in next ||
         'userDefaultsEnabled' in next;
 

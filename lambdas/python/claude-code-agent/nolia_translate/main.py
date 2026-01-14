@@ -19,6 +19,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 
 import helpers
 import s3_helpers
+from prm import client as prm_client
 from utils import (
     appoutput,
     cli_runner,
@@ -60,7 +61,6 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     job_id = event["job_id"]
     user_id = event["user_id"]
     output_language = event.get("output_language", "english")
-    assessment_type = event.get("assessment_type", "evaluation-report")
     phase = event.get("phase", 5)
 
     # Get display name for the language
@@ -107,7 +107,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
     # Run Claude CLI to translate
     trace_path = workdir / "translate_trace.jsonl"
-    new_session_id, _ = _run_claude_cli(
+    _run_claude_cli(
         bin_path=bin_path,
         workdir=workdir,
         prompt=user_prompt,
@@ -190,8 +190,6 @@ def _download_outputs_from_s3(outputs_dir: Path, bucket: str, prefix: str) -> No
 
     # List and download all files from the outputs prefix
     try:
-        from prm import client as prm_client
-
         s3_client = prm_client("s3")
 
         response = s3_client.list_objects_v2(Bucket=bucket, Prefix=outputs_prefix)

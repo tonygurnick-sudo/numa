@@ -65,6 +65,9 @@ type ChatFileUploadProps = {
   currentAgent?: AgentSummary | null;
   setPendingAgent?: (a: AgentSummary | null) => void;
   resetInactivityTimer?: () => void;
+  dataAnalysisAvailable?: boolean;
+  dataAnalysisToolEnabled?: boolean;
+  onFilesUploaded?: (files: FileResult[]) => void;
 };
 
 type UploaderRef = {
@@ -87,6 +90,9 @@ export const ChatFileUpload = ({
   currentAgent = null,
   setPendingAgent,
   resetInactivityTimer = () => {},
+  dataAnalysisAvailable = true,
+  dataAnalysisToolEnabled = false,
+  onFilesUploaded,
 }: ChatFileUploadProps) => {
   const { numaChatDynamoUtils, user, getCredentials } = useAuth();
   const { numaPost } = useNumaRequest();
@@ -94,7 +100,7 @@ export const ChatFileUpload = ({
   const [showCsvWarning, setShowCsvWarning] = useState(false);
   const [csvNoticeShown, setCsvNoticeShown] = useState(false);
   const csvWarningText =
-    'CSV files have limited support, however we are actively improving CSV handling. If you have issues reach out to our support team.';
+    'CSV support is limited when Data Analysis is off. Enable Data Analysis in chat tools to analyze CSV files.';
 
   // Imperative access into S3UploadModule
   const uploadRef = useRef<UploaderRef>(null);
@@ -265,6 +271,9 @@ export const ChatFileUpload = ({
       }
 
       refreshSidebar();
+      if (typeof onFilesUploaded === 'function') {
+        onFilesUploaded(fileArray);
+      }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
 
@@ -344,7 +353,7 @@ export const ChatFileUpload = ({
                 const name = (f as { fileName?: string }).fileName || (f as { name?: string }).name || '';
                 return type === 'text/csv' || name.toLowerCase().endsWith('.csv');
               });
-              setShowCsvWarning(hasCsv);
+              setShowCsvWarning(Boolean(hasCsv && dataAnalysisAvailable && !dataAnalysisToolEnabled));
             }
           }}
           onSelectFiles={(files) => {
@@ -357,8 +366,9 @@ export const ChatFileUpload = ({
               const name = f.name?.toLowerCase() || '';
               return type === 'text/csv' || name.endsWith('.csv');
             });
-            setShowCsvWarning(hasCsv);
-            if (hasCsv && !csvNoticeShown) {
+            const shouldWarn = Boolean(hasCsv && dataAnalysisAvailable && !dataAnalysisToolEnabled);
+            setShowCsvWarning(shouldWarn);
+            if (shouldWarn && !csvNoticeShown) {
               setMessages((prev: ChatMessage[]) => [
                 ...prev,
                 { role: 'system', content: csvWarningText, status: 'info' },

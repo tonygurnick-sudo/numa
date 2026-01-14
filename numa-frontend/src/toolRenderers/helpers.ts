@@ -149,4 +149,12 @@ export function getFallbackSummary(result: ToolResultLike): string {
   if (status === 'success' || status === 'completed') return `${friendlyLabel}: Tool call successful`;
   return `${friendlyLabel}: ${status || 'completed'}`;
 }
+
+// -------- Data analysis --------
+export function getDataAnalysisSummary(result: ToolResultLike): string {
+  const rawName = result?.name ?? result?.toolName ?? 'data_analysis';
+  const status = result?.status ?? 'completed';
+  if (status === 'error' || status === 'failed') return `${rawName}: Failed`;
+  return 'Data analysis results ready';
+}
 export type { IntegrationDownloadFile as IntegrationFile, IntegrationsFileDownloadPayload };

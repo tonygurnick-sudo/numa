@@ -1,6 +1,7 @@
 import { Construct } from 'constructs';
 // no direct Lambda layer publish; we upload the ZIP to S3 and download at runtime
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
+import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import {
@@ -73,8 +74,21 @@ export class DataAnalysis extends BaseNumaApp {
       {
         actions: ['s3:GetObject', 's3:PutObject', 's3:ListBucket'],
         effect: 'Allow',
-        resources: [props.outputsBucket.arn, `${props.outputsBucket.arn}${this.s3KeyPrefix}/*`],
+        resources: [
+          props.outputsBucket.arn,
+          `${props.outputsBucket.arn}${this.s3KeyPrefix}/*`,
+          `${props.outputsBucket.arn}/numa-chat/uploads/*`,
+        ],
       },
+      ...(props.dataBucket
+        ? [
+            {
+              actions: ['s3:GetObject', 's3:ListBucket'],
+              effect: 'Allow',
+              resources: [props.dataBucket.arn, `${props.dataBucket.arn}/*`],
+            },
+          ]
+        : []),
       // Allow runtime download of the Claude CLI zip placed under artifacts/claude-cli/
       {
         actions: ['s3:GetObject'],
@@ -215,6 +229,7 @@ export class DataAnalysis extends BaseNumaApp {
             'prompt.$': '$$.Execution.Input.prompt',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
             'user_timezone.$': '$$.Execution.Input.user_timezone',
+            'analysis_mode.$': '$$.Execution.Input.analysis_mode',
           },
           Next: 'RunAnalysis',
         },
@@ -228,6 +243,7 @@ export class DataAnalysis extends BaseNumaApp {
             'prompt.$': '$.prompt',
             'uploaded_files.$': '$.uploaded_files',
             'user_timezone.$': '$.user_timezone',
+            'analysis_mode.$': '$.analysis_mode',
             resume_session: true, // Enable session continuity for follow-up prompts
             stream_events: true, // Enable event streaming to show progress in real-time
             use_dynamodb: true, // Write events to DynamoDB jobs table for real-time status
@@ -246,7 +262,7 @@ export class DataAnalysis extends BaseNumaApp {
 
     // Add a Step Function + Start/Status routes (POST/GET) at /data-analysis/start
     // Then, add an extra GET alias at /data-analysis/status for convenience
-    this.addStepFunction(this, 'main', {
+    const stepFunction = this.addStepFunction(this, 'main', {
       outputsBucket: props.outputsBucket,
       stepFunctionDefinition: JSON.stringify(stepFunctionDefinition),
       urlPath: 'main', // May need to be 'data-analysis/start' in the future
@@ -256,6 +272,13 @@ export class DataAnalysis extends BaseNumaApp {
           resources: [runner.arn],
         },
       ],
+    });
+
+    new SsmParameter(this, 'data-analysis-step-function-arn', {
+      name: `/numa/${props.clientName}/apps/data-analysis/step-function-arn`,
+      type: 'String',
+      value: stepFunction.arn,
+      lifecycle: { createBeforeDestroy: true },
     });
 
     // Additional status route alias: /data-analysis/status (same status Lambda and policy)

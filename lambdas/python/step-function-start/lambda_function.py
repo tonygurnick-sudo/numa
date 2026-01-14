@@ -38,6 +38,9 @@ def handler(
         logger.info(f"Added user_id from token: {user_id}")
 
     try:
+        if app_id == "data-analysis" and "analysis_mode" not in payload:
+            payload["analysis_mode"] = "full"
+
         step_function_arn = os.environ["STEP_FUNCTION_ARN"]
         logger.info(
             "Start step function",

@@ -70,8 +70,10 @@ export const loadCompanyProfile = async (companyBucket, region, getCredentials) 
 export const getEnabledTools = (
   autoToolsEnabled: boolean,
   webSearchEnabled: boolean,
+  dataAnalysisEnabled = false,
   createAgentEnabled = false,
   enabledKBIds: string[] = [],
+  dataAnalysisAvailable = true,
 ) => {
   const enabledTools: string[] = [];
   const agentsFeatureEnabled =
@@ -81,11 +83,13 @@ export const getEnabledTools = (
     // In all tools mode, enable tools; include agent creation only when feature enabled
     if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('query_knowledge_base');
     enabledTools.push('web_search');
+    if (dataAnalysisAvailable) enabledTools.push('data_analysis');
     if (agentsFeatureEnabled) enabledTools.push('create_agent_tool');
   } else {
     // In manual mode, only enable selected tools based on what's selected
     if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('query_knowledge_base');
     if (webSearchEnabled) enabledTools.push('web_search');
+    if (dataAnalysisEnabled && dataAnalysisAvailable) enabledTools.push('data_analysis');
     if (agentsFeatureEnabled && createAgentEnabled) enabledTools.push('create_agent_tool');
   }
 
@@ -219,7 +223,7 @@ export const generateSystemPrompt = (
     baseSystemPrompt = `You are Numa, an AI assistant created by Arcanum AI who specialises in helping small to medium businesses get their work done and save time on everyday tasks.
 
 **Available Tools:**
-Note: Users can select or deselect tools. Possible tools the user can select are a KB query tool, web search tool, agent creation tool, and various integrations like gmail/google drive etc. If they ask you to use a tool but it's not available to you, you can request they enable it.
+Note: Users can select or deselect tools. Possible tools the user can select are a KB query tool, web search tool, data analysis tool, agent creation tool, and various integrations like gmail/google drive etc. If they ask you to use a tool but it's not available to you, you can request they enable it.
 - No tools are currently enabled.
 
 **Document Generation:**
@@ -256,6 +260,11 @@ Today's Date: ${TODAY}`;
     if (enabledTools.includes('web_search')) {
       toolLines.push('- Use web_search to find current information from the internet using natural language queries');
     }
+    if (enabledTools.includes('data_analysis')) {
+      toolLines.push(
+        '- Use data_analysis to analyze uploaded CSV, Excel, or JSON data files when the user asks for data analysis or insights from their data. Include a job_id (UUID) in the tool input so progress can be tracked. Use file_uris for S3 links.',
+      );
+    }
 
     const agentsFeatureEnabled =
       typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
@@ -274,7 +283,7 @@ Today's Date: ${TODAY}`;
     baseSystemPrompt = `You are Numa, an AI assistant created by Arcanum AI who specialises in helping small to medium businesses get their work done and save time on everyday tasks.
 
 **Available Tools:**
-Note: Users can select or deselect tools. Possible tools the user can select are a KB query tool, web search tool, agent creation tool, and various integrations like gmail/google drive etc. If they ask you to use a tool but it's not available to you, you can request they enable it.
+Note: Users can select or deselect tools. Possible tools the user can select are a KB query tool, web search tool, data analysis tool, agent creation tool, and various integrations like gmail/google drive etc. If they ask you to use a tool but it's not available to you, you can request they enable it.
 ${toolsSection}
 
 **Document Generation:**
