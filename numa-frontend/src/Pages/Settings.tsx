@@ -16,6 +16,10 @@ import {
 import UserManagement from './UserManagement';
 import { useAuth } from '../Providers/AuthProvider';
 import { AdminIntegrationsService, type GlobalIntegrationSettingsMap } from '../Services/AdminIntegrationsService';
+import {
+  AdminDataConnectorsService,
+  type GlobalDataConnectorSettingsMap,
+} from '../Services/AdminDataConnectorsService';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
@@ -31,7 +35,7 @@ import {
   DEFAULT_GLOBAL_CHAT_SETTINGS,
 } from '../Services/AdminChatSettingsService';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
-import { manifestService } from '../Services/manifestService';
+import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
 
 const AVAILABLE_INTEGRATIONS: IntegrationListItem[] = getIntegrationsListFormat();
 
@@ -78,6 +82,7 @@ export default function SettingsPage() {
 
   // Global (admin) settings
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
+  const [dataConnectorSettings, setDataConnectorSettings] = useState<GlobalDataConnectorSettingsMap>({});
   const [loadingSettings, setLoadingSettings] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -159,6 +164,17 @@ export default function SettingsPage() {
     }
   };
 
+  const loadDataConnectorSettings = async () => {
+    try {
+      if (!user) return;
+      const data = await AdminDataConnectorsService.listWithNuma(numaGet);
+      setDataConnectorSettings(data);
+    } catch (e) {
+      console.warn('Settings: failed to load data connector settings', e);
+      setDataConnectorSettings({ synergy: { status: 'disabled' } });
+    }
+  };
+
   useEffect(() => {
     if (previewMode) {
       // Feature disabled: avoid calling the API and clear loading state
@@ -168,6 +184,10 @@ export default function SettingsPage() {
     }
     loadGlobal();
   }, [user, numaGet, previewMode]);
+
+  useEffect(() => {
+    loadDataConnectorSettings();
+  }, [user, numaGet]);
 
   // Load Agents settings
   useEffect(() => {
@@ -195,6 +215,7 @@ export default function SettingsPage() {
   const [toolsError, setToolsError] = useState<string | null>(null);
   const [toolList, setToolList] = useState<{ name: string; description?: string }[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
+  const [integrationsTabKey, setIntegrationsTabKey] = useState<'connected-apps' | 'data-connectors'>('connected-apps');
   const [isBrandingDirty, setIsBrandingDirty] = useState<boolean>(false);
 
   useNavigationConfirm(
@@ -301,6 +322,25 @@ export default function SettingsPage() {
       await loadGlobal();
     } catch (e) {
       setError((e as Error).message || 'Failed to update integration');
+    }
+  };
+
+  const toggleDataConnector = async (connectorId: string, nextEnabled: boolean) => {
+    try {
+      if (!nextEnabled && dataConnectorSettings[connectorId]?.status === 'enabled') {
+        const ok = window.confirm(`Disabling ${connectorId} will prevent users from accessing it in Numa. Continue?`);
+        if (!ok) return;
+      }
+      await AdminDataConnectorsService.updateWithNuma(
+        connectorId,
+        {
+          status: nextEnabled ? 'enabled' : 'disabled',
+        },
+        numaPut,
+      );
+      await loadDataConnectorSettings();
+    } catch (e) {
+      setError((e as Error).message || 'Failed to update data connector');
     }
   };
 
@@ -427,6 +467,65 @@ export default function SettingsPage() {
       </div>
     );
   };
+
+  const renderDataConnectorRow = (connector: { id: string; name: string; description: string }) => {
+    const enabled = dataConnectorSettings[connector.id]?.status === 'enabled';
+
+    return (
+      <div
+        key={connector.id}
+        className="border rounded-3 p-3 mb-2 bg-white"
+        style={{
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          transition: 'all 0.2s ease',
+          opacity: enabled ? 1 : 0.75,
+          cursor: 'default',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)';
+        }}
+      >
+        <div className="row align-items-center">
+          <div className="col-md-6 d-flex align-items-center">
+            <div
+              className="rounded-2 d-flex align-items-center justify-content-center me-3 flex-shrink-0"
+              style={{ width: '48px', height: '48px', backgroundColor: '#f8f9fa', border: '1px solid #dee2e6' }}
+            >
+              <SynergyIcon />
+            </div>
+            <div>
+              <div className="fw-semibold" style={{ fontSize: '0.95rem' }}>
+                {connector.name}
+              </div>
+              <div className="text-muted small" style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
+                {connector.description}
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 d-flex justify-content-end gap-2 align-items-center">
+            <Form.Check
+              type="switch"
+              id={`toggle-${connector.id}`}
+              checked={enabled}
+              onChange={() => toggleDataConnector(connector.id, !enabled)}
+              label={<span className="small">{enabled ? 'Enabled' : 'Disabled'}</span>}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const dataConnectors = [
+    {
+      id: 'synergy',
+      name: 'Synergy',
+      description: 'Data connector for Synergy job data.',
+    },
+  ];
 
   return (
     <div className="dashboard">
@@ -871,34 +970,57 @@ export default function SettingsPage() {
                   </span>
                 }
               >
-                <Alert variant="secondary" className="mb-3">
-                  <div className="d-flex align-items-start">
-                    <i className="bi bi-building-gear me-2 mt-1"></i>
-                    <div>
-                      <div className="fw-semibold">Company-wide settings</div>
-                      <div className="small text-muted">
-                        These settings apply to everyone in your Numa environment. Use the toggle to enable/disable each
-                        integration for your company, and use <span className="fw-semibold">Manage Tools</span> to turn
-                        specific capabilities off globally.
+                <Tabs
+                  activeKey={integrationsTabKey}
+                  onSelect={(key) => setIntegrationsTabKey((key as typeof integrationsTabKey) || 'connected-apps')}
+                  className="mb-3"
+                >
+                  <Tab eventKey="connected-apps" title="Connected Apps">
+                    <Alert variant="secondary" className="mb-3">
+                      <div className="d-flex align-items-start">
+                        <i className="bi bi-building-gear me-2 mt-1"></i>
+                        <div>
+                          <div className="fw-semibold">Company-wide settings</div>
+                          <div className="small text-muted">
+                            These settings apply to everyone in your Numa environment. Use the toggle to enable/disable
+                            each integration for your company, and use <span className="fw-semibold">Manage Tools</span>{' '}
+                            to turn specific capabilities off globally.
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </Alert>
-                {previewMode && (
-                  <Alert variant="info" className="mb-3">
-                    Numa Integrations are not enabled in your Numa environment. Contact your account administrator to
-                    request access.
-                  </Alert>
-                )}
-                {loadingSettings ? (
-                  <div className="text-center py-5">
-                    <Spinner animation="border" variant="primary" />
-                  </div>
-                ) : (
-                  <div>
-                    {AVAILABLE_INTEGRATIONS.sort((a, b) => a.name.localeCompare(b.name)).map(renderIntegrationRow)}
-                  </div>
-                )}
+                    </Alert>
+                    {previewMode && (
+                      <Alert variant="info" className="mb-3">
+                        Numa Integrations are not enabled in your Numa environment. Contact your account administrator
+                        to request access.
+                      </Alert>
+                    )}
+                    {loadingSettings ? (
+                      <div className="text-center py-5">
+                        <Spinner animation="border" variant="primary" />
+                      </div>
+                    ) : (
+                      <div>
+                        {AVAILABLE_INTEGRATIONS.sort((a, b) => a.name.localeCompare(b.name)).map(renderIntegrationRow)}
+                      </div>
+                    )}
+                  </Tab>
+                  <Tab eventKey="data-connectors" title="Data Connectors">
+                    <Alert variant="secondary" className="mb-3">
+                      <div className="d-flex align-items-start">
+                        <i className="bi bi-building-gear me-2 mt-1"></i>
+                        <div>
+                          <div className="fw-semibold">Company-wide settings</div>
+                          <div className="small text-muted">
+                            These settings apply to everyone in your Numa environment. Use the toggle to enable or
+                            disable each data connector for your company.
+                          </div>
+                        </div>
+                      </div>
+                    </Alert>
+                    <div>{dataConnectors.map(renderDataConnectorRow)}</div>
+                  </Tab>
+                </Tabs>
               </Tab>
             </Tabs>
           </div>

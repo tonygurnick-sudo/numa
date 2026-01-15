@@ -70,6 +70,8 @@ export class CoreNumaInfra extends Construct {
   readonly userAgentsTable: DynamodbTable;
   readonly agentsSettingsTable: DynamodbTable;
   readonly chatSettingsTable: DynamodbTable;
+  readonly dataConnectorsTable: DynamodbTable;
+  readonly dataConnectorsSettingsTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
@@ -535,6 +537,34 @@ export class CoreNumaInfra extends Construct {
         Name: `${numaClient}-chat-settings`,
         Environment: props.environmentName,
         Purpose: 'user-chat-settings',
+      },
+    });
+
+    this.dataConnectorsTable = new DynamodbTable(this, 'data-connectors-table', {
+      name: `${numaClient}-data-connectors`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'user_id',
+      rangeKey: 'connector_id',
+      attribute: [
+        { name: 'user_id', type: 'S' },
+        { name: 'connector_id', type: 'S' },
+      ],
+      tags: {
+        Name: `${numaClient}-data-connectors`,
+        Environment: props.environmentName,
+        Purpose: 'data-connectors',
+      },
+    });
+
+    this.dataConnectorsSettingsTable = new DynamodbTable(this, 'global-data-connectors-settings', {
+      name: `${numaClient}-global-data-connector-settings`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'connector',
+      attribute: [{ name: 'connector', type: 'S' }],
+      tags: {
+        Name: `${numaClient}-global-data-connector-settings`,
+        Environment: props.environmentName,
+        Purpose: 'global-data-connector-settings',
       },
     });
 

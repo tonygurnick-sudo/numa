@@ -319,6 +319,38 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'PUT', path: 'settings/integrations/{integration}' },
     });
 
+    // Admin Data Connector Settings API (GET list, PUT single)
+    const adminDataConnectorEnv = {
+      CLIENT_NAME: props.clientName,
+      GLOBAL_TABLE_NAME: props.dataConnectorsSettingsTableName,
+    } as Record<string, string>;
+    const adminDataConnectorPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:Scan', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsSettingsTableName}`],
+      },
+    ];
+
+    this.addLambdaFunction(this, 'admin-data-connector-settings-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-data-connector-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminDataConnectorEnv,
+      additionalPolicyStatements: adminDataConnectorPolicy,
+      route: { verb: 'GET', path: 'settings/data-connectors' },
+    });
+    this.addLambdaFunction(this, 'admin-data-connector-settings-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-data-connector-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminDataConnectorEnv,
+      additionalPolicyStatements: adminDataConnectorPolicy,
+      route: { verb: 'PUT', path: 'settings/data-connectors/{connector}' },
+    });
+
     // Admin Agents Settings API (GET/PUT policy)
     const adminAgentsEnv = {
       CLIENT_NAME: props.clientName,
@@ -384,6 +416,50 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: chatSettingsEnv,
       additionalPolicyStatements: chatSettingsPolicy,
       route: { verb: 'PUT', path: 'chat/settings' },
+    });
+
+    // Data Connectors API (per-user connector configs + secrets)
+    const dataConnectorsEnv = {
+      CLIENT_NAME: props.clientName,
+      DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
+      DATA_CONNECTORS_SECRETS_PREFIX: `${props.clientName}/data-connectors`,
+      DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
+    } as Record<string, string>;
+
+    const dataConnectorsPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsSettingsTableName}`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['secretsmanager:CreateSecret', 'secretsmanager:PutSecretValue', 'secretsmanager:DescribeSecret'],
+        resources: ['*'],
+      },
+    ];
+
+    this.addLambdaFunction(this, 'data-connectors-status', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/status' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-connect', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'POST', path: 'data-connectors/connect' },
     });
 
     // Agents API (list/create/update/delete/copy)
@@ -535,4 +611,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   agentsSettingsTableName: string;
   /** User chat settings table name for per-user defaults (tools, KBs, integrations). */
   chatSettingsTableName: string;
+  /** Data connectors table name for per-user connector configs. */
+  dataConnectorsTableName: string;
+  /** Data connector settings table name for admin feature flags. */
+  dataConnectorsSettingsTableName: string;
 }

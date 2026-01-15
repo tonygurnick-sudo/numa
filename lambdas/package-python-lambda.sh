@@ -120,7 +120,10 @@ fi
 
 # Use the last modification date of the lambda for all files in the ZIP to make
 # it deterministic
-LAST_MODIFIED=$(git log -1 --format=%cd --date format:"%FT%T" "${LAMBDA_DIRECTORY}")
+LAST_MODIFIED=$(git log -1 --format=%cd --date format:"%FT%T" "${LAMBDA_DIRECTORY}" || true)
+if test -z "${LAST_MODIFIED}"; then
+    LAST_MODIFIED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+fi
 find "${BUILD_DIR}" -exec touch -d "${LAST_MODIFIED}" {} +
 
 pushd "${BUILD_DIR}";

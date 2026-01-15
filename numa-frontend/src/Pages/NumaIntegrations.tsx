@@ -11,6 +11,7 @@ import {
   Modal,
   OverlayTrigger,
   Tooltip,
+  Nav,
 } from 'react-bootstrap';
 
 import { createFrontendClient } from '@pipedream/sdk/browser';
@@ -22,10 +23,15 @@ import { GenericTestConnection } from '../Components/GenericTestConnection';
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { AdminIntegrationsService, type GlobalIntegrationSettingsMap } from '../Services/AdminIntegrationsService';
+import {
+  AdminDataConnectorsService,
+  type GlobalDataConnectorSettingsMap,
+} from '../Services/AdminDataConnectorsService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import type { ConnectionStatus } from '../types/pipedream';
 import { getDefaultDenyTools } from '../config/integrationToolsDefault';
 import { PageHeader } from '../Components/PageHeader';
+import { DataConnectorsTab } from '../Components/DataConnectors/DataConnectorsTab';
 
 const AVAILABLE_INTEGRATIONS: IntegrationListItem[] = getIntegrationsListFormat();
 
@@ -52,12 +58,14 @@ export const NumaIntegrations = () => {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [availableTools, setAvailableTools] = useState<{ name: string; description?: string }[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
+  const [activeTab, setActiveTab] = useState<'connected-apps' | 'data-connectors'>('connected-apps');
   // Version removed: last-write-wins policy
   const [recentlyConnectedApp, setRecentlyConnectedApp] = useState<string | null>(null);
   // Track per-app default policy application in-flight to avoid race in Settings
   const [defaultsApplying, setDefaultsApplying] = useState<Record<string, boolean>>({});
   // Global admin integration settings
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
+  const [dataConnectorSettings, setDataConnectorSettings] = useState<GlobalDataConnectorSettingsMap>({});
   const lambdaInitializedRef = useRef(false);
 
   // Initialize Lambda client only if integrations proxy is configured
@@ -124,10 +132,21 @@ export const NumaIntegrations = () => {
     }
   }, [user, numaGet]);
 
+  const loadDataConnectorSettings = useCallback(async () => {
+    try {
+      if (!user) return;
+      const data = await AdminDataConnectorsService.listWithNuma(numaGet);
+      setDataConnectorSettings(data);
+    } catch {
+      setDataConnectorSettings({ synergy: { status: 'disabled' } });
+    }
+  }, [user, numaGet]);
+
   // Initial fetch for global settings
   useEffect(() => {
     loadGlobalSettings();
-  }, [loadGlobalSettings]);
+    loadDataConnectorSettings();
+  }, [loadGlobalSettings, loadDataConnectorSettings]);
 
   const loadConnectionStatus = useCallback(
     async (forceRefresh = false) => {
@@ -595,162 +614,187 @@ export const NumaIntegrations = () => {
 
       {/* Moved alerts and content outside header */}
       <Container>
-        {previewMode && (
-          <Alert variant="info" className="mb-3">
-            Numa Integrations are not enabled in your Numa environment. Contact your account administrator to request
-            access.
-          </Alert>
-        )}
-        {error && (
-          <Alert variant="danger" className="mb-3">
-            {error}
-          </Alert>
-        )}
-
-        {/* Post-connection guidance alert */}
-        {recentlyConnectedApp && (
-          <Alert variant="success" className="mb-3" dismissible onClose={() => setRecentlyConnectedApp(null)}>
-            <div className="d-flex align-items-start">
-              <i className="bi bi-check-circle-fill text-success me-3 mt-1"></i>
-              <div className="flex-grow-1">
-                <h6 className="mb-1 fw-semibold">Integration Connected Successfully!</h6>
-                <p className="mb-2 small">
-                  Your{' '}
-                  {availableApps.find((app) => app.name_slug === recentlyConnectedApp)?.name || recentlyConnectedApp}{' '}
-                  integration is now ready to use.
-                </p>
-                <Button
-                  variant="success"
-                  size="sm"
-                  onClick={() => {
-                    openSettings(recentlyConnectedApp);
-                    setRecentlyConnectedApp(null);
-                  }}
-                  className="d-flex align-items-center"
-                >
-                  <i className="bi bi-sliders me-2"></i>
-                  Customize Tool Access
-                </Button>
-              </div>
-            </div>
-          </Alert>
+        {activeTab === 'connected-apps' && (
+          <>
+            {previewMode && (
+              <Alert variant="info" className="mb-3">
+                Numa Integrations are not enabled in your Numa environment. Contact your account administrator to
+                request access.
+              </Alert>
+            )}
+            {error && (
+              <Alert variant="danger" className="mb-3">
+                {error}
+              </Alert>
+            )}
+          </>
         )}
 
-        <Card className="mb-4 border-0 shadow-sm">
-          <Card.Body className="p-4">
-            <Row className="g-4">
-              <Col md={3}>
-                <div className="text-center p-2">
-                  <div className="d-flex align-items-center justify-content-center mb-2">
-                    <div className="integration-step-circle me-2">
-                      <span className="fw-bold">1</span>
-                    </div>
-                    <h6 className="text-primary fw-semibold mb-0">Connect Integration</h6>
-                  </div>
-                  <p className="small text-muted mb-0">Click the connect button on any app below to get started</p>
-                </div>
-              </Col>
-              <Col md={3}>
-                <div className="text-center p-2">
-                  <div className="d-flex align-items-center justify-content-center mb-2">
-                    <div className="integration-step-circle me-2">
-                      <span className="fw-bold">2</span>
-                    </div>
-                    <h6 className="text-primary fw-semibold mb-0">Sign In Securely</h6>
-                  </div>
-                  <p className="small text-muted mb-0">
-                    Follow the secure authentication steps and test your connection was successful
-                  </p>
-                </div>
-              </Col>
-              <Col md={3}>
-                <div className="text-center p-2">
-                  <div className="d-flex align-items-center justify-content-center mb-2">
-                    <div className="integration-step-circle me-2">
-                      <span className="fw-bold">3</span>
-                    </div>
-                    <h6 className="text-primary fw-semibold mb-0">Optimize Security</h6>
-                  </div>
-                  <p className="small text-muted mb-0">
-                    Use Settings to enable only the tools you need for better security and performance
-                  </p>
-                </div>
-              </Col>
-              <Col md={3}>
-                <div className="text-center p-2">
-                  <div className="d-flex align-items-center justify-content-center mb-2">
-                    <div className="integration-step-circle me-2">
-                      <span className="fw-bold">4</span>
-                    </div>
-                    <h6 className="text-primary fw-semibold mb-0">Get Work Done</h6>
-                  </div>
-                  <p className="small text-muted mb-0">
-                    Utilise your integrations while getting work done in{' '}
+        <Nav
+          variant="tabs"
+          activeKey={activeTab}
+          onSelect={(key) => setActiveTab((key as 'connected-apps' | 'data-connectors') || 'connected-apps')}
+          className="mb-4"
+        >
+          <Nav.Item>
+            <Nav.Link eventKey="connected-apps">Connected Apps</Nav.Link>
+          </Nav.Item>
+          <Nav.Item>
+            <Nav.Link eventKey="data-connectors">Data Connectors</Nav.Link>
+          </Nav.Item>
+        </Nav>
+
+        {activeTab === 'connected-apps' && (
+          <>
+            {/* Post-connection guidance alert */}
+            {recentlyConnectedApp && (
+              <Alert variant="success" className="mb-3" dismissible onClose={() => setRecentlyConnectedApp(null)}>
+                <div className="d-flex align-items-start">
+                  <i className="bi bi-check-circle-fill text-success me-3 mt-1"></i>
+                  <div className="flex-grow-1">
+                    <h6 className="mb-1 fw-semibold">Integration Connected Successfully!</h6>
+                    <p className="mb-2 small">
+                      Your{' '}
+                      {availableApps.find((app) => app.name_slug === recentlyConnectedApp)?.name ||
+                        recentlyConnectedApp}{' '}
+                      integration is now ready to use.
+                    </p>
                     <Button
-                      variant="link"
+                      variant="success"
                       size="sm"
-                      className="p-0 align-baseline small text-primary fw-semibold"
-                      onClick={() => (window.location.href = '/chat')}
+                      onClick={() => {
+                        openSettings(recentlyConnectedApp);
+                        setRecentlyConnectedApp(null);
+                      }}
+                      className="d-flex align-items-center"
                     >
-                      Numa Chat
+                      <i className="bi bi-sliders me-2"></i>
+                      Customize Tool Access
                     </Button>
-                  </p>
+                  </div>
                 </div>
-              </Col>
-            </Row>
-          </Card.Body>
-        </Card>
-        <div className="mb-4">
-          <h4 className="text-primary mb-0 d-flex align-items-center">
-            <i className="bi bi-grid-3x3-gap me-2"></i>
-            <span>Available Integrations {!loading && `(${availableApps.length})`}</span>
-          </h4>
-        </div>
-        <div style={previewMode ? { position: 'relative' } : undefined}>
-          {loading ? (
-            <div className="text-center py-5">
-              <Spinner animation="border" variant="primary" />
-              <p className="mt-3 text-muted">Loading integrations...</p>
+              </Alert>
+            )}
+
+            <Card className="mb-4 border-0 shadow-sm">
+              <Card.Body className="p-4">
+                <Row className="g-4">
+                  <Col md={3}>
+                    <div className="text-center p-2">
+                      <div className="d-flex align-items-center justify-content-center mb-2">
+                        <div className="integration-step-circle me-2">
+                          <span className="fw-bold">1</span>
+                        </div>
+                        <h6 className="text-primary fw-semibold mb-0">Connect Integration</h6>
+                      </div>
+                      <p className="small text-muted mb-0">Click the connect button on any app below to get started</p>
+                    </div>
+                  </Col>
+                  <Col md={3}>
+                    <div className="text-center p-2">
+                      <div className="d-flex align-items-center justify-content-center mb-2">
+                        <div className="integration-step-circle me-2">
+                          <span className="fw-bold">2</span>
+                        </div>
+                        <h6 className="text-primary fw-semibold mb-0">Sign In Securely</h6>
+                      </div>
+                      <p className="small text-muted mb-0">
+                        Follow the secure authentication steps and test your connection was successful
+                      </p>
+                    </div>
+                  </Col>
+                  <Col md={3}>
+                    <div className="text-center p-2">
+                      <div className="d-flex align-items-center justify-content-center mb-2">
+                        <div className="integration-step-circle me-2">
+                          <span className="fw-bold">3</span>
+                        </div>
+                        <h6 className="text-primary fw-semibold mb-0">Optimize Security</h6>
+                      </div>
+                      <p className="small text-muted mb-0">
+                        Use Settings to enable only the tools you need for better security and performance
+                      </p>
+                    </div>
+                  </Col>
+                  <Col md={3}>
+                    <div className="text-center p-2">
+                      <div className="d-flex align-items-center justify-content-center mb-2">
+                        <div className="integration-step-circle me-2">
+                          <span className="fw-bold">4</span>
+                        </div>
+                        <h6 className="text-primary fw-semibold mb-0">Get Work Done</h6>
+                      </div>
+                      <p className="small text-muted mb-0">
+                        Utilise your integrations while getting work done in{' '}
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 align-baseline small text-primary fw-semibold"
+                          onClick={() => (window.location.href = '/chat')}
+                        >
+                          Numa Chat
+                        </Button>
+                      </p>
+                    </div>
+                  </Col>
+                </Row>
+              </Card.Body>
+            </Card>
+            <div className="mb-4">
+              <h4 className="text-primary mb-0 d-flex align-items-center">
+                <i className="bi bi-grid-3x3-gap me-2"></i>
+                <span>Available Integrations {!loading && `(${availableApps.length})`}</span>
+              </h4>
             </div>
-          ) : (
-            <>
-              {/* Preview overlay */}
-              {previewMode && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'rgba(255,255,255,0.6)',
-                    backdropFilter: 'blur(2px)',
-                    WebkitBackdropFilter: 'blur(2px)',
-                    zIndex: 2,
-                  }}
-                />
+            <div style={previewMode ? { position: 'relative' } : undefined}>
+              {loading ? (
+                <div className="text-center py-5">
+                  <Spinner animation="border" variant="primary" />
+                  <p className="mt-3 text-muted">Loading integrations...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Preview overlay */}
+                  {previewMode && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'rgba(255,255,255,0.6)',
+                        backdropFilter: 'blur(2px)',
+                        WebkitBackdropFilter: 'blur(2px)',
+                        zIndex: 2,
+                      }}
+                    />
+                  )}
+                  <div style={previewMode ? { pointerEvents: 'none', opacity: 0.8 } : undefined}>
+                    {availableApps
+                      .sort((a: IntegrationListItem, b: IntegrationListItem) => {
+                        // Admin allowed (enabled) first
+                        const adminDisabledA = globalSettings[a.name_slug]?.status === 'disabled';
+                        const adminDisabledB = globalSettings[b.name_slug]?.status === 'disabled';
+                        if (adminDisabledA !== adminDisabledB) return adminDisabledA ? 1 : -1;
+
+                        // Then connected first
+                        const statusA = getConnectionStatus(a.name_slug);
+                        const statusB = getConnectionStatus(b.name_slug);
+                        const connectedA = statusA === 'connected';
+                        const connectedB = statusB === 'connected';
+                        if (connectedA && !connectedB) return -1;
+                        if (!connectedA && connectedB) return 1;
+
+                        // Finally alphabetical
+                        return a.name.localeCompare(b.name);
+                      })
+                      .map(renderIntegrationRow)}
+                  </div>
+                </>
               )}
-              <div style={previewMode ? { pointerEvents: 'none', opacity: 0.8 } : undefined}>
-                {availableApps
-                  .sort((a: IntegrationListItem, b: IntegrationListItem) => {
-                    // Admin allowed (enabled) first
-                    const adminDisabledA = globalSettings[a.name_slug]?.status === 'disabled';
-                    const adminDisabledB = globalSettings[b.name_slug]?.status === 'disabled';
-                    if (adminDisabledA !== adminDisabledB) return adminDisabledA ? 1 : -1;
+            </div>
+          </>
+        )}
 
-                    // Then connected first
-                    const statusA = getConnectionStatus(a.name_slug);
-                    const statusB = getConnectionStatus(b.name_slug);
-                    const connectedA = statusA === 'connected';
-                    const connectedB = statusB === 'connected';
-                    if (connectedA && !connectedB) return -1;
-                    if (!connectedA && connectedB) return 1;
-
-                    // Finally alphabetical
-                    return a.name.localeCompare(b.name);
-                  })
-                  .map(renderIntegrationRow)}
-              </div>
-            </>
-          )}
-        </div>
+        {activeTab === 'data-connectors' && <DataConnectorsTab adminSettings={dataConnectorSettings} />}
       </Container>
       {/* Settings modal */}
       <SettingsModal

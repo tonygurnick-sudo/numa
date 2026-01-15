@@ -30,6 +30,7 @@ variables:
 .node-lambdas-matrix:
   matrix:
     - BUILD_DIR:
+        - lambdas/node/admin-data-connector-settings
         - lambdas/node/admin-agents-settings
         - lambdas/node/admin-integration-settings
         - lambdas/node/agents
@@ -52,6 +53,7 @@ variables:
 .node-matrix:
   matrix:
     - BUILD_DIR:
+        - lambdas/node/admin-data-connector-settings
         - lambdas/node/admin-agents-settings
         - lambdas/node/admin-integration-settings
         - lambdas/node/agents
@@ -87,6 +89,7 @@ variables:
         - lambdas/python/costing-calculator
         - lambdas/python/council-resource-consents
         - lambdas/python/crawl-page
+        - lambdas/python/data-connectors
         - lambdas/python/document-summariser
         - lambdas/python/e2e-test
         - lambdas/python/enqueue-url
