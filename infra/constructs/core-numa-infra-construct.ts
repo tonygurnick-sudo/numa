@@ -72,6 +72,7 @@ export class CoreNumaInfra extends Construct {
   readonly chatSettingsTable: DynamodbTable;
   readonly dataConnectorsTable: DynamodbTable;
   readonly dataConnectorsSettingsTable: DynamodbTable;
+  readonly dataConnectorsSyncConfigsTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
@@ -565,6 +566,22 @@ export class CoreNumaInfra extends Construct {
         Name: `${numaClient}-global-data-connector-settings`,
         Environment: props.environmentName,
         Purpose: 'global-data-connector-settings',
+      },
+    });
+
+    this.dataConnectorsSyncConfigsTable = new DynamodbTable(this, 'data-connector-sync-configs', {
+      name: `${numaClient}-data-connector-sync-configs`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'user_id',
+      rangeKey: 'sync_config_id',
+      attribute: [
+        { name: 'user_id', type: 'S' },
+        { name: 'sync_config_id', type: 'S' },
+      ],
+      tags: {
+        Name: `${numaClient}-data-connector-sync-configs`,
+        Environment: props.environmentName,
+        Purpose: 'data-connector-sync-configs',
       },
     });
 
