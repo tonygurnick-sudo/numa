@@ -270,6 +270,7 @@ export class NumaClientStack extends TerraformStack {
       chatSettingsTableName: core.chatSettingsTable.name,
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,
+      dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(

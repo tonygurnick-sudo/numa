@@ -19,6 +19,9 @@ const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m)
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
 const NumaIntegrations = lazy(() => import('../Pages/NumaIntegrations').then((m) => ({ default: m.NumaIntegrations })));
 const JobHistoryManager = lazy(() => import('../Pages/JobHistoryManager'));
+const DataConnectorsPage = lazy(() =>
+  import('../Pages/DataConnectorsPage').then((m) => ({ default: m.DataConnectorsPage })),
+);
 
 export const ROUTE_CONFIG = [
   {
@@ -96,6 +99,11 @@ export const ROUTE_CONFIG = [
     path: '/integrations',
     element: () => <NumaIntegrations />,
     nav: { label: 'Integrations', icon: 'bi bi-link-45deg' },
+  },
+  {
+    path: '/data-connectors',
+    element: () => <DataConnectorsPage />,
+    nav: { label: 'Data Connectors', icon: 'bi bi-cloud-download' },
   },
   {
     path: '/app/:appId',

@@ -424,6 +424,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
       DATA_CONNECTORS_SECRETS_PREFIX: `${props.clientName}/data-connectors`,
       DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
+      DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME: props.dataConnectorsSyncConfigsTableName,
     } as Record<string, string>;
 
     const dataConnectorsPolicy = [
@@ -439,8 +440,24 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       },
       {
         effect: 'Allow',
-        actions: ['secretsmanager:CreateSecret', 'secretsmanager:PutSecretValue', 'secretsmanager:DescribeSecret'],
+        actions: [
+          'secretsmanager:CreateSecret',
+          'secretsmanager:PutSecretValue',
+          'secretsmanager:DescribeSecret',
+          'secretsmanager:GetSecretValue',
+        ],
         resources: ['*'],
+      },
+      {
+        effect: 'Allow',
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
+          'dynamodb:Query',
+        ],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsSyncConfigsTableName}`],
       },
     ];
 
@@ -460,6 +477,69 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: dataConnectorsEnv,
       additionalPolicyStatements: dataConnectorsPolicy,
       route: { verb: 'POST', path: 'data-connectors/connect' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-jobs', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/jobs' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-job-folders', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/jobs/{job_id}/folders' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-folder-items', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/folders/{folder_id}/items' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-sync-configs-list', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/sync-configs' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-sync-configs-create', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'POST', path: 'data-connectors/sync-configs' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-sync-configs-update', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'PUT', path: 'data-connectors/sync-configs/{id}' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-sync-configs-delete', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'DELETE', path: 'data-connectors/sync-configs/{id}' },
     });
 
     // Agents API (list/create/update/delete/copy)
@@ -615,4 +695,6 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   dataConnectorsTableName: string;
   /** Data connector settings table name for admin feature flags. */
   dataConnectorsSettingsTableName: string;
+  /** Data connector selection configs table name. */
+  dataConnectorsSyncConfigsTableName: string;
 }
